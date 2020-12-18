@@ -256,28 +256,35 @@ class WC_Tillit extends WC_Payment_Gateway
 
         // Make the request
         $data = $this->makeRequest('/order', [
-            // 'id' => $order_id,
-            // 'items' => $items,
-            // 'total' => $order->get_total(),
-            'line_items' => [],
+            'line_items' => $this->get_items($order),
             'state' => '',
             'recurring' => false,
             'buyer' => [
                 'representative' => [
+                    // @todo
                     'first_name' => '',
+                    // @todo
                     'last_name' => '',
+                    // @todo
                     'phone_number' => '',
+                    // @todo
                     'phone_number_prefix' => '',
+                    // @todo
                     'email' => ''
                 ],
                 'company' => [
+                    // @todo
                     'country_prefix' => '',
+                    // @todo
                     'organization_number' => '',
+                    // @todo
                     'company_name' => ''
                 ]
             ],
             'billing_address' => [
+                // @todo
                 'id' => '',
+                // @todo
                 'organization_name' => '',
                 'street_address' => $order->get_billing_address_1(),
                 'postal_code' => $order->get_billing_postcode(),
@@ -285,58 +292,94 @@ class WC_Tillit extends WC_Payment_Gateway
                 'region' => $order->get_billing_state(),
                 'country' => $order->get_billing_country(),
                 'references' => [
+                    // @todo
                     'co' => '',
+                    // @todo
                     'reference' => '',
+                    // @todo
                     'attn' => ''
                 ]
             ],
             'shipping_address' => [
+                // @todo
                 'id' => '',
+                // @todo
                 'organization_name' => '',
                 'street_address' => $order->get_shipping_address_1(),
                 'postal_code' => $order->get_shipping_postcode(),
                 'city' => $order->get_shipping_city(),
                 'region' => $order->get_shipping_state(),
                 'country' => $order->get_shipping_country(),
+                // @todo
                 'references' => [
+                    // @todo
                     'co' => '',
+                    // @todo
                     'reference' => '',
+                    // @todo
                     'attn' => ''
                 ]
             ],
+            // @todo
             'merchant_reference' => '',
+            // @todo
             'merchant_additional_info' => '',
+            // @todo
             'payment' => [
+                // @todo
                 'amount' => '',
+                // @todo
                 'currency' => '',
+                // @todo
                 'vat' => '',
+                // @todo
                 'discount' => '',
+                // @todo
                 'discount_percent' => '',
+                // @todo
                 'vat_percent' => '',
+                // @todo
                 'type' => 'INVOICE',
+                // @todo
                 'payment_details' => [
+                    // @todo
                     'payment_reference_message' => '',
+                    // @todo
                     'bank_account' => '',
+                    // @todo
                     'bank_account_type' => '',
+                    // @todo
                     'payment_reference_ocr' => '',
+                    // @todo
                     'due_in_days' => '',
+                    // @todo
                     'invoice_number' => ''
                 ]
             ],
             'merchant_urls' => [
                 'merchant_confirmation_url' => $order->get_checkout_order_received_url(),
                 'merchant_cancel_order_url' => $order->get_cancel_order_url(),
+                // @todo
                 'merchant_edit_order_url' => '',
+                // @todo
                 'merchant_order_verification_failed_url' => '',
+                // @todo
                 'merchant_invoice_url' => '',
+                // @todo
                 'merchant_shipping_document_url' => ''
+
             ],
             'shipping_details' => [
+                // @todo
                 'tracking_number' => '',
+                // @todo
                 'carrier_name' => '',
+                // @todo
                 'expected_delivery_date' => '',
+                // @todo
                 'carrier_tracking_url' => ''
             ],
+            // @todo
             'order_intent_id' => ''
         ]);
 
