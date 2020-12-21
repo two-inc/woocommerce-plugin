@@ -131,6 +131,11 @@ class WC_Tillit extends WC_Payment_Gateway
                 'title'       => __('API Key', 'woocommerce-gateway-tillit'),
                 'type'        => 'text',
                 'description' => __('Enter the Tillit API Key. We\'re using this for security purposes.', 'woocommerce-gateway-tillit')
+            ),
+            'disable_autocomplete' => array(
+                'title'       => __('Disable autocomplete', 'woocommerce-gateway-tillit'),
+                'type'        => 'checkbox',
+                'description' => __('We are using autocomplete for the company name and address. Disable it if you experience any errors. ', 'woocommerce-gateway-tillit')
             )
         ]);
     }

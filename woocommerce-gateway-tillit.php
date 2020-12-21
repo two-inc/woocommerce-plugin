@@ -13,6 +13,7 @@ if (!in_array('woocommerce/woocommerce.php', apply_filters('active_plugins', get
 
 // Define the plugin URL
 define('WC_TILLIT_PLUGIN_URL', plugin_dir_url(__FILE__));
+define('WC_TILLIT_PLUGIN_PATH', plugin_dir_path(__FILE__));
 
 // Define the Tillit API URL
 $tillitApi = !defined('WC_TILLIT_URL') ?
@@ -22,6 +23,7 @@ $tillitApi = !defined('WC_TILLIT_URL') ?
 function woocommerce_gateway_tillit_init()
 {
     require_once __DIR__ . '/class/WC_Tillit.php';
+    require_once __DIR__ . '/class/WC_Tillit_Checkout.php';
 }
 
 /**
