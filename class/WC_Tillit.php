@@ -279,8 +279,6 @@ class WC_Tillit extends WC_Payment_Gateway
                 ],
                 'company' => [
                     // @todo
-                    'country_prefix' => '',
-                    // @todo
                     'organization_number' => '',
                     // @todo
                     'company_name' => ''

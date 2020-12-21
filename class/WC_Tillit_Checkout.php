@@ -15,15 +15,15 @@ class WC_Tillit_Checkout
 
         // Inject the company details
         $fields['company'] = [
-            'company_number' => [
-                'label' => __('Registration code', 'woocommerce-gateway-tillit'),
-                'required' => true,
-                'priority' => 15
-            ],
             'company_name' => [
                 'label' => __('Company name', 'woocommerce-gateway-tillit'),
                 'required' => true,
                 'priority' => 20
+            ],
+            'company_id' => [
+                'label' => __('Company ID', 'woocommerce-gateway-tillit'),
+                'required' => true,
+                'priority' => 15
             ]
         ];
 
