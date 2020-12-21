@@ -18,12 +18,12 @@ class WC_Tillit_Checkout
             'company_name' => [
                 'label' => __('Company name', 'woocommerce-gateway-tillit'),
                 'required' => true,
-                'priority' => 20
+                'priority' => 15
             ],
             'company_id' => [
                 'label' => __('Company ID', 'woocommerce-gateway-tillit'),
                 'required' => true,
-                'priority' => 15
+                'priority' => 20
             ]
         ];
 
