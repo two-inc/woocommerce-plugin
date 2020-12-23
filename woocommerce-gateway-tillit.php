@@ -48,7 +48,12 @@ function wc_tillit_add_to_gateways($gateways)
 
 function wc_tillit_enqueue_styles()
 {
-    wp_enqueue_style( 'woocommerce-gateway-tillit', WC_TILLIT_PLUGIN_URL . '/assets/css/tillit.css');
+    wp_enqueue_style( 'woocommerce-gateway-tillit-css', WC_TILLIT_PLUGIN_URL . '/assets/css/tillit.css');
+}
+
+function wc_tillit_enqueue_scripts()
+{
+    wp_enqueue_script('woocommerce-gateway-tillit-js', WC_TILLIT_PLUGIN_URL . '/assets/js/tillit.js');
 }
 
 function wc_approve_order()
@@ -71,4 +76,5 @@ function wc_approve_order()
 add_filter('woocommerce_payment_gateways', 'wc_tillit_add_to_gateways');
 add_action('plugins_loaded', 'woocommerce_gateway_tillit_init');
 add_action('wp_enqueue_scripts', 'wc_tillit_enqueue_styles');
+add_action('wp_enqueue_scripts', 'wc_tillit_enqueue_scripts');
 add_action('init', 'wc_approve_order');

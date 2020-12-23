@@ -33,6 +33,7 @@ class WC_Tillit_Checkout
                 'required' => true,
                 'type' => 'radio',
                 'priority' => 15,
+                'value' => 'personal',
                 'options' => [
                     'personal' => __('Personal', 'woocommerce-gateway-tillit'),
                     'business' => __('Business', 'woocommerce-gateway-tillit')
@@ -60,12 +61,12 @@ class WC_Tillit_Checkout
         $fields['company'] = [
             'company_name' => [
                 'label' => __('Company name', 'woocommerce-gateway-tillit'),
-                'required' => true,
+                'required' => false,
                 'priority' => 15
             ],
             'company_id' => [
                 'label' => __('Company ID', 'woocommerce-gateway-tillit'),
-                'required' => true,
+                'required' => false,
                 'priority' => 20
             ]
         ];
@@ -90,7 +91,6 @@ class WC_Tillit_Checkout
         $fields['representative'] = [
             'representative_first_name' => [
                 'label' => __('First name', 'woocommerce-gateway-tillit'),
-                'required' => true,
                 'class' => [
                     'form-row-first'
                 ],
@@ -98,7 +98,6 @@ class WC_Tillit_Checkout
             ],
             'representative_last_name' => [
                 'label' => __('Last name', 'woocommerce-gateway-tillit'),
-                'required' => true,
                 'class' => [
                     'form-row-last'
                 ],
@@ -106,12 +105,10 @@ class WC_Tillit_Checkout
             ],
             'representative_phone_number' => [
                 'label' => __('Phone number', 'woocommerce-gateway-tillit'),
-                'required' => true,
                 'priority' => 25
             ],
             'representative_email' => [
                 'label' => __('Email', 'woocommerce-gateway-tillit'),
-                'required' => true,
                 'priority' => 30
             ]
         ];
