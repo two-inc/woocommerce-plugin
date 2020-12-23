@@ -120,23 +120,38 @@ class WC_Tillit extends WC_Payment_Gateway
                 'default'       => __('Pay with Tillit', 'woocommerce-gateway-tillit'),
                 'desc_tip'      => true
             ],
-            'description' => array(
+            'description' => [
                 'title'       => __('Description', 'woocommerce-gateway-tillit'),
                 'type'        => 'textarea',
                 'description' => __('Payment method description that the customer will see on your checkout.', 'woocommerce-gateway-tillit'),
                 'default'     => __('Making b2b purchases a breeze.', 'woocommerce-gateway-tillit'),
-                'desc_tip'    => true,
-            ),
-            'api_key' => array(
+                'desc_tip'    => true
+            ],
+            'api_key' => [
                 'title'       => __('API Key', 'woocommerce-gateway-tillit'),
                 'type'        => 'text',
                 'description' => __('Enter the Tillit API Key. We\'re using this for security purposes.', 'woocommerce-gateway-tillit')
-            ),
-            'disable_autocomplete' => array(
-                'title'       => __('Disable autocomplete', 'woocommerce-gateway-tillit'),
+            ],
+            'disable_company_name' => [
+                'title'       => __('Disable Search API: Company name', 'woocommerce-gateway-tillit'),
                 'type'        => 'checkbox',
-                'description' => __('We are using autocomplete for the company name and address. Disable it if you experience any errors. ', 'woocommerce-gateway-tillit')
-            )
+                'description' => __('Disable autocompletion for the company name input.', 'woocommerce-gateway-tillit')
+            ],
+            'disable_company_address' => [
+                'title'       => __('Disable Search API: Company address', 'woocommerce-gateway-tillit'),
+                'type'        => 'checkbox',
+                'description' => __('Disable autocompletion for the company address input.', 'woocommerce-gateway-tillit')
+            ],
+            'disable_order_intent' => [
+                'title'       => __('Disable Order Intent', 'woocommerce-gateway-tillit'),
+                'type'        => 'checkbox',
+                'description' => __('Disable the order intent feature.', 'woocommerce-gateway-tillit')
+            ],
+            'disable_funded_invoice' => [
+                'title'       => __('Disable Funded Invoice', 'woocommerce-gateway-tillit'),
+                'type'        => 'checkbox',
+                'description' => __('Disable the funded invoice feature.', 'woocommerce-gateway-tillit')
+            ]
         ]);
     }
 

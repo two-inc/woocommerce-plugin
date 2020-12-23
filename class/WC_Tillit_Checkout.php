@@ -5,15 +5,24 @@ class WC_Tillit_Checkout
 
     public function __construct()
     {
-        add_filter('woocommerce_checkout_fields', [$this, 'add_company_details'], 1);
         add_filter('woocommerce_checkout_fields', [$this, 'remove_company_name']);
+        add_filter('woocommerce_checkout_fields', [$this, 'add_company_fields'], 1);
+        add_filter('woocommerce_checkout_fields', [$this, 'add_representative_fields'], 2);
         add_action('woocommerce_checkout_billing', [$this, 'inject_company_details'], 1);
     }
 
-    public function add_company_details($fields)
+    /**
+     * Add the company name and company ID fields
+     *
+     * @param $fields
+     *
+     * @return mixed
+     */
+
+    public function add_company_fields($fields)
     {
 
-        // Inject the company details
+        // Define the company details
         $fields['company'] = [
             'company_name' => [
                 'label' => __('Company name', 'woocommerce-gateway-tillit'),
@@ -24,6 +33,47 @@ class WC_Tillit_Checkout
                 'label' => __('Company ID', 'woocommerce-gateway-tillit'),
                 'required' => true,
                 'priority' => 20
+            ]
+        ];
+
+        // Return the fields
+        return $fields;
+
+    }
+
+
+    /**
+     * Add the representative fields to checkout page
+     *
+     * @param $fields
+     *
+     * @return mixed
+     */
+
+    public function add_representative_fields($fields)
+    {
+
+        // Define the representative details
+        $fields['representative'] = [
+            'representative_first_name' => [
+                'label' => __('First name', 'woocommerce-gateway-tillit'),
+                'required' => true,
+                'priority' => 15
+            ],
+            'representative_last_name' => [
+                'label' => __('Last name', 'woocommerce-gateway-tillit'),
+                'required' => true,
+                'priority' => 20
+            ],
+            'representative_phone_number' => [
+                'label' => __('Phone number', 'woocommerce-gateway-tillit'),
+                'required' => true,
+                'priority' => 25
+            ],
+            'representative_email' => [
+                'label' => __('Email', 'woocommerce-gateway-tillit'),
+                'required' => true,
+                'priority' => 30
             ]
         ];
 
