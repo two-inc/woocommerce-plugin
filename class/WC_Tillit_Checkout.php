@@ -3,12 +3,46 @@
 class WC_Tillit_Checkout
 {
 
+    /**
+     * WC_Tillit_Checkout constructor.
+     */
+
     public function __construct()
     {
+
+        // Remove the default company name
         add_filter('woocommerce_checkout_fields', [$this, 'remove_company_name']);
-        add_filter('woocommerce_checkout_fields', [$this, 'add_company_fields'], 1);
-        add_filter('woocommerce_checkout_fields', [$this, 'add_representative_fields'], 2);
-        add_action('woocommerce_checkout_billing', [$this, 'inject_company_details'], 1);
+
+        // Register the custom fields
+        add_filter('woocommerce_checkout_fields', [$this, 'add_account_fields'], 1);
+        add_filter('woocommerce_checkout_fields', [$this, 'add_company_fields'], 2);
+        add_filter('woocommerce_checkout_fields', [$this, 'add_representative_fields'], 3);
+
+        // Render the fields on checkout page
+        add_action('woocommerce_checkout_billing', [$this, 'render_tillit_fields'], 1);
+
+    }
+
+    public function add_account_fields($fields)
+    {
+
+        // Define the company details
+        $fields['account_type'] = [
+            'account_type' => [
+                'label' => __('Select the account type', 'woocommerce-gateway-tillit'),
+                'required' => true,
+                'type' => 'radio',
+                'priority' => 15,
+                'options' => [
+                    'personal' => __('Personal', 'woocommerce-gateway-tillit'),
+                    'business' => __('Business', 'woocommerce-gateway-tillit')
+                ]
+            ]
+        ];
+
+        // Return the fields
+        return $fields;
+
     }
 
     /**
@@ -41,7 +75,6 @@ class WC_Tillit_Checkout
 
     }
 
-
     /**
      * Add the representative fields to checkout page
      *
@@ -58,11 +91,17 @@ class WC_Tillit_Checkout
             'representative_first_name' => [
                 'label' => __('First name', 'woocommerce-gateway-tillit'),
                 'required' => true,
-                'priority' => 15
+                'class' => [
+                    'form-row-first'
+                ],
+                'priority' => 15,
             ],
             'representative_last_name' => [
                 'label' => __('Last name', 'woocommerce-gateway-tillit'),
                 'required' => true,
+                'class' => [
+                    'form-row-last'
+                ],
                 'priority' => 20
             ],
             'representative_phone_number' => [
@@ -92,15 +131,20 @@ class WC_Tillit_Checkout
 
     public function remove_company_name($fields)
     {
-        // echo '<pre>'; print_r($fields); exit;
         unset($fields['billing']['billing_company']);
         return $fields;
     }
 
-    public function inject_company_details()
+    /**
+     * Render the Tillit fields to the checkout page
+     *
+     * @return void
+     */
+
+    public function render_tillit_fields()
     {
         ob_start();
-        require_once WC_TILLIT_PLUGIN_PATH . '/views/woocommerce_checkout_company.php';
+        require_once WC_TILLIT_PLUGIN_PATH . '/views/woocommerce_checkout.php';
         $content = ob_get_clean();
         echo $content;
     }

@@ -434,10 +434,10 @@ class WC_Tillit extends WC_Payment_Gateway
         WC()->cart->empty_cart();
 
         // Return the result
-        return array(
+        return [
             'result'    => 'success',
             'redirect'  => $body['verify_order_url']
-        );
+        ];
 
     }
 
