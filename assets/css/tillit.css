@@ -4,6 +4,7 @@
 }
 
 .woocommerce form .form-row#account_type_field .woocommerce-input-wrapper label {
-    margin-right: calc(var(--global--spacing-horizontal));
+    padding-left: .5em;
+    margin-right: 2em;
     display: inline;
 }
