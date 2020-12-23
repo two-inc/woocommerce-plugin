@@ -3,7 +3,7 @@
  * @global WC_Checkout $checkout
  */
 $checkout = WC()->checkout(); ?>
-<div class="woocommerce-billing-fields woocommerce-account-fields">
+<div class="woocommerce-billing-fields woocommerce-account-type-fields">
     <h3><?php esc_html_e('Account type', 'woocommerce-gateway-tillit'); ?></h3>
     <div class="woocommerce-account-type-fields__field-wrapper">
         <?php
