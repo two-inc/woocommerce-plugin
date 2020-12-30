@@ -58,18 +58,16 @@ class WC_Tillit_Checkout
     public function add_company_fields($fields)
     {
 
-        // Define the company details
-        $fields['company'] = [
-            'company_name' => [
-                'label' => __('Company name', 'woocommerce-gateway-tillit'),
-                'required' => false,
-                'priority' => 15
-            ],
-            'company_id' => [
-                'label' => __('Company ID', 'woocommerce-gateway-tillit'),
-                'required' => false,
-                'priority' => 20
-            ]
+        $fields['billing']['company_name'] = [
+            'label' => __('Company name', 'woocommerce-gateway-tillit'),
+            'required' => false,
+            'priority' => 1
+        ];
+
+        $fields['billing']['company_id'] = [
+            'label' => __('Company ID', 'woocommerce-gateway-tillit'),
+            'required' => false,
+            'priority' => 2
         ];
 
         // Return the fields
