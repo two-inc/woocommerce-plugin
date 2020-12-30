@@ -25,8 +25,8 @@ class WC_Tillit extends WC_Payment_Gateway
         $this->id = 'woocommerce-gateway-tillit';
         $this->has_fields = false;
         $this->order_button_text = __('Proceed to Tillit', 'woocommerce-gateway-tillit');
-        $this->method_title = __('Pay with Tillit', 'woocommerce-gateway-tillit');
-        $this->method_description = __('Making b2b purchases a breeze.', 'woocommerce-gateway-tillit');
+        $this->method_title = __('Pay in 15 days with EHF invoice', 'woocommerce-gateway-tillit');
+        $this->method_description = __('Buy Now, Pay Later for B2B Trade.', 'woocommerce-gateway-tillit');
         $this->icon = WC_HTTPS::force_https_url(WC_TILLIT_PLUGIN_URL . 'assets/images/logo.svg');
         $this->supports = ['products'];
 

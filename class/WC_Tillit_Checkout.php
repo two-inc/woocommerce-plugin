@@ -20,6 +20,7 @@ class WC_Tillit_Checkout
 
         // Render the fields on checkout page
         add_action('woocommerce_checkout_billing', [$this, 'render_tillit_fields'], 1);
+        add_action('woocommerce_after_checkout_billing_form', [$this, 'render_tillit_representative_fields'], 1);
 
     }
 
@@ -142,6 +143,20 @@ class WC_Tillit_Checkout
     {
         ob_start();
         require_once WC_TILLIT_PLUGIN_PATH . '/views/woocommerce_checkout.php';
+        $content = ob_get_clean();
+        echo $content;
+    }
+
+    /**
+     * Render the Tillit representative fields to the checkout page
+     *
+     * @return void
+     */
+
+    public function render_tillit_representative_fields()
+    {
+        ob_start();
+        require_once WC_TILLIT_PLUGIN_PATH . '/views/woocommerce_after_checkout_billing_form.php';
         $content = ob_get_clean();
         echo $content;
     }
