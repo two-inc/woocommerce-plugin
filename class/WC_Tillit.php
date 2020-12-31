@@ -187,6 +187,9 @@ class WC_Tillit extends WC_Payment_Gateway
     private function makeRequest($endpoint, $payload = [])
     {
 
+        var_dump(json_encode($payload));
+        exit;
+
         // Get the API Key
         $apiKey = $this->get_option('api_key');
 
@@ -239,8 +242,8 @@ class WC_Tillit extends WC_Payment_Gateway
                 'price' => $product->get_price(),
                 'quantity' => $item->get_quantity(),
                 'unit_price' => $product->get_price(),
-                'tax_class_rate' => '',
-                'quantity_unit' => '',
+                'tax_class_rate' => $product->get_tax_class(),
+                'quantity_unit' => 'piece',
                 'type' => '',
                 'tax_class_name' => '',
                 'image_url' => $productImage ? $productImage['url'] : null,
@@ -353,8 +356,7 @@ class WC_Tillit extends WC_Payment_Gateway
             ],
             // @todo
             'merchant_reference' => '',
-            // @todo
-            'merchant_additional_info' => '',
+            'merchant_additional_info' => $order->get_customer_order_notes(),
             // @todo
             'payment' => [
                 // @todo
