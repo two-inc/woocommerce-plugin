@@ -27,7 +27,7 @@ class WC_Tillit extends WC_Payment_Gateway
         // $this->order_button_text = __('Proceed to Tillit', 'woocommerce-gateway-tillit');
         $this->order_button_text = __('Place order', 'woocommerce-gateway-tillit');
         $this->method_title = __('Pay in 15 days with EHF invoice', 'woocommerce-gateway-tillit');
-        $this->method_description = __('Buy Now, Pay Later for B2B Trade.', 'woocommerce-gateway-tillit');
+        $this->method_description = $this->generate_method_description();
         $this->icon = WC_HTTPS::force_https_url(WC_TILLIT_PLUGIN_URL . 'assets/images/logo.svg');
         $this->supports = ['products'];
 
@@ -45,6 +45,25 @@ class WC_Tillit extends WC_Payment_Gateway
         add_action('woocommerce_order_status_processing', [$this, 'on_order_processing']);
         add_action('woocommerce_order_status_completed', [$this, 'on_order_completed']);
 
+    }
+
+    /**
+     * Generate the payment method description
+     *
+     * @return string
+     */
+
+    private function generate_method_description()
+    {
+        return sprintf(
+            '%s<br /><br />%s',
+            __('Invoice will be sent to your email and accounting system if signed up for EHF.', 'woocommerce-gateway-tillit'),
+            sprintf(
+                '%s <a href="https://tillit.ai" target="_blank">%s</a>',
+                __('Check', 'woocommerce-gateway-tillit'),
+                __('personal information policy.', 'woocommerce-gateway-tillit')
+            )
+        );
     }
 
     /**

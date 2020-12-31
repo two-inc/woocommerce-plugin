@@ -19,7 +19,6 @@ class WC_Tillit_Checkout
         // Register the custom fields
         add_filter('woocommerce_checkout_fields', [$this, 'add_account_fields'], 1);
         add_filter('woocommerce_checkout_fields', [$this, 'add_company_fields'], 2);
-        add_filter('woocommerce_checkout_fields', [$this, 'add_representative_fields'], 3);
 
         // Render the fields on checkout page
         add_action('woocommerce_checkout_billing', [$this, 'render_tillit_fields'], 1);
@@ -116,48 +115,6 @@ class WC_Tillit_Checkout
             'label' => __('Company ID', 'woocommerce-gateway-tillit'),
             'required' => false,
             'priority' => 3
-        ];
-
-        // Return the fields
-        return $fields;
-
-    }
-
-    /**
-     * Add the representative fields to checkout page
-     *
-     * @param $fields
-     *
-     * @return mixed
-     */
-
-    public function add_representative_fields($fields)
-    {
-
-        // Define the representative details
-        $fields['representative'] = [
-            'representative_first_name' => [
-                'label' => __('First name', 'woocommerce-gateway-tillit'),
-                'class' => [
-                    'form-row-first'
-                ],
-                'priority' => 15,
-            ],
-            'representative_last_name' => [
-                'label' => __('Last name', 'woocommerce-gateway-tillit'),
-                'class' => [
-                    'form-row-last'
-                ],
-                'priority' => 20
-            ],
-            'representative_phone_number' => [
-                'label' => __('Phone number', 'woocommerce-gateway-tillit'),
-                'priority' => 25
-            ],
-            'representative_email' => [
-                'label' => __('Email', 'woocommerce-gateway-tillit'),
-                'priority' => 30
-            ]
         ];
 
         // Return the fields
