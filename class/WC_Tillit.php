@@ -311,15 +311,13 @@ class WC_Tillit extends WC_Payment_Gateway
                 'company' => [
                     // @todo
                     'organization_number' => '',
-                    // @todo
-                    'company_name' => ''
+                    'company_name' => $order->get_billing_company()
                 ]
             ],
             'billing_address' => [
                 // @todo
                 'id' => '',
-                // @todo
-                'organization_name' => '',
+                'organization_name' => $order->get_billing_company(),
                 'street_address' => $order->get_billing_address_1(),
                 'postal_code' => $order->get_billing_postcode(),
                 'city' => $order->get_billing_city(),
@@ -337,8 +335,7 @@ class WC_Tillit extends WC_Payment_Gateway
             'shipping_address' => [
                 // @todo
                 'id' => '',
-                // @todo
-                'organization_name' => '',
+                'organization_name' => $order->get_billing_company(),
                 'street_address' => $order->get_shipping_address_1(),
                 'postal_code' => $order->get_shipping_postcode(),
                 'city' => $order->get_shipping_city(),

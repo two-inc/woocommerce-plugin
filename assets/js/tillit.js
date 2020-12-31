@@ -1,6 +1,102 @@
 const tillitRequiredField = '<abbr class="required" title="required">*</abbr>'
 
 /**
+ * Add a placeholder after an input
+ *
+ * @param $el
+ * @param name
+ */
+
+function tillitAddPlaceholder($el, name)
+{
+
+    // Get an existing placeholder
+    let $placeholder = jQuery('#tillit-'+ name +'-source')
+
+    // Stop if we already have a placeholder
+    if($placeholder.length > 0) return
+
+    // Create a placeholder
+    $placeholder = jQuery('<div id="tillit-'+ name +'-source"></div>')
+
+    // Add placeholder after element
+    $placeholder.insertAfter($el)
+
+}
+
+/**
+ * Move a field around and leave a placeholder
+ *
+ * @param selector
+ * @param name
+ */
+
+function tillitMoveField(selector, name)
+{
+
+    // Get the element
+    const $el = jQuery('#' + selector)
+
+    // Add a placeholder
+    tillitAddPlaceholder($el, name)
+
+    // Get the target
+    const $target = jQuery('#tillit-' + name + '-target')
+
+    // Move the input
+    $el.insertAfter($target)
+
+}
+
+/**
+ * Move a field to its original position
+ *
+ * @param selector
+ * @param name
+ */
+
+function tillitRevertField(selector, name)
+{
+
+    // Get the element
+    const $el = jQuery('#' + selector)
+
+    // Get the target
+    const $target = jQuery('#tillit-' + name + '-source')
+
+    // Move the input
+    $el.insertAfter($target)
+
+}
+
+/**
+ * Move the first name, last name, and phone based on the account type
+ *
+ * @return void
+ */
+
+function tillitMoveFields()
+{
+
+    // Get the account type
+    const accountType = jQuery(':input[name="account_type"]:checked').val()
+
+    // If business account
+    if(accountType === 'business') {
+        tillitMoveField('billing_first_name_field', 'fn')
+        tillitMoveField('billing_last_name_field', 'ln')
+        tillitMoveField('billing_phone_field', 'ph')
+        tillitMoveField('billing_email_field', 'em')
+    } else {
+        tillitRevertField('billing_first_name_field', 'fn')
+        tillitRevertField('billing_last_name_field', 'ln')
+        tillitRevertField('billing_phone_field', 'ph')
+        tillitRevertField('billing_email_field', 'em')
+    }
+
+}
+
+/**
  * Toggle the required property for company fields
  *
  * @param $targets
@@ -101,6 +197,9 @@ function tillitChangeAccountType()
     // Toggle the actions
     tillitToggleActions()
 
+    // Move the fields
+    tillitMoveFields()
+
 }
 
 jQuery(function(){
@@ -124,6 +223,9 @@ jQuery(function(){
 
         // Toggle the company fields
         tillitToggleCompanyFields(accountType)
+
+        // Move the fields
+        tillitMoveFields()
 
     }
 
