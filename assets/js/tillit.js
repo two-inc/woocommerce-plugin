@@ -44,7 +44,7 @@ function tillitToggleCompanyFields(accountType)
 {
 
     // Get the targets
-    const $targets = jQuery('.woocommerce-company-fields, .woocommerce-representative-fields, #company_id_field, #company_name_field')
+    const $targets = jQuery('.woocommerce-company-fields, .woocommerce-representative-fields, #company_id_field, #billing_company_field')
 
     // Toggle the targets based on the account type
     accountType === 'personal' ? $targets.hide() : $targets.show()

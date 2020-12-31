@@ -282,16 +282,12 @@ class WC_Tillit extends WC_Payment_Gateway
             'recurring' => false,
             'buyer' => [
                 'representative' => [
-                    // @todo
-                    'first_name' => '',
-                    // @todo
-                    'last_name' => '',
-                    // @todo
-                    'phone_number' => '',
+                    'first_name' => $order->get_billing_first_name(),
+                    'last_name' => $order->get_billing_last_name(),
+                    'phone_number' => $order->get_billing_phone(),
                     // @todo
                     'phone_number_prefix' => '',
-                    // @todo
-                    'email' => ''
+                    'email' => $order->get_billing_email()
                 ],
                 'company' => [
                     // @todo

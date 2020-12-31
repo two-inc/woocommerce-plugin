@@ -11,7 +11,7 @@ class WC_Tillit_Checkout
     {
 
         // Remove the default company name
-        add_filter('woocommerce_checkout_fields', [$this, 'remove_company_name']);
+        add_filter('woocommerce_checkout_fields', [$this, 'remove_company_name'], 1);
 
         // Move the country field to the top
         add_filter('woocommerce_checkout_fields', [$this, 'move_country_field'], 1);
@@ -105,8 +105,9 @@ class WC_Tillit_Checkout
     public function add_company_fields($fields)
     {
 
-        $fields['billing']['company_name'] = [
+        $fields['billing']['billing_company'] = [
             'label' => __('Company name', 'woocommerce-gateway-tillit'),
+            'autocomplete' => 'organization',
             'required' => false,
             'priority' => 2
         ];
