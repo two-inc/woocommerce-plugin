@@ -55,6 +55,35 @@ function tillitToggleCompanyFields(accountType)
 }
 
 /**
+ * Enable or disable the action button and the payment method based on the account type
+ *
+ * @return void
+ */
+
+function tillitToggleActions()
+{
+
+    // Get the account type
+    const accountType = jQuery(':input[name="account_type"]:checked').val()
+
+    // Get the payment method
+    const paymentMethod = jQuery(':input[name="payment_method"]:checked').val()
+
+    // Get the Tillit payment method
+    const $tillitPaymentMethod = jQuery(':input[value="woocommerce-gateway-tillit"]')
+
+    // Get the place order button
+    const $placeOrder = jQuery('#place_order')
+
+    // Disable the Tillit payment method for personal orders
+    $tillitPaymentMethod.attr('disabled', accountType === 'personal')
+
+    // Disable the place order button if personal order and payment method is Tillit
+    $placeOrder.attr('disabled', accountType === 'personal' && paymentMethod === 'woocommerce-gateway-tillit')
+
+}
+
+/**
  * Handle the account type change
  *
  * @return void
@@ -69,9 +98,14 @@ function tillitChangeAccountType()
     // Toggle the company fields
     tillitToggleCompanyFields($input.val())
 
+    // Toggle the actions
+    tillitToggleActions()
+
 }
 
 jQuery(function(){
+
+    const $body = jQuery(document.body)
 
     // Get the checkout form
     const $checkout = jQuery('.woocommerce-checkout')
@@ -85,12 +119,21 @@ jQuery(function(){
     // If we found the field
     if($accountType.length > 0) {
 
+        // Get the account type
+        const accountType = $accountType.val()
+
         // Toggle the company fields
-        tillitToggleCompanyFields($accountType.val())
+        tillitToggleCompanyFields(accountType)
 
     }
 
+    // Disable or enable actions based on the account type
+    $body.on('updated_checkout', tillitToggleActions)
+
     // Handle account type change
     $checkout.on('change', '[name="account_type"]', tillitChangeAccountType)
+
+    // Toggle the actions when the payment method changes
+    $checkout.on('change', '[name="payment_method"]', tillitToggleActions)
 
 })

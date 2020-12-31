@@ -13,6 +13,9 @@ class WC_Tillit_Checkout
         // Remove the default company name
         add_filter('woocommerce_checkout_fields', [$this, 'remove_company_name']);
 
+        // Move the country field to the top
+        add_filter('woocommerce_checkout_fields', [$this, 'move_country_field'], 1);
+
         // Register the custom fields
         add_filter('woocommerce_checkout_fields', [$this, 'add_account_fields'], 1);
         add_filter('woocommerce_checkout_fields', [$this, 'add_company_fields'], 2);
@@ -23,6 +26,50 @@ class WC_Tillit_Checkout
         add_action('woocommerce_after_checkout_billing_form', [$this, 'render_tillit_representative_fields'], 1);
 
     }
+
+    /**
+     * Remove the default company name from the checkout page
+     *
+     * @param $fields
+     *
+     * @return array
+     */
+
+    public function remove_company_name($fields)
+    {
+
+        // Remove the field
+        unset($fields['billing']['billing_company']);
+
+        // Return the fields list
+        return $fields;
+
+    }
+
+    /**
+     * Move the country field at the top of the Billing Details section
+     *
+     * @param $fields
+     */
+
+    public function move_country_field($fields)
+    {
+
+        // Change the priority for the country field
+        $fields['billing']['billing_country']['priority'] = 1;
+
+        // Return the fields list
+        return $fields;
+
+    }
+
+    /**
+     * Add the account type fields to the checkout page
+     *
+     * @param $fields
+     *
+     * @return mixed
+     */
 
     public function add_account_fields($fields)
     {
@@ -61,13 +108,13 @@ class WC_Tillit_Checkout
         $fields['billing']['company_name'] = [
             'label' => __('Company name', 'woocommerce-gateway-tillit'),
             'required' => false,
-            'priority' => 1
+            'priority' => 2
         ];
 
         $fields['billing']['company_id'] = [
             'label' => __('Company ID', 'woocommerce-gateway-tillit'),
             'required' => false,
-            'priority' => 2
+            'priority' => 3
         ];
 
         // Return the fields
@@ -115,20 +162,6 @@ class WC_Tillit_Checkout
         // Return the fields
         return $fields;
 
-    }
-
-    /**
-     * Remove the default company name from the checkout page
-     *
-     * @param $fields
-     *
-     * @return array
-     */
-
-    public function remove_company_name($fields)
-    {
-        unset($fields['billing']['billing_company']);
-        return $fields;
     }
 
     /**
