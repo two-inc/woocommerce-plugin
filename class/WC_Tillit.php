@@ -187,20 +187,17 @@ class WC_Tillit extends WC_Payment_Gateway
     private function makeRequest($endpoint, $payload = [])
     {
 
-        var_dump(json_encode($payload));
-        exit;
-
-        // Get the API Key
+        /*// Get the API Key
         $apiKey = $this->get_option('api_key');
 
         // Stop if no API key
         if(!$apiKey) return [
             'result' => 'failure',
             'messages' => __('Tillit API key is missing.', 'woocommerce-gateway-tillit')
-        ];
+        ];*/
 
         // Add the API key
-        $payload['api_key'] = $apiKey;
+        $payload['api_key'] = 'Hello World';
 
         // Create the order and get the payment url
         return wp_remote_post(sprintf('%s%s', WC_TILLIT_URL, $endpoint), [
@@ -312,8 +309,7 @@ class WC_Tillit extends WC_Payment_Gateway
                     'email' => $order->get_billing_email()
                 ],
                 'company' => [
-                    // @todo
-                    'organization_number' => '',
+                    'organization_number' => get_post_meta($order_id, '_company_id', true),
                     'company_name' => $order->get_billing_company()
                 ]
             ],
