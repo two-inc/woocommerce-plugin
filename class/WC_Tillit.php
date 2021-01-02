@@ -230,7 +230,14 @@ class WC_Tillit extends WC_Payment_Gateway
             /** @var WC_Product $product */
             $product = $item->get_product();
 
+            // Get the product image
             $productImage = wp_get_attachment_image_src($product->get_id(), 'full');
+
+            // Get the tax rates
+            $taxRates = WC_Tax::get_rates($product->get_tax_class());
+
+            // True if we have a tax rate defined
+            $withTaxRates = count($taxRates) > 0;
 
             $items[] = [
                 'id' => $item->get_id(),
@@ -239,10 +246,10 @@ class WC_Tillit extends WC_Payment_Gateway
                 'price' => $product->get_price(),
                 'quantity' => $item->get_quantity(),
                 'unit_price' => $product->get_price(),
-                'tax_class_rate' => $product->get_tax_class(),
+                'tax_class_rate' => $withTaxRates ? $taxRates[1]['rate'] : false,
                 'quantity_unit' => 'piece',
                 'type' => '',
-                'tax_class_name' => '',
+                'tax_class_name' => $withTaxRates ? $taxRates[1]['label'] : false,
                 'image_url' => $productImage ? $productImage['url'] : null,
                 'product_page_url' => get_permalink($product->get_id()),
                 'details' => [
@@ -254,6 +261,7 @@ class WC_Tillit extends WC_Payment_Gateway
                     'part_number' => ''
                 ]
             ];
+
         }
 
         // Return the items
@@ -309,7 +317,7 @@ class WC_Tillit extends WC_Payment_Gateway
                     'email' => $order->get_billing_email()
                 ],
                 'company' => [
-                    'organization_number' => get_post_meta($order_id, '_company_id', true),
+                    'organization_number' => sanitize_text_field($_POST['company_id'] || ''),
                     'company_name' => $order->get_billing_company()
                 ]
             ],
