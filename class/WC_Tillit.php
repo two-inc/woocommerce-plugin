@@ -317,7 +317,7 @@ class WC_Tillit extends WC_Payment_Gateway
                     'email' => $order->get_billing_email()
                 ],
                 'company' => [
-                    'organization_number' => sanitize_text_field($_POST['company_id'] || ''),
+                    'organization_number' => sanitize_text_field($_POST['company_id']),
                     'company_name' => $order->get_billing_company()
                 ]
             ],

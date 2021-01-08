@@ -107,6 +107,14 @@ class WC_Tillit_Checkout
         $fields['billing']['billing_company'] = [
             'label' => __('Company name', 'woocommerce-gateway-tillit'),
             'autocomplete' => 'organization',
+            'type' => 'select',
+            /*'custom_attributes' => [
+                'data-multiple' => true,
+                'data-multi' => true
+            ],*/
+            'options' => [
+                '' => __('Enter the company name', 'woocommerce-gateway-tillit')
+            ],
             'required' => false,
             'priority' => 2
         ];

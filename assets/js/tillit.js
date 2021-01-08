@@ -1,4 +1,7 @@
 const tillitRequiredField = '<abbr class="required" title="required">*</abbr>'
+const tillitSearchLimit = 50
+
+let tillitSearchCache
 
 /**
  * Add a placeholder after an input
@@ -202,6 +205,30 @@ function tillitChangeAccountType()
 
 }
 
+function tillitExtractItems(results)
+{
+
+    if(results.status !== 'success') return []
+
+    const items = []
+
+    for(let i = 0; i < results.data.items.length; i++) {
+
+        const item = results.data.items[i]
+
+        items.push({
+            id: item.name,
+            text: item.name,
+            html: item.highlight + ' (' + item.id + ')',
+            company_id: item.id
+        })
+
+    }
+
+    return items
+
+}
+
 jQuery(function(){
 
     const $body = jQuery(document.body)
@@ -214,6 +241,12 @@ jQuery(function(){
 
     // Get the account type input
     const $accountType = jQuery('[name="account_type"]:checked')
+
+    // Get the billing company field
+    const $billingCompany = $checkout.find('#billing_company')
+
+    // Get the company ID field
+    const $companyId = $checkout.find('#company_id')
 
     // If we found the field
     if($accountType.length > 0) {
@@ -237,5 +270,59 @@ jQuery(function(){
 
     // Toggle the actions when the payment method changes
     $checkout.on('change', '[name="payment_method"]', tillitToggleActions)
+
+    // Turn the select input into select2
+    $billingCompany.selectWoo({
+        minimumInputLength: 3,
+        width: '100%',
+        escapeMarkup: function(markup) {
+            return markup
+        },
+        templateResult: function(data)
+        {
+            return data.html
+        },
+        templateSelection: function(data) {
+            return data.text
+        },
+        ajax: {
+            dataType: 'json',
+            delay: 200,
+            url: function(params){
+                params.page = params.page || 1
+                return 'https://search-api-demo-j6whfmualq-lz.a.run.app/search?limit=' + tillitSearchLimit + '&offset=' + ((params.page - 1) * tillitSearchLimit) + '&q=' + params.term
+            },
+            data: function()
+            {
+                return {}
+            },
+            processResults: function(response, params)
+            {
+
+                tillitSearchCache = response
+
+                return {
+                    results: tillitExtractItems(response),
+                    pagination: {
+                        more: (params.page * tillitSearchLimit) < response.data.total
+                    }
+                }
+
+            }
+        }
+    }).on('select2:select', function(e){
+        $companyId.val(e.params.data.company_id)
+    })
+
+    /**
+     * Fix the position bug
+     */
+
+    const instance = $billingCompany.data('select2')
+
+    instance.on('open', function(e){
+        this.results.clear()
+        this.dropdown._positionDropdown()
+    })
 
 })
