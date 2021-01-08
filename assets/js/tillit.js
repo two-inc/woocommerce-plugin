@@ -205,6 +205,14 @@ function tillitChangeAccountType()
 
 }
 
+/**
+ * Extract and format the dropdown options
+ *
+ * @param results
+ *
+ * @returns {[]|*[]}
+ */
+
 function tillitExtractItems(results)
 {
 
@@ -316,6 +324,7 @@ jQuery(function(){
 
     /**
      * Fix the position bug
+     * https://github.com/select2/select2/issues/4614
      */
 
     const instance = $billingCompany.data('select2')
