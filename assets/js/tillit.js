@@ -2,6 +2,7 @@ const tillitRequiredField = '<abbr class="required" title="required">*</abbr>'
 const tillitSearchLimit = 50
 
 let tillitSearchCache
+let tillitMethodHidden = true
 
 /**
  * Add a placeholder after an input
@@ -168,39 +169,14 @@ function tillitToggleActions()
     // Get the payment method
     const paymentMethod = jQuery(':input[name="payment_method"]:checked').val()
 
-    // Get the Tillit payment method input
-    const $tillitPaymentMethod = jQuery(':input[value="woocommerce-gateway-tillit"]')
-
-    // Get the Tillit payment block
-    const $tillit = jQuery('.payment_method_woocommerce-gateway-tillit')
-
     // Get the place order button
     const $placeOrder = jQuery('#place_order')
 
-    // Disable the Tillit payment method for personal orders
-    $tillitPaymentMethod.attr('disabled', accountType === 'personal')
-
-    // If a personal account
-    if(accountType === 'personal') {
-
-        // Hide the payment method block
-        $tillit.hide()
-
-        // Select the first visible payment method
-        $tillit.parent().find('li:visible').eq(0).find(':radio').click()
-
-    } else {
-
-        // Select the payment method for business accounts
-        $tillitPaymentMethod.click()
-
-        // Show the tillit payment method
-        $tillit.show()
-
-    }
-
     // Disable the place order button if personal order and payment method is Tillit
     $placeOrder.attr('disabled', accountType === 'personal' && paymentMethod === 'woocommerce-gateway-tillit')
+
+    // Toggle the Tillit payment method
+    tillitToggleMethod()
 
 }
 
@@ -224,6 +200,9 @@ function tillitChangeAccountType()
 
     // Move the fields
     tillitMoveFields()
+
+    // Show or hide the payment method
+    tillitToggleMethod()
 
 }
 
@@ -250,12 +229,55 @@ function tillitExtractItems(results)
             id: item.name,
             text: item.name,
             html: item.highlight + ' (' + item.id + ')',
-            company_id: item.id
+            company_id: item.id,
+            approved: false
         })
 
     }
 
     return items
+
+}
+
+/**
+ * Hide or show the Tillit payment method
+ *
+ * @return void
+ */
+
+function tillitToggleMethod()
+{
+
+    // Get the account type
+    const accountType = jQuery(':input[name="account_type"]:checked').val()
+
+    // Get the Tillit payment method input
+    const $tillitPaymentMethod = jQuery(':input[value="woocommerce-gateway-tillit"]')
+
+    // Get the Tillit payment block
+    const $tillit = jQuery('.payment_method_woocommerce-gateway-tillit')
+
+    // Disable the Tillit payment method for personal orders
+    $tillitPaymentMethod.attr('disabled', accountType === 'personal')
+
+    // If a personal account
+    if(tillitMethodHidden === true || accountType === 'personal') {
+
+        // Hide the payment method block
+        $tillit.hide()
+
+        // Select the first visible payment method
+        $tillit.parent().find('li:visible').eq(0).find(':radio').click()
+
+    } else {
+
+        // Select the payment method for business accounts
+        $tillitPaymentMethod.click()
+
+        // Show the tillit payment method
+        $tillit.show()
+
+    }
 
 }
 
@@ -341,7 +363,19 @@ jQuery(function(){
             }
         }
     }).on('select2:select', function(e){
-        $companyId.val(e.params.data.company_id)
+
+        // Get the option data
+        const data = e.params.data
+
+        // Set the company ID
+        $companyId.val(data.company_id)
+
+        // Force hide if the company is not approved
+        tillitMethodHidden = data.approved === false
+
+        // Show or hide the payment method
+        tillitToggleMethod()
+
     })
 
     /**
