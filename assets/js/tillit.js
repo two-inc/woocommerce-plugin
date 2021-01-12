@@ -182,25 +182,23 @@ function tillitToggleMethod()
     // Get the Tillit payment method input
     const $tillitPaymentMethod = jQuery(':input[value="woocommerce-gateway-tillit"]')
 
-    // Get the Tillit payment block
-    const $tillit = jQuery('li.payment_method_woocommerce-gateway-tillit')
-
     // True if the Tillit payment method is disabled
     const isTillitDisabled = tillitMethodHidden === true || accountType === 'personal'
 
     // Disable the Tillit payment method for personal orders
     $tillitPaymentMethod.attr('disabled', isTillitDisabled)
 
-    // If a personal account
+    // If Tillit is disabled
     if(isTillitDisabled) {
 
-        // Hide the payment method block
-        $tillit.hide()
+        // Get the Tillit payment method
+        const $tillit = jQuery('li.payment_method_woocommerce-gateway-tillit')
 
-    } else {
+        // Get the next or previous target
+        const $target = $tillit.prev().length === 0 ? $tillit.next() : $tillit.prev()
 
-        // Show the tillit payment method
-        $tillit.show()
+        // Activate the next default method
+        $target.find(':radio').click()
 
     }
 
@@ -227,8 +225,11 @@ function tillitToggleActions()
     // Disable the place order button if personal order and payment method is Tillit
     $placeOrder.attr('disabled', accountType === 'personal' && paymentMethod === 'woocommerce-gateway-tillit')
 
-    // Hide or show the payment method
+    // Enable or disable the Tillit method
     tillitToggleMethod()
+
+    // Select the default method
+    tillitSelectDefaultMethod()
 
 }
 
@@ -436,7 +437,7 @@ jQuery(function(){
     $checkout.on('change', '[name="account_type"]', tillitChangeAccountType)
 
     // Toggle the actions when the payment method changes
-    $checkout.on('change', '[name="payment_method"]', tillitToggleActions)
+    // $checkout.on('change', '[name="payment_method"]', tillitToggleActions)
 
     // Turn the select input into select2
     $billingCompany.selectWoo({
