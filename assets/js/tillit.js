@@ -198,7 +198,7 @@ function tillitToggleMethod()
         const $target = $tillit.prev().length === 0 ? $tillit.next() : $tillit.prev()
 
         // Activate the next default method
-        $target.find(':radio').click()
+        $target.find('label').click()
 
     }
 
@@ -320,7 +320,7 @@ function tillitSelectDefaultMethod()
     if(isTillitDisabled) {
 
         // Select the first visible payment method
-        $tillit.parent().find('li:visible').eq(0).find(':radio').click()
+        $tillit.parent().find('li:visible').eq(0).find('label').click()
 
     } else {
 
