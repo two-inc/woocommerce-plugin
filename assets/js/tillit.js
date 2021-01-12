@@ -168,6 +168,45 @@ function tillitToggleCompanyFields(accountType)
 }
 
 /**
+ * Hide or show the Tillit payment method
+ *
+ * @return void
+ */
+
+function tillitToggleMethod()
+{
+
+    // Get the account type
+    const accountType = tillitGetAccountType()
+
+    // Get the Tillit payment method input
+    const $tillitPaymentMethod = jQuery(':input[value="woocommerce-gateway-tillit"]')
+
+    // Get the Tillit payment block
+    const $tillit = jQuery('li.payment_method_woocommerce-gateway-tillit')
+
+    // True if the Tillit payment method is disabled
+    const isTillitDisabled = tillitMethodHidden === true || accountType === 'personal'
+
+    // Disable the Tillit payment method for personal orders
+    $tillitPaymentMethod.attr('disabled', isTillitDisabled)
+
+    // If a personal account
+    if(isTillitDisabled) {
+
+        // Hide the payment method block
+        $tillit.hide()
+
+    } else {
+
+        // Show the tillit payment method
+        $tillit.show()
+
+    }
+
+}
+
+/**
  * Enable or disable the action button and the payment method based on the account type
  *
  * @return void
@@ -188,11 +227,8 @@ function tillitToggleActions()
     // Disable the place order button if personal order and payment method is Tillit
     $placeOrder.attr('disabled', accountType === 'personal' && paymentMethod === 'woocommerce-gateway-tillit')
 
-    // Get the Tillit payment block
-    const $tillit = jQuery('.payment_method_woocommerce-gateway-tillit')
-
-    if(accountType === 'personal') $tillit.hide()
-    else $tillit.show()
+    // Hide or show the payment method
+    tillitToggleMethod()
 
 }
 
@@ -256,12 +292,12 @@ function tillitExtractItems(results)
 }
 
 /**
- * Hide or show the Tillit payment method
+ * Select the default payment method
  *
  * @return void
  */
 
-function tillitToggleMethod()
+function tillitSelectDefaultMethod()
 {
 
     // Get the account type
@@ -282,9 +318,6 @@ function tillitToggleMethod()
     // If a personal account
     if(isTillitDisabled) {
 
-        // Hide the payment method block
-        $tillit.hide()
-
         // Select the first visible payment method
         $tillit.parent().find('li:visible').eq(0).find(':radio').click()
 
@@ -292,9 +325,6 @@ function tillitToggleMethod()
 
         // Select the payment method for business accounts
         $tillitPaymentMethod.click()
-
-        // Show the tillit payment method
-        $tillit.show()
 
     }
 
@@ -334,6 +364,9 @@ function tillitGetApproval(companyId)
 
         // Show or hide the Tillit payment method
         tillitToggleMethod()
+
+        // Select the default payment method
+        tillitSelectDefaultMethod()
 
         // Fetch the company data
         const addressResponse = tillitCheckoutApiRequest('address', companyId)
