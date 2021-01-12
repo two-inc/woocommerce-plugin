@@ -7,6 +7,17 @@ let tillitSearchCache
 let tillitMethodHidden = true
 
 /**
+ * Return the account type
+ *
+ * @returns {*|jQuery}
+ */
+
+function tillitGetAccountType()
+{
+    return jQuery(':input[name="account_type"]:checked').val()
+}
+
+/**
  * Add a placeholder after an input
  *
  * @param $el
@@ -85,7 +96,7 @@ function tillitMoveFields()
 {
 
     // Get the account type
-    const accountType = jQuery(':input[name="account_type"]:checked').val()
+    const accountType = tillitGetAccountType()
 
     // If business account
     if(accountType === 'business') {
@@ -166,7 +177,7 @@ function tillitToggleActions()
 {
 
     // Get the account type
-    const accountType = jQuery(':input[name="account_type"]:checked').val()
+    const accountType = tillitGetAccountType()
 
     // Get the payment method
     const paymentMethod = jQuery(':input[name="payment_method"]:checked').val()
@@ -177,8 +188,11 @@ function tillitToggleActions()
     // Disable the place order button if personal order and payment method is Tillit
     $placeOrder.attr('disabled', accountType === 'personal' && paymentMethod === 'woocommerce-gateway-tillit')
 
-    // Toggle the Tillit payment method
-    // tillitToggleMethod()
+    // Get the Tillit payment block
+    const $tillit = jQuery('.payment_method_woocommerce-gateway-tillit')
+
+    if(accountType === 'personal') $tillit.hide()
+    else $tillit.show()
 
 }
 
@@ -251,7 +265,7 @@ function tillitToggleMethod()
 {
 
     // Get the account type
-    const accountType = jQuery(':input[name="account_type"]:checked').val()
+    const accountType = tillitGetAccountType()
 
     // Get the Tillit payment method input
     const $tillitPaymentMethod = jQuery(':input[value="woocommerce-gateway-tillit"]')
@@ -321,34 +335,29 @@ function tillitGetApproval(companyId)
         // Show or hide the Tillit payment method
         tillitToggleMethod()
 
-        // If the company is approved
-        if(response.approved === true) {
+        // Fetch the company data
+        const addressResponse = tillitCheckoutApiRequest('address', companyId)
 
-            // Fetch the company data
-            const addressResponse = tillitCheckoutApiRequest('address', companyId)
+        addressResponse.done(function(response){
 
-            addressResponse.done(function(response){
+            // If we have the company location
+            if(response.company_location) {
 
-                // If we have the company location
-                if(response.company_location) {
+                // Get the company location object
+                const companyLocation = response.company_location
 
-                    // Get the company location object
-                    const companyLocation = response.company_location
+                // Populate the street name and house number fields
+                jQuery('#billing_address_1').val(companyLocation.street_address)
 
-                    // Populate the street name and house number fields
-                    jQuery('#billing_address_1').val(companyLocation.street_address)
+                // Populate the city
+                jQuery('#billing_city').val(companyLocation.municipality_name)
 
-                    // Populate the city
-                    jQuery('#billing_city').val(companyLocation.municipality_name)
+                // Populate the postal code
+                jQuery('#billing_postcode').val(companyLocation.postal_code)
 
-                    // Populate the postal code
-                    jQuery('#billing_postcode').val(companyLocation.postal_code)
+            }
 
-                }
-
-            })
-
-        }
+        })
 
     })
 
