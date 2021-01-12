@@ -308,7 +308,7 @@ function tillitGetApproval(companyId)
 {
 
     // Check the company approval
-    const approvalResponse = tillitCheckoutApiRequest('/approve', companyId)
+    const approvalResponse = tillitCheckoutApiRequest('approve', companyId)
 
     approvalResponse.done(function(response){
 
@@ -322,7 +322,7 @@ function tillitGetApproval(companyId)
         if(response.approved === true) {
 
             // Fetch the company data
-            const addressResponse = tillitCheckoutApiRequest('/address', companyId)
+            const addressResponse = tillitCheckoutApiRequest('address', companyId)
 
             addressResponse.done(function(response){
 
