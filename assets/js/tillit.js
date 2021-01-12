@@ -178,7 +178,7 @@ function tillitToggleActions()
     $placeOrder.attr('disabled', accountType === 'personal' && paymentMethod === 'woocommerce-gateway-tillit')
 
     // Toggle the Tillit payment method
-    tillitToggleMethod()
+    // tillitToggleMethod()
 
 }
 
@@ -259,11 +259,14 @@ function tillitToggleMethod()
     // Get the Tillit payment block
     const $tillit = jQuery('.payment_method_woocommerce-gateway-tillit')
 
+    // True if the Tillit payment method is disabled
+    const isTillitDisabled = tillitMethodHidden === true || accountType === 'personal'
+
     // Disable the Tillit payment method for personal orders
-    $tillitPaymentMethod.attr('disabled', accountType === 'personal')
+    $tillitPaymentMethod.attr('disabled', isTillitDisabled)
 
     // If a personal account
-    if(tillitMethodHidden === true || accountType === 'personal') {
+    if(isTillitDisabled) {
 
         // Hide the payment method block
         $tillit.hide()
