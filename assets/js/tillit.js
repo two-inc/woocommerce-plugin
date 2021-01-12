@@ -1,4 +1,6 @@
 const tillitRequiredField = '<abbr class="required" title="required">*</abbr>'
+const tillitCheckoutApi = 'https://tillit-checkout-api-j6whfmualq-lz.a.run.app'
+const tillitSearchApi = 'https://search-api-demo-j6whfmualq-lz.a.run.app'
 const tillitSearchLimit = 50
 
 let tillitSearchCache
@@ -281,6 +283,74 @@ function tillitToggleMethod()
 
 }
 
+/**
+ * Query the Tillit API
+ *
+ * @param endpoint
+ * @param companyId
+ */
+
+const tillitCheckoutApiRequest = function(endpoint, companyId)
+{
+    return jQuery.ajax({
+        dataType: 'json',
+        url: [tillitCheckoutApi, 'company', companyId, endpoint].join('/')
+    })
+}
+
+/**
+ * Fetch the company approval status and the address
+ *
+ * @param companyId
+ */
+
+function tillitGetApproval(companyId)
+{
+
+    // Check the company approval
+    const approvalResponse = tillitCheckoutApiRequest('/approve', companyId)
+
+    approvalResponse.done(function(response){
+
+        // Toggle the Tillit payment method
+        tillitMethodHidden = !response.approved
+
+        // Show or hide the Tillit payment method
+        tillitToggleMethod()
+
+        // If the company is approved
+        if(response.approved === true) {
+
+            // Fetch the company data
+            const addressResponse = tillitCheckoutApiRequest('/address', companyId)
+
+            addressResponse.done(function(response){
+
+                // If we have the company location
+                if(response.company_location) {
+
+                    // Get the company location object
+                    const companyLocation = response.company_location
+
+                    // Populate the street name and house number fields
+                    jQuery('#billing_address_1').val(companyLocation.street_address)
+
+                    // Populate the city
+                    jQuery('#billing_city').val(companyLocation.municipality_name)
+
+                    // Populate the postal code
+                    jQuery('#billing_postcode').val(companyLocation.postal_code)
+
+                }
+
+            })
+
+        }
+
+    })
+
+}
+
 jQuery(function(){
 
     const $body = jQuery(document.body)
@@ -342,7 +412,7 @@ jQuery(function(){
             delay: 200,
             url: function(params){
                 params.page = params.page || 1
-                return 'https://search-api-demo-j6whfmualq-lz.a.run.app/search?limit=' + tillitSearchLimit + '&offset=' + ((params.page - 1) * tillitSearchLimit) + '&q=' + params.term
+                return tillitSearchApi + '/search?limit=' + tillitSearchLimit + '&offset=' + ((params.page - 1) * tillitSearchLimit) + '&q=' + params.term
             },
             data: function()
             {
@@ -370,11 +440,8 @@ jQuery(function(){
         // Set the company ID
         $companyId.val(data.company_id)
 
-        // Force hide if the company is not approved
-        tillitMethodHidden = data.approved === false
-
-        // Show or hide the payment method
-        tillitToggleMethod()
+        // Get the company approval status
+        tillitGetApproval(data.company_id)
 
     })
 
