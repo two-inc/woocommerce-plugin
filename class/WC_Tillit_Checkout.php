@@ -22,7 +22,7 @@ class WC_Tillit_Checkout
 
         // Render the fields on checkout page
         add_action('woocommerce_checkout_billing', [$this, 'render_tillit_fields'], 1);
-        add_action('woocommerce_after_checkout_billing_form', [$this, 'render_tillit_representative_fields'], 1);
+        add_action('woocommerce_before_checkout_billing_form', [$this, 'render_tillit_representative_fields'], 1);
 
     }
 
