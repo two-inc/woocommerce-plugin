@@ -1,4 +1,13 @@
-# Accept payments with Tillit
+=== Tillit Payment Gateway ===
+Tags: payment request, woocommerce
+Requires at least: 4.4
+Tested up to: 5.5
+Requires PHP: 5.6
+Stable tag: 4.8.0
+License: GPLv3
+License URI: https://www.gnu.org/licenses/gpl-3.0.html
+
+== Description ==
 
 The Tillit plugin for WooCommerce allows you to offer your business customers to pay by invoice directly in the check-out. With Tillit, your trade customers get instant payment terms without leaving disrupting the shopping experience. Making your customers wait for payment terms and credit approval lowers your conversion rate – that’s why we skip the waiting.
 
@@ -6,11 +15,10 @@ Tillit is an easy way to offer trade customers their preferred way of payment. C
 
 Tillit has no setup fees, no monthly fees, and no hidden cost. Try our solution for free for three months, and experience the breeze of B2B payment.
 
-## Why use the Tillit Plugin?
+= Why use the Tillit Plugin? =
 
-- 70% of Business customers pay by invoice when given the option.
-- Automate credit check and verification.
-- Let the buyer know about your credit approval in real time.
-- Full control. You can adjust every aspect of the check-out.
-- Sell more to government entities by offering invoices sent through the PEPPOL network.
-
+* 70% of Business customers pay by invoice when given the option.
+* Automate credit check and verification.
+* Let the buyer know about your credit approval in real time.
+* Full control. You can adjust every aspect of the check-out.
+* Sell more to government entities by offering invoices sent through the PEPPOL network.

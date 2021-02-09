@@ -1,11 +1,13 @@
 <?php
 /**
- * Plugin Name: WooCommerce Tillit Gateway
+ * Plugin Name: Tillit Gateway
  * Plugin URI: https://tillit.ai
  * Description: Integration between WooCommerce and Tillit.
  * Version: 0.0.1
  * Author: Dan
  * Author URI: https://knoxon.co
+ * License: GPLv2 or later
+ * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  */
 
 // Make sure WooCommerce is active
