@@ -4,8 +4,8 @@
  * Plugin URI: https://tillit.ai
  * Description: Integration between WooCommerce and Tillit.
  * Version: 0.0.1
- * Author: Dan
- * Author URI: https://knoxon.co
+ * Author: Tillit
+ * Author URI: https://tillit.ai
  * License: GPLv2 or later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  */
@@ -19,7 +19,7 @@ define('WC_TILLIT_PLUGIN_PATH', plugin_dir_path(__FILE__));
 
 // Define the Tillit API URL
 $tillitApi = !defined('WC_TILLIT_URL') ?
-    define('WC_TILLIT_URL', 'https://tillit.knoxon.co') :
+    define('WC_TILLIT_URL', 'http://huynguyen.hopto.org:8084/v1') :
     WC_TILLIT_URL;
 
 function woocommerce_gateway_tillit_init()

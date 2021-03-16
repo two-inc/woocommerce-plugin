@@ -45,6 +45,14 @@ class WC_Tillit extends WC_Payment_Gateway
         add_action('woocommerce_order_status_processing', [$this, 'on_order_processing']);
         add_action('woocommerce_order_status_completed', [$this, 'on_order_completed']);
 
+        // Custom fields
+        add_action('woocommerce_admin_field_tillit_section_title', [$this, 'tillit_section_title']);
+
+    }
+
+    public function tillit_section_title($args)
+    {
+        var_dump($args); exit;
     }
 
     /**
@@ -126,7 +134,7 @@ class WC_Tillit extends WC_Payment_Gateway
 
     public function init_form_fields()
     {
-        $this->form_fields = apply_filters('wc_offline_form_fields', [
+        $this->form_fields = apply_filters('wc_tillit_form_fields', [
             'enabled' => [
                 'title'     => __('Enable/Disable', 'woocommerce-gateway-tillit'),
                 'type'      => 'checkbox',
@@ -147,30 +155,28 @@ class WC_Tillit extends WC_Payment_Gateway
                 'default'     => __('Making b2b purchases a breeze.', 'woocommerce-gateway-tillit'),
                 'desc_tip'    => true
             ],
+            'tillit_merchant_id' => [
+                'title'       => __('Tillit Merchant ID', 'woocommerce-gateway-tillit'),
+                'type'        => 'text',
+                'description' => __('Lorem ipsum dolor sit amet.', 'woocommerce-gateway-tillit')
+            ],
             'api_key' => [
                 'title'       => __('API Key', 'woocommerce-gateway-tillit'),
                 'type'        => 'text',
-                'description' => __('Enter the Tillit API Key. We\'re using this for security purposes.', 'woocommerce-gateway-tillit')
+                'description' => __('Lorem ipsum dolor sit amet.', 'woocommerce-gateway-tillit')
             ],
-            'disable_company_name' => [
-                'title'       => __('Disable Search API: Company name', 'woocommerce-gateway-tillit'),
-                'type'        => 'checkbox',
-                'description' => __('Disable autocompletion for the company name input.', 'woocommerce-gateway-tillit')
+            // Settings
+            'enable_company_name' => [
+                'title'         => __('Activate company name auto-complete', 'woocommerce-gateway-tillit'),
+                'label'         => __('Activate', 'woocommerce-gateway-tillit'),
+                'type'          => 'checkbox',
+                'description'   => __('Lorem ipsum dolor sit amet.', 'woocommerce-gateway-tillit')
             ],
-            'disable_company_address' => [
-                'title'       => __('Disable Search API: Company address', 'woocommerce-gateway-tillit'),
-                'type'        => 'checkbox',
-                'description' => __('Disable autocompletion for the company address input.', 'woocommerce-gateway-tillit')
-            ],
-            'disable_order_intent' => [
-                'title'       => __('Disable Order Intent', 'woocommerce-gateway-tillit'),
-                'type'        => 'checkbox',
-                'description' => __('Disable the order intent feature.', 'woocommerce-gateway-tillit')
-            ],
-            'disable_funded_invoice' => [
-                'title'       => __('Disable Funded Invoice', 'woocommerce-gateway-tillit'),
-                'type'        => 'checkbox',
-                'description' => __('Disable the funded invoice feature.', 'woocommerce-gateway-tillit')
+            'enable_company_id' => [
+                'title'         => __('Activate company org.id auto-complete', 'woocommerce-gateway-tillit'),
+                'label'         => __('Activate', 'woocommerce-gateway-tillit'),
+                'type'          => 'checkbox',
+                'description'   => __('Lorem ipsum dolor sit amet.', 'woocommerce-gateway-tillit')
             ]
         ]);
     }
@@ -186,27 +192,17 @@ class WC_Tillit extends WC_Payment_Gateway
 
     private function makeRequest($endpoint, $payload = [])
     {
-
-        /*// Get the API Key
-        $apiKey = $this->get_option('api_key');
-
-        // Stop if no API key
-        if(!$apiKey) return [
-            'result' => 'failure',
-            'messages' => __('Tillit API key is missing.', 'woocommerce-gateway-tillit')
-        ];*/
-
-        // Add the API key
-        $payload['api_key'] = 'Hello World';
-
-        // Create the order and get the payment url
         return wp_remote_post(sprintf('%s%s', WC_TILLIT_URL, $endpoint), [
-            'headers' => ['Content-Type' => 'application/json; charset=utf-8'],
+            'headers' => [
+                'Content-Type' => 'application/json; charset=utf-8',
+                'Tillit-Merchant-Id' => $this->get_option('tillit_merchant_id'),
+                'Authorization' => sprintf('Basic %s', $this->get_option('api_key'))
+            ],
+            'timeout' => 30,
             'body' => json_encode($payload),
             'method' => 'POST',
             'data_format' => 'body'
         ]);
-
     }
 
     /**
@@ -283,90 +279,51 @@ class WC_Tillit extends WC_Payment_Gateway
         // Get the order
         $order = wc_get_order($order_id);
 
-        // For storing the items
-        $items = [];
+        // Get the orde taxes
+        $orderTaxes = $order->get_taxes();
 
-        // For each order item
-        foreach($order->get_items() as $item_id => $item_data){
+        // Get the taxes Ids
+        $taxes = array_keys($orderTaxes);
 
-            // Get the product
-            /** @var WC_Product $product */
-            $product = $item_data->get_product();
-
-            // Store the item data
-            array_push($items, [
-                'name' => $product->get_name(),
-                'quantity' => $item_data->get_quantity(),
-                'total' => $item_data->get_total()
-            ]);
-
-        }
+        /** @var WC_Order_Item_Tax $vat */
+        $vat = $orderTaxes[$taxes[0]];
 
         // Make the request
         $data = $this->makeRequest('/order', [
-            'line_items' => $this->get_items($order),
-            'state' => '',
-            'recurring' => false,
+            'billing_address' => [
+                'city' => $order->get_billing_city(),
+                'country' => $order->get_billing_country(),
+                'organization_name' => $order->get_billing_company(),
+                'postal_code' => $order->get_billing_postcode(),
+                'references' => [
+                    'co' => 'MAKE IT OPTIONAL',
+                    'reference' => 'MAKE IT OPTIONAL',
+                    'attn' => 'MAKE IT OPTIONAL'
+                ],
+                'region' => $order->get_billing_state(),
+                'street_address' => $order->get_billing_address_1()
+            ],
             'buyer' => [
+                'company' => [
+                    'organization_number' => sanitize_text_field($_POST['company_id']),
+                    'country_prefix' => $order->get_billing_country(),
+                    'company_name' => $order->get_billing_company()
+                ],
                 'representative' => [
+                    'email' => $order->get_billing_email(),
                     'first_name' => $order->get_billing_first_name(),
                     'last_name' => $order->get_billing_last_name(),
                     'phone_number' => $order->get_billing_phone(),
-                    'phone_number_prefix' => '',
-                    'email' => $order->get_billing_email()
+                    'phone_number_prefix' => 'MAKE IT OPTIONAL'
                 ],
-                'company' => [
-                    'organization_number' => sanitize_text_field($_POST['company_id']),
-                    'company_name' => $order->get_billing_company()
-                ]
             ],
-            'billing_address' => [
-                'id' => '',
-                'organization_name' => $order->get_billing_company(),
-                'street_address' => $order->get_billing_address_1(),
-                'postal_code' => $order->get_billing_postcode(),
-                'city' => $order->get_billing_city(),
-                'region' => $order->get_billing_state(),
-                'country' => $order->get_billing_country(),
-                'references' => [
-                    'co' => '',
-                    'reference' => '',
-                    'attn' => ''
-                ]
-            ],
-            'shipping_address' => [
-                'id' => '',
-                'organization_name' => $order->get_billing_company(),
-                'street_address' => $order->get_shipping_address_1(),
-                'postal_code' => $order->get_shipping_postcode(),
-                'city' => $order->get_shipping_city(),
-                'region' => $order->get_shipping_state(),
-                'country' => $order->get_shipping_country(),
-                'references' => [
-                    'co' => '',
-                    'reference' => '',
-                    'attn' => ''
-                ]
-            ],
-            'merchant_reference' => '',
-            'merchant_additional_info' => $order->get_customer_order_notes(),
-            'payment' => [
-                'amount' => '',
-                'currency' => '',
-                'vat' => '',
-                'discount' => '',
-                'discount_percent' => '',
-                'vat_percent' => '',
-                'type' => 'INVOICE',
-                'payment_details' => [
-                    'payment_reference_message' => '',
-                    'bank_account' => '',
-                    'bank_account_type' => '',
-                    'payment_reference_ocr' => '',
-                    'due_in_days' => '',
-                    'invoice_number' => ''
-                ]
-            ],
+            'date_created' => '2021-04-20T10:10:10',
+            'date_updated' => '2021-04-21T10:10:10',
+            'line_items' => WC_Tillit_Checkout::get_line_items($order->get_items()),
+            'recurring' => false,
+            'merchant_additional_info' => 'lorem ipsum',
+            'merchant_id' => $this->get_option('tillit_merchant_id'),
+            'merchant_reference' => '45aa52f387871e3a210645d4',
             'merchant_urls' => [
                 'merchant_confirmation_url' => $order->get_checkout_order_received_url(),
                 'merchant_cancel_order_url' => $order->get_cancel_order_url(),
@@ -374,15 +331,54 @@ class WC_Tillit extends WC_Payment_Gateway
                 'merchant_order_verification_failed_url' => '',
                 'merchant_invoice_url' => '',
                 'merchant_shipping_document_url' => ''
-
+            ],
+            'merchant_reference' => '',
+            'payment' => [
+                'amount' => intval($order->get_subtotal() * 100),
+                'currency' => 'NOK',
+                'discount' => 0,
+                'discount_percent' => 0,
+                'type' => 'INVOICE',
+                'payment_details' => [
+                    'bank_account' => 'ROINGB 1234567890',
+                    'bank_account_type' => 'IBAN',
+                    'due_in_days' => 14,
+                    'invoice_number' => '1234567890',
+                    'payee_company_name' => 'Facebook',
+                    'payee_organization_number' => '1234567890',
+                    'payment_reference_message' => 'no message',
+                    'payment_reference_ocr' => '456',
+                ],
+                'type' => 'MERCHANT_INVOICE',
+                'vat' => intval($vat->get_tax_total() * 100),
+                'vat_percent' => intval($vat->get_rate_percent() * 100)
+            ],
+            'shipping_address' => [
+                'organization_name' => $order->get_billing_company(),
+                'street_address' => $order->get_shipping_address_1(),
+                'postal_code' => $order->get_shipping_postcode(),
+                'city' => $order->get_shipping_city(),
+                'region' => $order->get_shipping_state(),
+                'country' => $order->get_shipping_country(),
+                'references' => [
+                    'co' => 'Company CEO',
+                    'reference' => 'Firs floor office',
+                    'attn' => 'jdifjsldf'
+                ]
             ],
             'shipping_details' => [
-                'tracking_number' => '',
-                'carrier_name' => '',
-                'expected_delivery_date' => '',
-                'carrier_tracking_url' => ''
+                'carrier_name' => 'MAKE IT OPTIONAL',
+                'tracking_number' => 'MAKE IT OPTIONAL',
+                'expected_delivery_date' => '2021-01-31',
+                'carrier_tracking_url' => 'MAKE IT OPTIONAL'
             ],
-            'order_intent_id' => ''
+            'state' => 'PENDING',
+            'status' => 'APPROVED',
+            'tillit_urls' => [
+                'event_log_url' => 'REMOVE THIS',
+                'invoice_url' => 'REMOVE THIS',
+                'verify_order_url' => 'REMOVE THIS'
+            ]
         ]);
 
         // Stop on failure
@@ -390,6 +386,10 @@ class WC_Tillit extends WC_Payment_Gateway
 
         // Parse the response
         $body = json_decode($data['body'], true);
+
+        echo '<pre>';
+        print_r($body);
+        exit;
 
         // If we have an error
         if($data['response']['code'] === 400) {
@@ -420,8 +420,7 @@ class WC_Tillit extends WC_Payment_Gateway
         // Return the result
         return [
             'result'    => 'success',
-            // 'redirect'  => $body['verify_order_url'],
-            'redirect' => $this->get_return_url($order)
+            'redirect'  => $body['verify_order_url'],
         ];
 
     }
