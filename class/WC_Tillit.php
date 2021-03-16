@@ -387,10 +387,6 @@ class WC_Tillit extends WC_Payment_Gateway
         // Parse the response
         $body = json_decode($data['body'], true);
 
-        echo '<pre>';
-        print_r($body);
-        exit;
-
         // If we have an error
         if($data['response']['code'] === 400) {
 
