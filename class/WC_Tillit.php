@@ -45,6 +45,9 @@ class WC_Tillit extends WC_Payment_Gateway
         add_action('woocommerce_order_status_processing', [$this, 'on_order_processing']);
         add_action('woocommerce_order_status_completed', [$this, 'on_order_completed']);
 
+        // Process confirmation
+        add_action('get_header', [$this, 'process_confirmation']);
+
         // Custom fields
         add_action('woocommerce_admin_field_tillit_section_title', [$this, 'tillit_section_title']);
 
@@ -93,7 +96,7 @@ class WC_Tillit extends WC_Payment_Gateway
         $tillit_order_id = get_post_meta($order->get_id(), 'tillit_id', true);
 
         // Change the order status
-        $response = $this->makeRequest("/order/${tillit_order_id}/${status}");
+        $response = $this->makeRequest("/v1/order/${tillit_order_id}/${status}");
 
         if(is_wp_error($response)) {
 
@@ -186,21 +189,22 @@ class WC_Tillit extends WC_Payment_Gateway
      *
      * @param $endpoint
      * @param $payload
+     * @param string $method
      *
      * @return WP_Error|array
      */
 
-    private function makeRequest($endpoint, $payload = [])
+    private function makeRequest($endpoint, $payload = [], $method = 'POST')
     {
-        return wp_remote_post(sprintf('%s%s', WC_TILLIT_URL, $endpoint), [
+        return wp_remote_request(sprintf('%s%s', WC_TILLIT_URL, $endpoint), [
+            'method' => $method,
             'headers' => [
                 'Content-Type' => 'application/json; charset=utf-8',
                 'Tillit-Merchant-Id' => $this->get_option('tillit_merchant_id'),
                 'Authorization' => sprintf('Basic %s', $this->get_option('api_key'))
             ],
             'timeout' => 30,
-            'body' => json_encode($payload),
-            'method' => 'POST',
+            'body' => empty($payload) ? '' : json_encode($payload),
             'data_format' => 'body'
         ]);
     }
@@ -288,8 +292,14 @@ class WC_Tillit extends WC_Payment_Gateway
         /** @var WC_Order_Item_Tax $vat */
         $vat = $orderTaxes[$taxes[0]];
 
+        // Genereate an order reference string
+        $order_reference = wp_generate_password(64, false, false);
+
+        // Store the order reference
+        update_post_meta($order_id, '_tillit_order_reference', $order_reference);
+
         // Make the request
-        $data = $this->makeRequest('/order', [
+        $data = $this->makeRequest('/v1/order', [
             'billing_address' => [
                 'city' => $order->get_billing_city(),
                 'country' => $order->get_billing_country(),
@@ -325,7 +335,8 @@ class WC_Tillit extends WC_Payment_Gateway
             'merchant_id' => $this->get_option('tillit_merchant_id'),
             'merchant_reference' => '45aa52f387871e3a210645d4',
             'merchant_urls' => [
-                'merchant_confirmation_url' => $order->get_checkout_order_received_url(),
+                // 'merchant_confirmation_url' => $order->get_checkout_order_received_url(),
+                'merchant_confirmation_url' => sprintf('%s?tillit_confirm_order=%s&nonce=%s', get_site_url(), $order_reference, wp_create_nonce('tillit_confirm')),
                 'merchant_cancel_order_url' => $order->get_cancel_order_url(),
                 'merchant_edit_order_url' => '',
                 'merchant_order_verification_failed_url' => '',
@@ -407,6 +418,9 @@ class WC_Tillit extends WC_Payment_Gateway
 
         }
 
+        // Store the Tillit Order Id for future use
+        update_post_meta($order_id, 'tillit_order_id', $body['id']);
+
         // Reduce stock levels
         wc_reduce_stock_levels($order_id);
 
@@ -416,8 +430,67 @@ class WC_Tillit extends WC_Payment_Gateway
         // Return the result
         return [
             'result'    => 'success',
-            'redirect'  => $body['verify_order_url'],
+            'redirect'  => sprintf('%s%s', WC_TILLIT_URL, $body['tillit_urls']['verify_order_url']),
         ];
+
+    }
+
+    /**
+     * Process the order confirmation
+     *
+     * @return void
+     */
+
+    public function process_confirmation()
+    {
+
+        // Stop if no Tillit order reference and no nonce
+        if(!isset($_REQUEST['tillit_confirm_order']) && !isset($_REQUEST['nonce'])) return;
+
+        // Get the order reference
+        $order_reference = sanitize_text_field($_REQUEST['tillit_confirm_order']);
+
+        // Get the nonce
+        $nonce = $_REQUEST['nonce'];
+
+        // Stop if the code is not valid
+        if(!wp_verify_nonce($nonce, 'tillit_confirm')) wp_die(__('The security code is not valid.', 'tillit'));
+
+        /** @var wpdb $wpdb */
+        global $wpdb;
+
+        $sql = $wpdb->prepare("SELECT post_id FROM $wpdb->postmeta WHERE meta_key = %s AND meta_value = %s", '_tillit_order_reference', $order_reference);
+        $row = $wpdb->get_row($sql , ARRAY_A);
+
+        // Stop if no order found
+        if(!isset($row['post_id'])) wp_die(__('Unable to find the requested order.', 'tillit'));
+
+        // Get the order ID
+        $order_id = $row['post_id'];
+
+        // Get the order object
+        $order = new WC_Order($order_id);
+
+        // Get the Tillit order ID
+        $tillitOrderId = get_post_meta($order_id, 'tillit_order_id', true);
+
+        // Get the Tillit order details
+        $response = $this->makeRequest(sprintf('/v1/order/%s', $tillitOrderId), [], 'GET');
+
+        // Stop if request error
+        if(is_wp_error($response)) wp_die(__('Unable to retrieve the order information.', 'tillit'));
+
+        // Decode the response
+        $body = json_decode($response['body'], true);
+
+        // Get the order state
+        $state = $body['state'];
+
+        // Get the redirect URL by order state
+        $redirect = $state === 'PENDING' ? $order->get_checkout_order_received_url() : $order->get_cancel_order_url();
+
+        // Redirec the user to the requested page
+        wp_redirect($redirect);
 
     }
 
@@ -434,7 +507,7 @@ class WC_Tillit extends WC_Payment_Gateway
     {
 
         // Make the request
-        $data = $this->makeRequest('/shops/order_status', [
+        $data = $this->makeRequest('/v1/shops/order_status', [
             'transaction_code' => $transaction_code,
             'order_id' => $order_id
         ]);
