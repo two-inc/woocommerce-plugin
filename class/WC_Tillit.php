@@ -544,9 +544,6 @@ class WC_Tillit extends WC_Payment_Gateway
         // Store the Tillit Order Id for future use
         update_post_meta($order_id, 'tillit_order_id', $body['id']);
 
-        // Reduce stock levels
-        wc_reduce_stock_levels($order_id);
-
         // Remove cart
         WC()->cart->empty_cart();
 
