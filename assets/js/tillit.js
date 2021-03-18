@@ -62,7 +62,7 @@ class Tillit {
 
         }
 
-        // if(tillitWithCompanySearch) {
+        if(tillitWithCompanySearch) {
 
             // Turn the select input into select2
             $billingCompany.selectWoo({
@@ -126,14 +126,14 @@ class Tillit {
 
             })
 
-        // }
+        }
 
         /**
          * Fix the position bug
          * https://github.com/select2/select2/issues/4614
          */
 
-        // if(tillitWithCompanySearch) {
+        if(tillitWithCompanySearch) {
 
             const instance = $billingCompany.data('select2')
 
@@ -142,7 +142,7 @@ class Tillit {
                 this.dropdown._positionDropdown()
             })
 
-        // }
+        }
 
         // Disable or enable actions based on the account type
         $body.on('updated_checkout', function(){
