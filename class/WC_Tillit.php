@@ -207,7 +207,9 @@ class WC_Tillit extends WC_Payment_Gateway
 
     public function on_order_completed($order_id)
     {
-        $this->update_order_status('shipped', $order_id);
+        if($this->get_option('finalize_purchase') === 'yes') {
+            $this->update_order_status('shipped', $order_id);
+        }
     }
 
     /**
