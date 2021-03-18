@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name: Tillit Gateway
+ * Plugin Name: WooCommerce Tillit Gateway
  * Plugin URI: https://tillit.ai
  * Description: Integration between WooCommerce and Tillit.
  * Version: 0.0.1

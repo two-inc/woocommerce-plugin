@@ -3,6 +3,7 @@ const tillitCheckoutApi = 'http://huynguyen.hopto.org:8084/v1'
 const tillitSearchApi = 'https://search-api-demo-j6whfmualq-lz.a.run.app'
 const tillitSearchLimit = 50
 
+let tillitWithCompanySearch = null
 let tillitSearchCache
 let tillitMethodHidden = true
 let tillitApproved = null
@@ -61,75 +62,87 @@ class Tillit {
 
         }
 
-        // Turn the select input into select2
-        $billingCompany.selectWoo({
-            minimumInputLength: 3,
-            width: '100%',
-            escapeMarkup: function(markup) {
-                return markup
-            },
-            templateResult: function(data)
-            {
-                return data.html
-            },
-            templateSelection: function(data) {
-                return data.text
-            },
-            ajax: {
-                dataType: 'json',
-                delay: 200,
-                url: function(params){
-                    params.page = params.page || 1
-                    return tillitSearchApi + '/search?limit=' + tillitSearchLimit + '&offset=' + ((params.page - 1) * tillitSearchLimit) + '&q=' + params.term
-                },
-                data: function()
-                {
-                    return {}
-                },
-                processResults: function(response, params)
-                {
+        if(tillitWithCompanySearch) {
 
-                    tillitSearchCache = response
+            // Turn the select input into select2
+            $billingCompany.selectWoo({
+                minimumInputLength: 3,
+                width: '100%',
+                escapeMarkup: function(markup) {
+                    return markup
+                },
+                templateResult: function(data)
+                {
+                    return data.html
+                },
+                templateSelection: function(data) {
+                    return data.text
+                },
+                ajax: {
+                    dataType: 'json',
+                    delay: 200,
+                    url: function(params){
+                        params.page = params.page || 1
+                        return tillitSearchApi + '/search?limit=' + tillitSearchLimit + '&offset=' + ((params.page - 1) * tillitSearchLimit) + '&q=' + params.term
+                    },
+                    data: function()
+                    {
+                        return {}
+                    },
+                    processResults: function(response, params)
+                    {
 
-                    return {
-                        results: Tillit.extractItems(response),
-                        pagination: {
-                            more: (params.page * tillitSearchLimit) < response.data.total
+                        tillitSearchCache = response
+
+                        return {
+                            results: Tillit.extractItems(response),
+                            pagination: {
+                                more: (params.page * tillitSearchLimit) < response.data.total
+                            }
                         }
+
                     }
+                }
+            }).on('select2:select', function(e){
+
+                // Get the option data
+                const data = e.params.data
+
+                if(window.tillit.company_id_search && window.tillit.company_id_search === 'yes') {
+
+                    // Set the company ID
+                    tillitCompany.organization_number = data.company_id;
+
+                    // Set the company ID
+                    $companyId.val(data.company_id)
 
                 }
-            }
-        }).on('select2:select', function(e){
 
-            // Get the option data
-            const data = e.params.data
+                // Set the company name
+                tillitCompany.company_name = data.id
 
-            // Set the company ID
-            tillitCompany.organization_number = data.company_id;
+                // Get the company approval status
+                Tillit.getApproval()
 
-            // Set the company name
-            tillitCompany.company_name = data.id
+            })
 
-            // Set the company ID
-            $companyId.val(data.company_id)
-
-            // Get the company approval status
-            Tillit.getApproval()
-
-        })
+        }
 
         /**
          * Fix the position bug
          * https://github.com/select2/select2/issues/4614
          */
 
-        const instance = $billingCompany.data('select2')
+        if(tillitWithCompanySearch) {
 
-        instance.on('open', function(e){
-            this.results.clear()
-            this.dropdown._positionDropdown()
-        })
+            const instance = $billingCompany.data('select2')
+
+            instance.on('open', function(e){
+                this.results.clear()
+                this.dropdown._positionDropdown()
+            })
+
+        }
 
         // Disable or enable actions based on the account type
         $body.on('updated_checkout', function(){
@@ -662,5 +675,6 @@ class Tillit {
 }
 
 jQuery(function(){
+    tillitWithCompanySearch = window.tillit.company_name_search && window.tillit.company_name_search === 'yes'
     new Tillit()
 })

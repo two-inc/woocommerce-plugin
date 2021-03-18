@@ -7,6 +7,8 @@ class WC_Tillit_Checkout
 
     private $merchant_id = null;
 
+    private $WC_Tillit;
+
     /**
      * WC_Tillit_Checkout constructor.
      */
@@ -14,10 +16,10 @@ class WC_Tillit_Checkout
     public function __construct()
     {
 
-        $WC_Tillit = new WC_Tillit();
+        $this->WC_Tillit = new WC_Tillit();
 
-        $this->api_key = $WC_Tillit->get_option('api_key');
-        $this->merchant_id = $WC_Tillit->get_option('tillit_merchant_id');
+        $this->api_key = $this->WC_Tillit->get_option('api_key');
+        $this->merchant_id = $this->WC_Tillit->get_option('tillit_merchant_id');
 
         if(!$this->api_key && !$this->merchant_id) return;
 
@@ -51,8 +53,12 @@ class WC_Tillit_Checkout
     public function remove_company_name($fields)
     {
 
-        // Remove the field
-        unset($fields['billing']['billing_company']);
+        if($this->WC_Tillit->get_option('company_name_search') === 'yes') {
+
+            // Remove the field
+            unset($fields['billing']['billing_company']);
+
+        }
 
         // Return the fields list
         return $fields;
@@ -118,25 +124,29 @@ class WC_Tillit_Checkout
     public function add_company_fields($fields)
     {
 
-        $fields['billing']['billing_company'] = [
-            'label' => __('Company name', 'woocommerce-gateway-tillit'),
-            'autocomplete' => 'organization',
-            'type' => 'select',
-            /*'custom_attributes' => [
-                'data-multiple' => true,
-                'data-multi' => true
-            ],*/
-            'options' => [
-                '' => __('Enter the company name', 'woocommerce-gateway-tillit')
-            ],
-            'required' => false,
-            'priority' => 2
-        ];
+        $with_company_search = $this->WC_Tillit->get_option('company_name_search') === 'yes';
+
+        if($with_company_search) {
+            $fields['billing']['billing_company'] = [
+                'label' => __('Company name', 'woocommerce-gateway-tillit'),
+                'autocomplete' => 'organization',
+                'type' => 'select',
+                /*'custom_attributes' => [
+                    'data-multiple' => true,
+                    'data-multi' => true
+                ],*/
+                'options' => [
+                    '' => __('Enter the company name', 'woocommerce-gateway-tillit')
+                ],
+                'required' => false,
+                'priority' => 2
+            ];
+        }
 
         $fields['billing']['company_id'] = [
             'label' => __('Company ID', 'woocommerce-gateway-tillit'),
             'required' => false,
-            'priority' => 3
+            'priority' => $with_company_search ? 3 : 35
         ];
 
         // Return the fields
@@ -268,6 +278,8 @@ class WC_Tillit_Checkout
         $cart = WC()->cart;
 
         $properties = [
+            'company_name_search' => $this->WC_Tillit->get_option('enable_company_name'),
+            'company_id_search' => $this->WC_Tillit->get_option('enable_company_id'),
             'merchant_id' => $this->merchant_id,
             'api_key' => sprintf('Basic %s', $this->api_key),
             'currency' => get_woocommerce_currency(),
