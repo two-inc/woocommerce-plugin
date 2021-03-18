@@ -100,7 +100,7 @@ class WC_Tillit_Checkout
                 'required' => true,
                 'type' => 'radio',
                 'priority' => 15,
-                'value' => 'personal',
+                'value' => 'business',
                 'options' => [
                     'personal' => __('Personal', 'woocommerce-gateway-tillit'),
                     'business' => __('Business', 'woocommerce-gateway-tillit')
