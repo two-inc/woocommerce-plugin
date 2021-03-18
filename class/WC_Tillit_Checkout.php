@@ -53,7 +53,7 @@ class WC_Tillit_Checkout
     public function remove_company_name($fields)
     {
 
-        if($this->WC_Tillit->get_option('company_name_search') === 'yes') {
+        if($this->WC_Tillit->get_option('enable_company_name') === 'yes') {
 
             // Remove the field
             unset($fields['billing']['billing_company']);
@@ -124,7 +124,7 @@ class WC_Tillit_Checkout
     public function add_company_fields($fields)
     {
 
-        $with_company_search = $this->WC_Tillit->get_option('company_name_search') === 'yes';
+        $with_company_search = $this->WC_Tillit->get_option('enable_company_name') === 'yes';
 
         if($with_company_search) {
             $fields['billing']['billing_company'] = [
