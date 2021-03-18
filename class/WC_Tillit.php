@@ -645,6 +645,9 @@ class WC_Tillit extends WC_Payment_Gateway
         // Get the order state
         $state = $body['state'];
 
+        // Mark order as processing
+        if($state === 'PENDING') $order->update_status('processing');
+
         // Get the redirect URL by order state
         $redirect = $state === 'PENDING' ? $order->get_checkout_order_received_url() : $order->get_cancel_order_url();
 
