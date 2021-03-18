@@ -42,7 +42,6 @@ class WC_Tillit extends WC_Payment_Gateway
 
         // Actions
         add_action('woocommerce_update_options_payment_gateways_' . $this->id, [$this, 'process_admin_options']);
-        add_action('woocommerce_order_status_processing', [$this, 'on_order_processing']);
         add_action('woocommerce_order_status_completed', [$this, 'on_order_completed']);
         add_action('admin_enqueue_scripts', [$this, 'tillit_admin_scripts']);
         add_action('woocommerce_update_options_checkout', [$this, 'update_checkout_options']);
@@ -201,17 +200,6 @@ class WC_Tillit extends WC_Payment_Gateway
     }
 
     /**
-     * Notify Tillit API when the order status is processing
-     *
-     * @param $order_id
-     */
-
-    private function on_order_processing($order_id)
-    {
-        $this->update_order_status('shipped', $order_id);
-    }
-
-    /**
      * Notify Tillit API when the order status is completed
      *
      * @param $order_id
@@ -219,7 +207,7 @@ class WC_Tillit extends WC_Payment_Gateway
 
     public function on_order_completed($order_id)
     {
-        $this->update_order_status('delivered', $order_id);
+        $this->update_order_status('shipped', $order_id);
     }
 
     /**
