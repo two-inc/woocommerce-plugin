@@ -476,7 +476,7 @@ class WC_Tillit extends WC_Payment_Gateway
                 'payment_details' => [
                     'bank_account' => $this->get_option('bank_account_number'),
                     'bank_account_type' => 'IBAN',
-                    'due_in_days' => $this->get_option('days_on_invoice'),
+                    'due_in_days' => intval($this->get_option('days_on_invoice')),
                     'invoice_number' => '1234567890',
                     'payee_company_name' => $order->get_billing_company(),
                     'payee_organization_number' => sanitize_text_field($_POST['company_id']),
@@ -506,7 +506,7 @@ class WC_Tillit extends WC_Payment_Gateway
                 'expected_delivery_date' => '2021-01-31',
                 'carrier_tracking_url' => 'MAKE IT OPTIONAL'
             ],
-            'state' => 'PENDING',
+            'state' => 'UNVERIFIED',
             'status' => 'APPROVED',
             'tillit_urls' => [
                 'event_log_url' => 'REMOVE THIS',
@@ -633,10 +633,10 @@ class WC_Tillit extends WC_Payment_Gateway
         $state = $body['state'];
 
         // Mark order as processing
-        if($state === 'PENDING') $order->update_status('processing');
+        if($state === 'VERIFIED') $order->update_status('processing');
 
         // Get the redirect URL by order state
-        $redirect = $state === 'PENDING' ? $order->get_checkout_order_received_url() : $order->get_cancel_order_url();
+        $redirect = $state === 'VERIFIED' ? $order->get_checkout_order_received_url() : $order->get_cancel_order_url();
 
         // Redirec the user to the requested page
         wp_redirect($redirect);
