@@ -468,7 +468,7 @@ class WC_Tillit extends WC_Payment_Gateway
             ],
             'merchant_reference' => '',
             'payment' => [
-                'amount' => intval($order->get_subtotal() * 100),
+                'amount' => intval($order->get_total() * 10000),
                 'currency' => 'NOK',
                 'discount' => 0,
                 'discount_percent' => 0,
@@ -484,7 +484,7 @@ class WC_Tillit extends WC_Payment_Gateway
                     'payment_reference_ocr' => '456',
                 ],
                 'type' => 'MERCHANT_INVOICE',
-                'vat' => intval($vat->get_tax_total() * 100),
+                'vat' => intval($vat->get_tax_total() * 10000),
                 'vat_percent' => intval($vat->get_rate_percent() * 100)
             ],
             'shipping_address' => [
@@ -531,7 +531,10 @@ class WC_Tillit extends WC_Payment_Gateway
             ];
 
             // Add the notice
-            wc_add_notice(isset($errors[$body['message']]) ? $errors[$body['message']] : $body['message'], 'error');
+            if (property_exists($body, 'message'))
+                wc_add_notice(isset($errors[$body['message']]) ? $errors[$body['message']] : $body['message'], 'error');
+            else
+                wc_add_notice($body, 'error');
 
             // Return the error
             return [

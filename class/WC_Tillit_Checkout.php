@@ -224,9 +224,9 @@ class WC_Tillit_Checkout
             $product = [
                 'name' => $productSimple->get_name(),
                 'description' => substr($productSimple->get_description(), 0, 255),
-                'price' => intval($cartItem['line_subtotal'] * 100),
+                'price' => intval($productSimple->get_price_including_tax() * $cartItem['quantity'] * 10000),
                 'quantity' => $cartItem['quantity'],
-                'unit_price' => intval($productSimple->get_price() * 100),
+                'unit_price' => intval($productSimple->get_price_including_tax() * 10000),
                 'tax_class_name' => 'VAT ' . $tax_rate . '%',
                 'tax_class_rate' => $tax_rate,
                 'quantity_unit' => 'pcs',
@@ -284,7 +284,7 @@ class WC_Tillit_Checkout
             'api_key' => sprintf('Basic %s', $this->api_key),
             'currency' => get_woocommerce_currency(),
             'line_items' => $this->get_line_items($cart->get_cart_contents()),
-            'amount' => intval($cart->get_total('price') * 100)
+            'amount' => intval($cart->get_total('price') * 10000)
         ];
 
         return $properties;
