@@ -120,8 +120,32 @@ class Tillit {
                 // Set the company name
                 tillitCompany.company_name = data.id
 
-                // Get the company approval status
-                Tillit.getApproval()
+                // Fetch the company data
+                const addressResponse = Tillit.checkoutApiRequest('address', jQuery('#company_id').val())
+
+                addressResponse.done(function(response){
+
+                    // If we have the company location
+                    if(response.company_location) {
+
+                        // Get the company location object
+                        const companyLocation = response.company_location
+
+                        // Populate the street name and house number fields
+                        jQuery('#billing_address_1').val(companyLocation.street_address)
+
+                        // Populate the city
+                        jQuery('#billing_city').val(companyLocation.municipality_name)
+
+                        // Populate the postal code
+                        jQuery('#billing_postcode').val(companyLocation.postal_code)
+
+                    }
+
+                    // Get the company approval status
+                    Tillit.getApproval()
+
+                })
 
             })
 
@@ -553,30 +577,6 @@ class Tillit {
 
             // Select the default payment method
             Tillit.selectDefaultMethod()
-
-            // Fetch the company data
-            const addressResponse = Tillit.checkoutApiRequest('address', jQuery('#company_id').val())
-
-            addressResponse.done(function(response){
-
-                // If we have the company location
-                if(response.company_location) {
-
-                    // Get the company location object
-                    const companyLocation = response.company_location
-
-                    // Populate the street name and house number fields
-                    jQuery('#billing_address_1').val(companyLocation.street_address)
-
-                    // Populate the city
-                    jQuery('#billing_city').val(companyLocation.municipality_name)
-
-                    // Populate the postal code
-                    jQuery('#billing_postcode').val(companyLocation.postal_code)
-
-                }
-
-            })
 
         })
 
