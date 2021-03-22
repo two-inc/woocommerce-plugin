@@ -428,13 +428,8 @@ class WC_Tillit extends WC_Payment_Gateway
                 'country' => $order->get_billing_country(),
                 'organization_name' => $order->get_billing_company(),
                 'postal_code' => $order->get_billing_postcode(),
-                'references' => [
-                    'co' => 'MAKE IT OPTIONAL',
-                    'reference' => 'MAKE IT OPTIONAL',
-                    'attn' => 'MAKE IT OPTIONAL'
-                ],
                 'region' => $order->get_billing_state(),
-                'street_address' => $order->get_billing_address_1()
+                'street_address' => $order->get_billing_address_1() . (null !== $order->get_billing_address_2() ? $order->get_billing_address_2() : '')
             ],
             'buyer' => [
                 'company' => [
@@ -446,8 +441,7 @@ class WC_Tillit extends WC_Payment_Gateway
                     'email' => $order->get_billing_email(),
                     'first_name' => $order->get_billing_first_name(),
                     'last_name' => $order->get_billing_last_name(),
-                    'phone_number' => $order->get_billing_phone(),
-                    'phone_number_prefix' => 'MAKE IT OPTIONAL'
+                    'phone_number' => $order->get_billing_phone()
                 ],
             ],
             'date_created' => '2021-04-20T10:10:10',
@@ -493,26 +487,16 @@ class WC_Tillit extends WC_Payment_Gateway
                 'postal_code' => $order->get_shipping_postcode(),
                 'city' => $order->get_shipping_city(),
                 'region' => $order->get_shipping_state(),
-                'country' => $order->get_shipping_country(),
-                'references' => [
-                    'co' => 'Company CEO',
-                    'reference' => 'Firs floor office',
-                    'attn' => 'jdifjsldf'
-                ]
+                'country' => $order->get_shipping_country()
             ],
             'shipping_details' => [
-                'carrier_name' => 'MAKE IT OPTIONAL',
-                'tracking_number' => 'MAKE IT OPTIONAL',
-                'expected_delivery_date' => '2021-01-31',
-                'carrier_tracking_url' => 'MAKE IT OPTIONAL'
+                // 'carrier_name' => '',
+                // 'tracking_number' => '',
+                // 'carrier_tracking_url' => '',
+                'expected_delivery_date' => '2021-01-31'
             ],
             'state' => 'UNVERIFIED',
-            'status' => 'APPROVED',
-            'tillit_urls' => [
-                'event_log_url' => 'REMOVE THIS',
-                'invoice_url' => 'REMOVE THIS',
-                'verify_order_url' => 'REMOVE THIS'
-            ]
+            'status' => 'APPROVED'
         ]);
 
         // Stop on failure

@@ -18,8 +18,7 @@ const tillitRepresentative = {
     "email": null,
     "first_name": null,
     "last_name": null,
-    "phone_number": null,
-    "phone_number_prefix": '00'
+    "phone_number": null
 }
 
 class Tillit {
