@@ -532,11 +532,8 @@ class WC_Tillit extends WC_Payment_Gateway
             else
                 wc_add_notice($body, 'error');
 
-            // Return the error
-            return [
-                'result'    => 'failure',
-                'messages'  => wc_print_notices(true)
-            ];
+            // Return with error
+            return;
 
         }
 
