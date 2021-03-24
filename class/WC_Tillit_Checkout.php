@@ -228,24 +228,18 @@ class WC_Tillit_Checkout
                 'quantity' => $cartItem['quantity'],
                 'unit_price' => intval($productSimple->get_price_including_tax() * 10000),
                 'tax_class_name' => 'VAT ' . $tax_rate . '%',
-                'tax_class_rate' => $tax_rate,
-                'quantity_unit' => 'pcs',
+                'tax_class_rate' => $tax_rate * 100,
+                'quantity_unit' => 'item',
                 'image_url' => get_the_post_thumbnail_url($productSimple->get_id()),
                 'product_page_url' => $productSimple->get_permalink(),
                 'type' => 'PHYSICAL',
                 'details' => [
                     'barcodes' => [
                         [
-                            'type' => 'UPC',
-                            'id' => 'MAKE IT OPTIONAL'
-                        ],
-                        [
                             'type' => 'SKU',
-                            'id' => 'MAKE IT OPTIONAL'
+                            'id' => $productSimple->get_sku()
                         ]
-                    ],
-                    'brand' => 'MAKE IT OPTIONAL',
-                    'part_number' => 'MAKE IT OPTIONAL',
+                    ]
                 ]
             ];
 

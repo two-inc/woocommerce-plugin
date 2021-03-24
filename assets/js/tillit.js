@@ -622,6 +622,7 @@ class Tillit {
             // Display error messages
             if (response.status == 400) {
                 Tillit.clearAndDisplayErrors([response.responseJSON,]);
+                if (jQuery) jQuery.scroll_to_notices(jQuery('.woocommerce-NoticeGroup'));
             }
 
         })

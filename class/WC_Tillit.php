@@ -388,12 +388,12 @@ class WC_Tillit extends WC_Payment_Gateway
                 'image_url' => $productImage ? $productImage['url'] : null,
                 'product_page_url' => get_permalink($product->get_id()),
                 'details' => [
-                    'brand' => '',
-                    'categories' => [],
                     'barcodes' => [
-
-                    ],
-                    'part_number' => ''
+                        [
+                            'type' => 'SKU',
+                            'id' => $product->get_sku()
+                        ]
+                    ]
                 ]
             ];
 
@@ -456,13 +456,13 @@ class WC_Tillit extends WC_Payment_Gateway
                     'phone_number' => $order->get_billing_phone()
                 ],
             ],
-            'date_created' => '2021-04-20T10:10:10',
-            'date_updated' => '2021-04-21T10:10:10',
+            'date_created' => $order->order_date,
+            'date_updated' => $order->order_date,
             'line_items' => WC_Tillit_Checkout::get_line_items($order->get_items()),
             'recurring' => false,
-            'merchant_additional_info' => 'lorem ipsum',
+            'merchant_additional_info' => '',
             'merchant_id' => $this->get_option('tillit_merchant_id'),
-            'merchant_reference' => '45aa52f387871e3a210645d4',
+            'merchant_reference' => '',
             'merchant_urls' => [
                 // 'merchant_confirmation_url' => $order->get_checkout_order_received_url(),
                 'merchant_confirmation_url' => sprintf('%s?tillit_confirm_order=%s&nonce=%s', get_site_url(), $order_reference, wp_create_nonce('tillit_confirm')),
@@ -472,10 +472,9 @@ class WC_Tillit extends WC_Payment_Gateway
                 'merchant_invoice_url' => '',
                 'merchant_shipping_document_url' => ''
             ],
-            'merchant_reference' => '',
             'payment' => [
                 'amount' => intval($order->get_total() * 10000),
-                'currency' => 'NOK',
+                'currency' => $order->get_currency(),
                 'discount' => 0,
                 'discount_percent' => 0,
                 'type' => 'INVOICE',
@@ -483,11 +482,11 @@ class WC_Tillit extends WC_Payment_Gateway
                     'bank_account' => $this->get_option('bank_account_number'),
                     'bank_account_type' => 'IBAN',
                     'due_in_days' => intval($this->get_option('days_on_invoice')),
-                    'invoice_number' => '1234567890',
+                    'invoice_number' => $order->get_order_number(),
                     'payee_company_name' => $order->get_billing_company(),
                     'payee_organization_number' => sanitize_text_field($_POST['company_id']),
-                    'payment_reference_message' => 'no message',
-                    'payment_reference_ocr' => '456',
+                    'payment_reference_message' => '',
+                    'payment_reference_ocr' => '',
                 ],
                 'type' => 'MERCHANT_INVOICE',
                 'vat' => intval($vat->get_tax_total() * 10000),
@@ -505,7 +504,7 @@ class WC_Tillit extends WC_Payment_Gateway
                 // 'carrier_name' => '',
                 // 'tracking_number' => '',
                 // 'carrier_tracking_url' => '',
-                'expected_delivery_date' => '2021-01-31'
+                'expected_delivery_date' => date('Y-m-d', strtotime($Date. ' + 7 days'))
             ],
             'state' => 'UNVERIFIED',
             'status' => 'APPROVED'
