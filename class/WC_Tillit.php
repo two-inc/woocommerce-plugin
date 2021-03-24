@@ -43,6 +43,7 @@ class WC_Tillit extends WC_Payment_Gateway
         // Actions
         add_action('woocommerce_update_options_payment_gateways_' . $this->id, [$this, 'process_admin_options']);
         add_action('woocommerce_order_status_completed', [$this, 'on_order_completed']);
+        add_action('woocommerce_order_status_cancelled', [$this, 'on_order_cancelled']);
         add_action('admin_enqueue_scripts', [$this, 'tillit_admin_scripts']);
         add_action('woocommerce_update_options_checkout', [$this, 'update_checkout_options']);
 
@@ -210,6 +211,17 @@ class WC_Tillit extends WC_Payment_Gateway
         if($this->get_option('finalize_purchase') === 'yes') {
             $this->update_order_status('shipped', $order_id);
         }
+    }
+
+    /**
+     * Notify Tillit API when the order status is cancelled
+     *
+     * @param $order_id
+     */
+
+    public function on_order_cancelled($order_id)
+    {
+        $this->update_order_status('cancel', $order_id);
     }
 
     /**

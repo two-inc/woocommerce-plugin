@@ -1,5 +1,5 @@
 const tillitRequiredField = '<abbr class="required" title="required">*</abbr>'
-const tillitCheckoutApi = 'http://huynguyen.hopto.org:8084/v1'
+const tillitCheckoutApi = 'https://huynguyen.hopto.org:8083/v1'
 const tillitSearchApi = 'https://search-api-demo-j6whfmualq-lz.a.run.app'
 const tillitSearchLimit = 50
 
