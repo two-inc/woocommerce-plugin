@@ -513,8 +513,6 @@ class Tillit {
     static canGetApproval()
     {
 
-        if(tillitApproved === false) return false
-
         let can = true
         let values = [].concat(Object.values(tillitCompany), Object.values(tillitRepresentative))
 
@@ -531,6 +529,31 @@ class Tillit {
     }
 
     /**
+     * Clear woocommerce error messages and display new messages
+     *
+     * @param errorMsgs
+     */
+
+    static clearAndDisplayErrors(errorMsgs) {
+        let noticeGroup = document.querySelector('.woocommerce-NoticeGroup');
+        if (!noticeGroup) {
+            noticeGroup = document.createElement('div');
+            noticeGroup.className = 'woocommerce-NoticeGroup woocommerce-NoticeGroup-checkout';
+            document.querySelector('form[name="checkout"]').prepend(noticeGroup);
+        }
+        noticeGroup.innerHTML = '';console.log(errorMsgs);
+        for (let errorMsg of errorMsgs) {
+            let ul = document.createElement('ul');
+            ul.className = 'woocommerce-error';
+            ul.setAttribute('role', 'alert');
+            let li = document.createElement('li');
+            li.append(document.createTextNode(errorMsg));
+            ul.append(li);
+            noticeGroup.append(ul);
+        }
+    }
+
+    /**
      * Check the company approval status by creating an order intent
      *
      * @return void
@@ -541,7 +564,7 @@ class Tillit {
 
         const canGetApproval = Tillit.canGetApproval()
 
-        if(!canGetApproval) return
+        if(!canGetApproval) return;
 
         // Create an order intent
         const approvalResponse = jQuery.ajax({
@@ -566,17 +589,40 @@ class Tillit {
 
         approvalResponse.done(function(response){
 
-            // Toggle the Tillit payment method
-            tillitMethodHidden = !response.approved
-
             // Store the approved state
             tillitApproved = response.approved
+
+            // Toggle the Tillit payment method
+            tillitMethodHidden = !tillitApproved
 
             // Show or hide the Tillit payment method
             Tillit.toggleMethod()
 
             // Select the default payment method
             Tillit.selectDefaultMethod()
+
+            // Clear error messages
+            Tillit.clearAndDisplayErrors([]);
+        })
+
+        approvalResponse.error(function(response){
+
+            // Store the approved state
+            tillitApproved = false
+
+            // Toggle the Tillit payment method
+            tillitMethodHidden = !tillitApproved
+
+            // Show or hide the Tillit payment method
+            Tillit.toggleMethod()
+
+            // Select the default payment method
+            Tillit.selectDefaultMethod()
+
+            // Display error messages
+            if (response.status == 400) {
+                Tillit.clearAndDisplayErrors([response.responseJSON,]);
+            }
 
         })
 
