@@ -19,7 +19,7 @@ define('WC_TILLIT_PLUGIN_PATH', plugin_dir_path(__FILE__));
 
 // Define the Tillit API URL
 $tillitApi = !defined('WC_TILLIT_URL') ?
-    define('WC_TILLIT_URL', 'http://huynguyen.hopto.org:8084') :
+    define('WC_TILLIT_URL', 'https://staging.api.tillit.ai') :
     WC_TILLIT_URL;
 
 function woocommerce_gateway_tillit_init()

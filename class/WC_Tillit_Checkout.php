@@ -275,7 +275,6 @@ class WC_Tillit_Checkout
             'company_name_search' => $this->WC_Tillit->get_option('enable_company_name'),
             'company_id_search' => $this->WC_Tillit->get_option('enable_company_id'),
             'merchant_id' => $this->merchant_id,
-            'api_key' => sprintf('Basic %s', $this->api_key),
             'currency' => get_woocommerce_currency(),
             'line_items' => $this->get_line_items($cart->get_cart_contents()),
             'amount' => intval($cart->get_total('price') * 10000)

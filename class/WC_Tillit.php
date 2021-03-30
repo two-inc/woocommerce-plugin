@@ -545,7 +545,7 @@ class WC_Tillit extends WC_Payment_Gateway
         // Return the result
         return [
             'result'    => 'success',
-            'redirect'  => sprintf('%s%s', WC_TILLIT_URL, $body['tillit_urls']['verify_order_url']),
+            'redirect'  => $body['tillit_urls']['verify_order_url'],
         ];
 
     }

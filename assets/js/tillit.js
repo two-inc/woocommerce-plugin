@@ -1,5 +1,5 @@
 const tillitRequiredField = '<abbr class="required" title="required">*</abbr>'
-const tillitCheckoutApi = 'https://huynguyen.hopto.org:8083/v1'
+const tillitCheckoutApi = 'https://staging.api.tillit.ai/v1'
 const tillitSearchApi = 'https://search-api-demo-j6whfmualq-lz.a.run.app'
 const tillitSearchLimit = 50
 
@@ -496,11 +496,7 @@ class Tillit {
     {
         return jQuery.ajax({
             dataType: 'json',
-            url: [tillitCheckoutApi, 'company', companyId, endpoint].join('/'),
-            beforeSend: function(request)
-            {
-                request.setRequestHeader('X-API-Key', 'secret_test_987654321')
-            }
+            url: [tillitCheckoutApi, 'company', companyId, endpoint].join('/')
         })
     }
 
@@ -573,8 +569,7 @@ class Tillit {
             dataType: 'json',
             method: 'POST',
             headers: {
-                "Tillit-Merchant-Id": window.tillit.merchant_id,
-                "Authorization": window.tillit.api_key
+                "Tillit-Merchant-Id": window.tillit.merchant_id
             },
             data: JSON.stringify({
                 "amount": parseFloat(window.tillit.amount),
