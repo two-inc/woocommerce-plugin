@@ -482,7 +482,6 @@ class WC_Tillit extends WC_Payment_Gateway
                     'bank_account' => $this->get_option('bank_account_number'),
                     'bank_account_type' => 'IBAN',
                     'due_in_days' => intval($this->get_option('days_on_invoice')),
-                    'invoice_number' => $order->get_order_number(),
                     'payee_company_name' => $order->get_billing_company(),
                     'payee_organization_number' => sanitize_text_field($_POST['company_id']),
                     'payment_reference_message' => '',

@@ -218,15 +218,20 @@ class WC_Tillit_Checkout
                 $productSimple = $cartItem['data'];
             }
 
-            // Get the tax rate
             $tax_rate = WC_Tillit_Checkout::get_tax_rate($productSimple);
+
+            $unit_price_including_tax = wc_get_price_excluding_tax($productSimple) * (1 + $tax_rate / 100);
+            //wc_get_price_including_tax($productSimple) returns rounded values
+
+            // For price/tax rounding
+            $decimal_pow = pow(10, wc_get_price_decimals());
 
             $product = [
                 'name' => $productSimple->get_name(),
                 'description' => substr($productSimple->get_description(), 0, 255),
-                'price' => intval($productSimple->get_price_including_tax() * $cartItem['quantity'] * 10000),
+                'price' => intval($decimal_pow * ($unit_price_including_tax * $cartItem['quantity'])) * 10000 / $decimal_pow,
                 'quantity' => $cartItem['quantity'],
-                'unit_price' => intval($productSimple->get_price_including_tax() * 10000),
+                'unit_price' => intval($unit_price_including_tax * 10000),
                 'tax_class_name' => 'VAT ' . $tax_rate . '%',
                 'tax_class_rate' => $tax_rate * 100,
                 'quantity_unit' => 'item',
