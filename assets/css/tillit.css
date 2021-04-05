@@ -11,6 +11,22 @@
     display: inline;
 }
 
-.wc_payment_method.payment_method_woocommerce-gateway-tillit img {
+.woocommerce-checkout #payment ul.payment_methods li.wc_payment_method.payment_method_woocommerce-gateway-tillit label {
+    position: relative;
+}
+
+.woocommerce-checkout #payment ul.payment_methods li.wc_payment_method.payment_method_woocommerce-gateway-tillit img {
+    position: absolute;
+	top: 4px;
     height: 17px;
+}
+
+.woocommerce-checkout #payment ul.payment_methods li.wc_payment_method.payment_method_woocommerce-gateway-tillit .tillit-subtitle {
+    color: #ccc;
+    margin-left: 31px;
+    font-size: 0.9em;
+}
+
+.woocommerce-checkout #payment ul.payment_methods li.wc_payment_method.payment_method_woocommerce-gateway-tillit .tillit-buyer-name {
+    font-weight: bold;
 }

@@ -207,6 +207,9 @@ class WC_Tillit_Checkout
 
         $items = [];
 
+        // For price/tax rounding
+        $decimal_pow = pow(10, wc_get_price_decimals());
+
         /** @var WC_Order_Item_Product $cartItem */
         foreach($products as $cartItem) {
 
@@ -222,9 +225,6 @@ class WC_Tillit_Checkout
 
             $unit_price_including_tax = wc_get_price_excluding_tax($productSimple) * (1 + $tax_rate / 100);
             //wc_get_price_including_tax($productSimple) returns rounded values
-
-            // For price/tax rounding
-            $decimal_pow = pow(10, wc_get_price_decimals());
 
             $product = [
                 'name' => $productSimple->get_name(),

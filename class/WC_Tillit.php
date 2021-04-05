@@ -36,7 +36,7 @@ class WC_Tillit extends WC_Payment_Gateway
         $this->init_settings();
 
         // Define user set variables
-        $this->title = $this->get_option('title');
+        $this->title = '<span>' . $this->get_option('title') . '<br><span class="tillit-subtitle">' . $this->get_option('subtitle') . '</span></span>';
         $this->description = $this->get_option('description');
         $this->api_key = $this->get_option('api_key');
 
@@ -159,14 +159,8 @@ class WC_Tillit extends WC_Payment_Gateway
     private function generate_method_description()
     {
         return sprintf(
-            '<p>%s</p><p>%s</p><p>%s</p>',
-            __('Receive your order first. Payment period up to 45 days', 'woocommerce-gateway-tillit'),
-            __('All invoices are sent both a PDF and e-invoice', 'woocommerce-gateway-tillit'),
-            sprintf(
-                '%s <a href="https://tillit.ai/privacy-policy" target="_blank">%s</a>.',
-                __('By paying with Tillit you agree with our', 'woocommerce-gateway-tillit'),
-                __('Terms and conditions', 'woocommerce-gateway-tillit')
-            )
+            '<p>%s <span class="tillit-buyer-name"></span>.</p>',
+            __('By completing the purchase, you verify that you have the legal right to purchase on behalf of', 'woocommerce-gateway-tillit')
         );
     }
 
@@ -242,7 +236,12 @@ class WC_Tillit extends WC_Payment_Gateway
             'title' => [
                 'title'         => __('Title', 'woocommerce-gateway-tillit'),
                 'type'          => 'text',
-                'default'       => __('Pay in 15 days with invoice', 'woocommerce-gateway-tillit')
+                'default'       => __('Business invoice 30 days', 'woocommerce-gateway-tillit')
+            ],
+            'subtitle' => [
+                'title'         => __('Subtitle', 'woocommerce-gateway-tillit'),
+                'type'          => 'text',
+                'default'       => __('Receive the invoice via EHF and PDF', 'woocommerce-gateway-tillit')
             ],
             'description' => [
                 'title'       => __('Description', 'woocommerce-gateway-tillit'),

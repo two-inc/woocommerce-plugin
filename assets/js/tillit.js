@@ -596,6 +596,9 @@ class Tillit {
             // Select the default payment method
             Tillit.selectDefaultMethod()
 
+            // Update company name in payment option
+            document.querySelector('.tillit-buyer-name').innerText = document.querySelector('#select2-billing_company-container').innerText
+
             // Clear error messages
             Tillit.clearAndDisplayErrors([]);
         })
@@ -613,6 +616,9 @@ class Tillit {
 
             // Select the default payment method
             Tillit.selectDefaultMethod()
+
+            // Update company name in payment option
+            document.querySelector('.tillit-buyer-name').innerText = ''
 
             // Display error messages
             if (response.status == 400) {
