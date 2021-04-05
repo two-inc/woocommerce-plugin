@@ -114,7 +114,7 @@ class WC_Tillit_Checkout
     }
 
     /**
-     * Add the company name and company ID fields
+     * Add fields: Company name, Company ID, Department, Project
      *
      * @param $fields
      *
@@ -147,6 +147,18 @@ class WC_Tillit_Checkout
             'label' => __('Company ID', 'woocommerce-gateway-tillit'),
             'required' => false,
             'priority' => $with_company_search ? 3 : 35
+        ];
+
+        $fields['billing']['department'] = [
+            'label' => __('Department', 'woocommerce-gateway-tillit'),
+            'required' => false,
+            'priority' => 3
+        ];
+
+        $fields['billing']['project'] = [
+            'label' => __('Project', 'woocommerce-gateway-tillit'),
+            'required' => false,
+            'priority' => 4
         ];
 
         // Return the fields
