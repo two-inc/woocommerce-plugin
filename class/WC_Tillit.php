@@ -36,9 +36,12 @@ class WC_Tillit extends WC_Payment_Gateway
         $this->init_settings();
 
         // Define user set variables
-        $this->title = '<span>' . $this->get_option('title') . '<br><span class="tillit-subtitle">' . $this->get_option('subtitle') . '</span></span>';
+        $this->title = $this->get_option('title');
         $this->description = $this->get_option('description');
         $this->api_key = $this->get_option('api_key');
+        add_action('woocommerce_checkout_update_order_review', function () {
+            add_filter('woocommerce_gateway_title', [$this, 'change_tillit_payment_title'], 10, 2);
+        });
 
         // Actions
         add_action('woocommerce_update_options_payment_gateways_' . $this->id, [$this, 'process_admin_options']);
@@ -52,6 +55,16 @@ class WC_Tillit extends WC_Payment_Gateway
 
     }
 
+    function change_tillit_payment_title($title, $payment_id){
+        if( $payment_id === 'woocommerce-gateway-tillit' ) {
+            $title = sprintf(
+                '<span>%s<br><span class="tillit-subtitle">%s</span></span> ',
+                $this->get_option('title'),
+                $this->get_option('subtitle')
+            );
+        }
+        return $title;
+    }
     /**
      * Generate the section title
      *
@@ -472,7 +485,7 @@ class WC_Tillit extends WC_Payment_Gateway
                 'merchant_shipping_document_url' => ''
             ],
             'payment' => [
-                'amount' => intval($order->get_total() * 10000),
+                'amount' => round($order->get_total() * 10000),
                 'currency' => $order->get_currency(),
                 'discount' => 0,
                 'discount_percent' => 0,
@@ -487,8 +500,8 @@ class WC_Tillit extends WC_Payment_Gateway
                     'payment_reference_ocr' => '',
                 ],
                 'type' => 'MERCHANT_INVOICE',
-                'vat' => intval($vat->get_tax_total() * 10000),
-                'vat_percent' => intval($vat->get_rate_percent() * 100)
+                'vat' => round($vat->get_tax_total() * 10000),
+                'vat_percent' => round($vat->get_rate_percent() * 100)
             ],
             'shipping_address' => [
                 'organization_name' => $order->get_billing_company(),
