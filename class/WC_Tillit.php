@@ -279,11 +279,11 @@ class WC_Tillit extends WC_Payment_Gateway
                 'type' => 'separator',
                 'title' => __('Choose your product', 'woocommerce-gateway-tillit')
             ],
-            'product_funded' => [
+            'product_merchant' => [
                 'type' => 'radio',
                 'name' => 'product_type',
                 'disabled' => true,
-                'label' => __('Funded invoice (coming soon)', 'woocommerce-gateway-tillit')
+                'label' => __('Merchant Invoice (coming soon)', 'woocommerce-gateway-tillit')
             ],
             'product_administered' => [
                 'type' => 'radio',
@@ -291,10 +291,10 @@ class WC_Tillit extends WC_Payment_Gateway
                 'disabled' => true,
                 'label' => __('Administered invoice (coming soon)', 'woocommerce-gateway-tillit')
             ],
-            'product_merchant' => [
+            'product_funded' => [
                 'type' => 'radio',
                 'name' => 'product_type',
-                'label' => __('Merchant Invoice', 'woocommerce-gateway-tillit'),
+                'label' => __('Funded invoice', 'woocommerce-gateway-tillit'),
                 'checked' => true
             ],
             'bank_account_number' => [
