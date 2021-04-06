@@ -261,7 +261,8 @@ class WC_Tillit extends WC_Payment_Gateway
                 'type'        => 'textarea',
                 'description' => __('Payment method description that the customer will see on your checkout.', 'woocommerce-gateway-tillit'),
                 'default'     => __('Making b2b purchases a breeze.', 'woocommerce-gateway-tillit'),
-                'desc_tip'    => true
+                'desc_tip'    => true,
+                'disabled'    => true
             ],
             'tillit_merchant_id' => [
                 'title'       => __('Tillit Merchant ID', 'woocommerce-gateway-tillit'),
