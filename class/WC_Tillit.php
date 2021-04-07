@@ -419,6 +419,13 @@ class WC_Tillit extends WC_Payment_Gateway
         // Get the taxes Ids
         $taxes = array_keys($orderTaxes);
 
+        // Only proceed if taxes are configured
+        if (count($taxes) == 0) {
+            // Return with error
+            wc_add_notice(__('Tillit Merchant Error: Taxes are not configured', 'woocommerce-gateway-tillit'), 'error');
+            return;
+        }
+
         /** @var WC_Order_Item_Tax $vat */
         $vat = $orderTaxes[$taxes[0]];
 

@@ -722,6 +722,12 @@ class Tillit {
 }
 
 jQuery(function(){
+    if (window.tillit.error) {
+        setTimeout(function(){
+            Tillit.clearAndDisplayErrors(window.tillit.messages)
+        }, 3000);
+        return
+    }
     tillitWithCompanySearch = window.tillit.company_name_search && window.tillit.company_name_search === 'yes'
     new Tillit()
 })

@@ -288,6 +288,16 @@ class WC_Tillit_Checkout
         /** @var WC_Cart $cart */
         $cart = WC()->cart;
 
+        // Only proceed if taxes are configured
+        if (!$cart->get_taxes() || count($cart->get_taxes()) == 0) {
+            return [
+                'error'   => 'TAX_NOT_CONFIGURED',
+                'messages' => [
+                    __('Tillit Merchant Error: Taxes are not configured', 'woocommerce-gateway-tillit')
+                ]
+            ];
+        }
+
         $properties = [
             'company_name_search' => $this->WC_Tillit->get_option('enable_company_name'),
             'company_id_search' => $this->WC_Tillit->get_option('enable_company_id'),
