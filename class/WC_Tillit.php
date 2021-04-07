@@ -37,7 +37,10 @@ class WC_Tillit extends WC_Payment_Gateway
 
         // Define user set variables
         $this->title = $this->get_option('title');
-        $this->description = $this->get_option('description');
+        $this->description = sprintf(
+            '<p>%s <span class="tillit-buyer-name"></span>.</p>',
+            __('By completing the purchase, you verify that you have the legal right to purchase on behalf of', 'woocommerce-gateway-tillit')
+        );
         $this->api_key = $this->get_option('api_key');
         add_action('woocommerce_checkout_update_order_review', function () {
             add_filter('woocommerce_gateway_title', [$this, 'change_tillit_payment_title'], 10, 2);
@@ -65,6 +68,7 @@ class WC_Tillit extends WC_Payment_Gateway
         }
         return $title;
     }
+
     /**
      * Generate the section title
      *
@@ -164,20 +168,6 @@ class WC_Tillit extends WC_Payment_Gateway
     }
 
     /**
-     * Generate the payment method description
-     *
-     * @return string
-     */
-
-    private function generate_method_description()
-    {
-        return sprintf(
-            '<p>%s <span class="tillit-buyer-name"></span>.</p>',
-            __('By completing the purchase, you verify that you have the legal right to purchase on behalf of', 'woocommerce-gateway-tillit')
-        );
-    }
-
-    /**
      * Update the order status
      *
      * @param $status
@@ -247,87 +237,79 @@ class WC_Tillit extends WC_Payment_Gateway
                 'default'   => 'yes'
             ],
             'title' => [
-                'title'         => __('Title', 'woocommerce-gateway-tillit'),
-                'type'          => 'text',
-                'default'       => __('Business invoice 30 days', 'woocommerce-gateway-tillit')
+                'title'     => __('Title', 'woocommerce-gateway-tillit'),
+                'type'      => 'text',
+                'default'   => __('Business invoice 30 days', 'woocommerce-gateway-tillit')
             ],
             'subtitle' => [
-                'title'         => __('Subtitle', 'woocommerce-gateway-tillit'),
-                'type'          => 'text',
-                'default'       => __('Receive the invoice via EHF and PDF', 'woocommerce-gateway-tillit')
-            ],
-            'description' => [
-                'title'       => __('Description', 'woocommerce-gateway-tillit'),
-                'type'        => 'textarea',
-                'description' => __('Payment method description that the customer will see on your checkout.', 'woocommerce-gateway-tillit'),
-                'default'     => __('Making b2b purchases a breeze.', 'woocommerce-gateway-tillit'),
-                'desc_tip'    => true,
-                'disabled'    => true
+                'title'     => __('Subtitle', 'woocommerce-gateway-tillit'),
+                'type'      => 'text',
+                'default'   => __('Receive the invoice via EHF and PDF', 'woocommerce-gateway-tillit')
             ],
             'tillit_merchant_id' => [
-                'title'       => __('Tillit Merchant ID', 'woocommerce-gateway-tillit'),
-                'type'        => 'text'
+                'title'     => __('Tillit Merchant ID', 'woocommerce-gateway-tillit'),
+                'type'      => 'text'
             ],
             'api_key' => [
-                'title'       => __('API Key', 'woocommerce-gateway-tillit'),
-                'type'        => 'text',
+                'title'     => __('API Key', 'woocommerce-gateway-tillit'),
+                'type'      => 'text',
             ],
             'merchant_logo' => [
-                'title'         => __('Logo', 'woocommerce-gateway-tillit'),
-                'type'          => 'logo'
+                'title'     => __('Logo', 'woocommerce-gateway-tillit'),
+                'type'      => 'logo'
             ],
             'section_title_product' => [
-                'type' => 'separator',
-                'title' => __('Choose your product', 'woocommerce-gateway-tillit')
+                'type'      => 'separator',
+                'title'     => __('Choose your product', 'woocommerce-gateway-tillit')
             ],
             'product_merchant' => [
-                'type' => 'radio',
-                'name' => 'product_type',
-                'disabled' => true,
-                'label' => __('Merchant Invoice (coming soon)', 'woocommerce-gateway-tillit')
+                'type'      => 'radio',
+                'name'      => 'product_type',
+                'disabled'  => true,
+                'label'     => __('Merchant Invoice (coming soon)', 'woocommerce-gateway-tillit')
             ],
             'product_administered' => [
-                'type' => 'radio',
-                'name' => 'product_type',
-                'disabled' => true,
-                'label' => __('Administered invoice (coming soon)', 'woocommerce-gateway-tillit')
+                'type'      => 'radio',
+                'name'      => 'product_type',
+                'disabled'  => true,
+                'label'     => __('Administered invoice (coming soon)', 'woocommerce-gateway-tillit')
             ],
             'product_funded' => [
-                'type' => 'radio',
-                'name' => 'product_type',
-                'label' => __('Funded invoice', 'woocommerce-gateway-tillit'),
-                'checked' => true
+                'type'      => 'radio',
+                'name'      => 'product_type',
+                'label'     => __('Funded invoice', 'woocommerce-gateway-tillit'),
+                'checked'   => true
             ],
             'bank_account_number' => [
-                'title' => __('Bank account number', 'woocommerce-gateway-tillit'),
-                'type' => 'text',
+                'title'     => __('Bank account number', 'woocommerce-gateway-tillit'),
+                'type'      => 'text',
             ],
             'iban' => [
-                'title' => __('IBAN', 'woocommerce-gateway-tillit'),
-                'type' => 'text',
+                'title'     => __('IBAN', 'woocommerce-gateway-tillit'),
+                'type'      => 'text',
             ],
             'days_on_invoice' => [
-                'title' => __('Number of days on invoice', 'woocommerce-gateway-tillit'),
-                'type' => 'text',
+                'title'     => __('Number of days on invoice', 'woocommerce-gateway-tillit'),
+                'type'      => 'text',
             ],
             'section_title_settings' => [
-                'type' => 'separator',
-                'title' => __('Settings', 'woocommerce-gateway-tillit')
+                'type'      => 'separator',
+                'title'     => __('Settings', 'woocommerce-gateway-tillit')
             ],
             'enable_company_name' => [
-                'title'         => __('Activate company name auto-complete', 'woocommerce-gateway-tillit'),
-                'label'         => ' ',
-                'type'          => 'checkbox',
+                'title'     => __('Activate company name auto-complete', 'woocommerce-gateway-tillit'),
+                'label'     => ' ',
+                'type'      => 'checkbox',
             ],
             'enable_company_id' => [
-                'title'         => __('Activate company org.id auto-complete', 'woocommerce-gateway-tillit'),
-                'label'         => ' ',
-                'type'          => 'checkbox',
+                'title'     => __('Activate company org.id auto-complete', 'woocommerce-gateway-tillit'),
+                'label'     => ' ',
+                'type'      => 'checkbox',
             ],
             'finalize_purchase' => [
-                'title'         => __('Finalize purchase when order is shipped', 'woocommerce-gateway-tillit'),
-                'label'         => ' ',
-                'type'          => 'checkbox',
+                'title'     => __('Finalize purchase when order is shipped', 'woocommerce-gateway-tillit'),
+                'label'     => ' ',
+                'type'      => 'checkbox',
             ]
         ]);
     }
