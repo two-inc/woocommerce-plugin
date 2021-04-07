@@ -6,6 +6,7 @@
  * Version: 0.0.1
  * Author: Tillit
  * Author URI: https://tillit.ai
+ * Text Domain: woocommerce-gateway-tillit
  * License: GPLv2 or later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  */
@@ -24,8 +25,15 @@ $tillitApi = !defined('WC_TILLIT_URL') ?
 
 function woocommerce_gateway_tillit_init()
 {
+    init_tillit_translation();
     require_once __DIR__ . '/class/WC_Tillit.php';
     require_once __DIR__ . '/class/WC_Tillit_Checkout.php';
+}
+
+function init_tillit_translation()
+{
+    $plugin_rel_path = basename(dirname( __FILE__ ));
+    load_plugin_textdomain('woocommerce-gateway-tillit', false, $plugin_rel_path);
 }
 
 /**

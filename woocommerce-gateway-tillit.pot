@@ -1,0 +1,206 @@
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: WooCommerce Tillit Gateway\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2021-04-07 07:50+0000\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: \n"
+"Language: \n"
+"Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: Loco https://localise.biz/\n"
+"X-Loco-Version: 2.5.2; wp-5.7\n"
+"X-Domain: woocommerce-gateway-tillit"
+
+#: views/woocommerce_checkout.php:7
+msgid "Account type"
+msgstr ""
+
+#: class/WC_Tillit.php:318
+msgid "Activate company name auto-complete"
+msgstr ""
+
+#: class/WC_Tillit.php:323
+msgid "Activate company org.id auto-complete"
+msgstr ""
+
+#: class/WC_Tillit.php:293
+msgid "Administered invoice (coming soon)"
+msgstr ""
+
+#: class/WC_Tillit.php:272
+msgid "API Key"
+msgstr ""
+
+#: class/WC_Tillit.php:302
+msgid "Bank account number"
+msgstr ""
+
+#: class/WC_Tillit_Checkout.php:106
+msgid "Business"
+msgstr ""
+
+#: class/WC_Tillit.php:252
+msgid "Business invoice 30 days"
+msgstr ""
+
+#: class/WC_Tillit.php:176
+msgid ""
+"By completing the purchase, you verify that you have the legal right to "
+"purchase on behalf of"
+msgstr ""
+
+#: class/WC_Tillit.php:281
+msgid "Choose your product"
+msgstr ""
+
+#: class/WC_Tillit_Checkout.php:147
+msgid "Company ID"
+msgstr ""
+
+#: class/WC_Tillit_Checkout.php:131
+msgid "Company name"
+msgstr ""
+
+#: class/WC_Tillit_Checkout.php:153
+msgid "Department"
+msgstr ""
+
+#: class/WC_Tillit.php:260
+msgid "Description"
+msgstr ""
+
+#: class/WC_Tillit.php:246
+msgid "Enable Tillit Payments"
+msgstr ""
+
+#: class/WC_Tillit.php:244
+msgid "Enable/Disable"
+msgstr ""
+
+#: class/WC_Tillit_Checkout.php:139
+msgid "Enter the company name"
+msgstr ""
+
+#: class/WC_Tillit.php:328
+msgid "Finalize purchase when order is shipped"
+msgstr ""
+
+#: class/WC_Tillit.php:298
+msgid "Funded invoice"
+msgstr ""
+
+#. URI of the plugin
+#. Author URI of the plugin
+msgid "https://tillit.ai"
+msgstr ""
+
+#: class/WC_Tillit.php:306
+msgid "IBAN"
+msgstr ""
+
+#. Description of the plugin
+msgid "Integration between WooCommerce and Tillit."
+msgstr ""
+
+#: class/WC_Tillit.php:276
+msgid "Logo"
+msgstr ""
+
+#: class/WC_Tillit.php:263
+msgid "Making b2b purchases a breeze."
+msgstr ""
+
+#: class/WC_Tillit.php:30
+msgid "Making it easy for businesses to buy online."
+msgstr ""
+
+#: class/WC_Tillit.php:287
+msgid "Merchant Invoice (coming soon)"
+msgstr ""
+
+#: class/WC_Tillit.php:310
+msgid "Number of days on invoice"
+msgstr ""
+
+#: class/WC_Tillit.php:262
+msgid "Payment method description that the customer will see on your checkout."
+msgstr ""
+
+#: class/WC_Tillit_Checkout.php:105
+msgid "Personal"
+msgstr ""
+
+#: class/WC_Tillit.php:28
+msgid "Place order"
+msgstr ""
+
+#: class/WC_Tillit_Checkout.php:159
+msgid "Project"
+msgstr ""
+
+#: class/WC_Tillit.php:257
+msgid "Receive the invoice via EHF and PDF"
+msgstr ""
+
+#: class/WC_Tillit.php:158
+msgid "Select image"
+msgstr ""
+
+#: class/WC_Tillit_Checkout.php:99
+msgid "Select the account type"
+msgstr ""
+
+#: class/WC_Tillit.php:315
+msgid "Settings"
+msgstr ""
+
+#: class/WC_Tillit.php:255
+msgid "Subtitle"
+msgstr ""
+
+#: class/WC_Tillit.php:600
+msgid "The security code is not valid."
+msgstr ""
+
+#. Author of the plugin
+#: class/WC_Tillit.php:29
+msgid "Tillit"
+msgstr ""
+
+#: class/WC_Tillit.php:268
+msgid "Tillit Merchant ID"
+msgstr ""
+
+#: class/WC_Tillit.php:250
+msgid "Title"
+msgstr ""
+
+#: class/WC_Tillit.php:609
+msgid "Unable to find the requested order."
+msgstr ""
+
+#: class/WC_Tillit.php:624
+msgid "Unable to retrieve the order information."
+msgstr ""
+
+#: class/WC_Tillit.php:530
+msgid ""
+"We couldn't find your shop in our system. Make sure the API key is valid."
+msgstr ""
+
+#: class/WC_Tillit.php:204
+msgid "We couldn't update the Tillit Order status. Please try again later."
+msgstr ""
+
+#: class/WC_Tillit.php:529
+msgid "We couldn't validate your API key. Make sure it's set and valid."
+msgstr ""
+
+#. Name of the plugin
+msgid "WooCommerce Tillit Gateway"
+msgstr ""
