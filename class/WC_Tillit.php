@@ -219,6 +219,10 @@ class WC_Tillit extends WC_Payment_Gateway
     public function on_order_cancelled($order_id)
     {
         $this->update_order_status('cancel', $order_id);
+        if (!is_admin()) {
+            wp_redirect(wc_get_checkout_url());
+            exit;
+        }
     }
 
     /**
@@ -473,7 +477,7 @@ class WC_Tillit extends WC_Payment_Gateway
             'merchant_urls' => [
                 // 'merchant_confirmation_url' => $order->get_checkout_order_received_url(),
                 'merchant_confirmation_url' => sprintf('%s?tillit_confirm_order=%s&nonce=%s', get_site_url(), $order_reference, wp_create_nonce('tillit_confirm')),
-                'merchant_cancel_order_url' => $order->get_cancel_order_url(),
+                'merchant_cancel_order_url' => wp_specialchars_decode($order->get_cancel_order_url()),
                 'merchant_edit_order_url' => '',
                 'merchant_order_verification_failed_url' => '',
                 'merchant_invoice_url' => '',
@@ -633,7 +637,8 @@ class WC_Tillit extends WC_Payment_Gateway
         if($state === 'VERIFIED') $order->update_status('processing');
 
         // Get the redirect URL by order state
-        $redirect = $state === 'VERIFIED' ? $order->get_checkout_order_received_url() : $order->get_cancel_order_url();
+        $redirect = $state === 'VERIFIED' ? wp_specialchars_decode($order->get_checkout_order_received_url())
+                                          : wp_specialchars_decode($order->get_cancel_order_url());
 
         // Redirec the user to the requested page
         wp_redirect($redirect);

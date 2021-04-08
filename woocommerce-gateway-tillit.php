@@ -50,7 +50,7 @@ function wc_tillit_add_to_gateways($gateways)
 
 function wc_tillit_enqueue_styles()
 {
-    wp_enqueue_style( 'woocommerce-gateway-tillit-css', WC_TILLIT_PLUGIN_URL . '/assets/css/tillit.css');
+    wp_enqueue_style('woocommerce-gateway-tillit-css', WC_TILLIT_PLUGIN_URL . '/assets/css/tillit.css');
 }
 
 function wc_tillit_enqueue_scripts()
