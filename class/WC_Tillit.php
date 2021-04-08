@@ -484,7 +484,16 @@ class WC_Tillit extends WC_Payment_Gateway
                 'discount_percent' => 0,
                 'type' => 'FUNDED_INVOICE',
                 'vat' => round($vat->get_tax_total() * 10000),
-                'vat_percent' => round($vat->get_rate_percent() * 100)
+                'vat_percent' => round($vat->get_rate_percent() * 100),
+                'payment_details' => [
+                    'bank_account' => $this->get_option('bank_account_number'),
+                    'bank_account_type' => 'IBAN',
+                    'due_in_days' => intval($this->get_option('days_on_invoice')),
+                    'payee_company_name' => $order->get_billing_company(),
+                    'payee_organization_number' => sanitize_text_field($_POST['company_id']),
+                    'payment_reference_message' => '',
+                    'payment_reference_ocr' => '',
+                ]
             ],
             'shipping_address' => [
                 'organization_name' => $order->get_billing_company(),
