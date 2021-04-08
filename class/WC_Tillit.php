@@ -252,7 +252,7 @@ class WC_Tillit extends WC_Payment_Gateway
             ],
             'api_key' => [
                 'title'     => __('API Key', 'woocommerce-gateway-tillit'),
-                'type'      => 'text',
+                'type'      => 'password',
             ],
             'merchant_logo' => [
                 'title'     => __('Logo', 'woocommerce-gateway-tillit'),
@@ -331,7 +331,9 @@ class WC_Tillit extends WC_Payment_Gateway
             'headers' => [
                 'Content-Type' => 'application/json; charset=utf-8',
                 'Tillit-Merchant-Id' => $this->get_option('tillit_merchant_id'),
-                'Authorization' => sprintf('Basic %s', $this->get_option('api_key'))
+                'Authorization' => sprintf('Basic %s', base64_encode(
+                    $this->get_option('tillit_merchant_id') . ':' . $this->get_option('api_key')
+                ))
             ],
             'timeout' => 30,
             'body' => empty($payload) ? '' : json_encode($payload),
