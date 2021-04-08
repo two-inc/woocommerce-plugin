@@ -75,8 +75,17 @@ function wc_approve_order()
 
 }
 
+function tillit_settings_link($links)
+{
+    $settings_link = '<a href="admin.php?page=wc-settings&tab=checkout&section=woocommerce-gateway-tillit">Settings</a>';
+    array_unshift($links, $settings_link);
+    return $links;
+}
+
+
 add_filter('woocommerce_payment_gateways', 'wc_tillit_add_to_gateways');
 add_action('plugins_loaded', 'woocommerce_gateway_tillit_init');
 add_action('wp_enqueue_scripts', 'wc_tillit_enqueue_styles');
 add_action('wp_enqueue_scripts', 'wc_tillit_enqueue_scripts');
 add_action('init', 'wc_approve_order');
+add_filter("plugin_action_links_" . plugin_basename(__FILE__), 'tillit_settings_link');
