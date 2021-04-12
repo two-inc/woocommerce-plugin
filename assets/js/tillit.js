@@ -1,5 +1,5 @@
 const tillitRequiredField = '<abbr class="required" title="required">*</abbr>'
-const tillitCheckoutApi = 'https://staging.api.tillit.ai/v1'
+const tillitCheckoutApi = 'https://api.tillit.ai/v1'
 const tillitSearchApi = 'https://search-api-demo-j6whfmualq-lz.a.run.app'
 const tillitSearchLimit = 50
 
@@ -120,6 +120,9 @@ class Tillit {
                 // Set the company name
                 tillitCompany.company_name = data.id
 
+                // Get the company approval status
+                Tillit.getApproval()
+
                 // Fetch the company data
                 const addressResponse = Tillit.checkoutApiRequest('address', jQuery('#company_id').val())
 
@@ -141,9 +144,6 @@ class Tillit {
                         jQuery('#billing_postcode').val(companyLocation.postal_code)
 
                     }
-
-                    // Get the company approval status
-                    Tillit.getApproval()
 
                 })
 
