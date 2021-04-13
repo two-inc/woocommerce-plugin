@@ -197,70 +197,65 @@ class WC_Tillit_Checkout
     /**
      * Return the tax rate
      *
-     * @param WC_Product_Simple|WC_Order_Item_Product $productSimple
+     * @param WC_Product_Simple|WC_Order_Item_Product $product_simple
      *
      * @return int|mixed
      */
 
-    private static function get_tax_rate($productSimple)
+    private static function get_tax_rate($product_simple)
     {
-        $tax_rates = WC_Tax::get_rates($productSimple->get_tax_class());
+        $tax_rates = WC_Tax::get_rates($product_simple->get_tax_class());
         return $tax_rates && $tax_rates[1] ? $tax_rates[1]['rate'] : 0;
     }
 
     /**
-     * Format the cart products
+     * Format the cart items
      *
      * @return array
      */
 
-    public static function get_line_items($products)
+    public static function get_line_items($line_items)
     {
 
         $items = [];
 
-        // For price/tax rounding
-        $decimal_pow = pow(10, wc_get_price_decimals());
+        /** @var WC_Order_Item_Product $line_item */
+        foreach($line_items as $line_item) {
 
-        /** @var WC_Order_Item_Product $cartItem */
-        foreach($products as $cartItem) {
-
-            if(gettype($cartItem) !== 'array' && get_class($cartItem) === 'WC_Order_Item_Product') {
-                /** @var WC_Order_Item_Product $productSimple */
-                $productSimple = $cartItem->get_product();
+            if(gettype($line_item) !== 'array' && get_class($line_item) === 'WC_Order_Item_Product') {
+                /** @var WC_Order_Item_Product */
+                $product_simple = $line_item->get_product();
             } else {
-                /** @var WC_Product_Simple $productSimple */
-                $productSimple = $cartItem['data'];
+                /** @var WC_Product_Simple */
+                $product_simple = $line_item['data'];
             }
 
-            $tax_rate = WC_Tillit_Checkout::get_tax_rate($productSimple);
-
-            $unit_price_including_tax = wc_get_price_excluding_tax($productSimple) * (1 + $tax_rate / 100);
-            //wc_get_price_including_tax($productSimple) returns rounded values
+            $tax_rate = WC_Tillit_Checkout::get_tax_rate($product_simple);
 
             $product = [
-                'name' => $productSimple->get_name(),
-                'description' => substr($productSimple->get_description(), 0, 255),
-                'price' => round($decimal_pow * ($unit_price_including_tax * $cartItem['quantity'])) * 10000 / $decimal_pow,
-                'quantity' => $cartItem['quantity'],
-                'unit_price' => round($unit_price_including_tax * 10000),
+                'name' => $product_simple->get_name(),
+                'description' => substr($product_simple->get_description(), 0, 255),
+                'price' => round($line_item['line_total'] * 10000),
+                'quantity' => $line_item['quantity'],
+                'unit_price' => round($product_simple->get_price() * 10000),
                 'tax_class_name' => 'VAT ' . $tax_rate . '%',
-                'tax_class_rate' => $tax_rate * 100,
+                'tax_class_rate' => round($tax_rate * 100),
+                'tax' => round($line_item['line_tax'] * 10000),
                 'quantity_unit' => 'item',
-                'image_url' => get_the_post_thumbnail_url($productSimple->get_id()),
-                'product_page_url' => $productSimple->get_permalink(),
+                'image_url' => get_the_post_thumbnail_url($product_simple->get_id()),
+                'product_page_url' => $product_simple->get_permalink(),
                 'type' => 'PHYSICAL',
                 'details' => [
                     'barcodes' => [
                         [
                             'type' => 'SKU',
-                            'id' => $productSimple->get_sku()
+                            'id' => $product_simple->get_sku()
                         ]
                     ]
                 ]
             ];
 
-            $categories = wp_get_post_terms($productSimple->get_id(), 'product_cat');
+            $categories = wp_get_post_terms($product_simple->get_id(), 'product_cat');
 
             $product['details']['categories'] = [];
 

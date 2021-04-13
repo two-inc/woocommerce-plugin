@@ -226,11 +226,6 @@ class WC_Tillit extends WC_Payment_Gateway
             // Add the notice
             wc_add_notice(__('We couldn\'t update the Tillit Order status. Please try again later.', 'woocommerce-gateway-tillit'), 'error');
         }
-
-        if (!is_admin()) {
-            wp_redirect(wc_get_checkout_url());
-            exit;
-        }
     }
 
     /**
