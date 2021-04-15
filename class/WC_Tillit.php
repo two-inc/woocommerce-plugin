@@ -196,8 +196,16 @@ class WC_Tillit extends WC_Payment_Gateway
         if(is_wp_error($response)) {
             // Add the notice
             wc_add_notice(__('We couldn\'t update the Tillit Order status. Please try again later.', 'woocommerce-gateway-tillit'), 'error');
+            return;
         }
 
+        // Decode the response
+        $body = json_decode($response['body'], true);
+
+        // Save invoice number
+        if ($body['payment'] && $body['payment']['payment_details'] && $body['payment']['payment_details']['invoice_number']) {
+            update_post_meta($order->get_id(), 'invoice_number', $body['payment']['payment_details']['invoice_number']);
+        }
     }
 
     /**
