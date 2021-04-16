@@ -240,7 +240,7 @@ class WC_Tillit_Checkout
                 'unit_price' => round($product_simple->get_price() * 10000),
                 'tax_class_name' => 'VAT ' . $tax_rate . '%',
                 'tax_class_rate' => round($tax_rate * 100),
-                'tax' => round($line_item['line_tax'] * 10000),
+                //'tax' => round($line_item['line_tax'] * 10000),
                 'quantity_unit' => 'item',
                 'image_url' => get_the_post_thumbnail_url($product_simple->get_id()),
                 'product_page_url' => $product_simple->get_permalink(),

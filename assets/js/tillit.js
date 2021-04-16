@@ -1,5 +1,5 @@
 const tillitRequiredField = '<abbr class="required" title="required">*</abbr>'
-const tillitCheckoutApi = 'https://api.tillit.ai/v1'
+const tillitCheckoutApi = 'https://staging.api.tillit.ai/v1'
 const tillitSearchApi = 'https://search-api-demo-j6whfmualq-lz.a.run.app'
 const tillitSearchLimit = 50
 
