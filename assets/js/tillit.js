@@ -572,7 +572,7 @@ class Tillit {
                 "Tillit-Merchant-Id": window.tillit.merchant_id
             },
             data: JSON.stringify({
-                "amount": parseFloat(window.tillit.amount),
+                "gross_amount": window.tillit.gross_amount,
                 "buyer": {
                     "company": tillitCompany,
                     "representative": tillitRepresentative

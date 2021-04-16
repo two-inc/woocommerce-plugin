@@ -357,66 +357,6 @@ class WC_Tillit extends WC_Payment_Gateway
     }
 
     /**
-     * Return the order items
-     *
-     * @param WC_Order|WC_Order_Refund $order
-     *
-     * @return array
-     */
-
-    private function get_items($order)
-    {
-
-        // For storing the order items
-        $items = [];
-
-        // For each item
-        foreach($order->get_items() as $item_id => $item) {
-
-            // Get the product data
-            /** @var WC_Product $product */
-            $product = $item->get_product();
-
-            // Get the product image
-            $productImage = wp_get_attachment_image_src($product->get_id(), 'full');
-
-            // Get the tax rates
-            $taxRates = WC_Tax::get_rates($product->get_tax_class());
-
-            // True if we have a tax rate defined
-            $withTaxRates = count($taxRates) > 0;
-
-            $items[] = [
-                'id' => $item->get_id(),
-                'name' => $item->get_name(),
-                'description' => $product->get_description(),
-                'price' => $product->get_price(),
-                'quantity' => $item->get_quantity(),
-                'unit_price' => $product->get_price(),
-                'tax_class_rate' => $withTaxRates ? $taxRates[1]['rate'] : false,
-                'quantity_unit' => 'piece',
-                'type' => '',
-                'tax_class_name' => $withTaxRates ? $taxRates[1]['label'] : false,
-                'image_url' => $productImage ? $productImage['url'] : null,
-                'product_page_url' => get_permalink($product->get_id()),
-                'details' => [
-                    'barcodes' => [
-                        [
-                            'type' => 'SKU',
-                            'id' => $product->get_sku()
-                        ]
-                    ]
-                ]
-            ];
-
-        }
-
-        // Return the items
-        return $items;
-
-    }
-
-    /**
      * Process the payment
      *
      * @param int $order_id
@@ -500,13 +440,14 @@ class WC_Tillit extends WC_Payment_Gateway
                 'merchant_shipping_document_url' => ''
             ],
             'payment' => [
-                'amount' => round($order->get_total() * 10000),
                 'currency' => $order->get_currency(),
-                'discount' => 0,
-                'discount_percent' => 0,
+                'gross_amount' => strval(WC_Tillit_Checkout::round_amt($order->get_total())),
+                'net_amount' => strval(WC_Tillit_Checkout::round_amt($order->get_total() - $order->get_total_tax())),
+                'tax_amount' => strval(WC_Tillit_Checkout::round_amt($vat->get_tax_total())),
+                'tax_rate' => strval($vat->get_rate_percent()),
+                'discount_amount' => strval(WC_Tillit_Checkout::round_amt($order->get_total_discount())),
+                'discount_rate' => '0',
                 'type' => 'FUNDED_INVOICE',
-                'vat' => round($vat->get_tax_total() * 10000),
-                'vat_percent' => round($vat->get_rate_percent() * 100),
                 'payment_details' => [
                     'bank_account' => $this->get_option('bank_account_number'),
                     'bank_account_type' => 'IBAN',

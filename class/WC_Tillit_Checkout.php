@@ -235,12 +235,14 @@ class WC_Tillit_Checkout
             $product = [
                 'name' => $product_simple->get_name(),
                 'description' => substr($product_simple->get_description(), 0, 255),
-                'price' => round($line_item['line_total'] * 10000),
-                'quantity' => $line_item['quantity'],
-                'unit_price' => round($product_simple->get_price() * 10000),
+                'gross_amount' => strval(WC_Tillit_Checkout::round_amt($line_item['line_total'] + $line_item['line_tax'])),
+                'net_amount' =>  strval(WC_Tillit_Checkout::round_amt($line_item['line_total'])),
+                'discount_amount' => strval(WC_Tillit_Checkout::round_amt($line_item['line_subtotal'] - $line_item['line_total'])),
+                'tax_amount' => strval(WC_Tillit_Checkout::round_amt($line_item['line_tax'])),
                 'tax_class_name' => 'VAT ' . $tax_rate . '%',
-                'tax_class_rate' => round($tax_rate * 100),
-                //'tax' => round($line_item['line_tax'] * 10000),
+                'tax_rate' => strval($tax_rate),
+                'unit_price' => strval(WC_Tillit_Checkout::round_amt($product_simple->get_price())),
+                'quantity' => $line_item['quantity'],
                 'quantity_unit' => 'item',
                 'image_url' => get_the_post_thumbnail_url($product_simple->get_id()),
                 'product_page_url' => $product_simple->get_permalink(),
@@ -299,7 +301,7 @@ class WC_Tillit_Checkout
             'merchant_id' => $this->merchant_id,
             'currency' => get_woocommerce_currency(),
             'line_items' => $this->get_line_items($cart->get_cart_contents()),
-            'amount' => round($cart->get_total('price') * 10000)
+            'gross_amount' => strval($cart->get_total('price'))
         ];
 
         return $properties;
@@ -316,6 +318,17 @@ class WC_Tillit_Checkout
     {
         if(!is_checkout()) return;
         printf('<script>window.tillit = %s;</script>', json_encode($this->prepare_tillit_object()));
+    }
+
+    /**
+     * Round the amount in woocommerce way
+     *
+     * @return float
+     */
+
+    public static function round_amt($amt)
+    {
+        return round($amt, wc_get_price_decimals());
     }
 
 }
