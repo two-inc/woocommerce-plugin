@@ -46,6 +46,13 @@ class WC_Tillit extends WC_Payment_Gateway
             add_filter('woocommerce_gateway_title', [$this, 'change_tillit_payment_title'], 10, 2);
         });
 
+        // Tillit api host
+        $checkout_env = $this->get_option('checkout_env');
+        $this->tillit_search_host = 'https://search-api-demo-j6whfmualq-lz.a.run.app';
+        $this->tillit_checkout_host = $checkout_env == 'prod' ? 'https://api.tillit.ai'
+                                    : ($checkout_env == 'dev' ? 'https://huynguyen.hopto.org:8083'
+                                    : 'https://staging.api.tillit.ai');
+
         // Actions
         add_action('woocommerce_update_options_payment_gateways_' . $this->id, [$this, 'process_admin_options']);
         add_action('woocommerce_order_status_completed', [$this, 'on_order_completed']);
@@ -311,6 +318,16 @@ class WC_Tillit extends WC_Payment_Gateway
                 'type'      => 'separator',
                 'title'     => __('Settings', 'woocommerce-gateway-tillit')
             ],
+            'checkout_env' => [
+                'type'      => 'select',
+                'title'     => __('Mode', 'woocommerce-gateway-tillit'),
+                'default'   => 'stg',
+                'options' => array(
+                      'prod' => 'Production',
+                      'stg'  => 'Staging',
+                      'dev'  => 'Development'
+                 )
+            ],
             'enable_company_name' => [
                 'title'     => __('Activate company name auto-complete', 'woocommerce-gateway-tillit'),
                 'label'     => ' ',
@@ -341,7 +358,7 @@ class WC_Tillit extends WC_Payment_Gateway
 
     private function make_request($endpoint, $payload = [], $method = 'POST')
     {
-        return wp_remote_request(sprintf('%s%s', WC_TILLIT_URL, $endpoint), [
+        return wp_remote_request(sprintf('%s%s', $this->tillit_checkout_host, $endpoint), [
             'method' => $method,
             'headers' => [
                 'Content-Type' => 'application/json; charset=utf-8',
@@ -477,7 +494,9 @@ class WC_Tillit extends WC_Payment_Gateway
         ]);
 
         // Stop on failure
-        if(isset($data['result']) && $data['result'] === 'failure') return $data;
+        if(isset($data['result']) && $data['result'] === 'failure') {
+            return $data;
+        }
 
         // Parse the response
         $body = json_decode($data['body'], true);

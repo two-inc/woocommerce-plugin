@@ -1,6 +1,4 @@
 const tillitRequiredField = '<abbr class="required" title="required">*</abbr>'
-const tillitCheckoutApi = 'https://staging.api.tillit.ai/v1'
-const tillitSearchApi = 'https://search-api-demo-j6whfmualq-lz.a.run.app'
 const tillitSearchLimit = 50
 
 let tillitWithCompanySearch = null
@@ -82,7 +80,7 @@ class Tillit {
                     delay: 200,
                     url: function(params){
                         params.page = params.page || 1
-                        return tillitSearchApi + '/search?limit=' + tillitSearchLimit + '&offset=' + ((params.page - 1) * tillitSearchLimit) + '&q=' + params.term
+                        return window.tillit.tillit_search_host + '/search?limit=' + tillitSearchLimit + '&offset=' + ((params.page - 1) * tillitSearchLimit) + '&q=' + params.term
                     },
                     data: function()
                     {
@@ -124,7 +122,10 @@ class Tillit {
                 Tillit.getApproval()
 
                 // Fetch the company data
-                const addressResponse = Tillit.checkoutApiRequest('address', jQuery('#company_id').val())
+                const addressResponse = jQuery.ajax({
+                    dataType: 'json',
+                    url: window.tillit.tillit_checkout_host + '/v1/company/' + jQuery('#company_id').val() + '/address'
+                });
 
                 addressResponse.done(function(response){
 
@@ -486,21 +487,6 @@ class Tillit {
     }
 
     /**
-     * Query the Tillit API
-     *
-     * @param endpoint
-     * @param companyId
-     */
-
-    static checkoutApiRequest(endpoint, companyId)
-    {
-        return jQuery.ajax({
-            dataType: 'json',
-            url: [tillitCheckoutApi, 'company', companyId, endpoint].join('/')
-        })
-    }
-
-    /**
      * Check if all the required details are collected
      *
      * @returns {boolean}
@@ -564,7 +550,7 @@ class Tillit {
 
         // Create an order intent
         const approvalResponse = jQuery.ajax({
-            url: tillitCheckoutApi + '/order_intent',
+            url: window.tillit.tillit_checkout_host + '/v1/order_intent',
             contentType: "application/json; charset=utf-8",
             dataType: 'json',
             method: 'POST',
