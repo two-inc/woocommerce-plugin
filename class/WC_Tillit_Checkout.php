@@ -311,6 +311,23 @@ class WC_Tillit_Checkout
     }
 
     /**
+     * Recursively utf8 encode object
+     *
+     * @return array
+     */
+
+    private function utf8ize($d) {
+        if (is_array($d)) {
+            foreach ($d as $k => $v) {
+                $d[$k] = $this->utf8ize($v);
+            }
+        } else if (is_string($d)) {
+            return utf8_encode($d);
+        }
+        return $d;
+    }
+
+    /**
      * Inject the cart content in header
      *
      * @return void
@@ -319,7 +336,8 @@ class WC_Tillit_Checkout
     public function inject_cart_details()
     {
         if(!is_checkout()) return;
-        printf('<script>window.tillit = %s;</script>', json_encode($this->prepare_tillit_object()));
+        $tillit_obj = json_encode($this->utf8ize($this->prepare_tillit_object()));
+        if ($tillit_obj) printf('<script>window.tillit = %s;</script>', $tillit_obj);
     }
 
     /**
