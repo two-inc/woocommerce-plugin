@@ -182,6 +182,9 @@ class Tillit {
         // Handle the representative inputs blur event
         $body.on('blur', '#billing_first_name, #billing_last_name, #billing_email, #billing_phone', this.onRepresentativeInputBlur)
 
+        // Handle the representative inputs blur event
+        $body.on('blur', '#company_id, #billing_company', this.onCompanyManualInputBlur)
+
         // Handle the company inputs change event
         $body.on('change', '#billing_country', this.onCompanyInputChange)
 
@@ -666,6 +669,33 @@ class Tillit {
     }
 
     /**
+     * Handle the company manual input changes
+     *
+     * @param event
+     */
+
+    onCompanyManualInputBlur(event)
+    {
+
+        const $input = jQuery(this)
+
+        let inputName = $input.attr('name')
+
+        if(inputName === 'company_id') {
+            tillitCompany.organization_number = $input.val()
+        } else if(inputName === 'billing_company') {
+            tillitCompany.company_name = $input.val()
+        }
+
+        console.log(tillitCompany)
+
+        if(tillitCooldown) return
+
+        Tillit.getApproval()
+
+    }
+
+    /**
      * Handle the representative input changes
      *
      * @param event
@@ -673,8 +703,6 @@ class Tillit {
 
     onRepresentativeInputBlur(event)
     {
-
-        if(tillitCooldown) return
 
         const $input = jQuery(this)
 
@@ -685,6 +713,8 @@ class Tillit {
         tillitRepresentative[inputName] = $input.val()
 
         console.log(tillitRepresentative)
+
+        if(tillitCooldown) return
 
         Tillit.getApproval()
 
@@ -699,11 +729,11 @@ class Tillit {
     onCompanyInputChange(event)
     {
 
-        if(tillitCooldown) return
-
         const $input = jQuery(this)
 
         tillitCompany.country_prefix = $input.val()
+
+        if(tillitCooldown) return
 
         Tillit.getApproval()
 
