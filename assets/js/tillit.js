@@ -388,7 +388,7 @@ class Tillit {
         const $tillitPaymentMethod = jQuery(':input[value="woocommerce-gateway-tillit"]')
 
         // True if the Tillit payment method is disabled
-        const isTillitDisabled = tillitMethodHidden === true
+        const isTillitDisabled = window.tillit.enable_order_intent === 'yes' && tillitMethodHidden === true
 
         // Disable the Tillit payment method for personal orders
         $tillitPaymentMethod.attr('disabled', isTillitDisabled)
@@ -466,7 +466,7 @@ class Tillit {
         const $tillit = jQuery('.payment_method_woocommerce-gateway-tillit')
 
         // True if the Tillit payment method is disabled
-        const isTillitDisabled = tillitMethodHidden === true
+        const isTillitDisabled = window.tillit.enable_order_intent === 'yes' && tillitMethodHidden === true
 
         // Disable the Tillit payment method for personal orders
         $tillitPaymentMethod.attr('disabled', isTillitDisabled)
@@ -494,6 +494,10 @@ class Tillit {
 
     static canGetApproval()
     {
+
+        if (window.tillit.enable_order_intent !== 'yes') {
+            return false;
+        }
 
         let can = true
         let values = [].concat(Object.values(tillitCompany), Object.values(tillitRepresentative))

@@ -323,6 +323,7 @@ class WC_Tillit_Checkout
             'tillit_checkout_host' => $this->WC_Tillit->tillit_checkout_host,
             'company_name_search' => $this->WC_Tillit->get_option('enable_company_name'),
             'company_id_search' => $this->WC_Tillit->get_option('enable_company_id'),
+            'enable_order_intent' => $this->WC_Tillit->get_option('enable_order_intent'),
             'merchant_id' => $this->merchant_id,
             'currency' => get_woocommerce_currency(),
             'gross_amount' => strval($cart->get_total('price')),

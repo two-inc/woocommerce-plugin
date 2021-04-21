@@ -342,6 +342,12 @@ class WC_Tillit extends WC_Payment_Gateway
                 'title'     => __('Finalize purchase when order is shipped', 'woocommerce-gateway-tillit'),
                 'label'     => ' ',
                 'type'      => 'checkbox',
+            ],
+            'enable_order_intent' => [
+                'title'     => __('Pre-approve the buyer during checkout and disable Tillit if the buyer is declined', 'woocommerce-gateway-tillit'),
+                'label'     => ' ',
+                'type'      => 'checkbox',
+                'default'   => 'yes',
             ]
         ]);
     }
