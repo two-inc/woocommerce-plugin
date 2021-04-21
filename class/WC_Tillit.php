@@ -413,6 +413,8 @@ class WC_Tillit extends WC_Payment_Gateway
 
         /** @var WC_Order_Item_Tax $vat */
         $vat = $orderTaxes[$taxes[0]];
+        $tax_amount = $vat->get_tax_total() + $vat->get_shipping_tax_total();
+        $tax_rate = $vat->get_rate_percent();
 
         // Genereate an order reference string
         $order_reference = wp_generate_password(64, false, false);
@@ -466,8 +468,8 @@ class WC_Tillit extends WC_Payment_Gateway
                 'currency' => $order->get_currency(),
                 'gross_amount' => strval(WC_Tillit_Checkout::round_amt($order->get_total())),
                 'net_amount' => strval(WC_Tillit_Checkout::round_amt($order->get_total() - $order->get_total_tax())),
-                'tax_amount' => strval(WC_Tillit_Checkout::round_amt($vat->get_tax_total())),
-                'tax_rate' => strval($vat->get_rate_percent()),
+                'tax_amount' => strval(WC_Tillit_Checkout::round_amt($tax_amount)),
+                'tax_rate' => strval($tax_rate),
                 'discount_amount' => strval(WC_Tillit_Checkout::round_amt($order->get_total_discount())),
                 'discount_rate' => '0',
                 'type' => 'FUNDED_INVOICE',
