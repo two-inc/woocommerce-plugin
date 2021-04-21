@@ -214,7 +214,7 @@ class WC_Tillit_Checkout
      * @return array
      */
 
-    public static function get_line_items($line_items)
+    public static function get_line_items($line_items, $shippings)
     {
 
         $items = [];
@@ -269,6 +269,29 @@ class WC_Tillit_Checkout
 
         }
 
+        // Shipping
+        foreach($shippings as $shipping) {
+            if ($shipping->get_total() == 0) continue;
+            $tax_rate = WC_Tillit_Checkout::round_amt($shipping->get_total_tax() / $shipping->get_total());
+            $shipping_line = [
+                'name' => $shipping->get_name(),
+                'description' => '',
+                'gross_amount' => strval(WC_Tillit_Checkout::round_amt($shipping->get_total() + $shipping->get_total_tax())),
+                'net_amount' =>  strval(WC_Tillit_Checkout::round_amt($shipping->get_total())),
+                'discount_amount' => '0',
+                'tax_amount' => strval(WC_Tillit_Checkout::round_amt($shipping->get_total_tax())),
+                'tax_class_name' => 'VAT ' . $tax_rate . '%',
+                'tax_rate' => strval($tax_rate),
+                'unit_price' => strval(WC_Tillit_Checkout::round_amt($shipping->get_total())),
+                'quantity' => 1,
+                'quantity_unit' => 'sc', // shipment charge
+                'image_url' => '',
+                'product_page_url' => '',
+                'type' => 'SHIPPING_FEE'
+            ];
+            $items[] = $shipping_line;
+        }
+
         return $items;
 
     }
@@ -302,8 +325,8 @@ class WC_Tillit_Checkout
             'company_id_search' => $this->WC_Tillit->get_option('enable_company_id'),
             'merchant_id' => $this->merchant_id,
             'currency' => get_woocommerce_currency(),
-            'line_items' => $this->get_line_items($cart->get_cart_contents()),
-            'gross_amount' => strval($cart->get_total('price'))
+            'gross_amount' => strval($cart->get_total('price')),
+            'line_items' => $this->get_line_items($cart->get_cart_contents(), [])
         ];
 
         return $properties;
@@ -320,6 +343,10 @@ class WC_Tillit_Checkout
         if (is_array($d)) {
             foreach ($d as $k => $v) {
                 $d[$k] = $this->utf8ize($v);
+            }
+        } else if(is_object($d)) {
+            foreach ($d as $k => $v) {
+                $d->$k = $this->utf8ize($v);
             }
         } else if (is_string($d)) {
             return utf8_encode($d);
@@ -348,7 +375,8 @@ class WC_Tillit_Checkout
 
     public static function round_amt($amt)
     {
-        return round($amt, wc_get_price_decimals());
+        return $amt;
+        //return round($amt, wc_get_price_decimals());
     }
 
 }

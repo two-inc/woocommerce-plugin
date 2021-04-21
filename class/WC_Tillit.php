@@ -442,7 +442,7 @@ class WC_Tillit extends WC_Payment_Gateway
             'date_created' => $order->order_date,
             'date_updated' => $order->order_date,
             'order_note' => $order->get_customer_note(),
-            'line_items' => WC_Tillit_Checkout::get_line_items($order->get_items()),
+            'line_items' => WC_Tillit_Checkout::get_line_items($order->get_items(), $order->get_items('shipping')),
             'recurring' => false,
             'merchant_additional_info' => '',
             'merchant_id' => $this->get_option('tillit_merchant_id'),
@@ -493,6 +493,7 @@ class WC_Tillit extends WC_Payment_Gateway
             'status' => 'APPROVED'
         ]);
 
+
         // Stop on failure
         if(isset($data['result']) && $data['result'] === 'failure') {
             return $data;
@@ -511,8 +512,8 @@ class WC_Tillit extends WC_Payment_Gateway
             ];
 
             // Add the notice
-            if (property_exists($body, 'message'))
-                wc_add_notice(isset($errors[$body['message']]) ? $errors[$body['message']] : $body['message'], 'error');
+            if (!is_string($body) && $body['error_details'])
+                wc_add_notice(isset($errors[$body['error_details']]) ? $errors[$body['error_details']] : $body['error_details'], 'error');
             else
                 wc_add_notice($body, 'error');
 
