@@ -524,6 +524,7 @@ class Tillit {
      */
 
     static clearAndDisplayErrors(errorMsgs) {
+        if (!document.querySelector('form[name="checkout"]')) return;
         let noticeGroup = document.querySelector('.woocommerce-NoticeGroup');
         if (!noticeGroup) {
             noticeGroup = document.createElement('div');
@@ -751,5 +752,6 @@ jQuery(function(){
         }
         tillitWithCompanySearch = window.tillit.company_name_search && window.tillit.company_name_search === 'yes'
         new Tillit()
+        Tillit.getApproval()
     }
 })
