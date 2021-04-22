@@ -414,7 +414,7 @@ class WC_Tillit extends WC_Payment_Gateway
         /** @var WC_Order_Item_Tax $vat */
         $vat = $orderTaxes[$taxes[0]];
         $tax_amount = $vat->get_tax_total() + $vat->get_shipping_tax_total();
-        $tax_rate = $vat->get_rate_percent();
+        $tax_rate = $vat->get_rate_percent() / 100.0;
 
         // Genereate an order reference string
         $order_reference = wp_generate_password(64, false, false);

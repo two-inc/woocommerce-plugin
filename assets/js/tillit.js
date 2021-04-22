@@ -192,6 +192,18 @@ class Tillit {
         // Handle the company inputs change event
         $body.on('change', '#billing_country', this.onCompanyInputChange)
 
+        $body.on('click', '#place_order', function(){
+            clearInterval(tillitOrderIntentCheck.interval)
+            tillitOrderIntentCheck.interval = null
+            tillitOrderIntentCheck.pendingCheck = false
+        })
+
+        $body.on('checkout_error', function(){
+            clearInterval(tillitOrderIntentCheck.interval)
+            tillitOrderIntentCheck.interval = null
+            tillitOrderIntentCheck.pendingCheck = false
+        })
+
         // Handle account type change
         $checkout.on('change', '[name="account_type"]', this.changeAccountType)
 
@@ -529,7 +541,7 @@ class Tillit {
             noticeGroup.className = 'woocommerce-NoticeGroup woocommerce-NoticeGroup-checkout';
             document.querySelector('form[name="checkout"]').prepend(noticeGroup);
         }
-        noticeGroup.innerHTML = '';console.log(errorMsgs);
+        noticeGroup.innerHTML = '';
         for (let errorMsg of errorMsgs) {
             let ul = document.createElement('ul');
             ul.className = 'woocommerce-error';
@@ -565,7 +577,6 @@ class Tillit {
             if (!gross_amount || !tax_amount) {
                 return
             }
-            console.log('intv ' + tillitOrderIntentCheck.interval)
             clearInterval(tillitOrderIntentCheck.interval)
             tillitOrderIntentCheck.interval = null
             tillitOrderIntentCheck.pendingCheck = false
@@ -588,13 +599,13 @@ class Tillit {
                     "line_items": [{
                         "name": "Cart",
                         "description": "",
-                        "gross_amount": "" + gross_amount,
-                        "net_amount": "" + (gross_amount - tax_amount),
+                        "gross_amount": gross_amount.toFixed(2),
+                        "net_amount": (gross_amount - tax_amount).toFixed(2),
                         "discount_amount": "0",
-                        "tax_amount": "" + tax_amount,
-                        "tax_class_name": "VAT " + (100.0 * tax_amount / gross_amount) + "%",
-                        "tax_rate": "" + (1.0 * tax_amount / gross_amount),
-                        "unit_price": "" + gross_amount,
+                        "tax_amount": tax_amount.toFixed(2),
+                        "tax_class_name": "VAT " + (100.0 * tax_amount / gross_amount).toFixed(2) + "%",
+                        "tax_rate": "" + (1.0 * tax_amount / gross_amount).toFixed(6),
+                        "unit_price": gross_amount.toFixed(2),
                         "quantity": 1,
                         "quantity_unit": "item",
                         "image_url": "",
@@ -620,8 +631,10 @@ class Tillit {
                 Tillit.selectDefaultMethod()
 
                 // Update company name in payment option
-                document.querySelector('.tillit-buyer-name').innerText = document.querySelector('#select2-billing_company-container').innerText
-
+                if (document.querySelector('#select2-billing_company-container'))
+                    document.querySelector('.tillit-buyer-name').innerText = document.querySelector('#select2-billing_company-container').innerText
+                else if (document.querySelector('#billing_company'))
+                    document.querySelector('.tillit-buyer-name').innerText = document.querySelector('#billing_company').value
                 // Clear error messages
                 Tillit.clearAndDisplayErrors([]);
             })
@@ -645,7 +658,9 @@ class Tillit {
 
                 // Display error messages
                 if (response.status == 400) {
-                    let errMsg = 'error_details' in response.responseJSON ? response.responseJSON['error_details'] : response.responseJSON
+                    let errMsg = (typeof response.responseJSON === 'string' || !('error_details' in response.responseJSON))
+                                 ? response.responseJSON
+                                 : response.responseJSON['error_details']
                     Tillit.clearAndDisplayErrors([errMsg,]);
                     if (jQuery) jQuery.scroll_to_notices(jQuery('.woocommerce-NoticeGroup'));
                 }

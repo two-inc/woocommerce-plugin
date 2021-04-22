@@ -202,7 +202,7 @@ class WC_Tillit_Checkout
      * @return int|mixed
      */
 
-    private static function get_tax_rate($product_simple)
+    private static function get_tax_percentage($product_simple)
     {
         $tax_rates = WC_Tax::get_rates($product_simple->get_tax_class());
         return $tax_rates && $tax_rates[1] ? $tax_rates[1]['rate'] : 0;
@@ -230,7 +230,8 @@ class WC_Tillit_Checkout
                 $product_simple = $line_item['data'];
             }
 
-            $tax_rate = WC_Tillit_Checkout::get_tax_rate($product_simple);
+            $tax_percentage = WC_Tillit_Checkout::get_tax_percentage($product_simple);
+            $tax_rate = $tax_percentage / 100.0;
 
             $image_url = get_the_post_thumbnail_url($product_simple->get_id());
 
@@ -241,8 +242,8 @@ class WC_Tillit_Checkout
                 'net_amount' =>  strval(WC_Tillit_Checkout::round_amt($line_item['line_total'])),
                 'discount_amount' => strval(WC_Tillit_Checkout::round_amt($line_item['line_subtotal'] - $line_item['line_total'])),
                 'tax_amount' => strval(WC_Tillit_Checkout::round_amt($line_item['line_tax'])),
-                'tax_class_name' => 'VAT ' . $tax_rate . '%',
-                'tax_rate' => strval($tax_rate / 100.0),
+                'tax_class_name' => 'VAT ' . $tax_percentage . '%',
+                'tax_rate' => strval($tax_rate),
                 'unit_price' => strval(WC_Tillit_Checkout::round_amt($product_simple->get_price())),
                 'quantity' => $line_item['quantity'],
                 'quantity_unit' => 'item',
@@ -274,7 +275,7 @@ class WC_Tillit_Checkout
         // Shipping
         foreach($shippings as $shipping) {
             if ($shipping->get_total() == 0) continue;
-            $tax_rate = WC_Tillit_Checkout::round_amt($shipping->get_total_tax() / $shipping->get_total());
+            $tax_rate = 1.0 * $shipping->get_total_tax() / $shipping->get_total();
             $shipping_line = [
                 'name' => $shipping->get_name(),
                 'description' => '',
@@ -282,7 +283,7 @@ class WC_Tillit_Checkout
                 'net_amount' =>  strval(WC_Tillit_Checkout::round_amt($shipping->get_total())),
                 'discount_amount' => '0',
                 'tax_amount' => strval(WC_Tillit_Checkout::round_amt($shipping->get_total_tax())),
-                'tax_class_name' => 'VAT ' . $tax_rate . '%',
+                'tax_class_name' => 'VAT ' . WC_Tillit_Checkout::round_amt($tax_rate * 100) . '%',
                 'tax_rate' => strval($tax_rate),
                 'unit_price' => strval(WC_Tillit_Checkout::round_amt($shipping->get_total())),
                 'quantity' => 1,
@@ -365,7 +366,7 @@ class WC_Tillit_Checkout
 
     public static function round_amt($amt)
     {
-        return $amt;
+        return number_format($amt);
         //return round($amt, wc_get_price_decimals());
     }
 
