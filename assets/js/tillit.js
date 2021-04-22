@@ -5,7 +5,11 @@ let tillitWithCompanySearch = null
 let tillitSearchCache
 let tillitMethodHidden = true
 let tillitApproved = null
-let tillitCooldown = null
+
+const tillitOrderIntentCheck = {
+    "interval": null,
+    "pendingCheck": false,
+}
 
 const tillitCompany = {
     "company_name": null,
@@ -188,21 +192,15 @@ class Tillit {
         // Handle the company inputs change event
         $body.on('change', '#billing_country', this.onCompanyInputChange)
 
-        $body.on('click', '#place_order', function(){
-            tillitCooldown = true
-        })
-
-        $body.on('checkout_error', function(){
-            setTimeout(function(){
-                tillitCooldown = false
-            }, 1000)
-        })
-
         // Handle account type change
         $checkout.on('change', '[name="account_type"]', this.changeAccountType)
 
         // Toggle the actions when the payment method changes
         $checkout.on('change', '[name="payment_method"]', this.toggleActions)
+
+        setTimeout(function(){
+            if (tillitOrderIntentCheck.pendingCheck) Tillit.getApproval()
+        }, 1000)
 
     }
 
@@ -554,73 +552,106 @@ class Tillit {
 
         const canGetApproval = Tillit.canGetApproval()
 
-        if(!canGetApproval) return;
+        if(!canGetApproval) return
 
-        // Create an order intent
-        const approvalResponse = jQuery.ajax({
-            url: window.tillit.tillit_checkout_host + '/v1/order_intent',
-            contentType: "application/json; charset=utf-8",
-            dataType: 'json',
-            method: 'POST',
-            headers: {
-                "Tillit-Merchant-Id": window.tillit.merchant_id
-            },
-            data: JSON.stringify({
-                "gross_amount": window.tillit.gross_amount,
-                "buyer": {
-                    "company": tillitCompany,
-                    "representative": tillitRepresentative
-                },
-                "currency": window.tillit.currency,
-                "line_items": window.tillit.line_items
-            })
-        })
+        if (tillitOrderIntentCheck.interval) {
+            tillitOrderIntentCheck.pendingCheck = true
+            return
+        }
 
-        approvalResponse.done(function(response){
-
-            // Store the approved state
-            tillitApproved = response.approved
-
-            // Toggle the Tillit payment method
-            tillitMethodHidden = !tillitApproved
-
-            // Show or hide the Tillit payment method
-            Tillit.toggleMethod()
-
-            // Select the default payment method
-            Tillit.selectDefaultMethod()
-
-            // Update company name in payment option
-            document.querySelector('.tillit-buyer-name').innerText = document.querySelector('#select2-billing_company-container').innerText
-
-            // Clear error messages
-            Tillit.clearAndDisplayErrors([]);
-        })
-
-        approvalResponse.error(function(response){
-
-            // Store the approved state
-            tillitApproved = false
-
-            // Toggle the Tillit payment method
-            tillitMethodHidden = !tillitApproved
-
-            // Show or hide the Tillit payment method
-            Tillit.toggleMethod()
-
-            // Select the default payment method
-            Tillit.selectDefaultMethod()
-
-            // Update company name in payment option
-            document.querySelector('.tillit-buyer-name').innerText = ''
-
-            // Display error messages
-            if (response.status == 400) {
-                Tillit.clearAndDisplayErrors([response.responseJSON,]);
-                if (jQuery) jQuery.scroll_to_notices(jQuery('.woocommerce-NoticeGroup'));
+        tillitOrderIntentCheck.interval = setInterval(function() {
+            let gross_amount = Tillit.getPrice('order-total');
+            let tax_amount = Tillit.getPrice('tax-rate');
+            if (!gross_amount || !tax_amount) {
+                return
             }
+            console.log('intv ' + tillitOrderIntentCheck.interval)
+            clearInterval(tillitOrderIntentCheck.interval)
+            tillitOrderIntentCheck.interval = null
+            tillitOrderIntentCheck.pendingCheck = false
+            // Create an order intent
+            const approvalResponse = jQuery.ajax({
+                url: window.tillit.tillit_checkout_host + '/v1/order_intent',
+                contentType: "application/json; charset=utf-8",
+                dataType: 'json',
+                method: 'POST',
+                headers: {
+                    "Tillit-Merchant-Id": window.tillit.merchant_id
+                },
+                data: JSON.stringify({
+                    "gross_amount": "" + gross_amount,
+                    "buyer": {
+                        "company": tillitCompany,
+                        "representative": tillitRepresentative
+                    },
+                    "currency": window.tillit.currency,
+                    "line_items": [{
+                        "name": "Cart",
+                        "description": "",
+                        "gross_amount": "" + gross_amount,
+                        "net_amount": "" + (gross_amount - tax_amount),
+                        "discount_amount": "0",
+                        "tax_amount": "" + tax_amount,
+                        "tax_class_name": "VAT " + (100.0 * tax_amount / gross_amount) + "%",
+                        "tax_rate": "" + (1.0 * tax_amount / gross_amount),
+                        "unit_price": "" + gross_amount,
+                        "quantity": 1,
+                        "quantity_unit": "item",
+                        "image_url": "",
+                        "product_page_url": "",
+                        "type": "PHYSICAL",
+                        "details": "",
+                    }]
+                })
+            })
 
-        })
+            approvalResponse.done(function(response){
+
+                // Store the approved state
+                tillitApproved = response.approved
+
+                // Toggle the Tillit payment method
+                tillitMethodHidden = !tillitApproved
+
+                // Show or hide the Tillit payment method
+                Tillit.toggleMethod()
+
+                // Select the default payment method
+                Tillit.selectDefaultMethod()
+
+                // Update company name in payment option
+                document.querySelector('.tillit-buyer-name').innerText = document.querySelector('#select2-billing_company-container').innerText
+
+                // Clear error messages
+                Tillit.clearAndDisplayErrors([]);
+            })
+
+            approvalResponse.error(function(response){
+
+                // Store the approved state
+                tillitApproved = false
+
+                // Toggle the Tillit payment method
+                tillitMethodHidden = !tillitApproved
+
+                // Show or hide the Tillit payment method
+                Tillit.toggleMethod()
+
+                // Select the default payment method
+                Tillit.selectDefaultMethod()
+
+                // Update company name in payment option
+                document.querySelector('.tillit-buyer-name').innerText = ''
+
+                // Display error messages
+                if (response.status == 400) {
+                    let errMsg = 'error_details' in response.responseJSON ? response.responseJSON['error_details'] : response.responseJSON
+                    Tillit.clearAndDisplayErrors([errMsg,]);
+                    if (jQuery) jQuery.scroll_to_notices(jQuery('.woocommerce-NoticeGroup'));
+                }
+
+            })
+        }, 1000)
 
     }
 
@@ -690,8 +721,6 @@ class Tillit {
 
         console.log(tillitCompany)
 
-        if(tillitCooldown) return
-
         Tillit.getApproval()
 
     }
@@ -715,8 +744,6 @@ class Tillit {
 
         console.log(tillitRepresentative)
 
-        if(tillitCooldown) return
-
         Tillit.getApproval()
 
     }
@@ -734,22 +761,33 @@ class Tillit {
 
         tillitCompany.country_prefix = $input.val()
 
-        if(tillitCooldown) return
-
         Tillit.getApproval()
 
+    }
+
+    /**
+     * Get price from DOM
+     */
+
+    static getPrice(priceName)
+    {
+        let node = document.querySelector('.' + priceName + ' .woocommerce-Price-amount bdi')
+                   || document.querySelector('.' + priceName + ' .woocommerce-Price-amount')
+        if (node && node.childNodes) {
+            for (let n of node.childNodes) {
+                if (n.nodeName === '#text') {
+                    return parseFloat(n.textContent
+                        .replace(window.tillit.price_thousand_separator, '')
+                        .replace(window.tillit.wc_get_price_decimal_separator, '.'))
+                }
+            }
+        }
     }
 
 }
 
 jQuery(function(){
     if (window.tillit) {
-        if (window.tillit.error) {
-            setTimeout(function(){
-                Tillit.clearAndDisplayErrors(window.tillit.messages)
-            }, 3000);
-            return
-        }
         tillitWithCompanySearch = window.tillit.company_name_search && window.tillit.company_name_search === 'yes'
         new Tillit()
         Tillit.getApproval()

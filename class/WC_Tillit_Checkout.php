@@ -232,6 +232,8 @@ class WC_Tillit_Checkout
 
             $tax_rate = WC_Tillit_Checkout::get_tax_rate($product_simple);
 
+            $image_url = get_the_post_thumbnail_url($product_simple->get_id());
+
             $product = [
                 'name' => $product_simple->get_name(),
                 'description' => substr($product_simple->get_description(), 0, 255),
@@ -240,11 +242,11 @@ class WC_Tillit_Checkout
                 'discount_amount' => strval(WC_Tillit_Checkout::round_amt($line_item['line_subtotal'] - $line_item['line_total'])),
                 'tax_amount' => strval(WC_Tillit_Checkout::round_amt($line_item['line_tax'])),
                 'tax_class_name' => 'VAT ' . $tax_rate . '%',
-                'tax_rate' => strval($tax_rate),
+                'tax_rate' => strval($tax_rate / 100.0),
                 'unit_price' => strval(WC_Tillit_Checkout::round_amt($product_simple->get_price())),
                 'quantity' => $line_item['quantity'],
                 'quantity_unit' => 'item',
-                'image_url' => get_the_post_thumbnail_url($product_simple->get_id()),
+                'image_url' => $image_url ? $image_url : '',
                 'product_page_url' => $product_simple->get_permalink(),
                 'type' => 'PHYSICAL',
                 'details' => [
@@ -305,19 +307,6 @@ class WC_Tillit_Checkout
     private function prepare_tillit_object()
     {
 
-        /** @var WC_Cart $cart */
-        $cart = WC()->cart;
-
-        // Only proceed if taxes are configured
-        if (!$cart->get_taxes() || count($cart->get_taxes()) == 0) {
-            return [
-                'error'   => 'TAX_NOT_CONFIGURED',
-                'messages' => [
-                    __('Tillit Merchant Error: Taxes are not configured', 'woocommerce-gateway-tillit')
-                ]
-            ];
-        }
-
         $properties = [
             'tillit_search_host' => $this->WC_Tillit->tillit_search_host,
             'tillit_checkout_host' => $this->WC_Tillit->tillit_checkout_host,
@@ -326,8 +315,8 @@ class WC_Tillit_Checkout
             'enable_order_intent' => $this->WC_Tillit->get_option('enable_order_intent'),
             'merchant_id' => $this->merchant_id,
             'currency' => get_woocommerce_currency(),
-            'gross_amount' => strval($cart->get_total('price')),
-            'line_items' => $this->get_line_items($cart->get_cart_contents(), [])
+            'price_decimal_separator' => wc_get_price_decimal_separator(),
+            'price_thousand_separator' => wc_get_price_thousand_separator()
         ];
 
         return $properties;
