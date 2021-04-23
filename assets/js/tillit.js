@@ -856,7 +856,9 @@ class Tillit {
 
     static loadCheckoutInputs()
     {
-        let checkoutInputs = JSON.parse(sessionStorage.getItem('checkoutInputs'))
+        let checkoutInputs = sessionStorage.getItem('checkoutInputs')
+        if (!checkoutInputs) return
+        checkoutInputs = JSON.parse(checkoutInputs)
         for (let inp of checkoutInputs) {
             if (inp.htmlTag === 'INPUT') {
                 if (inp.val && ['text', 'tel', 'email', 'hidden'].indexOf(inp.type) >= 0) {
