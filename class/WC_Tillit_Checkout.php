@@ -93,20 +93,38 @@ class WC_Tillit_Checkout
     public function add_account_fields($fields)
     {
 
-        // Define the company details
-        $fields['account_type'] = [
-            'account_type' => [
-                'label' => __('Select the account type', 'woocommerce-gateway-tillit'),
-                'required' => true,
-                'type' => 'radio',
-                'priority' => 15,
-                'value' => 'business',
-                'options' => [
-                    'personal' => __('Personal', 'woocommerce-gateway-tillit'),
-                    'business' => __('Business', 'woocommerce-gateway-tillit')
+        if($this->WC_Tillit->get_option('enable_b2b_b2c_radio') === 'yes') {
+
+            $fields['account_type'] = [
+                'account_type' => [
+                    'label' => __('Select the account type', 'woocommerce-gateway-tillit'),
+                    'required' => true,
+                    'type' => 'radio',
+                    'priority' => 15,
+                    'value' => 'business',
+                    'options' => [
+                        'personal' => __('Personal', 'woocommerce-gateway-tillit'),
+                        'business' => __('Business', 'woocommerce-gateway-tillit')
+                    ]
                 ]
-            ]
-        ];
+            ];
+
+        } else {
+
+            $fields['account_type'] = [
+                'account_type' => [
+                    'required' => true,
+                    'type' => 'radio',
+                    'class' => array('hidden'),
+                    'priority' => 15,
+                    'value' => 'business',
+                    'options' => [
+                        'business' => __('Business', 'woocommerce-gateway-tillit')
+                    ]
+                ]
+            ];
+
+        }
 
         // Return the fields
         return $fields;
@@ -366,11 +384,9 @@ class WC_Tillit_Checkout
 
     public static function round_amt($amt)
     {
-        $rounded_formatted = number_format($amt);
-        return str_replace(wc_get_price_decimal_separator(), '.', str_replace(wc_get_price_thousand_separator(), '', $rounded_formatted));
+        return number_format($amt, wc_get_price_decimals(), '.', '');
         //return round($amt, wc_get_price_decimals());
     }
 
 }
-
 new WC_Tillit_Checkout();

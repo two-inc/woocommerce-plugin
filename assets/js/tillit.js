@@ -376,13 +376,14 @@ class Tillit {
     {
 
         // Get the targets
-        const $targets = jQuery('.woocommerce-company-fields, .woocommerce-representative-fields, #company_id_field, #billing_company_field')
+        const $requiredTargets = jQuery('.woocommerce-company-fields, .woocommerce-representative-fields, #company_id_field, #billing_company_field')
+        const $regularTargets = jQuery('.woocommerce-company-fields, .woocommerce-representative-fields, #company_id_field, #billing_company_field, #department_field, #project_field')
 
         // Toggle the targets based on the account type
-        accountType === 'personal' ? $targets.hide() : $targets.show()
+        accountType === 'personal' ? $regularTargets.addClass('hidden') : $regularTargets.removeClass('hidden')
 
         // Toggle the required fields based on the account type
-        Tillit.toggleRequiredFields($targets, accountType)
+        Tillit.toggleRequiredFields($requiredTargets, accountType)
 
     }
 

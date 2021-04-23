@@ -1,7 +1,4 @@
-.woocommerce form .woocommerce-company-fields,
-.woocommerce form .woocommerce-representative-fields,
-.woocommerce form #company_name_field,
-.woocommerce form #company_id_field {
+.hidden {
     display: none;
 }
 

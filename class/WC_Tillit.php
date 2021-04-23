@@ -348,6 +348,12 @@ class WC_Tillit extends WC_Payment_Gateway
                 'label'     => ' ',
                 'type'      => 'checkbox',
                 'default'   => 'yes',
+            ],
+            'enable_b2b_b2c_radio' => [
+                'title'     => __('Activate B2C/B2B check-out radio button', 'woocommerce-gateway-tillit'),
+                'label'     => ' ',
+                'type'      => 'checkbox',
+                'default'   => 'yes',
             ]
         ]);
     }
