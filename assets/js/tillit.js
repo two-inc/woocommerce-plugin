@@ -806,6 +806,7 @@ class Tillit {
     {
         let checkoutInputs = []
         let checkoutForm = document.querySelector('form[name="checkout"]')
+        if (!checkoutForm) return;
         for (let inp of checkoutForm.querySelectorAll('input:not([type="radio"],[type="checkbox"])')) {
             if (inp.getAttribute('id')) {
                 checkoutInputs.push({
