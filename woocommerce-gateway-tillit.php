@@ -45,12 +45,12 @@ function wc_tillit_add_to_gateways($gateways)
 
 function wc_tillit_enqueue_styles()
 {
-    wp_enqueue_style('woocommerce-gateway-tillit-css', WC_TILLIT_PLUGIN_URL . '/assets/css/tillit.css');
+    wp_enqueue_style('woocommerce-gateway-tillit-css', WC_TILLIT_PLUGIN_URL . '/assets/css/tillit.css', false, '1.0.0');
 }
 
 function wc_tillit_enqueue_scripts()
 {
-    wp_enqueue_script('woocommerce-gateway-tillit-js', WC_TILLIT_PLUGIN_URL . '/assets/js/tillit.js', ['jquery']);
+    wp_enqueue_script('woocommerce-gateway-tillit-js', WC_TILLIT_PLUGIN_URL . '/assets/js/tillit.js', ['jquery'], '1.0.0');
 }
 
 function wc_approve_order()
