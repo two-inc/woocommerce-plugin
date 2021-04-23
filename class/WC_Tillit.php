@@ -68,7 +68,7 @@ class WC_Tillit extends WC_Payment_Gateway
     function change_tillit_payment_title($title, $payment_id){
         if( $payment_id === 'woocommerce-gateway-tillit' ) {
             $title = sprintf(
-                '<span>%s<br><span class="tillit-subtitle">%s</span></span> ',
+                '%s<div class="tillit-subtitle">%s</div> ',
                 $this->get_option('title'),
                 $this->get_option('subtitle')
             );
