@@ -37,9 +37,6 @@ class Tillit {
         // Stop if not the checkout page
         if($checkout.length === 0) return
 
-        // Populate the company and representative fields
-        this.populateFields()
-
         // Get the account type input
         const $accountType = jQuery('[name="account_type"]:checked')
 
@@ -210,13 +207,14 @@ class Tillit {
         // Toggle the actions when the payment method changes
         $checkout.on('change', '[name="payment_method"]', this.toggleActions)
 
-        setTimeout(function(){
+        setInterval(function(){
             if (tillitOrderIntentCheck.pendingCheck) Tillit.getApproval()
-        }, 1000)
+            Tillit.saveCheckoutInputs()
+        }, 3000)
 
     }
 
-    populateFields()
+    static populateFields()
     {
         tillitCompany.company_name = jQuery('#billing_company').val()
         tillitCompany.country_prefix = jQuery('#billing_country').val()
@@ -799,12 +797,110 @@ class Tillit {
         }
     }
 
+    /**
+     * Save checkout inputs
+     */
+
+    static saveCheckoutInputs()
+    {
+        let checkoutInputs = []
+        let checkoutForm = document.querySelector('form[name="checkout"]')
+        for (let inp of checkoutForm.querySelectorAll('input:not([type="radio"],[type="checkbox"])')) {
+            if (inp.getAttribute('id')) {
+                checkoutInputs.push({
+                    'htmlTag': inp.tagName,
+                    'id': inp.getAttribute('id'),
+                    'name': inp.getAttribute('name'),
+                    'type': inp.getAttribute('type'),
+                    'val': inp.value,
+                });
+            }
+        }
+        for (let inp of checkoutForm.querySelectorAll('input[type="radio"]:checked,input[type="checkbox"]:checked')) {
+            if (inp.getAttribute('id')) {
+                checkoutInputs.push({
+                    'htmlTag': inp.tagName,
+                    'id': inp.getAttribute('id'),
+                    'name': inp.getAttribute('name'),
+                    'type': inp.getAttribute('type'),
+                });
+            }
+        }
+        for (let inp of checkoutForm.querySelectorAll('span[id$="-container"]')) {
+            if (inp.getAttribute('id')) {
+                checkoutInputs.push({
+                    'htmlTag': inp.tagName,
+                    'id': inp.getAttribute('id'),
+                    'parentLabel': inp.parentNode.getAttribute('aria-labelledby'),
+                    'html': inp.outerHTML,
+                });
+            }
+        }
+        for (let inp of checkoutForm.querySelectorAll('select')) {
+            if (inp.getAttribute('id')) {
+                checkoutInputs.push({
+                    'htmlTag': inp.tagName,
+                    'id': inp.getAttribute('id'),
+                    'val': inp.value,
+                    'optionHtml': inp.querySelector('option[value="' + inp.value + '"]').outerHTML,
+                });
+            }
+        }
+        sessionStorage.setItem('checkoutInputs', JSON.stringify(checkoutInputs))
+    }
+
+    /**
+     * Load checkout inputs
+     */
+
+    static loadCheckoutInputs()
+    {
+        let checkoutInputs = JSON.parse(sessionStorage.getItem('checkoutInputs'))
+        for (let inp of checkoutInputs) {
+            if (inp.htmlTag === 'INPUT') {
+                if (inp.val && ['text', 'tel', 'email', 'hidden'].indexOf(inp.type) >= 0) {
+                    if (document.querySelector('#' + inp.id) && !(document.querySelector('#' + inp.id).value)) {
+                        document.querySelector('#' + inp.id).value = inp.val
+                    }
+                } else if (inp.type === 'radio') {
+                    if (document.querySelector('#' + inp.id)) {
+                        document.querySelector('#' + inp.id).click()
+                    }
+                } else if (inp.type === 'checkbox') {
+                    if (inp.val && document.querySelector('#' + inp.id)) {
+                        document.querySelector('#' + inp.id).checked = true
+                    }
+                }
+            } else if (inp.htmlTag === 'SPAN') {
+                if (inp.parentLabel && inp.html) {
+                    if (document.querySelector('#' + inp.id)) {
+                        document.querySelector('#' + inp.id).remove()
+                    }
+                    let parentNode = document.querySelector('[aria-labelledby="' + inp.parentLabel + '"]')
+                    if (parentNode) parentNode.innerHTML = inp.html + parentNode.innerHTML
+                }
+            } else if (inp.htmlTag === 'SELECT') {
+                if (inp.val && inp.optionHtml) {
+                    let selectElem = document.querySelector('#' + inp.id)
+                    if (selectElem) {
+                        if (!selectElem.querySelector('option[value="' + inp.value + '"]')) {
+                            selectElem.innerHTML = inp.optionHtml + selectElem.innerHTML
+                        }
+                        selectElem.value = inp.val
+                    }
+                }
+            }
+        }
+    }
+
 }
 
 jQuery(function(){
     if (window.tillit) {
         tillitWithCompanySearch = window.tillit.company_name_search && window.tillit.company_name_search === 'yes'
         new Tillit()
+        Tillit.loadCheckoutInputs()
+        Tillit.populateFields()
         Tillit.getApproval()
     }
 })
