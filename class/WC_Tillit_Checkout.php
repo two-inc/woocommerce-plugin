@@ -366,7 +366,8 @@ class WC_Tillit_Checkout
 
     public static function round_amt($amt)
     {
-        return number_format($amt);
+        $rounded_formatted = number_format($amt);
+        return str_replace(wc_get_price_decimal_separator(), '.', str_replace(wc_get_price_thousand_separator(), '', $rounded_formatted));
         //return round($amt, wc_get_price_decimals());
     }
 
