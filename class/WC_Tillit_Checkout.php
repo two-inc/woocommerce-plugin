@@ -262,7 +262,7 @@ class WC_Tillit_Checkout
                 'tax_amount' => strval(WC_Tillit_Checkout::round_amt($line_item['line_tax'])),
                 'tax_class_name' => 'VAT ' . $tax_percentage . '%',
                 'tax_rate' => strval($tax_rate),
-                'unit_price' => strval(WC_Tillit_Checkout::round_amt($product_simple->get_price())),
+                'unit_price' => strval(WC_Tillit_Checkout::round_amt($product_simple->get_price_excluding_tax())),
                 'quantity' => $line_item['quantity'],
                 'quantity_unit' => 'item',
                 'image_url' => $image_url ? $image_url : '',
