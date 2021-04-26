@@ -460,7 +460,7 @@ class WC_Tillit extends WC_Payment_Gateway
             'recurring' => false,
             'merchant_additional_info' => '',
             'merchant_id' => $this->get_option('tillit_merchant_id'),
-            'merchant_reference' => '',
+            'merchant_reference' => strval($order_id),
             'merchant_urls' => [
                 // 'merchant_confirmation_url' => $order->get_checkout_order_received_url(),
                 'merchant_confirmation_url' => sprintf('%s?tillit_confirm_order=%s&nonce=%s', get_site_url(), $order_reference, wp_create_nonce('tillit_confirm')),

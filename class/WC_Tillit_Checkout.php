@@ -295,7 +295,7 @@ class WC_Tillit_Checkout
             if ($shipping->get_total() == 0) continue;
             $tax_rate = 1.0 * $shipping->get_total_tax() / $shipping->get_total();
             $shipping_line = [
-                'name' => $shipping->get_name(),
+                'name' => 'Shipping - ' . $shipping->get_name(),
                 'description' => '',
                 'gross_amount' => strval(WC_Tillit_Checkout::round_amt($shipping->get_total() + $shipping->get_total_tax())),
                 'net_amount' =>  strval(WC_Tillit_Checkout::round_amt($shipping->get_total())),
