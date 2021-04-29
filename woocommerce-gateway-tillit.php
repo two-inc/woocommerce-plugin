@@ -61,21 +61,11 @@ function wc_tillit_enqueue_scripts()
     wp_enqueue_script('woocommerce-gateway-tillit-js', WC_TILLIT_PLUGIN_URL . '/assets/js/tillit.js', ['jquery'], '1.0.1');
 }
 
-function wc_approve_order()
+function wc_process_confirmation()
 {
-
-    // Stop if no `wc_tillit_confirm` query var
-    if(!isset($_GET['wc_tillit_confirm'])) return null;
-
-    // Get the transaction code
-    $transactionCode = $_GET['transaction_code'];
-
-    // Get the order id
-    $orderId = $_GET['order_id'];
-
-    // Approve the order
-    return (new WC_Tillit())->approve_order($transactionCode, $orderId);
-
+    if(isset($_REQUEST['tillit_confirm_order']) && isset($_REQUEST['nonce'])) {
+        (new WC_Tillit())->process_confirmation();
+    }
 }
 
 function tillit_settings_link($links)
@@ -90,5 +80,5 @@ add_filter('woocommerce_payment_gateways', 'wc_tillit_add_to_gateways');
 add_action('plugins_loaded', 'woocommerce_gateway_tillit_init');
 add_action('wp_enqueue_scripts', 'wc_tillit_enqueue_styles');
 add_action('wp_enqueue_scripts', 'wc_tillit_enqueue_scripts');
-add_action('init', 'wc_approve_order');
+add_action('get_header', 'wc_process_confirmation');
 add_filter("plugin_action_links_" . plugin_basename(__FILE__), 'tillit_settings_link');

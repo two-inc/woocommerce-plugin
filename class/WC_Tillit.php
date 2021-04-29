@@ -22,6 +22,10 @@ class WC_Tillit extends WC_Payment_Gateway
     public function __construct()
     {
 
+        global $tillit_payment_gateway;
+        if (isset($tillit_payment_gateway)) return;
+        $tillit_payment_gateway = $this;
+
         $this->id = 'woocommerce-gateway-tillit';
         $this->has_fields = false;
         // $this->order_button_text = __('Proceed to Tillit', 'woocommerce-gateway-tillit');
@@ -42,9 +46,6 @@ class WC_Tillit extends WC_Payment_Gateway
             __('By completing the purchase, you verify that you have the legal right to purchase on behalf of', 'woocommerce-gateway-tillit')
         );
         $this->api_key = $this->get_option('api_key');
-        add_action('woocommerce_checkout_update_order_review', function () {
-            add_filter('woocommerce_gateway_title', [$this, 'change_tillit_payment_title'], 10, 2);
-        });
 
         // Tillit api host
         $checkout_env = $this->get_option('checkout_env');
@@ -53,15 +54,20 @@ class WC_Tillit extends WC_Payment_Gateway
                                     : ($checkout_env == 'dev' ? 'https://huynguyen.hopto.org:8083'
                                     : 'https://staging.api.tillit.ai');
 
+        if(!$this->get_option('api_key') || !$this->get_option('tillit_merchant_id')) return;
+
+        new WC_Tillit_Checkout($this);
+
+        add_action('woocommerce_checkout_update_order_review', function () {
+            add_filter('woocommerce_gateway_title', [$this, 'change_tillit_payment_title'], 10, 2);
+        });
+
         // Actions
         add_action('woocommerce_update_options_payment_gateways_' . $this->id, [$this, 'process_admin_options']);
         add_action('woocommerce_order_status_completed', [$this, 'on_order_completed']);
         add_action('woocommerce_order_status_cancelled', [$this, 'on_order_cancelled']);
         add_action('admin_enqueue_scripts', [$this, 'tillit_admin_scripts']);
         add_action('woocommerce_update_options_checkout', [$this, 'update_checkout_options']);
-
-        // Process confirmation
-        add_action('get_header', [$this, 'process_confirmation']);
 
     }
 
@@ -583,7 +589,7 @@ class WC_Tillit extends WC_Payment_Gateway
     {
 
         // Stop if no Tillit order reference and no nonce
-        if(!isset($_REQUEST['tillit_confirm_order']) && !isset($_REQUEST['nonce'])) return;
+        if(!isset($_REQUEST['tillit_confirm_order']) || !isset($_REQUEST['nonce'])) return;
 
         // Get the order reference
         $order_reference = sanitize_text_field($_REQUEST['tillit_confirm_order']);

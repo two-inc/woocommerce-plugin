@@ -3,25 +3,16 @@
 class WC_Tillit_Checkout
 {
 
-    private $api_key = null;
-
-    private $merchant_id = null;
-
     private $WC_Tillit;
 
     /**
      * WC_Tillit_Checkout constructor.
      */
 
-    public function __construct()
+    public function __construct($tillit_payment_gateway)
     {
 
-        $this->WC_Tillit = new WC_Tillit();
-
-        $this->api_key = $this->WC_Tillit->get_option('api_key');
-        $this->merchant_id = $this->WC_Tillit->get_option('tillit_merchant_id');
-
-        if(!$this->api_key && !$this->merchant_id) return;
+        $this->WC_Tillit = $tillit_payment_gateway;
 
         // Remove the default company name
         add_filter('woocommerce_checkout_fields', [$this, 'remove_company_name'], 1);
@@ -332,7 +323,7 @@ class WC_Tillit_Checkout
             'company_name_search' => $this->WC_Tillit->get_option('enable_company_name'),
             'company_id_search' => $this->WC_Tillit->get_option('enable_company_id'),
             'enable_order_intent' => $this->WC_Tillit->get_option('enable_order_intent'),
-            'merchant_id' => $this->merchant_id,
+            'merchant_id' => $this->WC_Tillit->get_option('tillit_merchant_id'),
             'currency' => get_woocommerce_currency(),
             'price_decimal_separator' => wc_get_price_decimal_separator(),
             'price_thousand_separator' => wc_get_price_thousand_separator()
@@ -389,4 +380,3 @@ class WC_Tillit_Checkout
     }
 
 }
-new WC_Tillit_Checkout();
