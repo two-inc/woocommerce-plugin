@@ -573,8 +573,11 @@ class Tillit {
         tillitOrderIntentCheck.interval = setInterval(function() {
             let gross_amount = Tillit.getPrice('order-total');
             let tax_amount = Tillit.getPrice('tax-rate');
-            if (!gross_amount || !tax_amount) {
+            if (!gross_amount) {
                 return
+            }
+            if (!tax_amount) {
+                tax_amount = 0
             }
             clearInterval(tillitOrderIntentCheck.interval)
             tillitOrderIntentCheck.interval = null
