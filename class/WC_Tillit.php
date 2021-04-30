@@ -22,10 +22,6 @@ class WC_Tillit extends WC_Payment_Gateway
     public function __construct()
     {
 
-        global $tillit_payment_gateway;
-        if (isset($tillit_payment_gateway)) return;
-        $tillit_payment_gateway = $this;
-
         $this->id = 'woocommerce-gateway-tillit';
         $this->has_fields = false;
         // $this->order_button_text = __('Proceed to Tillit', 'woocommerce-gateway-tillit');
@@ -56,30 +52,43 @@ class WC_Tillit extends WC_Payment_Gateway
 
         if(!$this->get_option('api_key') || !$this->get_option('tillit_merchant_id')) return;
 
-        new WC_Tillit_Checkout($this);
-
-        add_action('woocommerce_checkout_update_order_review', function () {
-            add_filter('woocommerce_gateway_title', [$this, 'change_tillit_payment_title'], 10, 2);
-        });
-
-        // Actions
-        add_action('woocommerce_update_options_payment_gateways_' . $this->id, [$this, 'process_admin_options']);
-        add_action('woocommerce_order_status_completed', [$this, 'on_order_completed']);
-        add_action('woocommerce_order_status_cancelled', [$this, 'on_order_cancelled']);
-        add_action('admin_enqueue_scripts', [$this, 'tillit_admin_scripts']);
-        add_action('woocommerce_update_options_checkout', [$this, 'update_checkout_options']);
+        global $tillit_payment_gateway;
+        if (!isset($tillit_payment_gateway)) {
+            $this->init_actions();
+            $tillit_payment_gateway = $this;
+            new WC_Tillit_Checkout($this);
+        }
 
     }
 
-    function change_tillit_payment_title($title, $payment_id){
-        if( $payment_id === 'woocommerce-gateway-tillit' ) {
-            $title = sprintf(
-                '%s<div class="tillit-subtitle">%s</div> ',
-                $this->get_option('title'),
-                $this->get_option('subtitle')
-            );
-        }
-        return $title;
+    /**
+     * Add filter to gateway payment title
+     */
+
+    private function init_actions(){
+        add_action('woocommerce_update_options_payment_gateways_' . $this->id, [$this, 'process_admin_options']);
+        add_action('woocommerce_order_status_completed', [$this, 'on_order_completed']);
+        add_action('woocommerce_order_status_cancelled', [$this, 'on_order_cancelled']);
+        add_action('get_header', [$this, 'process_confirmation']);
+        add_action('woocommerce_update_options_checkout', [$this, 'update_checkout_options']);
+        add_action('admin_enqueue_scripts', [$this, 'tillit_admin_scripts']);
+    }
+
+    /**
+     * Add filter to gateway payment title
+     */
+
+    public function change_tillit_payment_title(){
+        add_filter('woocommerce_gateway_title', function ($title, $payment_id) {
+            if( $payment_id === 'woocommerce-gateway-tillit' ) {
+                $title = sprintf(
+                    '%s<div class="tillit-subtitle">%s</div> ',
+                    $this->get_option('title'),
+                    $this->get_option('subtitle')
+                );
+            }
+            return $title;
+        }, 10, 2);
     }
 
     /**
@@ -469,7 +478,10 @@ class WC_Tillit extends WC_Payment_Gateway
             'merchant_reference' => strval($order_id),
             'merchant_urls' => [
                 // 'merchant_confirmation_url' => $order->get_checkout_order_received_url(),
-                'merchant_confirmation_url' => sprintf('%s?tillit_confirm_order=%s&nonce=%s', get_site_url(), $order_reference, wp_create_nonce('tillit_confirm')),
+                'merchant_confirmation_url' => sprintf('%s?tillit_confirm_order=%s&nonce=%s',
+                                                    wc_get_checkout_url(),
+                                                    $order_reference,
+                                                    wp_create_nonce('tillit_confirm')),
                 'merchant_cancel_order_url' => wp_specialchars_decode($order->get_cancel_order_url()),
                 'merchant_edit_order_url' => '',
                 'merchant_order_verification_failed_url' => '',

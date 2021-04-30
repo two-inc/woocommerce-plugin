@@ -18,11 +18,12 @@ if (!in_array('woocommerce/woocommerce.php', apply_filters('active_plugins', get
 define('WC_TILLIT_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('WC_TILLIT_PLUGIN_PATH', plugin_dir_path(__FILE__));
 
-function woocommerce_gateway_tillit_init()
+function woocommerce_gateway_tillit_classes()
 {
     init_tillit_translation();
     require_once __DIR__ . '/class/WC_Tillit.php';
     require_once __DIR__ . '/class/WC_Tillit_Checkout.php';
+    add_action('woocommerce_checkout_update_order_review', [get_tillit_gateway(), 'change_tillit_payment_title']);
 }
 
 function init_tillit_translation()
@@ -61,13 +62,6 @@ function wc_tillit_enqueue_scripts()
     wp_enqueue_script('woocommerce-gateway-tillit-js', WC_TILLIT_PLUGIN_URL . '/assets/js/tillit.js', ['jquery'], '1.0.1');
 }
 
-function wc_process_confirmation()
-{
-    if(isset($_REQUEST['tillit_confirm_order']) && isset($_REQUEST['nonce'])) {
-        (new WC_Tillit())->process_confirmation();
-    }
-}
-
 function tillit_settings_link($links)
 {
     $settings_link = '<a href="admin.php?page=wc-settings&tab=checkout&section=woocommerce-gateway-tillit">Settings</a>';
@@ -75,10 +69,19 @@ function tillit_settings_link($links)
     return $links;
 }
 
+function get_tillit_gateway()
+{
+    global $tillit_payment_gateway;
+    if (!isset($tillit_payment_gateway)) {
+        $tillit_payment_gateway = new WC_Tillit();
+    }
+    return $tillit_payment_gateway;
+}
+
 
 add_filter('woocommerce_payment_gateways', 'wc_tillit_add_to_gateways');
-add_action('plugins_loaded', 'woocommerce_gateway_tillit_init');
+add_filter("plugin_action_links_" . plugin_basename(__FILE__), 'tillit_settings_link');
+
+add_action('plugins_loaded', 'woocommerce_gateway_tillit_classes');
 add_action('wp_enqueue_scripts', 'wc_tillit_enqueue_styles');
 add_action('wp_enqueue_scripts', 'wc_tillit_enqueue_scripts');
-add_action('get_header', 'wc_process_confirmation');
-add_filter("plugin_action_links_" . plugin_basename(__FILE__), 'tillit_settings_link');
