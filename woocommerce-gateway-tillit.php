@@ -23,7 +23,11 @@ function woocommerce_gateway_tillit_classes()
     init_tillit_translation();
     require_once __DIR__ . '/class/WC_Tillit.php';
     require_once __DIR__ . '/class/WC_Tillit_Checkout.php';
-    add_action('woocommerce_checkout_update_order_review', [get_tillit_gateway(), 'change_tillit_payment_title']);
+
+    $tillit_payment_gateway = get_tillit_gateway();
+    add_action('woocommerce_checkout_update_order_review', [$tillit_payment_gateway, 'change_tillit_payment_title']);
+    add_action('woocommerce_before_save_order_items', [$tillit_payment_gateway, 'before_order_update'], 10, 2);
+    add_action('woocommerce_saved_order_items', [$tillit_payment_gateway, 'after_order_update'], 10, 2);
 }
 
 function init_tillit_translation()

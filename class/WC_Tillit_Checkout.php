@@ -161,13 +161,13 @@ class WC_Tillit_Checkout
         $fields['billing']['department'] = [
             'label' => __('Department', 'woocommerce-gateway-tillit'),
             'required' => false,
-            'priority' => 3
+            'priority' => 4
         ];
 
         $fields['billing']['project'] = [
             'label' => __('Project', 'woocommerce-gateway-tillit'),
             'required' => false,
-            'priority' => 4
+            'priority' => 5
         ];
 
         // Return the fields
@@ -301,6 +301,7 @@ class WC_Tillit_Checkout
                 'product_page_url' => '',
                 'type' => 'SHIPPING_FEE'
             ];
+
             $items[] = $shipping_line;
         }
 
