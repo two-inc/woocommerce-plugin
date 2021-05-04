@@ -437,8 +437,16 @@ class WC_Tillit extends WC_Payment_Gateway
         }
 
         // If we have an error
+        if($response['response']['code'] === 401 || $response['response']['code'] === 403) {
+            WC_Tillit_Helper::display_ajax_error(__('Website is not properly configured with Tillit payment', 'woocommerce-gateway-tillit'));
+
+            // Return with error
+            return;
+        }
+
+        // If we have an error
         if($response['response']['code'] === 400) {
-            WC_Tillit_Helper::display_ajax_error(__('Website is not configured with Tillit payment', 'woocommerce-gateway-tillit'));
+            WC_Tillit_Helper::display_ajax_error(__('Please update the plugin', 'woocommerce-gateway-tillit'));
 
             // Return with error
             return;

@@ -91,7 +91,9 @@ class WC_Tillit_Helper
     {
         if (!is_string($message)) return;
         wc_add_notice($message, 'error');
-        wc_print_notices();
+        if (!wp_is_json_request()) {
+            wc_print_notices();
+        }
     }
 
     /**
