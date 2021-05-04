@@ -21,8 +21,9 @@ define('WC_TILLIT_PLUGIN_PATH', plugin_dir_path(__FILE__));
 function woocommerce_gateway_tillit_classes()
 {
     init_tillit_translation();
-    require_once __DIR__ . '/class/WC_Tillit.php';
+    require_once __DIR__ . '/class/WC_Tillit_Helper.php';
     require_once __DIR__ . '/class/WC_Tillit_Checkout.php';
+    require_once __DIR__ . '/class/WC_Tillit.php';
 
     $tillit_payment_gateway = get_tillit_gateway();
     add_action('woocommerce_checkout_update_order_review', [$tillit_payment_gateway, 'change_tillit_payment_title']);
@@ -48,7 +49,6 @@ function init_tillit_translation()
  *
  * @return array
  */
-
 function wc_tillit_add_to_gateways($gateways)
 {
     $gateways[] = 'WC_Tillit';
@@ -60,7 +60,6 @@ function wc_tillit_add_to_gateways($gateways)
  *
  * @return void
  */
-
 function wc_tillit_enqueue_styles()
 {
     wp_enqueue_style('woocommerce-gateway-tillit-css', WC_TILLIT_PLUGIN_URL . '/assets/css/tillit.css', false, '1.0.0');

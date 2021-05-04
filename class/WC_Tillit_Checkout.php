@@ -1,5 +1,12 @@
 <?php
 
+/**
+ * Tillit Checkout page modifier
+ *
+ * @class WC_Tillit_Checkout
+ * @author Tillit
+ */
+
 class WC_Tillit_Checkout
 {
 
@@ -8,7 +15,6 @@ class WC_Tillit_Checkout
     /**
      * WC_Tillit_Checkout constructor.
      */
-
     public function __construct($tillit_payment_gateway)
     {
 
@@ -40,7 +46,6 @@ class WC_Tillit_Checkout
      *
      * @return array
      */
-
     public function remove_company_name($fields)
     {
 
@@ -61,7 +66,6 @@ class WC_Tillit_Checkout
      *
      * @param $fields
      */
-
     public function move_country_field($fields)
     {
 
@@ -80,7 +84,6 @@ class WC_Tillit_Checkout
      *
      * @return mixed
      */
-
     public function add_account_fields($fields)
     {
 
@@ -129,7 +132,6 @@ class WC_Tillit_Checkout
      *
      * @return mixed
      */
-
     public function add_company_fields($fields)
     {
 
@@ -180,7 +182,6 @@ class WC_Tillit_Checkout
      *
      * @return void
      */
-
     public function render_tillit_fields()
     {
         ob_start();
@@ -194,7 +195,6 @@ class WC_Tillit_Checkout
      *
      * @return void
      */
-
     public function render_tillit_representative_fields()
     {
         ob_start();
@@ -204,117 +204,10 @@ class WC_Tillit_Checkout
     }
 
     /**
-     * Return the tax rate
-     *
-     * @param WC_Product_Simple|WC_Order_Item_Product $product_simple
-     *
-     * @return int|mixed
-     */
-
-    private static function get_tax_percentage($product_simple)
-    {
-        $tax_rates = WC_Tax::get_rates($product_simple->get_tax_class());
-        return $tax_rates && $tax_rates[1] ? $tax_rates[1]['rate'] : 0;
-    }
-
-    /**
-     * Format the cart items
-     *
-     * @return array
-     */
-
-    public static function get_line_items($line_items, $shippings)
-    {
-
-        $items = [];
-
-        /** @var WC_Order_Item_Product $line_item */
-        foreach($line_items as $line_item) {
-
-            if(gettype($line_item) !== 'array' && get_class($line_item) === 'WC_Order_Item_Product') {
-                /** @var WC_Order_Item_Product */
-                $product_simple = $line_item->get_product();
-            } else {
-                /** @var WC_Product_Simple */
-                $product_simple = $line_item['data'];
-            }
-
-            $tax_percentage = WC_Tillit_Checkout::get_tax_percentage($product_simple);
-            $tax_rate = $tax_percentage / 100.0;
-
-            $image_url = get_the_post_thumbnail_url($product_simple->get_id());
-
-            $product = [
-                'name' => $product_simple->get_name(),
-                'description' => substr($product_simple->get_description(), 0, 255),
-                'gross_amount' => strval(WC_Tillit_Checkout::round_amt($line_item['line_total'] + $line_item['line_tax'])),
-                'net_amount' =>  strval(WC_Tillit_Checkout::round_amt($line_item['line_total'])),
-                'discount_amount' => strval(WC_Tillit_Checkout::round_amt($line_item['line_subtotal'] - $line_item['line_total'])),
-                'tax_amount' => strval(WC_Tillit_Checkout::round_amt($line_item['line_tax'])),
-                'tax_class_name' => 'VAT ' . $tax_percentage . '%',
-                'tax_rate' => strval($tax_rate),
-                'unit_price' => strval(WC_Tillit_Checkout::round_amt($product_simple->get_price_excluding_tax())),
-                'quantity' => $line_item['quantity'],
-                'quantity_unit' => 'item',
-                'image_url' => $image_url ? $image_url : '',
-                'product_page_url' => $product_simple->get_permalink(),
-                'type' => 'PHYSICAL',
-                'details' => [
-                    'barcodes' => [
-                        [
-                            'type' => 'SKU',
-                            'id' => $product_simple->get_sku()
-                        ]
-                    ]
-                ]
-            ];
-
-            $categories = wp_get_post_terms($product_simple->get_id(), 'product_cat');
-
-            $product['details']['categories'] = [];
-
-            foreach($categories as $category) {
-                $product['details']['categories'][] = $category->name;
-            }
-
-            $items[] = $product;
-
-        }
-
-        // Shipping
-        foreach($shippings as $shipping) {
-            if ($shipping->get_total() == 0) continue;
-            $tax_rate = 1.0 * $shipping->get_total_tax() / $shipping->get_total();
-            $shipping_line = [
-                'name' => 'Shipping - ' . $shipping->get_name(),
-                'description' => '',
-                'gross_amount' => strval(WC_Tillit_Checkout::round_amt($shipping->get_total() + $shipping->get_total_tax())),
-                'net_amount' =>  strval(WC_Tillit_Checkout::round_amt($shipping->get_total())),
-                'discount_amount' => '0',
-                'tax_amount' => strval(WC_Tillit_Checkout::round_amt($shipping->get_total_tax())),
-                'tax_class_name' => 'VAT ' . WC_Tillit_Checkout::round_amt($tax_rate * 100) . '%',
-                'tax_rate' => strval($tax_rate),
-                'unit_price' => strval(WC_Tillit_Checkout::round_amt($shipping->get_total())),
-                'quantity' => 1,
-                'quantity_unit' => 'sc', // shipment charge
-                'image_url' => '',
-                'product_page_url' => '',
-                'type' => 'SHIPPING_FEE'
-            ];
-
-            $items[] = $shipping_line;
-        }
-
-        return $items;
-
-    }
-
-    /**
      * Use the ca
      *
      * @return array
      */
-
     private function prepare_tillit_object()
     {
 
@@ -335,49 +228,15 @@ class WC_Tillit_Checkout
     }
 
     /**
-     * Recursively utf8 encode object
-     *
-     * @return array
-     */
-
-    private function utf8ize($d) {
-        if (is_array($d)) {
-            foreach ($d as $k => $v) {
-                $d[$k] = $this->utf8ize($v);
-            }
-        } else if(is_object($d)) {
-            foreach ($d as $k => $v) {
-                $d->$k = $this->utf8ize($v);
-            }
-        } else if (is_string($d)) {
-            return utf8_encode($d);
-        }
-        return $d;
-    }
-
-    /**
      * Inject the cart content in header
      *
      * @return void
      */
-
     public function inject_cart_details()
     {
         if(!is_checkout()) return;
-        $tillit_obj = json_encode($this->utf8ize($this->prepare_tillit_object()));
+        $tillit_obj = json_encode(WC_Tillit_Helper::utf8ize($this->prepare_tillit_object()));
         if ($tillit_obj) printf('<script>window.tillit = %s;</script>', $tillit_obj);
-    }
-
-    /**
-     * Round the amount in woocommerce way
-     *
-     * @return float
-     */
-
-    public static function round_amt($amt)
-    {
-        return number_format($amt, wc_get_price_decimals(), '.', '');
-        //return round($amt, wc_get_price_decimals());
     }
 
 }
