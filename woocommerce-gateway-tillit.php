@@ -26,8 +26,13 @@ function woocommerce_gateway_tillit_classes()
 
     $tillit_payment_gateway = get_tillit_gateway();
     add_action('woocommerce_checkout_update_order_review', [$tillit_payment_gateway, 'change_tillit_payment_title']);
+    // For order update
     add_action('woocommerce_before_save_order_items', [$tillit_payment_gateway, 'before_order_update'], 10, 2);
     add_action('woocommerce_saved_order_items', [$tillit_payment_gateway, 'after_order_update'], 10, 2);
+    // For order update by item add
+    add_action('woocommerce_ajax_order_items_added', [$tillit_payment_gateway, 'after_order_add_item'], 10, 2);
+    // For order update by item remove
+    add_action('woocommerce_ajax_order_items_removed', [$tillit_payment_gateway, 'after_order_remove_item'], 10, 4);
 }
 
 function init_tillit_translation()

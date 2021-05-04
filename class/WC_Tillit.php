@@ -18,7 +18,6 @@ class WC_Tillit extends WC_Payment_Gateway
     /**
      * WC_Tillit constructor.
      */
-
     public function __construct()
     {
 
@@ -64,7 +63,6 @@ class WC_Tillit extends WC_Payment_Gateway
     /**
      * Add filter to gateway payment title
      */
-
     private function init_actions(){
         add_action('woocommerce_update_options_payment_gateways_' . $this->id, [$this, 'process_admin_options']);
         add_action('woocommerce_order_status_completed', [$this, 'on_order_completed']);
@@ -77,7 +75,6 @@ class WC_Tillit extends WC_Payment_Gateway
     /**
      * Add filter to gateway payment title
      */
-
     public function change_tillit_payment_title(){
         add_filter('woocommerce_gateway_title', function ($title, $payment_id) {
             if( $payment_id === 'woocommerce-gateway-tillit' ) {
@@ -99,7 +96,6 @@ class WC_Tillit extends WC_Payment_Gateway
      *
      * @return string
      */
-
     public function generate_separator_html($field_id, $field_args)
     {
         ob_start();
@@ -121,7 +117,6 @@ class WC_Tillit extends WC_Payment_Gateway
      *
      * @return false|string
      */
-
     public function generate_radio_html($key, $data)
     {
         $field_key = $this->get_field_key( $key );
@@ -190,12 +185,41 @@ class WC_Tillit extends WC_Payment_Gateway
     }
 
     /**
+     * Notify Tillit API after the order item is added
+     *
+     * @param $added_items
+     * @param $order
+     */
+    public function after_order_add_item($added_items, $order)
+    {
+        $order->calculate_totals(true);
+
+        $this->update_tillit_order($order);
+
+        $this->append_force_reload_script();
+    }
+
+    /**
+     * Notify Tillit API after the order item is removed
+     *
+     * @param $item_id
+     * @param $item
+     * @param $changed_stock
+     * @param $order
+     */
+    public function after_order_remove_item($item_id, $item, $changed_stock, $order)
+    {
+        $this->update_tillit_order($order);
+
+        $this->append_force_reload_script();
+    }
+
+    /**
      * Check if order is updated
      *
      * @param $order_id
      * @param $items
      */
-
     public function before_order_update($order_id, $items)
     {
 
@@ -217,7 +241,6 @@ class WC_Tillit extends WC_Payment_Gateway
      * @param $order_id
      * @param $items
      */
-
     public function after_order_update($order_id, $items)
     {
 
@@ -232,85 +255,102 @@ class WC_Tillit extends WC_Payment_Gateway
 
         if ($diff) {
 
-            $tillit_order_id = get_post_meta($order->get_id(), 'tillit_order_id', true);
-            $notice_id = $tillit_order_id . '_after_order_update';
+            $this->update_tillit_order($order);
 
-
-            // 1. Get information from the current order
-            $response = $this->make_request("/v1/order/${tillit_order_id}", [], 'GET');
-
-            $body = json_decode($response['body'], true);
-
-            $company_id = get_post_meta($order->get_id(), 'company_id', true);
-            if ($company_id) {
-                $department = get_post_meta($order->get_id(), 'department', true);
-                $project = get_post_meta($order->get_id(), 'project', true);
-            } else {
-                if (!$body || !$body['buyer'] || !$body['buyer']['company'] || !$body['buyer']['company']['organization_number']) {
-                    $this->display_admin_reloaded_error(
-                        $notice_id,
-                        sprintf(__('Missing company ID, please check with Tillit admin for id %s', 'woocommerce-gateway-tillit'), $tillit_order_id));
-                    return;
-                }
-                $company_id = $body['buyer']['company']['organization_number'];
-                $department = $body['buyer_department'];
-                $project = $body['buyer_project'];
-            }
-            $order_reference = get_post_meta($order->get_id(), '_tillit_order_reference', true);
-
-
-            // 2. Cancel the current order
-            $response = $this->make_request("/v1/order/${tillit_order_id}/cancel");
-
-            $tillit_err = $this->get_tillit_error_msg($response);
-            if ($tillit_err) {
-                $this->display_admin_reloaded_error(
-                    $notice_id,
-                    sprintf(__('Could not cancel the Tillit order, please check with Tillit admin for id %s', 'woocommerce-gateway-tillit'), $tillit_order_id));
-                return;
-            }
-
-
-            // 3. Create new order
-            $response = $this->make_request('/v1/order', $this->compose_tillit_order(
-                $order,
-                $order_reference,
-                $company_id,
-                $department,
-                $project
-            ));
-
-            $tillit_err = $this->get_tillit_error_msg($response);
-            if ($tillit_err) {
-                $this->display_admin_reloaded_error(
-                    $notice_id,
-                    __('Could not recreate new Tillit order, please check with Tillit admin', 'woocommerce-gateway-tillit'));
-                return;
-            }
-
-            $body = json_decode($response['body'], true);
-
-            $new_tillit_order_id = $body['id'];
-            update_post_meta($order_id, 'tillit_order_id', $new_tillit_order_id);
-
-            $this->remove_admin_reloaded_error($notice_id);
-
-
-            // 4. Set new order to verified
-            $notice_id = $new_tillit_order_id . '_after_order_update';
-            $response = $this->make_request("/v1/verify_order/${new_tillit_order_id}", [], 'GET');
-
-            $tillit_err = $this->get_tillit_error_msg($response);
-            if ($tillit_err) {
-                $this->display_admin_reloaded_error(
-                    $notice_id,
-                    sprintf(__('Could not verify the Tillit order, please check with Tillit admin for id %s', 'woocommerce-gateway-tillit'), $new_tillit_order_id));
-                return;
-            }
-
-            $this->remove_admin_reloaded_error($notice_id);
+            $this->append_force_reload_script();
 
         }
+    }
+
+    /**
+     * Run the update execution
+     *
+     * @param $order_id
+     */
+    private function update_tillit_order($order)
+    {
+
+        $tillit_order_id = get_post_meta($order->get_id(), 'tillit_order_id', true);
+        $notice_id = $tillit_order_id . '_after_order_update';
+
+
+        // 1. Get information from the current order
+        $response = $this->make_request("/v1/order/${tillit_order_id}", [], 'GET');
+
+        $body = json_decode($response['body'], true);
+
+        $company_id = get_post_meta($order->get_id(), 'company_id', true);
+        if ($company_id) {
+            $department = get_post_meta($order->get_id(), 'department', true);
+            $project = get_post_meta($order->get_id(), 'project', true);
+        } else {
+            if (!$body || !$body['buyer'] || !$body['buyer']['company'] || !$body['buyer']['company']['organization_number']) {
+                $this->display_admin_reloaded_error(
+                    $notice_id,
+                    sprintf(__('Missing company ID, please check with Tillit admin for id %s', 'woocommerce-gateway-tillit'), $tillit_order_id));
+                return;
+            }
+            $company_id = $body['buyer']['company']['organization_number'];
+            $department = $body['buyer_department'];
+            $project = $body['buyer_project'];
+            update_post_meta($order->get_id(), 'company_id', $company_id);
+            update_post_meta($order->get_id(), 'department', $department);
+            update_post_meta($order->get_id(), 'project', $project);
+        }
+        $order_reference = get_post_meta($order->get_id(), '_tillit_order_reference', true);
+
+
+        // 2. Cancel the current order
+        $response = $this->make_request("/v1/order/${tillit_order_id}/cancel");
+
+        $tillit_err = $this->get_tillit_error_msg($response);
+        if ($tillit_err) {
+            $this->display_admin_reloaded_error(
+                $notice_id,
+                sprintf(__('Could not cancel the Tillit order, please check with Tillit admin for id %s', 'woocommerce-gateway-tillit'), $tillit_order_id));
+            return;
+        }
+
+
+        // 3. Create new order
+        $response = $this->make_request('/v1/order', $this->compose_tillit_order(
+            $order,
+            $order_reference,
+            $company_id,
+            $department,
+            $project
+        ));
+
+        $tillit_err = $this->get_tillit_error_msg($response);
+        if ($tillit_err) {
+            $this->display_admin_reloaded_error(
+                $notice_id,
+                __('Could not recreate new Tillit order, please check with Tillit admin', 'woocommerce-gateway-tillit'));
+            return;
+        }
+
+        $body = json_decode($response['body'], true);
+
+        $new_tillit_order_id = $body['id'];
+        update_post_meta($order->get_id(), 'tillit_order_id', $new_tillit_order_id);
+
+        $this->remove_admin_reloaded_error($notice_id);
+
+
+        // 4. Set new order to verified
+        $notice_id = $new_tillit_order_id . '_after_order_update';
+        $response = $this->make_request("/v1/verify_order/${new_tillit_order_id}", [], 'GET');
+
+        $tillit_err = $this->get_tillit_error_msg($response);
+        if ($tillit_err) {
+            $this->display_admin_reloaded_error(
+                $notice_id,
+                sprintf(__('Could not verify the Tillit order, please check with Tillit admin for id %s', 'woocommerce-gateway-tillit'), $new_tillit_order_id));
+            return;
+        }
+
+        $this->remove_admin_reloaded_error($notice_id);
+
     }
 
     /**
@@ -318,7 +358,6 @@ class WC_Tillit extends WC_Payment_Gateway
      *
      * @param $order_id
      */
-
     public function on_order_completed($order_id)
     {
         if($this->get_option('finalize_purchase') !== 'yes') {
@@ -369,7 +408,6 @@ class WC_Tillit extends WC_Payment_Gateway
      *
      * @param $order_id
      */
-
     public function on_order_cancelled($order_id)
     {
         // Get the order
@@ -408,7 +446,6 @@ class WC_Tillit extends WC_Payment_Gateway
      *
      * @return void
      */
-
     public function init_form_fields()
     {
         $this->form_fields = apply_filters('wc_tillit_form_fields', [
@@ -527,7 +564,6 @@ class WC_Tillit extends WC_Payment_Gateway
      *
      * @return WP_Error|array
      */
-
     private function make_request($endpoint, $payload = [], $method = 'POST')
     {
         return wp_remote_request(sprintf('%s%s', $this->tillit_checkout_host, $endpoint), [
@@ -552,7 +588,6 @@ class WC_Tillit extends WC_Payment_Gateway
      *
      * @return array
      */
-
     public function process_payment($order_id)
     {
 
@@ -622,7 +657,6 @@ class WC_Tillit extends WC_Payment_Gateway
      *
      * @return void
      */
-
     public function update_checkout_options()
     {
 
@@ -648,7 +682,6 @@ class WC_Tillit extends WC_Payment_Gateway
      *
      * @return void
      */
-
     public function process_confirmation()
     {
 
@@ -726,7 +759,6 @@ class WC_Tillit extends WC_Payment_Gateway
      *
      * @return array
      */
-
     private function array_diff_r($src_arr, $dst_arr) {
         $diff = array();
 
@@ -756,7 +788,6 @@ class WC_Tillit extends WC_Payment_Gateway
      *
      * @return string|void
      */
-
     private function get_tillit_error_msg($response)
     {
         if($response && $response['body']) {
@@ -777,7 +808,6 @@ class WC_Tillit extends WC_Payment_Gateway
      *
      * @return void
      */
-
     private function display_admin_reloaded_error($id, $message)
     {
         if (!is_string($message)) return;
@@ -792,7 +822,6 @@ class WC_Tillit extends WC_Payment_Gateway
      *
      * @return void
      */
-
     private function remove_admin_reloaded_error($id)
     {
         WC_Admin_Notices::remove_notice('tillit_' . $id);
@@ -805,7 +834,6 @@ class WC_Tillit extends WC_Payment_Gateway
      *
      * @return void
      */
-
     private function display_ajax_error($message)
     {
         if (!is_string($message)) return;
@@ -820,7 +848,6 @@ class WC_Tillit extends WC_Payment_Gateway
      *
      * @return bool
      */
-
     private function is_tillit_order($order)
     {
         return $order && $order->get_payment_method() && $order->get_payment_method() === 'woocommerce-gateway-tillit';
@@ -833,7 +860,6 @@ class WC_Tillit extends WC_Payment_Gateway
      *
      * @return bool
      */
-
     private function compose_tillit_order($order, $order_reference, $company_id, $department, $project)
     {
         // Get the orde taxes
@@ -936,12 +962,24 @@ class WC_Tillit extends WC_Payment_Gateway
             'status' => 'APPROVED'
         ];
     }
+
+    /**
+     * Force reload after admin ajax request
+     *
+     * @return void
+     */
+    private function append_force_reload_script()
+    {
+        add_action('woocommerce_admin_order_item_headers', function(){
+            print('<script>location.reload();</script>');
+        });
+    }
+
     /**
      * Enqueue the admin scripts
      *
      * @return void
      */
-
     public function tillit_admin_scripts()
     {
 
