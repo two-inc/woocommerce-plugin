@@ -660,15 +660,30 @@ class Tillit {
 
                 // Display error messages
                 if (response.status == 400) {
+                    // @TODO: use code in checkout-api
                     let errMsg = (typeof response.responseJSON === 'string' || !('error_details' in response.responseJSON))
                                  ? response.responseJSON
                                  : response.responseJSON['error_details']
-                    Tillit.clearAndDisplayErrors([errMsg,]);
+                    Tillit.clearAndDisplayErrors(Tillit.getErrorMessage(
+                        errMsg.startsWith('Minimum Payment using Tillit') ? 'amount_min'
+                        : errMsg.startsWith('Maximum Payment using Tillit') ? 'amount_max'
+                        : 'order_intent_reject'
+                    ));
                     if (jQuery) jQuery.scroll_to_notices(jQuery('.woocommerce-NoticeGroup'));
                 }
 
             })
         }, 1000)
+
+    }
+
+    static getErrorMessage(key)
+    {
+
+        if (key && key in window.tillit.error_msgs) {
+            return [window.tillit.error_msgs[key],]
+        }
+        return []
 
     }
 

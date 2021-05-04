@@ -207,7 +207,7 @@ class WC_Tillit_Helper
      * @return bool
      */
     public static function compose_tillit_order(
-        $order, $order_reference, $company_id, $department, $project, $tillit_merchant_id, $bank_account_number, $days_on_invoice)
+        $order, $order_reference, $company_id, $department, $project, $tillit_merchant_id, $days_on_invoice)
     {
         // Get the orde taxes
         $order_taxes = $order->get_taxes();
@@ -282,11 +282,11 @@ class WC_Tillit_Helper
                 'discount_rate' => '0',
                 'type' => 'FUNDED_INVOICE',
                 'payment_details' => [
-                    'bank_account' => $bank_account_number,
-                    'bank_account_type' => 'IBAN',
                     'due_in_days' => intval($days_on_invoice),
-                    'payee_company_name' => $order->get_billing_company(),
-                    'payee_organization_number' => sanitize_text_field($_POST['company_id']),
+                    'bank_account' => '',
+                    'bank_account_type' => 'IBAN',
+                    'payee_company_name' => '',
+                    'payee_organization_number' => '',
                     'payment_reference_message' => '',
                     'payment_reference_ocr' => '',
                 ]

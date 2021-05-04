@@ -427,7 +427,6 @@ class WC_Tillit extends WC_Payment_Gateway
             sanitize_text_field($_POST['department']),
             sanitize_text_field($_POST['project']),
             $this->get_option('tillit_merchant_id'),
-            $this->get_option('bank_account_number'),
             $this->get_option('days_on_invoice'),
         ));
 
@@ -453,8 +452,8 @@ class WC_Tillit extends WC_Payment_Gateway
         }
 
         $tillit_err = WC_Tillit_Helper::get_tillit_error_msg($response);
-        if ($tillit_err) {
-            WC_Tillit_Helper::display_ajax_error(__($tillit_err, 'woocommerce-gateway-tillit'));
+        if ($tillit_err || $response['response']['code'] >= 400) {
+            WC_Tillit_Helper::display_ajax_error(__('Invoice is not available for this order', 'woocommerce-gateway-tillit'));
 
             // Return with error
             return;
@@ -606,14 +605,14 @@ class WC_Tillit extends WC_Payment_Gateway
                 'label'     => __('Funded invoice', 'woocommerce-gateway-tillit'),
                 'checked'   => true
             ],
-            'bank_account_number' => [
-                'title'     => __('Bank account number', 'woocommerce-gateway-tillit'),
-                'type'      => 'text',
-            ],
-            'iban' => [
-                'title'     => __('IBAN', 'woocommerce-gateway-tillit'),
-                'type'      => 'text',
-            ],
+            // 'bank_account_number' => [
+            //     'title'     => __('Bank account number', 'woocommerce-gateway-tillit'),
+            //     'type'      => 'text',
+            // ],
+            // 'iban' => [
+            //     'title'     => __('IBAN', 'woocommerce-gateway-tillit'),
+            //     'type'      => 'text',
+            // ],
             'days_on_invoice' => [
                 'title'     => __('Number of days on invoice', 'woocommerce-gateway-tillit'),
                 'type'      => 'text',
@@ -720,7 +719,6 @@ class WC_Tillit extends WC_Payment_Gateway
             $department,
             $project,
             $this->get_option('tillit_merchant_id'),
-            $this->get_option('bank_account_number'),
             $this->get_option('days_on_invoice'),
         ));
 
