@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: WooCommerce Tillit Gateway\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2021-04-23 14:23+0000\n"
+"POT-Creation-Date: 2021-05-04 15:06+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: \n"
@@ -20,77 +20,107 @@ msgstr ""
 msgid "Account type"
 msgstr ""
 
-#: class/WC_Tillit.php:353
+#: class/WC_Tillit.php:656
 msgid "Activate B2C/B2B check-out radio button"
 msgstr ""
 
-#: class/WC_Tillit.php:332
+#: class/WC_Tillit.php:635
 msgid "Activate company name auto-complete"
 msgstr ""
 
-#: class/WC_Tillit.php:337
+#: class/WC_Tillit.php:640
 msgid "Activate company org.id auto-complete"
 msgstr ""
 
-#: class/WC_Tillit.php:297
+#: class/WC_Tillit.php:600
 msgid "Administered invoice (coming soon)"
 msgstr ""
 
-#: class/WC_Tillit.php:276
+#: class/WC_Tillit.php:579
 msgid "API Key"
 msgstr ""
 
-#: class/WC_Tillit.php:306
-msgid "Bank account number"
-msgstr ""
-
-#: class/WC_Tillit_Checkout.php:107 class/WC_Tillit_Checkout.php:122
+#: class/WC_Tillit_Checkout.php:101 class/WC_Tillit_Checkout.php:116
 msgid "Business"
 msgstr ""
 
-#: class/WC_Tillit.php:264
+#: class/WC_Tillit.php:567
 msgid "Business invoice 30 days"
 msgstr ""
 
-#: class/WC_Tillit.php:42
+#: class/WC_Tillit.php:41
 msgid ""
 "By completing the purchase, you verify that you have the legal right to "
 "purchase on behalf of"
 msgstr ""
 
-#: class/WC_Tillit.php:285
+#: class/WC_Tillit.php:588
 msgid "Choose your product"
 msgstr ""
 
-#: class/WC_Tillit_Checkout.php:165
+#: class/WC_Tillit_Checkout.php:158
 msgid "Company ID"
 msgstr ""
 
-#: class/WC_Tillit_Checkout.php:149
+#: class/WC_Tillit_Checkout.php:142
 msgid "Company name"
 msgstr ""
 
-#: class/WC_Tillit_Checkout.php:171
-msgid "Department"
+#: class/WC_Tillit.php:709
+#, php-format
+msgid ""
+"Could not cancel the Tillit order, please check with Tillit admin for id %s"
 msgstr ""
 
-#: class/WC_Tillit.php:258
-msgid "Enable Tillit Payments"
+#: class/WC_Tillit.php:729
+msgid "Could not recreate new Tillit order, please check with Tillit admin"
 msgstr ""
 
-#: class/WC_Tillit.php:256
-msgid "Enable/Disable"
+#: class/WC_Tillit.php:334 class/WC_Tillit.php:380
+msgid "Could not update status"
 msgstr ""
 
-#: class/WC_Tillit_Checkout.php:157
-msgid "Enter the company name"
+#: class/WC_Tillit.php:388
+#, php-format
+msgid ""
+"Could not update status to cancelled, please check with Tillit admin for id "
+"%s"
 msgstr ""
 
 #: class/WC_Tillit.php:342
+#, php-format
+msgid ""
+"Could not update status to fulfilled on Tillit, please check with Tillit "
+"admin for id %s"
+msgstr ""
+
+#: class/WC_Tillit.php:749
+#, php-format
+msgid ""
+"Could not verify the Tillit order, please check with Tillit admin for id %s"
+msgstr ""
+
+#: class/WC_Tillit_Checkout.php:164
+msgid "Department"
+msgstr ""
+
+#: class/WC_Tillit.php:561
+msgid "Enable Tillit Payments"
+msgstr ""
+
+#: class/WC_Tillit.php:559
+msgid "Enable/Disable"
+msgstr ""
+
+#: class/WC_Tillit_Checkout.php:150
+msgid "Enter the company name"
+msgstr ""
+
+#: class/WC_Tillit.php:645
 msgid "Finalize purchase when order is shipped"
 msgstr ""
 
-#: class/WC_Tillit.php:302
+#: class/WC_Tillit.php:605
 msgid "Funded invoice"
 msgstr ""
 
@@ -99,112 +129,126 @@ msgstr ""
 msgid "https://tillit.ai"
 msgstr ""
 
-#: class/WC_Tillit.php:310
-msgid "IBAN"
-msgstr ""
-
 #. Description of the plugin
 msgid "Integration between WooCommerce and Tillit."
 msgstr ""
 
-#: class/WC_Tillit.php:280
+#: class/WC_Tillit.php:456 class/WC_Tillit_Checkout.php:216
+msgid "Invoice is not available for this order"
+msgstr ""
+
+#: class/WC_Tillit.php:583
 msgid "Logo"
 msgstr ""
 
-#: class/WC_Tillit.php:30
+#: class/WC_Tillit.php:29
 msgid "Making it easy for businesses to buy online."
 msgstr ""
 
-#: class/WC_Tillit.php:291
+#: class/WC_Tillit_Checkout.php:218
+#, php-format
+msgid "Maximum Payment using Tillit is %s NOK"
+msgstr ""
+
+#: class/WC_Tillit.php:594
 msgid "Merchant Invoice (coming soon)"
 msgstr ""
 
-#: class/WC_Tillit.php:323
+#: class/WC_Tillit_Checkout.php:217
+#, php-format
+msgid "Minimum Payment using Tillit is %s NOK"
+msgstr ""
+
+#: class/WC_Tillit.php:689
+#, php-format
+msgid "Missing company ID, please check with Tillit admin for id %s"
+msgstr ""
+
+#: class/WC_Tillit.php:626
 msgid "Mode"
 msgstr ""
 
-#: class/WC_Tillit.php:314
+#: class/WC_Tillit.php:617
 msgid "Number of days on invoice"
 msgstr ""
 
-#: class/WC_Tillit_Checkout.php:106
+#: class/WC_Tillit_Checkout.php:100
 msgid "Personal"
 msgstr ""
 
-#: class/WC_Tillit.php:28
+#: class/WC_Tillit.php:27
 msgid "Place order"
 msgstr ""
 
-#: class/WC_Tillit.php:347
+#: class/WC_Tillit.php:448
+msgid "Please update the plugin"
+msgstr ""
+
+#: class/WC_Tillit.php:650
 msgid ""
 "Pre-approve the buyer during checkout and disable Tillit if the buyer is "
 "declined"
 msgstr ""
 
-#: class/WC_Tillit_Checkout.php:177
+#: class/WC_Tillit_Checkout.php:170
 msgid "Project"
 msgstr ""
 
-#: class/WC_Tillit.php:269
+#: class/WC_Tillit.php:572
 msgid "Receive the invoice via EHF and PDF"
 msgstr ""
 
-#: class/WC_Tillit.php:169
+#: class/WC_Tillit.php:221
 msgid "Select image"
 msgstr ""
 
-#: class/WC_Tillit_Checkout.php:100
+#: class/WC_Tillit_Checkout.php:94
 msgid "Select the account type"
 msgstr ""
 
-#: class/WC_Tillit.php:319
+#: class/WC_Tillit.php:622
 msgid "Settings"
 msgstr ""
 
-#: class/WC_Tillit.php:267
+#: class/WC_Tillit.php:570
 msgid "Subtitle"
 msgstr ""
 
-#: class/WC_Tillit.php:595
+#: class/WC_Tillit.php:494
 msgid "The security code is not valid."
 msgstr ""
 
 #. Author of the plugin
-#: class/WC_Tillit.php:29
+#: class/WC_Tillit.php:28
 msgid "Tillit"
 msgstr ""
 
-#: class/WC_Tillit.php:416
+#: class/WC_Tillit_Helper.php:221
 msgid "Tillit Merchant Error: Taxes are not configured"
 msgstr ""
 
-#: class/WC_Tillit.php:272
+#: class/WC_Tillit.php:575
 msgid "Tillit Merchant ID"
 msgstr ""
 
-#: class/WC_Tillit.php:262
+#: class/WC_Tillit.php:565
 msgid "Title"
 msgstr ""
 
-#: class/WC_Tillit.php:604
+#: class/WC_Tillit.php:503
 msgid "Unable to find the requested order."
 msgstr ""
 
-#: class/WC_Tillit.php:624
-msgid "Unable to retrieve the order information."
-msgstr ""
-
-#: class/WC_Tillit.php:525
-msgid ""
-"We couldn't find your shop in our system. Make sure the API key is valid."
-msgstr ""
-
-#: class/WC_Tillit.php:205 class/WC_Tillit.php:242
-msgid "We couldn't update the Tillit Order status. Please try again later."
-msgstr ""
-
 #: class/WC_Tillit.php:524
-msgid "We couldn't validate your API key. Make sure it's set and valid."
+msgid "Unable to retrieve the order information"
+msgstr ""
+
+#: class/WC_Tillit.php:529
+msgid "Unable to retrieve the order payment information"
+msgstr ""
+
+#: class/WC_Tillit.php:440
+msgid "Website is not properly configured with Tillit payment"
 msgstr ""
 
 #. Name of the plugin
