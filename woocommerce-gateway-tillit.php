@@ -32,6 +32,8 @@ function woocommerce_gateway_tillit_classes()
     add_action('woocommerce_saved_order_items', [$tillit_payment_gateway, 'after_order_update'], 10, 2);
     // For order update by add/remove item (product/fee/shipping) and recalculate (tax)
     add_action('woocommerce_admin_order_item_headers', [$tillit_payment_gateway, 'after_order_item_update'], 10, 1);
+
+    add_action('deactivate_' . plugin_basename(__FILE__), [$tillit_payment_gateway, 'on_deactivate_plugin']);
 }
 
 function init_tillit_translation()

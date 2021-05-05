@@ -49,27 +49,22 @@ class WC_Tillit extends WC_Payment_Gateway
                                     : ($checkout_env == 'dev' ? 'https://huynguyen.hopto.org:8083'
                                     : 'https://staging.api.tillit.ai');
 
-        if(!$this->get_option('api_key') || !$this->get_option('tillit_merchant_id')) return;
-
         global $tillit_payment_gateway;
-        if (!isset($tillit_payment_gateway)) {
-            $this->init_actions();
-            $tillit_payment_gateway = $this;
-            new WC_Tillit_Checkout($this);
+        if (isset($tillit_payment_gateway)) {
+            return;
         }
 
-    }
-
-    /**
-     * Add filter to gateway payment title
-     */
-    private function init_actions(){
         add_action('woocommerce_update_options_payment_gateways_' . $this->id, [$this, 'process_admin_options']);
+        if(!$this->get_option('api_key') || !$this->get_option('tillit_merchant_id')) return;
         add_action('woocommerce_order_status_completed', [$this, 'on_order_completed']);
         add_action('woocommerce_order_status_cancelled', [$this, 'on_order_cancelled']);
         add_action('get_header', [$this, 'process_confirmation']);
         add_action('woocommerce_update_options_checkout', [$this, 'update_checkout_options']);
         add_action('admin_enqueue_scripts', [$this, 'tillit_admin_scripts']);
+
+        $tillit_payment_gateway = $this;
+        new WC_Tillit_Checkout($this);
+
     }
 
     /**
@@ -507,7 +502,7 @@ class WC_Tillit extends WC_Payment_Gateway
         $row = $wpdb->get_row($sql , ARRAY_A);
 
         // Stop if no order found
-        if(!isset($row['post_id'])) wp_die(__('Unable to find the requested order.', 'woocommerce-gateway-tillit'));
+        if(!isset($row['post_id'])) wp_die(__('Unable to find the requested order', 'woocommerce-gateway-tillit'));
 
         // Get the order ID
         $order_id = $row['post_id'];
@@ -612,17 +607,10 @@ class WC_Tillit extends WC_Payment_Gateway
                 'label'     => __('Funded invoice', 'woocommerce-gateway-tillit'),
                 'checked'   => true
             ],
-            // 'bank_account_number' => [
-            //     'title'     => __('Bank account number', 'woocommerce-gateway-tillit'),
-            //     'type'      => 'text',
-            // ],
-            // 'iban' => [
-            //     'title'     => __('IBAN', 'woocommerce-gateway-tillit'),
-            //     'type'      => 'text',
-            // ],
             'days_on_invoice' => [
                 'title'     => __('Number of days on invoice', 'woocommerce-gateway-tillit'),
                 'type'      => 'text',
+                'default'   => '14',
             ],
             'section_title_settings' => [
                 'type'      => 'separator',
@@ -661,6 +649,12 @@ class WC_Tillit extends WC_Payment_Gateway
             ],
             'enable_b2b_b2c_radio' => [
                 'title'     => __('Activate B2C/B2B check-out radio button', 'woocommerce-gateway-tillit'),
+                'label'     => ' ',
+                'type'      => 'checkbox',
+                'default'   => 'yes',
+            ],
+            'clear_options_on_deactivation' => [
+                'title'     => __('Clear settings on deactivation', 'woocommerce-gateway-tillit'),
                 'label'     => ' ',
                 'type'      => 'checkbox',
                 'default'   => 'yes',
@@ -785,6 +779,18 @@ class WC_Tillit extends WC_Payment_Gateway
             'body' => empty($payload) ? '' : json_encode($payload),
             'data_format' => 'body'
         ]);
+    }
+
+    /**
+     * On deactivating the plugin
+     *
+     * @return void
+     */
+    public function on_deactivate_plugin()
+    {
+        if($this->get_option('clear_options_on_deactivation') === 'yes') {
+            delete_option('woocommerce_woocommerce-gateway-tillit_settings');
+        }
     }
 
 }
