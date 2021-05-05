@@ -227,33 +227,40 @@ class WC_Tillit extends WC_Payment_Gateway
     }
 
     /**
-     * Notify Tillit API after the order item is added
+     * Notify Tillit API after order item update
      *
-     * @param $added_items
      * @param $order
      */
-    public function after_order_add_item($added_items, $order)
+    public function after_order_item_update($order)
     {
-        $order->calculate_totals(true);
+        if (!WC_Tillit_Helper::is_tillit_order($order)) {
+            return;
+        }
 
-        $this->update_tillit_order($order);
+        if (!$_POST || !isset($_POST['action'])) {
+            return;
+        }
+        $action = $_POST['action'];
 
-        WC_Tillit_Helper::append_admin_force_reload();
-    }
-
-    /**
-     * Notify Tillit API after the order item is removed
-     *
-     * @param $item_id
-     * @param $item
-     * @param $changed_stock
-     * @param $order
-     */
-    public function after_order_remove_item($item_id, $item, $changed_stock, $order)
-    {
-        $this->update_tillit_order($order);
-
-        WC_Tillit_Helper::append_admin_force_reload();
+        if ($action == 'woocommerce_add_order_item') {
+            $order->calculate_totals(true);
+            $this->update_tillit_order($order);
+            WC_Tillit_Helper::append_admin_force_reload();
+        } else if ($action == 'woocommerce_remove_order_item') {
+            $this->update_tillit_order($order);
+            WC_Tillit_Helper::append_admin_force_reload();
+        } else if ($action == 'woocommerce_add_order_fee') {
+            $this->update_tillit_order($order);
+            WC_Tillit_Helper::append_admin_force_reload();
+        } else if ($action == 'woocommerce_add_order_shipping') {
+            $this->update_tillit_order($order);
+            WC_Tillit_Helper::append_admin_force_reload();
+        // } else if ($action == 'woocommerce_add_order_tax') {
+        // } else if ($action == 'woocommerce_remove_order_tax') {
+        } else if ($action == 'woocommerce_calc_line_taxes') {
+            $this->update_tillit_order($order);
+            WC_Tillit_Helper::append_admin_force_reload();
+        }
     }
 
     /**
@@ -270,7 +277,7 @@ class WC_Tillit extends WC_Payment_Gateway
             return;
         }
 
-        $original_line_items = WC_Tillit_Helper::get_line_items($order->get_items(), $order->get_items('shipping'));
+        $original_line_items = WC_Tillit_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'));
 
         if (!property_exists($this, 'order_line_items')) $this->order_line_items = array();
         $this->order_line_items[$order_id] = $original_line_items;
@@ -292,7 +299,7 @@ class WC_Tillit extends WC_Payment_Gateway
         }
 
         $original_line_items = $this->order_line_items[$order_id];
-        $updated_line_items = WC_Tillit_Helper::get_line_items($order->get_items(), $order->get_items('shipping'));
+        $updated_line_items = WC_Tillit_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'));
         $diff = WC_Tillit_Helper::array_diff_r($original_line_items, $updated_line_items);
 
         if ($diff) {

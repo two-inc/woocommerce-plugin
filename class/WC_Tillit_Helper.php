@@ -18,7 +18,6 @@ class WC_Tillit_Helper
     public static function round_amt($amt)
     {
         return number_format($amt, wc_get_price_decimals(), '.', '');
-        //return round($amt, wc_get_price_decimals());
     }
 
     /**
@@ -113,7 +112,7 @@ class WC_Tillit_Helper
      *
      * @return array
      */
-    public static function get_line_items($line_items, $shippings)
+    public static function get_line_items($line_items, $shippings, $fees)
     {
 
         $items = [];
@@ -129,8 +128,7 @@ class WC_Tillit_Helper
                 $product_simple = $line_item['data'];
             }
 
-            $tax_percentage = WC_Tillit_Helper::get_tax_percentage($product_simple);
-            $tax_rate = $tax_percentage / 100.0;
+            $tax_rate = 1.0 * $line_item['line_tax'] / $line_item['line_total'];
 
             $image_url = get_the_post_thumbnail_url($product_simple->get_id());
 
@@ -141,7 +139,7 @@ class WC_Tillit_Helper
                 'net_amount' =>  strval(WC_Tillit_Helper::round_amt($line_item['line_total'])),
                 'discount_amount' => strval(WC_Tillit_Helper::round_amt($line_item['line_subtotal'] - $line_item['line_total'])),
                 'tax_amount' => strval(WC_Tillit_Helper::round_amt($line_item['line_tax'])),
-                'tax_class_name' => 'VAT ' . $tax_percentage . '%',
+                'tax_class_name' => 'VAT ' . WC_Tillit_Helper::round_amt($tax_rate * 100) . '%',
                 'tax_rate' => strval($tax_rate),
                 'unit_price' => strval(WC_Tillit_Helper::round_amt($product_simple->get_price_excluding_tax())),
                 'quantity' => $line_item['quantity'],
@@ -195,6 +193,30 @@ class WC_Tillit_Helper
             $items[] = $shipping_line;
         }
 
+        // Fee
+        foreach($fees as $fee) {
+            if ($fee->get_total() == 0) continue;
+            $tax_rate = 1.0 * $fee->get_total_tax() / $fee->get_total();
+            $fee_line = [
+                'name' => 'Fee - ' . $fee->get_name(),
+                'description' => '',
+                'gross_amount' => strval(WC_Tillit_Helper::round_amt($fee->get_total() + $fee->get_total_tax())),
+                'net_amount' =>  strval(WC_Tillit_Helper::round_amt($fee->get_total())),
+                'discount_amount' => '0',
+                'tax_amount' => strval(WC_Tillit_Helper::round_amt($fee->get_total_tax())),
+                'tax_class_name' => 'VAT ' . WC_Tillit_Helper::round_amt($tax_rate * 100) . '%',
+                'tax_rate' => strval($tax_rate),
+                'unit_price' => strval(WC_Tillit_Helper::round_amt($fee->get_total())),
+                'quantity' => 1,
+                'quantity_unit' => 'fee',
+                'image_url' => '',
+                'product_page_url' => '',
+                'type' => 'SERVICE'
+            ];
+
+            $items[] = $fee_line;
+        }
+
         return $items;
 
     }
@@ -215,17 +237,15 @@ class WC_Tillit_Helper
         // Get the taxes Ids
         $taxes = array_keys($order_taxes);
 
-        // Only proceed if taxes are configured
         if (count($taxes) == 0) {
-            // Return with error
-            WC_Tillit_Helper::display_ajax_error(__('Tillit Merchant Error: Taxes are not configured', 'woocommerce-gateway-tillit'));
-            return;
+            $tax_amount = 0;
+            $tax_rate = 0;
+        } else {
+            /** @var WC_Order_Item_Tax $vat */
+            $vat = $order_taxes[$taxes[0]];
+            $tax_amount = $vat->get_tax_total() + $vat->get_shipping_tax_total();
+            $tax_rate = $vat->get_rate_percent() / 100.0;
         }
-
-        /** @var WC_Order_Item_Tax $vat */
-        $vat = $order_taxes[$taxes[0]];
-        $tax_amount = $vat->get_tax_total() + $vat->get_shipping_tax_total();
-        $tax_rate = $vat->get_rate_percent() / 100.0;
 
         return [
             'billing_address' => [
@@ -254,7 +274,7 @@ class WC_Tillit_Helper
             'date_created' => $order->order_date,
             'date_updated' => $order->order_date,
             'order_note' => $order->get_customer_note(),
-            'line_items' => WC_Tillit_Helper::get_line_items($order->get_items(), $order->get_items('shipping')),
+            'line_items' => WC_Tillit_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee')),
             'recurring' => false,
             'merchant_additional_info' => '',
             'merchant_id' => $tillit_merchant_id,
@@ -317,7 +337,7 @@ class WC_Tillit_Helper
      */
     public static function append_admin_force_reload()
     {
-        add_action('woocommerce_admin_order_item_headers', function(){
+        add_action('woocommerce_admin_order_items_after_line_items', function(){
             print('<script>location.reload();</script>');
         });
     }
