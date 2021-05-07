@@ -429,7 +429,7 @@ class WC_Tillit extends WC_Payment_Gateway
             sanitize_text_field($_POST['department']),
             sanitize_text_field($_POST['project']),
             $this->get_option('tillit_merchant_id'),
-            $this->get_option('days_on_invoice'),
+            $this->get_option('days_on_invoice')
         ));
 
         // Stop on failure
@@ -720,7 +720,7 @@ class WC_Tillit extends WC_Payment_Gateway
             $department,
             $project,
             $this->get_option('tillit_merchant_id'),
-            $this->get_option('days_on_invoice'),
+            $this->get_option('days_on_invoice')
         ));
 
         $tillit_err = WC_Tillit_Helper::get_tillit_error_msg($response);

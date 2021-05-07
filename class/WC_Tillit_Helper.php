@@ -278,8 +278,7 @@ class WC_Tillit_Helper
             'recurring' => false,
             'merchant_additional_info' => '',
             'merchant_id' => $tillit_merchant_id,
-            'merchant_order_id' => strval($order->get_id()),
-            'merchant_reference' => '',
+            'merchant_reference' => strval($order->get_id()),
             'merchant_urls' => [
                 // 'merchant_confirmation_url' => $order->get_checkout_order_received_url(),
                 'merchant_confirmation_url' => sprintf('%s?tillit_confirm_order=%s&nonce=%s',
