@@ -613,7 +613,10 @@ class Tillit {
                         "image_url": "",
                         "product_page_url": "",
                         "type": "PHYSICAL",
-                        "details": "",
+                        "details": {
+                            "categories": [],
+                            "barcodes": []
+                        },
                     }]
                 })
             })

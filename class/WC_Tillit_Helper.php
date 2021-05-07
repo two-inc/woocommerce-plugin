@@ -271,14 +271,13 @@ class WC_Tillit_Helper
             ],
             'buyer_department' => $department,
             'buyer_project' => $project,
-            'date_created' => $order->order_date,
-            'date_updated' => $order->order_date,
             'order_note' => $order->get_customer_note(),
             'line_items' => WC_Tillit_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee')),
             'recurring' => false,
             'merchant_additional_info' => '',
             'merchant_id' => $tillit_merchant_id,
-            'merchant_reference' => strval($order->get_id()),
+            'merchant_order_id' => strval($order->get_id()),
+            'merchant_reference' => '',
             'merchant_urls' => [
                 // 'merchant_confirmation_url' => $order->get_checkout_order_received_url(),
                 'merchant_confirmation_url' => sprintf('%s?tillit_confirm_order=%s&nonce=%s',
@@ -323,9 +322,7 @@ class WC_Tillit_Helper
                 // 'tracking_number' => '',
                 // 'carrier_tracking_url' => '',
                 'expected_delivery_date' => date('Y-m-d', strtotime($Date. ' + 7 days'))
-            ],
-            'state' => 'UNVERIFIED',
-            'status' => 'APPROVED'
+            ]
         ];
     }
 
