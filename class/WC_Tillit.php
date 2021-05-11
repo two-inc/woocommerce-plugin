@@ -538,7 +538,7 @@ class WC_Tillit extends WC_Payment_Gateway
         $state = $body['state'];
 
         // Mark order as processing
-        if($state === 'VERIFIED') $order->update_status('processing');
+        if($state === 'VERIFIED') $order->payment_complete();
 
         // Get the redirect URL by order state
         $redirect = $state === 'VERIFIED' ? wp_specialchars_decode($order->get_checkout_order_received_url())
@@ -720,7 +720,8 @@ class WC_Tillit extends WC_Payment_Gateway
             $department,
             $project,
             $this->get_option('tillit_merchant_id'),
-            $this->get_option('days_on_invoice')
+            $this->get_option('days_on_invoice'),
+            $tillit_order_id
         ));
 
         $tillit_err = WC_Tillit_Helper::get_tillit_error_msg($response);
