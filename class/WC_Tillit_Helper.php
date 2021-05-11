@@ -229,7 +229,7 @@ class WC_Tillit_Helper
      * @return bool
      */
     public static function compose_tillit_order(
-        $order, $order_reference, $company_id, $department, $project, $tillit_merchant_id, $days_on_invoice)
+        $order, $order_reference, $company_id, $department, $project, $tillit_merchant_id, $days_on_invoice, $tillit_original_order_id = '')
     {
         // Get the orde taxes
         $order_taxes = $order->get_taxes();
@@ -247,7 +247,7 @@ class WC_Tillit_Helper
             $tax_rate = $vat->get_rate_percent() / 100.0;
         }
 
-        return [
+        $req_body = [
             'billing_address' => [
                 'city' => $order->get_billing_city(),
                 'country' => $order->get_billing_country(),
@@ -327,6 +327,12 @@ class WC_Tillit_Helper
             'state' => 'UNVERIFIED',
             'status' => 'APPROVED'
         ];
+
+        if ($tillit_original_order_id) {
+            $req_body['original_order_id'] = $tillit_original_order_id;
+        }
+
+        return $req_body;
     }
 
     /**
