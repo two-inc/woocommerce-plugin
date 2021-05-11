@@ -538,7 +538,7 @@ class WC_Tillit extends WC_Payment_Gateway
         $state = $body['state'];
 
         // Mark order as processing
-        if($state === 'VERIFIED') $order->update_status('processing');
+        if($state === 'VERIFIED') $order->payment_complete();
 
         // Get the redirect URL by order state
         $redirect = $state === 'VERIFIED' ? wp_specialchars_decode($order->get_checkout_order_received_url())
