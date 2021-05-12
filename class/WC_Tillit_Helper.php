@@ -229,7 +229,7 @@ class WC_Tillit_Helper
      * @return bool
      */
     public static function compose_tillit_order(
-        $order, $order_reference, $company_id, $department, $project, $tillit_merchant_id, $days_on_invoice, $tillit_original_order_id = '')
+        $order, $order_reference, $tillit_merchant_id, $days_on_invoice, $company_id, $department, $project, $tillit_original_order_id = '')
     {
         // Get the orde taxes
         $order_taxes = $order->get_taxes();

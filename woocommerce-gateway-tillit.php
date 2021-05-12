@@ -28,10 +28,13 @@ function woocommerce_gateway_tillit_classes()
     $tillit_payment_gateway = get_tillit_gateway();
     add_action('woocommerce_checkout_update_order_review', [$tillit_payment_gateway, 'change_tillit_payment_title']);
     // For order update by Save button
-    add_action('woocommerce_before_save_order_items', [$tillit_payment_gateway, 'before_order_update'], 10, 2);
-    add_action('woocommerce_saved_order_items', [$tillit_payment_gateway, 'after_order_update'], 10, 2);
+    add_action('woocommerce_before_save_order_items', [$tillit_payment_gateway, 'before_order_item_save'], 10, 2);
+    add_action('woocommerce_saved_order_items', [$tillit_payment_gateway, 'after_order_item_save'], 10, 2);
     // For order update by add/remove item (product/fee/shipping) and recalculate (tax)
     add_action('woocommerce_admin_order_item_headers', [$tillit_payment_gateway, 'after_order_item_update'], 10, 1);
+    // For order update using Update post
+    add_action('save_post_shop_order', [$tillit_payment_gateway, 'before_order_update'], 10, 2);
+    add_action('wp_after_insert_post', [$tillit_payment_gateway, 'after_order_update'], 10, 4);
 
     add_action('deactivate_' . plugin_basename(__FILE__), [$tillit_payment_gateway, 'on_deactivate_plugin']);
 }
