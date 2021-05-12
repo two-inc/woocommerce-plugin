@@ -527,32 +527,6 @@ class Tillit {
     }
 
     /**
-     * Clear woocommerce error messages and display new messages
-     *
-     * @param errorMsgs
-     */
-
-    static clearAndDisplayErrors(errorMsgs) {
-        if (!document.querySelector('form[name="checkout"]')) return
-        let noticeGroup = document.querySelector('.woocommerce-NoticeGroup')
-        if (!noticeGroup) {
-            noticeGroup = document.createElement('div')
-            noticeGroup.className = 'woocommerce-NoticeGroup woocommerce-NoticeGroup-checkout'
-            document.querySelector('form[name="checkout"]').prepend(noticeGroup)
-        }
-        noticeGroup.innerHTML = ''
-        for (let errorMsg of errorMsgs) {
-            let ul = document.createElement('ul')
-            ul.className = 'woocommerce-error'
-            ul.setAttribute('role', 'alert')
-            let li = document.createElement('li')
-            li.append(document.createTextNode(errorMsg))
-            ul.append(li)
-            noticeGroup.append(ul)
-        }
-    }
-
-    /**
      * Check the company approval status by creating an order intent
      *
      * @return void
@@ -637,8 +611,8 @@ class Tillit {
                     document.querySelector('.tillit-buyer-name').innerText = document.querySelector('#select2-billing_company-container').innerText
                 else if (document.querySelector('#billing_company'))
                     document.querySelector('.tillit-buyer-name').innerText = document.querySelector('#billing_company').value
-                // Clear error messages
-                Tillit.clearAndDisplayErrors([])
+
+                // Update tillit message
                 let tillitSubtitleExistCheck = setInterval(function() {
                     if (document.querySelector('.tillit-subtitle')) {
                         document.querySelector('.tillit-subtitle').innerText = Tillit.getMessage('subtitle_order_intent_ok')
@@ -670,13 +644,8 @@ class Tillit {
                     let errMsg = (typeof response.responseJSON === 'string' || !('error_details' in response.responseJSON))
                                  ? response.responseJSON
                                  : response.responseJSON['error_details']
-                    Tillit.clearAndDisplayErrors(Tillit.getMessage(
-                        errMsg.startsWith('Minimum Payment using Tillit') ? 'amount_min'
-                        : errMsg.startsWith('Maximum Payment using Tillit') ? 'amount_max'
-                        : 'subtitle_order_intent_reject'
-                    ))
-                    if (jQuery) jQuery.scroll_to_notices(jQuery('.woocommerce-NoticeGroup'))
-                    //
+
+                    // Update tillit message
                     let tillitSubtitleExistCheck = setInterval(function() {
                         if (document.querySelector('.tillit-subtitle')) {
                             document.querySelector('.tillit-subtitle').innerText = Tillit.getMessage(
