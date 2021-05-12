@@ -35,7 +35,7 @@ class WC_Tillit extends WC_Payment_Gateway
         $this->init_settings();
 
         // Define user set variables
-        $this->title = $this->get_option('title');
+        $this->title = sprintf(__($this->get_option('title'), 'woocommerce-gateway-tillit'), strval($this->get_option('days_on_invoice')));
         $this->description = sprintf(
             '<p>%s <span class="tillit-buyer-name"></span>.</p>',
             __('By completing the purchase, you verify that you have the legal right to purchase on behalf of', 'woocommerce-gateway-tillit')
@@ -75,8 +75,8 @@ class WC_Tillit extends WC_Payment_Gateway
             if( $payment_id === 'woocommerce-gateway-tillit' ) {
                 $title = sprintf(
                     '%s<div class="tillit-subtitle">%s</div> ',
-                    $this->get_option('title'),
-                    $this->get_option('subtitle')
+                    sprintf(__($this->get_option('title'), 'woocommerce-gateway-tillit'), strval($this->get_option('days_on_invoice'))),
+                    __('Enter company name to pay on invoice', 'woocommerce-gateway-tillit')
                 );
             }
             return $title;
@@ -455,7 +455,7 @@ class WC_Tillit extends WC_Payment_Gateway
 
         $tillit_err = WC_Tillit_Helper::get_tillit_error_msg($response);
         if ($tillit_err || $response['response']['code'] >= 400) {
-            WC_Tillit_Helper::display_ajax_error(__('Invoice is not available for this order', 'woocommerce-gateway-tillit'));
+            WC_Tillit_Helper::display_ajax_error(__('EHF Invoice is not available for this order', 'woocommerce-gateway-tillit'));
 
             // Return with error
             return;
@@ -566,12 +566,12 @@ class WC_Tillit extends WC_Payment_Gateway
             'title' => [
                 'title'     => __('Title', 'woocommerce-gateway-tillit'),
                 'type'      => 'text',
-                'default'   => __('Business invoice 30 days', 'woocommerce-gateway-tillit')
+                'default'   => __('Business invoice %s days', 'woocommerce-gateway-tillit')
             ],
             'subtitle' => [
                 'title'     => __('Subtitle', 'woocommerce-gateway-tillit'),
                 'type'      => 'text',
-                'default'   => __('Receive the invoice via EHF and PDF', 'woocommerce-gateway-tillit')
+                'default'   => __('Receive the invoice via EHF and email', 'woocommerce-gateway-tillit')
             ],
             'tillit_merchant_id' => [
                 'title'     => __('Tillit Merchant ID', 'woocommerce-gateway-tillit'),

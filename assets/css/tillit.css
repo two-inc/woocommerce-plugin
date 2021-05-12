@@ -30,3 +30,7 @@
 .woocommerce-checkout #payment ul.payment_methods li.wc_payment_method.payment_method_woocommerce-gateway-tillit .tillit-buyer-name {
     font-weight: bold;
 }
+
+.woocommerce-checkout #payment ul.payment_methods li.wc_payment_method.payment_method_woocommerce-gateway-tillit img {
+    margin-left: 20px;
+}

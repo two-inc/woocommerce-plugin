@@ -109,7 +109,7 @@ class Tillit {
                 if(window.tillit.company_id_search && window.tillit.company_id_search === 'yes') {
 
                     // Set the company ID
-                    tillitCompany.organization_number = data.company_id;
+                    tillitCompany.organization_number = data.company_id
 
                     // Set the company ID
                     $companyId.val(data.company_id)
@@ -126,7 +126,7 @@ class Tillit {
                 const addressResponse = jQuery.ajax({
                     dataType: 'json',
                     url: window.tillit.tillit_checkout_host + '/v1/company/' + jQuery('#company_id').val() + '/address'
-                });
+                })
 
                 addressResponse.done(function(response){
 
@@ -237,7 +237,7 @@ class Tillit {
     }
 
     /**
-     * Helper for adding a placeholder after an input; used for movinf the fields
+     * Helper for adding a placeholder after an input, used for moving the fields
      *
      * @param $el
      * @param name
@@ -508,7 +508,7 @@ class Tillit {
     {
 
         if (window.tillit.enable_order_intent !== 'yes') {
-            return false;
+            return false
         }
 
         let can = true
@@ -533,22 +533,22 @@ class Tillit {
      */
 
     static clearAndDisplayErrors(errorMsgs) {
-        if (!document.querySelector('form[name="checkout"]')) return;
-        let noticeGroup = document.querySelector('.woocommerce-NoticeGroup');
+        if (!document.querySelector('form[name="checkout"]')) return
+        let noticeGroup = document.querySelector('.woocommerce-NoticeGroup')
         if (!noticeGroup) {
-            noticeGroup = document.createElement('div');
-            noticeGroup.className = 'woocommerce-NoticeGroup woocommerce-NoticeGroup-checkout';
-            document.querySelector('form[name="checkout"]').prepend(noticeGroup);
+            noticeGroup = document.createElement('div')
+            noticeGroup.className = 'woocommerce-NoticeGroup woocommerce-NoticeGroup-checkout'
+            document.querySelector('form[name="checkout"]').prepend(noticeGroup)
         }
-        noticeGroup.innerHTML = '';
+        noticeGroup.innerHTML = ''
         for (let errorMsg of errorMsgs) {
-            let ul = document.createElement('ul');
-            ul.className = 'woocommerce-error';
-            ul.setAttribute('role', 'alert');
-            let li = document.createElement('li');
-            li.append(document.createTextNode(errorMsg));
-            ul.append(li);
-            noticeGroup.append(ul);
+            let ul = document.createElement('ul')
+            ul.className = 'woocommerce-error'
+            ul.setAttribute('role', 'alert')
+            let li = document.createElement('li')
+            li.append(document.createTextNode(errorMsg))
+            ul.append(li)
+            noticeGroup.append(ul)
         }
     }
 
@@ -571,8 +571,8 @@ class Tillit {
         }
 
         tillitOrderIntentCheck.interval = setInterval(function() {
-            let gross_amount = Tillit.getPrice('order-total');
-            let tax_amount = Tillit.getPrice('tax-rate');
+            let gross_amount = Tillit.getPrice('order-total')
+            let tax_amount = Tillit.getPrice('tax-rate')
             if (!gross_amount) {
                 return
             }
@@ -638,7 +638,13 @@ class Tillit {
                 else if (document.querySelector('#billing_company'))
                     document.querySelector('.tillit-buyer-name').innerText = document.querySelector('#billing_company').value
                 // Clear error messages
-                Tillit.clearAndDisplayErrors([]);
+                Tillit.clearAndDisplayErrors([])
+                let tillitSubtitleExistCheck = setInterval(function() {
+                    if (document.querySelector('.tillit-subtitle')) {
+                        document.querySelector('.tillit-subtitle').innerText = Tillit.getMessage('subtitle_order_intent_ok')
+                        clearInterval(tillitSubtitleExistCheck)
+                   }
+                }, 1000)
             })
 
             approvalResponse.error(function(response){
@@ -664,12 +670,23 @@ class Tillit {
                     let errMsg = (typeof response.responseJSON === 'string' || !('error_details' in response.responseJSON))
                                  ? response.responseJSON
                                  : response.responseJSON['error_details']
-                    Tillit.clearAndDisplayErrors(Tillit.getErrorMessage(
+                    Tillit.clearAndDisplayErrors(Tillit.getMessage(
                         errMsg.startsWith('Minimum Payment using Tillit') ? 'amount_min'
                         : errMsg.startsWith('Maximum Payment using Tillit') ? 'amount_max'
-                        : 'order_intent_reject'
-                    ));
-                    if (jQuery) jQuery.scroll_to_notices(jQuery('.woocommerce-NoticeGroup'));
+                        : 'subtitle_order_intent_reject'
+                    ))
+                    if (jQuery) jQuery.scroll_to_notices(jQuery('.woocommerce-NoticeGroup'))
+                    //
+                    let tillitSubtitleExistCheck = setInterval(function() {
+                        if (document.querySelector('.tillit-subtitle')) {
+                            document.querySelector('.tillit-subtitle').innerText = Tillit.getMessage(
+                                errMsg.startsWith('Minimum Payment using Tillit') ? 'amount_min'
+                                : errMsg.startsWith('Maximum Payment using Tillit') ? 'amount_max'
+                                : 'subtitle_order_intent_reject'
+                            )
+                            clearInterval(tillitSubtitleExistCheck)
+                       }
+                    }, 1000)
                 }
 
             })
@@ -677,11 +694,11 @@ class Tillit {
 
     }
 
-    static getErrorMessage(key)
+    static getMessage(key)
     {
 
-        if (key && key in window.tillit.error_msgs) {
-            return [window.tillit.error_msgs[key],]
+        if (key && key in window.tillit.messages) {
+            return [window.tillit.messages[key],]
         }
         return []
 
@@ -824,7 +841,7 @@ class Tillit {
     {
         let checkoutInputs = []
         let checkoutForm = document.querySelector('form[name="checkout"]')
-        if (!checkoutForm) return;
+        if (!checkoutForm) return
         for (let inp of checkoutForm.querySelectorAll('input:not([type="radio"],[type="checkbox"])')) {
             if (inp.getAttribute('id')) {
                 checkoutInputs.push({
@@ -833,7 +850,7 @@ class Tillit {
                     'name': inp.getAttribute('name'),
                     'type': inp.getAttribute('type'),
                     'val': inp.value,
-                });
+                })
             }
         }
         for (let inp of checkoutForm.querySelectorAll('input[type="radio"]:checked,input[type="checkbox"]:checked')) {
@@ -843,7 +860,7 @@ class Tillit {
                     'id': inp.getAttribute('id'),
                     'name': inp.getAttribute('name'),
                     'type': inp.getAttribute('type'),
-                });
+                })
             }
         }
         for (let inp of checkoutForm.querySelectorAll('span[id$="-container"]')) {
@@ -853,7 +870,7 @@ class Tillit {
                     'id': inp.getAttribute('id'),
                     'parentLabel': inp.parentNode.getAttribute('aria-labelledby'),
                     'html': inp.outerHTML,
-                });
+                })
             }
         }
         for (let inp of checkoutForm.querySelectorAll('select')) {
@@ -863,7 +880,7 @@ class Tillit {
                     'id': inp.getAttribute('id'),
                     'val': inp.value,
                     'optionHtml': inp.querySelector('option[value="' + inp.value + '"]').outerHTML,
-                });
+                })
             }
         }
         sessionStorage.setItem('checkoutInputs', JSON.stringify(checkoutInputs))
