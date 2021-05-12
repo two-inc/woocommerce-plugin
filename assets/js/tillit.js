@@ -639,7 +639,7 @@ class Tillit {
                 document.querySelector('.tillit-buyer-name').innerText = ''
 
                 // Display error messages
-                if (response.status == 400) {
+                if (response.status >= 400) {
                     // @TODO: use code in checkout-api
                     let errMsg = (typeof response.responseJSON === 'string' || !('error_details' in response.responseJSON))
                                  ? response.responseJSON
