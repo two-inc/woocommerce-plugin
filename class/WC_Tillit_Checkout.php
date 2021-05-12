@@ -212,8 +212,9 @@ class WC_Tillit_Checkout
     {
 
         $properties = [
-            'error_msgs' => [
-                'order_intent_reject' => __('Invoice is not available for this order', 'woocommerce-gateway-tillit'),
+            'messages' => [
+                'subtitle_order_intent_ok' =>$this->WC_Tillit->get_option('subtitle'),
+                'subtitle_order_intent_reject' => __('EHF Invoice is not available for this order', 'woocommerce-gateway-tillit'),
                 'amount_min' => sprintf(__('Minimum Payment using Tillit is %s NOK', 'woocommerce-gateway-tillit'), '200'),
                 'amount_max' => sprintf(__('Maximum Payment using Tillit is %s NOK', 'woocommerce-gateway-tillit'), '250,000'),
             ],

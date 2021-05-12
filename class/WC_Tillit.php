@@ -35,7 +35,7 @@ class WC_Tillit extends WC_Payment_Gateway
         $this->init_settings();
 
         // Define user set variables
-        $this->title = $this->get_option('title');
+        $this->title = sprintf(__($this->get_option('title'), 'woocommerce-gateway-tillit'), strval($this->get_option('days_on_invoice')));
         $this->description = sprintf(
             '<p>%s <span class="tillit-buyer-name"></span>.</p>',
             __('By completing the purchase, you verify that you have the legal right to purchase on behalf of', 'woocommerce-gateway-tillit')
@@ -75,8 +75,8 @@ class WC_Tillit extends WC_Payment_Gateway
             if( $payment_id === 'woocommerce-gateway-tillit' ) {
                 $title = sprintf(
                     '%s<div class="tillit-subtitle">%s</div> ',
-                    $this->get_option('title'),
-                    $this->get_option('subtitle')
+                    sprintf(__($this->get_option('title'), 'woocommerce-gateway-tillit'), strval($this->get_option('days_on_invoice'))),
+                    __('Enter company name to pay on invoice', 'woocommerce-gateway-tillit')
                 );
             }
             return $title;
@@ -123,102 +123,6 @@ class WC_Tillit extends WC_Payment_Gateway
         wp_enqueue_script( 'tillit.admin', WC_TILLIT_PLUGIN_URL . '/assets/js/admin.js', ['jquery']);
         wp_enqueue_style( 'tillit.admin', WC_TILLIT_PLUGIN_URL . '/assets/css/admin.css');
 
-    }
-
-    /**
-     * Generate the section title
-     *
-     * @param $field_id
-     * @param $field_args
-     *
-     * @return string
-     */
-    public function generate_separator_html($field_id, $field_args)
-    {
-        ob_start();
-        ?>
-        <tr valign="top">
-            <th colspan="2">
-                <h3 style="margin-bottom: 0;"><?php echo $field_args['title']; ?></h3>
-            </th>
-        </tr>
-        <?php
-        return ob_get_clean();
-    }
-
-    /**
-     * Generate a radio input
-     *
-     * @param $key
-     * @param $data
-     *
-     * @return false|string
-     */
-    public function generate_radio_html($key, $data)
-    {
-        $field_key = $this->get_field_key( $key );
-        $defaults  = array(
-            'title'             => '',
-            'label'             => '',
-            'disabled'          => false,
-            'class'             => '',
-            'css'               => '',
-            'type'              => 'text',
-            'desc_tip'          => false,
-            'description'       => '',
-            'custom_attributes' => array(),
-            'checked'           => false
-        );
-
-        $data = wp_parse_args( $data, $defaults );
-
-        if ( ! $data['label'] ) {
-            $data['label'] = $data['title'];
-        }
-
-        ob_start();
-        ?>
-        <tr valign="top">
-            <td class="forminp" colspan="2">
-                <fieldset>
-                    <legend class="screen-reader-text"><span><?php echo wp_kses_post( $data['title'] ); ?></span></legend>
-                    <label for="<?php echo esc_attr( $field_key ); ?>">
-                        <input <?php disabled( $data['disabled'], true ); ?> class="<?php echo esc_attr( $data['class'] ); ?>" type="radio" name="<?php echo esc_attr( $field_key ); ?>" id="<?php echo esc_attr( $field_key ); ?>" style="<?php echo esc_attr( $data['css'] ); ?>" value="1" <?php checked($data['checked'] === true, true); ?> <?php echo $this->get_custom_attribute_html( $data ); // WPCS: XSS ok. ?> /> <?php echo wp_kses_post( $data['label'] ); ?></label><br/>
-                    <?php echo $this->get_description_html( $data ); // WPCS: XSS ok. ?>
-                </fieldset>
-            </td>
-        </tr>
-        <?php
-
-        return ob_get_clean();
-
-    }
-
-    public function generate_logo_html($field_key, $data)
-    {
-        $image_id = $this->get_option($field_key);
-        $image = $image_id ? wp_get_attachment_image_src($image_id, 'full') : null;
-        $image_src = $image ? $image[0] : null;
-        ob_start();
-        ?>
-        <tr valign="top">
-            <th scope="row" class="titledesc">
-                <label for="<?php echo esc_attr($field_key); ?>"><?php echo wp_kses_post($data['title']); ?></label>
-            </th>
-            <td class="forminp">
-                <fieldset>
-                    <input type="hidden" name="woocommerce_woocommerce-gateway-tillit_<?php echo $field_key; ?>" id="<?php echo esc_attr($field_key); ?>" class="logo_id" value="<?php echo $image_id; ?>" />
-                    <div class="image-container woocommerce-tillit-image-container">
-                        <?php if($image_src): ?>
-                            <img src="<?php echo $image_src; ?>" alt="" />
-                        <?php endif; ?>
-                    </div>
-                    <button class="button-secondary woocommerce-tillit-logo" type="button"><?php _e('Select image', 'woocommerce-gateway-tillit'); ?></button>
-                </fieldset>
-            </td>
-        </tr>
-        <?php
-        return ob_get_clean();
     }
 
     /**
@@ -455,7 +359,7 @@ class WC_Tillit extends WC_Payment_Gateway
 
         $tillit_err = WC_Tillit_Helper::get_tillit_error_msg($response);
         if ($tillit_err || $response['response']['code'] >= 400) {
-            WC_Tillit_Helper::display_ajax_error(__('Invoice is not available for this order', 'woocommerce-gateway-tillit'));
+            WC_Tillit_Helper::display_ajax_error(__('EHF Invoice is not available for this order', 'woocommerce-gateway-tillit'));
 
             // Return with error
             return;
@@ -566,12 +470,12 @@ class WC_Tillit extends WC_Payment_Gateway
             'title' => [
                 'title'     => __('Title', 'woocommerce-gateway-tillit'),
                 'type'      => 'text',
-                'default'   => __('Business invoice 30 days', 'woocommerce-gateway-tillit')
+                'default'   => __('Business invoice %s days', 'woocommerce-gateway-tillit')
             ],
             'subtitle' => [
                 'title'     => __('Subtitle', 'woocommerce-gateway-tillit'),
                 'type'      => 'text',
-                'default'   => __('Receive the invoice via EHF and PDF', 'woocommerce-gateway-tillit')
+                'default'   => __('Receive the invoice via EHF and email', 'woocommerce-gateway-tillit')
             ],
             'tillit_merchant_id' => [
                 'title'     => __('Tillit Merchant ID', 'woocommerce-gateway-tillit'),
