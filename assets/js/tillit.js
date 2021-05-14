@@ -556,6 +556,13 @@ class Tillit {
             clearInterval(tillitOrderIntentCheck.interval)
             tillitOrderIntentCheck.interval = null
             tillitOrderIntentCheck.pendingCheck = false
+
+            let subtitleElem = document.querySelector('.payment_method_woocommerce-gateway-tillit .tillit-subtitle')
+            if (subtitleElem) {
+                subtitleElem.innerHTML = ''
+                subtitleElem.appendChild(Tillit.getLoaderHtml())
+            }
+
             // Create an order intent
             const approvalResponse = jQuery.ajax({
                 url: window.tillit.tillit_checkout_host + '/v1/order_intent',
@@ -648,7 +655,7 @@ class Tillit {
                     // Update tillit message
                     let tillitSubtitleExistCheck = setInterval(function() {
                         if (document.querySelector('.tillit-subtitle')) {
-                            document.querySelector('.tillit-subtitle').innerText = Tillit.getMessage(
+                            document.querySelector('.tillit-subtitle').innerHTML = Tillit.getMessage(
                                 errMsg.startsWith('Minimum Payment using Tillit') ? 'amount_min'
                                 : errMsg.startsWith('Maximum Payment using Tillit') ? 'amount_max'
                                 : 'subtitle_order_intent_reject'
@@ -656,10 +663,27 @@ class Tillit {
                             clearInterval(tillitSubtitleExistCheck)
                        }
                     }, 1000)
+                } else {
+                    let tillitSubtitleExistCheck = setInterval(function() {
+                        if (document.querySelector('.tillit-subtitle')) {
+                            document.querySelector('.tillit-subtitle').innerHTML = Tillit.getMessage('subtitle_order_intent_reject')
+                            clearInterval(tillitSubtitleExistCheck)
+                       }
+                    }, 1000)
                 }
 
             })
         }, 1000)
+
+    }
+
+    static getLoaderHtml()
+    {
+
+        let img = document.createElement("IMG")
+        img.src = '/wp-content/plugins/woocommerce/assets/images/icons/loader.svg'
+        img.className = 'loader'
+        return img
 
     }
 
