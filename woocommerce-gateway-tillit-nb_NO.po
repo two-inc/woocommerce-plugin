@@ -3,7 +3,7 @@ msgstr ""
 "Project-Id-Version: WooCommerce Tillit Gateway\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2021-04-07 07:50+0000\n"
-"PO-Revision-Date: 2021-05-12 04:16+0000\n"
+"PO-Revision-Date: 2021-05-14 13:41+0000\n"
 "Last-Translator: \n"
 "Language-Team: Norwegian (Bokmål)\n"
 "Language: nb_NO\n"
@@ -12,7 +12,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "X-Generator: Loco https://localise.biz/\n"
-"X-Loco-Version: 2.5.2; wp-5.7.1\n"
+"X-Loco-Version: 2.5.2; wp-5.7.2\n"
 "X-Domain: woocommerce-gateway-tillit"
 
 #: views/woocommerce_checkout.php:11
@@ -132,7 +132,7 @@ msgstr "Skru på/Skru av"
 
 #: class/WC_Tillit.php:79 class/WC_Tillit_Checkout.php:217
 msgid "Enter company name to pay on invoice"
-msgstr ""
+msgstr "Skriv inn selskapsnavn for å betale på faktura"
 
 #: class/WC_Tillit_Checkout.php:150
 msgid "Enter the company name"
