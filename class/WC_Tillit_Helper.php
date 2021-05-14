@@ -46,9 +46,9 @@ class WC_Tillit_Helper
             $body = json_decode($response['body'], true);
             if (is_string($body))
                 return __($body, 'woocommerce-gateway-tillit');
-            else if ($body['error_details'] && is_string($body['error_details']))
+            else if (isset($body['error_details']) && is_string($body['error_details']))
                 return __($body['error_details'], 'woocommerce-gateway-tillit');
-            else if ($body['error_code'] && is_string($body['error_code']))
+            else if (isset($body['error_code']) && is_string($body['error_code']))
                 return __($body['error_code'], 'woocommerce-gateway-tillit');
         }
     }
@@ -141,7 +141,7 @@ class WC_Tillit_Helper
                 'tax_amount' => strval(WC_Tillit_Helper::round_amt($line_item['line_tax'])),
                 'tax_class_name' => 'VAT ' . WC_Tillit_Helper::round_amt($tax_rate * 100) . '%',
                 'tax_rate' => strval($tax_rate),
-                'unit_price' => strval(WC_Tillit_Helper::round_amt($product_simple->get_price_excluding_tax())),
+                'unit_price' => strval(WC_Tillit_Helper::round_amt(wc_get_price_excluding_tax($product_simple))),
                 'quantity' => $line_item['quantity'],
                 'quantity_unit' => 'item',
                 'image_url' => $image_url ? $image_url : '',
@@ -229,7 +229,7 @@ class WC_Tillit_Helper
      * @return bool
      */
     public static function compose_tillit_order(
-        $order, $order_reference, $company_id, $department, $project, $tillit_merchant_id, $days_on_invoice, $tillit_original_order_id = '')
+        $order, $order_reference, $tillit_merchant_id, $days_on_invoice, $company_id, $department, $project, $tillit_original_order_id = '')
     {
         // Get the orde taxes
         $order_taxes = $order->get_taxes();
@@ -321,7 +321,7 @@ class WC_Tillit_Helper
                 // 'carrier_name' => '',
                 // 'tracking_number' => '',
                 // 'carrier_tracking_url' => '',
-                'expected_delivery_date' => date('Y-m-d', strtotime($Date. ' + 7 days'))
+                'expected_delivery_date' => date('Y-m-d', strtotime('+ 7 days'))
             ]
         ];
 

@@ -136,7 +136,7 @@ class WC_Tillit extends WC_Payment_Gateway
             return;
         }
 
-        if (!$_POST || !isset($_POST['action'])) {
+        if (!isset($_POST) || !isset($_POST['action'])) {
             return;
         }
         $action = $_POST['action'];
@@ -163,12 +163,95 @@ class WC_Tillit extends WC_Payment_Gateway
     }
 
     /**
-     * Check if order is updated
+     * Before the order update by post.php
      *
      * @param $order_id
      * @param $items
      */
-    public function before_order_update($order_id, $items)
+    public function before_order_update($post_id, $post)
+    {
+
+        if (!isset($_POST) || !isset($_POST['action']) || 'editpost' !== $_POST['action']) return;
+
+        $order = wc_get_order($post_id);
+        if (!$order || !WC_Tillit_Helper::is_tillit_order($order)) {
+            return;
+        }
+
+        $tillit_order_id = $order->get_meta('tillit_order_id');
+        $notice_id = $tillit_order_id . '_before_order_update';
+
+        $tillit_meta = $this->get_save_tillit_meta($order, $notice_id);
+        if (!$tillit_meta) return;
+
+        $original_order = WC_Tillit_Helper::compose_tillit_order(
+            $order,
+            $tillit_meta['order_reference'],
+            $tillit_meta['tillit_merchant_id'],
+            $tillit_meta['days_on_invoice'],
+            $tillit_meta['company_id'],
+            $tillit_meta['department'],
+            $tillit_meta['project'],
+            $tillit_meta['tillit_original_order_id']
+        );
+
+        if (!property_exists($this, 'original_orders')) $this->original_orders = array();
+        $this->original_orders[$order->get_id()] = $original_order;
+
+    }
+
+    /**
+     * After the order update by post.php
+     *
+     * @param $order_id
+     * @param $items
+     */
+    public function after_order_update($post_id, $post, $update, $post_before)
+    {
+
+        if (!isset($_POST) || !isset($_POST['action']) || 'editpost' !== $_POST['action']) return;
+
+        $order = wc_get_order($post_id);
+        if ('shop_order' !== $post->post_type || !WC_Tillit_Helper::is_tillit_order($order)) {
+            return;
+        }
+
+        if (!$this->original_orders || !$this->original_orders[$order->get_id()]) return;
+
+        $tillit_order_id = $order->get_meta('tillit_order_id');
+        $notice_id = $tillit_order_id . '_after_order_update';
+
+        $tillit_meta = $this->get_save_tillit_meta($order, $notice_id);
+        if (!$tillit_meta) return;
+
+        $updated_order = WC_Tillit_Helper::compose_tillit_order(
+            $order,
+            $tillit_meta['order_reference'],
+            $tillit_meta['tillit_merchant_id'],
+            $tillit_meta['days_on_invoice'],
+            $tillit_meta['company_id'],
+            $tillit_meta['department'],
+            $tillit_meta['project'],
+            $tillit_meta['tillit_original_order_id']
+        );
+
+        $diff = WC_Tillit_Helper::array_diff_r($this->original_orders[$order->get_id()], $updated_order);
+
+        if ($diff) {
+
+            $this->update_tillit_order($order);
+
+        }
+
+    }
+
+    /**
+     * Before item "Save" button
+     *
+     * @param $order_id
+     * @param $items
+     */
+    public function before_order_item_save($order_id, $items)
     {
 
         $order = wc_get_order($order_id);
@@ -184,12 +267,13 @@ class WC_Tillit extends WC_Payment_Gateway
     }
 
     /**
+     * After item "Save" button
      * Notify Tillit API after the order is updated
      *
      * @param $order_id
      * @param $items
      */
-    public function after_order_update($order_id, $items)
+    public function after_order_item_save($order_id, $items)
     {
 
         $order = wc_get_order($order_id);
@@ -230,7 +314,7 @@ class WC_Tillit extends WC_Payment_Gateway
         }
 
         // Get the Tillit order ID
-        $tillit_order_id = get_post_meta($order->get_id(), 'tillit_order_id', true);
+        $tillit_order_id = $order->get_meta('tillit_order_id');
         $notice_id = $tillit_order_id . '_on_order_completed';
 
         // Change the order status
@@ -276,7 +360,7 @@ class WC_Tillit extends WC_Payment_Gateway
         }
 
         // Get the Tillit order ID
-        $tillit_order_id = get_post_meta($order->get_id(), 'tillit_order_id', true);
+        $tillit_order_id = $order->get_meta('tillit_order_id');
         $notice_id = $tillit_order_id . '_on_order_cancelled';
 
         // Change the order status
@@ -321,6 +405,8 @@ class WC_Tillit extends WC_Payment_Gateway
 
         // Store the order meta
         update_post_meta($order_id, '_tillit_order_reference', $order_reference);
+        update_post_meta($order_id, '_tillit_merchant_id', $this->get_option('tillit_merchant_id'));
+        update_post_meta($order_id, '_days_on_invoice', $this->get_option('days_on_invoice'));
         update_post_meta($order_id, 'company_id', sanitize_text_field($_POST['company_id']));
         update_post_meta($order_id, 'department', sanitize_text_field($_POST['department']));
         update_post_meta($order_id, 'project', sanitize_text_field($_POST['project']));
@@ -329,11 +415,11 @@ class WC_Tillit extends WC_Payment_Gateway
         $response = $this->make_request('/v1/order', WC_Tillit_Helper::compose_tillit_order(
             $order,
             $order_reference,
+            $this->get_option('tillit_merchant_id'),
+            $this->get_option('days_on_invoice'),
             sanitize_text_field($_POST['company_id']),
             sanitize_text_field($_POST['department']),
-            sanitize_text_field($_POST['project']),
-            $this->get_option('tillit_merchant_id'),
-            $this->get_option('days_on_invoice')
+            sanitize_text_field($_POST['project'])
         ));
 
         // Stop on failure
@@ -370,6 +456,7 @@ class WC_Tillit extends WC_Payment_Gateway
 
         // Store the Tillit Order Id for future use
         update_post_meta($order_id, 'tillit_order_id', $body['id']);
+        update_post_meta($order_id, '_tillit_original_order_id', $body['id']);
 
         // Return the result
         return [
@@ -420,7 +507,7 @@ class WC_Tillit extends WC_Payment_Gateway
         }
 
         // Get the Tillit order ID
-        $tillit_order_id = get_post_meta($order_id, 'tillit_order_id', true);
+        $tillit_order_id = $order->get_meta('tillit_order_id');
 
         // Get the Tillit order details
         $response = $this->make_request("/v1/order/${tillit_order_id}", [], 'GET');
@@ -567,27 +654,139 @@ class WC_Tillit extends WC_Payment_Gateway
     }
 
     /**
-     * Run the update execution
+     * Generate a radio input
      *
-     * @param $order_id
+     * @param $key
+     * @param $data
+     *
+     * @return false|string
      */
-    private function update_tillit_order($order)
+    public function generate_radio_html($key, $data)
+    {
+        $field_key = $this->get_field_key( $key );
+        $defaults  = array(
+            'title'             => '',
+            'label'             => '',
+            'disabled'          => false,
+            'class'             => '',
+            'css'               => '',
+            'type'              => 'text',
+            'desc_tip'          => false,
+            'description'       => '',
+            'custom_attributes' => array(),
+            'checked'           => false
+        );
+
+        $data = wp_parse_args( $data, $defaults );
+
+        if ( ! $data['label'] ) {
+            $data['label'] = $data['title'];
+        }
+
+        ob_start();
+        ?>
+        <tr valign="top">
+            <td class="forminp" colspan="2">
+                <fieldset>
+                    <legend class="screen-reader-text"><span><?php echo wp_kses_post( $data['title'] ); ?></span></legend>
+                    <label for="<?php echo esc_attr( $field_key ); ?>">
+                        <input <?php disabled( $data['disabled'], true ); ?> class="<?php echo esc_attr( $data['class'] ); ?>" type="radio" name="<?php echo esc_attr( $field_key ); ?>" id="<?php echo esc_attr( $field_key ); ?>" style="<?php echo esc_attr( $data['css'] ); ?>" value="1" <?php checked($data['checked'] === true, true); ?> <?php echo $this->get_custom_attribute_html( $data ); // WPCS: XSS ok. ?> /> <?php echo wp_kses_post( $data['label'] ); ?></label><br/>
+                    <?php echo $this->get_description_html( $data ); // WPCS: XSS ok. ?>
+                </fieldset>
+            </td>
+        </tr>
+        <?php
+
+        return ob_get_clean();
+
+    }
+
+    public function generate_logo_html($field_key, $data)
+    {
+        $image_id = $this->get_option($field_key);
+        $image = $image_id ? wp_get_attachment_image_src($image_id, 'full') : null;
+        $image_src = $image ? $image[0] : null;
+        ob_start();
+        ?>
+        <tr valign="top">
+            <th scope="row" class="titledesc">
+                <label for="<?php echo esc_attr($field_key); ?>"><?php echo wp_kses_post($data['title']); ?></label>
+            </th>
+            <td class="forminp">
+                <fieldset>
+                    <input type="hidden" name="woocommerce_woocommerce-gateway-tillit_<?php echo $field_key; ?>" id="<?php echo esc_attr($field_key); ?>" class="logo_id" value="<?php echo $image_id; ?>" />
+                    <div class="image-container woocommerce-tillit-image-container">
+                        <?php if($image_src): ?>
+                            <img src="<?php echo $image_src; ?>" alt="" />
+                        <?php endif; ?>
+                    </div>
+                    <button class="button-secondary woocommerce-tillit-logo" type="button"><?php _e('Select image', 'woocommerce-gateway-tillit'); ?></button>
+                </fieldset>
+            </td>
+        </tr>
+        <?php
+        return ob_get_clean();
+    }
+
+    /**
+     * Generate the section title
+     *
+     * @param $field_id
+     * @param $field_args
+     *
+     * @return string
+     */
+    public function generate_separator_html($field_id, $field_args)
+    {
+        ob_start();
+        ?>
+        <tr valign="top">
+            <th colspan="2">
+                <h3 style="margin-bottom: 0;"><?php echo $field_args['title']; ?></h3>
+            </th>
+        </tr>
+        <?php
+        return ob_get_clean();
+    }
+
+    /**
+     * Get tillit meta from DB and Tillit server
+     *
+     * @param $order
+     */
+    private function get_save_tillit_meta($order)
     {
 
-        $tillit_order_id = get_post_meta($order->get_id(), 'tillit_order_id', true);
-        $notice_id = $tillit_order_id . '_after_order_update';
+        $tillit_order_id = $order->get_meta('tillit_order_id');
+        if (!$tillit_order_id) {
+            return;
+        }
+        $tillit_original_order_id = $order->get_meta('_tillit_original_order_id');
+        if (!$tillit_original_order_id) {
+            $tillit_original_order_id = $tillit_order_id;
+            update_post_meta($order->get_id(), '_tillit_original_order_id', $tillit_original_order_id);
+        }
 
+        $order_reference = $order->get_meta('_tillit_order_reference');
+        $tillit_merchant_id = $order->get_meta('_tillit_merchant_id');
+        if (!$tillit_merchant_id) {
+            $tillit_merchant_id = $this->get_option('tillit_merchant_id');
+            update_post_meta($order->get_id(), '_tillit_merchant_id', $tillit_merchant_id);
+        }
+        $days_on_invoice = $order->get_meta('_days_on_invoice');
+        if (!$days_on_invoice) {
+            $days_on_invoice = $this->get_option('days_on_invoice');
+            update_post_meta($order->get_id(), '_days_on_invoice', $days_on_invoice);
+        }
 
-        // 1. Get information from the current order
-        $response = $this->make_request("/v1/order/${tillit_order_id}", [], 'GET');
-
-        $body = json_decode($response['body'], true);
-
-        $company_id = get_post_meta($order->get_id(), 'company_id', true);
+        $company_id = $order->get_meta('company_id');
         if ($company_id) {
-            $department = get_post_meta($order->get_id(), 'department', true);
-            $project = get_post_meta($order->get_id(), 'project', true);
+            $department = $order->get_meta('department');
+            $project = $order->get_meta('project');
         } else {
+            $response = $this->make_request("/v1/order/${tillit_order_id}", [], 'GET');
+
+            $body = json_decode($response['body'], true);
             if (!$body || !$body['buyer'] || !$body['buyer']['company'] || !$body['buyer']['company']['organization_number']) {
                 WC_Tillit_Helper::display_admin_reloaded_error(
                     $notice_id,
@@ -601,7 +800,35 @@ class WC_Tillit extends WC_Payment_Gateway
             update_post_meta($order->get_id(), 'department', $department);
             update_post_meta($order->get_id(), 'project', $project);
         }
-        $order_reference = get_post_meta($order->get_id(), '_tillit_order_reference', true);
+
+        return array(
+            'order_reference' => $order_reference,
+            'tillit_merchant_id' => $tillit_merchant_id,
+            'days_on_invoice' => $days_on_invoice,
+            'company_id' => $company_id,
+            'department' => $department,
+            'project' => $project,
+            'tillit_order_id' => $tillit_order_id,
+            'tillit_original_order_id' => $tillit_original_order_id,
+        );
+
+    }
+
+    /**
+     * Run the update execution
+     *
+     * @param $order
+     */
+    private function update_tillit_order($order)
+    {
+
+        $tillit_order_id = $order->get_meta('tillit_order_id');
+        $notice_id = $tillit_order_id . '_update_tillit_order';
+
+
+        // 1. Get information from the current order
+        $tillit_meta = $this->get_save_tillit_meta($order, $notice_id);
+        if (!$tillit_meta) return;
 
 
         // 2. Cancel the current order
@@ -619,13 +846,13 @@ class WC_Tillit extends WC_Payment_Gateway
         // 3. Create new order
         $response = $this->make_request('/v1/order', WC_Tillit_Helper::compose_tillit_order(
             $order,
-            $order_reference,
-            $company_id,
-            $department,
-            $project,
-            $this->get_option('tillit_merchant_id'),
-            $this->get_option('days_on_invoice'),
-            $tillit_order_id
+            $tillit_meta['order_reference'],
+            $tillit_meta['tillit_merchant_id'],
+            $tillit_meta['days_on_invoice'],
+            $tillit_meta['company_id'],
+            $tillit_meta['department'],
+            $tillit_meta['project'],
+            $tillit_meta['tillit_original_order_id']
         ));
 
         $tillit_err = WC_Tillit_Helper::get_tillit_error_msg($response);
