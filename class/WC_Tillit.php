@@ -46,8 +46,9 @@ class WC_Tillit extends WC_Payment_Gateway
         $checkout_env = $this->get_option('checkout_env');
         $this->tillit_search_host = 'https://search-api-demo-j6whfmualq-lz.a.run.app';
         $this->tillit_checkout_host = $checkout_env == 'prod' ? 'https://api.tillit.ai'
+                                    : ($checkout_env == 'demo' ? 'https://demo.api.tillit.ai'
                                     : ($checkout_env == 'dev' ? 'https://huynguyen.hopto.org:8083'
-                                    : 'https://staging.api.tillit.ai');
+                                    : 'https://staging.api.tillit.ai'));
 
         global $tillit_payment_gateway;
         if (isset($tillit_payment_gateway)) {
@@ -541,6 +542,19 @@ class WC_Tillit extends WC_Payment_Gateway
     }
 
     /**
+     * Get default environment id
+     *
+     * @return string
+     */
+    public function get_default_env()
+    {
+        // To avoid running WC_Tillit_Helper::get_default_env() for every request
+        if ($this->get_option('checkout_env')) return 'demo';
+
+        return WC_Tillit_Helper::get_default_env();
+    }
+
+    /**
      * Register Admin form fields
      *
      * @return void
@@ -610,9 +624,10 @@ class WC_Tillit extends WC_Payment_Gateway
             'checkout_env' => [
                 'type'      => 'select',
                 'title'     => __('Mode', 'woocommerce-gateway-tillit'),
-                'default'   => 'stg',
+                'default'   => $this->get_default_env(),
                 'options' => array(
                       'prod' => 'Production',
+                      'demo' => 'Demo',
                       'stg'  => 'Staging',
                       'dev'  => 'Development'
                  )
