@@ -496,6 +496,7 @@ class WC_Tillit extends WC_Payment_Gateway
         }
 
         if (!$order_refund || !$tillit_order_id || !$amount) {
+            $order->add_order_note(sprintf(__('Could not initiate refund by Tillit', 'woocommerce-gateway-tillit')));
             return false;
         }
 
@@ -512,7 +513,12 @@ class WC_Tillit extends WC_Payment_Gateway
         // Send refund request
         $response = $this->make_request(
             "/v1/order/${tillit_order_id}/refund",
-            WC_Tillit_Helper::compose_tillit_refund($order_refund, -$amount, $order->get_currency(), true),
+            WC_Tillit_Helper::compose_tillit_refund(
+                $order_refund,
+                -$amount,
+                $order->get_currency(),
+                $this->get_option('initiate_payment_to_buyer_on_refund') === 'yes'
+            ),
             'POST'
         );
 
@@ -714,6 +720,12 @@ class WC_Tillit extends WC_Payment_Gateway
             ],
             'enable_b2b_b2c_radio' => [
                 'title'     => __('Activate B2C/B2B check-out radio button', 'woocommerce-gateway-tillit'),
+                'label'     => ' ',
+                'type'      => 'checkbox',
+                'default'   => 'yes',
+            ],
+            'initiate_payment_to_buyer_on_refund' => [
+                'title'     => __('Initiate payment to buyer on refund', 'woocommerce-gateway-tillit'),
                 'label'     => ' ',
                 'type'      => 'checkbox',
                 'default'   => 'yes',
