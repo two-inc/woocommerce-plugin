@@ -365,6 +365,21 @@ class WC_Tillit_Helper
     }
 
     /**
+     * Get default environment id
+     *
+     * @return string
+     */
+    public static function get_default_env()
+    {
+        $hostname = str_replace(array('http://', 'https://'), '', get_home_url());
+
+        if (in_array($hostname, array('staging.demo.tillit.ai'))) return 'stg';
+        else if (in_array($hostname, array('demo.tillit.ai'))) return 'demo';
+        else if (in_array($hostname, array('dev.tillitlocal.ai', 'localhost')) || str_starts_with($hostname, 'localhost:')) return 'dev';
+        else return 'prod';
+    }
+
+    /**
      * Recursively utf8 encode object
      *
      * @return array
