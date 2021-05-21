@@ -333,6 +333,26 @@ class WC_Tillit_Helper
     }
 
     /**
+     * Compose request body for tillit create order
+     *
+     * @param $order
+     *
+     * @return bool
+     */
+    public static function compose_tillit_refund($order_refund, $amount, $currency, $initiate_payment_to_buyer)
+    {
+
+        $req_body = [
+            'amount' => strval(WC_Tillit_Helper::round_amt($amount)),
+            'currency' => $currency,
+            'initiate_payment_to_buyer' => $initiate_payment_to_buyer,
+            'line_items' => WC_Tillit_Helper::get_line_items($order_refund->get_items(), $order_refund->get_items('shipping'), $order_refund->get_items('fee'))
+        ];
+
+        return $req_body;
+    }
+
+    /**
      * Force reload after admin ajax request
      *
      * @return void

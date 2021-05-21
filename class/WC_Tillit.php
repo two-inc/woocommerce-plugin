@@ -28,7 +28,7 @@ class WC_Tillit extends WC_Payment_Gateway
         $this->method_title = __('Tillit', 'woocommerce-gateway-tillit');
         $this->method_description = __('Making it easy for businesses to buy online.', 'woocommerce-gateway-tillit');
         $this->icon = WC_HTTPS::force_https_url(WC_TILLIT_PLUGIN_URL . 'assets/images/logo.svg');
-        $this->supports = ['products'];
+        $this->supports = ['products', 'refunds'];
 
         // Load the settings
         $this->init_form_fields();
@@ -463,6 +463,80 @@ class WC_Tillit extends WC_Payment_Gateway
             'result'    => 'success',
             'redirect'  => $body['tillit_urls']['verify_order_url'],
         ];
+
+    }
+
+    /**
+     * Process the order refund
+     *
+     * @return void
+     */
+
+    public function process_refund($order_id, $amount = null, $reason = '') {
+
+        $order = wc_get_order( $order_id );
+
+        // Check payment method
+        if (!WC_Tillit_Helper::is_tillit_order($order)) {
+            return;
+        }
+
+        // Get the Tillit order ID
+        $tillit_order_id = $order->get_meta('tillit_order_id');
+
+        // Get and check refund data
+        $order_refunds = $order->get_refunds();
+        foreach($order_refunds as $refund){
+            if (!$refund_ids || in_array($refund->get_id(), $refund_ids)) {
+                // Latest refund
+                if (!$order_refund || $refund->get_date_created() > $order_refund->get_date_created()) {
+                    $order_refund = $refund;
+                }
+            }
+        }
+
+        if (!$order_refund || !$tillit_order_id || !$amount) {
+            return false;
+        }
+
+        $amount_check = $amount;
+        foreach($order_refund->get_items() as $item_id => $item){
+            // Item total and tax are negative
+            $amount_check += $item->get_subtotal();
+            $amount_check += $item->get_subtotal_tax();
+        }
+        if (strval(WC_Tillit_Helper::round_amt($amount_check)) != '0') {
+            return false;
+        }
+
+        // Send refund request
+        $response = $this->make_request(
+            "/v1/order/${tillit_order_id}/refund",
+            WC_Tillit_Helper::compose_tillit_refund($order_refund, -$amount, $order->get_currency(), true),
+            'POST'
+        );
+
+        // Stop if request error
+        if(is_wp_error($response)) {
+            return false;
+        }
+
+        $tillit_err = WC_Tillit_Helper::get_tillit_error_msg($response);
+        if ($tillit_err) {
+            $order->add_order_note(sprintf(__('Failed to request refund order to Tillit', 'woocommerce-gateway-tillit')));
+            return false;
+        }
+
+        // Decode the response
+        $body = json_decode($response['body'], true);
+
+        // Check if response is ok
+        if (!$body['amount']) {
+            $order->add_order_note(sprintf(__('Failed to refund order by Tillit', 'woocommerce-gateway-tillit')));
+            return false;
+        }
+
+        return true;
 
     }
 
