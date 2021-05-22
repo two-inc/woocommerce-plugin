@@ -380,6 +380,20 @@ class WC_Tillit_Helper
     }
 
     /**
+     * Get short locale, e.g. en_US to en
+     *
+     * @return string
+     */
+    public static function get_short_locale()
+    {
+        $locale = get_locale();
+        if ($locale && strlen($locale) > 1) {
+            return substr($locale, 0, 2);
+        }
+        return 'en';
+    }
+
+    /**
      * Recursively utf8 encode object
      *
      * @return array

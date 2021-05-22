@@ -486,6 +486,11 @@ class WC_Tillit extends WC_Payment_Gateway
         $tillit_order_id = $order->get_meta('tillit_order_id');
 
         // Get and check refund data
+        if ($order->get_status() !== 'completed') {
+            return new WP_Error('invalid_tillit_refund',
+                __('Only Completed order can be refunded by Tillit', 'woocommerce-gateway-tillit'));
+        }
+
         $order_refunds = $order->get_refunds();
         foreach($order_refunds as $refund){
             if (!$refund_ids || in_array($refund->get_id(), $refund_ids)) {
@@ -497,8 +502,8 @@ class WC_Tillit extends WC_Payment_Gateway
         }
 
         if (!$order_refund || !$tillit_order_id || !$amount) {
-            $order->add_order_note(sprintf(__('Could not initiate refund by Tillit', 'woocommerce-gateway-tillit')));
-            return false;
+            return new WP_Error('invalid_tillit_refund',
+                __('Could not initiate refund by Tillit', 'woocommerce-gateway-tillit'));
         }
 
         $amount_check = $amount;
@@ -508,7 +513,8 @@ class WC_Tillit extends WC_Payment_Gateway
             $amount_check += $item->get_subtotal_tax();
         }
         if (strval(WC_Tillit_Helper::round_amt($amount_check)) != '0') {
-            return false;
+            return new WP_Error('invalid_tillit_refund',
+                __('Could not initiate a valid refund by Tillit', 'woocommerce-gateway-tillit'));
         }
 
         // Send refund request
@@ -531,7 +537,8 @@ class WC_Tillit extends WC_Payment_Gateway
         $tillit_err = WC_Tillit_Helper::get_tillit_error_msg($response);
         if ($tillit_err) {
             $order->add_order_note(sprintf(__('Failed to request refund order to Tillit', 'woocommerce-gateway-tillit')));
-            return false;
+            return new WP_Error('invalid_tillit_refund',
+                __('Failed to request refund order to Tillit', 'woocommerce-gateway-tillit'));
         }
 
         // Decode the response
@@ -540,7 +547,8 @@ class WC_Tillit extends WC_Payment_Gateway
         // Check if response is ok
         if (!$body['amount']) {
             $order->add_order_note(sprintf(__('Failed to refund order by Tillit', 'woocommerce-gateway-tillit')));
-            return false;
+            return new WP_Error('invalid_tillit_refund',
+                __('Failed to refund order by Tillit', 'woocommerce-gateway-tillit'));
         }
 
         return true;
@@ -1002,6 +1010,7 @@ class WC_Tillit extends WC_Payment_Gateway
         return wp_remote_request(sprintf('%s%s', $this->tillit_checkout_host, $endpoint), [
             'method' => $method,
             'headers' => [
+                'Accept-Language' => WC_Tillit_Helper::get_short_locale(),
                 'Content-Type' => 'application/json; charset=utf-8',
                 'Tillit-Merchant-Id' => $this->get_option('tillit_merchant_id'),
                 'Authorization' => sprintf('Basic %s', base64_encode(
