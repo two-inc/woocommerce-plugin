@@ -29,6 +29,7 @@ class WC_Tillit_Checkout
         // Register the custom fields
         add_filter('woocommerce_checkout_fields', [$this, 'add_account_fields'], 1);
         add_filter('woocommerce_checkout_fields', [$this, 'add_company_fields'], 2);
+        add_filter('woocommerce_checkout_fields', [$this, 'update_phone_field'], 3);
 
         // Render the fields on checkout page
         add_action('woocommerce_checkout_billing', [$this, 'render_tillit_fields'], 1);
@@ -173,6 +174,23 @@ class WC_Tillit_Checkout
         ];
 
         // Return the fields
+        return $fields;
+
+    }
+
+    /**
+     * Remove the default company name from the checkout page
+     *
+     * @param $fields
+     *
+     * @return array
+     */
+    public function update_phone_field($fields)
+    {
+
+        $fields['billing']['billing_phone']['placeholder'] = '+4799999999';
+
+        // Return the fields list
         return $fields;
 
     }
