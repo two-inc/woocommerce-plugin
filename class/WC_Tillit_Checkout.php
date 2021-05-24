@@ -188,7 +188,7 @@ class WC_Tillit_Checkout
     public function update_phone_field($fields)
     {
 
-        $fields['billing']['billing_phone']['placeholder'] = '+4799999999';
+        $fields['billing']['billing_phone']['placeholder'] = '+47 99999999';
 
         // Return the fields list
         return $fields;

@@ -1010,7 +1010,7 @@ class WC_Tillit extends WC_Payment_Gateway
         return wp_remote_request(sprintf('%s%s', $this->tillit_checkout_host, $endpoint), [
             'method' => $method,
             'headers' => [
-                'Accept-Language' => WC_Tillit_Helper::get_short_locale(),
+                'Accept-Language' => WC_Tillit_Helper::get_locale(),
                 'Content-Type' => 'application/json; charset=utf-8',
                 'Tillit-Merchant-Id' => $this->get_option('tillit_merchant_id'),
                 'Authorization' => sprintf('Basic %s', base64_encode(

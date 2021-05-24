@@ -384,13 +384,13 @@ class WC_Tillit_Helper
      *
      * @return string
      */
-    public static function get_short_locale()
+    public static function get_locale()
     {
         $locale = get_locale();
-        if ($locale && strlen($locale) > 1) {
-            return substr($locale, 0, 2);
+        if ($locale && strlen($locale) > 0) {
+            return $locale;
         }
-        return 'en';
+        return 'en_US';
     }
 
     /**
