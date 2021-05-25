@@ -3,7 +3,7 @@
  * Plugin Name: WooCommerce Tillit Gateway
  * Plugin URI: https://tillit.ai
  * Description: Integration between WooCommerce and Tillit.
- * Version: 0.0.1
+ * Version: 1.0.1
  * Author: Tillit
  * Author URI: https://tillit.ai
  * Text Domain: woocommerce-gateway-tillit

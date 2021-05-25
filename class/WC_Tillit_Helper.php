@@ -42,6 +42,14 @@ class WC_Tillit_Helper
      */
     public static function get_tillit_error_msg($response)
     {
+        if (!$response) {
+            return __('Tillit empty response', 'woocommerce-gateway-tillit');
+        }
+
+        if($response['response']['code'] && $response['response'] && $response['response']['code'] && $response['response']['code'] >= 400) {
+            return sprintf(__('Tillit response code %d', 'woocommerce-gateway-tillit'), $response['response']['code']);
+        }
+
         if($response && $response['body']) {
             $body = json_decode($response['body'], true);
             if (is_string($body))
@@ -51,32 +59,6 @@ class WC_Tillit_Helper
             else if (isset($body['error_code']) && is_string($body['error_code']))
                 return __($body['error_code'], 'woocommerce-gateway-tillit');
         }
-    }
-
-    /**
-     * Display notice message in admin console
-     *
-     * @param $message
-     *
-     * @return void
-     */
-    public static function display_admin_reloaded_error($id, $message)
-    {
-        if (!is_string($message)) return;
-        WC_Admin_Notices::add_custom_notice('tillit_' . $id, $message);
-        if (!is_ajax()) WC_Admin_Notices::output_custom_notices();
-    }
-
-    /**
-     * Remove notice message in admin console
-     *
-     * @param $message
-     *
-     * @return void
-     */
-    public static function remove_admin_reloaded_error($id)
-    {
-        WC_Admin_Notices::remove_notice('tillit_' . $id);
     }
 
     /**

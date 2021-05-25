@@ -88,6 +88,7 @@ class WC_Tillit_Checkout
     public function add_account_fields($fields)
     {
 
+
         if($this->WC_Tillit->get_option('enable_b2b_b2c_radio') === 'yes') {
 
             $fields['account_type'] = [
