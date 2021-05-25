@@ -285,7 +285,7 @@ class WC_Tillit_Helper
                                                     $order_reference,
                                                     wp_create_nonce('tillit_confirm')),
                 'merchant_cancel_order_url' => wp_specialchars_decode($order->get_cancel_order_url()),
-                'merchant_edit_order_url' => '',
+                'merchant_edit_order_url' => wp_specialchars_decode($order->get_edit_order_url()),
                 'merchant_order_verification_failed_url' => '',
                 'merchant_invoice_url' => '',
                 'merchant_shipping_document_url' => ''
