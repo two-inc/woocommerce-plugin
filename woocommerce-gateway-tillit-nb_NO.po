@@ -3,7 +3,7 @@ msgstr ""
 "Project-Id-Version: WooCommerce Tillit Gateway\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2021-04-07 07:50+0000\n"
-"PO-Revision-Date: 2021-05-21 16:47+0000\n"
+"PO-Revision-Date: 2021-05-25 10:36+0000\n"
 "Last-Translator: \n"
 "Language-Team: Norwegian (Bokmål)\n"
 "Language: nb_NO\n"
@@ -39,7 +39,7 @@ msgstr "Administrert faktura (kommer snart)"
 msgid "API Key"
 msgstr "API-nøkkel"
 
-#: class/WC_Tillit_Checkout.php:101 class/WC_Tillit_Checkout.php:116
+#: class/WC_Tillit_Checkout.php:102 class/WC_Tillit_Checkout.php:117
 msgid "Business"
 msgstr "Bedrift"
 
@@ -64,11 +64,11 @@ msgstr "Velg produkt"
 msgid "Clear settings on deactivation"
 msgstr "Slett innstillingene ved deaktivering"
 
-#: class/WC_Tillit_Checkout.php:158
+#: class/WC_Tillit_Checkout.php:159
 msgid "Company ID"
 msgstr "Organisasjonsnummer"
 
-#: class/WC_Tillit_Checkout.php:142
+#: class/WC_Tillit_Checkout.php:143
 msgid "Company name"
 msgstr "Selskapsnavn"
 
@@ -117,11 +117,11 @@ msgid ""
 msgstr ""
 "Kunne ikke verifisere Tillit-orderen. Ta kontakt med Tillit admin for id %s"
 
-#: class/WC_Tillit_Checkout.php:164
+#: class/WC_Tillit_Checkout.php:165
 msgid "Department"
 msgstr "Avdeling"
 
-#: class/WC_Tillit.php:449 class/WC_Tillit_Checkout.php:217
+#: class/WC_Tillit.php:449 class/WC_Tillit_Checkout.php:235
 #| msgid "Invoice is not available for this order"
 msgid "EHF Invoice is not available for this order"
 msgstr "Faktura kan ikke benyttes for denne bestillingen"
@@ -138,7 +138,7 @@ msgstr "Skru på/Skru av"
 msgid "Enter company name to pay on invoice"
 msgstr "Skriv inn selskapsnavn for å betale på faktura"
 
-#: class/WC_Tillit_Checkout.php:150
+#: class/WC_Tillit_Checkout.php:151
 msgid "Enter the company name"
 msgstr "Skriv inn selskapsnavn"
 
@@ -179,7 +179,7 @@ msgstr "Logo"
 msgid "Making it easy for businesses to buy online."
 msgstr "Morgendagens betalingsløsning for bedrifter"
 
-#: class/WC_Tillit_Checkout.php:219
+#: class/WC_Tillit_Checkout.php:237
 #, php-format
 msgid "Maximum Payment using Tillit is %s NOK"
 msgstr "Betalingsgrensen med Tillit er %s NOK"
@@ -188,7 +188,7 @@ msgstr "Betalingsgrensen med Tillit er %s NOK"
 msgid "Merchant Invoice (coming soon)"
 msgstr "Egen faktura (kommer snart)"
 
-#: class/WC_Tillit_Checkout.php:218
+#: class/WC_Tillit_Checkout.php:236
 #, php-format
 msgid "Minimum Payment using Tillit is %s NOK"
 msgstr "Minimumsbeløp med Tillit er %s NOK"
@@ -210,7 +210,7 @@ msgstr "Antall fakturadager"
 msgid "Only Completed order can be refunded by Tillit"
 msgstr ""
 
-#: class/WC_Tillit_Checkout.php:100
+#: class/WC_Tillit_Checkout.php:101
 msgid "Personal"
 msgstr "Privat"
 
@@ -222,6 +222,10 @@ msgstr "Fullfør kjøpet"
 msgid "Please update the plugin"
 msgstr "Vennligs oppdater pluginen"
 
+#: class/WC_Tillit_Checkout.php:238
+msgid "Please use phone format +47 99999999"
+msgstr ""
+
 #: class/WC_Tillit.php:739
 msgid ""
 "Pre-approve the buyer during checkout and disable Tillit if the buyer is "
@@ -230,7 +234,7 @@ msgstr ""
 "Forhåndsgodkjenn bedriftskunder i kassen og skru av Tillit hvis kunden ikke "
 "godkjennes"
 
-#: class/WC_Tillit_Checkout.php:170
+#: class/WC_Tillit_Checkout.php:171
 msgid "Project"
 msgstr "Prosjektnummer"
 
@@ -243,7 +247,7 @@ msgstr "Motta faktura på EHF og email"
 msgid "Select image"
 msgstr "Velg bilde"
 
-#: class/WC_Tillit_Checkout.php:94
+#: class/WC_Tillit_Checkout.php:95
 msgid "Select the account type"
 msgstr "Velg kontotype"
 

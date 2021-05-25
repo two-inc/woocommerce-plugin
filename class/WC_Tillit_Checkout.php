@@ -235,6 +235,7 @@ class WC_Tillit_Checkout
                 'subtitle_order_intent_reject' => __('EHF Invoice is not available for this order', 'woocommerce-gateway-tillit'),
                 'amount_min' => sprintf(__('Minimum Payment using Tillit is %s NOK', 'woocommerce-gateway-tillit'), '200'),
                 'amount_max' => sprintf(__('Maximum Payment using Tillit is %s NOK', 'woocommerce-gateway-tillit'), '250,000'),
+                'invalid_phone' => __('Please use phone format +47 99999999', 'woocommerce-gateway-tillit'),
             ],
             'tillit_search_host' => $this->WC_Tillit->tillit_search_host,
             'tillit_checkout_host' => $this->WC_Tillit->tillit_checkout_host,

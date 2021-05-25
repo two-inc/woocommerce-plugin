@@ -658,11 +658,16 @@ class Tillit {
                     // Update tillit message
                     let tillitSubtitleExistCheck = setInterval(function() {
                         if (document.querySelector('.tillit-subtitle')) {
-                            document.querySelector('.tillit-subtitle').innerHTML = Tillit.getMessage(
-                                errMsg.startsWith('Minimum Payment using Tillit') ? 'amount_min'
-                                : errMsg.startsWith('Maximum Payment using Tillit') ? 'amount_max'
-                                : 'subtitle_order_intent_reject'
-                            )
+                            let messageId = 'subtitle_order_intent_reject'
+                            if (errMsg.startsWith('Minimum Payment using Tillit')) {
+                                messageId = 'amount_min'
+                            } else if (errMsg.startsWith('Maximum Payment using Tillit')) {
+                                messageId = 'amount_max'
+                            } else if (errMsg.includes('Invalid phone number')) {
+                                messageId = 'invalid_phone'
+                                Tillit.markFieldInvalid('billing_phone_field')
+                            }
+                            document.querySelector('.tillit-subtitle').innerHTML = Tillit.getMessage(messageId)
                             clearInterval(tillitSubtitleExistCheck)
                        }
                     }, 1000)
@@ -697,6 +702,18 @@ class Tillit {
             return [window.tillit.messages[key],]
         }
         return []
+
+    }
+
+    static markFieldInvalid(fieldWrapperId)
+    {
+
+        const fieldWrapper = document.querySelector('#' + fieldWrapperId)
+
+        if (fieldWrapper && fieldWrapper.classList) {
+            fieldWrapper.classList.remove('woocommerce-validated')
+            fieldWrapper.classList.add('woocommerce-invalid')
+        }
 
     }
 
