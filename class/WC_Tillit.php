@@ -410,7 +410,9 @@ class WC_Tillit extends WC_Payment_Gateway
             $this->get_option('days_on_invoice'),
             sanitize_text_field($_POST['company_id']),
             sanitize_text_field($_POST['department']),
-            sanitize_text_field($_POST['project'])
+            sanitize_text_field($_POST['project']),
+            '',
+            sanitize_text_field($_POST['tracking_id'])
         ));
 
         // Stop on process payment failure

@@ -569,10 +569,9 @@ class Tillit {
                 contentType: "application/json; charset=utf-8",
                 dataType: 'json',
                 method: 'POST',
-                headers: {
-                    "Tillit-Merchant-Id": window.tillit.merchant_id
-                },
+                xhrFields: {withCredentials: true},
                 data: JSON.stringify({
+                    "merchant_id": window.tillit.merchant_id,
                     "gross_amount": "" + gross_amount,
                     "buyer": {
                         "company": tillitCompany,
@@ -621,6 +620,11 @@ class Tillit {
                     document.querySelector('.tillit-buyer-name').innerText = document.querySelector('#select2-billing_company-container').innerText
                 else if (document.querySelector('#billing_company'))
                     document.querySelector('.tillit-buyer-name').innerText = document.querySelector('#billing_company').value
+
+                // Update tracking number
+                if (response.tracking_id) {
+                    document.querySelector('#tracking_id').value = response.tracking_id
+                }
 
                 // Update tillit message
                 let tillitSubtitleExistCheck = setInterval(function() {

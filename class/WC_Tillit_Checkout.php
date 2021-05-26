@@ -30,6 +30,7 @@ class WC_Tillit_Checkout
         add_filter('woocommerce_checkout_fields', [$this, 'add_account_fields'], 1);
         add_filter('woocommerce_checkout_fields', [$this, 'add_company_fields'], 2);
         add_filter('woocommerce_checkout_fields', [$this, 'update_phone_field'], 3);
+        add_filter('woocommerce_checkout_fields', [$this, 'add_tracking_field'], 4);
 
         // Render the fields on checkout page
         add_action('woocommerce_checkout_billing', [$this, 'render_tillit_fields'], 1);
@@ -180,7 +181,7 @@ class WC_Tillit_Checkout
     }
 
     /**
-     * Remove the default company name from the checkout page
+     * Update the default phone field placeholder
      *
      * @param $fields
      *
@@ -190,6 +191,28 @@ class WC_Tillit_Checkout
     {
 
         $fields['billing']['billing_phone']['placeholder'] = '+47 99999999';
+
+        // Return the fields list
+        return $fields;
+
+    }
+
+    /**
+     * Add the tracking id from order intent to order
+     *
+     * @param $fields
+     *
+     * @return array
+     */
+    public function add_tracking_field($fields)
+    {
+
+        $fields['billing']['tracking_id'] = [
+            'required' => false,
+            'type' => 'text',
+            'class' => array('hidden'),
+            'priority' => 16
+        ];
 
         // Return the fields list
         return $fields;
