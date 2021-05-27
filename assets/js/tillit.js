@@ -10,6 +10,7 @@ const tillitOrderIntentCheck = {
     "interval": null,
     "pendingCheck": false,
 }
+const tillitOrderIntentLog = {}
 
 const tillitCompany = {
     "company_name": null,
@@ -553,6 +554,45 @@ class Tillit {
             if (!tax_amount) {
                 tax_amount = 0
             }
+
+            let jsonBody = JSON.stringify({
+                "merchant_id": window.tillit.merchant_id,
+                "gross_amount": "" + gross_amount,
+                "buyer": {
+                    "company": tillitCompany,
+                    "representative": tillitRepresentative
+                },
+                "currency": window.tillit.currency,
+                "line_items": [{
+                    "name": "Cart",
+                    "description": "",
+                    "gross_amount": gross_amount.toFixed(2),
+                    "net_amount": (gross_amount - tax_amount).toFixed(2),
+                    "discount_amount": "0",
+                    "tax_amount": tax_amount.toFixed(2),
+                    "tax_class_name": "VAT " + (100.0 * tax_amount / gross_amount).toFixed(2) + "%",
+                    "tax_rate": "" + (1.0 * tax_amount / gross_amount).toFixed(6),
+                    "unit_price": (gross_amount - tax_amount).toFixed(2),
+                    "quantity": 1,
+                    "quantity_unit": "item",
+                    "image_url": "",
+                    "product_page_url": "",
+                    "type": "PHYSICAL",
+                    "details": {
+                        "categories": [],
+                        "barcodes": []
+                    },
+                }]
+            })
+
+            let hashedBody = Tillit.getUnsecuredHash(jsonBody)
+            if (tillitOrderIntentLog[hashedBody]) {
+                tillitOrderIntentLog[hashedBody] = tillitOrderIntentLog[hashedBody] + 1
+                return
+            } else {
+                tillitOrderIntentLog[hashedBody] = 1
+            }
+
             clearInterval(tillitOrderIntentCheck.interval)
             tillitOrderIntentCheck.interval = null
             tillitOrderIntentCheck.pendingCheck = false
@@ -570,35 +610,7 @@ class Tillit {
                 dataType: 'json',
                 method: 'POST',
                 xhrFields: {withCredentials: true},
-                data: JSON.stringify({
-                    "merchant_id": window.tillit.merchant_id,
-                    "gross_amount": "" + gross_amount,
-                    "buyer": {
-                        "company": tillitCompany,
-                        "representative": tillitRepresentative
-                    },
-                    "currency": window.tillit.currency,
-                    "line_items": [{
-                        "name": "Cart",
-                        "description": "",
-                        "gross_amount": gross_amount.toFixed(2),
-                        "net_amount": (gross_amount - tax_amount).toFixed(2),
-                        "discount_amount": "0",
-                        "tax_amount": tax_amount.toFixed(2),
-                        "tax_class_name": "VAT " + (100.0 * tax_amount / gross_amount).toFixed(2) + "%",
-                        "tax_rate": "" + (1.0 * tax_amount / gross_amount).toFixed(6),
-                        "unit_price": (gross_amount - tax_amount).toFixed(2),
-                        "quantity": 1,
-                        "quantity_unit": "item",
-                        "image_url": "",
-                        "product_page_url": "",
-                        "type": "PHYSICAL",
-                        "details": {
-                            "categories": [],
-                            "barcodes": []
-                        },
-                    }]
-                })
+                data: jsonBody
             })
 
             approvalResponse.done(function(response){
@@ -709,6 +721,18 @@ class Tillit {
 
     }
 
+    static getUnsecuredHash(inp, seed = 0) {
+        let h1 = 0xdeadbeef ^ seed, h2 = 0x41c6ce57 ^ seed
+        for (let i = 0, ch; i < inp.length; i++) {
+            ch = inp.charCodeAt(i)
+            h1 = Math.imul(h1 ^ ch, 2654435761)
+            h2 = Math.imul(h2 ^ ch, 1597334677)
+        }
+        h1 = Math.imul(h1 ^ (h1>>>16), 2246822507) ^ Math.imul(h2 ^ (h2>>>13), 3266489909)
+        h2 = Math.imul(h2 ^ (h2>>>16), 2246822507) ^ Math.imul(h1 ^ (h1>>>13), 3266489909)
+        return 4294967296 * (2097151 & h2) + (h1>>>0)
+    }
+
     static markFieldInvalid(fieldWrapperId)
     {
 
@@ -785,8 +809,6 @@ class Tillit {
             tillitCompany.company_name = $input.val()
         }
 
-        console.log(tillitCompany)
-
         Tillit.getApproval()
 
     }
@@ -807,8 +829,6 @@ class Tillit {
         if(inputName === 'phone') inputName += '_number'
 
         tillitRepresentative[inputName] = $input.val()
-
-        console.log(tillitRepresentative)
 
         Tillit.getApproval()
 
