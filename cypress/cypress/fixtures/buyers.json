@@ -1,0 +1,18 @@
+[
+    {
+        "firstName": "Adam",
+        "lastName": "Beattie",
+        "username": "adambeattie",
+        "password": "testtesttest",
+        "email": "adambeattie@gmail.com",
+        "phone": "00000000",
+        "country": "Norway",
+        "companyName": "NAVI",
+        "companyId": "993596183",
+        "department": "HR",
+        "project": "Tree",
+        "address1": "Postboks 150 Skøyen",
+        "postcode": "0212",
+        "city": "OSLO"
+    }
+]

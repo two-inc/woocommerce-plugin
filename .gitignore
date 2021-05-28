@@ -1,1 +1,7 @@
 .idea
+.env
+*.env.json
+package-lock.json
+screenshots/
+videos/
+node_modules/
