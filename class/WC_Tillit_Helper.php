@@ -211,7 +211,9 @@ class WC_Tillit_Helper
      * @return bool
      */
     public static function compose_tillit_order(
-        $order, $order_reference, $tillit_merchant_id, $days_on_invoice, $company_id, $department, $project, $tillit_original_order_id = '')
+        $order, $order_reference, $tillit_merchant_id, $days_on_invoice,
+        $company_id, $department, $project, $tillit_original_order_id = '',
+        $tracking_id = '')
     {
         // Get the orde taxes
         $order_taxes = $order->get_taxes();
@@ -309,6 +311,10 @@ class WC_Tillit_Helper
 
         if ($tillit_original_order_id) {
             $req_body['original_order_id'] = $tillit_original_order_id;
+        }
+
+        if ($tracking_id) {
+            $req_body['tracking_id'] = $tracking_id;
         }
 
         return $req_body;
