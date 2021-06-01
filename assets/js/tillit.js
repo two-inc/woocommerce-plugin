@@ -163,10 +163,12 @@ class Tillit {
 
             const instance = $billingCompany.data('select2')
 
-            instance.on('open', function(e){
-                this.results.clear()
-                this.dropdown._positionDropdown()
-            })
+            if (instance) {
+                instance.on('open', function(e){
+                    this.results.clear()
+                    this.dropdown._positionDropdown()
+                })
+            }
 
         }
 

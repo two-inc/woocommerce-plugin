@@ -16,7 +16,7 @@ context('Actions', () => {
 
     })
 
-    it('Admin marks the order as completed', () => {
+    it('Admin edits the order', () => {
 
         cy.task('getOrderId').then((orderId) => {
 
@@ -28,9 +28,9 @@ context('Actions', () => {
 
             cy.checkTillitOrderStatus('VERIFIED')
 
-            cy.updateOrderStatus('completed')
+            //@TODO: cy.editOrder()
 
-            cy.checkTillitOrderStatus('FULFILLED')
+            //@TODO: cy.checkUpdated()
 
             cy.wait(1000)
 
