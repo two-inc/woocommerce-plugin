@@ -923,61 +923,24 @@ class WC_Tillit extends WC_Payment_Gateway
         if (!$tillit_meta) return;
 
 
-        // 2. Cancel the current order
-        $response = $this->make_request("/v1/order/${tillit_order_id}/cancel");
+        // 2. Edit the order
+        $response = $this->make_request("/v1/order/${tillit_order_id}", WC_Tillit_Helper::compose_tillit_edit_order(
+                $order,
+                $tillit_meta['days_on_invoice'],
+                $tillit_meta['department'],
+                $tillit_meta['project']
+            ),
+            'PUT'
+        );
 
         if(is_wp_error($response)) {
-            $order->add_order_note(__('Could not cancel the Tillit order', 'woocommerce-gateway-tillit'));
+            $order->add_order_note(__('Could not edit the Tillit order', 'woocommerce-gateway-tillit'));
             return;
         }
 
         $tillit_err = WC_Tillit_Helper::get_tillit_error_msg($response);
         if ($tillit_err) {
-            $order->add_order_note(sprintf(__('Could not cancel the Tillit order, please check with Tillit admin for id %s', 'woocommerce-gateway-tillit'), $tillit_order_id));
-            return;
-        }
-
-
-        // 3. Create new order
-        $response = $this->make_request('/v1/order', WC_Tillit_Helper::compose_tillit_order(
-            $order,
-            $tillit_meta['order_reference'],
-            $tillit_meta['tillit_merchant_id'],
-            $tillit_meta['days_on_invoice'],
-            $tillit_meta['company_id'],
-            $tillit_meta['department'],
-            $tillit_meta['project'],
-            $tillit_meta['tillit_original_order_id']
-        ));
-
-        if(is_wp_error($response)) {
-            $order->add_order_note(__('Could not recreate new Tillit order', 'woocommerce-gateway-tillit'));
-            return;
-        }
-
-        $tillit_err = WC_Tillit_Helper::get_tillit_error_msg($response);
-        if ($tillit_err) {
-            $order->add_order_note(__('Could not recreate new Tillit order, please check with Tillit admin', 'woocommerce-gateway-tillit'));
-            return;
-        }
-
-        $body = json_decode($response['body'], true);
-
-        $new_tillit_order_id = $body['id'];
-        update_post_meta($order->get_id(), 'tillit_order_id', $new_tillit_order_id);
-
-
-        // 4. Set new order to verified
-        $response = $this->make_request("/v1/verify_order/${new_tillit_order_id}", [], 'GET');
-
-        if(is_wp_error($response)) {
-            $order->add_order_note(__('Could not verify the Tillit order', 'woocommerce-gateway-tillit'));
-            return;
-        }
-
-        $tillit_err = WC_Tillit_Helper::get_tillit_error_msg($response);
-        if ($tillit_err) {
-            $order->add_order_note(sprintf(__('Could not verify the Tillit order, please check with Tillit admin for id %s', 'woocommerce-gateway-tillit'), $new_tillit_order_id));
+            $order->add_order_note(__('Could not edit the Tillit order, please check with Tillit admin', 'woocommerce-gateway-tillit'));
             return;
         }
 
