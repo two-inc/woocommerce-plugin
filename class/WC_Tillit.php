@@ -532,7 +532,10 @@ class WC_Tillit extends WC_Payment_Gateway
                 __('Failed to refund order by Tillit', 'woocommerce-gateway-tillit'));
         }
 
-        return true;
+        return [
+            'result'    => 'success',
+            'refresh'  => true,
+        ];
 
     }
 
