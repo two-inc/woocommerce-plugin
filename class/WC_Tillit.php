@@ -489,8 +489,8 @@ class WC_Tillit extends WC_Payment_Gateway
         $amount_check = $amount;
         foreach($order_refund->get_items() as $item_id => $item){
             // Item total and tax are negative
-            $amount_check += $item->get_subtotal();
-            $amount_check += $item->get_subtotal_tax();
+            $amount_check += WC_Tillit_Helper::round_amt($item->get_subtotal());
+            $amount_check += WC_Tillit_Helper::round_amt($item->get_subtotal_tax());
         }
         if (strval(WC_Tillit_Helper::round_amt($amount_check)) != '0') {
             return new WP_Error('invalid_tillit_refund',
