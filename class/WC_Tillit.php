@@ -440,10 +440,17 @@ class WC_Tillit extends WC_Payment_Gateway
         update_post_meta($order_id, '_tillit_original_order_id', $body['id']);
 
         // Return the result
-        return [
-            'result'    => 'success',
-            'redirect'  => $body['tillit_urls']['verify_order_url'],
-        ];
+        if ($this->get_option('tillit_merchant_id') === 'morgenlevering') {
+            return [
+                'result'    => 'success',
+                'redirect' => $body['merchant_urls']['merchant_confirmation_url']
+            ];
+        } else {
+            return [
+                'result'    => 'success',
+                'redirect'  => $body['tillit_urls']['verify_order_url']
+            ];
+        }
 
     }
 
@@ -534,7 +541,7 @@ class WC_Tillit extends WC_Payment_Gateway
 
         return [
             'result'    => 'success',
-            'refresh'  => true,
+            'refresh'  => true
         ];
 
     }
