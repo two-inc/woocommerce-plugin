@@ -321,6 +321,85 @@ class WC_Tillit_Helper
     }
 
     /**
+     * Compose request body for tillit edit order
+     *
+     * @param $order
+     *
+     * @return bool
+     */
+    public static function compose_tillit_edit_order($order, $days_on_invoice, $department, $project)
+    {
+        // Get the orde taxes
+        $order_taxes = $order->get_taxes();
+
+        // Get the taxes Ids
+        $taxes = array_keys($order_taxes);
+
+        if (count($taxes) == 0) {
+            $tax_amount = 0;
+            $tax_rate = 0;
+        } else {
+            /** @var WC_Order_Item_Tax $vat */
+            $vat = $order_taxes[$taxes[0]];
+            $tax_amount = $vat->get_tax_total() + $vat->get_shipping_tax_total();
+            $tax_rate = $vat->get_rate_percent() / 100.0;
+        }
+
+        $req_body = [
+            'billing_address' => [
+                'city' => $order->get_billing_city(),
+                'country' => $order->get_billing_country(),
+                'organization_name' => $order->get_billing_company(),
+                'postal_code' => $order->get_billing_postcode(),
+                'region' => $order->get_billing_state(),
+                'street_address' => $order->get_billing_address_1() . (null !== $order->get_billing_address_2() ? $order->get_billing_address_2() : '')
+            ],
+            'buyer_department' => $department,
+            'buyer_project' => $project,
+            'order_note' => $order->get_customer_note(),
+            'line_items' => WC_Tillit_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee')),
+            'recurring' => false,
+            'merchant_additional_info' => '',
+            'merchant_reference' => '',
+            'payment' => [
+                'currency' => $order->get_currency(),
+                'gross_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total())),
+                'net_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total() - $order->get_total_tax())),
+                'tax_amount' => strval(WC_Tillit_Helper::round_amt($tax_amount)),
+                'tax_rate' => strval($tax_rate),
+                'discount_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total_discount())),
+                'discount_rate' => '0',
+                'type' => 'FUNDED_INVOICE',
+                'payment_details' => [
+                    'due_in_days' => intval($days_on_invoice),
+                    'bank_account' => '',
+                    'bank_account_type' => 'IBAN',
+                    'payee_company_name' => '',
+                    'payee_organization_number' => '',
+                    'payment_reference_message' => '',
+                    'payment_reference_ocr' => '',
+                ]
+            ],
+            'shipping_address' => [
+                'organization_name' => $order->get_billing_company(),
+                'street_address' => $order->get_shipping_address_1(),
+                'postal_code' => $order->get_shipping_postcode(),
+                'city' => $order->get_shipping_city(),
+                'region' => $order->get_shipping_state(),
+                'country' => $order->get_shipping_country()
+            ],
+            'shipping_details' => [
+                // 'carrier_name' => '',
+                // 'tracking_number' => '',
+                // 'carrier_tracking_url' => '',
+                'expected_delivery_date' => date('Y-m-d', strtotime('+ 7 days'))
+            ]
+        ];
+
+        return $req_body;
+    }
+
+    /**
      * Compose request body for tillit create order
      *
      * @param $order
