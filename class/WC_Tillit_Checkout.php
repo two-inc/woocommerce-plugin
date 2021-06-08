@@ -261,6 +261,7 @@ class WC_Tillit_Checkout
                 'amount_max' => sprintf(__('Maximum Payment using Tillit is %s NOK', 'woocommerce-gateway-tillit'), '250,000'),
                 'invalid_phone' => __('Please use phone format +47 99999999', 'woocommerce-gateway-tillit'),
             ],
+            'tillit_plugin_url' => WC_TILLIT_PLUGIN_URL,
             'tillit_search_host' => $this->WC_Tillit->tillit_search_host,
             'tillit_checkout_host' => $this->WC_Tillit->tillit_checkout_host,
             'company_name_search' => $this->WC_Tillit->get_option('enable_company_name'),

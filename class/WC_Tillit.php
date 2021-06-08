@@ -94,8 +94,8 @@ class WC_Tillit extends WC_Payment_Gateway
 
         if(!isset($_POST['woocommerce_woocommerce-gateway-tillit_merchant_logo']) && !isset($_POST['woocommerce_woocommerce-gateway-tillit_tillit_merchant_id'])) return;
 
-        $image_id = $_POST['woocommerce_woocommerce-gateway-tillit_merchant_logo'];
-        $merchant_id = $_POST['woocommerce_woocommerce-gateway-tillit_tillit_merchant_id'];
+        $image_id = sanitize_text_field($_POST['woocommerce_woocommerce-gateway-tillit_merchant_logo']);
+        $merchant_id = sanitize_text_field($_POST['woocommerce_woocommerce-gateway-tillit_tillit_merchant_id']);
 
         $image = $image_id ? wp_get_attachment_image_src($image_id, 'full') : null;
         $image_src = $image ? $image[0] : null;
@@ -140,7 +140,7 @@ class WC_Tillit extends WC_Payment_Gateway
         if (!isset($_POST) || !isset($_POST['action'])) {
             return;
         }
-        $action = $_POST['action'];
+        $action = sanitize_text_field($_POST['action']);
 
         if ($action == 'woocommerce_add_order_item') {
             $order->calculate_totals(true);
@@ -172,7 +172,7 @@ class WC_Tillit extends WC_Payment_Gateway
     public function before_order_update($post_id, $post)
     {
 
-        if (!isset($_POST) || !isset($_POST['action']) || 'editpost' !== $_POST['action']) return;
+        if (!isset($_POST) || !isset($_POST['action']) || 'editpost' !== sanitize_text_field($_POST['action'])) return;
 
         $order = wc_get_order($post_id);
         if (!$order || !WC_Tillit_Helper::is_tillit_order($order)) {
@@ -209,7 +209,7 @@ class WC_Tillit extends WC_Payment_Gateway
     public function after_order_update($post_id, $post, $update, $post_before)
     {
 
-        if (!isset($_POST) || !isset($_POST['action']) || 'editpost' !== $_POST['action']) return;
+        if (!isset($_POST) || !isset($_POST['action']) || 'editpost' !== sanitize_text_field($_POST['action'])) return;
 
         $order = wc_get_order($post_id);
         if ('shop_order' !== $post->post_type || !WC_Tillit_Helper::is_tillit_order($order)) {

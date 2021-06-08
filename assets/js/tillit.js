@@ -707,7 +707,7 @@ class Tillit {
     {
 
         let img = document.createElement("IMG")
-        img.src = '/wp-content/plugins/woocommerce/assets/images/icons/loader.svg'
+        img.src = window.tillit.tillit_plugin_url + '/assets/images/loader.svg'
         img.className = 'loader'
         return img
 
