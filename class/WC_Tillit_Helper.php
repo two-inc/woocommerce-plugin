@@ -90,6 +90,27 @@ class WC_Tillit_Helper
     }
 
     /**
+     * Check if address json to send to Tillit is empty
+     *
+     * @param $tillit_address
+     *
+     * @return bool
+     */
+    public static function is_tillit_address_empty($tillit_address)
+    {
+
+        $is_empty = true;
+
+        if ($tillit_address) {
+            $is_empty = !$tillit_address['city'] && !$tillit_address['region'] && !$tillit_address['country']
+                        && !$tillit_address['postal_code'] && !$tillit_address['street_address'];
+        }
+
+        return $is_empty;
+
+    }
+
+    /**
      * Format the cart items
      *
      * @return array
@@ -231,15 +252,27 @@ class WC_Tillit_Helper
             $tax_rate = $vat->get_rate_percent() / 100.0;
         }
 
+        $billing_address = [
+            'organization_name' => $order->get_billing_company(),
+            'street_address' => $order->get_billing_address_1() . (null !== $order->get_billing_address_2() ? $order->get_billing_address_2() : ''),
+            'postal_code' => $order->get_billing_postcode(),
+            'city' => $order->get_billing_city(),
+            'region' => $order->get_billing_state(),
+            'country' => $order->get_billing_country()
+        ];
+        $shipping_address = [
+            'organization_name' => $order->get_billing_company(),
+            'street_address' => $order->get_shipping_address_1() . (null !== $order->get_shipping_address_2() ? $order->get_shipping_address_2() : ''),
+            'postal_code' => $order->get_shipping_postcode(),
+            'city' => $order->get_shipping_city(),
+            'region' => $order->get_shipping_state(),
+            'country' => $order->get_shipping_country()
+        ];
+        if (WC_Tillit_Helper::is_tillit_address_empty($shipping_address)) {
+            $shipping_address = $billing_address;
+        }
+
         $req_body = [
-            'billing_address' => [
-                'city' => $order->get_billing_city(),
-                'country' => $order->get_billing_country(),
-                'organization_name' => $order->get_billing_company(),
-                'postal_code' => $order->get_billing_postcode(),
-                'region' => $order->get_billing_state(),
-                'street_address' => $order->get_billing_address_1() . (null !== $order->get_billing_address_2() ? $order->get_billing_address_2() : '')
-            ],
             'buyer' => [
                 'company' => [
                     'organization_number' => $company_id,
@@ -293,14 +326,8 @@ class WC_Tillit_Helper
                     'payment_reference_ocr' => '',
                 ]
             ],
-            'shipping_address' => [
-                'organization_name' => $order->get_billing_company(),
-                'street_address' => $order->get_shipping_address_1(),
-                'postal_code' => $order->get_shipping_postcode(),
-                'city' => $order->get_shipping_city(),
-                'region' => $order->get_shipping_state(),
-                'country' => $order->get_shipping_country()
-            ],
+            'billing_address' => $billing_address,
+            'shipping_address' => $shipping_address,
             'shipping_details' => [
                 // 'carrier_name' => '',
                 // 'tracking_number' => '',
@@ -345,15 +372,27 @@ class WC_Tillit_Helper
             $tax_rate = $vat->get_rate_percent() / 100.0;
         }
 
+        $billing_address = [
+            'organization_name' => $order->get_billing_company(),
+            'street_address' => $order->get_billing_address_1() . (null !== $order->get_billing_address_2() ? $order->get_billing_address_2() : ''),
+            'postal_code' => $order->get_billing_postcode(),
+            'city' => $order->get_billing_city(),
+            'region' => $order->get_billing_state(),
+            'country' => $order->get_billing_country()
+        ];
+        $shipping_address = [
+            'organization_name' => $order->get_billing_company(),
+            'street_address' => $order->get_shipping_address_1() . (null !== $order->get_shipping_address_2() ? $order->get_shipping_address_2() : ''),
+            'postal_code' => $order->get_shipping_postcode(),
+            'city' => $order->get_shipping_city(),
+            'region' => $order->get_shipping_state(),
+            'country' => $order->get_shipping_country()
+        ];
+        if (WC_Tillit_Helper::is_tillit_address_empty($shipping_address)) {
+            $shipping_address = $billing_address;
+        }
+
         $req_body = [
-            'billing_address' => [
-                'city' => $order->get_billing_city(),
-                'country' => $order->get_billing_country(),
-                'organization_name' => $order->get_billing_company(),
-                'postal_code' => $order->get_billing_postcode(),
-                'region' => $order->get_billing_state(),
-                'street_address' => $order->get_billing_address_1() . (null !== $order->get_billing_address_2() ? $order->get_billing_address_2() : '')
-            ],
             'buyer_department' => $department,
             'buyer_project' => $project,
             'order_note' => $order->get_customer_note(),
@@ -380,14 +419,8 @@ class WC_Tillit_Helper
                     'payment_reference_ocr' => '',
                 ]
             ],
-            'shipping_address' => [
-                'organization_name' => $order->get_billing_company(),
-                'street_address' => $order->get_shipping_address_1(),
-                'postal_code' => $order->get_shipping_postcode(),
-                'city' => $order->get_shipping_city(),
-                'region' => $order->get_shipping_state(),
-                'country' => $order->get_shipping_country()
-            ],
+            'billing_address' => $billing_address,
+            'shipping_address' => $shipping_address,
             'shipping_details' => [
                 // 'carrier_name' => '',
                 // 'tracking_number' => '',
