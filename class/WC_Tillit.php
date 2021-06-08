@@ -493,17 +493,6 @@ class WC_Tillit extends WC_Payment_Gateway
                 __('Could not initiate refund by Tillit', 'woocommerce-gateway-tillit'));
         }
 
-        $amount_check = $amount;
-        foreach($order_refund->get_items() as $item_id => $item){
-            // Item total and tax are negative
-            $amount_check += WC_Tillit_Helper::round_amt($item->get_subtotal());
-            $amount_check += WC_Tillit_Helper::round_amt($item->get_subtotal_tax());
-        }
-        if (strval(WC_Tillit_Helper::round_amt($amount_check)) != '0') {
-            return new WP_Error('invalid_tillit_refund',
-                __('Could not initiate a valid refund by Tillit', 'woocommerce-gateway-tillit'));
-        }
-
         // Send refund request
         $response = $this->make_request(
             "/v1/order/${tillit_order_id}/refund",
