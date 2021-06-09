@@ -7,7 +7,6 @@
  *
  * @class WC_Tillit
  * @extends WC_Payment_Gateway
- * @version 0.0.1
  * @package WooCommerce/Classes/Payment
  * @author Tillit
  */
@@ -977,7 +976,7 @@ class WC_Tillit extends WC_Payment_Gateway
     public function on_deactivate_plugin()
     {
         if($this->get_option('clear_options_on_deactivation') === 'yes') {
-            delete_option('woocommerce_tillit-payment-gateway_settings');
+            delete_option('woocommerce_woocommerce-gateway-tillit_settings');
         }
     }
 

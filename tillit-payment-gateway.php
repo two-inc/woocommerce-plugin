@@ -3,7 +3,7 @@
  * Plugin Name: Tillit Payment Gateway
  * Plugin URI: https://tillit.ai
  * Description: Integration between WooCommerce and Tillit.
- * Version: 1.1.0
+ * Version: 1.2.0
  * Author: Tillit
  * Author URI: https://tillit.ai
  * Text Domain: tillit-payment-gateway
@@ -75,7 +75,7 @@ function wc_tillit_enqueue_scripts()
 
 function tillit_settings_link($links)
 {
-    $settings_link = '<a href="admin.php?page=wc-settings&tab=checkout&section=tillit-payment-gateway">Settings</a>';
+    $settings_link = '<a href="admin.php?page=wc-settings&tab=checkout&section=woocommerce-gateway-tillit">Settings</a>';
     array_unshift($links, $settings_link);
     return $links;
 }
