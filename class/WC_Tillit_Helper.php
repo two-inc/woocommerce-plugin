@@ -43,21 +43,21 @@ class WC_Tillit_Helper
     public static function get_tillit_error_msg($response)
     {
         if (!$response) {
-            return __('Tillit empty response', 'woocommerce-gateway-tillit');
+            return __('Tillit empty response', 'tillit-payment-gateway');
         }
 
         if($response['response']['code'] && $response['response'] && $response['response']['code'] && $response['response']['code'] >= 400) {
-            return sprintf(__('Tillit response code %d', 'woocommerce-gateway-tillit'), $response['response']['code']);
+            return sprintf(__('Tillit response code %d', 'tillit-payment-gateway'), $response['response']['code']);
         }
 
         if($response && $response['body']) {
             $body = json_decode($response['body'], true);
             if (is_string($body))
-                return __($body, 'woocommerce-gateway-tillit');
+                return __($body, 'tillit-payment-gateway');
             else if (isset($body['error_details']) && is_string($body['error_details']))
-                return __($body['error_details'], 'woocommerce-gateway-tillit');
+                return __($body['error_details'], 'tillit-payment-gateway');
             else if (isset($body['error_code']) && is_string($body['error_code']))
-                return __($body['error_code'], 'woocommerce-gateway-tillit');
+                return __($body['error_code'], 'tillit-payment-gateway');
         }
     }
 

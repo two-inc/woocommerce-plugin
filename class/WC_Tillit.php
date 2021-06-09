@@ -7,7 +7,6 @@
  *
  * @class WC_Tillit
  * @extends WC_Payment_Gateway
- * @version 0.0.1
  * @package WooCommerce/Classes/Payment
  * @author Tillit
  */
@@ -23,10 +22,10 @@ class WC_Tillit extends WC_Payment_Gateway
 
         $this->id = 'woocommerce-gateway-tillit';
         $this->has_fields = false;
-        // $this->order_button_text = __('Proceed to Tillit', 'woocommerce-gateway-tillit');
-        $this->order_button_text = __('Place order', 'woocommerce-gateway-tillit');
-        $this->method_title = __('Tillit', 'woocommerce-gateway-tillit');
-        $this->method_description = __('Making it easy for businesses to buy online.', 'woocommerce-gateway-tillit');
+        // $this->order_button_text = __('Proceed to Tillit', 'tillit-payment-gateway');
+        $this->order_button_text = __('Place order', 'tillit-payment-gateway');
+        $this->method_title = __('Tillit', 'tillit-payment-gateway');
+        $this->method_description = __('Making it easy for businesses to buy online.', 'tillit-payment-gateway');
         $this->icon = WC_HTTPS::force_https_url(WC_TILLIT_PLUGIN_URL . 'assets/images/logo.svg');
         $this->supports = ['products', 'refunds'];
 
@@ -35,10 +34,10 @@ class WC_Tillit extends WC_Payment_Gateway
         $this->init_settings();
 
         // Define user set variables
-        $this->title = sprintf(__($this->get_option('title'), 'woocommerce-gateway-tillit'), strval($this->get_option('days_on_invoice')));
+        $this->title = sprintf(__($this->get_option('title'), 'tillit-payment-gateway'), strval($this->get_option('days_on_invoice')));
         $this->description = sprintf(
             '<p>%s <span class="tillit-buyer-name"></span>.</p>',
-            __('By completing the purchase, you verify that you have the legal right to purchase on behalf of', 'woocommerce-gateway-tillit')
+            __('By completing the purchase, you verify that you have the legal right to purchase on behalf of', 'tillit-payment-gateway')
         );
         $this->api_key = $this->get_option('api_key');
 
@@ -76,8 +75,8 @@ class WC_Tillit extends WC_Payment_Gateway
             if( $payment_id === 'woocommerce-gateway-tillit' ) {
                 $title = sprintf(
                     '%s<div class="tillit-subtitle">%s</div> ',
-                    sprintf(__($this->get_option('title'), 'woocommerce-gateway-tillit'), strval($this->get_option('days_on_invoice'))),
-                    __('Enter company name to pay on invoice', 'woocommerce-gateway-tillit')
+                    sprintf(__($this->get_option('title'), 'tillit-payment-gateway'), strval($this->get_option('days_on_invoice'))),
+                    __('Enter company name to pay on invoice', 'tillit-payment-gateway')
                 );
             }
             return $title;
@@ -319,13 +318,13 @@ class WC_Tillit extends WC_Payment_Gateway
         $response = $this->make_request("/v1/order/${tillit_order_id}/fulfilled");
 
         if(is_wp_error($response)) {
-            $order->add_order_note(__('Could not update status', 'woocommerce-gateway-tillit'));
+            $order->add_order_note(__('Could not update status', 'tillit-payment-gateway'));
             return;
         }
 
         $tillit_err = WC_Tillit_Helper::get_tillit_error_msg($response);
         if ($tillit_err) {
-            $order->add_order_note(sprintf(__('Could not update status to fulfilled on Tillit, please check with Tillit admin for id %s', 'woocommerce-gateway-tillit'), $tillit_order_id));
+            $order->add_order_note(sprintf(__('Could not update status to fulfilled on Tillit, please check with Tillit admin for id %s', 'tillit-payment-gateway'), $tillit_order_id));
             return;
         }
 
@@ -361,13 +360,13 @@ class WC_Tillit extends WC_Payment_Gateway
         $response = $this->make_request("/v1/order/${tillit_order_id}/cancel");
 
         if(is_wp_error($response)) {
-            $order->add_order_note(__('Could not update status', 'woocommerce-gateway-tillit'));
+            $order->add_order_note(__('Could not update status', 'tillit-payment-gateway'));
             return;
         }
 
         $tillit_err = WC_Tillit_Helper::get_tillit_error_msg($response);
         if ($tillit_err) {
-            $order->add_order_note(sprintf(__('Could not update status to cancelled, please check with Tillit admin for id %s', 'woocommerce-gateway-tillit'), $tillit_order_id));
+            $order->add_order_note(sprintf(__('Could not update status to cancelled, please check with Tillit admin for id %s', 'tillit-payment-gateway'), $tillit_order_id));
             return;
         }
 
@@ -417,18 +416,18 @@ class WC_Tillit extends WC_Payment_Gateway
 
         // Stop on process payment failure
         if(isset($response) && isset($response['result']) && $response['result'] === 'failure') {
-            $order->add_order_note(__('Fail to process payment', 'woocommerce-gateway-tillit'));
+            $order->add_order_note(__('Fail to process payment', 'tillit-payment-gateway'));
             return $response;
         }
 
         if(is_wp_error($response)) {
-            $order->add_order_note(__('Could not request to create tillit order', 'woocommerce-gateway-tillit'));
+            $order->add_order_note(__('Could not request to create tillit order', 'tillit-payment-gateway'));
             return;
         }
 
         $tillit_err = WC_Tillit_Helper::get_tillit_error_msg($response);
         if ($tillit_err) {
-            WC_Tillit_Helper::display_ajax_error(__('EHF Invoice is not available for this order', 'woocommerce-gateway-tillit'));
+            WC_Tillit_Helper::display_ajax_error(__('EHF Invoice is not available for this order', 'tillit-payment-gateway'));
             return;
         }
 
@@ -475,7 +474,7 @@ class WC_Tillit extends WC_Payment_Gateway
         // Get and check refund data
         if ($order->get_status() !== 'completed') {
             return new WP_Error('invalid_tillit_refund',
-                __('Only Completed order can be refunded by Tillit', 'woocommerce-gateway-tillit'));
+                __('Only Completed order can be refunded by Tillit', 'tillit-payment-gateway'));
         }
 
         $order_refunds = $order->get_refunds();
@@ -490,7 +489,7 @@ class WC_Tillit extends WC_Payment_Gateway
 
         if (!$order_refund || !$tillit_order_id || !$amount) {
             return new WP_Error('invalid_tillit_refund',
-                __('Could not initiate refund by Tillit', 'woocommerce-gateway-tillit'));
+                __('Could not initiate refund by Tillit', 'tillit-payment-gateway'));
         }
 
         // Send refund request
@@ -507,15 +506,15 @@ class WC_Tillit extends WC_Payment_Gateway
 
         // Stop if request error
         if(is_wp_error($response)) {
-            $order->add_order_note(__('Failed to request refund order to Tillit', 'woocommerce-gateway-tillit'));
+            $order->add_order_note(__('Failed to request refund order to Tillit', 'tillit-payment-gateway'));
             return false;
         }
 
         $tillit_err = WC_Tillit_Helper::get_tillit_error_msg($response);
         if ($tillit_err) {
-            $order->add_order_note(sprintf(__('Failed to request refund order to Tillit, please check with Tillit admin for id %s', 'woocommerce-gateway-tillit'), $tillit_order_id));
+            $order->add_order_note(sprintf(__('Failed to request refund order to Tillit, please check with Tillit admin for id %s', 'tillit-payment-gateway'), $tillit_order_id));
             return new WP_Error('invalid_tillit_refund',
-                __('Request refund order to Tillit has errors', 'woocommerce-gateway-tillit'));
+                __('Request refund order to Tillit has errors', 'tillit-payment-gateway'));
         }
 
         // Decode the response
@@ -523,9 +522,9 @@ class WC_Tillit extends WC_Payment_Gateway
 
         // Check if response is ok
         if (!$body['amount']) {
-            $order->add_order_note(sprintf(__('Failed to refund order by Tillit, please check with Tillit admin for id %s', 'woocommerce-gateway-tillit'), $tillit_order_id));
+            $order->add_order_note(sprintf(__('Failed to refund order by Tillit, please check with Tillit admin for id %s', 'tillit-payment-gateway'), $tillit_order_id));
             return new WP_Error('invalid_tillit_refund',
-                __('Failed to refund order by Tillit', 'woocommerce-gateway-tillit'));
+                __('Failed to refund order by Tillit', 'tillit-payment-gateway'));
         }
 
         return [
@@ -553,7 +552,7 @@ class WC_Tillit extends WC_Payment_Gateway
         $nonce = $_REQUEST['nonce'];
 
         // Stop if the code is not valid
-        if(!wp_verify_nonce($nonce, 'tillit_confirm')) wp_die(__('The security code is not valid.', 'woocommerce-gateway-tillit'));
+        if(!wp_verify_nonce($nonce, 'tillit_confirm')) wp_die(__('The security code is not valid.', 'tillit-payment-gateway'));
 
         /** @var wpdb $wpdb */
         global $wpdb;
@@ -562,7 +561,7 @@ class WC_Tillit extends WC_Payment_Gateway
         $row = $wpdb->get_row($sql , ARRAY_A);
 
         // Stop if no order found
-        if(!isset($row['post_id'])) wp_die(__('Unable to find the requested order', 'woocommerce-gateway-tillit'));
+        if(!isset($row['post_id'])) wp_die(__('Unable to find the requested order', 'tillit-payment-gateway'));
 
         // Get the order ID
         $order_id = $row['post_id'];
@@ -583,14 +582,14 @@ class WC_Tillit extends WC_Payment_Gateway
 
         // Stop if request error
         if(is_wp_error($response)) {
-            $order->add_order_note(__('Unable to retrieve the order information', 'woocommerce-gateway-tillit'));
-            wp_die(__('Unable to retrieve the order information', 'woocommerce-gateway-tillit'));
+            $order->add_order_note(__('Unable to retrieve the order information', 'tillit-payment-gateway'));
+            wp_die(__('Unable to retrieve the order information', 'tillit-payment-gateway'));
         }
 
         $tillit_err = WC_Tillit_Helper::get_tillit_error_msg($response);
         if ($tillit_err) {
-            $order->add_order_note(__('Unable to retrieve the order payment information', 'woocommerce-gateway-tillit'));
-            wp_die(__('Unable to retrieve the order payment information', 'woocommerce-gateway-tillit'));
+            $order->add_order_note(__('Unable to retrieve the order payment information', 'tillit-payment-gateway'));
+            wp_die(__('Unable to retrieve the order payment information', 'tillit-payment-gateway'));
         }
 
         // Decode the response
@@ -633,67 +632,67 @@ class WC_Tillit extends WC_Payment_Gateway
     {
         $this->form_fields = apply_filters('wc_tillit_form_fields', [
             'enabled' => [
-                'title'     => __('Enable/Disable', 'woocommerce-gateway-tillit'),
+                'title'     => __('Enable/Disable', 'tillit-payment-gateway'),
                 'type'      => 'checkbox',
-                'label'     => __('Enable Tillit Payments', 'woocommerce-gateway-tillit'),
+                'label'     => __('Enable Tillit Payments', 'tillit-payment-gateway'),
                 'default'   => 'yes'
             ],
             'title' => [
-                'title'     => __('Title', 'woocommerce-gateway-tillit'),
+                'title'     => __('Title', 'tillit-payment-gateway'),
                 'type'      => 'text',
-                'default'   => __('Business invoice %s days', 'woocommerce-gateway-tillit')
+                'default'   => __('Business invoice %s days', 'tillit-payment-gateway')
             ],
             'subtitle' => [
-                'title'     => __('Subtitle', 'woocommerce-gateway-tillit'),
+                'title'     => __('Subtitle', 'tillit-payment-gateway'),
                 'type'      => 'text',
-                'default'   => __('Receive the invoice via EHF and email', 'woocommerce-gateway-tillit')
+                'default'   => __('Receive the invoice via EHF and email', 'tillit-payment-gateway')
             ],
             'tillit_merchant_id' => [
-                'title'     => __('Tillit Merchant ID', 'woocommerce-gateway-tillit'),
+                'title'     => __('Tillit Merchant ID', 'tillit-payment-gateway'),
                 'type'      => 'text'
             ],
             'api_key' => [
-                'title'     => __('API Key', 'woocommerce-gateway-tillit'),
+                'title'     => __('API Key', 'tillit-payment-gateway'),
                 'type'      => 'password',
             ],
             'merchant_logo' => [
-                'title'     => __('Logo', 'woocommerce-gateway-tillit'),
+                'title'     => __('Logo', 'tillit-payment-gateway'),
                 'type'      => 'logo'
             ],
             'section_title_product' => [
                 'type'      => 'separator',
-                'title'     => __('Choose your product', 'woocommerce-gateway-tillit')
+                'title'     => __('Choose your product', 'tillit-payment-gateway')
             ],
             'product_merchant' => [
                 'type'      => 'radio',
                 'name'      => 'product_type',
                 'disabled'  => true,
-                'label'     => __('Merchant Invoice (coming soon)', 'woocommerce-gateway-tillit')
+                'label'     => __('Merchant Invoice (coming soon)', 'tillit-payment-gateway')
             ],
             'product_administered' => [
                 'type'      => 'radio',
                 'name'      => 'product_type',
                 'disabled'  => true,
-                'label'     => __('Administered invoice (coming soon)', 'woocommerce-gateway-tillit')
+                'label'     => __('Administered invoice (coming soon)', 'tillit-payment-gateway')
             ],
             'product_funded' => [
                 'type'      => 'radio',
                 'name'      => 'product_type',
-                'label'     => __('Funded invoice', 'woocommerce-gateway-tillit'),
+                'label'     => __('Funded invoice', 'tillit-payment-gateway'),
                 'checked'   => true
             ],
             'days_on_invoice' => [
-                'title'     => __('Number of days on invoice', 'woocommerce-gateway-tillit'),
+                'title'     => __('Number of days on invoice', 'tillit-payment-gateway'),
                 'type'      => 'text',
                 'default'   => '14',
             ],
             'section_title_settings' => [
                 'type'      => 'separator',
-                'title'     => __('Settings', 'woocommerce-gateway-tillit')
+                'title'     => __('Settings', 'tillit-payment-gateway')
             ],
             'checkout_env' => [
                 'type'      => 'select',
-                'title'     => __('Mode', 'woocommerce-gateway-tillit'),
+                'title'     => __('Mode', 'tillit-payment-gateway'),
                 'default'   => $this->get_default_env(),
                 'options' => array(
                       'prod' => 'Production',
@@ -703,40 +702,40 @@ class WC_Tillit extends WC_Payment_Gateway
                  )
             ],
             'enable_company_name' => [
-                'title'     => __('Activate company name auto-complete', 'woocommerce-gateway-tillit'),
+                'title'     => __('Activate company name auto-complete', 'tillit-payment-gateway'),
                 'label'     => ' ',
                 'type'      => 'checkbox',
             ],
             'enable_company_id' => [
-                'title'     => __('Activate company org.id auto-complete', 'woocommerce-gateway-tillit'),
+                'title'     => __('Activate company org.id auto-complete', 'tillit-payment-gateway'),
                 'label'     => ' ',
                 'type'      => 'checkbox',
             ],
             'finalize_purchase' => [
-                'title'     => __('Finalize purchase when order is fulfilled', 'woocommerce-gateway-tillit'),
+                'title'     => __('Finalize purchase when order is fulfilled', 'tillit-payment-gateway'),
                 'label'     => ' ',
                 'type'      => 'checkbox',
             ],
             'enable_order_intent' => [
-                'title'     => __('Pre-approve the buyer during checkout and disable Tillit if the buyer is declined', 'woocommerce-gateway-tillit'),
+                'title'     => __('Pre-approve the buyer during checkout and disable Tillit if the buyer is declined', 'tillit-payment-gateway'),
                 'label'     => ' ',
                 'type'      => 'checkbox',
                 'default'   => 'yes',
             ],
             'enable_b2b_b2c_radio' => [
-                'title'     => __('Activate B2C/B2B check-out radio button', 'woocommerce-gateway-tillit'),
+                'title'     => __('Activate B2C/B2B check-out radio button', 'tillit-payment-gateway'),
                 'label'     => ' ',
                 'type'      => 'checkbox',
                 'default'   => 'yes',
             ],
             'initiate_payment_to_buyer_on_refund' => [
-                'title'     => __('Initiate payment to buyer on refund', 'woocommerce-gateway-tillit'),
+                'title'     => __('Initiate payment to buyer on refund', 'tillit-payment-gateway'),
                 'label'     => ' ',
                 'type'      => 'checkbox',
                 'default'   => 'yes',
             ],
             'clear_options_on_deactivation' => [
-                'title'     => __('Clear settings on deactivation', 'woocommerce-gateway-tillit'),
+                'title'     => __('Clear settings on deactivation', 'tillit-payment-gateway'),
                 'label'     => ' ',
                 'type'      => 'checkbox',
                 'default'   => 'yes',
@@ -811,7 +810,7 @@ class WC_Tillit extends WC_Payment_Gateway
                             <img src="<?php echo $image_src; ?>" alt="" />
                         <?php endif; ?>
                     </div>
-                    <button class="button-secondary woocommerce-tillit-logo" type="button"><?php _e('Select image', 'woocommerce-gateway-tillit'); ?></button>
+                    <button class="button-secondary woocommerce-tillit-logo" type="button"><?php _e('Select image', 'tillit-payment-gateway'); ?></button>
                 </fieldset>
             </td>
         </tr>
@@ -879,7 +878,7 @@ class WC_Tillit extends WC_Payment_Gateway
 
             $body = json_decode($response['body'], true);
             if (!$body || !$body['buyer'] || !$body['buyer']['company'] || !$body['buyer']['company']['organization_number']) {
-                $order->add_order_note(sprintf(__('Missing company ID, please check with Tillit admin for id %s', 'woocommerce-gateway-tillit'), $tillit_order_id));
+                $order->add_order_note(sprintf(__('Missing company ID, please check with Tillit admin for id %s', 'tillit-payment-gateway'), $tillit_order_id));
                 return;
             }
             $company_id = $body['buyer']['company']['organization_number'];
@@ -930,13 +929,13 @@ class WC_Tillit extends WC_Payment_Gateway
         );
 
         if(is_wp_error($response)) {
-            $order->add_order_note(__('Could not edit the Tillit order', 'woocommerce-gateway-tillit'));
+            $order->add_order_note(__('Could not edit the Tillit order', 'tillit-payment-gateway'));
             return;
         }
 
         $tillit_err = WC_Tillit_Helper::get_tillit_error_msg($response);
         if ($tillit_err) {
-            $order->add_order_note(__('Could not edit the Tillit order, please check with Tillit admin', 'woocommerce-gateway-tillit'));
+            $order->add_order_note(__('Could not edit the Tillit order, please check with Tillit admin', 'tillit-payment-gateway'));
             return;
         }
 
