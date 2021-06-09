@@ -316,7 +316,7 @@ class WC_Tillit extends WC_Payment_Gateway
         $tillit_order_id = $order->get_meta('tillit_order_id');
 
         // Change the order status
-        $response = $this->make_request("/v1/order/${tillit_order_id}/shipped");
+        $response = $this->make_request("/v1/order/${tillit_order_id}/fulfilled");
 
         if(is_wp_error($response)) {
             $order->add_order_note(__('Could not update status', 'woocommerce-gateway-tillit'));
@@ -713,7 +713,7 @@ class WC_Tillit extends WC_Payment_Gateway
                 'type'      => 'checkbox',
             ],
             'finalize_purchase' => [
-                'title'     => __('Finalize purchase when order is shipped', 'woocommerce-gateway-tillit'),
+                'title'     => __('Finalize purchase when order is fulfilled', 'woocommerce-gateway-tillit'),
                 'label'     => ' ',
                 'type'      => 'checkbox',
             ],
