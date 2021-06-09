@@ -61,6 +61,7 @@ class WC_Tillit extends WC_Payment_Gateway
         add_action('get_header', [$this, 'process_confirmation']);
         add_action('woocommerce_update_options_checkout', [$this, 'update_checkout_options']);
         add_action('admin_enqueue_scripts', [$this, 'tillit_admin_scripts']);
+        add_action('woocommerce_admin_order_data_after_order_details', [$this, 'add_invoice_credit_note_urls']);
 
         $tillit_payment_gateway = $this;
         new WC_Tillit_Checkout($this);
@@ -106,6 +107,50 @@ class WC_Tillit extends WC_Payment_Gateway
             'logo_path' => $image_src
         ]);
 
+    }
+
+    /**
+     * Add invoice and credit note URLs
+     */
+    public function add_invoice_credit_note_urls(){
+        global $post;
+        $order = wc_get_order($post->ID);
+
+        if (!WC_Tillit_Helper::is_tillit_order($order)) {
+            return;
+        }
+
+        if ($order->get_status() !== 'completed' && $order->get_status() !== 'refunded') {
+            return;
+        }
+
+        $tillit_order_id = $order->get_meta('tillit_order_id');
+
+        if ($tillit_order_id) {
+
+            $order_refunds = $order->get_refunds();
+            $has_tillit_refund = false;
+            foreach($order_refunds as $refund){
+                if ($refund->get_refunded_payment()) {
+                    $has_tillit_refund = true;
+                    break;
+                }
+            }
+
+            print('<div style="margin-top:20px;float:left;">');
+
+            if ($has_tillit_refund) {
+                print('<a href="' . $this->tillit_checkout_host . "/v1/invoice/${tillit_order_id}/pdf"
+                      . '"><button type="button" class="button">Download credit note</button></a><br><br>');
+                print('<a href="' . $this->tillit_checkout_host . "/v1/invoice/${tillit_order_id}/pdf?v=original"
+                      . '"><button type="button" class="button">Download original invoice</button></a>');
+            } else {
+                print('<a href="' . $this->tillit_checkout_host . "/v1/invoice/${tillit_order_id}/pdf?v=original"
+                      . '"><button type="button" class="button">Download invoice</button></a>');
+            }
+
+            print('</div>');
+        }
     }
 
     /**
@@ -479,11 +524,8 @@ class WC_Tillit extends WC_Payment_Gateway
 
         $order_refunds = $order->get_refunds();
         foreach($order_refunds as $refund){
-            if (!$refund_ids || in_array($refund->get_id(), $refund_ids)) {
-                // Latest refund
-                if (!$order_refund || $refund->get_date_created() > $order_refund->get_date_created()) {
-                    $order_refund = $refund;
-                }
+            if (!$order_refund || $refund->get_date_created() > $order_refund->get_date_created()) {
+                $order_refund = $refund;
             }
         }
 
