@@ -94,14 +94,14 @@ class WC_Tillit_Checkout
 
             $fields['account_type'] = [
                 'account_type' => [
-                    'label' => __('Select the account type', 'woocommerce-gateway-tillit'),
+                    'label' => __('Select the account type', 'tillit-payment-gateway'),
                     'required' => true,
                     'type' => 'radio',
                     'priority' => 15,
                     'value' => 'business',
                     'options' => [
-                        'personal' => __('Personal', 'woocommerce-gateway-tillit'),
-                        'business' => __('Business', 'woocommerce-gateway-tillit')
+                        'personal' => __('Personal', 'tillit-payment-gateway'),
+                        'business' => __('Business', 'tillit-payment-gateway')
                     ]
                 ]
             ];
@@ -116,7 +116,7 @@ class WC_Tillit_Checkout
                     'priority' => 15,
                     'value' => 'business',
                     'options' => [
-                        'business' => __('Business', 'woocommerce-gateway-tillit')
+                        'business' => __('Business', 'tillit-payment-gateway')
                     ]
                 ]
             ];
@@ -142,7 +142,7 @@ class WC_Tillit_Checkout
 
         if($with_company_search) {
             $fields['billing']['billing_company'] = [
-                'label' => __('Company name', 'woocommerce-gateway-tillit'),
+                'label' => __('Company name', 'tillit-payment-gateway'),
                 'autocomplete' => 'organization',
                 'type' => 'select',
                 /*'custom_attributes' => [
@@ -150,7 +150,7 @@ class WC_Tillit_Checkout
                     'data-multi' => true
                 ],*/
                 'options' => [
-                    '' => __('Enter the company name', 'woocommerce-gateway-tillit')
+                    '' => __('Enter the company name', 'tillit-payment-gateway')
                 ],
                 'required' => false,
                 'priority' => 2
@@ -158,19 +158,19 @@ class WC_Tillit_Checkout
         }
 
         $fields['billing']['company_id'] = [
-            'label' => __('Company ID', 'woocommerce-gateway-tillit'),
+            'label' => __('Company ID', 'tillit-payment-gateway'),
             'required' => false,
             'priority' => $with_company_search ? 3 : 35
         ];
 
         $fields['billing']['department'] = [
-            'label' => __('Department', 'woocommerce-gateway-tillit'),
+            'label' => __('Department', 'tillit-payment-gateway'),
             'required' => false,
             'priority' => 4
         ];
 
         $fields['billing']['project'] = [
-            'label' => __('Project', 'woocommerce-gateway-tillit'),
+            'label' => __('Project', 'tillit-payment-gateway'),
             'required' => false,
             'priority' => 5
         ];
@@ -256,10 +256,10 @@ class WC_Tillit_Checkout
         $properties = [
             'messages' => [
                 'subtitle_order_intent_ok' =>$this->WC_Tillit->get_option('subtitle'),
-                'subtitle_order_intent_reject' => __('EHF Invoice is not available for this order', 'woocommerce-gateway-tillit'),
-                'amount_min' => sprintf(__('Minimum Payment using Tillit is %s NOK', 'woocommerce-gateway-tillit'), '200'),
-                'amount_max' => sprintf(__('Maximum Payment using Tillit is %s NOK', 'woocommerce-gateway-tillit'), '250,000'),
-                'invalid_phone' => __('Please use phone format +47 99999999', 'woocommerce-gateway-tillit'),
+                'subtitle_order_intent_reject' => __('EHF Invoice is not available for this order', 'tillit-payment-gateway'),
+                'amount_min' => sprintf(__('Minimum Payment using Tillit is %s NOK', 'tillit-payment-gateway'), '200'),
+                'amount_max' => sprintf(__('Maximum Payment using Tillit is %s NOK', 'tillit-payment-gateway'), '250,000'),
+                'invalid_phone' => __('Please use phone format +47 99999999', 'tillit-payment-gateway'),
             ],
             'tillit_plugin_url' => WC_TILLIT_PLUGIN_URL,
             'tillit_search_host' => $this->WC_Tillit->tillit_search_host,

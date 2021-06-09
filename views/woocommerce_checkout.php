@@ -8,7 +8,7 @@ $checkout = WC()->checkout(); ?>
 if ($this->WC_Tillit->get_option('enable_b2b_b2c_radio') === 'yes')
 {
     echo '<h3>';
-    esc_html_e('Account type', 'woocommerce-gateway-tillit');
+    esc_html_e('Account type', 'tillit-payment-gateway');
     echo '</h3>';
 }
 ?>
