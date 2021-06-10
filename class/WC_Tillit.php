@@ -58,10 +58,11 @@ class WC_Tillit extends WC_Payment_Gateway
         if(!$this->get_option('api_key') || !$this->get_option('tillit_merchant_id')) return;
         add_action('woocommerce_order_status_completed', [$this, 'on_order_completed']);
         add_action('woocommerce_order_status_cancelled', [$this, 'on_order_cancelled']);
+        add_action('woocommerce_cancelled_order', [$this, 'on_order_cancelled']);
         add_action('get_header', [$this, 'process_confirmation']);
         add_action('woocommerce_update_options_checkout', [$this, 'update_checkout_options']);
-        add_action('admin_enqueue_scripts', [$this, 'tillit_admin_scripts']);
         add_action('woocommerce_admin_order_data_after_order_details', [$this, 'add_invoice_credit_note_urls']);
+        add_action('admin_enqueue_scripts', [$this, 'tillit_admin_scripts']);
 
         $tillit_payment_gateway = $this;
         new WC_Tillit_Checkout($this);
@@ -405,7 +406,7 @@ class WC_Tillit extends WC_Payment_Gateway
         $response = $this->make_request("/v1/order/${tillit_order_id}/cancel");
 
         if(is_wp_error($response)) {
-            $order->add_order_note(__('Could not update status', 'tillit-payment-gateway'));
+            $order->add_order_note(__('Could not update status to cancelled', 'tillit-payment-gateway'));
             return;
         }
 
@@ -640,15 +641,20 @@ class WC_Tillit extends WC_Payment_Gateway
         // Get the order state
         $state = $body['state'];
 
-        // Mark order as processing
-        if($state === 'VERIFIED') $order->payment_complete();
+        if($state === 'VERIFIED') {
 
-        // Get the redirect URL by order state
-        $redirect = $state === 'VERIFIED' ? wp_specialchars_decode($order->get_checkout_order_received_url())
-                                          : wp_specialchars_decode($order->get_cancel_order_url());
+            // Mark order as processing
+            $order->payment_complete();
 
-        // Redirec the user to the requested page
-        wp_redirect($redirect);
+            // Redirect the user to confirmation page
+            wp_redirect(wp_specialchars_decode($order->get_checkout_order_received_url()));
+
+        } else {
+
+            // Redirect the user to Woocom cancellation page
+            wp_redirect(wp_specialchars_decode($order->get_cancel_order_url()));
+
+        }
 
     }
 
