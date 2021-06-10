@@ -141,12 +141,15 @@ class WC_Tillit extends WC_Payment_Gateway
             print('<div style="margin-top:20px;float:left;">');
 
             if ($has_tillit_refund) {
-                print('<a href="' . $this->tillit_checkout_host . "/v1/invoice/${tillit_order_id}/pdf"
+                print('<a href="' . $this->tillit_checkout_host . "/v1/invoice/${tillit_order_id}/pdf?lang="
+                      . WC_Tillit_Helper::get_locale()
                       . '"><button type="button" class="button">Download credit note</button></a><br><br>');
-                print('<a href="' . $this->tillit_checkout_host . "/v1/invoice/${tillit_order_id}/pdf?v=original"
+                print('<a href="' . $this->tillit_checkout_host . "/v1/invoice/${tillit_order_id}/pdf?v=original&lang="
+                      . WC_Tillit_Helper::get_locale()
                       . '"><button type="button" class="button">Download original invoice</button></a>');
             } else {
-                print('<a href="' . $this->tillit_checkout_host . "/v1/invoice/${tillit_order_id}/pdf?v=original"
+                print('<a href="' . $this->tillit_checkout_host . "/v1/invoice/${tillit_order_id}/pdf?v=original&lang="
+                      . WC_Tillit_Helper::get_locale()
                       . '"><button type="button" class="button">Download invoice</button></a>');
             }
 
