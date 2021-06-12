@@ -1,6 +1,9 @@
 .hidden {
     display: none;
 }
+.tillit-hidden {
+    display: none;
+}
 
 .woocommerce form .form-row#account_type_field .woocommerce-input-wrapper label {
     padding-left: .5em;

@@ -475,7 +475,7 @@ class WC_Tillit_Helper
 
         if (in_array($hostname, array('staging.demo.tillit.ai'))) return 'stg';
         else if (in_array($hostname, array('demo.tillit.ai'))) return 'demo';
-        else if (in_array($hostname, array('dev.tillitlocal.ai', 'localhost')) || str_starts_with($hostname, 'localhost:')) return 'dev';
+        else if (in_array($hostname, array('dev.tillitlocal.ai', 'localhost')) || substr($hostname, 0, 10) === 'localhost:') return 'dev';
         else return 'prod';
     }
 

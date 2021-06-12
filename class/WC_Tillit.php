@@ -463,15 +463,15 @@ class WC_Tillit extends WC_Payment_Gateway
             sanitize_text_field($_POST['tracking_id'])
         ));
 
+        if(is_wp_error($response)) {
+            $order->add_order_note(__('Could not request to create tillit order', 'tillit-payment-gateway'));
+            return;
+        }
+
         // Stop on process payment failure
         if(isset($response) && isset($response['result']) && $response['result'] === 'failure') {
             $order->add_order_note(__('Fail to process payment', 'tillit-payment-gateway'));
             return $response;
-        }
-
-        if(is_wp_error($response)) {
-            $order->add_order_note(__('Could not request to create tillit order', 'tillit-payment-gateway'));
-            return;
         }
 
         $tillit_err = WC_Tillit_Helper::get_tillit_error_msg($response);

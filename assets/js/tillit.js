@@ -2,15 +2,16 @@ const tillitRequiredField = '<abbr class="required" title="required">*</abbr>'
 const tillitSearchLimit = 50
 
 let tillitWithCompanySearch = null
-let tillitSearchCache
 let tillitMethodHidden = true
 let tillitApproved = null
+let tillitOrderIntentLog = {}
 
 const tillitOrderIntentCheck = {
     "interval": null,
     "pendingCheck": false,
+    "lastCheckOk": false,
+    "lastCheckHash": null
 }
-const tillitOrderIntentLog = {}
 
 const tillitCompany = {
     "company_name": null,
@@ -90,8 +91,6 @@ class Tillit {
                     },
                     processResults: function(response, params)
                     {
-
-                        tillitSearchCache = response
 
                         return {
                             results: Tillit.extractItems(response),
@@ -594,6 +593,7 @@ class Tillit {
             } else {
                 tillitOrderIntentLog[hashedBody] = 1
             }
+            tillitOrderIntentCheck['lastCheckHash'] = hashedBody
 
             clearInterval(tillitOrderIntentCheck.interval)
             tillitOrderIntentCheck.interval = null
@@ -636,7 +636,7 @@ class Tillit {
                     document.querySelector('.tillit-buyer-name').innerText = document.querySelector('#billing_company').value
 
                 // Update tracking number
-                if (response.tracking_id) {
+                if (response.tracking_id && document.querySelector('#tracking_id')) {
                     document.querySelector('#tracking_id').value = response.tracking_id
                 }
 
@@ -647,6 +647,14 @@ class Tillit {
                         clearInterval(tillitSubtitleExistCheck)
                    }
                 }, 1000)
+
+                // Update order intent log
+                if (!tillitOrderIntentCheck['lastCheckOk']) {
+                    tillitOrderIntentCheck['lastCheckOk'] = true
+                    tillitOrderIntentLog = {}
+                    tillitOrderIntentLog[tillitOrderIntentCheck['lastCheckHash']] = 1
+                }
+
             })
 
             approvalResponse.error(function(response){
@@ -696,6 +704,13 @@ class Tillit {
                             clearInterval(tillitSubtitleExistCheck)
                        }
                     }, 1000)
+                }
+
+                // Update order intent log
+                if (tillitOrderIntentCheck['lastCheckOk']) {
+                    tillitOrderIntentCheck['lastCheckOk'] = false
+                    tillitOrderIntentLog = {}
+                    tillitOrderIntentLog[tillitOrderIntentCheck['lastCheckHash']] = 1
                 }
 
             })
