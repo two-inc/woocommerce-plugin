@@ -1,8 +1,5 @@
 .hidden {
-    display: none;
-}
-.tillit-hidden {
-    display: none;
+    display: none!important;
 }
 
 .woocommerce form .form-row#account_type_field .woocommerce-input-wrapper label {

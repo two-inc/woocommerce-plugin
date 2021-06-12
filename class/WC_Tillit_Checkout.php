@@ -210,7 +210,7 @@ class WC_Tillit_Checkout
         $fields['billing']['tracking_id'] = [
             'required' => false,
             'type' => 'text',
-            'class' => array('tillit-hidden'),
+            'class' => array('hidden'),
             'priority' => 16
         ];
 
