@@ -17,11 +17,11 @@ Cypress.Commands.add('loginAsCustomer', (username, password) => {
 
 Cypress.Commands.add('addToCart', (idx) => {
     cy.visit(Cypress.env('TEST_WP_HOST_NAME') + Cypress.env('TEST_WP_PRODUCTS_PATH'))
-    cy.get('a.woocommerce-LoopProduct-link').should('exist')
-    cy.get('a.woocommerce-LoopProduct-link').eq(idx).should('exist')
-    cy.get('a.woocommerce-LoopProduct-link').eq(idx).click()
-    cy.get('form.cart .quantity input').should('exist')
-    cy.get('form.cart .quantity input').clear().type(getRandomInt(3,8))
+    cy.get(Cypress.env('TEST_WP_THEME_PRODUCT_SELECTOR')).should('exist')
+    cy.get(Cypress.env('TEST_WP_THEME_PRODUCT_SELECTOR')).eq(idx).should('exist')
+    cy.get(Cypress.env('TEST_WP_THEME_PRODUCT_SELECTOR')).eq(idx).click({force: true})
+    cy.get('#main form.cart .quantity input[name="quantity"]').should('exist')
+    cy.get('#main form.cart .quantity input[name="quantity"]').clear().type(getRandomInt(10,20))
     cy.get('button.single_add_to_cart_button').should('exist')
     cy.get('button.single_add_to_cart_button').click()
 })
