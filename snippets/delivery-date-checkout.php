@@ -38,7 +38,7 @@ function add_delivery_date_field($checkout) {
         });
     </script>
     <style>
-        .ui-datepicker-calendar {
+        #ui-datepicker-div {
             background: #fff;
         }
     </style>';
