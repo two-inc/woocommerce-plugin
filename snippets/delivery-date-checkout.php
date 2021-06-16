@@ -34,7 +34,7 @@ function add_delivery_date_field($checkout) {
     echo '
     <script>
         jQuery(function($){
-            $("#delivery-date-picker").datepicker({minDate: 0});
+            $("#delivery-date-picker").datepicker({minDate: 0, dateFormat: "yy-mm-dd"});
         });
     </script>
     <style>
@@ -65,12 +65,16 @@ function add_delivery_date_field($checkout) {
  * @return void
  */
 function checkout_validate_delivery_date() {
-    global $woocommerce;
 
-    // Check if the required field delivery_date was sent
-    if (!$_POST['delivery_date'])
-         wc_add_notice('<strong>' . __('Delivery Date', 'tillit-payment-gateway') . '</strong> '
-                       . __('is a required field.', 'tillit-payment-gateway'), 'error');
+    if (!$_POST['delivery_date']) {
+        // the required field delivery_date was not sent
+        wc_add_notice('<strong>' . __('Delivery Date', 'tillit-payment-gateway') . '</strong> '
+                      . __('is a required field.', 'tillit-payment-gateway'), 'error');
+    } else if (!validate_date($_POST['delivery_date'])) {
+        // delivery_date is of incorrect format
+        wc_add_notice('<strong>' . __('Delivery Date', 'tillit-payment-gateway') . '</strong> '
+                      . __('cannot be parsed.', 'tillit-payment-gateway'), 'error');
+    }
 }
 
 
@@ -81,6 +85,17 @@ function checkout_validate_delivery_date() {
  */
 function add_delivery_date_to_order_meta($order_id) {
     if (!empty($_POST['delivery_date'])) {
-        update_post_meta($order_id, 'Delivery Date', sanitize_text_field($_POST['delivery_date']));
+        update_post_meta($order_id, 'delivery_date', sanitize_text_field($_POST['delivery_date']));
     }
+}
+
+
+/**
+ * Validate if a string is of a specific date format
+ *
+ * @return bool
+ */
+function validate_date($date_str, $format = 'Y-m-d') {
+    $d = DateTime::createFromFormat($format, $date_str);
+    return $d && $d->format($format) === $date_str;
 }

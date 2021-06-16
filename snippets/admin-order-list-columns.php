@@ -1,7 +1,39 @@
 <?php
 
-add_action('manage_shop_order_posts_custom_column', 'add_custom_columns_content');
 add_filter('manage_edit-shop_order_columns', 'add_custom_columns');
+add_filter('manage_edit-shop_order_sortable_columns', 'add_custom_sortable_columns');
+add_action('manage_shop_order_posts_custom_column', 'add_custom_columns_content');
+add_action('pre_get_posts', 'add_sorting_query');
+
+
+/**
+ * Add sorting query for custom columns
+ *
+ * @return array
+ */
+function add_sorting_query($query) {
+    if(!is_admin()) {
+        return;
+    }
+
+    $orderby = $query->get('orderby');
+
+    if('order_delivery_date' == $orderby) {
+        $meta_query = array(
+            'relation' => 'OR',
+            array(
+                'key' => 'delivery_date',
+                'compare' => 'NOT EXISTS', // for empty value
+            ),
+            array(
+                'key' => 'delivery_date',
+            ),
+        );
+
+        $query->set('meta_query', $meta_query);
+        $query->set('orderby', 'meta_value');
+    }
+}
 
 
 /**
@@ -26,6 +58,20 @@ function add_custom_columns($columns) {
 
 
 /**
+ * Add sort-by feature to custom columns
+ *
+ * @return array
+ */
+function add_custom_sortable_columns($columns) {
+
+    $columns['order_delivery_date'] = 'order_delivery_date';
+
+    return $columns;
+
+}
+
+
+/**
  * Add custom columns content in admin edit order page
  *
  * @return void
@@ -41,8 +87,11 @@ function add_custom_columns_content($column) {
         }
     } else if ('order_delivery_date' === $column) {
         $order = wc_get_order($post->ID);
-        if ($order->get_meta('Delivery Date')) {
-            print(esc_html($order->get_meta('Delivery Date')));
+        if ($order->get_meta('delivery_date')) {
+            $d = DateTime::createFromFormat('Y-m-d', $order->get_meta('delivery_date'));
+            if ($d) {
+                print(esc_html($d->format(get_option('date_format'))));
+            }
         }
     }
 
