@@ -8,6 +8,12 @@
   $ docker-compose up
 ```
 
+
+## End-to-end Test
+```bash
+  $ npx cypress run --browser chrome --config baseUrl=http://localhost
+```
+
 # Random Notes
 
 * Copy code into `plugins`
@@ -23,4 +29,3 @@ define( 'WP_DEBUG', true );
 
 * webhooks (merchant dashboard -> woocommerce)
 * orders are stored in `wp_posts` and `wp_postmeta` (also some stuff in `wp_woocommerce_order_*` (`update_post_*` function in PHP)
-* testing is (probably?) impossible

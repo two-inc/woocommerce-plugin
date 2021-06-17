@@ -5,18 +5,13 @@ To install dependencies, run
 npm install
 ```
 
-To run tests, run command
+To run tests
 ```
-npx cypress run
-npx cypress run --browser chrome
-```
+# On local
+npx cypress run --browser chrome --config-file "local-cypress.json" --config baseUrl=http://localhost
 
-on local machine, create "cypress.env.json" on root folder with this content to set environment variable
-```
-{
-  "TEST_WORDPRESS_HOST_NAME":"your_host",
-  "TEST_WORDPRESS_ADMIN_USERNAME": "your_username",
-  "TEST_WORDPRESS_ADMIN_PASSWORD": "your_password"
-}
-
+# On staging
+export CYPRESS_TEST_WP_ADMIN_USERNAME="YOUR_USERNAME"
+export CYPRESS_TEST_WP_ADMIN_PASSWORD="YOUR_PASSWORD"
+npx cypress run --browser chrome --config-file "staging-cypress.json" --config baseUrl=https://staging.demo.tillit.ai
 ```
