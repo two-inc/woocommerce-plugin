@@ -1,0 +1,23 @@
+{
+    "chromeWebSecurity": false,
+    "defaultCommandTimeout": 30000,
+    "requestTimeout": 30000,
+    "viewportHeight": 800,
+    "viewportWidth": 1200,
+    "video": false,
+    "env": {
+        "TEST_WP_HOST_NAME":"http://localhost",
+        "TEST_WP_ADMIN_USERNAME": "harry",
+        "TEST_WP_ADMIN_PASSWORD": "testtest",
+        "TEST_WP_LOGIN_PATH": "/wp-login.php",
+        "TEST_WP_CHECKOUT_PATH": "/checkout/",
+        "TEST_WP_PRODUCTS_PATH": "/shop/",
+        "TEST_WP_ADM_ORDERS_PATH": "/wp-admin/edit.php?post_type=shop_order",
+        "TEST_CHECKOUT_API_HOST": "https://huynguyen.hopto.org:8083",
+        "TEST_WP_THEME_PRODUCT_SELECTOR": "a.woocommerce-LoopProduct-link",
+        "TEST_WP_THEME_PRODUCT_QUANTITY_SELECTOR": "#main form.cart .quantity input[name=\"quantity\"]",
+        "TEST_ORDER_INTENT_OK_TEXT": "Receive the invoice via EHF and email"
+        "TEST_PRODUCT_QUANTITY_FROM": 10,
+        "TEST_PRODUCT_QUANTITY_TO": 20
+    }
+}

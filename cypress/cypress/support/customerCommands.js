@@ -20,8 +20,9 @@ Cypress.Commands.add('addToCart', (idx) => {
     cy.get(Cypress.env('TEST_WP_THEME_PRODUCT_SELECTOR')).should('exist')
     cy.get(Cypress.env('TEST_WP_THEME_PRODUCT_SELECTOR')).eq(idx).should('exist')
     cy.get(Cypress.env('TEST_WP_THEME_PRODUCT_SELECTOR')).eq(idx).click({force: true})
-    cy.get('#main form.cart .quantity input[name="quantity"]').should('exist')
-    cy.get('#main form.cart .quantity input[name="quantity"]').clear().type(getRandomInt(10,20))
+    cy.get(Cypress.env('TEST_WP_THEME_PRODUCT_QUANTITY_SELECTOR')).should('exist')
+    cy.get(Cypress.env('TEST_WP_THEME_PRODUCT_QUANTITY_SELECTOR')).clear().type(
+        getRandomInt(Cypress.env('TEST_PRODUCT_QUANTITY_FROM'), Cypress.env('TEST_PRODUCT_QUANTITY_TO')))
     cy.get('button.single_add_to_cart_button').should('exist')
     cy.get('button.single_add_to_cart_button').click()
 })
@@ -32,7 +33,7 @@ Cypress.Commands.add('goToCheckout', () => {
     cy.get('#payment_method_woocommerce-gateway-tillit').should('exist')
     cy.get('#payment_method_woocommerce-gateway-tillit').should('not.be.checked')
     cy.contains('Enter company name to pay on invoice').should('exist')
-    cy.contains('Receive the invoice via EHF and email').should('not.exist')
+    cy.contains(Cypress.env('TEST_ORDER_INTENT_OK_TEXT')).should('not.exist')
     cy.get('#billing_address_1').should('have.value', '')
     cy.get('#billing_postcode').should('have.value', '')
     cy.get('#billing_city').should('have.value', '')
@@ -76,7 +77,7 @@ Cypress.Commands.add('fillCheckout', (b) => {
 
 
 Cypress.Commands.add('placeOrder', (b) => {
-    cy.contains('Receive the invoice via EHF and email').should('exist')
+    cy.contains(Cypress.env('TEST_ORDER_INTENT_OK_TEXT')).should('exist')
     cy.get('#payment_method_woocommerce-gateway-tillit').should('be.checked')
 
     cy.get('#place_order').should('exist')
