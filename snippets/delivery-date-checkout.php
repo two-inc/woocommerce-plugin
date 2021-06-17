@@ -4,7 +4,7 @@ add_action('wp_enqueue_scripts', 'enqueue_date_picker');
 add_action('woocommerce_after_order_notes', 'add_delivery_date_field', 10, 1);
 add_action('woocommerce_checkout_process', 'checkout_validate_delivery_date');
 add_action('woocommerce_checkout_update_order_meta', 'add_delivery_date_to_order_meta');
-
+add_action('wp_insert_post', 'prepend_to_order_note', 10, 3);
 
 /**
  * Enqueue datepicker js
@@ -98,4 +98,40 @@ function add_delivery_date_to_order_meta($order_id) {
 function validate_date($date_str, $format = 'Y-m-d') {
     $d = DateTime::createFromFormat($format, $date_str);
     return $d && $d->format($format) === $date_str;
+}
+
+
+/**
+ * Prepend Delivery date to order note on order creation
+ *
+ * @return void
+ */
+function prepend_to_order_note($post_id, $post, $update) {
+
+    // Skip if $post_id doesn't exist OR post is not order OR this is update
+    if ( ! $post_id || get_post_type( $post_id ) != 'shop_order' || $update == 1 ) {
+        return;
+    }
+
+    if (!$_POST['delivery_date'] || !validate_date($_POST['delivery_date'])) {
+        return;
+    }
+
+    $d = DateTime::createFromFormat('Y-m-d', $_POST['delivery_date']);
+    if (!$d) {
+        return;
+    }
+
+    $order = wc_get_order($post_id);
+    $existing_note = $order->get_customer_note();
+    $order->set_customer_note('Delivery date: ' . $d->format(get_option('date_format')));
+    if ($existing_note) {
+
+        $order->set_customer_note($order->get_customer_note() . '
+'
+        . $existing_note);
+    }
+
+    $order->save();
+
 }
