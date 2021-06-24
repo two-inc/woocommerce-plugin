@@ -1,5 +1,10 @@
-const basicAuthString = 'Basic dGlsbGl0OnNlY3JldF9wcm9kX2VQTGM0eXpSdzJ3LXNVekpUdFVBQlBNdlRmbkkwV3JhekoxYW90algyQnc='
-const tillitMerchantId = 'tillit'
+function getBasicAuthString() {
+    return 'Basic ' + btoa(Cypress.env('TEST_API_USER') + ':' + Cypress.env('TEST_API_KEY'))
+}
+
+function getTillitMerchantId() {
+    return Cypress.env('TEST_API_USER')
+}
 
 
 Cypress.Commands.add('tillitGetOrder', (tillitOrderId) => {
@@ -8,8 +13,8 @@ Cypress.Commands.add('tillitGetOrder', (tillitOrderId) => {
         url: Cypress.env('TEST_CHECKOUT_API_HOST') + '/v1/order/' + tillitOrderId,
         method: 'GET',
         headers: {
-            'Authorization': basicAuthString,
-            'Tillit-Merchant-Id': tillitMerchantId
+            'Authorization': getBasicAuthString(),
+            'Tillit-Merchant-Id': getTillitMerchantId()
         }
     }).as('tillitResponse')
 
