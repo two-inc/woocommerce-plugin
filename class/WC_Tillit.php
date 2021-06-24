@@ -488,7 +488,7 @@ class WC_Tillit extends WC_Payment_Gateway
         update_post_meta($order_id, '_tillit_original_order_id', $body['id']);
 
         // Return the result
-        if ($this->get_option('tillit_merchant_id') === 'morgenlevering') {
+        if ($this->get_option('tillit_merchant_id') === 'morgenlevering' || $this->get_option('tillit_merchant_id') === 'arkwrightx') {
             return [
                 'result'    => 'success',
                 'redirect' => $body['merchant_urls']['merchant_confirmation_url']
