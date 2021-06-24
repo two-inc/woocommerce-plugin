@@ -2,13 +2,15 @@ const tillitRequiredField = '<abbr class="required" title="required">*</abbr>'
 const tillitSearchLimit = 50
 
 let tillitWithCompanySearch = null
-let tillitSearchCache
 let tillitMethodHidden = true
 let tillitApproved = null
+let tillitOrderIntentLog = {}
 
 const tillitOrderIntentCheck = {
     "interval": null,
     "pendingCheck": false,
+    "lastCheckOk": false,
+    "lastCheckHash": null
 }
 
 const tillitCompany = {
@@ -90,8 +92,6 @@ class Tillit {
                     processResults: function(response, params)
                     {
 
-                        tillitSearchCache = response
-
                         return {
                             results: Tillit.extractItems(response),
                             pagination: {
@@ -162,10 +162,12 @@ class Tillit {
 
             const instance = $billingCompany.data('select2')
 
-            instance.on('open', function(e){
-                this.results.clear()
-                this.dropdown._positionDropdown()
-            })
+            if (instance) {
+                instance.on('open', function(e){
+                    this.results.clear()
+                    this.dropdown._positionDropdown()
+                })
+            }
 
         }
 
@@ -553,6 +555,46 @@ class Tillit {
             if (!tax_amount) {
                 tax_amount = 0
             }
+
+            let jsonBody = JSON.stringify({
+                "merchant_id": window.tillit.merchant_id,
+                "gross_amount": "" + gross_amount,
+                "buyer": {
+                    "company": tillitCompany,
+                    "representative": tillitRepresentative
+                },
+                "currency": window.tillit.currency,
+                "line_items": [{
+                    "name": "Cart",
+                    "description": "",
+                    "gross_amount": gross_amount.toFixed(2),
+                    "net_amount": (gross_amount - tax_amount).toFixed(2),
+                    "discount_amount": "0",
+                    "tax_amount": tax_amount.toFixed(2),
+                    "tax_class_name": "VAT " + (100.0 * tax_amount / gross_amount).toFixed(2) + "%",
+                    "tax_rate": "" + (1.0 * tax_amount / gross_amount).toFixed(6),
+                    "unit_price": (gross_amount - tax_amount).toFixed(2),
+                    "quantity": 1,
+                    "quantity_unit": "item",
+                    "image_url": "",
+                    "product_page_url": "",
+                    "type": "PHYSICAL",
+                    "details": {
+                        "categories": [],
+                        "barcodes": []
+                    },
+                }]
+            })
+
+            let hashedBody = Tillit.getUnsecuredHash(jsonBody)
+            if (tillitOrderIntentLog[hashedBody]) {
+                tillitOrderIntentLog[hashedBody] = tillitOrderIntentLog[hashedBody] + 1
+                return
+            } else {
+                tillitOrderIntentLog[hashedBody] = 1
+            }
+            tillitOrderIntentCheck['lastCheckHash'] = hashedBody
+
             clearInterval(tillitOrderIntentCheck.interval)
             tillitOrderIntentCheck.interval = null
             tillitOrderIntentCheck.pendingCheck = false
@@ -569,37 +611,8 @@ class Tillit {
                 contentType: "application/json; charset=utf-8",
                 dataType: 'json',
                 method: 'POST',
-                headers: {
-                    "Tillit-Merchant-Id": window.tillit.merchant_id
-                },
-                data: JSON.stringify({
-                    "gross_amount": "" + gross_amount,
-                    "buyer": {
-                        "company": tillitCompany,
-                        "representative": tillitRepresentative
-                    },
-                    "currency": window.tillit.currency,
-                    "line_items": [{
-                        "name": "Cart",
-                        "description": "",
-                        "gross_amount": gross_amount.toFixed(2),
-                        "net_amount": (gross_amount - tax_amount).toFixed(2),
-                        "discount_amount": "0",
-                        "tax_amount": tax_amount.toFixed(2),
-                        "tax_class_name": "VAT " + (100.0 * tax_amount / gross_amount).toFixed(2) + "%",
-                        "tax_rate": "" + (1.0 * tax_amount / gross_amount).toFixed(6),
-                        "unit_price": (gross_amount - tax_amount).toFixed(2),
-                        "quantity": 1,
-                        "quantity_unit": "item",
-                        "image_url": "",
-                        "product_page_url": "",
-                        "type": "PHYSICAL",
-                        "details": {
-                            "categories": [],
-                            "barcodes": []
-                        },
-                    }]
-                })
+                xhrFields: {withCredentials: true},
+                data: jsonBody
             })
 
             approvalResponse.done(function(response){
@@ -622,6 +635,11 @@ class Tillit {
                 else if (document.querySelector('#billing_company'))
                     document.querySelector('.tillit-buyer-name').innerText = document.querySelector('#billing_company').value
 
+                // Update tracking number
+                if (response.tracking_id && document.querySelector('#tracking_id')) {
+                    document.querySelector('#tracking_id').value = response.tracking_id
+                }
+
                 // Update tillit message
                 let tillitSubtitleExistCheck = setInterval(function() {
                     if (document.querySelector('.tillit-subtitle')) {
@@ -629,6 +647,14 @@ class Tillit {
                         clearInterval(tillitSubtitleExistCheck)
                    }
                 }, 1000)
+
+                // Update order intent log
+                if (!tillitOrderIntentCheck['lastCheckOk']) {
+                    tillitOrderIntentCheck['lastCheckOk'] = true
+                    tillitOrderIntentLog = {}
+                    tillitOrderIntentLog[tillitOrderIntentCheck['lastCheckHash']] = 1
+                }
+
             })
 
             approvalResponse.error(function(response){
@@ -680,6 +706,13 @@ class Tillit {
                     }, 1000)
                 }
 
+                // Update order intent log
+                if (tillitOrderIntentCheck['lastCheckOk']) {
+                    tillitOrderIntentCheck['lastCheckOk'] = false
+                    tillitOrderIntentLog = {}
+                    tillitOrderIntentLog[tillitOrderIntentCheck['lastCheckHash']] = 1
+                }
+
             })
         }, 1000)
 
@@ -689,7 +722,7 @@ class Tillit {
     {
 
         let img = document.createElement("IMG")
-        img.src = '/wp-content/plugins/woocommerce/assets/images/icons/loader.svg'
+        img.src = window.tillit.tillit_plugin_url + '/assets/images/loader.svg'
         img.className = 'loader'
         return img
 
@@ -703,6 +736,18 @@ class Tillit {
         }
         return []
 
+    }
+
+    static getUnsecuredHash(inp, seed = 0) {
+        let h1 = 0xdeadbeef ^ seed, h2 = 0x41c6ce57 ^ seed
+        for (let i = 0, ch; i < inp.length; i++) {
+            ch = inp.charCodeAt(i)
+            h1 = Math.imul(h1 ^ ch, 2654435761)
+            h2 = Math.imul(h2 ^ ch, 1597334677)
+        }
+        h1 = Math.imul(h1 ^ (h1>>>16), 2246822507) ^ Math.imul(h2 ^ (h2>>>13), 3266489909)
+        h2 = Math.imul(h2 ^ (h2>>>16), 2246822507) ^ Math.imul(h1 ^ (h1>>>13), 3266489909)
+        return 4294967296 * (2097151 & h2) + (h1>>>0)
     }
 
     static markFieldInvalid(fieldWrapperId)
@@ -781,8 +826,6 @@ class Tillit {
             tillitCompany.company_name = $input.val()
         }
 
-        console.log(tillitCompany)
-
         Tillit.getApproval()
 
     }
@@ -803,8 +846,6 @@ class Tillit {
         if(inputName === 'phone') inputName += '_number'
 
         tillitRepresentative[inputName] = $input.val()
-
-        console.log(tillitRepresentative)
 
         Tillit.getApproval()
 

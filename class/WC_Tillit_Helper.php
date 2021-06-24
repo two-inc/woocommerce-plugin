@@ -43,21 +43,21 @@ class WC_Tillit_Helper
     public static function get_tillit_error_msg($response)
     {
         if (!$response) {
-            return __('Tillit empty response', 'woocommerce-gateway-tillit');
+            return __('Tillit empty response', 'tillit-payment-gateway');
         }
 
         if($response['response']['code'] && $response['response'] && $response['response']['code'] && $response['response']['code'] >= 400) {
-            return sprintf(__('Tillit response code %d', 'woocommerce-gateway-tillit'), $response['response']['code']);
+            return sprintf(__('Tillit response code %d', 'tillit-payment-gateway'), $response['response']['code']);
         }
 
         if($response && $response['body']) {
             $body = json_decode($response['body'], true);
             if (is_string($body))
-                return __($body, 'woocommerce-gateway-tillit');
+                return __($body, 'tillit-payment-gateway');
             else if (isset($body['error_details']) && is_string($body['error_details']))
-                return __($body['error_details'], 'woocommerce-gateway-tillit');
+                return __($body['error_details'], 'tillit-payment-gateway');
             else if (isset($body['error_code']) && is_string($body['error_code']))
-                return __($body['error_code'], 'woocommerce-gateway-tillit');
+                return __($body['error_code'], 'tillit-payment-gateway');
         }
     }
 
@@ -90,6 +90,27 @@ class WC_Tillit_Helper
     }
 
     /**
+     * Check if address json to send to Tillit is empty
+     *
+     * @param $tillit_address
+     *
+     * @return bool
+     */
+    public static function is_tillit_address_empty($tillit_address)
+    {
+
+        $is_empty = true;
+
+        if ($tillit_address) {
+            $is_empty = !$tillit_address['city'] && !$tillit_address['region'] && !$tillit_address['country']
+                        && !$tillit_address['postal_code'] && !$tillit_address['street_address'];
+        }
+
+        return $is_empty;
+
+    }
+
+    /**
      * Format the cart items
      *
      * @return array
@@ -110,7 +131,10 @@ class WC_Tillit_Helper
                 $product_simple = $line_item['data'];
             }
 
-            $tax_rate = 1.0 * $line_item['line_tax'] / $line_item['line_total'];
+            $tax_rate = 0;
+            if ($line_item['line_tax'] && $line_item['line_total']) {
+                $tax_rate = 1.0 * $line_item['line_tax'] / $line_item['line_total'];
+            }
 
             $image_url = get_the_post_thumbnail_url($product_simple->get_id());
 
@@ -211,7 +235,9 @@ class WC_Tillit_Helper
      * @return bool
      */
     public static function compose_tillit_order(
-        $order, $order_reference, $tillit_merchant_id, $days_on_invoice, $company_id, $department, $project, $tillit_original_order_id = '')
+        $order, $order_reference, $tillit_merchant_id, $days_on_invoice,
+        $company_id, $department, $project, $tillit_original_order_id = '',
+        $tracking_id = '')
     {
         // Get the orde taxes
         $order_taxes = $order->get_taxes();
@@ -229,15 +255,27 @@ class WC_Tillit_Helper
             $tax_rate = $vat->get_rate_percent() / 100.0;
         }
 
+        $billing_address = [
+            'organization_name' => $order->get_billing_company(),
+            'street_address' => $order->get_billing_address_1() . (null !== $order->get_billing_address_2() ? $order->get_billing_address_2() : ''),
+            'postal_code' => $order->get_billing_postcode(),
+            'city' => $order->get_billing_city(),
+            'region' => $order->get_billing_state(),
+            'country' => $order->get_billing_country()
+        ];
+        $shipping_address = [
+            'organization_name' => $order->get_billing_company(),
+            'street_address' => $order->get_shipping_address_1() . (null !== $order->get_shipping_address_2() ? $order->get_shipping_address_2() : ''),
+            'postal_code' => $order->get_shipping_postcode(),
+            'city' => $order->get_shipping_city(),
+            'region' => $order->get_shipping_state(),
+            'country' => $order->get_shipping_country()
+        ];
+        if (WC_Tillit_Helper::is_tillit_address_empty($shipping_address)) {
+            $shipping_address = $billing_address;
+        }
+
         $req_body = [
-            'billing_address' => [
-                'city' => $order->get_billing_city(),
-                'country' => $order->get_billing_country(),
-                'organization_name' => $order->get_billing_company(),
-                'postal_code' => $order->get_billing_postcode(),
-                'region' => $order->get_billing_state(),
-                'street_address' => $order->get_billing_address_1() . (null !== $order->get_billing_address_2() ? $order->get_billing_address_2() : '')
-            ],
             'buyer' => [
                 'company' => [
                     'organization_number' => $company_id,
@@ -291,14 +329,8 @@ class WC_Tillit_Helper
                     'payment_reference_ocr' => '',
                 ]
             ],
-            'shipping_address' => [
-                'organization_name' => $order->get_billing_company(),
-                'street_address' => $order->get_shipping_address_1(),
-                'postal_code' => $order->get_shipping_postcode(),
-                'city' => $order->get_shipping_city(),
-                'region' => $order->get_shipping_state(),
-                'country' => $order->get_shipping_country()
-            ],
+            'billing_address' => $billing_address,
+            'shipping_address' => $shipping_address,
             'shipping_details' => [
                 // 'carrier_name' => '',
                 // 'tracking_number' => '',
@@ -310,6 +342,95 @@ class WC_Tillit_Helper
         if ($tillit_original_order_id) {
             $req_body['original_order_id'] = $tillit_original_order_id;
         }
+
+        if ($tracking_id) {
+            $req_body['tracking_id'] = $tracking_id;
+        }
+
+        return $req_body;
+    }
+
+    /**
+     * Compose request body for tillit edit order
+     *
+     * @param $order
+     *
+     * @return bool
+     */
+    public static function compose_tillit_edit_order($order, $days_on_invoice, $department, $project)
+    {
+        // Get the orde taxes
+        $order_taxes = $order->get_taxes();
+
+        // Get the taxes Ids
+        $taxes = array_keys($order_taxes);
+
+        if (count($taxes) == 0) {
+            $tax_amount = 0;
+            $tax_rate = 0;
+        } else {
+            /** @var WC_Order_Item_Tax $vat */
+            $vat = $order_taxes[$taxes[0]];
+            $tax_amount = $vat->get_tax_total() + $vat->get_shipping_tax_total();
+            $tax_rate = $vat->get_rate_percent() / 100.0;
+        }
+
+        $billing_address = [
+            'organization_name' => $order->get_billing_company(),
+            'street_address' => $order->get_billing_address_1() . (null !== $order->get_billing_address_2() ? $order->get_billing_address_2() : ''),
+            'postal_code' => $order->get_billing_postcode(),
+            'city' => $order->get_billing_city(),
+            'region' => $order->get_billing_state(),
+            'country' => $order->get_billing_country()
+        ];
+        $shipping_address = [
+            'organization_name' => $order->get_billing_company(),
+            'street_address' => $order->get_shipping_address_1() . (null !== $order->get_shipping_address_2() ? $order->get_shipping_address_2() : ''),
+            'postal_code' => $order->get_shipping_postcode(),
+            'city' => $order->get_shipping_city(),
+            'region' => $order->get_shipping_state(),
+            'country' => $order->get_shipping_country()
+        ];
+        if (WC_Tillit_Helper::is_tillit_address_empty($shipping_address)) {
+            $shipping_address = $billing_address;
+        }
+
+        $req_body = [
+            'buyer_department' => $department,
+            'buyer_project' => $project,
+            'order_note' => $order->get_customer_note(),
+            'line_items' => WC_Tillit_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee')),
+            'recurring' => false,
+            'merchant_additional_info' => '',
+            'merchant_reference' => '',
+            'payment' => [
+                'currency' => $order->get_currency(),
+                'gross_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total())),
+                'net_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total() - $order->get_total_tax())),
+                'tax_amount' => strval(WC_Tillit_Helper::round_amt($tax_amount)),
+                'tax_rate' => strval($tax_rate),
+                'discount_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total_discount())),
+                'discount_rate' => '0',
+                'type' => 'FUNDED_INVOICE',
+                'payment_details' => [
+                    'due_in_days' => intval($days_on_invoice),
+                    'bank_account' => '',
+                    'bank_account_type' => 'IBAN',
+                    'payee_company_name' => '',
+                    'payee_organization_number' => '',
+                    'payment_reference_message' => '',
+                    'payment_reference_ocr' => '',
+                ]
+            ],
+            'billing_address' => $billing_address,
+            'shipping_address' => $shipping_address,
+            'shipping_details' => [
+                // 'carrier_name' => '',
+                // 'tracking_number' => '',
+                // 'carrier_tracking_url' => '',
+                'expected_delivery_date' => date('Y-m-d', strtotime('+ 7 days'))
+            ]
+        ];
 
         return $req_body;
     }
@@ -357,7 +478,7 @@ class WC_Tillit_Helper
 
         if (in_array($hostname, array('staging.demo.tillit.ai'))) return 'stg';
         else if (in_array($hostname, array('demo.tillit.ai'))) return 'demo';
-        else if (in_array($hostname, array('dev.tillitlocal.ai', 'localhost')) || str_starts_with($hostname, 'localhost:')) return 'dev';
+        else if (in_array($hostname, array('dev.tillitlocal.ai', 'localhost')) || substr($hostname, 0, 10) === 'localhost:') return 'dev';
         else return 'prod';
     }
 

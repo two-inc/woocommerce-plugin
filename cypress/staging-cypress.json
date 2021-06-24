@@ -1,0 +1,21 @@
+{
+    "chromeWebSecurity": false,
+    "defaultCommandTimeout": 30000,
+    "requestTimeout": 30000,
+    "viewportHeight": 800,
+    "viewportWidth": 1200,
+    "video": false,
+    "env": {
+        "TEST_WP_HOST_NAME":"https://staging.demo.tillit.ai",
+        "TEST_WP_LOGIN_PATH": "/wp-login.php",
+        "TEST_WP_CHECKOUT_PATH": "/checkout/",
+        "TEST_WP_PRODUCTS_PATH": "/shop/",
+        "TEST_WP_ADM_ORDERS_PATH": "/wp-admin/edit.php?post_type=shop_order",
+        "TEST_CHECKOUT_API_HOST": "https://staging.api.tillit.ai",
+        "TEST_WP_THEME_PRODUCT_SELECTOR": "div.ht-product-image-wrap > div > a",
+        "TEST_WP_THEME_PRODUCT_QUANTITY_SELECTOR": "form.cart .quantity input[name=\"quantity\"]",
+        "TEST_ORDER_INTENT_OK_TEXT": "Receive the invoice via EHF and PDF",
+        "TEST_PRODUCT_QUANTITY_FROM": 1,
+        "TEST_PRODUCT_QUANTITY_TO": 3
+    }
+}
