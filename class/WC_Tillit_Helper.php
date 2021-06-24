@@ -131,7 +131,10 @@ class WC_Tillit_Helper
                 $product_simple = $line_item['data'];
             }
 
-            $tax_rate = 1.0 * $line_item['line_tax'] / $line_item['line_total'];
+            $tax_rate = 0;
+            if ($line_item['line_tax'] && $line_item['line_total']) {
+                $tax_rate = 1.0 * $line_item['line_tax'] / $line_item['line_total'];
+            }
 
             $image_url = get_the_post_thumbnail_url($product_simple->get_id());
 
