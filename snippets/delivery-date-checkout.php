@@ -34,7 +34,7 @@ function add_delivery_date_field($checkout) {
     echo '
     <script>
         jQuery(function($){
-            $("#delivery-date-picker").datepicker({minDate: 0, dateFormat: "yy-mm-dd"});
+            $("#delivery-date-picker").datepicker({dateFormat: "yy-mm-dd"});
         });
     </script>
     <style>
