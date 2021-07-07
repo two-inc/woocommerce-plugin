@@ -89,16 +89,16 @@ class WC_Tillit_Checkout
     public function add_account_fields($fields)
     {
 
-
         if($this->WC_Tillit->get_option('enable_b2b_b2c_radio') === 'yes') {
 
+            $default_account_type = $this->WC_Tillit->get_option('default_to_b2c') === 'yes' ? 'personal' : 'business';
             $fields['account_type'] = [
                 'account_type' => [
                     'label' => __('Select the account type', 'tillit-payment-gateway'),
                     'required' => true,
                     'type' => 'radio',
                     'priority' => 15,
-                    'value' => 'business',
+                    'value' => $default_account_type,
                     'options' => [
                         'personal' => __('Personal', 'tillit-payment-gateway'),
                         'business' => __('Business', 'tillit-payment-gateway')

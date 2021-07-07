@@ -779,6 +779,11 @@ class WC_Tillit extends WC_Payment_Gateway
                 'type'      => 'checkbox',
                 'default'   => 'yes',
             ],
+            'default_to_b2c' => [
+                'title'     => __('Default to B2C check-out', 'tillit-payment-gateway'),
+                'label'     => ' ',
+                'type'      => 'checkbox',
+            ],
             'initiate_payment_to_buyer_on_refund' => [
                 'title'     => __('Initiate payment to buyer on refund', 'tillit-payment-gateway'),
                 'label'     => ' ',
