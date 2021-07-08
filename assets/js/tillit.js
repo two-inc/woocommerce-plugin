@@ -37,7 +37,7 @@ class Tillit {
         const $checkout = jQuery('.woocommerce-checkout')
 
         // Stop if not the checkout page
-        if($checkout.length === 0) return
+        if ($checkout.length === 0) return
 
         // Get the account type input
         const $accountType = jQuery('[name="account_type"]:checked')
@@ -49,7 +49,7 @@ class Tillit {
         const $companyId = $checkout.find('#company_id')
 
         // If we found the field
-        if($accountType.length > 0) {
+        if ($accountType.length > 0) {
 
             // Get the account type
             const accountType = $accountType.val()
@@ -62,7 +62,7 @@ class Tillit {
 
         }
 
-        if(tillitWithCompanySearch) {
+        if (tillitWithCompanySearch) {
 
             // Turn the select input into select2
             $billingCompany.selectWoo({
@@ -106,7 +106,7 @@ class Tillit {
                 // Get the option data
                 const data = e.params.data
 
-                if(window.tillit.company_id_search && window.tillit.company_id_search === 'yes') {
+                if (window.tillit.company_id_search && window.tillit.company_id_search === 'yes') {
 
                     // Set the company ID
                     tillitCompany.organization_number = data.company_id
@@ -131,7 +131,7 @@ class Tillit {
                 addressResponse.done(function(response){
 
                     // If we have the company location
-                    if(response.company_location) {
+                    if (response.company_location) {
 
                         // Get the company location object
                         const companyLocation = response.company_location
@@ -158,7 +158,7 @@ class Tillit {
          * https://github.com/select2/select2/issues/4614
          */
 
-        if(tillitWithCompanySearch) {
+        if (tillitWithCompanySearch) {
 
             const instance = $billingCompany.data('select2')
 
@@ -252,7 +252,7 @@ class Tillit {
         let $placeholder = jQuery('#tillit-'+ name +'-source')
 
         // Stop if we already have a placeholder
-        if($placeholder.length > 0) return
+        if ($placeholder.length > 0) return
 
         // Create a placeholder
         $placeholder = jQuery('<div id="tillit-'+ name +'-source"></div>')
@@ -320,7 +320,7 @@ class Tillit {
         const accountType = Tillit.getAccountType()
 
         // If business account
-        if(accountType === 'business') {
+        if (accountType === 'business') {
             Tillit.moveField('billing_first_name_field', 'fn')
             Tillit.moveField('billing_last_name_field', 'ln')
             Tillit.moveField('billing_phone_field', 'ph')
@@ -411,7 +411,7 @@ class Tillit {
         const $tillit = jQuery('li.payment_method_woocommerce-gateway-tillit')
 
         // If Tillit is disabled
-        if(isTillitDisabled) {
+        if (isTillitDisabled) {
 
             // Get the next or previous target
             const $target = $tillit.prev().length === 0 ? $tillit.next() : $tillit.prev()
@@ -423,6 +423,18 @@ class Tillit {
 
             // Active the Tillit method
             $tillit.find(':radio').click()
+
+        }
+
+        if (Tillit.getAccountType() === 'personal') {
+
+            // Hide Tillit payment option
+            $tillit.addClass('hidden')
+
+        } else {
+
+            // Show Tillit payment option
+            $tillit.removeClass('hidden')
 
         }
 
@@ -439,7 +451,7 @@ class Tillit {
     static extractItems(results)
     {
 
-        if(results.status !== 'success') return []
+        if (results.status !== 'success') return []
 
         const items = []
 
@@ -485,8 +497,8 @@ class Tillit {
         // Disable the Tillit payment method for personal orders
         $tillitPaymentMethod.attr('disabled', isTillitDisabled)
 
-        // If a personal account
-        if(isTillitDisabled) {
+        // If tillit method cannot be used
+        if (isTillitDisabled) {
 
             // Select the first visible payment method
             $tillit.parent().find('li:visible').eq(0).find(':radio').click()
@@ -518,7 +530,7 @@ class Tillit {
 
         for(let i = 0; i < values.length; i++) {
             const value = values[i]
-            if(!value || value.length === 0) {
+            if (!value || value.length === 0) {
                 can = false
                 break
             }
@@ -539,7 +551,7 @@ class Tillit {
 
         const canGetApproval = Tillit.canGetApproval()
 
-        if(!canGetApproval) return
+        if (!canGetApproval) return
 
         if (tillitOrderIntentCheck.interval) {
             tillitOrderIntentCheck.pendingCheck = true
@@ -621,7 +633,7 @@ class Tillit {
                 tillitApproved = response.approved
 
                 // Toggle the Tillit payment method
-                tillitMethodHidden = !tillitApproved
+                tillitMethodHidden = !tillitApproved || Tillit.getAccountType() === 'personal'
 
                 // Show or hide the Tillit payment method
                 Tillit.toggleMethod()
@@ -793,8 +805,8 @@ class Tillit {
         const accountType = Tillit.getAccountType()
 
         // Hide the method for personal accounts
-        if(accountType === 'personal') tillitMethodHidden = true
-        if(accountType === 'business' && tillitApproved) tillitMethodHidden = false
+        if (accountType === 'personal') tillitMethodHidden = true
+        if (accountType === 'business' && tillitApproved) tillitMethodHidden = false
 
         // Toggle the company fields
         Tillit.toggleCompanyFields($input.val())
@@ -820,9 +832,9 @@ class Tillit {
 
         let inputName = $input.attr('name')
 
-        if(inputName === 'company_id') {
+        if (inputName === 'company_id') {
             tillitCompany.organization_number = $input.val()
-        } else if(inputName === 'billing_company') {
+        } else if (inputName === 'billing_company') {
             tillitCompany.company_name = $input.val()
         }
 
@@ -843,7 +855,7 @@ class Tillit {
 
         let inputName = $input.attr('name').replace('billing_', '')
 
-        if(inputName === 'phone') inputName += '_number'
+        if (inputName === 'phone') inputName += '_number'
 
         tillitRepresentative[inputName] = $input.val()
 
