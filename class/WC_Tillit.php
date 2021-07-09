@@ -43,7 +43,8 @@ class WC_Tillit extends WC_Payment_Gateway
 
         // Tillit api host
         $checkout_env = $this->get_option('checkout_env');
-        $this->tillit_search_host = 'https://search-api-demo-j6whfmualq-lz.a.run.app';
+        $this->tillit_search_host_no = 'https://no.search.tillit.ai';
+        $this->tillit_search_host_gb = 'https://gb.search.tillit.ai';
         $this->tillit_checkout_host = $checkout_env == 'prod' ? 'https://api.tillit.ai'
                                     : ($checkout_env == 'demo' ? 'https://demo.api.tillit.ai'
                                     : ($checkout_env == 'dev' ? 'https://huynguyen.hopto.org:8083'

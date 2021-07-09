@@ -149,6 +149,7 @@ class WC_Tillit_Checkout
                     'data-multiple' => true,
                     'data-multi' => true
                 ],*/
+                'class' => array('billing_company_selectwoo'),
                 'options' => [
                     '' => __('Enter the company name', 'tillit-payment-gateway')
                 ],
@@ -262,7 +263,8 @@ class WC_Tillit_Checkout
                 'invalid_phone' => __('Please use phone format +47 99999999', 'tillit-payment-gateway'),
             ],
             'tillit_plugin_url' => WC_TILLIT_PLUGIN_URL,
-            'tillit_search_host' => $this->WC_Tillit->tillit_search_host,
+            'tillit_search_host_no' => $this->WC_Tillit->tillit_search_host_no,
+            'tillit_search_host_gb' => $this->WC_Tillit->tillit_search_host_gb,
             'tillit_checkout_host' => $this->WC_Tillit->tillit_checkout_host,
             'company_name_search' => $this->WC_Tillit->get_option('enable_company_name'),
             'company_id_search' => $this->WC_Tillit->get_option('enable_company_id'),
