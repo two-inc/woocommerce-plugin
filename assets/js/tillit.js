@@ -45,6 +45,9 @@ class Tillit {
         // Get the billing company field
         const $billingCompany = $checkout.find('#billing_company')
 
+        // Get the billing country field
+        const $billingCountry = $checkout.find('#billing_country')
+
         // Get the company ID field
         const $companyId = $checkout.find('#company_id')
 
@@ -64,44 +67,13 @@ class Tillit {
 
         if (tillitWithCompanySearch) {
 
+            // Reinitiate company select on country change
+            $billingCountry.on('select2:select', function(e){
+                $billingCompany.selectWoo(selectWooParams())
+            })
+
             // Turn the select input into select2
-            $billingCompany.selectWoo({
-                minimumInputLength: 3,
-                width: '100%',
-                escapeMarkup: function(markup) {
-                    return markup
-                },
-                templateResult: function(data)
-                {
-                    return data.html
-                },
-                templateSelection: function(data) {
-                    return data.text
-                },
-                ajax: {
-                    dataType: 'json',
-                    delay: 200,
-                    url: function(params){
-                        params.page = params.page || 1
-                        return window.tillit.tillit_search_host + '/search?limit=' + tillitSearchLimit + '&offset=' + ((params.page - 1) * tillitSearchLimit) + '&q=' + params.term
-                    },
-                    data: function()
-                    {
-                        return {}
-                    },
-                    processResults: function(response, params)
-                    {
-
-                        return {
-                            results: Tillit.extractItems(response),
-                            pagination: {
-                                more: (params.page * tillitSearchLimit) < response.data.total
-                            }
-                        }
-
-                    }
-                }
-            }).on('select2:select', function(e){
+            $billingCompany.selectWoo(selectWooParams()).on('select2:select', function(e){
 
                 // Get the option data
                 const data = e.params.data
@@ -998,6 +970,85 @@ class Tillit {
         }
     }
 
+}
+
+function selectWooParams() {
+    let countryParams = {
+        "NO": {
+            "tillit_search_host": window.tillit.tillit_search_host_no,
+        },
+        "GB": {
+            "tillit_search_host": window.tillit.tillit_search_host_gb,
+        }
+    }
+
+    let country = jQuery('#billing_country').val()
+
+    if (country in countryParams) {
+        return {
+            minimumInputLength: 3,
+            width: '100%',
+            escapeMarkup: function(markup) {
+                return markup
+            },
+            templateResult: function(data)
+            {
+                return data.html
+            },
+            templateSelection: function(data) {
+                return data.text
+            },
+            language: {
+                errorLoading: function() {
+                    return wc_country_select_params.i18n_searching
+                },
+                inputTooShort: function(t) {
+                    t = t.minimum - t.input.length;
+                    return 1 == t ? wc_country_select_params.i18n_input_too_short_1 : wc_country_select_params.i18n_input_too_short_n.replace("%qty%", t)
+                },
+                noResults: function() {
+                    return wc_country_select_params.i18n_no_matches
+                },
+                searching: function() {
+                    return wc_country_select_params.i18n_searching
+                },
+            },
+            ajax: {
+                dataType: 'json',
+                delay: 200,
+                url: function(params){
+                    params.page = params.page || 1
+                    return countryParams[country].tillit_search_host + '/search?limit=' + tillitSearchLimit + '&offset=' + ((params.page - 1) * tillitSearchLimit) + '&q=' + params.term
+                },
+                data: function()
+                {
+                    return {}
+                },
+                processResults: function(response, params)
+                {
+
+                    return {
+                        results: Tillit.extractItems(response),
+                        pagination: {
+                            more: (params.page * tillitSearchLimit) < response.data.total
+                        }
+                    }
+
+                }
+            }
+        }
+    } else {
+        jQuery('input[aria-owns="select2-billing_company-results"]').css('display: none;')
+        return {
+            minimumInputLength: 10000,
+            width: '100%',
+            language: {
+                inputTooShort: function(t) {
+                    return 'Please select country Norway or United Kingdom (UK) to search'
+                },
+            },
+        }
+    }
 }
 
 jQuery(function(){
