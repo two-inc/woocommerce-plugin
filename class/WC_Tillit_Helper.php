@@ -511,7 +511,11 @@ class WC_Tillit_Helper
                 $d->$k = WC_Tillit_Helper::utf8ize($v);
             }
         } else if (is_string($d)) {
-            return utf8_encode($d);
+            if (mb_detect_encoding($d, ['UTF-8'], true)) { // already in UTF-8
+                return $d;
+            } else {
+                return utf8_encode($d);
+            }
         }
         return $d;
     }
