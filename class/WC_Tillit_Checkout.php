@@ -287,7 +287,7 @@ class WC_Tillit_Checkout
     public function inject_cart_details()
     {
         if(!is_checkout()) return;
-        $tillit_obj = json_encode(WC_Tillit_Helper::utf8ize($this->prepare_tillit_object()));
+        $tillit_obj = json_encode(WC_Tillit_Helper::utf8ize($this->prepare_tillit_object()), JSON_UNESCAPED_UNICODE);
         if ($tillit_obj) printf('<script>window.tillit = %s;</script>', $tillit_obj);
     }
 
