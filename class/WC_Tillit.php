@@ -63,6 +63,7 @@ class WC_Tillit extends WC_Payment_Gateway
         add_action('get_header', [$this, 'process_confirmation']);
         add_action('woocommerce_update_options_checkout', [$this, 'update_checkout_options']);
         add_action('woocommerce_admin_order_data_after_order_details', [$this, 'add_invoice_credit_note_urls']);
+        add_action('woocommerce_cart_calculate_fees', [$this, 'add_invoice_fees']);
         add_action('admin_enqueue_scripts', [$this, 'tillit_admin_scripts']);
 
         $tillit_payment_gateway = $this;
@@ -340,6 +341,45 @@ class WC_Tillit extends WC_Payment_Gateway
             WC_Tillit_Helper::append_admin_force_reload();
 
         }
+    }
+
+    /**
+     * Add invoice fee as a line item
+     *
+     * @param $order_id
+     */
+    function add_invoice_fees() {
+
+        if ($this->get_option('invoice_fee_to_buyer') === 'yes' && 'woocommerce-gateway-tillit' === WC()->session->get('chosen_payment_method')) {
+            global $woocommerce;
+
+            if (is_admin() && ! defined('DOING_AJAX')) {
+                return;
+            }
+
+            // Get invoice fixed fee
+            $tillit_merchant_id = $this->get_option('tillit_merchant_id');
+            $response = $this->make_request("/v1/merchant/${tillit_merchant_id}", [], 'GET');
+
+            if(is_wp_error($response)) {
+                WC()->session->set('chosen_payment_method', 'cod');
+                return;
+            }
+
+            $tillit_err = WC_Tillit_Helper::get_tillit_error_msg($response);
+            if ($tillit_err) {
+                WC()->session->set('chosen_payment_method', 'cod');
+                return;
+            }
+
+            $body = json_decode($response['body'], true);
+
+            $invoice_fixed_fee = $body['fixed_fee_per_order'];
+
+            //$invoice_percentage_fee = ($woocommerce->cart->cart_contents_total + $woocommerce->cart->tax_total + $woocommerce->cart->shipping_total + $woocommerce->cart->shipping_tax_total) * $percentage;
+            $woocommerce->cart->add_fee('Invoice fee', $invoice_fixed_fee, false, '');
+        }
+
     }
 
     /**
@@ -782,6 +822,11 @@ class WC_Tillit extends WC_Payment_Gateway
             ],
             'default_to_b2c' => [
                 'title'     => __('Default to B2C check-out', 'tillit-payment-gateway'),
+                'label'     => ' ',
+                'type'      => 'checkbox',
+            ],
+            'invoice_fee_to_buyer' => [
+                'title'     => __('Shift invoice fee to the buyers', 'tillit-payment-gateway'),
                 'label'     => ' ',
                 'type'      => 'checkbox',
             ],
