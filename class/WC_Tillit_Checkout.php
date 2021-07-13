@@ -141,6 +141,7 @@ class WC_Tillit_Checkout
         $with_company_search = $this->WC_Tillit->get_option('enable_company_name') === 'yes';
 
         if($with_company_search) {
+
             $fields['billing']['billing_company'] = [
                 'label' => __('Company name', 'tillit-payment-gateway'),
                 'autocomplete' => 'organization',
@@ -156,19 +157,29 @@ class WC_Tillit_Checkout
                 'required' => true,
                 'priority' => 2
             ];
+
+            $fields['billing']['company_id'] = [
+                'label' => __('Company ID', 'tillit-payment-gateway'),
+                'required' => true,
+                'priority' => 3,
+                'custom_attributes' => array( 'disabled' => true)
+            ];
+
         } else {
+
             $fields['billing']['billing_company'] = [
                 'label' => __('Company name', 'tillit-payment-gateway'),
                 'required' => true,
                 'priority' => 34
             ];
-        }
 
-        $fields['billing']['company_id'] = [
-            'label' => __('Company ID', 'tillit-payment-gateway'),
-            'required' => true,
-            'priority' => $with_company_search ? 3 : 35
-        ];
+            $fields['billing']['company_id'] = [
+                'label' => __('Company ID', 'tillit-payment-gateway'),
+                'required' => true,
+                'priority' => 35
+            ];
+
+        }
 
         $fields['billing']['department'] = [
             'label' => __('Department', 'tillit-payment-gateway'),
