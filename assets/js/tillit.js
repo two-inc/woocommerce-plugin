@@ -147,7 +147,7 @@ class Tillit {
         $body.on('updated_checkout', function(){
 
             // Toggle the action buttons
-            context.toggleActions()
+            Tillit.toggleActions()
 
             // Enable or disable the Tillit method
             Tillit.toggleMethod()
@@ -160,8 +160,8 @@ class Tillit {
         // Handle the representative inputs blur event
         $body.on('blur', '#company_id, #billing_company', this.onCompanyManualInputBlur)
 
-        // Handle the company inputs change event
-        $body.on('change', '#billing_country', this.onCompanyInputChange)
+        // Handle the country inputs change event
+        $body.on('change', '#billing_country', this.onCountryInputChange)
 
         $body.on('click', '#place_order', function(){
             clearInterval(tillitOrderIntentCheck.interval)
@@ -178,8 +178,10 @@ class Tillit {
         // Handle account type change
         $checkout.on('change', '[name="account_type"]', this.changeAccountType)
 
-        // Toggle the actions when the payment method changes
-        $checkout.on('change', '[name="payment_method"]', this.toggleActions)
+        // Update right sidebar order review when the payment method changes
+        $checkout.on('change', '[name="payment_method"]', function() {
+            $body.trigger('update_checkout');
+        });
 
         setInterval(function(){
             if (tillitOrderIntentCheck.pendingCheck) Tillit.getApproval()
@@ -370,43 +372,34 @@ class Tillit {
     static toggleMethod()
     {
 
+        // Get the Tillit payment method section
+        const $tillitSection = jQuery('li.payment_method_woocommerce-gateway-tillit')
+
         // Get the Tillit payment method input
-        const $tillitPaymentMethod = jQuery(':input[value="woocommerce-gateway-tillit"]')
+        const $tillitBox = jQuery(':input[value="woocommerce-gateway-tillit"]')
 
         // True if the Tillit payment method is disabled
         const isTillitDisabled = window.tillit.enable_order_intent === 'yes' && tillitMethodHidden === true
 
-        // Disable the Tillit payment method for personal orders
-        $tillitPaymentMethod.attr('disabled', isTillitDisabled)
-
-        // Get the Tillit payment method
-        const $tillit = jQuery('li.payment_method_woocommerce-gateway-tillit')
-
         // If Tillit is disabled
         if (isTillitDisabled) {
 
-            // Get the next or previous target
-            const $target = $tillit.prev().length === 0 ? $tillit.next() : $tillit.prev()
-
-            // Activate the next default method
-            $target.find(':radio').click()
-
-        } else {
-
-            // Active the Tillit method
-            $tillit.find(':radio').click()
+            $tillitBox.prop('checked', false)
 
         }
+
+        // Disable the Tillit payment method for personal orders
+        $tillitBox.attr('disabled', isTillitDisabled)
 
         if (Tillit.getAccountType() === 'personal') {
 
             // Hide Tillit payment option
-            $tillit.addClass('hidden')
+            $tillitSection.addClass('hidden')
 
         } else {
 
             // Show Tillit payment option
-            $tillit.removeClass('hidden')
+            $tillitSection.removeClass('hidden')
 
         }
 
@@ -652,9 +645,6 @@ class Tillit {
                 // Show or hide the Tillit payment method
                 Tillit.toggleMethod()
 
-                // Select the default payment method
-                Tillit.selectDefaultMethod()
-
                 // Update company name in payment option
                 document.querySelector('.tillit-buyer-name').innerText = ''
 
@@ -746,7 +736,7 @@ class Tillit {
 
     }
 
-    toggleActions()
+    static toggleActions()
     {
 
         // Get the account type
@@ -836,12 +826,12 @@ class Tillit {
     }
 
     /**
-     * Handle the company input changes
+     * Handle the country input changes
      *
      * @param event
      */
 
-    onCompanyInputChange(event)
+    onCountryInputChange(event)
     {
 
         const $input = jQuery(this)
