@@ -66,6 +66,8 @@ class WC_Tillit extends WC_Payment_Gateway
         add_action('woocommerce_cart_calculate_fees', [$this, 'add_invoice_fees']);
         add_action('admin_enqueue_scripts', [$this, 'tillit_admin_scripts']);
 
+        add_filter('acf/settings/remove_wp_meta_box', '__return_false');
+
         $tillit_payment_gateway = $this;
         new WC_Tillit_Checkout($this);
 

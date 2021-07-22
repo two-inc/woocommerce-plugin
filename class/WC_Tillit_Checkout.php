@@ -162,7 +162,7 @@ class WC_Tillit_Checkout
                 'label' => __('Company ID', 'tillit-payment-gateway'),
                 'required' => true,
                 'priority' => 3,
-                'custom_attributes' => array( 'disabled' => true)
+                'custom_attributes' => array('readonly' => 'readonly')
             ];
 
         } else {
