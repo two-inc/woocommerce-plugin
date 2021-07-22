@@ -36,8 +36,9 @@ class WC_Tillit extends WC_Payment_Gateway
         // Define user set variables
         $this->title = sprintf(__($this->get_option('title'), 'tillit-payment-gateway'), strval($this->get_option('days_on_invoice')));
         $this->description = sprintf(
-            '<p>%s <span class="tillit-buyer-name"></span>.</p>',
-            __('By completing the purchase, you verify that you have the legal right to purchase on behalf of', 'tillit-payment-gateway')
+            '<p>%s <span class="tillit-buyer-name-placeholder">%s</span><span class="tillit-buyer-name"></span>.</p>',
+            __('By completing the purchase, you verify that you have the legal right to purchase on behalf of', 'tillit-payment-gateway'),
+            __('your company', 'tillit-payment-gateway')
         );
         $this->api_key = $this->get_option('api_key');
 

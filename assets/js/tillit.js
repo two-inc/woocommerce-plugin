@@ -152,6 +152,9 @@ class Tillit {
             // Enable or disable the Tillit method
             Tillit.toggleMethod()
 
+            // Enable or disable the Tillit method
+            Tillit.updateCompanyNameAgreement()
+
         })
 
         // Handle the representative inputs blur event
@@ -159,6 +162,10 @@ class Tillit {
 
         // Handle the representative inputs blur event
         $body.on('blur', '#company_id, #billing_company', this.onCompanyManualInputBlur)
+
+        // Handle the company inputs change event
+        $body.on('change', '#select2-billing_company-container', Tillit.updateCompanyNameAgreement)
+        $body.on('change', '#billing_company', Tillit.updateCompanyNameAgreement)
 
         // Handle the country inputs change event
         $body.on('change', '#billing_country', this.onCountryInputChange)
@@ -606,12 +613,6 @@ class Tillit {
                 // Select the default payment method
                 Tillit.selectDefaultMethod()
 
-                // Update company name in payment option
-                if (document.querySelector('#select2-billing_company-container'))
-                    document.querySelector('.tillit-buyer-name').innerText = document.querySelector('#select2-billing_company-container').innerText
-                else if (document.querySelector('#billing_company'))
-                    document.querySelector('.tillit-buyer-name').innerText = document.querySelector('#billing_company').value
-
                 // Update tracking number
                 if (response.tracking_id && document.querySelector('#tracking_id')) {
                     document.querySelector('#tracking_id').value = response.tracking_id
@@ -644,9 +645,6 @@ class Tillit {
 
                 // Show or hide the Tillit payment method
                 Tillit.toggleMethod()
-
-                // Update company name in payment option
-                document.querySelector('.tillit-buyer-name').innerText = ''
 
                 // Display error messages
                 if (response.status >= 400) {
@@ -840,6 +838,26 @@ class Tillit {
 
         Tillit.getApproval()
 
+    }
+
+    /**
+     * Update company name in payment method aggrement section
+     */
+
+    static updateCompanyNameAgreement()
+    {
+        if (document.querySelector('#select2-billing_company-container') && document.querySelector('#select2-billing_company-container').innerText) {
+            document.querySelector('.tillit-buyer-name').innerText = document.querySelector('#select2-billing_company-container').innerText
+            document.querySelector('.tillit-buyer-name').classList.remove('hidden')
+            document.querySelector('.tillit-buyer-name-placeholder').classList.add('hidden')
+        } else if (document.querySelector('#billing_company') && document.querySelector('#billing_company').value) {
+            document.querySelector('.tillit-buyer-name').innerText = document.querySelector('#billing_company').value
+            document.querySelector('.tillit-buyer-name').classList.remove('hidden')
+            document.querySelector('.tillit-buyer-name-placeholder').classList.add('hidden')
+        } else {
+            document.querySelector('.tillit-buyer-name').classList.add('hidden')
+            document.querySelector('.tillit-buyer-name-placeholder').classList.remove('hidden')
+        }
     }
 
     /**
