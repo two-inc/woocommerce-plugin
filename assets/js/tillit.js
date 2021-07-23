@@ -72,8 +72,15 @@ class Tillit {
                 $billingCompany.selectWoo(selectWooParams())
             })
 
+            $billingCountry.on('select2:open', function(e){
+                setTimeout(function(){
+                    jQuery('input[aria-owns="select2-billing_country-results"]').get(0).focus()
+                }, 200)
+            })
+
             // Turn the select input into select2
-            $billingCompany.selectWoo(selectWooParams()).on('select2:select', function(e){
+            const $billingCompanySelect = $billingCompany.selectWoo(selectWooParams())
+            $billingCompanySelect.on('select2:select', function(e){
 
                 // Get the option data
                 const data = e.params.data
@@ -121,6 +128,12 @@ class Tillit {
 
                 })
 
+            })
+
+            $billingCompanySelect.on('select2:open', function(e){
+                setTimeout(function(){
+                    jQuery('input[aria-owns="select2-billing_company-results"]').get(0).focus()
+                }, 200)
             })
 
         }

@@ -2,7 +2,7 @@
 	height: 12px;
 	margin: 0 0 8px 4px;
 }
-.woocommerce-checkout span.select2-container {
+.woocommerce-checkout .woocommerce-input-wrapper span.select2-container {
 	border-radius: 15px;
 	height: 70px;
 	padding: .6rem;
@@ -26,4 +26,5 @@
 }
 .woocommerce-checkout #payment ul.payment_methods li.wc_payment_method.payment_method_woocommerce-gateway-tillit .tillit-subtitle {
   margin-left: unset;
+	color: #777;
 }
