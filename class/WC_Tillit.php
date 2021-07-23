@@ -1062,10 +1062,7 @@ class WC_Tillit extends WC_Payment_Gateway
             'headers' => [
                 'Accept-Language' => WC_Tillit_Helper::get_locale(),
                 'Content-Type' => 'application/json; charset=utf-8',
-                'Tillit-Merchant-Id' => $this->get_option('tillit_merchant_id'),
-                'Authorization' => sprintf('Basic %s', base64_encode(
-                    $this->get_option('tillit_merchant_id') . ':' . $this->get_option('api_key')
-                ))
+                'X-API-Key' => $this->get_option('api_key')
             ],
             'timeout' => 30,
             'body' => empty($payload) ? '' : json_encode($payload),
