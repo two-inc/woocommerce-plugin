@@ -50,6 +50,8 @@ class WC_Tillit extends WC_Payment_Gateway
                                     : ($checkout_env == 'dev' ? 'https://huynguyen.hopto.org:8083'
                                     : 'https://staging.api.tillit.ai'));
 
+        $this->plugin_version = get_plugin_version();
+
         global $tillit_payment_gateway;
         if (isset($tillit_payment_gateway)) {
             return;
@@ -1054,9 +1056,11 @@ class WC_Tillit extends WC_Payment_Gateway
      *
      * @return WP_Error|array
      */
-    private function make_request($endpoint, $payload = [], $method = 'POST')
+    private function make_request($endpoint, $payload = [], $method = 'POST', $params = array())
     {
-        return wp_remote_request(sprintf('%s%s', $this->tillit_checkout_host, $endpoint), [
+        $params['client'] = 'wp';
+        $params['client_v'] = $this->plugin_version;
+        return wp_remote_request(sprintf('%s%s?%s', $this->tillit_checkout_host, $endpoint, http_build_query($params)), [
             'method' => $method,
             'headers' => [
                 'Accept-Language' => WC_Tillit_Helper::get_locale(),
