@@ -41,7 +41,7 @@ function woocommerce_gateway_tillit_classes()
 
 function init_tillit_translation()
 {
-    $plugin_rel_path = basename(dirname( __FILE__ ));
+    $plugin_rel_path = basename(dirname(__FILE__));
     load_plugin_textdomain('tillit-payment-gateway', false, $plugin_rel_path);
 }
 

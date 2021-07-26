@@ -22,7 +22,6 @@ class WC_Tillit extends WC_Payment_Gateway
 
         $this->id = 'woocommerce-gateway-tillit';
         $this->has_fields = false;
-        // $this->order_button_text = __('Proceed to Tillit', 'tillit-payment-gateway');
         $this->order_button_text = __('Place order', 'tillit-payment-gateway');
         $this->method_title = __('Tillit', 'tillit-payment-gateway');
         $this->method_description = __('Making it easy for businesses to buy online.', 'tillit-payment-gateway');
@@ -79,7 +78,7 @@ class WC_Tillit extends WC_Payment_Gateway
      */
     public function change_tillit_payment_title(){
         add_filter('woocommerce_gateway_title', function ($title, $payment_id) {
-            if( $payment_id === 'woocommerce-gateway-tillit' ) {
+            if($payment_id === 'woocommerce-gateway-tillit') {
                 $title = sprintf(
                     '%s<div class="tillit-subtitle">%s</div> ',
                     sprintf(__($this->get_option('title'), 'tillit-payment-gateway'), strval($this->get_option('days_on_invoice'))),
@@ -174,8 +173,8 @@ class WC_Tillit extends WC_Payment_Gateway
             wp_enqueue_media();
         }
 
-        wp_enqueue_script( 'tillit.admin', WC_TILLIT_PLUGIN_URL . '/assets/js/admin.js', ['jquery']);
-        wp_enqueue_style( 'tillit.admin', WC_TILLIT_PLUGIN_URL . '/assets/css/admin.css');
+        wp_enqueue_script('tillit.admin', WC_TILLIT_PLUGIN_URL . '/assets/js/admin.js', ['jquery']);
+        wp_enqueue_style('tillit.admin', WC_TILLIT_PLUGIN_URL . '/assets/css/admin.css');
 
     }
 
@@ -554,7 +553,7 @@ class WC_Tillit extends WC_Payment_Gateway
 
     public function process_refund($order_id, $amount = null, $reason = '') {
 
-        $order = wc_get_order( $order_id );
+        $order = wc_get_order($order_id);
 
         // Check payment method
         if (!WC_Tillit_Helper::is_tillit_order($order)) {
@@ -858,7 +857,7 @@ class WC_Tillit extends WC_Payment_Gateway
      */
     public function generate_radio_html($key, $data)
     {
-        $field_key = $this->get_field_key( $key );
+        $field_key = $this->get_field_key($key);
         $defaults  = array(
             'title'             => '',
             'label'             => '',
@@ -872,9 +871,9 @@ class WC_Tillit extends WC_Payment_Gateway
             'checked'           => false
         );
 
-        $data = wp_parse_args( $data, $defaults );
+        $data = wp_parse_args($data, $defaults);
 
-        if ( ! $data['label'] ) {
+        if (! $data['label']) {
             $data['label'] = $data['title'];
         }
 
@@ -883,10 +882,10 @@ class WC_Tillit extends WC_Payment_Gateway
         <tr valign="top">
             <td class="forminp" colspan="2">
                 <fieldset>
-                    <legend class="screen-reader-text"><span><?php echo wp_kses_post( $data['title'] ); ?></span></legend>
-                    <label for="<?php echo esc_attr( $field_key ); ?>">
-                        <input <?php disabled( $data['disabled'], true ); ?> class="<?php echo esc_attr( $data['class'] ); ?>" type="radio" name="<?php echo esc_attr( $field_key ); ?>" id="<?php echo esc_attr( $field_key ); ?>" style="<?php echo esc_attr( $data['css'] ); ?>" value="1" <?php checked($data['checked'] === true, true); ?> <?php echo $this->get_custom_attribute_html( $data ); // WPCS: XSS ok. ?> /> <?php echo wp_kses_post( $data['label'] ); ?></label><br/>
-                    <?php echo $this->get_description_html( $data ); // WPCS: XSS ok. ?>
+                    <legend class="screen-reader-text"><span><?php echo wp_kses_post($data['title']); ?></span></legend>
+                    <label for="<?php echo esc_attr($field_key); ?>">
+                        <input <?php disabled($data['disabled'], true); ?> class="<?php echo esc_attr($data['class']); ?>" type="radio" name="<?php echo esc_attr($field_key); ?>" id="<?php echo esc_attr($field_key); ?>" style="<?php echo esc_attr($data['css']); ?>" value="1" <?php checked($data['checked'] === true, true); ?> <?php echo $this->get_custom_attribute_html($data); // WPCS: XSS ok. ?> /> <?php echo wp_kses_post($data['label']); ?></label><br/>
+                    <?php echo $this->get_description_html($data); // WPCS: XSS ok. ?>
                 </fieldset>
             </td>
         </tr>

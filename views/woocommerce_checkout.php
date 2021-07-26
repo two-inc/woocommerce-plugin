@@ -14,10 +14,10 @@ if ($this->WC_Tillit->get_option('enable_b2b_b2c_radio') === 'yes')
 ?>
     <div class="woocommerce-account-type-fields__field-wrapper">
         <?php
-        $fields = $checkout->get_checkout_fields( 'account_type' );
+        $fields = $checkout->get_checkout_fields('account_type');
         foreach($fields as $key => $field){
-            $value = isset($field['value']) ? $field['value'] : $checkout->get_value( $key );
-            woocommerce_form_field( $key, $field, $value );
+            $value = isset($field['value']) ? $field['value'] : $checkout->get_value($key);
+            woocommerce_form_field($key, $field, $value);
         }
         ?>
     </div>
