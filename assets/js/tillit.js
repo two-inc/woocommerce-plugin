@@ -104,7 +104,7 @@ class Tillit {
                 // Fetch the company data
                 const addressResponse = jQuery.ajax({
                     dataType: 'json',
-                    url: window.tillit.tillit_checkout_host + '/v1/company/' + jQuery('#company_id').val() + '/address'
+                    url: Tillit.contructTillitUrl('/v1/company/' + jQuery('#company_id').val() + '/address')
                 })
 
                 addressResponse.done(function(response){
@@ -604,7 +604,7 @@ class Tillit {
 
             // Create an order intent
             const approvalResponse = jQuery.ajax({
-                url: window.tillit.tillit_checkout_host + '/v1/order_intent',
+                url: Tillit.contructTillitUrl('/v1/order_intent'),
                 contentType: "application/json; charset=utf-8",
                 dataType: 'json',
                 method: 'POST',
@@ -943,6 +943,17 @@ class Tillit {
             }
         }
         sessionStorage.setItem('checkoutInputs', JSON.stringify(checkoutInputs))
+    }
+
+    /**
+     * Construct url to Tillit checkout api
+     */
+
+    static contructTillitUrl(path, params = {})
+    {
+        params['client'] = window.tillit.client_name
+        params['client_v'] = window.tillit.client_version
+        return window.tillit.tillit_checkout_host + path + '?' + (new URLSearchParams(params)).toString()
     }
 
     /**
