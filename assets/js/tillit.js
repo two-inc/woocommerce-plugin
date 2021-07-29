@@ -101,10 +101,14 @@ class Tillit {
                 // Get the company approval status
                 Tillit.getApproval()
 
+                // Get country
+                let country_prefix = tillitCompany.country_prefix
+                if (!country_prefix || !['GB'].includes(country_prefix)) country_prefix = 'NO'
+
                 // Fetch the company data
                 const addressResponse = jQuery.ajax({
                     dataType: 'json',
-                    url: Tillit.contructTillitUrl('/v1/company/' + jQuery('#company_id').val() + '/address')
+                    url: Tillit.contructTillitUrl('/v1/' + country_prefix + '/company/' + jQuery('#company_id').val() + '/address')
                 })
 
                 addressResponse.done(function(response){
@@ -113,16 +117,16 @@ class Tillit {
                     if (response.company_location) {
 
                         // Get the company location object
-                        const companyLocation = response.company_location
+                        const companyLocation = response.address
 
                         // Populate the street name and house number fields
-                        jQuery('#billing_address_1').val(companyLocation.street_address)
+                        jQuery('#billing_address_1').val(companyLocation.streetAddress)
 
                         // Populate the city
-                        jQuery('#billing_city').val(companyLocation.municipality_name)
+                        jQuery('#billing_city').val(companyLocation.city)
 
                         // Populate the postal code
-                        jQuery('#billing_postcode').val(companyLocation.postal_code)
+                        jQuery('#billing_postcode').val(companyLocation.postalCode)
 
                     }
 
