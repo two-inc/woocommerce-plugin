@@ -42,13 +42,12 @@ class WC_Tillit extends WC_Payment_Gateway
         $this->api_key = $this->get_option('api_key');
 
         // Tillit api host
-        $checkout_env = $this->get_option('checkout_env');
         $this->tillit_search_host_no = 'https://no.search.tillit.ai';
         $this->tillit_search_host_gb = 'https://gb.search.tillit.ai';
-        $this->tillit_checkout_host = $checkout_env == 'prod' ? 'https://api.tillit.ai'
-                                    : ($checkout_env == 'demo' ? 'https://demo.api.tillit.ai'
-                                    : ($checkout_env == 'dev' ? 'https://huynguyen.hopto.org:8083'
-                                    : 'https://staging.api.tillit.ai'));
+        $this->tillit_checkout_host = 'https://api.tillit.ai';
+        if (WC_Tillit_Helper::is_tillit_development()) {
+            $this->tillit_checkout_host = $this->get_option('test_checkout_host');
+        }
 
         $this->plugin_version = get_plugin_version();
 
@@ -514,7 +513,7 @@ class WC_Tillit extends WC_Payment_Gateway
         if ($product_type === 'MERCHANT_INVOICE') {
             $bank_account = $this->get_option('bank_account');
             $bank_account_type = $this->get_option('bank_account_type');
-            $payment_reference_message = $order->get_id();
+            $payment_reference_message = strval($order->get_id());
         }
 
         // Create order
@@ -733,26 +732,13 @@ class WC_Tillit extends WC_Payment_Gateway
     }
 
     /**
-     * Get default environment id
-     *
-     * @return string
-     */
-    public function get_default_env()
-    {
-        // To avoid running WC_Tillit_Helper::get_default_env() for every request
-        if ($this->get_option('checkout_env')) return 'demo';
-
-        return WC_Tillit_Helper::get_default_env();
-    }
-
-    /**
      * Register Admin form fields
      *
      * @return void
      */
     public function init_form_fields()
     {
-        $this->form_fields = apply_filters('wc_tillit_form_fields', [
+        $tillit_form_fields = [
             'enabled' => [
                 'title'     => __('Enable/Disable', 'tillit-payment-gateway'),
                 'type'      => 'checkbox',
@@ -775,7 +761,7 @@ class WC_Tillit extends WC_Payment_Gateway
             ],
             'api_key' => [
                 'title'     => __('API Key', 'tillit-payment-gateway'),
-                'type'      => 'password',
+                'type'      => 'password'
             ],
             'merchant_logo' => [
                 'title'     => __('Logo', 'tillit-payment-gateway'),
@@ -812,73 +798,73 @@ class WC_Tillit extends WC_Payment_Gateway
             'days_on_invoice' => [
                 'title'     => __('Number of days on invoice', 'tillit-payment-gateway'),
                 'type'      => 'text',
-                'default'   => '14',
+                'default'   => '14'
             ],
             'section_title_settings' => [
                 'type'      => 'separator',
                 'title'     => __('Settings', 'tillit-payment-gateway')
             ],
-            'checkout_env' => [
-                'type'      => 'select',
-                'title'     => __('Mode', 'tillit-payment-gateway'),
-                'default'   => $this->get_default_env(),
-                'options'   => array(
-                      'prod' => 'Production',
-                      'demo' => 'Demo',
-                      'stg'  => 'Staging',
-                      'dev'  => 'Development'
-                 )
+            'test_checkout_host' => [
+                'type'      => 'text',
+                'title'     => __('Tillit Test Server', 'tillit-payment-gateway'),
+                'default'   => 'https://staging.api.tillit.ai'
             ],
             'enable_company_name' => [
                 'title'     => __('Activate company name auto-complete', 'tillit-payment-gateway'),
                 'label'     => ' ',
-                'type'      => 'checkbox',
+                'type'      => 'checkbox'
             ],
             'enable_company_id' => [
                 'title'     => __('Activate company org.id auto-complete', 'tillit-payment-gateway'),
                 'label'     => ' ',
-                'type'      => 'checkbox',
+                'type'      => 'checkbox'
             ],
             'finalize_purchase' => [
                 'title'     => __('Finalize purchase when order is fulfilled', 'tillit-payment-gateway'),
                 'label'     => ' ',
-                'type'      => 'checkbox',
+                'type'      => 'checkbox'
             ],
             'enable_order_intent' => [
                 'title'     => __('Pre-approve the buyer during checkout and disable Tillit if the buyer is declined', 'tillit-payment-gateway'),
                 'label'     => ' ',
                 'type'      => 'checkbox',
-                'default'   => 'yes',
+                'default'   => 'yes'
             ],
             'enable_b2b_b2c_radio' => [
                 'title'     => __('Activate B2C/B2B check-out radio button', 'tillit-payment-gateway'),
                 'label'     => ' ',
                 'type'      => 'checkbox',
-                'default'   => 'yes',
+                'default'   => 'yes'
             ],
             'default_to_b2c' => [
                 'title'     => __('Default to B2C check-out', 'tillit-payment-gateway'),
                 'label'     => ' ',
-                'type'      => 'checkbox',
+                'type'      => 'checkbox'
             ],
             'invoice_fee_to_buyer' => [
                 'title'     => __('Shift invoice fee to the buyers', 'tillit-payment-gateway'),
                 'label'     => ' ',
-                'type'      => 'checkbox',
+                'type'      => 'checkbox'
             ],
             'initiate_payment_to_buyer_on_refund' => [
                 'title'     => __('Initiate payment to buyer on refund', 'tillit-payment-gateway'),
                 'label'     => ' ',
                 'type'      => 'checkbox',
-                'default'   => 'yes',
+                'default'   => 'yes'
             ],
             'clear_options_on_deactivation' => [
                 'title'     => __('Clear settings on deactivation', 'tillit-payment-gateway'),
                 'label'     => ' ',
                 'type'      => 'checkbox',
-                'default'   => 'yes',
+                'default'   => 'yes'
             ]
-        ]);
+        ];
+
+        if (!WC_Tillit_Helper::is_tillit_development()) {
+            unset($tillit_form_fields['test_checkout_host']);
+        }
+
+        $this->form_fields = apply_filters('wc_tillit_form_fields', $tillit_form_fields);
     }
 
     /**

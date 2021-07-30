@@ -48,7 +48,7 @@ function toggleProductTypeFields() {
 
     const productType = jQuery('#woocommerce_woocommerce-gateway-tillit_product_type').val()
 
-    if (productType === 'merchant_invoice') {
+    if (productType === 'MERCHANT_INVOICE') {
         jQuery('#woocommerce_woocommerce-gateway-tillit_bank_account').closest('tr').show()
         jQuery('#woocommerce_woocommerce-gateway-tillit_bank_account_type').closest('tr').show()
     } else {

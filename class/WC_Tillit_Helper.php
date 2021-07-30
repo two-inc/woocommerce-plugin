@@ -471,18 +471,36 @@ class WC_Tillit_Helper
     }
 
     /**
-     * Get default environment id
+     * Check if current server is tillit development
      *
      * @return string
      */
-    public static function get_default_env()
+    public static function is_tillit_development()
     {
         $hostname = str_replace(array('http://', 'https://'), '', get_home_url());
 
-        if (in_array($hostname, array('staging.demo.tillit.ai'))) return 'stg';
-        else if (in_array($hostname, array('demo.tillit.ai'))) return 'demo';
-        else if (in_array($hostname, array('dev.tillitlocal.ai', 'localhost')) || substr($hostname, 0, 10) === 'localhost:') return 'dev';
-        else return 'prod';
+        // Local
+        if (in_array($hostname, array('dev.tillitlocal.ai', 'localhost')) || substr($hostname, 0, 10) === 'localhost:') return true;
+
+        // Production sites
+        if (strlen($hostname) > 10 && substr($hostname, -10) === '.tillit.ai') {
+            $tillit_prod_sites = array('shop', 'morgenlevering', 'arkwrightx', 'paguro');
+            $host_prefix = substr($hostname, 0, -10);
+
+            foreach($tillit_prod_sites as $tillit_prod_site) {
+                if ($host_prefix === $tillit_prod_site || $host_prefix === ('www.' . $tillit_prod_site)) {
+                    // Tillit site but not for development
+                    return false;
+                }
+            }
+
+            // Tillit development site
+            return true;
+        }
+
+        // Neither local nor tillit development site
+        return false;
+
     }
 
     /**
