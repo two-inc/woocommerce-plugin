@@ -114,7 +114,7 @@ class Tillit {
                 addressResponse.done(function(response){
 
                     // If we have the company location
-                    if (response.company_location) {
+                    if (response.address) {
 
                         // Get the company location object
                         const companyLocation = response.address
