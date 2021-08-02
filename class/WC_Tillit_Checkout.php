@@ -154,13 +154,13 @@ class WC_Tillit_Checkout
                 'options' => [
                     '' => __('Enter the company name', 'tillit-payment-gateway')
                 ],
-                'required' => true,
+                'required' => false,
                 'priority' => 2
             ];
 
             $fields['billing']['company_id'] = [
                 'label' => __('Company ID', 'tillit-payment-gateway'),
-                'required' => true,
+                'required' => false,
                 'priority' => 3,
                 'custom_attributes' => array('readonly' => 'readonly')
             ];
@@ -169,13 +169,13 @@ class WC_Tillit_Checkout
 
             $fields['billing']['billing_company'] = [
                 'label' => __('Company name', 'tillit-payment-gateway'),
-                'required' => true,
+                'required' => false,
                 'priority' => 34
             ];
 
             $fields['billing']['company_id'] = [
                 'label' => __('Company ID', 'tillit-payment-gateway'),
-                'required' => true,
+                'required' => false,
                 'priority' => 35
             ];
 
