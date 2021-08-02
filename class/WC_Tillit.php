@@ -246,6 +246,8 @@ class WC_Tillit extends WC_Payment_Gateway
             $tillit_meta['department'],
             $tillit_meta['project'],
             $tillit_meta['product_type'],
+            $tillit_meta['bank_code'],
+            $tillit_meta['bank_code_type'],
             $tillit_meta['bank_account'],
             $tillit_meta['bank_account_type'],
             $tillit_meta['payment_reference_message'],
@@ -290,6 +292,8 @@ class WC_Tillit extends WC_Payment_Gateway
             $tillit_meta['department'],
             $tillit_meta['project'],
             $tillit_meta['product_type'],
+            $tillit_meta['bank_code'],
+            $tillit_meta['bank_code_type'],
             $tillit_meta['bank_account'],
             $tillit_meta['bank_account_type'],
             $tillit_meta['payment_reference_message'],
@@ -506,11 +510,15 @@ class WC_Tillit extends WC_Payment_Gateway
 
         // Get payment details
         $product_type = $this->get_option('product_type');
+        $bank_code = '';
+        $bank_code_type = '';
         $bank_account = '';
         $bank_account_type = 'IBAN';
         $payment_reference_message = '';
 
         if ($product_type === 'MERCHANT_INVOICE') {
+            $bank_code = $this->get_option('bank_code');
+            $bank_code_type = $this->get_option('bank_code_type');
             $bank_account = $this->get_option('bank_account');
             $bank_account_type = $this->get_option('bank_account_type');
             $payment_reference_message = strval($order->get_id());
@@ -526,6 +534,8 @@ class WC_Tillit extends WC_Payment_Gateway
             sanitize_text_field($_POST['department']),
             sanitize_text_field($_POST['project']),
             $product_type,
+            $bank_code,
+            $bank_code_type,
             $bank_account,
             $bank_account_type,
             $payment_reference_message,
@@ -780,6 +790,18 @@ class WC_Tillit extends WC_Payment_Gateway
                       'MERCHANT_INVOICE' => 'Merchant Invoice'
                  )
             ],
+            'bank_code' => [
+                'title'     => __('Bank code', 'tillit-payment-gateway'),
+                'type'      => 'text'
+            ],
+            'bank_code_type' => [
+                'type'      => 'select',
+                'title'     => __('Bank code type', 'tillit-payment-gateway'),
+                'default'   => 'SORT_CODE',
+                'options'   => array(
+                      'SORT_CODE' => 'Sort code'
+                 )
+            ],
             'bank_account' => [
                 'title'     => __('Bank account', 'tillit-payment-gateway'),
                 'type'      => 'text'
@@ -994,6 +1016,8 @@ class WC_Tillit extends WC_Payment_Gateway
         }
 
         $product_type = $order->get_meta('_product_type');
+        $bank_code = '';
+        $bank_code_type = '';
         $bank_account = '';
         $bank_account_type = 'IBAN';
         $payment_reference_message = '';
@@ -1003,6 +1027,16 @@ class WC_Tillit extends WC_Payment_Gateway
             update_post_meta($order->get_id(), '_product_type', $product_type);
         }
         if ($product_type === 'MERCHANT_INVOICE') {
+            $bank_code = $order->get_meta('_bank_code');
+            if (!$bank_code) {
+                $bank_code = $this->get_option('bank_code');
+                update_post_meta($order->get_id(), '_bank_code', $bank_code);
+            }
+            $bank_code_type = $order->get_meta('_bank_code_type');
+            if (!$bank_code_type) {
+                $bank_code_type = $this->get_option('bank_code_type');
+                update_post_meta($order->get_id(), '_bank_code_type', $bank_code_type);
+            }
             $bank_account = $order->get_meta('_bank_account');
             if (!$bank_account) {
                 $bank_account = $this->get_option('bank_account');
@@ -1046,6 +1080,8 @@ class WC_Tillit extends WC_Payment_Gateway
             'tillit_order_id' => $tillit_order_id,
             'tillit_original_order_id' => $tillit_original_order_id,
             'product_type' => $product_type,
+            'bank_code' => $bank_code,
+            'bank_code_type' => $bank_code_type,
             'bank_account' => $bank_account,
             'bank_account_type' => $bank_account_type,
             'payment_reference_message' => $payment_reference_message
@@ -1076,6 +1112,8 @@ class WC_Tillit extends WC_Payment_Gateway
                 $tillit_meta['department'],
                 $tillit_meta['project'],
                 $tillit_meta['product_type'],
+                $tillit_meta['bank_code'],
+                $tillit_meta['bank_code_type'],
                 $tillit_meta['bank_account'],
                 $tillit_meta['bank_account_type'],
                 $tillit_meta['payment_reference_message']
