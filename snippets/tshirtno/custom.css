@@ -10,6 +10,9 @@
 	border: 2px solid #f1f1f1;
 	box-shadow: none;
 }
+.woocommerce-checkout .woocommerce-input-wrapper span.select2-selection--single {
+	border: none;
+}
 .woocommerce-checkout span.select2-container .select2-selection__arrow {
 	top: 26px;
 	right: 12px;
@@ -25,6 +28,6 @@
 	margin-bottom: 20px;
 }
 .woocommerce-checkout #payment ul.payment_methods li.wc_payment_method.payment_method_woocommerce-gateway-tillit .tillit-subtitle {
-  margin-left: unset;
+	margin-left: unset;
 	color: #777;
 }
