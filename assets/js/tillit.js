@@ -74,7 +74,9 @@ class Tillit {
 
             $billingCountry.on('select2:open', function(e){
                 setTimeout(function(){
-                    jQuery('input[aria-owns="select2-billing_country-results"]').get(0).focus()
+                    if (jQuery('input[aria-owns="select2-billing_country-results"]').get(0)) {
+                        jQuery('input[aria-owns="select2-billing_country-results"]').get(0).focus()
+                    }
                 }, 200)
             })
 
@@ -136,7 +138,9 @@ class Tillit {
 
             $billingCompanySelect.on('select2:open', function(e){
                 setTimeout(function(){
-                    jQuery('input[aria-owns="select2-billing_company-results"]').get(0).focus()
+                    if (jQuery('input[aria-owns="select2-billing_company-results"]').get(0)) {
+                        jQuery('input[aria-owns="select2-billing_company-results"]').get(0).focus()
+                    }
                 }, 200)
             })
 
@@ -558,7 +562,7 @@ class Tillit {
             }
 
             let jsonBody = JSON.stringify({
-                "merchant_id": window.tillit.merchant_id,
+                "merchant_short_name": window.tillit.merchant_short_name,
                 "gross_amount": "" + gross_amount,
                 "buyer": {
                     "company": tillitCompany,

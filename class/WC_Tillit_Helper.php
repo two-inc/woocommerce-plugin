@@ -235,7 +235,7 @@ class WC_Tillit_Helper
      * @return bool
      */
     public static function compose_tillit_order(
-        $order, $order_reference, $tillit_merchant_id, $days_on_invoice,
+        $order, $order_reference, $days_on_invoice,
         $company_id, $department, $project, $product_type,
         $bank_code, $bank_code_type, $bank_account, $bank_account_type,
         $payment_reference_message = '', $tillit_original_order_id = '', $tracking_id = '')
@@ -296,7 +296,6 @@ class WC_Tillit_Helper
             'line_items' => WC_Tillit_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee')),
             'recurring' => false,
             'merchant_additional_info' => '',
-            'merchant_id' => $tillit_merchant_id,
             'merchant_order_id' => strval($order->get_id()),
             'merchant_reference' => '',
             'merchant_urls' => [

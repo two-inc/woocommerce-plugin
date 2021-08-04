@@ -240,7 +240,6 @@ class WC_Tillit extends WC_Payment_Gateway
         $original_order = WC_Tillit_Helper::compose_tillit_order(
             $order,
             $tillit_meta['order_reference'],
-            $tillit_meta['tillit_merchant_id'],
             $tillit_meta['days_on_invoice'],
             $tillit_meta['company_id'],
             $tillit_meta['department'],
@@ -286,7 +285,6 @@ class WC_Tillit extends WC_Payment_Gateway
         $updated_order = WC_Tillit_Helper::compose_tillit_order(
             $order,
             $tillit_meta['order_reference'],
-            $tillit_meta['tillit_merchant_id'],
             $tillit_meta['days_on_invoice'],
             $tillit_meta['company_id'],
             $tillit_meta['department'],
@@ -524,11 +522,17 @@ class WC_Tillit extends WC_Payment_Gateway
             $payment_reference_message = strval($order->get_id());
         }
 
+        update_post_meta($order_id, '_product_type', $product_type);
+        update_post_meta($order_id, '_bank_code', $bank_code);
+        update_post_meta($order_id, '_bank_code_type', $bank_code_type);
+        update_post_meta($order_id, '_bank_account', $bank_account);
+        update_post_meta($order_id, '_bank_account_type', $bank_account_type);
+        update_post_meta($order_id, '_payment_reference_message', $payment_reference_message);
+
         // Create order
         $response = $this->make_request('/v1/order', WC_Tillit_Helper::compose_tillit_order(
             $order,
             $order_reference,
-            $this->get_option('tillit_merchant_id'),
             $this->get_option('days_on_invoice'),
             sanitize_text_field($_POST['company_id']),
             sanitize_text_field($_POST['department']),
