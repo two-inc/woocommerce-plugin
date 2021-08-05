@@ -160,6 +160,7 @@ class WC_Tillit_Checkout
         $fields['billing']['company_id'] = [
             'label' => __('Company ID', 'tillit-payment-gateway'),
             'required' => false,
+            'custom_attributes' => array('readonly' => 'readonly'),
             'priority' => $with_company_search ? 3 : 35
         ];
 
