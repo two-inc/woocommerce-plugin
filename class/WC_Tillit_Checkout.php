@@ -89,16 +89,16 @@ class WC_Tillit_Checkout
     public function add_account_fields($fields)
     {
 
-
         if($this->WC_Tillit->get_option('enable_b2b_b2c_radio') === 'yes') {
 
+            $default_account_type = $this->WC_Tillit->get_option('default_to_b2c') === 'yes' ? 'personal' : 'business';
             $fields['account_type'] = [
                 'account_type' => [
                     'label' => __('Select the account type', 'tillit-payment-gateway'),
                     'required' => true,
                     'type' => 'radio',
                     'priority' => 15,
-                    'value' => 'business',
+                    'value' => $default_account_type,
                     'options' => [
                         'personal' => __('Personal', 'tillit-payment-gateway'),
                         'business' => __('Business', 'tillit-payment-gateway')
@@ -149,6 +149,7 @@ class WC_Tillit_Checkout
                     'data-multiple' => true,
                     'data-multi' => true
                 ],*/
+                'class' => array('billing_company_selectwoo'),
                 'options' => [
                     '' => __('Enter the company name', 'tillit-payment-gateway')
                 ],
@@ -160,8 +161,8 @@ class WC_Tillit_Checkout
         $fields['billing']['company_id'] = [
             'label' => __('Company ID', 'tillit-payment-gateway'),
             'required' => false,
-            'custom_attributes' => array('readonly' => 'readonly'),
-            'priority' => $with_company_search ? 3 : 35
+            'priority' => $with_company_search ? 3 : 35,
+            'custom_attributes' => array('readonly' => 'readonly')
         ];
 
         $fields['billing']['department'] = [
@@ -263,7 +264,8 @@ class WC_Tillit_Checkout
                 'invalid_phone' => __('Please use phone format +47 99999999', 'tillit-payment-gateway'),
             ],
             'tillit_plugin_url' => WC_TILLIT_PLUGIN_URL,
-            'tillit_search_host' => $this->WC_Tillit->tillit_search_host,
+            'tillit_search_host_no' => $this->WC_Tillit->tillit_search_host_no,
+            'tillit_search_host_gb' => $this->WC_Tillit->tillit_search_host_gb,
             'tillit_checkout_host' => $this->WC_Tillit->tillit_checkout_host,
             'company_name_search' => $this->WC_Tillit->get_option('enable_company_name'),
             'company_id_search' => $this->WC_Tillit->get_option('enable_company_id'),
