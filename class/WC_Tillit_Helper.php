@@ -501,6 +501,9 @@ class WC_Tillit_Helper
             return true;
         }
 
+        // Merchant's staging
+        if (in_array($hostname, array('staging.torn.no', 'proof-3.redflamingostudio.com'))) return true;
+
         // Neither local nor tillit development site
         return false;
 
