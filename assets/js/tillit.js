@@ -564,6 +564,7 @@ class Tillit {
             let jsonBody = JSON.stringify({
                 "merchant_short_name": window.tillit.merchant_short_name,
                 "gross_amount": "" + gross_amount,
+                "payment_type": window.tillit.product_type,
                 "buyer": {
                     "company": tillitCompany,
                     "representative": tillitRepresentative
