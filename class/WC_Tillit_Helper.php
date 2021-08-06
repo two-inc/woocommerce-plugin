@@ -237,7 +237,6 @@ class WC_Tillit_Helper
     public static function compose_tillit_order(
         $order, $order_reference, $days_on_invoice,
         $company_id, $department, $project, $product_type,
-        $bank_code, $bank_code_type, $bank_account, $bank_account_type,
         $payment_reference_message = '', $tillit_original_order_id = '', $tracking_id = '')
     {
         // Get the orde taxes
@@ -277,6 +276,19 @@ class WC_Tillit_Helper
         }
 
         $req_body = [
+            'currency' => $order->get_currency(),
+            'gross_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total())),
+            'net_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total() - $order->get_total_tax())),
+            'tax_amount' => strval(WC_Tillit_Helper::round_amt($tax_amount)),
+            'tax_rate' => strval($tax_rate),
+            'discount_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total_discount())),
+            'discount_rate' => '0',
+            'payment_type' => $product_type,
+            'payment_details' => [
+                'due_in_days' => intval($days_on_invoice),
+                'payment_reference_message' => $payment_reference_message,
+                'payment_reference_ocr' => ''
+            ],
             'buyer' => [
                 'company' => [
                     'organization_number' => $company_id,
@@ -310,27 +322,6 @@ class WC_Tillit_Helper
                 'merchant_invoice_url' => '',
                 'merchant_shipping_document_url' => ''
             ],
-            'payment' => [
-                'currency' => $order->get_currency(),
-                'gross_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total())),
-                'net_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total() - $order->get_total_tax())),
-                'tax_amount' => strval(WC_Tillit_Helper::round_amt($tax_amount)),
-                'tax_rate' => strval($tax_rate),
-                'discount_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total_discount())),
-                'discount_rate' => '0',
-                'type' => $product_type,
-                'payment_details' => [
-                    'due_in_days' => intval($days_on_invoice),
-                    'bank_code' => empty($bank_code) ? NULL : $bank_code,
-                    'bank_code_type' => empty($bank_code_type) ? NULL : $bank_code_type,
-                    'bank_account' => $bank_account,
-                    'bank_account_type' => $bank_account_type,
-                    'payee_company_name' => '',
-                    'payee_organization_number' => '',
-                    'payment_reference_message' => $payment_reference_message,
-                    'payment_reference_ocr' => ''
-                ]
-            ],
             'billing_address' => $billing_address,
             'shipping_address' => $shipping_address,
             'shipping_details' => [
@@ -360,8 +351,7 @@ class WC_Tillit_Helper
      * @return bool
      */
     public static function compose_tillit_edit_order(
-        $order, $days_on_invoice, $department, $project, $product_type,
-        $bank_code, $bank_code_type, $bank_account, $bank_account_type, $payment_reference_message = '')
+        $order, $days_on_invoice, $department, $project, $product_type, $payment_reference_message = '')
     {
         // Get the orde taxes
         $order_taxes = $order->get_taxes();
@@ -400,6 +390,19 @@ class WC_Tillit_Helper
         }
 
         $req_body = [
+            'currency' => $order->get_currency(),
+            'gross_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total())),
+            'net_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total() - $order->get_total_tax())),
+            'tax_amount' => strval(WC_Tillit_Helper::round_amt($tax_amount)),
+            'tax_rate' => strval($tax_rate),
+            'discount_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total_discount())),
+            'discount_rate' => '0',
+            'payment_type' => $product_type,
+            'payment_details' => [
+                'due_in_days' => intval($days_on_invoice),
+                'payment_reference_message' => $payment_reference_message,
+                'payment_reference_ocr' => ''
+            ],
             'buyer_department' => $department,
             'buyer_project' => $project,
             'order_note' => $order->get_customer_note(),
@@ -407,27 +410,6 @@ class WC_Tillit_Helper
             'recurring' => false,
             'merchant_additional_info' => '',
             'merchant_reference' => '',
-            'payment' => [
-                'currency' => $order->get_currency(),
-                'gross_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total())),
-                'net_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total() - $order->get_total_tax())),
-                'tax_amount' => strval(WC_Tillit_Helper::round_amt($tax_amount)),
-                'tax_rate' => strval($tax_rate),
-                'discount_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total_discount())),
-                'discount_rate' => '0',
-                'type' => $product_type,
-                'payment_details' => [
-                    'due_in_days' => intval($days_on_invoice),
-                    'bank_code' => empty($bank_code) ? NULL : $bank_code,
-                    'bank_code_type' => empty($bank_code_type) ? NULL : $bank_code_type,
-                    'bank_account' => $bank_account,
-                    'bank_account_type' => $bank_account_type,
-                    'payee_company_name' => '',
-                    'payee_organization_number' => '',
-                    'payment_reference_message' => $payment_reference_message,
-                    'payment_reference_ocr' => ''
-                ]
-            ],
             'billing_address' => $billing_address,
             'shipping_address' => $shipping_address,
             'shipping_details' => [

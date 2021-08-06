@@ -286,6 +286,7 @@ class WC_Tillit_Checkout
             'company_name_search' => $this->WC_Tillit->get_option('enable_company_name'),
             'company_id_search' => $this->WC_Tillit->get_option('enable_company_id'),
             'enable_order_intent' => $this->WC_Tillit->get_option('enable_order_intent'),
+            'product_type' => $this->WC_Tillit->get_option('product_type'),
             'merchant_short_name' => $this->WC_Tillit->get_option('tillit_merchant_id'),
             'currency' => get_woocommerce_currency(),
             'price_decimal_separator' => wc_get_price_decimal_separator(),
