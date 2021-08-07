@@ -976,7 +976,7 @@ class WC_Tillit extends WC_Payment_Gateway
             update_post_meta($order->get_id(), '_product_type', $product_type);
         }
         if ($product_type === 'MERCHANT_INVOICE') {
-            $payment_reference_message = $order->get_id();
+            $payment_reference_message = strval($order->get_id());
         }
 
         $company_id = $order->get_meta('company_id');
