@@ -176,6 +176,9 @@ class Tillit {
             // Enable or disable the Tillit method
             Tillit.updateCompanyNameAgreement()
 
+            document.querySelector('label[for="payment_method_woocommerce-gateway-tillit"] .tillit-subtitle').parentElement.appendChild(
+                document.querySelector('label[for="payment_method_woocommerce-gateway-tillit"] .tillit-subtitle'))
+
         })
 
         // Handle the representative inputs blur event

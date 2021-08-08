@@ -65,12 +65,12 @@ function wc_tillit_add_to_gateways($gateways)
  */
 function wc_tillit_enqueue_styles()
 {
-    wp_enqueue_style('tillit-payment-gateway-css', WC_TILLIT_PLUGIN_URL . '/assets/css/tillit.css', false, '1.0.5');
+    wp_enqueue_style('tillit-payment-gateway-css', WC_TILLIT_PLUGIN_URL . '/assets/css/tillit.css', false, '1.0.6');
 }
 
 function wc_tillit_enqueue_scripts()
 {
-    wp_enqueue_script('tillit-payment-gateway-js', WC_TILLIT_PLUGIN_URL . '/assets/js/tillit.js', ['jquery'], '1.0.14');
+    wp_enqueue_script('tillit-payment-gateway-js', WC_TILLIT_PLUGIN_URL . '/assets/js/tillit.js', ['jquery'], '1.0.15');
 }
 
 function tillit_settings_link($links)
