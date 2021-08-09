@@ -13,7 +13,7 @@ class WC_Tillit_Helper
     /**
      * Round the amount in woocommerce way
      *
-     * @return float
+     * @return string
      */
     public static function round_amt($amt)
     {
@@ -21,16 +21,13 @@ class WC_Tillit_Helper
     }
 
     /**
-     * Return the tax rate
+     * Round the rate to 6dp
      *
-     * @param WC_Product_Simple|WC_Order_Item_Product $product_simple
-     *
-     * @return int|mixed
+     * @return string
      */
-    public static function get_tax_percentage($product_simple)
+    public static function round_rate($rate)
     {
-        $tax_rates = WC_Tax::get_rates($product_simple->get_tax_class());
-        return $tax_rates && $tax_rates[1] ? $tax_rates[1]['rate'] : 0;
+        return number_format($rate, 6, '.', '');
     }
 
     /**
@@ -146,7 +143,7 @@ class WC_Tillit_Helper
                 'discount_amount' => strval(WC_Tillit_Helper::round_amt($line_item['line_subtotal'] - $line_item['line_total'])),
                 'tax_amount' => strval(WC_Tillit_Helper::round_amt($line_item['line_tax'])),
                 'tax_class_name' => 'VAT ' . WC_Tillit_Helper::round_amt($tax_rate * 100) . '%',
-                'tax_rate' => strval($tax_rate),
+                'tax_rate' => strval(WC_Tillit_Helper::round_rate($tax_rate)),
                 'unit_price' => strval(WC_Tillit_Helper::round_amt(wc_get_price_excluding_tax($product_simple))),
                 'quantity' => $line_item['quantity'],
                 'quantity_unit' => 'item',
@@ -187,7 +184,7 @@ class WC_Tillit_Helper
                 'discount_amount' => '0',
                 'tax_amount' => strval(WC_Tillit_Helper::round_amt($shipping->get_total_tax())),
                 'tax_class_name' => 'VAT ' . WC_Tillit_Helper::round_amt($tax_rate * 100) . '%',
-                'tax_rate' => strval($tax_rate),
+                'tax_rate' => strval(WC_Tillit_Helper::round_rate($tax_rate)),
                 'unit_price' => strval(WC_Tillit_Helper::round_amt($shipping->get_total())),
                 'quantity' => 1,
                 'quantity_unit' => 'sc', // shipment charge
@@ -211,7 +208,7 @@ class WC_Tillit_Helper
                 'discount_amount' => '0',
                 'tax_amount' => strval(WC_Tillit_Helper::round_amt($fee->get_total_tax())),
                 'tax_class_name' => 'VAT ' . WC_Tillit_Helper::round_amt($tax_rate * 100) . '%',
-                'tax_rate' => strval($tax_rate),
+                'tax_rate' => strval(WC_Tillit_Helper::round_rate($tax_rate)),
                 'unit_price' => strval(WC_Tillit_Helper::round_amt($fee->get_total())),
                 'quantity' => 1,
                 'quantity_unit' => 'fee',
@@ -239,21 +236,6 @@ class WC_Tillit_Helper
         $company_id, $department, $project, $product_type,
         $payment_reference_message = '', $tillit_original_order_id = '', $tracking_id = '')
     {
-        // Get the orde taxes
-        $order_taxes = $order->get_taxes();
-
-        // Get the taxes Ids
-        $taxes = array_keys($order_taxes);
-
-        if (count($taxes) == 0) {
-            $tax_amount = 0;
-            $tax_rate = 0;
-        } else {
-            /** @var WC_Order_Item_Tax $vat */
-            $vat = $order_taxes[$taxes[0]];
-            $tax_amount = $vat->get_tax_total() + $vat->get_shipping_tax_total();
-            $tax_rate = $vat->get_rate_percent() / 100.0;
-        }
 
         $billing_address = [
             'organization_name' => $order->get_billing_company(),
@@ -279,8 +261,8 @@ class WC_Tillit_Helper
             'currency' => $order->get_currency(),
             'gross_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total())),
             'net_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total() - $order->get_total_tax())),
-            'tax_amount' => strval(WC_Tillit_Helper::round_amt($tax_amount)),
-            'tax_rate' => strval($tax_rate),
+            'tax_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total_tax())),
+            'tax_rate' => strval(WC_Tillit_Helper::round_rate(1.0 * $order->get_total_tax() / $order->get_total())),
             'discount_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total_discount())),
             'discount_rate' => '0',
             'payment_type' => $product_type,
@@ -353,21 +335,6 @@ class WC_Tillit_Helper
     public static function compose_tillit_edit_order(
         $order, $days_on_invoice, $department, $project, $product_type, $payment_reference_message = '')
     {
-        // Get the orde taxes
-        $order_taxes = $order->get_taxes();
-
-        // Get the taxes Ids
-        $taxes = array_keys($order_taxes);
-
-        if (count($taxes) == 0) {
-            $tax_amount = 0;
-            $tax_rate = 0;
-        } else {
-            /** @var WC_Order_Item_Tax $vat */
-            $vat = $order_taxes[$taxes[0]];
-            $tax_amount = $vat->get_tax_total() + $vat->get_shipping_tax_total();
-            $tax_rate = $vat->get_rate_percent() / 100.0;
-        }
 
         $billing_address = [
             'organization_name' => $order->get_billing_company(),
@@ -393,8 +360,8 @@ class WC_Tillit_Helper
             'currency' => $order->get_currency(),
             'gross_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total())),
             'net_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total() - $order->get_total_tax())),
-            'tax_amount' => strval(WC_Tillit_Helper::round_amt($tax_amount)),
-            'tax_rate' => strval($tax_rate),
+            'tax_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total_tax())),
+            'tax_rate' => strval(WC_Tillit_Helper::round_rate(1.0 * $order->get_total_tax() / $order->get_total())),
             'discount_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total_discount())),
             'discount_rate' => '0',
             'payment_type' => $product_type,
