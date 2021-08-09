@@ -91,7 +91,7 @@ class WC_Tillit_Checkout
 
         if($this->WC_Tillit->get_option('enable_b2b_b2c_radio') === 'yes') {
 
-            $personal_text = $this->WC_Tillit->get_option('rename_personal') === 'yes' ? 'Sole Trader' : 'Personal';
+            $personal_text = $this->WC_Tillit->get_option('rename_personal') === 'yes' ? 'Sole trader/other' : 'Personal';
             $default_account_type = $this->WC_Tillit->get_option('default_to_b2c') === 'yes' ? 'personal' : 'business';
             $fields['account_type'] = [
                 'account_type' => [
