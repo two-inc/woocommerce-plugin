@@ -784,6 +784,16 @@ class WC_Tillit extends WC_Payment_Gateway
                 'title'     => __('Tillit Test Server', 'tillit-payment-gateway'),
                 'default'   => 'https://staging.api.tillit.ai'
             ],
+            'hide_other_payments' => [
+                'title'     => __('Hide other payment methods', 'tillit-payment-gateway'),
+                'label'     => ' ',
+                'type'      => 'checkbox'
+            ],
+            'rename_personal' => [
+                'title'     => __('Use the term Sole Trader instead of Personal on Checkout', 'tillit-payment-gateway'),
+                'label'     => ' ',
+                'type'      => 'checkbox'
+            ],
             'enable_company_name' => [
                 'title'     => __('Activate company name auto-complete', 'tillit-payment-gateway'),
                 'label'     => ' ',

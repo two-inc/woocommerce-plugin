@@ -214,6 +214,11 @@ class Tillit {
             $body.trigger('update_checkout');
         });
 
+        // If setting is to hide other payment methods, hide when page load by default
+        if (window.tillit.hide_other_payments === 'yes') {
+            jQuery('#payment .wc_payment_methods > li:not([class*="payment_method_woocommerce-gateway-tillit"])').hide()
+        }
+
         setInterval(function(){
             if (tillitOrderIntentCheck.pendingCheck) Tillit.getApproval()
             Tillit.saveCheckoutInputs()
@@ -404,7 +409,8 @@ class Tillit {
     {
 
         // Get the Tillit payment method section
-        const $tillitSection = jQuery('li.payment_method_woocommerce-gateway-tillit')
+        const $tillitSection = jQuery('#payment .wc_payment_methods > li.payment_method_woocommerce-gateway-tillit')
+        const $otherPaymentSections = jQuery('#payment .wc_payment_methods > li:not([class*="payment_method_woocommerce-gateway-tillit"])')
 
         // Get the Tillit payment method input
         const $tillitBox = jQuery(':input[value="woocommerce-gateway-tillit"]')
@@ -427,10 +433,19 @@ class Tillit {
             // Hide Tillit payment option
             $tillitSection.addClass('hidden')
 
+            // Always show other methods for personal purchases
+            $otherPaymentSections.show()
+
         } else {
 
             // Show Tillit payment option
             $tillitSection.removeClass('hidden')
+
+            // If Tillit is approved and setting is to hide other payment methods
+            if (window.tillit.hide_other_payments === 'yes') {
+                if (isTillitDisabled) $otherPaymentSections.show()
+                else $otherPaymentSections.hide()
+            }
 
         }
 
