@@ -91,6 +91,7 @@ class WC_Tillit_Checkout
 
         if($this->WC_Tillit->get_option('enable_b2b_b2c_radio') === 'yes') {
 
+            $personal_text = $this->WC_Tillit->get_option('rename_personal') === 'yes' ? 'Sole Trader' : 'Personal';
             $default_account_type = $this->WC_Tillit->get_option('default_to_b2c') === 'yes' ? 'personal' : 'business';
             $fields['account_type'] = [
                 'account_type' => [
@@ -100,7 +101,7 @@ class WC_Tillit_Checkout
                     'priority' => 15,
                     'value' => $default_account_type,
                     'options' => [
-                        'personal' => __('Personal', 'tillit-payment-gateway'),
+                        'personal' => __($personal_text, 'tillit-payment-gateway'),
                         'business' => __('Business', 'tillit-payment-gateway')
                     ]
                 ]
@@ -283,6 +284,7 @@ class WC_Tillit_Checkout
             'tillit_search_host_no' => $this->WC_Tillit->tillit_search_host_no,
             'tillit_search_host_gb' => $this->WC_Tillit->tillit_search_host_gb,
             'tillit_checkout_host' => $this->WC_Tillit->tillit_checkout_host,
+            'hide_other_payments' => $this->WC_Tillit->get_option('hide_other_payments'),
             'company_name_search' => $this->WC_Tillit->get_option('enable_company_name'),
             'company_id_search' => $this->WC_Tillit->get_option('enable_company_id'),
             'enable_order_intent' => $this->WC_Tillit->get_option('enable_order_intent'),
