@@ -829,10 +829,17 @@ class WC_Tillit extends WC_Payment_Gateway
                 'title'     => __('Tillit Test Server', 'tillit-payment-gateway'),
                 'default'   => 'https://staging.api.tillit.ai'
             ],
-            'hide_other_payments' => [
-                'title'     => __('Hide other payment methods', 'tillit-payment-gateway'),
+            'display_other_payments' => [
+                'title'     => __('Always enable all available payment methods', 'tillit-payment-gateway'),
                 'label'     => ' ',
-                'type'      => 'checkbox'
+                'type'      => 'checkbox',
+                'default'   => 'yes'
+            ],
+            'fallback_to_another_payment' => [
+                'title'     => __('Fallback to other payment methods if Tillit is not available', 'tillit-payment-gateway'),
+                'label'     => ' ',
+                'type'      => 'checkbox',
+                'default'   => 'yes'
             ],
             'enable_company_name' => [
                 'title'     => __('Activate company name auto-complete', 'tillit-payment-gateway'),

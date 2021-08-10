@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Tillit Payment Gateway\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2021-08-10 08:46+0000\n"
+"POT-Creation-Date: 2021-08-10 09:20+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: \n"
@@ -20,12 +20,16 @@ msgstr ""
 msgid "Account type"
 msgstr ""
 
-#: class/WC_Tillit.php:838
+#: class/WC_Tillit.php:845
 msgid "Activate company name auto-complete"
 msgstr ""
 
-#: class/WC_Tillit.php:843
+#: class/WC_Tillit.php:850
 msgid "Activate company org.id auto-complete"
+msgstr ""
+
+#: class/WC_Tillit.php:833
+msgid "Always enable all available payment methods"
 msgstr ""
 
 #: class/WC_Tillit.php:777
@@ -51,7 +55,7 @@ msgstr ""
 msgid "Choose your product"
 msgstr ""
 
-#: class/WC_Tillit.php:875
+#: class/WC_Tillit.php:882
 msgid "Clear settings on deactivation"
 msgstr ""
 
@@ -63,11 +67,11 @@ msgstr ""
 msgid "Company name"
 msgstr ""
 
-#: class/WC_Tillit.php:1090
+#: class/WC_Tillit.php:1097
 msgid "Could not edit the Tillit order"
 msgstr ""
 
-#: class/WC_Tillit.php:1096
+#: class/WC_Tillit.php:1103
 msgid "Could not edit the Tillit order, please check with Tillit admin"
 msgstr ""
 
@@ -101,7 +105,7 @@ msgid ""
 "admin for id %s"
 msgstr ""
 
-#: class/WC_Tillit.php:859
+#: class/WC_Tillit.php:866
 msgid "Default to B2C check-out"
 msgstr ""
 
@@ -154,12 +158,12 @@ msgid ""
 "id %s"
 msgstr ""
 
-#: class/WC_Tillit.php:848
-msgid "Finalize purchase when order is fulfilled"
+#: class/WC_Tillit.php:839
+msgid "Fallback to other payment methods if Tillit is not available"
 msgstr ""
 
-#: class/WC_Tillit.php:833
-msgid "Hide other payment methods"
+#: class/WC_Tillit.php:855
+msgid "Finalize purchase when order is fulfilled"
 msgstr ""
 
 #. URI of the plugin
@@ -167,7 +171,7 @@ msgstr ""
 msgid "https://tillit.ai"
 msgstr ""
 
-#: class/WC_Tillit.php:869
+#: class/WC_Tillit.php:876
 msgid "Initiate payment to buyer on refund"
 msgstr ""
 
@@ -197,7 +201,7 @@ msgstr ""
 msgid "Minimum Payment using Tillit is %s NOK"
 msgstr ""
 
-#: class/WC_Tillit.php:1035
+#: class/WC_Tillit.php:1042
 #, php-format
 msgid "Missing company ID, please check with Tillit admin for id %s"
 msgstr ""
@@ -222,7 +226,7 @@ msgstr ""
 msgid "Please use phone format +47 99999999"
 msgstr ""
 
-#: class/WC_Tillit.php:853
+#: class/WC_Tillit.php:860
 msgid ""
 "Pre-approve the buyer during checkout and disable Tillit if the buyer is "
 "declined"
@@ -240,7 +244,7 @@ msgstr ""
 msgid "Request refund order to Tillit has errors"
 msgstr ""
 
-#: class/WC_Tillit.php:956
+#: class/WC_Tillit.php:963
 msgid "Select image"
 msgstr ""
 
@@ -252,7 +256,7 @@ msgstr ""
 msgid "Settings"
 msgstr ""
 
-#: class/WC_Tillit.php:864
+#: class/WC_Tillit.php:871
 msgid "Shift invoice fee to the buyers"
 msgstr ""
 
