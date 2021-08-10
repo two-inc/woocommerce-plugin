@@ -5,7 +5,7 @@
 $checkout = WC()->checkout(); ?>
 <div class="woocommerce-billing-fields woocommerce-account-type-fields">
 <?php
-if ($this->WC_Tillit->get_option('enable_b2b_b2c_radio') === 'yes')
+if (sizeof($this->WC_Tillit->available_account_types()) > 1)
 {
     echo '<h3>';
     esc_html_e('Account type', 'tillit-payment-gateway');

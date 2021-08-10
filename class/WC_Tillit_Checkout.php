@@ -89,10 +89,19 @@ class WC_Tillit_Checkout
     public function add_account_fields($fields)
     {
 
-        if($this->WC_Tillit->get_option('enable_b2b_b2c_radio') === 'yes') {
+        // available_account_types size always > 0
+        $available_account_types = $this->WC_Tillit->available_account_types();
+        // Default account type, if available, with priority: business - sole_trader - personal
+        end($available_account_types); // Move pointer to last
+        $default_account_type = key($available_account_types); // Get current pointer
 
-            $personal_text = $this->WC_Tillit->get_option('rename_personal') === 'yes' ? 'Sole trader/other' : 'Personal';
-            $default_account_type = $this->WC_Tillit->get_option('default_to_b2c') === 'yes' ? 'personal' : 'business';
+        if(sizeof($this->WC_Tillit->available_account_types()) > 1) {
+
+            // Default to personal if admin settings is set
+            if ($this->WC_Tillit->get_option('default_to_b2c') === 'yes' && array_key_exists('personal', $available_account_types)) {
+                $default_account_type = 'personal';
+            }
+
             $fields['account_type'] = [
                 'account_type' => [
                     'label' => __('Select the account type', 'tillit-payment-gateway'),
@@ -100,10 +109,7 @@ class WC_Tillit_Checkout
                     'type' => 'radio',
                     'priority' => 15,
                     'value' => $default_account_type,
-                    'options' => [
-                        'personal' => __($personal_text, 'tillit-payment-gateway'),
-                        'business' => __('Business', 'tillit-payment-gateway')
-                    ]
+                    'options' => $available_account_types
                 ]
             ];
 
@@ -115,10 +121,8 @@ class WC_Tillit_Checkout
                     'type' => 'radio',
                     'class' => array('hidden'),
                     'priority' => 15,
-                    'value' => 'business',
-                    'options' => [
-                        'business' => __('Business', 'tillit-payment-gateway')
-                    ]
+                    'value' => $default_account_type,
+                    'options' => $available_account_types
                 ]
             ];
 
@@ -275,7 +279,7 @@ class WC_Tillit_Checkout
         $properties = [
             'messages' => [
                 'subtitle_order_intent_ok' =>$this->WC_Tillit->get_option('subtitle'),
-                'subtitle_order_intent_reject' => __('EHF Invoice is not available for this order', 'tillit-payment-gateway'),
+                'subtitle_order_intent_reject' => __('Invoice is not available for this purchase', 'tillit-payment-gateway'),
                 'amount_min' => sprintf(__('Minimum Payment using Tillit is %s NOK', 'tillit-payment-gateway'), '200'),
                 'amount_max' => sprintf(__('Maximum Payment using Tillit is %s NOK', 'tillit-payment-gateway'), '250,000'),
                 'invalid_phone' => __('Please use phone format +47 99999999', 'tillit-payment-gateway'),
