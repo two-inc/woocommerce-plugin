@@ -167,6 +167,9 @@ class Tillit {
         // Disable or enable actions based on the account type
         $body.on('updated_checkout', function(){
 
+            // Check approval again
+            Tillit.getApproval()
+
             // Toggle the action buttons
             Tillit.toggleActions()
 
@@ -215,7 +218,7 @@ class Tillit {
         });
 
         // If setting is to hide other payment methods, hide when page load by default
-        if (window.tillit.hide_other_payments === 'yes') {
+        if (window.tillit.display_other_payments !== 'yes') {
             jQuery('#payment .wc_payment_methods > li:not([class*="payment_method_woocommerce-gateway-tillit"])').hide()
         }
 
@@ -444,7 +447,7 @@ class Tillit {
             $tillitSection.removeClass('hidden')
 
             // If Tillit is approved and setting is to hide other payment methods
-            if (window.tillit.hide_other_payments === 'yes') {
+            if (window.tillit.display_other_payments !== 'yes') {
                 if (isTillitDisabled) $otherPaymentSections.show()
                 else $otherPaymentSections.hide()
             }
@@ -503,9 +506,6 @@ class Tillit {
     static selectDefaultMethod()
     {
 
-        // Get the account type
-        const accountType = Tillit.getAccountType()
-
         // Get the Tillit payment method input
         const $tillitPaymentMethod = jQuery(':input[value="woocommerce-gateway-tillit"]')
 
@@ -521,8 +521,11 @@ class Tillit {
         // If tillit method cannot be used
         if (isTillitDisabled) {
 
-            // Select the first visible payment method
-            $tillit.parent().find('li:visible').eq(0).find(':radio').click()
+            // Fallback if set in admin and current account type is business
+            if (window.tillit.fallback_to_another_payment === 'yes' && Tillit.isCompany(Tillit.getAccountType())) {
+                // Select the first visible payment method
+                $tillit.parent().find('li:visible').eq(0).find(':radio').click()
+            }
 
         } else {
 
@@ -691,10 +694,13 @@ class Tillit {
                 tillitApproved = false
 
                 // Toggle the Tillit payment method
-                tillitMethodHidden = !tillitApproved
+                tillitMethodHidden = true
 
                 // Show or hide the Tillit payment method
                 Tillit.toggleMethod()
+
+                // Select the default payment method
+                Tillit.selectDefaultMethod()
 
                 // Display error messages
                 if (response.status >= 400) {
