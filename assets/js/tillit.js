@@ -356,9 +356,6 @@ class Tillit {
     static toggleRequiredFields($targets, accountType)
     {
 
-        // True if the extra fields are required
-        const isRequired =  accountType === 'business'
-
         // For each input
         $targets.find(':input').each(function(){
 
@@ -369,7 +366,7 @@ class Tillit {
             const $row = $input.parents('.form-row')
 
             // Toggle the required property
-            $input.attr('required', isRequired)
+            $input.attr('required', Tillit.isCompany(accountType))
 
             // Replace the optional visual cue with the required one
             $row.find('label .optional').replaceWith(tillitRequiredField)
@@ -392,10 +389,23 @@ class Tillit {
         const $regularTargets = jQuery('.woocommerce-company-fields, .woocommerce-representative-fields, #company_id_field, #billing_company_field, #department_field, #project_field')
 
         // Toggle the targets based on the account type
-        accountType === 'personal' ? $regularTargets.addClass('hidden') : $regularTargets.removeClass('hidden')
+        Tillit.isCompany(accountType) ? $regularTargets.removeClass('hidden') : $regularTargets.addClass('hidden')
 
         // Toggle the required fields based on the account type
         Tillit.toggleRequiredFields($requiredTargets, accountType)
+
+    }
+
+    /**
+     * Check if selected account type is business
+     *
+     * @param accountType
+     */
+
+    static isCompany(accountType)
+    {
+
+        return accountType === 'business'
 
     }
 
@@ -425,18 +435,10 @@ class Tillit {
 
         }
 
-        // Disable the Tillit payment method for personal orders
+        // Disable the Tillit payment method for non-business orders
         $tillitBox.attr('disabled', isTillitDisabled)
 
-        if (Tillit.getAccountType() === 'personal') {
-
-            // Hide Tillit payment option
-            $tillitSection.addClass('hidden')
-
-            // Always show other methods for personal purchases
-            $otherPaymentSections.show()
-
-        } else {
+        if (Tillit.isCompany(Tillit.getAccountType())) {
 
             // Show Tillit payment option
             $tillitSection.removeClass('hidden')
@@ -446,6 +448,14 @@ class Tillit {
                 if (isTillitDisabled) $otherPaymentSections.show()
                 else $otherPaymentSections.hide()
             }
+
+        } else {
+
+            // Hide Tillit payment option
+            $tillitSection.addClass('hidden')
+
+            // Always show other methods for non-business purchases
+            $otherPaymentSections.show()
 
         }
 
@@ -505,7 +515,7 @@ class Tillit {
         // True if the Tillit payment method is disabled
         const isTillitDisabled = window.tillit.enable_order_intent === 'yes' && tillitMethodHidden === true
 
-        // Disable the Tillit payment method for personal orders
+        // Disable the Tillit payment method for non-business orders
         $tillitPaymentMethod.attr('disabled', isTillitDisabled)
 
         // If tillit method cannot be used
@@ -645,7 +655,7 @@ class Tillit {
                 tillitApproved = response.approved
 
                 // Toggle the Tillit payment method
-                tillitMethodHidden = !tillitApproved || Tillit.getAccountType() === 'personal'
+                tillitMethodHidden = !(tillitApproved && Tillit.isCompany(Tillit.getAccountType()))
 
                 // Show or hide the Tillit payment method
                 Tillit.toggleMethod()
@@ -786,8 +796,8 @@ class Tillit {
         // Get the place order button
         const $placeOrder = jQuery('#place_order')
 
-        // Disable the place order button if personal order and payment method is Tillit
-        $placeOrder.attr('disabled', accountType === 'personal' && paymentMethod === 'woocommerce-gateway-tillit')
+        // Disable the place order button if order is non-business and payment method is Tillit
+        $placeOrder.attr('disabled', !Tillit.isCompany(accountType) && paymentMethod === 'woocommerce-gateway-tillit')
 
     }
 
@@ -804,9 +814,9 @@ class Tillit {
         // Get the account type
         const accountType = Tillit.getAccountType()
 
-        // Hide the method for personal accounts
-        if (accountType === 'personal') tillitMethodHidden = true
-        if (accountType === 'business' && tillitApproved) tillitMethodHidden = false
+        // Hide the method for non-business accounts
+        if (!Tillit.isCompany(accountType)) tillitMethodHidden = true
+        else if (tillitApproved) tillitMethodHidden = false
 
         // Toggle the company fields
         Tillit.toggleCompanyFields($input.val())

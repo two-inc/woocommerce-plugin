@@ -49,6 +49,7 @@ form.checkout.woocommerce-checkout .woocommerce-account-type-fields__field-wrapp
 }
 
 form.checkout.woocommerce-checkout .woocommerce-account-type-fields__field-wrapper label[for="account_type_personal"],
+form.checkout.woocommerce-checkout .woocommerce-account-type-fields__field-wrapper label[for="account_type_sole_trader"],
 form.checkout.woocommerce-checkout .woocommerce-account-type-fields__field-wrapper label[for="account_type_business"] {
     position: unset;
     display: inline;

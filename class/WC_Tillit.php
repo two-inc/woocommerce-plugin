@@ -57,7 +57,7 @@ class WC_Tillit extends WC_Payment_Gateway
         }
 
         add_action('woocommerce_update_options_payment_gateways_' . $this->id, [$this, 'process_admin_options']);
-        if(!$this->get_option('api_key') || !$this->get_option('tillit_merchant_id')) return;
+        if(!$this->get_option('api_key') || !$this->get_option('tillit_merchant_id') || sizeof($this->available_account_types()) == 0) return;
         add_action('woocommerce_order_status_completed', [$this, 'on_order_completed']);
         add_action('woocommerce_order_status_cancelled', [$this, 'on_order_cancelled']);
         add_action('woocommerce_cancelled_order', [$this, 'on_order_cancelled']);
@@ -536,7 +536,7 @@ class WC_Tillit extends WC_Payment_Gateway
 
         $tillit_err = WC_Tillit_Helper::get_tillit_error_msg($response);
         if ($tillit_err) {
-            WC_Tillit_Helper::display_ajax_error(__('EHF Invoice is not available for this order', 'tillit-payment-gateway'));
+            WC_Tillit_Helper::display_ajax_error(__('Invoice is not available for this purchase', 'tillit-payment-gateway'));
             return;
         }
 
@@ -722,6 +722,30 @@ class WC_Tillit extends WC_Payment_Gateway
     }
 
     /**
+     * Get customer types enabled in admin settings
+     */
+    public function available_account_types()
+    {
+
+        $available_types = [];
+
+        if ($this->get_option('checkout_personal') === 'yes') {
+            $available_types['personal'] = __('Personal', 'tillit-payment-gateway');
+        }
+
+        if ($this->get_option('checkout_sole_trader') === 'yes') {
+            $available_types['sole_trader'] = __('Sole trader/other', 'tillit-payment-gateway');
+        }
+
+        if ($this->get_option('checkout_business') === 'yes') {
+            $available_types['business'] = __('Business', 'tillit-payment-gateway');
+        }
+
+        return $available_types;
+
+    }
+
+    /**
      * Register Admin form fields
      *
      * @return void
@@ -757,6 +781,27 @@ class WC_Tillit extends WC_Payment_Gateway
                 'title'     => __('Logo', 'tillit-payment-gateway'),
                 'type'      => 'logo'
             ],
+            'section_title_checkout_for' => [
+                'type'      => 'separator',
+                'title'     => __('Enable checkout for', 'tillit-payment-gateway')
+            ],
+            'checkout_personal' => [
+                'title'     => __('Personal', 'tillit-payment-gateway'),
+                'label'     => ' ',
+                'type'      => 'checkbox',
+                'default'   => 'yes'
+            ],
+            'checkout_sole_trader' => [
+                'title'     => __('Sole trader/other', 'tillit-payment-gateway'),
+                'label'     => ' ',
+                'type'      => 'checkbox'
+            ],
+            'checkout_business' => [
+                'title'     => __('Business', 'tillit-payment-gateway'),
+                'label'     => ' ',
+                'type'      => 'checkbox',
+                'default'   => 'yes'
+            ],
             'section_title_product' => [
                 'type'      => 'separator',
                 'title'     => __('Choose your product', 'tillit-payment-gateway')
@@ -789,11 +834,6 @@ class WC_Tillit extends WC_Payment_Gateway
                 'label'     => ' ',
                 'type'      => 'checkbox'
             ],
-            'rename_personal' => [
-                'title'     => __('Use the term Sole Trader instead of Personal on Checkout', 'tillit-payment-gateway'),
-                'label'     => ' ',
-                'type'      => 'checkbox'
-            ],
             'enable_company_name' => [
                 'title'     => __('Activate company name auto-complete', 'tillit-payment-gateway'),
                 'label'     => ' ',
@@ -811,12 +851,6 @@ class WC_Tillit extends WC_Payment_Gateway
             ],
             'enable_order_intent' => [
                 'title'     => __('Pre-approve the buyer during checkout and disable Tillit if the buyer is declined', 'tillit-payment-gateway'),
-                'label'     => ' ',
-                'type'      => 'checkbox',
-                'default'   => 'yes'
-            ],
-            'enable_b2b_b2c_radio' => [
-                'title'     => __('Activate B2C/B2B check-out radio button', 'tillit-payment-gateway'),
                 'label'     => ' ',
                 'type'      => 'checkbox',
                 'default'   => 'yes'
