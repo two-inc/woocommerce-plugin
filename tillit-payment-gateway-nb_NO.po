@@ -3,7 +3,7 @@ msgstr ""
 "Project-Id-Version: Tillit Payment Gateway\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2021-04-07 07:50+0000\n"
-"PO-Revision-Date: 2021-08-10 09:20+0000\n"
+"PO-Revision-Date: 2021-08-10 13:45+0000\n"
 "Last-Translator: \n"
 "Language-Team: Norwegian (Bokmål)\n"
 "Language: nb_NO\n"
@@ -243,8 +243,8 @@ msgid "Project"
 msgstr "Prosjektnummer"
 
 #: class/WC_Tillit.php:770
-msgid "Receive the invoice via EHF and email"
-msgstr "Motta faktura på EHF og email"
+msgid "Receive the invoice via PDF and email"
+msgstr "Motta faktura på PDF og email"
 
 #: class/WC_Tillit.php:623
 msgid "Request refund order to Tillit has errors"

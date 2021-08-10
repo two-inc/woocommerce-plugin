@@ -767,7 +767,7 @@ class WC_Tillit extends WC_Payment_Gateway
             'subtitle' => [
                 'title'     => __('Subtitle', 'tillit-payment-gateway'),
                 'type'      => 'text',
-                'default'   => __('Receive the invoice via EHF and email', 'tillit-payment-gateway')
+                'default'   => __('Receive the invoice via PDF and email', 'tillit-payment-gateway')
             ],
             'tillit_merchant_id' => [
                 'title'     => __('Tillit Merchant ID', 'tillit-payment-gateway'),

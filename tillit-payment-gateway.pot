@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Tillit Payment Gateway\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2021-08-10 09:20+0000\n"
+"POT-Creation-Date: 2021-08-10 13:45+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: \n"
@@ -237,7 +237,7 @@ msgid "Project"
 msgstr ""
 
 #: class/WC_Tillit.php:770
-msgid "Receive the invoice via EHF and email"
+msgid "Receive the invoice via PDF and email"
 msgstr ""
 
 #: class/WC_Tillit.php:623
