@@ -37,7 +37,7 @@ class Tillit {
         const $checkout = jQuery('.woocommerce-checkout')
 
         // Stop if not the checkout page
-        if($checkout.length === 0) return
+        if ($checkout.length === 0) return
 
         // Get the account type input
         const $accountType = jQuery('[name="account_type"]:checked')
@@ -45,11 +45,14 @@ class Tillit {
         // Get the billing company field
         const $billingCompany = $checkout.find('#billing_company')
 
+        // Get the billing country field
+        const $billingCountry = $checkout.find('#billing_country')
+
         // Get the company ID field
         const $companyId = $checkout.find('#company_id')
 
         // If we found the field
-        if($accountType.length > 0) {
+        if ($accountType.length > 0) {
 
             // Get the account type
             const accountType = $accountType.val()
@@ -62,51 +65,29 @@ class Tillit {
 
         }
 
-        if(tillitWithCompanySearch) {
+        if (tillitWithCompanySearch) {
+
+            // Reinitiate company select on country change
+            $billingCountry.on('select2:select', function(e){
+                $billingCompany.selectWoo(selectWooParams())
+            })
+
+            $billingCountry.on('select2:open', function(e){
+                setTimeout(function(){
+                    if (jQuery('input[aria-owns="select2-billing_country-results"]').get(0)) {
+                        jQuery('input[aria-owns="select2-billing_country-results"]').get(0).focus()
+                    }
+                }, 200)
+            })
 
             // Turn the select input into select2
-            $billingCompany.selectWoo({
-                minimumInputLength: 3,
-                width: '100%',
-                escapeMarkup: function(markup) {
-                    return markup
-                },
-                templateResult: function(data)
-                {
-                    return data.html
-                },
-                templateSelection: function(data) {
-                    return data.text
-                },
-                ajax: {
-                    dataType: 'json',
-                    delay: 200,
-                    url: function(params){
-                        params.page = params.page || 1
-                        return window.tillit.tillit_search_host + '/search?limit=' + tillitSearchLimit + '&offset=' + ((params.page - 1) * tillitSearchLimit) + '&q=' + params.term
-                    },
-                    data: function()
-                    {
-                        return {}
-                    },
-                    processResults: function(response, params)
-                    {
-
-                        return {
-                            results: Tillit.extractItems(response),
-                            pagination: {
-                                more: (params.page * tillitSearchLimit) < response.data.total
-                            }
-                        }
-
-                    }
-                }
-            }).on('select2:select', function(e){
+            const $billingCompanySelect = $billingCompany.selectWoo(selectWooParams())
+            $billingCompanySelect.on('select2:select', function(e){
 
                 // Get the option data
                 const data = e.params.data
 
-                if(window.tillit.company_id_search && window.tillit.company_id_search === 'yes') {
+                if (window.tillit.company_id_search && window.tillit.company_id_search === 'yes') {
 
                     // Set the company ID
                     tillitCompany.organization_number = data.company_id
@@ -122,33 +103,45 @@ class Tillit {
                 // Get the company approval status
                 Tillit.getApproval()
 
+                // Get country
+                let country_prefix = tillitCompany.country_prefix
+                if (!country_prefix || !['GB'].includes(country_prefix)) country_prefix = 'NO'
+
                 // Fetch the company data
                 const addressResponse = jQuery.ajax({
                     dataType: 'json',
-                    url: window.tillit.tillit_checkout_host + '/v1/company/' + jQuery('#company_id').val() + '/address'
+                    url: Tillit.contructTillitUrl('/v1/' + country_prefix + '/company/' + jQuery('#company_id').val() + '/address')
                 })
 
                 addressResponse.done(function(response){
 
                     // If we have the company location
-                    if(response.company_location) {
+                    if (response.address) {
 
                         // Get the company location object
-                        const companyLocation = response.company_location
+                        const companyLocation = response.address
 
                         // Populate the street name and house number fields
-                        jQuery('#billing_address_1').val(companyLocation.street_address)
+                        jQuery('#billing_address_1').val(companyLocation.streetAddress)
 
                         // Populate the city
-                        jQuery('#billing_city').val(companyLocation.municipality_name)
+                        jQuery('#billing_city').val(companyLocation.city)
 
                         // Populate the postal code
-                        jQuery('#billing_postcode').val(companyLocation.postal_code)
+                        jQuery('#billing_postcode').val(companyLocation.postalCode)
 
                     }
 
                 })
 
+            })
+
+            $billingCompanySelect.on('select2:open', function(e){
+                setTimeout(function(){
+                    if (jQuery('input[aria-owns="select2-billing_company-results"]').get(0)) {
+                        jQuery('input[aria-owns="select2-billing_company-results"]').get(0).focus()
+                    }
+                }, 200)
             })
 
         }
@@ -158,7 +151,7 @@ class Tillit {
          * https://github.com/select2/select2/issues/4614
          */
 
-        if(tillitWithCompanySearch) {
+        if (tillitWithCompanySearch) {
 
             const instance = $billingCompany.data('select2')
 
@@ -174,11 +167,20 @@ class Tillit {
         // Disable or enable actions based on the account type
         $body.on('updated_checkout', function(){
 
+            // Check approval again
+            Tillit.getApproval()
+
             // Toggle the action buttons
-            context.toggleActions()
+            Tillit.toggleActions()
 
             // Enable or disable the Tillit method
             Tillit.toggleMethod()
+
+            // Enable or disable the Tillit method
+            Tillit.updateCompanyNameAgreement()
+
+            document.querySelector('label[for="payment_method_woocommerce-gateway-tillit"] .tillit-subtitle').parentElement.appendChild(
+                document.querySelector('label[for="payment_method_woocommerce-gateway-tillit"] .tillit-subtitle'))
 
         })
 
@@ -189,7 +191,11 @@ class Tillit {
         $body.on('blur', '#company_id, #billing_company', this.onCompanyManualInputBlur)
 
         // Handle the company inputs change event
-        $body.on('change', '#billing_country', this.onCompanyInputChange)
+        $body.on('change', '#select2-billing_company-container', Tillit.updateCompanyNameAgreement)
+        $body.on('change', '#billing_company', Tillit.updateCompanyNameAgreement)
+
+        // Handle the country inputs change event
+        $body.on('change', '#billing_country', this.onCountryInputChange)
 
         $body.on('click', '#place_order', function(){
             clearInterval(tillitOrderIntentCheck.interval)
@@ -206,8 +212,15 @@ class Tillit {
         // Handle account type change
         $checkout.on('change', '[name="account_type"]', this.changeAccountType)
 
-        // Toggle the actions when the payment method changes
-        $checkout.on('change', '[name="payment_method"]', this.toggleActions)
+        // Update right sidebar order review when the payment method changes
+        $checkout.on('change', '[name="payment_method"]', function() {
+            $body.trigger('update_checkout');
+        });
+
+        // If setting is to hide other payment methods, hide when page load by default
+        if (window.tillit.display_other_payments !== 'yes') {
+            jQuery('#payment .wc_payment_methods > li:not([class*="payment_method_woocommerce-gateway-tillit"])').hide()
+        }
 
         setInterval(function(){
             if (tillitOrderIntentCheck.pendingCheck) Tillit.getApproval()
@@ -252,7 +265,7 @@ class Tillit {
         let $placeholder = jQuery('#tillit-'+ name +'-source')
 
         // Stop if we already have a placeholder
-        if($placeholder.length > 0) return
+        if ($placeholder.length > 0) return
 
         // Create a placeholder
         $placeholder = jQuery('<div id="tillit-'+ name +'-source"></div>')
@@ -320,7 +333,7 @@ class Tillit {
         const accountType = Tillit.getAccountType()
 
         // If business account
-        if(accountType === 'business') {
+        if (accountType === 'business') {
             Tillit.moveField('billing_first_name_field', 'fn')
             Tillit.moveField('billing_last_name_field', 'ln')
             Tillit.moveField('billing_phone_field', 'ph')
@@ -346,9 +359,6 @@ class Tillit {
     static toggleRequiredFields($targets, accountType)
     {
 
-        // True if the extra fields are required
-        const isRequired =  accountType === 'business'
-
         // For each input
         $targets.find(':input').each(function(){
 
@@ -359,7 +369,7 @@ class Tillit {
             const $row = $input.parents('.form-row')
 
             // Toggle the required property
-            $input.attr('required', isRequired)
+            $input.attr('required', Tillit.isCompany(accountType))
 
             // Replace the optional visual cue with the required one
             $row.find('label .optional').replaceWith(tillitRequiredField)
@@ -382,10 +392,23 @@ class Tillit {
         const $regularTargets = jQuery('.woocommerce-company-fields, .woocommerce-representative-fields, #company_id_field, #billing_company_field, #department_field, #project_field')
 
         // Toggle the targets based on the account type
-        accountType === 'personal' ? $regularTargets.addClass('hidden') : $regularTargets.removeClass('hidden')
+        Tillit.isCompany(accountType) ? $regularTargets.removeClass('hidden') : $regularTargets.addClass('hidden')
 
         // Toggle the required fields based on the account type
         Tillit.toggleRequiredFields($requiredTargets, accountType)
+
+    }
+
+    /**
+     * Check if selected account type is business
+     *
+     * @param accountType
+     */
+
+    static isCompany(accountType)
+    {
+
+        return accountType === 'business'
 
     }
 
@@ -398,31 +421,44 @@ class Tillit {
     static toggleMethod()
     {
 
+        // Get the Tillit payment method section
+        const $tillitSection = jQuery('#payment .wc_payment_methods > li.payment_method_woocommerce-gateway-tillit')
+        const $otherPaymentSections = jQuery('#payment .wc_payment_methods > li:not([class*="payment_method_woocommerce-gateway-tillit"])')
+
         // Get the Tillit payment method input
-        const $tillitPaymentMethod = jQuery(':input[value="woocommerce-gateway-tillit"]')
+        const $tillitBox = jQuery(':input[value="woocommerce-gateway-tillit"]')
 
         // True if the Tillit payment method is disabled
         const isTillitDisabled = window.tillit.enable_order_intent === 'yes' && tillitMethodHidden === true
 
-        // Disable the Tillit payment method for personal orders
-        $tillitPaymentMethod.attr('disabled', isTillitDisabled)
-
-        // Get the Tillit payment method
-        const $tillit = jQuery('li.payment_method_woocommerce-gateway-tillit')
-
         // If Tillit is disabled
-        if(isTillitDisabled) {
+        if (isTillitDisabled) {
 
-            // Get the next or previous target
-            const $target = $tillit.prev().length === 0 ? $tillit.next() : $tillit.prev()
+            $tillitBox.prop('checked', false)
 
-            // Activate the next default method
-            $target.find(':radio').click()
+        }
+
+        // Disable the Tillit payment method for non-business orders
+        $tillitBox.attr('disabled', isTillitDisabled)
+
+        if (Tillit.isCompany(Tillit.getAccountType())) {
+
+            // Show Tillit payment option
+            $tillitSection.removeClass('hidden')
+
+            // If Tillit is approved and setting is to hide other payment methods
+            if (window.tillit.display_other_payments !== 'yes') {
+                if (isTillitDisabled) $otherPaymentSections.show()
+                else $otherPaymentSections.hide()
+            }
 
         } else {
 
-            // Active the Tillit method
-            $tillit.find(':radio').click()
+            // Hide Tillit payment option
+            $tillitSection.addClass('hidden')
+
+            // Always show other methods for non-business purchases
+            $otherPaymentSections.show()
 
         }
 
@@ -439,7 +475,7 @@ class Tillit {
     static extractItems(results)
     {
 
-        if(results.status !== 'success') return []
+        if (results.status !== 'success') return []
 
         const items = []
 
@@ -470,9 +506,6 @@ class Tillit {
     static selectDefaultMethod()
     {
 
-        // Get the account type
-        const accountType = Tillit.getAccountType()
-
         // Get the Tillit payment method input
         const $tillitPaymentMethod = jQuery(':input[value="woocommerce-gateway-tillit"]')
 
@@ -482,14 +515,17 @@ class Tillit {
         // True if the Tillit payment method is disabled
         const isTillitDisabled = window.tillit.enable_order_intent === 'yes' && tillitMethodHidden === true
 
-        // Disable the Tillit payment method for personal orders
+        // Disable the Tillit payment method for non-business orders
         $tillitPaymentMethod.attr('disabled', isTillitDisabled)
 
-        // If a personal account
-        if(isTillitDisabled) {
+        // If tillit method cannot be used
+        if (isTillitDisabled) {
 
-            // Select the first visible payment method
-            $tillit.parent().find('li:visible').eq(0).find(':radio').click()
+            // Fallback if set in admin and current account type is business
+            if (window.tillit.fallback_to_another_payment === 'yes' && Tillit.isCompany(Tillit.getAccountType())) {
+                // Select the first visible payment method
+                $tillit.parent().find('li:visible').eq(0).find(':radio').click()
+            }
 
         } else {
 
@@ -518,7 +554,7 @@ class Tillit {
 
         for(let i = 0; i < values.length; i++) {
             const value = values[i]
-            if(!value || value.length === 0) {
+            if (!value || value.length === 0) {
                 can = false
                 break
             }
@@ -539,7 +575,7 @@ class Tillit {
 
         const canGetApproval = Tillit.canGetApproval()
 
-        if(!canGetApproval) return
+        if (!canGetApproval) return
 
         if (tillitOrderIntentCheck.interval) {
             tillitOrderIntentCheck.pendingCheck = true
@@ -557,8 +593,9 @@ class Tillit {
             }
 
             let jsonBody = JSON.stringify({
-                "merchant_id": window.tillit.merchant_id,
+                "merchant_short_name": window.tillit.merchant_short_name,
                 "gross_amount": "" + gross_amount,
+                "payment_type": window.tillit.product_type,
                 "buyer": {
                     "company": tillitCompany,
                     "representative": tillitRepresentative
@@ -607,7 +644,7 @@ class Tillit {
 
             // Create an order intent
             const approvalResponse = jQuery.ajax({
-                url: window.tillit.tillit_checkout_host + '/v1/order_intent',
+                url: Tillit.contructTillitUrl('/v1/order_intent'),
                 contentType: "application/json; charset=utf-8",
                 dataType: 'json',
                 method: 'POST',
@@ -621,19 +658,13 @@ class Tillit {
                 tillitApproved = response.approved
 
                 // Toggle the Tillit payment method
-                tillitMethodHidden = !tillitApproved
+                tillitMethodHidden = !(tillitApproved && Tillit.isCompany(Tillit.getAccountType()))
 
                 // Show or hide the Tillit payment method
                 Tillit.toggleMethod()
 
                 // Select the default payment method
                 Tillit.selectDefaultMethod()
-
-                // Update company name in payment option
-                if (document.querySelector('#select2-billing_company-container'))
-                    document.querySelector('.tillit-buyer-name').innerText = document.querySelector('#select2-billing_company-container').innerText
-                else if (document.querySelector('#billing_company'))
-                    document.querySelector('.tillit-buyer-name').innerText = document.querySelector('#billing_company').value
 
                 // Update tracking number
                 if (response.tracking_id && document.querySelector('#tracking_id')) {
@@ -663,16 +694,13 @@ class Tillit {
                 tillitApproved = false
 
                 // Toggle the Tillit payment method
-                tillitMethodHidden = !tillitApproved
+                tillitMethodHidden = true
 
                 // Show or hide the Tillit payment method
                 Tillit.toggleMethod()
 
                 // Select the default payment method
                 Tillit.selectDefaultMethod()
-
-                // Update company name in payment option
-                document.querySelector('.tillit-buyer-name').innerText = ''
 
                 // Display error messages
                 if (response.status >= 400) {
@@ -762,7 +790,7 @@ class Tillit {
 
     }
 
-    toggleActions()
+    static toggleActions()
     {
 
         // Get the account type
@@ -774,8 +802,8 @@ class Tillit {
         // Get the place order button
         const $placeOrder = jQuery('#place_order')
 
-        // Disable the place order button if personal order and payment method is Tillit
-        $placeOrder.attr('disabled', accountType === 'personal' && paymentMethod === 'woocommerce-gateway-tillit')
+        // Disable the place order button if order is non-business and payment method is Tillit
+        $placeOrder.attr('disabled', !Tillit.isCompany(accountType) && paymentMethod === 'woocommerce-gateway-tillit')
 
     }
 
@@ -792,9 +820,9 @@ class Tillit {
         // Get the account type
         const accountType = Tillit.getAccountType()
 
-        // Hide the method for personal accounts
-        if(accountType === 'personal') tillitMethodHidden = true
-        if(accountType === 'business' && tillitApproved) tillitMethodHidden = false
+        // Hide the method for non-business accounts
+        if (!Tillit.isCompany(accountType)) tillitMethodHidden = true
+        else if (tillitApproved) tillitMethodHidden = false
 
         // Toggle the company fields
         Tillit.toggleCompanyFields($input.val())
@@ -820,9 +848,9 @@ class Tillit {
 
         let inputName = $input.attr('name')
 
-        if(inputName === 'company_id') {
+        if (inputName === 'company_id') {
             tillitCompany.organization_number = $input.val()
-        } else if(inputName === 'billing_company') {
+        } else if (inputName === 'billing_company') {
             tillitCompany.company_name = $input.val()
         }
 
@@ -843,7 +871,7 @@ class Tillit {
 
         let inputName = $input.attr('name').replace('billing_', '')
 
-        if(inputName === 'phone') inputName += '_number'
+        if (inputName === 'phone') inputName += '_number'
 
         tillitRepresentative[inputName] = $input.val()
 
@@ -852,12 +880,12 @@ class Tillit {
     }
 
     /**
-     * Handle the company input changes
+     * Handle the country input changes
      *
      * @param event
      */
 
-    onCompanyInputChange(event)
+    onCountryInputChange(event)
     {
 
         const $input = jQuery(this)
@@ -866,6 +894,26 @@ class Tillit {
 
         Tillit.getApproval()
 
+    }
+
+    /**
+     * Update company name in payment method aggrement section
+     */
+
+    static updateCompanyNameAgreement()
+    {
+        if (document.querySelector('#select2-billing_company-container') && document.querySelector('#select2-billing_company-container').innerText) {
+            document.querySelector('.tillit-buyer-name').innerText = document.querySelector('#select2-billing_company-container').innerText
+            document.querySelector('.tillit-buyer-name').classList.remove('hidden')
+            document.querySelector('.tillit-buyer-name-placeholder').classList.add('hidden')
+        } else if (document.querySelector('#billing_company') && document.querySelector('#billing_company').value) {
+            document.querySelector('.tillit-buyer-name').innerText = document.querySelector('#billing_company').value
+            document.querySelector('.tillit-buyer-name').classList.remove('hidden')
+            document.querySelector('.tillit-buyer-name-placeholder').classList.add('hidden')
+        } else {
+            document.querySelector('.tillit-buyer-name').classList.add('hidden')
+            document.querySelector('.tillit-buyer-name-placeholder').classList.remove('hidden')
+        }
     }
 
     /**
@@ -941,6 +989,17 @@ class Tillit {
     }
 
     /**
+     * Construct url to Tillit checkout api
+     */
+
+    static contructTillitUrl(path, params = {})
+    {
+        params['client'] = window.tillit.client_name
+        params['client_v'] = window.tillit.client_version
+        return window.tillit.tillit_checkout_host + path + '?' + (new URLSearchParams(params)).toString()
+    }
+
+    /**
      * Load checkout inputs
      */
 
@@ -986,6 +1045,85 @@ class Tillit {
         }
     }
 
+}
+
+function selectWooParams() {
+    let countryParams = {
+        "NO": {
+            "tillit_search_host": window.tillit.tillit_search_host_no,
+        },
+        "GB": {
+            "tillit_search_host": window.tillit.tillit_search_host_gb,
+        }
+    }
+
+    let country = jQuery('#billing_country').val()
+
+    if (country in countryParams) {
+        return {
+            minimumInputLength: 3,
+            width: '100%',
+            escapeMarkup: function(markup) {
+                return markup
+            },
+            templateResult: function(data)
+            {
+                return data.html
+            },
+            templateSelection: function(data) {
+                return data.text
+            },
+            language: {
+                errorLoading: function() {
+                    return wc_country_select_params.i18n_searching
+                },
+                inputTooShort: function(t) {
+                    t = t.minimum - t.input.length;
+                    return 1 == t ? wc_country_select_params.i18n_input_too_short_1 : wc_country_select_params.i18n_input_too_short_n.replace("%qty%", t)
+                },
+                noResults: function() {
+                    return wc_country_select_params.i18n_no_matches
+                },
+                searching: function() {
+                    return wc_country_select_params.i18n_searching
+                },
+            },
+            ajax: {
+                dataType: 'json',
+                delay: 200,
+                url: function(params){
+                    params.page = params.page || 1
+                    return countryParams[country].tillit_search_host + '/search?limit=' + tillitSearchLimit + '&offset=' + ((params.page - 1) * tillitSearchLimit) + '&q=' + params.term
+                },
+                data: function()
+                {
+                    return {}
+                },
+                processResults: function(response, params)
+                {
+
+                    return {
+                        results: Tillit.extractItems(response),
+                        pagination: {
+                            more: (params.page * tillitSearchLimit) < response.data.total
+                        }
+                    }
+
+                }
+            }
+        }
+    } else {
+        jQuery('input[aria-owns="select2-billing_company-results"]').css('display: none;')
+        return {
+            minimumInputLength: 10000,
+            width: '100%',
+            language: {
+                inputTooShort: function(t) {
+                    return 'Please select country Norway or United Kingdom (UK) to search'
+                },
+            },
+        }
+    }
 }
 
 jQuery(function(){

@@ -22,7 +22,6 @@ class WC_Tillit extends WC_Payment_Gateway
 
         $this->id = 'woocommerce-gateway-tillit';
         $this->has_fields = false;
-        // $this->order_button_text = __('Proceed to Tillit', 'tillit-payment-gateway');
         $this->order_button_text = __('Place order', 'tillit-payment-gateway');
         $this->method_title = __('Tillit', 'tillit-payment-gateway');
         $this->method_description = __('Making it easy for businesses to buy online.', 'tillit-payment-gateway');
@@ -36,18 +35,21 @@ class WC_Tillit extends WC_Payment_Gateway
         // Define user set variables
         $this->title = sprintf(__($this->get_option('title'), 'tillit-payment-gateway'), strval($this->get_option('days_on_invoice')));
         $this->description = sprintf(
-            '<p>%s <span class="tillit-buyer-name"></span>.</p>',
-            __('By completing the purchase, you verify that you have the legal right to purchase on behalf of', 'tillit-payment-gateway')
+            '<p>%s <span class="tillit-buyer-name-placeholder">%s</span><span class="tillit-buyer-name"></span>.</p>',
+            __('By completing the purchase, you verify that you have the legal right to purchase on behalf of', 'tillit-payment-gateway'),
+            __('your company', 'tillit-payment-gateway')
         );
         $this->api_key = $this->get_option('api_key');
 
         // Tillit api host
-        $checkout_env = $this->get_option('checkout_env');
-        $this->tillit_search_host = 'https://search-api-demo-j6whfmualq-lz.a.run.app';
-        $this->tillit_checkout_host = $checkout_env == 'prod' ? 'https://api.tillit.ai'
-                                    : ($checkout_env == 'demo' ? 'https://demo.api.tillit.ai'
-                                    : ($checkout_env == 'dev' ? 'https://huynguyen.hopto.org:8083'
-                                    : 'https://staging.api.tillit.ai'));
+        $this->tillit_search_host_no = 'https://no.search.tillit.ai';
+        $this->tillit_search_host_gb = 'https://gb.search.tillit.ai';
+        $this->tillit_checkout_host = 'https://api.tillit.ai';
+        if (WC_Tillit_Helper::is_tillit_development()) {
+            $this->tillit_checkout_host = $this->get_option('test_checkout_host');
+        }
+
+        $this->plugin_version = get_plugin_version();
 
         global $tillit_payment_gateway;
         if (isset($tillit_payment_gateway)) {
@@ -55,14 +57,17 @@ class WC_Tillit extends WC_Payment_Gateway
         }
 
         add_action('woocommerce_update_options_payment_gateways_' . $this->id, [$this, 'process_admin_options']);
-        if(!$this->get_option('api_key') || !$this->get_option('tillit_merchant_id')) return;
+        if(!$this->get_option('api_key') || !$this->get_option('tillit_merchant_id') || sizeof($this->available_account_types()) == 0) return;
         add_action('woocommerce_order_status_completed', [$this, 'on_order_completed']);
         add_action('woocommerce_order_status_cancelled', [$this, 'on_order_cancelled']);
         add_action('woocommerce_cancelled_order', [$this, 'on_order_cancelled']);
         add_action('get_header', [$this, 'process_confirmation']);
         add_action('woocommerce_update_options_checkout', [$this, 'update_checkout_options']);
         add_action('woocommerce_admin_order_data_after_order_details', [$this, 'add_invoice_credit_note_urls']);
+        add_action('woocommerce_cart_calculate_fees', [$this, 'add_invoice_fees']);
         add_action('admin_enqueue_scripts', [$this, 'tillit_admin_scripts']);
+
+        add_filter('acf/settings/remove_wp_meta_box', '__return_false');
 
         $tillit_payment_gateway = $this;
         new WC_Tillit_Checkout($this);
@@ -74,7 +79,7 @@ class WC_Tillit extends WC_Payment_Gateway
      */
     public function change_tillit_payment_title(){
         add_filter('woocommerce_gateway_title', function ($title, $payment_id) {
-            if( $payment_id === 'woocommerce-gateway-tillit' ) {
+            if($payment_id === 'woocommerce-gateway-tillit') {
                 $title = sprintf(
                     '%s<div class="tillit-subtitle">%s</div> ',
                     sprintf(__($this->get_option('title'), 'tillit-payment-gateway'), strval($this->get_option('days_on_invoice'))),
@@ -169,8 +174,8 @@ class WC_Tillit extends WC_Payment_Gateway
             wp_enqueue_media();
         }
 
-        wp_enqueue_script( 'tillit.admin', WC_TILLIT_PLUGIN_URL . '/assets/js/admin.js', ['jquery']);
-        wp_enqueue_style( 'tillit.admin', WC_TILLIT_PLUGIN_URL . '/assets/css/admin.css');
+        wp_enqueue_script('tillit.admin', WC_TILLIT_PLUGIN_URL . '/assets/js/admin.js', ['jquery']);
+        wp_enqueue_style('tillit.admin', WC_TILLIT_PLUGIN_URL . '/assets/css/admin.css');
 
     }
 
@@ -235,12 +240,14 @@ class WC_Tillit extends WC_Payment_Gateway
         $original_order = WC_Tillit_Helper::compose_tillit_order(
             $order,
             $tillit_meta['order_reference'],
-            $tillit_meta['tillit_merchant_id'],
             $tillit_meta['days_on_invoice'],
             $tillit_meta['company_id'],
             $tillit_meta['department'],
             $tillit_meta['project'],
-            $tillit_meta['tillit_original_order_id']
+            $tillit_meta['product_type'],
+            $tillit_meta['payment_reference_message'],
+            $tillit_meta['tillit_original_order_id'],
+            ''
         );
 
         if (!property_exists($this, 'original_orders')) $this->original_orders = array();
@@ -274,12 +281,14 @@ class WC_Tillit extends WC_Payment_Gateway
         $updated_order = WC_Tillit_Helper::compose_tillit_order(
             $order,
             $tillit_meta['order_reference'],
-            $tillit_meta['tillit_merchant_id'],
             $tillit_meta['days_on_invoice'],
             $tillit_meta['company_id'],
             $tillit_meta['department'],
             $tillit_meta['project'],
-            $tillit_meta['tillit_original_order_id']
+            $tillit_meta['product_type'],
+            $tillit_meta['payment_reference_message'],
+            $tillit_meta['tillit_original_order_id'],
+            ''
         );
 
         $diff = WC_Tillit_Helper::array_diff_r($this->original_orders[$order->get_id()], $updated_order);
@@ -339,6 +348,45 @@ class WC_Tillit extends WC_Payment_Gateway
             WC_Tillit_Helper::append_admin_force_reload();
 
         }
+    }
+
+    /**
+     * Add invoice fee as a line item
+     *
+     * @param $order_id
+     */
+    function add_invoice_fees() {
+
+        if ($this->get_option('invoice_fee_to_buyer') === 'yes' && 'woocommerce-gateway-tillit' === WC()->session->get('chosen_payment_method')) {
+            global $woocommerce;
+
+            if (is_admin() && ! defined('DOING_AJAX')) {
+                return;
+            }
+
+            // Get invoice fixed fee
+            $tillit_merchant_id = $this->get_option('tillit_merchant_id');
+            $response = $this->make_request("/v1/merchant/${tillit_merchant_id}", [], 'GET');
+
+            if(is_wp_error($response)) {
+                WC()->session->set('chosen_payment_method', 'cod');
+                return;
+            }
+
+            $tillit_err = WC_Tillit_Helper::get_tillit_error_msg($response);
+            if ($tillit_err) {
+                WC()->session->set('chosen_payment_method', 'cod');
+                return;
+            }
+
+            $body = json_decode($response['body'], true);
+
+            $invoice_fixed_fee = $body['fixed_fee_per_order'];
+
+            //$invoice_percentage_fee = ($woocommerce->cart->cart_contents_total + $woocommerce->cart->tax_total + $woocommerce->cart->shipping_total + $woocommerce->cart->shipping_tax_total) * $percentage;
+            $woocommerce->cart->add_fee('Invoice fee', $invoice_fixed_fee, false, '');
+        }
+
     }
 
     /**
@@ -450,15 +498,27 @@ class WC_Tillit extends WC_Payment_Gateway
         update_post_meta($order_id, 'department', sanitize_text_field($_POST['department']));
         update_post_meta($order_id, 'project', sanitize_text_field($_POST['project']));
 
+        // Get payment details
+        $product_type = $this->get_option('product_type');
+        $payment_reference_message = '';
+
+        if ($product_type === 'MERCHANT_INVOICE') {
+            $payment_reference_message = strval($order->get_id());
+        }
+
+        update_post_meta($order_id, '_product_type', $product_type);
+        update_post_meta($order_id, '_payment_reference_message', $payment_reference_message);
+
         // Create order
         $response = $this->make_request('/v1/order', WC_Tillit_Helper::compose_tillit_order(
             $order,
             $order_reference,
-            $this->get_option('tillit_merchant_id'),
             $this->get_option('days_on_invoice'),
             sanitize_text_field($_POST['company_id']),
             sanitize_text_field($_POST['department']),
             sanitize_text_field($_POST['project']),
+            $product_type,
+            $payment_reference_message,
             '',
             sanitize_text_field($_POST['tracking_id'])
         ));
@@ -476,7 +536,7 @@ class WC_Tillit extends WC_Payment_Gateway
 
         $tillit_err = WC_Tillit_Helper::get_tillit_error_msg($response);
         if ($tillit_err) {
-            WC_Tillit_Helper::display_ajax_error(__('EHF Invoice is not available for this order', 'tillit-payment-gateway'));
+            WC_Tillit_Helper::display_ajax_error(__('Invoice is not available for this purchase', 'tillit-payment-gateway'));
             return;
         }
 
@@ -510,7 +570,7 @@ class WC_Tillit extends WC_Payment_Gateway
 
     public function process_refund($order_id, $amount = null, $reason = '') {
 
-        $order = wc_get_order( $order_id );
+        $order = wc_get_order($order_id);
 
         // Check payment method
         if (!WC_Tillit_Helper::is_tillit_order($order)) {
@@ -662,16 +722,27 @@ class WC_Tillit extends WC_Payment_Gateway
     }
 
     /**
-     * Get default environment id
-     *
-     * @return string
+     * Get customer types enabled in admin settings
      */
-    public function get_default_env()
+    public function available_account_types()
     {
-        // To avoid running WC_Tillit_Helper::get_default_env() for every request
-        if ($this->get_option('checkout_env')) return 'demo';
 
-        return WC_Tillit_Helper::get_default_env();
+        $available_types = [];
+
+        if ($this->get_option('checkout_personal') === 'yes') {
+            $available_types['personal'] = __('Personal', 'tillit-payment-gateway');
+        }
+
+        if ($this->get_option('checkout_sole_trader') === 'yes') {
+            $available_types['sole_trader'] = __('Sole trader/other', 'tillit-payment-gateway');
+        }
+
+        if ($this->get_option('checkout_business') === 'yes') {
+            $available_types['business'] = __('Business', 'tillit-payment-gateway');
+        }
+
+        return $available_types;
+
     }
 
     /**
@@ -681,7 +752,7 @@ class WC_Tillit extends WC_Payment_Gateway
      */
     public function init_form_fields()
     {
-        $this->form_fields = apply_filters('wc_tillit_form_fields', [
+        $tillit_form_fields = [
             'enabled' => [
                 'title'     => __('Enable/Disable', 'tillit-payment-gateway'),
                 'type'      => 'checkbox',
@@ -696,7 +767,7 @@ class WC_Tillit extends WC_Payment_Gateway
             'subtitle' => [
                 'title'     => __('Subtitle', 'tillit-payment-gateway'),
                 'type'      => 'text',
-                'default'   => __('Receive the invoice via EHF and email', 'tillit-payment-gateway')
+                'default'   => __('Receive the invoice via PDF and email', 'tillit-payment-gateway')
             ],
             'tillit_merchant_id' => [
                 'title'     => __('Tillit Merchant ID', 'tillit-payment-gateway'),
@@ -704,94 +775,122 @@ class WC_Tillit extends WC_Payment_Gateway
             ],
             'api_key' => [
                 'title'     => __('API Key', 'tillit-payment-gateway'),
-                'type'      => 'password',
+                'type'      => 'password'
             ],
             'merchant_logo' => [
                 'title'     => __('Logo', 'tillit-payment-gateway'),
                 'type'      => 'logo'
             ],
+            'section_title_checkout_for' => [
+                'type'      => 'separator',
+                'title'     => __('Enable checkout for', 'tillit-payment-gateway')
+            ],
+            'checkout_personal' => [
+                'title'     => __('Personal', 'tillit-payment-gateway'),
+                'label'     => ' ',
+                'type'      => 'checkbox',
+                'default'   => 'yes'
+            ],
+            'checkout_sole_trader' => [
+                'title'     => __('Sole trader/other', 'tillit-payment-gateway'),
+                'label'     => ' ',
+                'type'      => 'checkbox'
+            ],
+            'checkout_business' => [
+                'title'     => __('Business', 'tillit-payment-gateway'),
+                'label'     => ' ',
+                'type'      => 'checkbox',
+                'default'   => 'yes'
+            ],
             'section_title_product' => [
                 'type'      => 'separator',
                 'title'     => __('Choose your product', 'tillit-payment-gateway')
             ],
-            'product_merchant' => [
-                'type'      => 'radio',
-                'name'      => 'product_type',
-                'disabled'  => true,
-                'label'     => __('Merchant Invoice (coming soon)', 'tillit-payment-gateway')
-            ],
-            'product_administered' => [
-                'type'      => 'radio',
-                'name'      => 'product_type',
-                'disabled'  => true,
-                'label'     => __('Administered invoice (coming soon)', 'tillit-payment-gateway')
-            ],
-            'product_funded' => [
-                'type'      => 'radio',
-                'name'      => 'product_type',
-                'label'     => __('Funded invoice', 'tillit-payment-gateway'),
-                'checked'   => true
+            'product_type' => [
+                'type'      => 'select',
+                'title'     => __('Choose your product', 'tillit-payment-gateway'),
+                'default'   => 'FUNDED_INVOICE',
+                'options'   => array(
+                      'FUNDED_INVOICE'   => 'Funded Invoice',
+                      'MERCHANT_INVOICE' => 'Merchant Invoice'
+                 )
             ],
             'days_on_invoice' => [
                 'title'     => __('Number of days on invoice', 'tillit-payment-gateway'),
                 'type'      => 'text',
-                'default'   => '14',
+                'default'   => '14'
             ],
             'section_title_settings' => [
                 'type'      => 'separator',
                 'title'     => __('Settings', 'tillit-payment-gateway')
             ],
-            'checkout_env' => [
-                'type'      => 'select',
-                'title'     => __('Mode', 'tillit-payment-gateway'),
-                'default'   => $this->get_default_env(),
-                'options' => array(
-                      'prod' => 'Production',
-                      'demo' => 'Demo',
-                      'stg'  => 'Staging',
-                      'dev'  => 'Development'
-                 )
+            'test_checkout_host' => [
+                'type'      => 'text',
+                'title'     => __('Tillit Test Server', 'tillit-payment-gateway'),
+                'default'   => 'https://staging.api.tillit.ai'
+            ],
+            'display_other_payments' => [
+                'title'     => __('Always enable all available payment methods', 'tillit-payment-gateway'),
+                'label'     => ' ',
+                'type'      => 'checkbox',
+                'default'   => 'yes'
+            ],
+            'fallback_to_another_payment' => [
+                'title'     => __('Fallback to other payment methods if Tillit is not available', 'tillit-payment-gateway'),
+                'label'     => ' ',
+                'type'      => 'checkbox',
+                'default'   => 'yes'
             ],
             'enable_company_name' => [
                 'title'     => __('Activate company name auto-complete', 'tillit-payment-gateway'),
                 'label'     => ' ',
-                'type'      => 'checkbox',
+                'type'      => 'checkbox'
             ],
             'enable_company_id' => [
                 'title'     => __('Activate company org.id auto-complete', 'tillit-payment-gateway'),
                 'label'     => ' ',
-                'type'      => 'checkbox',
+                'type'      => 'checkbox'
             ],
             'finalize_purchase' => [
                 'title'     => __('Finalize purchase when order is fulfilled', 'tillit-payment-gateway'),
                 'label'     => ' ',
-                'type'      => 'checkbox',
+                'type'      => 'checkbox'
             ],
             'enable_order_intent' => [
                 'title'     => __('Pre-approve the buyer during checkout and disable Tillit if the buyer is declined', 'tillit-payment-gateway'),
                 'label'     => ' ',
                 'type'      => 'checkbox',
-                'default'   => 'yes',
+                'default'   => 'yes'
             ],
-            'enable_b2b_b2c_radio' => [
-                'title'     => __('Activate B2C/B2B check-out radio button', 'tillit-payment-gateway'),
+            'default_to_b2c' => [
+                'title'     => __('Default to B2C check-out', 'tillit-payment-gateway'),
                 'label'     => ' ',
-                'type'      => 'checkbox',
-                'default'   => 'yes',
+                'type'      => 'checkbox'
+            ],
+            'invoice_fee_to_buyer' => [
+                'title'     => __('Shift invoice fee to the buyers', 'tillit-payment-gateway'),
+                'label'     => ' ',
+                'type'      => 'checkbox'
             ],
             'initiate_payment_to_buyer_on_refund' => [
                 'title'     => __('Initiate payment to buyer on refund', 'tillit-payment-gateway'),
                 'label'     => ' ',
                 'type'      => 'checkbox',
-                'default'   => 'yes',
+                'default'   => 'yes'
             ],
             'clear_options_on_deactivation' => [
                 'title'     => __('Clear settings on deactivation', 'tillit-payment-gateway'),
                 'label'     => ' ',
                 'type'      => 'checkbox',
-                'default'   => 'yes',
+                'default'   => 'yes'
             ]
-        ]);
+        ];
+
+        if (!WC_Tillit_Helper::is_tillit_development()) {
+            unset($tillit_form_fields['test_checkout_host']);
+        }
+
+        $this->form_fields = apply_filters('wc_tillit_form_fields', $tillit_form_fields);
     }
 
     /**
@@ -804,7 +903,7 @@ class WC_Tillit extends WC_Payment_Gateway
      */
     public function generate_radio_html($key, $data)
     {
-        $field_key = $this->get_field_key( $key );
+        $field_key = $this->get_field_key($key);
         $defaults  = array(
             'title'             => '',
             'label'             => '',
@@ -818,9 +917,9 @@ class WC_Tillit extends WC_Payment_Gateway
             'checked'           => false
         );
 
-        $data = wp_parse_args( $data, $defaults );
+        $data = wp_parse_args($data, $defaults);
 
-        if ( ! $data['label'] ) {
+        if (! $data['label']) {
             $data['label'] = $data['title'];
         }
 
@@ -829,10 +928,10 @@ class WC_Tillit extends WC_Payment_Gateway
         <tr valign="top">
             <td class="forminp" colspan="2">
                 <fieldset>
-                    <legend class="screen-reader-text"><span><?php echo wp_kses_post( $data['title'] ); ?></span></legend>
-                    <label for="<?php echo esc_attr( $field_key ); ?>">
-                        <input <?php disabled( $data['disabled'], true ); ?> class="<?php echo esc_attr( $data['class'] ); ?>" type="radio" name="<?php echo esc_attr( $field_key ); ?>" id="<?php echo esc_attr( $field_key ); ?>" style="<?php echo esc_attr( $data['css'] ); ?>" value="1" <?php checked($data['checked'] === true, true); ?> <?php echo $this->get_custom_attribute_html( $data ); // WPCS: XSS ok. ?> /> <?php echo wp_kses_post( $data['label'] ); ?></label><br/>
-                    <?php echo $this->get_description_html( $data ); // WPCS: XSS ok. ?>
+                    <legend class="screen-reader-text"><span><?php echo wp_kses_post($data['title']); ?></span></legend>
+                    <label for="<?php echo esc_attr($field_key); ?>">
+                        <input <?php disabled($data['disabled'], true); ?> class="<?php echo esc_attr($data['class']); ?>" type="radio" name="<?php echo esc_attr($field_key); ?>" id="<?php echo esc_attr($field_key); ?>" style="<?php echo esc_attr($data['css']); ?>" value="1" <?php checked($data['checked'] === true, true); ?> <?php echo $this->get_custom_attribute_html($data); // WPCS: XSS ok. ?> /> <?php echo wp_kses_post($data['label']); ?></label><br/>
+                    <?php echo $this->get_description_html($data); // WPCS: XSS ok. ?>
                 </fieldset>
             </td>
         </tr>
@@ -920,6 +1019,17 @@ class WC_Tillit extends WC_Payment_Gateway
             update_post_meta($order->get_id(), '_days_on_invoice', $days_on_invoice);
         }
 
+        $product_type = $order->get_meta('_product_type');
+        $payment_reference_message = '';
+
+        if (!$product_type) {
+            $product_type = 'FUNDED_INVOICE'; // First product type as default for older orders
+            update_post_meta($order->get_id(), '_product_type', $product_type);
+        }
+        if ($product_type === 'MERCHANT_INVOICE') {
+            $payment_reference_message = strval($order->get_id());
+        }
+
         $company_id = $order->get_meta('company_id');
         if ($company_id) {
             $department = $order->get_meta('department');
@@ -949,6 +1059,8 @@ class WC_Tillit extends WC_Payment_Gateway
             'project' => $project,
             'tillit_order_id' => $tillit_order_id,
             'tillit_original_order_id' => $tillit_original_order_id,
+            'product_type' => $product_type,
+            'payment_reference_message' => $payment_reference_message
         );
 
     }
@@ -974,7 +1086,9 @@ class WC_Tillit extends WC_Payment_Gateway
                 $order,
                 $tillit_meta['days_on_invoice'],
                 $tillit_meta['department'],
-                $tillit_meta['project']
+                $tillit_meta['project'],
+                $tillit_meta['product_type'],
+                $tillit_meta['payment_reference_message']
             ),
             'PUT'
         );
@@ -1001,17 +1115,16 @@ class WC_Tillit extends WC_Payment_Gateway
      *
      * @return WP_Error|array
      */
-    private function make_request($endpoint, $payload = [], $method = 'POST')
+    private function make_request($endpoint, $payload = [], $method = 'POST', $params = array())
     {
-        return wp_remote_request(sprintf('%s%s', $this->tillit_checkout_host, $endpoint), [
+        $params['client'] = 'wp';
+        $params['client_v'] = $this->plugin_version;
+        return wp_remote_request(sprintf('%s%s?%s', $this->tillit_checkout_host, $endpoint, http_build_query($params)), [
             'method' => $method,
             'headers' => [
                 'Accept-Language' => WC_Tillit_Helper::get_locale(),
                 'Content-Type' => 'application/json; charset=utf-8',
-                'Tillit-Merchant-Id' => $this->get_option('tillit_merchant_id'),
-                'Authorization' => sprintf('Basic %s', base64_encode(
-                    $this->get_option('tillit_merchant_id') . ':' . $this->get_option('api_key')
-                ))
+                'X-API-Key' => $this->get_option('api_key')
             ],
             'timeout' => 30,
             'body' => empty($payload) ? '' : json_encode($payload),

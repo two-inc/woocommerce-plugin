@@ -89,8 +89,18 @@ class WC_Tillit_Checkout
     public function add_account_fields($fields)
     {
 
+        // available_account_types size always > 0
+        $available_account_types = $this->WC_Tillit->available_account_types();
+        // Default account type, if available, with priority: business - sole_trader - personal
+        end($available_account_types); // Move pointer to last
+        $default_account_type = key($available_account_types); // Get current pointer
 
-        if($this->WC_Tillit->get_option('enable_b2b_b2c_radio') === 'yes') {
+        if(sizeof($this->WC_Tillit->available_account_types()) > 1) {
+
+            // Default to personal if admin settings is set
+            if ($this->WC_Tillit->get_option('default_to_b2c') === 'yes' && array_key_exists('personal', $available_account_types)) {
+                $default_account_type = 'personal';
+            }
 
             $fields['account_type'] = [
                 'account_type' => [
@@ -98,11 +108,8 @@ class WC_Tillit_Checkout
                     'required' => true,
                     'type' => 'radio',
                     'priority' => 15,
-                    'value' => 'business',
-                    'options' => [
-                        'personal' => __('Personal', 'tillit-payment-gateway'),
-                        'business' => __('Business', 'tillit-payment-gateway')
-                    ]
+                    'value' => $default_account_type,
+                    'options' => $available_account_types
                 ]
             ];
 
@@ -114,10 +121,8 @@ class WC_Tillit_Checkout
                     'type' => 'radio',
                     'class' => array('hidden'),
                     'priority' => 15,
-                    'value' => 'business',
-                    'options' => [
-                        'business' => __('Business', 'tillit-payment-gateway')
-                    ]
+                    'value' => $default_account_type,
+                    'options' => $available_account_types
                 ]
             ];
 
@@ -141,6 +146,7 @@ class WC_Tillit_Checkout
         $with_company_search = $this->WC_Tillit->get_option('enable_company_name') === 'yes';
 
         if($with_company_search) {
+
             $fields['billing']['billing_company'] = [
                 'label' => __('Company name', 'tillit-payment-gateway'),
                 'autocomplete' => 'organization',
@@ -149,19 +155,36 @@ class WC_Tillit_Checkout
                     'data-multiple' => true,
                     'data-multi' => true
                 ],*/
+                'class' => array('billing_company_selectwoo'),
                 'options' => [
                     '' => __('Enter the company name', 'tillit-payment-gateway')
                 ],
                 'required' => false,
                 'priority' => 2
             ];
-        }
 
-        $fields['billing']['company_id'] = [
-            'label' => __('Company ID', 'tillit-payment-gateway'),
-            'required' => false,
-            'priority' => $with_company_search ? 3 : 35
-        ];
+            $fields['billing']['company_id'] = [
+                'label' => __('Company ID', 'tillit-payment-gateway'),
+                'required' => false,
+                'priority' => 3,
+                'custom_attributes' => array('readonly' => 'readonly')
+            ];
+
+        } else {
+
+            $fields['billing']['billing_company'] = [
+                'label' => __('Company name', 'tillit-payment-gateway'),
+                'required' => false,
+                'priority' => 34
+            ];
+
+            $fields['billing']['company_id'] = [
+                'label' => __('Company ID', 'tillit-payment-gateway'),
+                'required' => false,
+                'priority' => 35
+            ];
+
+        }
 
         $fields['billing']['department'] = [
             'label' => __('Department', 'tillit-payment-gateway'),
@@ -256,21 +279,27 @@ class WC_Tillit_Checkout
         $properties = [
             'messages' => [
                 'subtitle_order_intent_ok' =>$this->WC_Tillit->get_option('subtitle'),
-                'subtitle_order_intent_reject' => __('EHF Invoice is not available for this order', 'tillit-payment-gateway'),
+                'subtitle_order_intent_reject' => __('Invoice is not available for this purchase', 'tillit-payment-gateway'),
                 'amount_min' => sprintf(__('Minimum Payment using Tillit is %s NOK', 'tillit-payment-gateway'), '200'),
                 'amount_max' => sprintf(__('Maximum Payment using Tillit is %s NOK', 'tillit-payment-gateway'), '250,000'),
                 'invalid_phone' => __('Please use phone format +47 99999999', 'tillit-payment-gateway'),
             ],
             'tillit_plugin_url' => WC_TILLIT_PLUGIN_URL,
-            'tillit_search_host' => $this->WC_Tillit->tillit_search_host,
+            'tillit_search_host_no' => $this->WC_Tillit->tillit_search_host_no,
+            'tillit_search_host_gb' => $this->WC_Tillit->tillit_search_host_gb,
             'tillit_checkout_host' => $this->WC_Tillit->tillit_checkout_host,
+            'display_other_payments' => $this->WC_Tillit->get_option('display_other_payments'),
+            'fallback_to_another_payment' => $this->WC_Tillit->get_option('fallback_to_another_payment'),
             'company_name_search' => $this->WC_Tillit->get_option('enable_company_name'),
             'company_id_search' => $this->WC_Tillit->get_option('enable_company_id'),
             'enable_order_intent' => $this->WC_Tillit->get_option('enable_order_intent'),
-            'merchant_id' => $this->WC_Tillit->get_option('tillit_merchant_id'),
+            'product_type' => $this->WC_Tillit->get_option('product_type'),
+            'merchant_short_name' => $this->WC_Tillit->get_option('tillit_merchant_id'),
             'currency' => get_woocommerce_currency(),
             'price_decimal_separator' => wc_get_price_decimal_separator(),
-            'price_thousand_separator' => wc_get_price_thousand_separator()
+            'price_thousand_separator' => wc_get_price_thousand_separator(),
+            'client_name' => 'wp',
+            'client_version' => get_plugin_version()
         ];
 
         return $properties;
@@ -285,7 +314,7 @@ class WC_Tillit_Checkout
     public function inject_cart_details()
     {
         if(!is_checkout()) return;
-        $tillit_obj = json_encode(WC_Tillit_Helper::utf8ize($this->prepare_tillit_object()));
+        $tillit_obj = json_encode(WC_Tillit_Helper::utf8ize($this->prepare_tillit_object()), JSON_UNESCAPED_UNICODE);
         if ($tillit_obj) printf('<script>window.tillit = %s;</script>', $tillit_obj);
     }
 

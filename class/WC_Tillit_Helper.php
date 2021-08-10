@@ -13,7 +13,7 @@ class WC_Tillit_Helper
     /**
      * Round the amount in woocommerce way
      *
-     * @return float
+     * @return string
      */
     public static function round_amt($amt)
     {
@@ -21,16 +21,13 @@ class WC_Tillit_Helper
     }
 
     /**
-     * Return the tax rate
+     * Round the rate to 6dp
      *
-     * @param WC_Product_Simple|WC_Order_Item_Product $product_simple
-     *
-     * @return int|mixed
+     * @return string
      */
-    public static function get_tax_percentage($product_simple)
+    public static function round_rate($rate)
     {
-        $tax_rates = WC_Tax::get_rates($product_simple->get_tax_class());
-        return $tax_rates && $tax_rates[1] ? $tax_rates[1]['rate'] : 0;
+        return number_format($rate, 6, '.', '');
     }
 
     /**
@@ -111,7 +108,7 @@ class WC_Tillit_Helper
     }
 
     /**
-     * Format the cart items
+     * Compose the cart items
      *
      * @return array
      */
@@ -146,7 +143,7 @@ class WC_Tillit_Helper
                 'discount_amount' => strval(WC_Tillit_Helper::round_amt($line_item['line_subtotal'] - $line_item['line_total'])),
                 'tax_amount' => strval(WC_Tillit_Helper::round_amt($line_item['line_tax'])),
                 'tax_class_name' => 'VAT ' . WC_Tillit_Helper::round_amt($tax_rate * 100) . '%',
-                'tax_rate' => strval($tax_rate),
+                'tax_rate' => strval(WC_Tillit_Helper::round_rate($tax_rate)),
                 'unit_price' => strval(WC_Tillit_Helper::round_amt(wc_get_price_excluding_tax($product_simple))),
                 'quantity' => $line_item['quantity'],
                 'quantity_unit' => 'item',
@@ -187,7 +184,7 @@ class WC_Tillit_Helper
                 'discount_amount' => '0',
                 'tax_amount' => strval(WC_Tillit_Helper::round_amt($shipping->get_total_tax())),
                 'tax_class_name' => 'VAT ' . WC_Tillit_Helper::round_amt($tax_rate * 100) . '%',
-                'tax_rate' => strval($tax_rate),
+                'tax_rate' => strval(WC_Tillit_Helper::round_rate($tax_rate)),
                 'unit_price' => strval(WC_Tillit_Helper::round_amt($shipping->get_total())),
                 'quantity' => 1,
                 'quantity_unit' => 'sc', // shipment charge
@@ -211,7 +208,7 @@ class WC_Tillit_Helper
                 'discount_amount' => '0',
                 'tax_amount' => strval(WC_Tillit_Helper::round_amt($fee->get_total_tax())),
                 'tax_class_name' => 'VAT ' . WC_Tillit_Helper::round_amt($tax_rate * 100) . '%',
-                'tax_rate' => strval($tax_rate),
+                'tax_rate' => strval(WC_Tillit_Helper::round_rate($tax_rate)),
                 'unit_price' => strval(WC_Tillit_Helper::round_amt($fee->get_total())),
                 'quantity' => 1,
                 'quantity_unit' => 'fee',
@@ -235,25 +232,10 @@ class WC_Tillit_Helper
      * @return bool
      */
     public static function compose_tillit_order(
-        $order, $order_reference, $tillit_merchant_id, $days_on_invoice,
-        $company_id, $department, $project, $tillit_original_order_id = '',
-        $tracking_id = '')
+        $order, $order_reference, $days_on_invoice,
+        $company_id, $department, $project, $product_type,
+        $payment_reference_message = '', $tillit_original_order_id = '', $tracking_id = '')
     {
-        // Get the orde taxes
-        $order_taxes = $order->get_taxes();
-
-        // Get the taxes Ids
-        $taxes = array_keys($order_taxes);
-
-        if (count($taxes) == 0) {
-            $tax_amount = 0;
-            $tax_rate = 0;
-        } else {
-            /** @var WC_Order_Item_Tax $vat */
-            $vat = $order_taxes[$taxes[0]];
-            $tax_amount = $vat->get_tax_total() + $vat->get_shipping_tax_total();
-            $tax_rate = $vat->get_rate_percent() / 100.0;
-        }
 
         $billing_address = [
             'organization_name' => $order->get_billing_company(),
@@ -276,6 +258,19 @@ class WC_Tillit_Helper
         }
 
         $req_body = [
+            'currency' => $order->get_currency(),
+            'gross_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total())),
+            'net_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total() - $order->get_total_tax())),
+            'tax_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total_tax())),
+            'tax_rate' => strval(WC_Tillit_Helper::round_rate(1.0 * $order->get_total_tax() / $order->get_total())),
+            'discount_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total_discount())),
+            'discount_rate' => '0',
+            'payment_type' => $product_type,
+            'payment_details' => [
+                'due_in_days' => intval($days_on_invoice),
+                'payment_reference_message' => $payment_reference_message,
+                'payment_reference_ocr' => ''
+            ],
             'buyer' => [
                 'company' => [
                     'organization_number' => $company_id,
@@ -295,7 +290,6 @@ class WC_Tillit_Helper
             'line_items' => WC_Tillit_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee')),
             'recurring' => false,
             'merchant_additional_info' => '',
-            'merchant_id' => $tillit_merchant_id,
             'merchant_order_id' => strval($order->get_id()),
             'merchant_reference' => '',
             'merchant_urls' => [
@@ -309,25 +303,6 @@ class WC_Tillit_Helper
                 'merchant_order_verification_failed_url' => '',
                 'merchant_invoice_url' => '',
                 'merchant_shipping_document_url' => ''
-            ],
-            'payment' => [
-                'currency' => $order->get_currency(),
-                'gross_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total())),
-                'net_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total() - $order->get_total_tax())),
-                'tax_amount' => strval(WC_Tillit_Helper::round_amt($tax_amount)),
-                'tax_rate' => strval($tax_rate),
-                'discount_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total_discount())),
-                'discount_rate' => '0',
-                'type' => 'FUNDED_INVOICE',
-                'payment_details' => [
-                    'due_in_days' => intval($days_on_invoice),
-                    'bank_account' => '',
-                    'bank_account_type' => 'IBAN',
-                    'payee_company_name' => '',
-                    'payee_organization_number' => '',
-                    'payment_reference_message' => '',
-                    'payment_reference_ocr' => '',
-                ]
             ],
             'billing_address' => $billing_address,
             'shipping_address' => $shipping_address,
@@ -357,23 +332,9 @@ class WC_Tillit_Helper
      *
      * @return bool
      */
-    public static function compose_tillit_edit_order($order, $days_on_invoice, $department, $project)
+    public static function compose_tillit_edit_order(
+        $order, $days_on_invoice, $department, $project, $product_type, $payment_reference_message = '')
     {
-        // Get the orde taxes
-        $order_taxes = $order->get_taxes();
-
-        // Get the taxes Ids
-        $taxes = array_keys($order_taxes);
-
-        if (count($taxes) == 0) {
-            $tax_amount = 0;
-            $tax_rate = 0;
-        } else {
-            /** @var WC_Order_Item_Tax $vat */
-            $vat = $order_taxes[$taxes[0]];
-            $tax_amount = $vat->get_tax_total() + $vat->get_shipping_tax_total();
-            $tax_rate = $vat->get_rate_percent() / 100.0;
-        }
 
         $billing_address = [
             'organization_name' => $order->get_billing_company(),
@@ -396,6 +357,19 @@ class WC_Tillit_Helper
         }
 
         $req_body = [
+            'currency' => $order->get_currency(),
+            'gross_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total())),
+            'net_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total() - $order->get_total_tax())),
+            'tax_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total_tax())),
+            'tax_rate' => strval(WC_Tillit_Helper::round_rate(1.0 * $order->get_total_tax() / $order->get_total())),
+            'discount_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total_discount())),
+            'discount_rate' => '0',
+            'payment_type' => $product_type,
+            'payment_details' => [
+                'due_in_days' => intval($days_on_invoice),
+                'payment_reference_message' => $payment_reference_message,
+                'payment_reference_ocr' => ''
+            ],
             'buyer_department' => $department,
             'buyer_project' => $project,
             'order_note' => $order->get_customer_note(),
@@ -403,25 +377,6 @@ class WC_Tillit_Helper
             'recurring' => false,
             'merchant_additional_info' => '',
             'merchant_reference' => '',
-            'payment' => [
-                'currency' => $order->get_currency(),
-                'gross_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total())),
-                'net_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total() - $order->get_total_tax())),
-                'tax_amount' => strval(WC_Tillit_Helper::round_amt($tax_amount)),
-                'tax_rate' => strval($tax_rate),
-                'discount_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total_discount())),
-                'discount_rate' => '0',
-                'type' => 'FUNDED_INVOICE',
-                'payment_details' => [
-                    'due_in_days' => intval($days_on_invoice),
-                    'bank_account' => '',
-                    'bank_account_type' => 'IBAN',
-                    'payee_company_name' => '',
-                    'payee_organization_number' => '',
-                    'payment_reference_message' => '',
-                    'payment_reference_ocr' => '',
-                ]
-            ],
             'billing_address' => $billing_address,
             'shipping_address' => $shipping_address,
             'shipping_details' => [
@@ -468,18 +423,39 @@ class WC_Tillit_Helper
     }
 
     /**
-     * Get default environment id
+     * Check if current server is tillit development
      *
      * @return string
      */
-    public static function get_default_env()
+    public static function is_tillit_development()
     {
         $hostname = str_replace(array('http://', 'https://'), '', get_home_url());
 
-        if (in_array($hostname, array('staging.demo.tillit.ai'))) return 'stg';
-        else if (in_array($hostname, array('demo.tillit.ai'))) return 'demo';
-        else if (in_array($hostname, array('dev.tillitlocal.ai', 'localhost')) || substr($hostname, 0, 10) === 'localhost:') return 'dev';
-        else return 'prod';
+        // Local
+        if (in_array($hostname, array('dev.tillitlocal.ai', 'localhost')) || substr($hostname, 0, 10) === 'localhost:') return true;
+
+        // Production sites
+        if (strlen($hostname) > 10 && substr($hostname, -10) === '.tillit.ai') {
+            $tillit_prod_sites = array('shop', 'morgenlevering', 'arkwrightx', 'paguro');
+            $host_prefix = substr($hostname, 0, -10);
+
+            foreach($tillit_prod_sites as $tillit_prod_site) {
+                if ($host_prefix === $tillit_prod_site || $host_prefix === ('www.' . $tillit_prod_site)) {
+                    // Tillit site but not for development
+                    return false;
+                }
+            }
+
+            // Tillit development site
+            return true;
+        }
+
+        // Merchant's staging
+        if (in_array($hostname, array('staging.torn.no', 'proof-3.redflamingostudio.com'))) return true;
+
+        // Neither local nor tillit development site
+        return false;
+
     }
 
     /**
@@ -511,7 +487,11 @@ class WC_Tillit_Helper
                 $d->$k = WC_Tillit_Helper::utf8ize($v);
             }
         } else if (is_string($d)) {
-            return utf8_encode($d);
+            if (mb_detect_encoding($d, ['UTF-8'], true)) { // already in UTF-8
+                return $d;
+            } else {
+                return utf8_encode($d);
+            }
         }
         return $d;
     }

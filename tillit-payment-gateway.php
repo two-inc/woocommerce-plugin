@@ -3,7 +3,7 @@
  * Plugin Name: Tillit Payment Gateway
  * Plugin URI: https://tillit.ai
  * Description: Integration between WooCommerce and Tillit.
- * Version: 1.2.3
+ * Version: 1.2.7
  * Author: Tillit
  * Author URI: https://tillit.ai
  * Text Domain: tillit-payment-gateway
@@ -41,7 +41,7 @@ function woocommerce_gateway_tillit_classes()
 
 function init_tillit_translation()
 {
-    $plugin_rel_path = basename(dirname( __FILE__ ));
+    $plugin_rel_path = basename(dirname(__FILE__));
     load_plugin_textdomain('tillit-payment-gateway', false, $plugin_rel_path);
 }
 
@@ -65,12 +65,12 @@ function wc_tillit_add_to_gateways($gateways)
  */
 function wc_tillit_enqueue_styles()
 {
-    wp_enqueue_style('tillit-payment-gateway-css', WC_TILLIT_PLUGIN_URL . '/assets/css/tillit.css', false, '1.0.3');
+    wp_enqueue_style('tillit-payment-gateway-css', WC_TILLIT_PLUGIN_URL . '/assets/css/tillit.css', false, '1.0.6');
 }
 
 function wc_tillit_enqueue_scripts()
 {
-    wp_enqueue_script('tillit-payment-gateway-js', WC_TILLIT_PLUGIN_URL . '/assets/js/tillit.js', ['jquery'], '1.0.8');
+    wp_enqueue_script('tillit-payment-gateway-js', WC_TILLIT_PLUGIN_URL . '/assets/js/tillit.js', ['jquery'], '1.0.17');
 }
 
 function tillit_settings_link($links)
@@ -87,6 +87,12 @@ function get_tillit_gateway()
         $tillit_payment_gateway = new WC_Tillit();
     }
     return $tillit_payment_gateway;
+}
+
+function get_plugin_version()
+{
+    $plugin_data = get_plugin_data(__FILE__);
+    return $plugin_data['Version'];
 }
 
 
