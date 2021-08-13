@@ -112,7 +112,7 @@ class WC_Tillit_Helper
      *
      * @return array
      */
-    public static function get_line_items($line_items, $shippings, $fees)
+    public static function get_line_items($line_items, $shippings, $fees, $order)
     {
 
         $items = [];
@@ -120,13 +120,7 @@ class WC_Tillit_Helper
         /** @var WC_Order_Item_Product $line_item */
         foreach($line_items as $line_item) {
 
-            if(gettype($line_item) !== 'array' && get_class($line_item) === 'WC_Order_Item_Product') {
-                /** @var WC_Order_Item_Product */
-                $product_simple = $line_item->get_product();
-            } else {
-                /** @var WC_Product_Simple */
-                $product_simple = $line_item['data'];
-            }
+            $product_simple = WC_Tillit_Helper::get_product($line_item);
 
             $tax_rate = 0;
             if ($line_item['line_tax'] && $line_item['line_total']) {
@@ -144,7 +138,7 @@ class WC_Tillit_Helper
                 'tax_amount' => strval(WC_Tillit_Helper::round_amt($line_item['line_tax'])),
                 'tax_class_name' => 'VAT ' . WC_Tillit_Helper::round_amt($tax_rate * 100) . '%',
                 'tax_rate' => strval(WC_Tillit_Helper::round_rate($tax_rate)),
-                'unit_price' => strval(WC_Tillit_Helper::round_amt(wc_get_price_excluding_tax($product_simple))),
+                'unit_price' => strval($order->get_item_subtotal($line_item, false, true)),
                 'quantity' => $line_item['quantity'],
                 'quantity_unit' => 'item',
                 'image_url' => $image_url ? $image_url : '',
@@ -287,7 +281,7 @@ class WC_Tillit_Helper
             'buyer_department' => $department,
             'buyer_project' => $project,
             'order_note' => $order->get_customer_note(),
-            'line_items' => WC_Tillit_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee')),
+            'line_items' => WC_Tillit_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'), $order),
             'recurring' => false,
             'merchant_additional_info' => '',
             'merchant_order_id' => strval($order->get_id()),
@@ -373,7 +367,7 @@ class WC_Tillit_Helper
             'buyer_department' => $department,
             'buyer_project' => $project,
             'order_note' => $order->get_customer_note(),
-            'line_items' => WC_Tillit_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee')),
+            'line_items' => WC_Tillit_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'), $order),
             'recurring' => false,
             'merchant_additional_info' => '',
             'merchant_reference' => '',
@@ -404,7 +398,7 @@ class WC_Tillit_Helper
             'amount' => strval(WC_Tillit_Helper::round_amt($amount)),
             'currency' => $currency,
             'initiate_payment_to_buyer' => $initiate_payment_to_buyer,
-            'line_items' => WC_Tillit_Helper::get_line_items($order_refund->get_items(), $order_refund->get_items('shipping'), $order_refund->get_items('fee'))
+            'line_items' => WC_Tillit_Helper::get_line_items($order_refund->get_items(), $order_refund->get_items('shipping'), $order_refund->get_items('fee'), $order_refund)
         ];
 
         return $req_body;
@@ -524,6 +518,29 @@ class WC_Tillit_Helper
             }
         }
         return $diff;
+    }
+
+    /**
+     * Get product from a line item
+     *
+     * @param $line_item
+     *
+     * @return array
+     */
+    public static function get_product($line_item) {
+
+        if(gettype($line_item) !== 'array' && get_class($line_item) === 'WC_Order_Item_Product') {
+            /** @var WC_Product_Variation */
+            //if ($line_item->get_product()->get_type() === 'variation') {
+            //    return new WC_Product_Variation($line_item->get_product()->get_variation_id());
+            //}
+            /** @var WC_Order_Item_Product */
+            return $line_item->get_product();
+        } else {
+            /** @var WC_Product_Simple */
+            return $line_item['data'];
+        }
+
     }
 
 }

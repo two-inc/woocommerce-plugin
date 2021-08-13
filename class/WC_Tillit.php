@@ -109,7 +109,6 @@ class WC_Tillit extends WC_Payment_Gateway
         if(!$image_src) return;
 
         $this->make_request("/v1/merchant/${merchant_id}/update", [
-            'merchant_id' => $merchant_id,
             'logo_path' => $image_src
         ]);
 
