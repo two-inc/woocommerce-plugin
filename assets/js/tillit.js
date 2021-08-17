@@ -671,20 +671,8 @@ class Tillit {
                     document.querySelector('#tracking_id').value = response.tracking_id
                 }
 
-                // Update tillit message
-                let tillitSubtitleExistCheck = setInterval(function() {
-                    if (document.querySelector('.tillit-subtitle')) {
-                        document.querySelector('.tillit-subtitle').innerText = Tillit.getMessage('subtitle_order_intent_ok')
-                        clearInterval(tillitSubtitleExistCheck)
-                   }
-                }, 1000)
-
-                // Update order intent log
-                if (!tillitOrderIntentCheck['lastCheckOk']) {
-                    tillitOrderIntentCheck['lastCheckOk'] = true
-                    tillitOrderIntentLog = {}
-                    tillitOrderIntentLog[tillitOrderIntentCheck['lastCheckHash']] = 1
-                }
+                // Display messages and update order intent logs
+                Tillit.processOrderIntentResponse(response)
 
             })
 
@@ -702,47 +690,75 @@ class Tillit {
                 // Select the default payment method
                 Tillit.selectDefaultMethod()
 
-                // Display error messages
-                if (response.status >= 400) {
-                    // @TODO: use code in checkout-api
-                    let errMsg = (typeof response.responseJSON === 'string' || !('error_details' in response.responseJSON))
-                                 ? response.responseJSON
-                                 : response.responseJSON['error_details']
-
-                    // Update tillit message
-                    let tillitSubtitleExistCheck = setInterval(function() {
-                        if (document.querySelector('.tillit-subtitle')) {
-                            let messageId = 'subtitle_order_intent_reject'
-                            if (errMsg.startsWith('Minimum Payment using Tillit')) {
-                                messageId = 'amount_min'
-                            } else if (errMsg.startsWith('Maximum Payment using Tillit')) {
-                                messageId = 'amount_max'
-                            } else if (errMsg.includes('Invalid phone number')) {
-                                messageId = 'invalid_phone'
-                                Tillit.markFieldInvalid('billing_phone_field')
-                            }
-                            document.querySelector('.tillit-subtitle').innerHTML = Tillit.getMessage(messageId)
-                            clearInterval(tillitSubtitleExistCheck)
-                       }
-                    }, 1000)
-                } else {
-                    let tillitSubtitleExistCheck = setInterval(function() {
-                        if (document.querySelector('.tillit-subtitle')) {
-                            document.querySelector('.tillit-subtitle').innerHTML = Tillit.getMessage('subtitle_order_intent_reject')
-                            clearInterval(tillitSubtitleExistCheck)
-                       }
-                    }, 1000)
-                }
-
-                // Update order intent log
-                if (tillitOrderIntentCheck['lastCheckOk']) {
-                    tillitOrderIntentCheck['lastCheckOk'] = false
-                    tillitOrderIntentLog = {}
-                    tillitOrderIntentLog[tillitOrderIntentCheck['lastCheckHash']] = 1
-                }
+                // Display messages and update order intent logs
+                Tillit.processOrderIntentResponse(response)
 
             })
         }, 1000)
+
+    }
+
+    static processOrderIntentResponse(response)
+    {
+        if (response.approved) {
+
+            // Update tillit message
+            let tillitSubtitleExistCheck = setInterval(function() {
+                if (document.querySelector('.tillit-subtitle')) {
+                    document.querySelector('.tillit-subtitle').innerText = Tillit.getMessage('subtitle_order_intent_ok')
+                    clearInterval(tillitSubtitleExistCheck)
+               }
+            }, 1000)
+
+            // Update order intent log
+            if (!tillitOrderIntentCheck['lastCheckOk']) {
+                tillitOrderIntentCheck['lastCheckOk'] = true
+                tillitOrderIntentLog = {}
+                tillitOrderIntentLog[tillitOrderIntentCheck['lastCheckHash']] = 1
+            }
+
+        } else {
+
+            // Display error messages
+            if (response.status >= 400) {
+                // @TODO: use code in checkout-api
+                let errMsg = (typeof response.responseJSON === 'string' || !('error_details' in response.responseJSON))
+                             ? response.responseJSON
+                             : response.responseJSON['error_details']
+
+                // Update tillit message
+                let tillitSubtitleExistCheck = setInterval(function() {
+                    if (document.querySelector('.tillit-subtitle')) {
+                        let messageId = 'subtitle_order_intent_reject'
+                        if (errMsg.startsWith('Minimum Payment using Tillit')) {
+                            messageId = 'amount_min'
+                        } else if (errMsg.startsWith('Maximum Payment using Tillit')) {
+                            messageId = 'amount_max'
+                        } else if (errMsg.includes('Invalid phone number')) {
+                            messageId = 'invalid_phone'
+                            Tillit.markFieldInvalid('billing_phone_field')
+                        }
+                        document.querySelector('.tillit-subtitle').innerHTML = Tillit.getMessage(messageId)
+                        clearInterval(tillitSubtitleExistCheck)
+                   }
+                }, 1000)
+            } else {
+                let tillitSubtitleExistCheck = setInterval(function() {
+                    if (document.querySelector('.tillit-subtitle')) {
+                        document.querySelector('.tillit-subtitle').innerHTML = Tillit.getMessage('subtitle_order_intent_reject')
+                        clearInterval(tillitSubtitleExistCheck)
+                   }
+                }, 1000)
+            }
+
+            // Update order intent log
+            if (tillitOrderIntentCheck['lastCheckOk']) {
+                tillitOrderIntentCheck['lastCheckOk'] = false
+                tillitOrderIntentLog = {}
+                tillitOrderIntentLog[tillitOrderIntentCheck['lastCheckHash']] = 1
+            }
+
+        }
 
     }
 

@@ -314,7 +314,7 @@ class WC_Tillit extends WC_Payment_Gateway
             return;
         }
 
-        $original_line_items = WC_Tillit_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'));
+        $original_line_items = WC_Tillit_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'), $order);
 
         if (!property_exists($this, 'order_line_items')) $this->order_line_items = array();
         $this->order_line_items[$order_id] = $original_line_items;
@@ -337,7 +337,7 @@ class WC_Tillit extends WC_Payment_Gateway
         }
 
         $original_line_items = $this->order_line_items[$order_id];
-        $updated_line_items = WC_Tillit_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'));
+        $updated_line_items = WC_Tillit_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'), $order);
         $diff = WC_Tillit_Helper::array_diff_r($original_line_items, $updated_line_items);
 
         if ($diff) {
