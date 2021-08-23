@@ -91,6 +91,10 @@ function get_tillit_gateway()
 
 function get_plugin_version()
 {
+    if(!function_exists('get_plugin_data')){
+        require_once(ABSPATH . 'wp-admin/includes/plugin.php');
+    }
+
     $plugin_data = get_plugin_data(__FILE__);
     return $plugin_data['Version'];
 }
