@@ -549,7 +549,7 @@ class WC_Tillit_Helper
      * @return float
      */
     private static function get_item_tax_rate($line_item, $product) {
-        if ($product->is_taxable() && $line_item['line_subtotal_tax'] > 0) {
+        if ($product->is_taxable() && $line_item['line_subtotal_tax'] != 0) {
             $tax_rates = WC_Tax::get_rates($product->get_tax_class());
             $tax_rate = array_shift($tax_rates);
             if (isset($tax_rate['rate'])) {
