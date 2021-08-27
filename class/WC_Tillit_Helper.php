@@ -145,7 +145,7 @@ class WC_Tillit_Helper
                     'barcodes' => [
                         [
                             'type' => 'SKU',
-                            'id' => $product_simple->get_sku()
+                            'value' => $product_simple->get_sku()
                         ]
                     ]
                 ]

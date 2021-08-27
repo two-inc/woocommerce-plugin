@@ -555,7 +555,7 @@ class WC_Tillit extends WC_Payment_Gateway
         } else {
             return [
                 'result'    => 'success',
-                'redirect'  => $body['tillit_urls']['verify_order_url']
+                'redirect'  => $body['payment_url']
             ];
         }
 
