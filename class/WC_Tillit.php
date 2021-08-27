@@ -428,8 +428,8 @@ class WC_Tillit extends WC_Payment_Gateway
         $body = json_decode($response['body'], true);
 
         // Save invoice number
-        if ($body['payment'] && $body['payment']['payment_details'] && $body['payment']['payment_details']['invoice_number']) {
-            update_post_meta($order->get_id(), 'invoice_number', $body['payment']['payment_details']['invoice_number']);
+        if ($body['invoice_details'] && $body['invoice_details']['invoice_number']) {
+            update_post_meta($order->get_id(), 'invoice_number', $body['invoice_details']['invoice_number']);
         }
 
     }
@@ -555,7 +555,7 @@ class WC_Tillit extends WC_Payment_Gateway
         } else {
             return [
                 'result'    => 'success',
-                'redirect'  => $body['tillit_urls']['verify_order_url']
+                'redirect'  => $body['payment_url']
             ];
         }
 
