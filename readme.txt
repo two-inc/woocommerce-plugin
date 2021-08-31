@@ -1,24 +1,46 @@
 === Tillit Payment Gateway ===
-Tags: payment request, woocommerce
+Tags: payments, checkout, ecommerce, e-commerce, BNPL, invoice, B2B
 Requires at least: 4.7
 Tested up to: 5.7.2
 Requires PHP: 5.6
-Stable tag: 1.2.3
+Stable tag: 1.3.0
 License: GPLv3
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
-== Description ==
 
-The Tillit plugin for WooCommerce allows you to offer your business customers to pay by invoice directly in the check-out. With Tillit, your trade customers get instant payment terms without leaving disrupting the shopping experience. Making your customers wait for payment terms and credit approval lowers your conversion rate – that’s why we skip the waiting.
+=== Making it easy for businesses to sell & buy online. ===
 
-Tillit is an easy way to offer trade customers their preferred way of payment. Choose the product that is the best fit for you. Set the number of payment days, if you would like your invoice to be funded and choose your risk threshold. Keep the control, but skip the time consuming bureaucracy.
+== Description ==:
 
-Tillit has no setup fees, no monthly fees, and no hidden cost. Try our solution for free for three months, and experience the breeze of B2B payment.
+Our plugin for WooCommerce allows you to offer a seamless invoicing option for your business customers directly in your check-out. With Tillit you will provide your business customers with instant payment terms without them having to wait for credit approvals and thereby risk losing them altogether.
 
-= Why use the Tillit Plugin? =
+Simply put; customer centric, less friction and higher conversion rates.
 
-* 70% of Business customers pay by invoice when given the option.
-* Automate credit check and verification.
-* Let the buyer know about your credit approval in real time.
-* Full control. You can adjust every aspect of the check-out.
-* Sell more to government entities by offering invoices sent through the PEPPOL network.
+== WHY the Tillit plugin? ==
+
+- 70% of Business customers pay by invoice when given the option.
+- Automated credit check and verification of customers
+- Real time credit approval
+- You are in control - make adjustments to every aspect of the check-out
+- Already integrated with PEPPOL e-invoicing network (EHF)
+- Transparent pricing and no hidden fees (option: Tillit has no setup fees, no monthly fees and no hidden fees)
+
+== How to get going? ==
+
+- Sign up for Tillit
+- Install the plugin - **ask: Does customers have to sign up first or can the plugin be installed first?**
+- Test it live! // You’re live
+
+If you’ve read this far - go ahead and try it!
+
+- we offer three months for free so you can experience how easy B2B payments should be.
+
+== Useful links: ==
+
+- [Documentation](https://docs.tillit.ai)
+- FAQ - when ready -
+
+== Contributors & Developers ==
+
+*“Tillit Payment Gateway”* is developed in-house by the Tillit Team. Our code is open source, and we welcome contributions.
+
