@@ -428,8 +428,8 @@ class WC_Tillit extends WC_Payment_Gateway
         $body = json_decode($response['body'], true);
 
         // Save invoice number
-        if ($body['payment'] && $body['payment']['payment_details'] && $body['payment']['payment_details']['invoice_number']) {
-            update_post_meta($order->get_id(), 'invoice_number', $body['payment']['payment_details']['invoice_number']);
+        if ($body['invoice_details'] && $body['invoice_details']['invoice_number']) {
+            update_post_meta($order->get_id(), 'invoice_number', $body['invoice_details']['invoice_number']);
         }
 
     }
@@ -501,7 +501,12 @@ class WC_Tillit extends WC_Payment_Gateway
         $product_type = $this->get_option('product_type');
         $payment_reference_message = '';
 
+        // Backward compatible
         if ($product_type === 'MERCHANT_INVOICE') {
+            $product_type = 'DIRECT_INVOICE';
+        }
+
+        if ($product_type === 'DIRECT_INVOICE') {
             $payment_reference_message = strval($order->get_id());
         }
 
@@ -555,7 +560,7 @@ class WC_Tillit extends WC_Payment_Gateway
         } else {
             return [
                 'result'    => 'success',
-                'redirect'  => $body['tillit_urls']['verify_order_url']
+                'redirect'  => $body['payment_url']
             ];
         }
 
@@ -811,7 +816,7 @@ class WC_Tillit extends WC_Payment_Gateway
                 'default'   => 'FUNDED_INVOICE',
                 'options'   => array(
                       'FUNDED_INVOICE'   => 'Funded Invoice',
-                      'MERCHANT_INVOICE' => 'Merchant Invoice'
+                      'DIRECT_INVOICE' => 'Direct Invoice'
                  )
             ],
             'days_on_invoice' => [
@@ -1025,7 +1030,7 @@ class WC_Tillit extends WC_Payment_Gateway
             $product_type = 'FUNDED_INVOICE'; // First product type as default for older orders
             update_post_meta($order->get_id(), '_product_type', $product_type);
         }
-        if ($product_type === 'MERCHANT_INVOICE') {
+        if ($product_type === 'DIRECT_INVOICE') {
             $payment_reference_message = strval($order->get_id());
         }
 

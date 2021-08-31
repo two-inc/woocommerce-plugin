@@ -145,7 +145,7 @@ class WC_Tillit_Helper
                     'barcodes' => [
                         [
                             'type' => 'SKU',
-                            'id' => $product_simple->get_sku()
+                            'value' => $product_simple->get_sku()
                         ]
                     ]
                 ]
@@ -256,8 +256,8 @@ class WC_Tillit_Helper
             'tax_rate' => strval(WC_Tillit_Helper::round_rate(1.0 * $order->get_total_tax() / $order->get_total())),
             'discount_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total_discount())),
             'discount_rate' => '0',
-            'payment_type' => $product_type,
-            'payment_details' => [
+            'invoice_type' => $product_type,
+            'invoice_details' => [
                 'due_in_days' => intval($days_on_invoice),
                 'payment_reference_message' => $payment_reference_message,
                 'payment_reference_ocr' => ''
@@ -355,8 +355,8 @@ class WC_Tillit_Helper
             'tax_rate' => strval(WC_Tillit_Helper::round_rate(1.0 * $order->get_total_tax() / $order->get_total())),
             'discount_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total_discount())),
             'discount_rate' => '0',
-            'payment_type' => $product_type,
-            'payment_details' => [
+            'invoice_type' => $product_type,
+            'invoice_details' => [
                 'due_in_days' => intval($days_on_invoice),
                 'payment_reference_message' => $payment_reference_message,
                 'payment_reference_ocr' => ''

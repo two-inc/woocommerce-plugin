@@ -15,9 +15,11 @@ if (sizeof($this->WC_Tillit->available_account_types()) > 1)
     <div class="woocommerce-account-type-fields__field-wrapper">
         <?php
         $fields = $checkout->get_checkout_fields('account_type');
-        foreach($fields as $key => $field){
-            $value = isset($field['value']) ? $field['value'] : $checkout->get_value($key);
-            woocommerce_form_field($key, $field, $value);
+        if (is_array($fields)) {
+            foreach($fields as $key => $field){
+                $value = isset($field['value']) ? $field['value'] : $checkout->get_value($key);
+                woocommerce_form_field($key, $field, $value);
+            }
         }
         ?>
     </div>
