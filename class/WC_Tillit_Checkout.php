@@ -157,7 +157,7 @@ class WC_Tillit_Checkout
                 ],*/
                 'class' => array('billing_company_selectwoo'),
                 'options' => [
-                    '' => __('Enter the company name', 'tillit-payment-gateway')
+                    '' => '&nbsp;'
                 ],
                 'required' => false,
                 'priority' => 2
