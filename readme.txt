@@ -3,22 +3,53 @@ Tags: payment request, woocommerce
 Requires at least: 4.7
 Tested up to: 5.7.2
 Requires PHP: 5.6
-Stable tag: 1.2.3
+Stable tag: 1.3.2
 License: GPLv3
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
 == Description ==
 
-The Tillit plugin for WooCommerce allows you to offer your business customers to pay by invoice directly in the check-out. With Tillit, your trade customers get instant payment terms without leaving disrupting the shopping experience. Making your customers wait for payment terms and credit approval lowers your conversion rate – that’s why we skip the waiting.
 
-Tillit is an easy way to offer trade customers their preferred way of payment. Choose the product that is the best fit for you. Set the number of payment days, if you would like your invoice to be funded and choose your risk threshold. Keep the control, but skip the time consuming bureaucracy.
+### Overview
 
-Tillit has no setup fees, no monthly fees, and no hidden cost. Try our solution for free for three months, and experience the breeze of B2B payment.
+**Making it easy for businesses to sell & buy online.**
 
-= Why use the Tillit Plugin? =
+The Tillit Payment plugin for WooCommerce simplifies B2B shopping, making it easy and safe for Merchants to offer invoices as a payment method. It is a standalone add-on payment method that complements your checkout. It will allow you to cater to business customers with their preferred payment method online, increasing conversion rates in checkout and helping you sell more.
 
-* 70% of Business customers pay by invoice when given the option.
-* Automate credit check and verification.
-* Let the buyer know about your credit approval in real time.
-* Full control. You can adjust every aspect of the check-out.
-* Sell more to government entities by offering invoices sent through the PEPPOL network.
+### Benefits for Merchants
+
+Tillit allows you to offer a seamless  **Buy now, Pay later**  option for your business customers which will enhance the buyer journey and reduce the manual work related to doing business with other Businesses. The Tillit solution enables instant payment terms without having to wait for credit approvals and thereby risk loosing them altogether.
+
+Simply put; Tillit is customer centric, less friction and higher conversion rates.
+
+### Features
+
+**WHY the Tillit plugin?**
+
+-   70% of Business customers pay by invoice when given the option.
+-   Automated credit check and verification of customers
+-   Real time credit approval
+-   You are in control - make adjustments to every aspect of the check-out
+-   You set the payment terms for your business customers
+-   Already integrated with PEPPOL e-invoicing network
+-   You get paid independent of when the buyer pays the invoice
+
+### Benefit for customers
+
+**Tillit Buy now, Pay later**  offers your business customers the option to pay with a frictionless invoice solution that will send the invoice directly to their accountant through electronic invoicing.
+
+**How to install the plugin:**
+
+The plugin can be installed three ways:
+
+-   by using the  _WordPress built-in installer_
+-   via WordPress Admin
+-   manually with an upload using an SFTP
+
+You can find the WordPress installation guide  [here](https://wordpress.org/support/article/managing-plugins/#installing-plugins)  ([](https://wordpress.org/support/article/managing-plugins/#installing-plugins)[https://wordpress.org/support/article/managing-plugins/#installing-plugins](https://wordpress.org/support/article/managing-plugins/#installing-plugins))
+
+**How to get your Tillit keys:**
+
+1.  Go to  [Tillit.ai](http://tillit.ai/)  and sign up your company
+2.  You will receive an e-mail with your test keys and as soon as you are ready your production keys as well.
+3.  Once you have changed out your test keys with the production ones - you are ready to offer your B2B customers the Tillit solution.
