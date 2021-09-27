@@ -69,7 +69,15 @@ class Tillit {
 
             // Reinitiate company select on country change
             $billingCountry.on('select2:select', function(e){
+                // Clear company inputs
+                $billingCompany.html('')
                 $billingCompany.selectWoo(selectWooParams())
+                jQuery('#company_id').val('')
+
+                // Clear the addresses, in case address get request fails
+                jQuery('#billing_address_1').val('')
+                jQuery('#billing_city').val('')
+                jQuery('#billing_postcode').val('')
             })
 
             $billingCountry.on('select2:open', function(e){
@@ -107,6 +115,11 @@ class Tillit {
                     // Get country
                     let country_prefix = tillitCompany.country_prefix
                     if (!country_prefix || !['GB'].includes(country_prefix)) country_prefix = 'NO'
+
+                    // Clear the addresses, in case address get request fails
+                    jQuery('#billing_address_1').val('')
+                    jQuery('#billing_city').val('')
+                    jQuery('#billing_postcode').val('')
 
                     // Fetch the company data
                     const addressResponse = jQuery.ajax({
@@ -995,12 +1008,14 @@ class Tillit {
         }
         for (let inp of checkoutForm.querySelectorAll('select')) {
             if (inp.getAttribute('id')) {
-                checkoutInputs.push({
-                    'htmlTag': inp.tagName,
-                    'id': inp.getAttribute('id'),
-                    'val': inp.value,
-                    'optionHtml': inp.querySelector('option[value="' + inp.value + '"]').outerHTML,
-                })
+                if (inp.querySelector('option[value="' + inp.value + '"]')) {
+                    checkoutInputs.push({
+                        'htmlTag': inp.tagName,
+                        'id': inp.getAttribute('id'),
+                        'val': inp.value,
+                        'optionHtml': inp.querySelector('option[value="' + inp.value + '"]').outerHTML,
+                    })
+                }
             }
         }
         sessionStorage.setItem('checkoutInputs', JSON.stringify(checkoutInputs))
