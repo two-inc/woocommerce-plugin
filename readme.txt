@@ -1,9 +1,9 @@
 === Tillit Payment Gateway ===
 Tags: payment request, woocommerce
 Requires at least: 4.7
-Tested up to: 5.7.2
+Tested up to: 5.8.1
 Requires PHP: 5.6
-Stable tag: 1.3.2
+Stable tag: 1.3.3
 License: GPLv3
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -46,7 +46,7 @@ The plugin can be installed three ways:
 -   via WordPress Admin
 -   manually with an upload using an SFTP
 
-You can find the WordPress installation guide  [here](https://wordpress.org/support/article/managing-plugins/#installing-plugins)  ([](https://wordpress.org/support/article/managing-plugins/#installing-plugins)[https://wordpress.org/support/article/managing-plugins/#installing-plugins](https://wordpress.org/support/article/managing-plugins/#installing-plugins))
+You can find the WordPress installation guide  [here](https://wordpress.org/support/article/managing-plugins/#installing-plugins)  (`https://wordpress.org/support/article/managing-plugins/#installing-plugins`)
 
 **How to get your Tillit keys:**
 

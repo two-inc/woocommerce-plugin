@@ -81,68 +81,70 @@ class Tillit {
             })
 
             // Turn the select input into select2
-            const $billingCompanySelect = $billingCompany.selectWoo(selectWooParams())
-            $billingCompanySelect.on('select2:select', function(e){
+            setTimeout(function(){
+                const $billingCompanySelect = $billingCompany.selectWoo(selectWooParams())
+                $billingCompanySelect.on('select2:select', function(e){
 
-                // Get the option data
-                const data = e.params.data
+                    // Get the option data
+                    const data = e.params.data
 
-                if (window.tillit.company_id_search && window.tillit.company_id_search === 'yes') {
+                    if (window.tillit.company_id_search && window.tillit.company_id_search === 'yes') {
 
-                    // Set the company ID
-                    tillitCompany.organization_number = data.company_id
+                        // Set the company ID
+                        tillitCompany.organization_number = data.company_id
 
-                    // Set the company ID
-                    $companyId.val(data.company_id)
-
-                }
-
-                // Set the company name
-                tillitCompany.company_name = data.id
-
-                // Get the company approval status
-                Tillit.getApproval()
-
-                // Get country
-                let country_prefix = tillitCompany.country_prefix
-                if (!country_prefix || !['GB'].includes(country_prefix)) country_prefix = 'NO'
-
-                // Fetch the company data
-                const addressResponse = jQuery.ajax({
-                    dataType: 'json',
-                    url: Tillit.contructTillitUrl('/v1/' + country_prefix + '/company/' + jQuery('#company_id').val() + '/address')
-                })
-
-                addressResponse.done(function(response){
-
-                    // If we have the company location
-                    if (response.address) {
-
-                        // Get the company location object
-                        const companyLocation = response.address
-
-                        // Populate the street name and house number fields
-                        jQuery('#billing_address_1').val(companyLocation.streetAddress)
-
-                        // Populate the city
-                        jQuery('#billing_city').val(companyLocation.city)
-
-                        // Populate the postal code
-                        jQuery('#billing_postcode').val(companyLocation.postalCode)
+                        // Set the company ID
+                        $companyId.val(data.company_id)
 
                     }
 
+                    // Set the company name
+                    tillitCompany.company_name = data.id
+
+                    // Get the company approval status
+                    Tillit.getApproval()
+
+                    // Get country
+                    let country_prefix = tillitCompany.country_prefix
+                    if (!country_prefix || !['GB'].includes(country_prefix)) country_prefix = 'NO'
+
+                    // Fetch the company data
+                    const addressResponse = jQuery.ajax({
+                        dataType: 'json',
+                        url: Tillit.contructTillitUrl('/v1/' + country_prefix + '/company/' + jQuery('#company_id').val() + '/address')
+                    })
+
+                    addressResponse.done(function(response){
+
+                        // If we have the company location
+                        if (response.address) {
+
+                            // Get the company location object
+                            const companyLocation = response.address
+
+                            // Populate the street name and house number fields
+                            jQuery('#billing_address_1').val(companyLocation.streetAddress)
+
+                            // Populate the city
+                            jQuery('#billing_city').val(companyLocation.city)
+
+                            // Populate the postal code
+                            jQuery('#billing_postcode').val(companyLocation.postalCode)
+
+                        }
+
+                    })
+
                 })
 
-            })
-
-            $billingCompanySelect.on('select2:open', function(e){
-                setTimeout(function(){
-                    if (jQuery('input[aria-owns="select2-billing_company-results"]').get(0)) {
-                        jQuery('input[aria-owns="select2-billing_company-results"]').get(0).focus()
-                    }
-                }, 200)
-            })
+                $billingCompanySelect.on('select2:open', function(e){
+                    setTimeout(function(){
+                        if (jQuery('input[aria-owns="select2-billing_company-results"]').get(0)) {
+                            jQuery('input[aria-owns="select2-billing_company-results"]').get(0).focus()
+                        }
+                    }, 200)
+                })
+            }, 800)
 
         }
 
@@ -1091,7 +1093,7 @@ function selectWooParams() {
             },
             language: {
                 errorLoading: function() {
-                    return wc_country_select_params.i18n_searching
+                    return wc_country_select_params.i18n_ajax_error
                 },
                 inputTooShort: function(t) {
                     t = t.minimum - t.input.length;
