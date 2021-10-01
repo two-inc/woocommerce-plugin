@@ -47,6 +47,8 @@ class WC_Tillit extends WC_Payment_Gateway
         $this->tillit_checkout_host = 'https://api.tillit.ai';
         if (WC_Tillit_Helper::is_tillit_development()) {
             $this->tillit_checkout_host = $this->get_option('test_checkout_host');
+        } else if ($this->get_option('checkout_env') === 'SANDBOX') {
+            $this->tillit_checkout_host = 'https://test.api.tillit.ai';
         }
 
         $this->plugin_version = get_plugin_version();
@@ -815,7 +817,7 @@ class WC_Tillit extends WC_Payment_Gateway
                 'title'     => __('Choose your product', 'tillit-payment-gateway'),
                 'default'   => 'FUNDED_INVOICE',
                 'options'   => array(
-                      'FUNDED_INVOICE'   => 'Funded Invoice',
+                      'FUNDED_INVOICE' => 'Funded Invoice',
                       'DIRECT_INVOICE' => 'Direct Invoice'
                  )
             ],
@@ -832,6 +834,15 @@ class WC_Tillit extends WC_Payment_Gateway
                 'type'      => 'text',
                 'title'     => __('Tillit Test Server', 'tillit-payment-gateway'),
                 'default'   => 'https://staging.api.tillit.ai'
+            ],
+            'checkout_env' => [
+                'type'      => 'select',
+                'title'     => __('Choose your settings', 'tillit-payment-gateway'),
+                'default'   => 'Production',
+                'options'   => array(
+                      'PROD'     => 'Production',
+                      'SANDBOX'  => 'Sandbox'
+                 )
             ],
             'display_other_payments' => [
                 'title'     => __('Always enable all available payment methods', 'tillit-payment-gateway'),
@@ -890,7 +901,9 @@ class WC_Tillit extends WC_Payment_Gateway
             ]
         ];
 
-        if (!WC_Tillit_Helper::is_tillit_development()) {
+        if (WC_Tillit_Helper::is_tillit_development()) {
+            unset($tillit_form_fields['checkout_env']);
+        } else {
             unset($tillit_form_fields['test_checkout_host']);
         }
 
