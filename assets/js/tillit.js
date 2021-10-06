@@ -927,6 +927,8 @@ class Tillit {
 
         setTimeout(function(){
             jQuery('#billing_phone').val(billingPhoneInput.getNumber())
+            tillitRepresentative['phone_number'] = jQuery('#billing_phone').val()
+            Tillit.getApproval()
         }, 100)
 
     }
