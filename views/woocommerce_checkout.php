@@ -4,6 +4,27 @@
  */
 $checkout = WC()->checkout(); ?>
 <div class="woocommerce-billing-fields woocommerce-account-type-fields">
+
+
+<!-- selectable phone country -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.8/css/intlTelInput.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.8/js/intlTelInput.min.js"></script>
+<script>
+    var billingPhoneInput
+    jQuery(function(){
+        if (window.tillit) {
+            let billingPhoneInputField = document.querySelector("#billing_phone_display")
+            billingPhoneInput = window.intlTelInput(billingPhoneInputField, {
+                utilsScript: "https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.8/js/utils.js"
+            })
+            if (jQuery('#billing_phone')) {
+                billingPhoneInput.setNumber(jQuery('#billing_phone').val())
+            }
+        }
+    })
+</script>
+
+
 <?php
 if (sizeof($this->WC_Tillit->available_account_types()) > 1)
 {

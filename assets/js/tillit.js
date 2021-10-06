@@ -205,6 +205,12 @@ class Tillit {
         // Handle the representative inputs blur event
         $body.on('blur', '#company_id, #billing_company', this.onCompanyManualInputBlur)
 
+        // Handle the phone inputs change event
+        $body.on('change', '#billing_phone_display', this.onPhoneInputChange)
+        setTimeout(function(){
+            jQuery('.iti__country-list').on('click', context.onPhoneInputChange)
+        }, 1000)
+
         // Handle the company inputs change event
         $body.on('change', '#select2-billing_company-container', Tillit.updateCompanyNameAgreement)
         $body.on('change', '#billing_company', Tillit.updateCompanyNameAgreement)
@@ -907,6 +913,21 @@ class Tillit {
         tillitRepresentative[inputName] = $input.val()
 
         Tillit.getApproval()
+
+    }
+
+    /**
+     * Handle the phone number input changes
+     *
+     * @param event
+     */
+
+    onPhoneInputChange(event)
+    {
+
+        setTimeout(function(){
+            jQuery('#billing_phone').val(billingPhoneInput.getNumber())
+        }, 100)
 
     }
 

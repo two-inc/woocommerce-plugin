@@ -59,3 +59,7 @@ form.checkout.woocommerce-checkout .woocommerce-account-type-fields__field-wrapp
     height: unset;
     width: unset;
 }
+
+.iti.iti--allow-dropdown {
+    width: 100%;
+}
