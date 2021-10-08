@@ -213,7 +213,16 @@ class WC_Tillit_Checkout
     public function update_phone_field($fields)
     {
 
-        $fields['billing']['billing_phone']['placeholder'] = '+47 99999999';
+        $fields['billing']['billing_phone']['class'] = array('hidden');
+        $fields['billing']['billing_phone']['required'] = false;
+
+        $fields['billing']['billing_phone_display'] = [
+            'label' => __('Phone', 'tillit-payment-gateway'),
+            'required' => true,
+            'priority' => 0
+        ];
+
+        $fields['billing']['billing_email']['priority'] = 1;
 
         // Return the fields list
         return $fields;
@@ -289,7 +298,7 @@ class WC_Tillit_Checkout
                 'subtitle_order_intent_reject' => __('Invoice is not available for this purchase', 'tillit-payment-gateway'),
                 'amount_min' => sprintf(__('Minimum Payment using Tillit is %s NOK', 'tillit-payment-gateway'), '200'),
                 'amount_max' => sprintf(__('Maximum Payment using Tillit is %s NOK', 'tillit-payment-gateway'), '250,000'),
-                'invalid_phone' => __('Please use phone format +47 99999999', 'tillit-payment-gateway'),
+                'invalid_phone' => __('Phone number is invalid', 'tillit-payment-gateway'),
             ],
             'tillit_plugin_url' => WC_TILLIT_PLUGIN_URL,
             'tillit_search_host_no' => $this->WC_Tillit->tillit_search_host_no,

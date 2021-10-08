@@ -253,7 +253,6 @@ class WC_Tillit_Helper
             'gross_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total())),
             'net_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total() - $order->get_total_tax())),
             'tax_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total_tax())),
-            'tax_rate' => strval(WC_Tillit_Helper::round_rate(1.0 * $order->get_total_tax() / $order->get_total())),
             'discount_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total_discount())),
             'discount_rate' => '0',
             'invoice_type' => $product_type,
@@ -291,7 +290,7 @@ class WC_Tillit_Helper
                                                     wp_create_nonce('tillit_confirm')),
                 'merchant_cancel_order_url' => wp_specialchars_decode($order->get_cancel_order_url()),
                 'merchant_edit_order_url' => wp_specialchars_decode($order->get_edit_order_url()),
-                'merchant_order_verification_failed_url' => '',
+                'merchant_order_verification_failed_url' => wp_specialchars_decode($order->get_cancel_order_url()),
                 'merchant_invoice_url' => '',
                 'merchant_shipping_document_url' => ''
             ],
@@ -352,7 +351,6 @@ class WC_Tillit_Helper
             'gross_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total())),
             'net_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total() - $order->get_total_tax())),
             'tax_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total_tax())),
-            'tax_rate' => strval(WC_Tillit_Helper::round_rate(1.0 * $order->get_total_tax() / $order->get_total())),
             'discount_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total_discount())),
             'discount_rate' => '0',
             'invoice_type' => $product_type,
@@ -442,7 +440,7 @@ class WC_Tillit_Helper
         }
 
         // Merchant's staging
-        if (in_array($hostname, array('staging.torn.no', 'proof-3.redflamingostudio.com'))) return true;
+        if (in_array($hostname, array('staging.torn.no', 'proof-3.redflamingostudio.com', 'icecreamextreme.no'))) return true;
 
         // Neither local nor tillit development site
         return false;

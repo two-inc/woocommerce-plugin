@@ -69,7 +69,15 @@ class Tillit {
 
             // Reinitiate company select on country change
             $billingCountry.on('select2:select', function(e){
+                // Clear company inputs
+                $billingCompany.html('')
                 $billingCompany.selectWoo(selectWooParams())
+                jQuery('#company_id').val('')
+
+                // Clear the addresses, in case address get request fails
+                jQuery('#billing_address_1').val('')
+                jQuery('#billing_city').val('')
+                jQuery('#billing_postcode').val('')
             })
 
             $billingCountry.on('select2:open', function(e){
@@ -81,68 +89,75 @@ class Tillit {
             })
 
             // Turn the select input into select2
-            const $billingCompanySelect = $billingCompany.selectWoo(selectWooParams())
-            $billingCompanySelect.on('select2:select', function(e){
+            setTimeout(function(){
+                const $billingCompanySelect = $billingCompany.selectWoo(selectWooParams())
+                $billingCompanySelect.on('select2:select', function(e){
 
-                // Get the option data
-                const data = e.params.data
+                    // Get the option data
+                    const data = e.params.data
 
-                if (window.tillit.company_id_search && window.tillit.company_id_search === 'yes') {
+                    if (window.tillit.company_id_search && window.tillit.company_id_search === 'yes') {
 
-                    // Set the company ID
-                    tillitCompany.organization_number = data.company_id
+                        // Set the company ID
+                        tillitCompany.organization_number = data.company_id
 
-                    // Set the company ID
-                    $companyId.val(data.company_id)
-
-                }
-
-                // Set the company name
-                tillitCompany.company_name = data.id
-
-                // Get the company approval status
-                Tillit.getApproval()
-
-                // Get country
-                let country_prefix = tillitCompany.country_prefix
-                if (!country_prefix || !['GB'].includes(country_prefix)) country_prefix = 'NO'
-
-                // Fetch the company data
-                const addressResponse = jQuery.ajax({
-                    dataType: 'json',
-                    url: Tillit.contructTillitUrl('/v1/' + country_prefix + '/company/' + jQuery('#company_id').val() + '/address')
-                })
-
-                addressResponse.done(function(response){
-
-                    // If we have the company location
-                    if (response.address) {
-
-                        // Get the company location object
-                        const companyLocation = response.address
-
-                        // Populate the street name and house number fields
-                        jQuery('#billing_address_1').val(companyLocation.streetAddress)
-
-                        // Populate the city
-                        jQuery('#billing_city').val(companyLocation.city)
-
-                        // Populate the postal code
-                        jQuery('#billing_postcode').val(companyLocation.postalCode)
+                        // Set the company ID
+                        $companyId.val(data.company_id)
 
                     }
 
+                    // Set the company name
+                    tillitCompany.company_name = data.id
+
+                    // Get the company approval status
+                    Tillit.getApproval()
+
+                    // Get country
+                    let country_prefix = tillitCompany.country_prefix
+                    if (!country_prefix || !['GB'].includes(country_prefix)) country_prefix = 'NO'
+
+                    // Clear the addresses, in case address get request fails
+                    jQuery('#billing_address_1').val('')
+                    jQuery('#billing_city').val('')
+                    jQuery('#billing_postcode').val('')
+
+                    // Fetch the company data
+                    const addressResponse = jQuery.ajax({
+                        dataType: 'json',
+                        url: Tillit.contructTillitUrl('/v1/' + country_prefix + '/company/' + jQuery('#company_id').val() + '/address')
+                    })
+
+                    addressResponse.done(function(response){
+
+                        // If we have the company location
+                        if (response.address) {
+
+                            // Get the company location object
+                            const companyLocation = response.address
+
+                            // Populate the street name and house number fields
+                            jQuery('#billing_address_1').val(companyLocation.streetAddress)
+
+                            // Populate the city
+                            jQuery('#billing_city').val(companyLocation.city)
+
+                            // Populate the postal code
+                            jQuery('#billing_postcode').val(companyLocation.postalCode)
+
+                        }
+
+                    })
+
                 })
 
-            })
-
-            $billingCompanySelect.on('select2:open', function(e){
-                setTimeout(function(){
-                    if (jQuery('input[aria-owns="select2-billing_company-results"]').get(0)) {
-                        jQuery('input[aria-owns="select2-billing_company-results"]').get(0).focus()
-                    }
-                }, 200)
-            })
+                $billingCompanySelect.on('select2:open', function(e){
+                    setTimeout(function(){
+                        if (jQuery('input[aria-owns="select2-billing_company-results"]').get(0)) {
+                            jQuery('input[aria-owns="select2-billing_company-results"]').get(0).focus()
+                        }
+                    }, 200)
+                })
+            }, 800)
 
         }
 
@@ -189,6 +204,12 @@ class Tillit {
 
         // Handle the representative inputs blur event
         $body.on('blur', '#company_id, #billing_company', this.onCompanyManualInputBlur)
+
+        // Handle the phone inputs change event
+        $body.on('change', '#billing_phone_display', this.onPhoneInputChange)
+        setTimeout(function(){
+            jQuery('.iti__country-list').on('click', context.onPhoneInputChange)
+        }, 1000)
 
         // Handle the company inputs change event
         $body.on('change', '#select2-billing_company-container', Tillit.updateCompanyNameAgreement)
@@ -676,7 +697,7 @@ class Tillit {
 
             })
 
-            approvalResponse.error(function(response){
+            approvalResponse.fail(function(response){
 
                 // Store the approved state
                 tillitApproved = false
@@ -896,6 +917,23 @@ class Tillit {
     }
 
     /**
+     * Handle the phone number input changes
+     *
+     * @param event
+     */
+
+    onPhoneInputChange(event)
+    {
+
+        setTimeout(function(){
+            jQuery('#billing_phone').val(billingPhoneInput.getNumber())
+            tillitRepresentative['phone_number'] = jQuery('#billing_phone').val()
+            Tillit.getApproval()
+        }, 100)
+
+    }
+
+    /**
      * Handle the country input changes
      *
      * @param event
@@ -993,12 +1031,14 @@ class Tillit {
         }
         for (let inp of checkoutForm.querySelectorAll('select')) {
             if (inp.getAttribute('id')) {
-                checkoutInputs.push({
-                    'htmlTag': inp.tagName,
-                    'id': inp.getAttribute('id'),
-                    'val': inp.value,
-                    'optionHtml': inp.querySelector('option[value="' + inp.value + '"]').outerHTML,
-                })
+                if (inp.querySelector('option[value="' + inp.value + '"]')) {
+                    checkoutInputs.push({
+                        'htmlTag': inp.tagName,
+                        'id': inp.getAttribute('id'),
+                        'val': inp.value,
+                        'optionHtml': inp.querySelector('option[value="' + inp.value + '"]').outerHTML,
+                    })
+                }
             }
         }
         sessionStorage.setItem('checkoutInputs', JSON.stringify(checkoutInputs))
@@ -1091,7 +1131,7 @@ function selectWooParams() {
             },
             language: {
                 errorLoading: function() {
-                    return wc_country_select_params.i18n_searching
+                    return wc_country_select_params.i18n_ajax_error
                 },
                 inputTooShort: function(t) {
                     t = t.minimum - t.input.length;
