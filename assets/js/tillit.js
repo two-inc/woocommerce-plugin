@@ -697,7 +697,7 @@ class Tillit {
 
             })
 
-            approvalResponse.error(function(response){
+            approvalResponse.fail(function(response){
 
                 // Store the approved state
                 tillitApproved = false
