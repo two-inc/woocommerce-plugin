@@ -63,6 +63,7 @@ class WC_Tillit extends WC_Payment_Gateway
         add_action('woocommerce_order_status_completed', [$this, 'on_order_completed']);
         add_action('woocommerce_order_status_cancelled', [$this, 'on_order_cancelled']);
         add_action('woocommerce_cancelled_order', [$this, 'on_order_cancelled']);
+        add_action('rest_api_init', [$this, 'plugin_status_checking']);
         add_action('woocommerce_before_checkout_form', [$this, 'process_confirmation']);
         add_action('woocommerce_update_options_checkout', [$this, 'update_checkout_options']);
         add_action('woocommerce_admin_order_data_after_order_details', [$this, 'add_invoice_credit_note_urls']);
@@ -725,6 +726,25 @@ class WC_Tillit extends WC_Payment_Gateway
 
         }
 
+    }
+
+    /**
+     * Return the status of the plugin
+     *
+     * @return void
+     */
+    public function plugin_status_checking()
+    {
+        register_rest_route(
+            'tillit-payment-gateway',
+            'tillit_plugin_status_checking',
+            array(
+                'methods' => 'GET',
+                'callback' => function($request) {
+                    return '1';
+                },
+            )
+        );
     }
 
     /**
