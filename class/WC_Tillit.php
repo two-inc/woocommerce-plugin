@@ -688,7 +688,8 @@ class WC_Tillit extends WC_Payment_Gateway
         }
 
         // Get the Tillit order ID
-        $tillit_order_id = $order->get_meta('tillit_order_id');
+        $tillit_order_id = get_post_meta($order_id, 'tillit_order_id', true);
+        // $tillit_order_id = $order->get_meta('tillit_order_id');
 
         // Get the Tillit order details
         $response = $this->make_request("/v1/order/${tillit_order_id}", [], 'GET');
