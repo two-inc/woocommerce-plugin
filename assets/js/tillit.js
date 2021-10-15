@@ -978,13 +978,31 @@ class Tillit {
     {
         let node = document.querySelector('.' + priceName + ' .woocommerce-Price-amount bdi')
                    || document.querySelector('.' + priceName + ' .woocommerce-Price-amount')
-        if (node && node.childNodes) {
+        return Tillit.getPriceRecursively(node)
+    }
+
+    /**
+     * Get price recursively from a DOM node
+     */
+
+    static getPriceRecursively(node)
+    {
+        if (!node) return
+        if (node.classList && node.classList.contains('woocommerce-Price-currencySymbol')) return
+        if (node.childNodes) {
             for (let n of node.childNodes) {
-                if (n.nodeName === '#text') {
-                    return parseFloat(n.textContent
-                        .replace(window.tillit.price_thousand_separator, '')
-                        .replace(window.tillit.wc_get_price_decimal_separator, '.'))
+                let val = Tillit.getPriceRecursively(n)
+                if (val) {
+                    return val
                 }
+            }
+        }
+        if (node.nodeName === '#text') {
+            let val = node.textContent
+                .replace(window.tillit.price_thousand_separator, '')
+                .replace(window.tillit.wc_get_price_decimal_separator, '.')
+            if (!isNaN(val) && !isNaN(parseFloat(val))) {
+                return parseFloat(val)
             }
         }
     }
