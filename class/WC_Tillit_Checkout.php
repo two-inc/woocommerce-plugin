@@ -215,14 +215,15 @@ class WC_Tillit_Checkout
 
         $fields['billing']['billing_phone']['class'] = array('hidden');
         $fields['billing']['billing_phone']['required'] = false;
+        $fields['billing']['billing_phone']['priority'] = 32;
 
         $fields['billing']['billing_phone_display'] = [
             'label' => __('Phone', 'tillit-payment-gateway'),
-            'required' => true,
+            'required' => false,
             'priority' => 0
         ];
 
-        $fields['billing']['billing_email']['priority'] = 1;
+        $fields['billing']['billing_email']['priority'] = 31;
 
         // Return the fields list
         return $fields;

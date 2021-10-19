@@ -235,8 +235,10 @@ class Tillit {
 
         // Update right sidebar order review when the payment method changes
         $checkout.on('change', '[name="payment_method"]', function() {
-            $body.trigger('update_checkout');
-        });
+            if (Tillit.isCompany(Tillit.getAccountType())) {
+                $body.trigger('update_checkout')
+            }
+        })
 
         // If setting is to hide other payment methods, hide when page load by default
         if (window.tillit.display_other_payments !== 'yes') {
@@ -409,14 +411,21 @@ class Tillit {
     {
 
         // Get the targets
-        const $requiredTargets = jQuery('.woocommerce-company-fields, .woocommerce-representative-fields, #company_id_field, #billing_company_field')
-        const $regularTargets = jQuery('.woocommerce-company-fields, .woocommerce-representative-fields, #company_id_field, #billing_company_field, #department_field, #project_field')
+        const $requiredCompanyTargets = jQuery('.woocommerce-company-fields, .woocommerce-representative-fields, #company_id_field, #billing_company_field, #billing_phone_display_field')
+        const $visibleCompanyTargets = jQuery('.woocommerce-company-fields, .woocommerce-representative-fields, #company_id_field, #billing_company_field, #billing_phone_display_field, #department_field, #project_field')
+        const $visibleNoncompanyTargets = jQuery('#billing_phone_field')
 
         // Toggle the targets based on the account type
-        Tillit.isCompany(accountType) ? $regularTargets.removeClass('hidden') : $regularTargets.addClass('hidden')
+        if (Tillit.isCompany(accountType)) {
+            $visibleCompanyTargets.removeClass('hidden')
+            $visibleNoncompanyTargets.addClass('hidden')
+        } else {
+            $visibleCompanyTargets.addClass('hidden')
+            $visibleNoncompanyTargets.removeClass('hidden')
+        }
 
         // Toggle the required fields based on the account type
-        Tillit.toggleRequiredFields($requiredTargets, accountType)
+        Tillit.toggleRequiredFields($requiredCompanyTargets, accountType)
 
     }
 
@@ -1152,7 +1161,7 @@ function selectWooParams() {
                     return wc_country_select_params.i18n_ajax_error
                 },
                 inputTooShort: function(t) {
-                    t = t.minimum - t.input.length;
+                    t = t.minimum - t.input.length
                     return 1 == t ? wc_country_select_params.i18n_input_too_short_1 : wc_country_select_params.i18n_input_too_short_n.replace("%qty%", t)
                 },
                 noResults: function() {
