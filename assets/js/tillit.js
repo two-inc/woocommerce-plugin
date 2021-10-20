@@ -235,8 +235,10 @@ class Tillit {
 
         // Update right sidebar order review when the payment method changes
         $checkout.on('change', '[name="payment_method"]', function() {
-            $body.trigger('update_checkout');
-        });
+            if (Tillit.isCompany(Tillit.getAccountType())) {
+                $body.trigger('update_checkout')
+            }
+        })
 
         // If setting is to hide other payment methods, hide when page load by default
         if (window.tillit.display_other_payments !== 'yes') {
@@ -377,7 +379,7 @@ class Tillit {
      * @return void
      */
 
-    static toggleRequiredFields($targets, accountType)
+    static toggleRequiredFields($targets, is_required)
     {
 
         // For each input
@@ -390,7 +392,7 @@ class Tillit {
             const $row = $input.parents('.form-row')
 
             // Toggle the required property
-            $input.attr('required', Tillit.isCompany(accountType))
+            $input.attr('required', is_required)
 
             // Replace the optional visual cue with the required one
             $row.find('label .optional').replaceWith(tillitRequiredField)
@@ -409,14 +411,30 @@ class Tillit {
     {
 
         // Get the targets
-        const $requiredTargets = jQuery('.woocommerce-company-fields, .woocommerce-representative-fields, #company_id_field, #billing_company_field')
-        const $regularTargets = jQuery('.woocommerce-company-fields, .woocommerce-representative-fields, #company_id_field, #billing_company_field, #department_field, #project_field')
+        const $requiredCompanyTargets = jQuery('.woocommerce-company-fields, .woocommerce-representative-fields, #company_id_field, #billing_company_field, #billing_phone_display_field')
+        const $visibleCompanyTargets = jQuery('.woocommerce-company-fields, .woocommerce-representative-fields, #company_id_field, #billing_company_field, #billing_phone_display_field, #department_field, #project_field')
+        const $visibleNoncompanyTargets = jQuery('#billing_phone_field')
 
         // Toggle the targets based on the account type
-        Tillit.isCompany(accountType) ? $regularTargets.removeClass('hidden') : $regularTargets.addClass('hidden')
+        const is_tillit_visible = jQuery('#payment_method_woocommerce-gateway-tillit').length !== 0
+        if (is_tillit_visible) {
+            jQuery('#account_type_field').removeClass('hidden')
+        } else {
+            jQuery('#account_type_field').addClass('hidden')
+        }
+        const is_tillit_available = is_tillit_visible && Tillit.isCompany(accountType)
+        if (is_tillit_available) {
+            $visibleCompanyTargets.removeClass('hidden')
+            $visibleNoncompanyTargets.addClass('hidden')
+        } else {
+            $visibleCompanyTargets.addClass('hidden')
+            $visibleNoncompanyTargets.removeClass('hidden')
+        }
 
         // Toggle the required fields based on the account type
-        Tillit.toggleRequiredFields($requiredTargets, accountType)
+        if (window.tillit.mark_tillit_fields_required === 'yes') {
+            Tillit.toggleRequiredFields($requiredCompanyTargets, is_tillit_available)
+        }
 
     }
 
@@ -978,13 +996,31 @@ class Tillit {
     {
         let node = document.querySelector('.' + priceName + ' .woocommerce-Price-amount bdi')
                    || document.querySelector('.' + priceName + ' .woocommerce-Price-amount')
-        if (node && node.childNodes) {
+        return Tillit.getPriceRecursively(node)
+    }
+
+    /**
+     * Get price recursively from a DOM node
+     */
+
+    static getPriceRecursively(node)
+    {
+        if (!node) return
+        if (node.classList && node.classList.contains('woocommerce-Price-currencySymbol')) return
+        if (node.childNodes) {
             for (let n of node.childNodes) {
-                if (n.nodeName === '#text') {
-                    return parseFloat(n.textContent
-                        .replace(window.tillit.price_thousand_separator, '')
-                        .replace(window.tillit.wc_get_price_decimal_separator, '.'))
+                let val = Tillit.getPriceRecursively(n)
+                if (val) {
+                    return val
                 }
+            }
+        }
+        if (node.nodeName === '#text') {
+            let val = node.textContent
+                .replace(window.tillit.price_thousand_separator, '')
+                .replace(window.tillit.price_decimal_separator, '.')
+            if (!isNaN(val) && !isNaN(parseFloat(val))) {
+                return parseFloat(val)
             }
         }
     }
@@ -1134,7 +1170,7 @@ function selectWooParams() {
                     return wc_country_select_params.i18n_ajax_error
                 },
                 inputTooShort: function(t) {
-                    t = t.minimum - t.input.length;
+                    t = t.minimum - t.input.length
                     return 1 == t ? wc_country_select_params.i18n_input_too_short_1 : wc_country_select_params.i18n_input_too_short_n.replace("%qty%", t)
                 },
                 noResults: function() {

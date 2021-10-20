@@ -63,7 +63,8 @@ class WC_Tillit extends WC_Payment_Gateway
         add_action('woocommerce_order_status_completed', [$this, 'on_order_completed']);
         add_action('woocommerce_order_status_cancelled', [$this, 'on_order_cancelled']);
         add_action('woocommerce_cancelled_order', [$this, 'on_order_cancelled']);
-        add_action('get_header', [$this, 'process_confirmation']);
+        add_action('rest_api_init', [$this, 'plugin_status_checking']);
+        add_action('woocommerce_before_checkout_form', [$this, 'process_confirmation']);
         add_action('woocommerce_update_options_checkout', [$this, 'update_checkout_options']);
         add_action('woocommerce_admin_order_data_after_order_details', [$this, 'add_invoice_credit_note_urls']);
         add_action('woocommerce_cart_calculate_fees', [$this, 'add_invoice_fees']);
@@ -687,7 +688,8 @@ class WC_Tillit extends WC_Payment_Gateway
         }
 
         // Get the Tillit order ID
-        $tillit_order_id = $order->get_meta('tillit_order_id');
+        $tillit_order_id = get_post_meta($order_id, 'tillit_order_id', true);
+        // $tillit_order_id = $order->get_meta('tillit_order_id');
 
         // Get the Tillit order details
         $response = $this->make_request("/v1/order/${tillit_order_id}", [], 'GET');
@@ -725,6 +727,27 @@ class WC_Tillit extends WC_Payment_Gateway
 
         }
 
+    }
+
+    /**
+     * Return the status of the plugin
+     *
+     * @return void
+     */
+    public function plugin_status_checking()
+    {
+        register_rest_route(
+            'tillit-payment-gateway',
+            'tillit_plugin_status_checking',
+            array(
+                'methods' => 'GET',
+                'callback' => function($request) {
+                    return [
+                        'version' => $this->plugin_version
+                    ];
+                },
+            )
+        );
     }
 
     /**
@@ -870,6 +893,12 @@ class WC_Tillit extends WC_Payment_Gateway
                 'title'     => __('Finalize purchase when order is fulfilled', 'tillit-payment-gateway'),
                 'label'     => ' ',
                 'type'      => 'checkbox'
+            ],
+            'mark_tillit_fields_required' => [
+                'title'     => __('Always mark Tillit fields as required', 'tillit-payment-gateway'),
+                'label'     => ' ',
+                'type'      => 'checkbox',
+                'default'   => 'yes'
             ],
             'enable_order_intent' => [
                 'title'     => __('Pre-approve the buyer during checkout and disable Tillit if the buyer is declined', 'tillit-payment-gateway'),
