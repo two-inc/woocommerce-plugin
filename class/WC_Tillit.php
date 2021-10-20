@@ -742,7 +742,9 @@ class WC_Tillit extends WC_Payment_Gateway
             array(
                 'methods' => 'GET',
                 'callback' => function($request) {
-                    return '1';
+                    return [
+                        'version' => $this->plugin_version
+                    ];
                 },
             )
         );
@@ -891,6 +893,12 @@ class WC_Tillit extends WC_Payment_Gateway
                 'title'     => __('Finalize purchase when order is fulfilled', 'tillit-payment-gateway'),
                 'label'     => ' ',
                 'type'      => 'checkbox'
+            ],
+            'mark_tillit_fields_required' => [
+                'title'     => __('Always mark Tillit fields as required', 'tillit-payment-gateway'),
+                'label'     => ' ',
+                'type'      => 'checkbox',
+                'default'   => 'yes'
             ],
             'enable_order_intent' => [
                 'title'     => __('Pre-approve the buyer during checkout and disable Tillit if the buyer is declined', 'tillit-payment-gateway'),

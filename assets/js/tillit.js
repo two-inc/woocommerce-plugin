@@ -379,7 +379,7 @@ class Tillit {
      * @return void
      */
 
-    static toggleRequiredFields($targets, accountType)
+    static toggleRequiredFields($targets, is_required)
     {
 
         // For each input
@@ -392,7 +392,7 @@ class Tillit {
             const $row = $input.parents('.form-row')
 
             // Toggle the required property
-            $input.attr('required', Tillit.isCompany(accountType))
+            $input.attr('required', is_required)
 
             // Replace the optional visual cue with the required one
             $row.find('label .optional').replaceWith(tillitRequiredField)
@@ -416,7 +416,14 @@ class Tillit {
         const $visibleNoncompanyTargets = jQuery('#billing_phone_field')
 
         // Toggle the targets based on the account type
-        if (Tillit.isCompany(accountType)) {
+        const is_tillit_visible = jQuery('#payment_method_woocommerce-gateway-tillit').length !== 0
+        if (is_tillit_visible) {
+            jQuery('#account_type_field').removeClass('hidden')
+        } else {
+            jQuery('#account_type_field').addClass('hidden')
+        }
+        const is_tillit_available = is_tillit_visible && Tillit.isCompany(accountType)
+        if (is_tillit_available) {
             $visibleCompanyTargets.removeClass('hidden')
             $visibleNoncompanyTargets.addClass('hidden')
         } else {
@@ -425,7 +432,9 @@ class Tillit {
         }
 
         // Toggle the required fields based on the account type
-        Tillit.toggleRequiredFields($requiredCompanyTargets, accountType)
+        if (window.tillit.mark_tillit_fields_required === 'yes') {
+            Tillit.toggleRequiredFields($requiredCompanyTargets, is_tillit_available)
+        }
 
     }
 
@@ -1009,7 +1018,7 @@ class Tillit {
         if (node.nodeName === '#text') {
             let val = node.textContent
                 .replace(window.tillit.price_thousand_separator, '')
-                .replace(window.tillit.wc_get_price_decimal_separator, '.')
+                .replace(window.tillit.price_decimal_separator, '.')
             if (!isNaN(val) && !isNaN(parseFloat(val))) {
                 return parseFloat(val)
             }
