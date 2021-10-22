@@ -3,7 +3,7 @@
  * Plugin Name: Tillit Payment Gateway
  * Plugin URI: https://tillit.ai
  * Description: Integration between WooCommerce and Tillit.
- * Version: 1.4.6
+ * Version: 1.4.7
  * Author: Tillit
  * Author URI: https://tillit.ai
  * Text Domain: tillit-payment-gateway
@@ -26,6 +26,7 @@ function woocommerce_gateway_tillit_classes()
     require_once __DIR__ . '/class/WC_Tillit.php';
 
     $tillit_payment_gateway = get_tillit_gateway();
+    $tillit_payment_gateway->one_click_setup();
     add_action('woocommerce_checkout_update_order_review', [$tillit_payment_gateway, 'change_tillit_payment_title']);
     // For order update by Save button
     add_action('woocommerce_before_save_order_items', [$tillit_payment_gateway, 'before_order_item_save'], 10, 2);

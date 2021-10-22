@@ -44,12 +44,7 @@ class WC_Tillit extends WC_Payment_Gateway
         // Tillit api host
         $this->tillit_search_host_no = 'https://no.search.tillit.ai';
         $this->tillit_search_host_gb = 'https://gb.search.tillit.ai';
-        $this->tillit_checkout_host = 'https://api.tillit.ai';
-        if (WC_Tillit_Helper::is_tillit_development()) {
-            $this->tillit_checkout_host = $this->get_option('test_checkout_host');
-        } else if ($this->get_option('checkout_env') === 'SANDBOX') {
-            $this->tillit_checkout_host = 'https://test.api.tillit.ai';
-        }
+        $this->tillit_checkout_host = $this->get_tillit_checkout_host();
 
         $this->plugin_version = get_plugin_version();
 
@@ -75,6 +70,19 @@ class WC_Tillit extends WC_Payment_Gateway
         $tillit_payment_gateway = $this;
         new WC_Tillit_Checkout($this);
 
+    }
+
+    /**
+     * Get tillit checkout host based on current settings
+     */
+    public function get_tillit_checkout_host(){
+        if (WC_Tillit_Helper::is_tillit_development()) {
+            return $this->get_option('test_checkout_host');
+        } else if ($this->get_option('checkout_env') === 'SANDBOX') {
+            return 'https://test.api.tillit.ai';
+        } else {
+            return 'https://api.tillit.ai';
+        }
     }
 
     /**
@@ -748,6 +756,115 @@ class WC_Tillit extends WC_Payment_Gateway
                 },
             )
         );
+    }
+
+    /**
+     * Setup Tillit settings
+     *
+     * @return void
+     */
+    public function one_click_setup()
+    {
+
+        // Stop if this is not setup request
+        if(strtok($_SERVER["REQUEST_URI"], '?s') !== '/tillit-payment-gateway/init' || !isset($_REQUEST['m']) || !isset($_REQUEST['k']) || !isset($_REQUEST['t']) || !isset($_REQUEST['c'])) return;
+
+        if (!current_user_can('manage_options')) {
+            $redirect_to_signin = wp_login_url() . '?redirect_to=' . urlencode($_SERVER["REQUEST_URI"]);
+            $error = new WP_Error(
+                'init_failed',
+                sprintf(
+                    __('Wordpress admin privilege is required for Tillit payment One-click setup. %s', 'tillit-payment-gateway'),
+                    sprintf('<a href="%s">» %s</a>', $redirect_to_signin, __('Log in', 'tillit-payment-gateway'))
+                ),
+                array('title' => _('Tillit payment setup failure'), 'response' => '401', 'back_link' => false));
+            if(is_wp_error($error)){
+                wp_die($error, '', $error->get_error_data());
+            }
+        }
+
+        // Get the id and token to send to Tillit
+        $merchant_id = sanitize_text_field($_REQUEST['m']);
+        $tillit_init_tk = sanitize_text_field($_REQUEST['k']);
+        $site_type = sanitize_text_field($_REQUEST['t']);
+        $tillit_checkout_host = sanitize_text_field($_REQUEST['c']);
+
+        if ($site_type === 'WOOCOMMERCE') {
+            $params = [
+                'm' => $merchant_id,
+                'k' => $tillit_init_tk,
+                't' => $site_type,
+            ];
+            $response = wp_remote_request(sprintf('%s%s?%s', $tillit_checkout_host, '/v1/portal/merchant/settings', http_build_query($params)), [
+                'method' => 'GET',
+                'timeout' => 30,
+                'body' => '',
+                'data_format' => 'body'
+            ]);
+
+            $body = json_decode($response['body'], true);
+            if ($response['response']['code'] === 200 && $body && $body['merchant_secret_api_key']) {
+                $this->update_option('tillit_merchant_id', $body['merchant_short_name']);
+                $this->update_option('api_key', $body['merchant_secret_api_key']);
+                if (isset($body['enabled'])) $this->update_option('enabled', $body['enabled'] ? 'yes' : 'no');
+                if (isset($body['title'])) $this->update_option('title', $body['title']);
+                if (isset($body['subtitle'])) $this->update_option('subtitle', $body['subtitle']);
+                if (isset($body['checkout_personal'])) $this->update_option('checkout_personal', $body['checkout_personal'] ? 'yes' : 'no');
+                if (isset($body['checkout_sole_trader'])) $this->update_option('checkout_sole_trader', $body['checkout_sole_trader'] ? 'yes' : 'no');
+                if (isset($body['checkout_business'])) $this->update_option('checkout_business', $body['checkout_business'] ? 'yes' : 'no');
+                if (isset($body['product_type'])) $this->update_option('product_type', $body['product_type']);
+                if (isset($body['days_on_invoice'])) $this->update_option('days_on_invoice', $body['days_on_invoice']);
+                if (isset($body['display_other_payments'])) $this->update_option('display_other_payments', $body['display_other_payments'] ? 'yes' : 'no');
+                if (isset($body['fallback_to_another_payment'])) $this->update_option('fallback_to_another_payment', $body['fallback_to_another_payment'] ? 'yes' : 'no');
+                if (isset($body['enable_company_name'])) $this->update_option('enable_company_name', $body['enable_company_name'] ? 'yes' : 'no');
+                if (isset($body['enable_company_id'])) $this->update_option('enable_company_id', $body['enable_company_id'] ? 'yes' : 'no');
+                if (isset($body['finalize_purchase'])) $this->update_option('finalize_purchase', $body['finalize_purchase'] ? 'yes' : 'no');
+                if (isset($body['mark_tillit_fields_required'])) $this->update_option('mark_tillit_fields_required', $body['mark_tillit_fields_required'] ? 'yes' : 'no');
+                if (isset($body['enable_order_intent'])) $this->update_option('enable_order_intent', $body['enable_order_intent'] ? 'yes' : 'no');
+                if (isset($body['default_to_b2c'])) $this->update_option('default_to_b2c', $body['default_to_b2c'] ? 'yes' : 'no');
+                if (isset($body['invoice_fee_to_buyer'])) $this->update_option('invoice_fee_to_buyer', $body['invoice_fee_to_buyer'] ? 'yes' : 'no');
+                if (isset($body['initiate_payment_to_buyer_on_refund'])) $this->update_option('initiate_payment_to_buyer_on_refund', $body['initiate_payment_to_buyer_on_refund'] ? 'yes' : 'no');
+                if (isset($body['clear_options_on_deactivation'])) $this->update_option('clear_options_on_deactivation', $body['clear_options_on_deactivation'] ? 'yes' : 'no');
+                if (WC_Tillit_Helper::is_tillit_development()) {
+                    $this->update_option('test_checkout_host', $tillit_checkout_host);
+                } else if (strpos($tillit_checkout_host, 'test.api.tillit.ai') !== false) {
+                    $this->update_option('checkout_env', 'SANDBOX');
+                } else {
+                    $this->update_option('checkout_env', 'PROD');
+                }
+
+                // Init done
+                $error = new WP_Error(
+                    'init_ok',
+                    sprintf(
+                        'Successfully setup Tillit payment! Go to %s.',
+                        sprintf('<a href="%s">%s</a>', get_dashboard_url(), __('Dashboard', 'tillit-payment-gateway'))
+                    ),
+                    array('title' => _('Tillit payment setup success'), 'response' => '200', 'back_link' => false));
+                wp_die($error, '', $error->get_error_data());
+            } else if ($response['response']['code'] === 400) {
+                // Link expired or max attempts reached or wrong key
+                $error = new WP_Error(
+                    'init_failed',
+                    sprintf(
+                        'Magic setup link already used or expired, please contact %s for more information!',
+                        sprintf('<a href="https://tillit.ai/">%s</a>', __('Tillit', 'tillit-payment-gateway'))
+                    ),
+                    array('title' => _('Tillit payment setup failure'), 'response' => '400', 'back_link' => false));
+                wp_die($error, '', $error->get_error_data());
+            }
+        }
+
+        // Other errors
+        $error = new WP_Error(
+            'init_failed',
+            sprintf(
+                'Could not setup Tillit payment on your website, please contact %s for more information!',
+                sprintf('<a href="https://tillit.ai/">%s</a>', __('Tillit', 'tillit-payment-gateway'))
+            ),
+            array('title' => _('Tillit payment setup failure'), 'response' => '400', 'back_link' => false));
+        wp_die($error, '', $error->get_error_data());
+
     }
 
     /**
