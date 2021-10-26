@@ -795,7 +795,7 @@ class WC_Tillit extends WC_Payment_Gateway
                 'k' => $tillit_init_tk,
                 't' => $site_type,
             ];
-            $response = wp_remote_request(sprintf('%s%s?%s', $tillit_checkout_host, '/v1/portal/merchant/settings', http_build_query($params)), [
+            $response = wp_remote_request(sprintf('%s%s?%s', $tillit_checkout_host, '/v1/portal/merchant/ocs', http_build_query($params)), [
                 'method' => 'GET',
                 'timeout' => 30,
                 'body' => '',
