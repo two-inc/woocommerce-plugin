@@ -63,3 +63,7 @@ form.checkout.woocommerce-checkout .woocommerce-account-type-fields__field-wrapp
 .iti.iti--allow-dropdown {
     width: 100%;
 }
+
+#billing_phone_display {
+    padding-left: 48px;
+}
