@@ -411,7 +411,10 @@ class Tillit {
     {
 
         // Get the targets
-        const $requiredCompanyTargets = jQuery('.woocommerce-company-fields, .woocommerce-representative-fields, #company_id_field, #billing_company_field, #billing_phone_display_field')
+        let $requiredCompanyTargets = jQuery('#billing_phone_display_field')
+        if (window.tillit.mark_tillit_fields_required === 'yes') {
+            $requiredCompanyTargets = jQuery('.woocommerce-company-fields, .woocommerce-representative-fields, #company_id_field, #billing_company_field, #billing_phone_display_field')
+        }
         const $visibleCompanyTargets = jQuery('.woocommerce-company-fields, .woocommerce-representative-fields, #company_id_field, #billing_company_field, #billing_phone_display_field, #department_field, #project_field')
         const $visibleNoncompanyTargets = jQuery('#billing_phone_field')
 
@@ -432,9 +435,7 @@ class Tillit {
         }
 
         // Toggle the required fields based on the account type
-        if (window.tillit.mark_tillit_fields_required === 'yes') {
-            Tillit.toggleRequiredFields($requiredCompanyTargets, is_tillit_available)
-        }
+        Tillit.toggleRequiredFields($requiredCompanyTargets, is_tillit_available)
 
     }
 
@@ -1017,8 +1018,8 @@ class Tillit {
         }
         if (node.nodeName === '#text') {
             let val = node.textContent
-                .replace(window.tillit.price_thousand_separator, '')
-                .replace(window.tillit.price_decimal_separator, '.')
+                .replaceAll(window.tillit.price_thousand_separator, '')
+                .replaceAll(window.tillit.price_decimal_separator, '.')
             if (!isNaN(val) && !isNaN(parseFloat(val))) {
                 return parseFloat(val)
             }

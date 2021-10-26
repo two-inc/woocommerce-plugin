@@ -214,7 +214,6 @@ class WC_Tillit_Checkout
     {
 
         $fields['billing']['billing_phone']['class'] = array('hidden');
-        $fields['billing']['billing_phone']['required'] = false;
         $fields['billing']['billing_phone']['priority'] = 32;
 
         $fields['billing']['billing_phone_display'] = [
@@ -293,12 +292,20 @@ class WC_Tillit_Checkout
             $product_type = 'DIRECT_INVOICE';
         }
 
+        $currency = get_woocommerce_currency();
+        $amount_min = '200 NOK';
+        $amount_max = '500,000 NOK';
+        if ($currency === 'GBP') {
+            $amount_min = '10 GBP';
+            $amount_max = '10,000 GBP';
+        }
+
         $properties = [
             'messages' => [
                 'subtitle_order_intent_ok' =>$this->WC_Tillit->get_option('subtitle'),
                 'subtitle_order_intent_reject' => __('Invoice is not available for this purchase', 'tillit-payment-gateway'),
-                'amount_min' => sprintf(__('Minimum Payment using Tillit is %s NOK', 'tillit-payment-gateway'), '200'),
-                'amount_max' => sprintf(__('Maximum Payment using Tillit is %s NOK', 'tillit-payment-gateway'), '250,000'),
+                'amount_min' => sprintf(__('Minimum Payment using Tillit is %s', 'tillit-payment-gateway'), $amount_min),
+                'amount_max' => sprintf(__('Maximum Payment using Tillit is %s', 'tillit-payment-gateway'), $amount_max),
                 'invalid_phone' => __('Phone number is invalid', 'tillit-payment-gateway'),
             ],
             'tillit_plugin_url' => WC_TILLIT_PLUGIN_URL,
@@ -314,7 +321,7 @@ class WC_Tillit_Checkout
             'product_type' => $product_type,
             'merchant_short_name' => $this->WC_Tillit->get_option('tillit_merchant_id'),
             'shop_base_country' => strtolower(WC()->countries->get_base_country()),
-            'currency' => get_woocommerce_currency(),
+            'currency' => $currency,
             'price_decimal_separator' => wc_get_price_decimal_separator(),
             'price_thousand_separator' => wc_get_price_thousand_separator(),
             'client_name' => 'wp',
