@@ -297,7 +297,7 @@ class WC_Tillit_Checkout
         $amount_max = '500,000 NOK';
         if ($currency === 'GBP') {
             $amount_min = '10 GBP';
-            $amount_max = '2,000 GBP';
+            $amount_max = '10,000 GBP';
         }
 
         $properties = [
