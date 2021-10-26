@@ -54,6 +54,10 @@ class WC_Tillit extends WC_Payment_Gateway
         }
 
         add_action('woocommerce_update_options_payment_gateways_' . $this->id, [$this, 'process_admin_options']);
+        if(!$this->get_option('api_key') || !$this->get_option('tillit_merchant_id')) {
+            add_action('admin_notices', [$this, 'tillit_account_init_notice']);
+            add_action('network_admin_notices', [$this, 'tillit_account_init_notice']);
+        }
         if(!$this->get_option('api_key') || !$this->get_option('tillit_merchant_id') || sizeof($this->available_account_types()) == 0) return;
         add_action('woocommerce_order_status_completed', [$this, 'on_order_completed']);
         add_action('woocommerce_order_status_cancelled', [$this, 'on_order_cancelled']);
@@ -1293,6 +1297,40 @@ class WC_Tillit extends WC_Payment_Gateway
             'body' => empty($payload) ? '' : json_encode($payload),
             'data_format' => 'body'
         ]);
+    }
+
+    /**
+     * Display admin banner notice for tillit account setup
+     *
+     * @return void
+     */
+    public function tillit_account_init_notice(){
+        global $pagenow;
+        if ($pagenow !== 'options-general.php') {
+            echo '
+            <div id="tillit-account-init-notice" class="notice notice-info is-dismissible" style="background-color: #e2e0ff;padding: 20px;display: flex;">
+                <div style="width:60%;padding-right:40px;">
+                    <h1 style="color: #000000;font-weight:700;">Set up your Tillit account</h1>
+                    <p style="color: #000000;font-size: 1.3em;text-align: justify;">Happy to see you here! Before you can start selling with the Tillit buy now, pay later solution you need to complete our signup process. It\'s easy, fast and gives you immediate access to the <a target="_blank" href="https://portal.tillit.ai/merchant">Tillit Merchant Portal</a></p>
+                </div>
+                <div>
+                    <img style="position: absolute;top: 40px;right: 40px;width: 100px;" src="/wp-content/plugins/tillit-payment-gateway/assets/images/logo.svg">
+                    <div style="position: absolute;bottom: 20px;right:40px;">
+                        <a href="#" id="dismiss-tillit-notice" class="button" style="margin-left: 20px;background: none;font-size: 1.1em;font-weight: 600;color: #3e16a2;padding: 7px 30px;border-color: #3e16a2;border-radius: 12px;">Not now, thanks</a>
+                        <a href="https://portal.tillit.ai/merchant" target="_blank" class="button" style="margin-left: 20px;background: #3e16a2;font-size: 1.1em;font-weight: 600;color: #ffffff;padding: 7px 30px;border-color: #3e16a2;border-radius: 12px;">Set up my account</a>
+                    </div>
+                </div>
+            </div>
+
+            <script type="text/javascript">
+                jQuery(document).ready(function($){
+                    jQuery("#dismiss-tillit-notice").click(function(){
+                        jQuery("#tillit-account-init-notice").slideUp();
+                    });
+                });
+            </script>
+            ';
+        }
     }
 
     /**
