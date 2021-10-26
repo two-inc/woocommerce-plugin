@@ -1018,8 +1018,8 @@ class Tillit {
         }
         if (node.nodeName === '#text') {
             let val = node.textContent
-                .replace(window.tillit.price_thousand_separator, '')
-                .replace(window.tillit.price_decimal_separator, '.')
+                .replaceAll(window.tillit.price_thousand_separator, '')
+                .replaceAll(window.tillit.price_decimal_separator, '.')
             if (!isNaN(val) && !isNaN(parseFloat(val))) {
                 return parseFloat(val)
             }
