@@ -72,6 +72,7 @@ class Tillit {
                 // Clear company inputs
                 $billingCompany.html('')
                 $billingCompany.selectWoo(selectWooParams())
+                Tillit.fixSelectWooPositionCompanyName()
                 jQuery('#company_id').val('')
 
                 // Clear the addresses, in case address get request fails
@@ -150,6 +151,8 @@ class Tillit {
 
                 })
 
+                Tillit.fixSelectWooPositionCompanyName()
+
                 $billingCompanySelect.on('select2:open', function(e){
                     setTimeout(function(){
                         if (jQuery('input[aria-owns="select2-billing_company-results"]').get(0)) {
@@ -158,24 +161,6 @@ class Tillit {
                     }, 200)
                 })
             }, 800)
-
-        }
-
-        /**
-         * Fix the position bug
-         * https://github.com/select2/select2/issues/4614
-         */
-
-        if (tillitWithCompanySearch) {
-
-            const instance = $billingCompany.data('select2')
-
-            if (instance) {
-                instance.on('open', function(e){
-                    this.results.clear()
-                    this.dropdown._positionDropdown()
-                })
-            }
 
         }
 
@@ -233,6 +218,13 @@ class Tillit {
         // Handle account type change
         $checkout.on('change', '[name="account_type"]', this.changeAccountType)
 
+        // Fix for themes not supporting selectWoo css
+        setTimeout(function(){
+            if (jQuery('#billing_company_field .select2-container').outerHeight() < 0.9 * jQuery('#billing_email').outerHeight()) {
+                jQuery('span[aria-labelledby="select2-billing_company-container"]').outerHeight(jQuery('#billing_email').outerHeight())
+            }
+        }, 2000)
+
         // Update right sidebar order review when the payment method changes
         $checkout.on('change', '[name="payment_method"]', function() {
             if (Tillit.isCompany(Tillit.getAccountType())) {
@@ -249,6 +241,33 @@ class Tillit {
             if (tillitOrderIntentCheck.pendingCheck) Tillit.getApproval()
             Tillit.saveCheckoutInputs()
         }, 3000)
+
+    }
+
+    static fixSelectWooPositionCompanyName()
+    {
+
+        /**
+         * Fix the position bug
+         * https://github.com/select2/select2/issues/4614
+         */
+
+        if (tillitWithCompanySearch) {
+
+            const instance = jQuery('.woocommerce-checkout #billing_company').data('select2')
+
+            if (instance) {
+                instance.on('open', function(e) {
+                    this.results.clear()
+                    this.dropdown._positionDropdown()
+                })
+                instance.on('results:message', function(e) {
+                    this.dropdown._resizeDropdown()
+                    this.dropdown._positionDropdown()
+                })
+            }
+
+        }
 
     }
 
@@ -1168,7 +1187,9 @@ function selectWooParams() {
             },
             language: {
                 errorLoading: function() {
-                    return wc_country_select_params.i18n_ajax_error
+                    // return wc_country_select_params.i18n_ajax_error
+                    // Should not show ajax error if request is cancelled
+                    return wc_country_select_params.i18n_searching
                 },
                 inputTooShort: function(t) {
                     t = t.minimum - t.input.length
