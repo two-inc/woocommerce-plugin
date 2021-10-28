@@ -42,11 +42,12 @@ class Tillit {
         // Get the account type input
         const $accountType = jQuery('[name="account_type"]:checked')
 
-        // Get the billing company field
-        const $billingCompany = $checkout.find('#billing_company')
-
         // Get the billing country field
         const $billingCountry = $checkout.find('#billing_country')
+
+        // Get the billing company field
+        const $billingCompanyDisplay = $checkout.find('#billing_company_display')
+        const $billingCompany = $checkout.find('#billing_company')
 
         // Get the company ID field
         const $companyId = $checkout.find('#company_id')
@@ -70,8 +71,8 @@ class Tillit {
             // Reinitiate company select on country change
             $billingCountry.on('select2:select', function(e){
                 // Clear company inputs
-                $billingCompany.html('')
-                $billingCompany.selectWoo(selectWooParams())
+                $billingCompanyDisplay.html('')
+                $billingCompanyDisplay.selectWoo(selectWooParams())
                 Tillit.fixSelectWooPositionCompanyName()
                 jQuery('#company_id').val('')
 
@@ -91,7 +92,7 @@ class Tillit {
 
             // Turn the select input into select2
             setTimeout(function(){
-                const $billingCompanySelect = $billingCompany.selectWoo(selectWooParams())
+                const $billingCompanySelect = $billingCompanyDisplay.selectWoo(selectWooParams())
                 $billingCompanySelect.on('select2:select', function(e){
 
                     // Get the option data
@@ -102,8 +103,11 @@ class Tillit {
                         // Set the company ID
                         tillitCompany.organization_number = data.company_id
 
-                        // Set the company ID
+                        // Set the company ID to HTML DOM
                         $companyId.val(data.company_id)
+
+                        // Set the company name to HTML DOM
+                        $billingCompany.val(data.id)
 
                     }
 
@@ -155,8 +159,8 @@ class Tillit {
 
                 $billingCompanySelect.on('select2:open', function(e){
                     setTimeout(function(){
-                        if (jQuery('input[aria-owns="select2-billing_company-results"]').get(0)) {
-                            jQuery('input[aria-owns="select2-billing_company-results"]').get(0).focus()
+                        if (jQuery('input[aria-owns="select2-billing_company_display-results"]').get(0)) {
+                            jQuery('input[aria-owns="select2-billing_company_display-results"]').get(0).focus()
                         }
                     }, 200)
                 })
@@ -188,7 +192,7 @@ class Tillit {
         $body.on('blur', '#billing_first_name, #billing_last_name, #billing_email, #billing_phone', this.onRepresentativeInputBlur)
 
         // Handle the representative inputs blur event
-        $body.on('blur', '#company_id, #billing_company', this.onCompanyManualInputBlur)
+        $body.on('blur', '#company_id, #billing_company_display', this.onCompanyManualInputBlur)
 
         // Handle the phone inputs change event
         $body.on('change', '#billing_phone_display', this.onPhoneInputChange)
@@ -197,7 +201,7 @@ class Tillit {
         }, 1000)
 
         // Handle the company inputs change event
-        $body.on('change', '#select2-billing_company-container', Tillit.updateCompanyNameAgreement)
+        $body.on('change', '#select2-billing_company_display-container', Tillit.updateCompanyNameAgreement)
         $body.on('change', '#billing_company', Tillit.updateCompanyNameAgreement)
 
         // Handle the country inputs change event
@@ -220,10 +224,10 @@ class Tillit {
 
         // Fix for themes not supporting selectWoo css
         setTimeout(function(){
-            if (jQuery('#billing_company_field .select2-container').outerHeight() < 0.9 * jQuery('#billing_email').outerHeight()) {
-                jQuery('span[aria-labelledby="select2-billing_company-container"]').outerHeight(jQuery('#billing_email').outerHeight())
-                jQuery('[aria-labelledby="select2-billing_company-container"]>span').css('height', '100%')
-                jQuery('#select2-billing_company-container').css('line-height', jQuery('#select2-billing_company-container').height() + 'px')
+            if (jQuery('#billing_company_display_field .select2-container').outerHeight() < 0.9 * jQuery('#billing_email').outerHeight()) {
+                jQuery('span[aria-labelledby="select2-billing_company_display-container"]').outerHeight(jQuery('#billing_email').outerHeight())
+                jQuery('[aria-labelledby="select2-billing_company_display-container"]>span').css('height', '100%')
+                jQuery('#select2-billing_company_display-container').css('line-height', jQuery('#select2-billing_company_display-container').height() + 'px')
             }
         }, 2000)
 
@@ -256,7 +260,7 @@ class Tillit {
 
         if (tillitWithCompanySearch) {
 
-            const instance = jQuery('.woocommerce-checkout #billing_company').data('select2')
+            const instance = jQuery('.woocommerce-checkout #billing_company_display').data('select2')
 
             if (instance) {
                 instance.on('open', function(e) {
@@ -434,10 +438,10 @@ class Tillit {
         // Get the targets
         let $requiredCompanyTargets = jQuery('#billing_phone_display_field')
         if (window.tillit.mark_tillit_fields_required === 'yes') {
-            $requiredCompanyTargets = jQuery('.woocommerce-company-fields, .woocommerce-representative-fields, #company_id_field, #billing_company_field, #billing_phone_display_field')
+            $requiredCompanyTargets = jQuery('.woocommerce-company-fields, .woocommerce-representative-fields, #company_id_field, #billing_company_display_field, #billing_phone_display_field')
         }
-        const $visibleCompanyTargets = jQuery('.woocommerce-company-fields, .woocommerce-representative-fields, #company_id_field, #billing_company_field, #billing_phone_display_field, #department_field, #project_field')
-        const $visibleNoncompanyTargets = jQuery('#billing_phone_field')
+        const $visibleCompanyTargets = jQuery('.woocommerce-company-fields, .woocommerce-representative-fields, #company_id_field, #billing_company_display_field, #billing_phone_display_field, #department_field, #project_field')
+        const $visibleNoncompanyTargets = jQuery('#billing_company_field, #billing_phone_field')
 
         // Toggle the targets based on the account type
         const is_tillit_visible = jQuery('#payment_method_woocommerce-gateway-tillit').length !== 0
@@ -789,7 +793,8 @@ class Tillit {
 
                 // Update tillit message
                 let tillitSubtitleExistCheck = setInterval(function() {
-                    if (document.querySelector('.tillit-subtitle')) {
+                    if (document.querySelector('.tillit-subtitle') && jQuery('#payment .blockOverlay').length === 0) {
+                        // tillit-subtitle exists and woocommerce's update_checkout is not running
                         let messageId = 'subtitle_order_intent_reject'
                         if (errMsg.startsWith('Minimum Payment using Tillit')) {
                             messageId = 'amount_min'
@@ -805,7 +810,8 @@ class Tillit {
                 }, 1000)
             } else {
                 let tillitSubtitleExistCheck = setInterval(function() {
-                    if (document.querySelector('.tillit-subtitle')) {
+                    if (document.querySelector('.tillit-subtitle') && jQuery('#payment .blockOverlay').length === 0) {
+                        // tillit-subtitle exists and woocommerce's update_checkout is not running
                         document.querySelector('.tillit-subtitle').innerHTML = Tillit.getMessage('subtitle_order_intent_reject')
                         clearInterval(tillitSubtitleExistCheck)
                    }
@@ -927,7 +933,7 @@ class Tillit {
 
         if (inputName === 'company_id') {
             tillitCompany.organization_number = $input.val()
-        } else if (inputName === 'billing_company') {
+        } else if (inputName === 'billing_company_display') {
             tillitCompany.company_name = $input.val()
         }
 
@@ -996,8 +1002,8 @@ class Tillit {
 
     static updateCompanyNameAgreement()
     {
-        if (document.querySelector('#select2-billing_company-container') && document.querySelector('#select2-billing_company-container').innerText) {
-            document.querySelector('.tillit-buyer-name').innerText = document.querySelector('#select2-billing_company-container').innerText
+        if (document.querySelector('#select2-billing_company_display-container') && document.querySelector('#select2-billing_company_display-container').innerText) {
+            document.querySelector('.tillit-buyer-name').innerText = document.querySelector('#select2-billing_company_display-container').innerText
             document.querySelector('.tillit-buyer-name').classList.remove('hidden')
             document.querySelector('.tillit-buyer-name-placeholder').classList.add('hidden')
         } else if (document.querySelector('#billing_company') && document.querySelector('#billing_company').value) {
@@ -1229,7 +1235,7 @@ function selectWooParams() {
             }
         }
     } else {
-        jQuery('input[aria-owns="select2-billing_company-results"]').css('display: none;')
+        jQuery('input[aria-owns="select2-billing_company_display-results"]').css('display: none;')
         return {
             minimumInputLength: 10000,
             width: '100%',

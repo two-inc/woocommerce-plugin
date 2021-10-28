@@ -65,7 +65,7 @@ if (!class_exists('WC_Tillit')) {
                 }
 
                 // On plugin deactivated
-                add_action('deactivate_' . plugin_basename(__FILE__), [$tillit_payment_gateway, 'on_deactivate_plugin']);
+                add_action('deactivate_' . plugin_basename(__FILE__), [$this, 'on_deactivate_plugin']);
 
                 // Add js css to admin page
                 add_action('admin_enqueue_scripts', [$this, 'tillit_admin_styles_scripts']);
