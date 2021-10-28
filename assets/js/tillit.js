@@ -222,6 +222,8 @@ class Tillit {
         setTimeout(function(){
             if (jQuery('#billing_company_field .select2-container').outerHeight() < 0.9 * jQuery('#billing_email').outerHeight()) {
                 jQuery('span[aria-labelledby="select2-billing_company-container"]').outerHeight(jQuery('#billing_email').outerHeight())
+                jQuery('[aria-labelledby="select2-billing_company-container"]>span').css('height', '100%')
+                jQuery('#select2-billing_company-container').css('line-height', jQuery('#select2-billing_company-container').height() + 'px')
             }
         }, 2000)
 

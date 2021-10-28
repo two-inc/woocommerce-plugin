@@ -27,7 +27,7 @@ $checkout = WC()->checkout(); ?>
 
 
 <?php
-if (sizeof($this->WC_Tillit->available_account_types()) > 1)
+if (sizeof($this->wc_tillit->available_account_types()) > 1)
 {
     echo '<h3>';
     esc_html_e('Account type', 'tillit-payment-gateway');
