@@ -21,17 +21,14 @@ if (!class_exists('WC_Tillit_Checkout')) {
 
             $this->wc_tillit = $wc_tillit;
 
-            // Remove the default company name
-            add_filter('woocommerce_checkout_fields', [$this, 'remove_company_name'], 1);
-
             // Move the country field to the top
-            add_filter('woocommerce_checkout_fields', [$this, 'move_country_field'], 1);
+            add_filter('woocommerce_checkout_fields', [$this, 'move_country_field'], 20);
 
             // Register the custom fields
-            add_filter('woocommerce_checkout_fields', [$this, 'add_account_fields'], 1);
-            add_filter('woocommerce_checkout_fields', [$this, 'add_company_fields'], 2);
-            add_filter('woocommerce_checkout_fields', [$this, 'update_phone_field'], 3);
-            add_filter('woocommerce_checkout_fields', [$this, 'add_tracking_field'], 4);
+            add_filter('woocommerce_checkout_fields', [$this, 'add_tracking_fields'], 21);
+            add_filter('woocommerce_checkout_fields', [$this, 'add_account_fields'], 22);
+            add_filter('woocommerce_checkout_fields', [$this, 'update_company_fields'], 23);
+            add_filter('woocommerce_checkout_fields', [$this, 'update_phone_fields'], 24);
 
             // Render the fields on checkout page
             add_action('woocommerce_checkout_billing', [$this, 'render_tillit_fields'], 1);
@@ -39,28 +36,6 @@ if (!class_exists('WC_Tillit_Checkout')) {
 
             // Inject the cart details in header
             add_action('woocommerce_before_checkout_billing_form', [$this, 'inject_cart_details']);
-
-        }
-
-        /**
-         * Remove the default company name from the checkout page
-         *
-         * @param $fields
-         *
-         * @return array
-         */
-        public function remove_company_name($fields)
-        {
-
-            if($this->wc_tillit->get_option('enable_company_name') === 'yes') {
-
-                // Remove the field
-                unset($fields['billing']['billing_company']);
-
-            }
-
-            // Return the fields list
-            return $fields;
 
         }
 
@@ -73,7 +48,7 @@ if (!class_exists('WC_Tillit_Checkout')) {
         {
 
             // Change the priority for the country field
-            $fields['billing']['billing_country']['priority'] = 1;
+            $fields['billing']['billing_country']['priority'] = $fields['billing']['billing_company']['priority'] - 1;
 
             // Return the fields list
             return $fields;
@@ -108,7 +83,7 @@ if (!class_exists('WC_Tillit_Checkout')) {
                         'label' => __('Select the account type', 'tillit-payment-gateway'),
                         'required' => false,
                         'type' => 'radio',
-                        'priority' => 15,
+                        'priority' => 30,
                         'value' => $default_account_type,
                         'options' => $available_account_types
                     ]
@@ -121,7 +96,7 @@ if (!class_exists('WC_Tillit_Checkout')) {
                         'required' => false,
                         'type' => 'radio',
                         'class' => array('hidden'),
-                        'priority' => 15,
+                        'priority' => 30,
                         'value' => $default_account_type,
                         'options' => $available_account_types
                     ]
@@ -141,14 +116,15 @@ if (!class_exists('WC_Tillit_Checkout')) {
          *
          * @return mixed
          */
-        public function add_company_fields($fields)
+        public function update_company_fields($fields)
         {
 
             $with_company_search = $this->wc_tillit->get_option('enable_company_name') === 'yes';
+            $company_name_priority = $fields['billing']['billing_company']['priority'];
 
             if($with_company_search) {
 
-                $fields['billing']['billing_company'] = [
+                $fields['billing']['billing_company_display'] = [
                     'label' => __('Company name', 'tillit-payment-gateway'),
                     'autocomplete' => 'organization',
                     'type' => 'select',
@@ -161,28 +137,22 @@ if (!class_exists('WC_Tillit_Checkout')) {
                         '' => '&nbsp;'
                     ],
                     'required' => false,
-                    'priority' => 2
+                    'priority' => $company_name_priority
                 ];
 
                 $fields['billing']['company_id'] = [
                     'label' => __('Company ID', 'tillit-payment-gateway'),
                     'required' => false,
-                    'priority' => 3,
+                    'priority' => $company_name_priority + 1,
                     'custom_attributes' => array('readonly' => 'readonly')
                 ];
 
             } else {
 
-                $fields['billing']['billing_company'] = [
-                    'label' => __('Company name', 'tillit-payment-gateway'),
-                    'required' => false,
-                    'priority' => 34
-                ];
-
                 $fields['billing']['company_id'] = [
                     'label' => __('Company ID', 'tillit-payment-gateway'),
                     'required' => false,
-                    'priority' => 35
+                    'priority' => $company_name_priority + 1
                 ];
 
             }
@@ -190,13 +160,13 @@ if (!class_exists('WC_Tillit_Checkout')) {
             $fields['billing']['department'] = [
                 'label' => __('Department', 'tillit-payment-gateway'),
                 'required' => false,
-                'priority' => 4
+                'priority' => $company_name_priority + 2
             ];
 
             $fields['billing']['project'] = [
                 'label' => __('Project', 'tillit-payment-gateway'),
                 'required' => false,
-                'priority' => 5
+                'priority' => $company_name_priority + 3
             ];
 
             // Return the fields
@@ -211,19 +181,14 @@ if (!class_exists('WC_Tillit_Checkout')) {
          *
          * @return array
          */
-        public function update_phone_field($fields)
+        public function update_phone_fields($fields)
         {
-
-            $fields['billing']['billing_phone']['class'] = array('hidden');
-            $fields['billing']['billing_phone']['priority'] = 32;
 
             $fields['billing']['billing_phone_display'] = [
                 'label' => __('Phone', 'tillit-payment-gateway'),
                 'required' => false,
-                'priority' => 0
+                'priority' => $fields['billing']['billing_email']['priority'] + 1 // insert email field in-between, must not be directly under first name to avoid css error
             ];
-
-            $fields['billing']['billing_email']['priority'] = 31;
 
             // Return the fields list
             return $fields;
@@ -237,14 +202,14 @@ if (!class_exists('WC_Tillit_Checkout')) {
          *
          * @return array
          */
-        public function add_tracking_field($fields)
+        public function add_tracking_fields($fields)
         {
 
             $fields['billing']['tracking_id'] = [
                 'required' => false,
                 'type' => 'text',
                 'class' => array('hidden'),
-                'priority' => 16
+                'priority' => 20
             ];
 
             // Return the fields list
