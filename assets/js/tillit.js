@@ -138,7 +138,7 @@ let tillitSelectWooHelper = {
      */
     fixSelectWooPositionCompanyName: function() {
 
-        if (this.withCompanyNameSearch) {
+        if (Tillit.getInstance().withCompanyNameSearch) {
 
             const instance = jQuery('.woocommerce-checkout #billing_company_display').data('select2')
 
@@ -699,7 +699,8 @@ class Tillit {
     /**
      * Initialize Tillit code
      */
-    initialize(loadSavedInputs) {console.log('try init: ' + this.isInitialized)
+    initialize(loadSavedInputs) {
+        console.log('try init: ' + this.isInitialized)
         if (this.isInitialized) {
             return
         }
@@ -915,7 +916,7 @@ class Tillit {
 
         // Toggle the action buttons
         tillitDomHelper.toggleActions()
-console.log(this.isTillitMethodHidden)
+
         // Enable or disable the Tillit method
         tillitDomHelper.toggleMethod(this.isTillitMethodHidden)
 
@@ -1057,7 +1058,7 @@ console.log(this.isTillitMethodHidden)
                 }
 
                 // Display messages and update order intent logs
-                Tillit.processOrderIntentResponse(response)
+                Tillit.getInstance().processOrderIntentResponse(response)
 
             })
 
@@ -1076,7 +1077,7 @@ console.log(this.isTillitMethodHidden)
                 tillitDomHelper.selectDefaultMethod(Tillit.getInstance().isTillitMethodHidden)
 
                 // Display messages and update order intent logs
-                Tillit.processOrderIntentResponse(response)
+                Tillit.getInstance().processOrderIntentResponse(response)
 
             })
         }, 1000)
@@ -1276,7 +1277,9 @@ jQuery(function(){
             // Handle payment method radio select every time order review (right panel) is updated
             jQuery(document.body).on('updated_checkout', function(){
 
-console.log('updated_checkout')
+                jQuery('#payment .wc_payment_methods input.input-radio').prop('checked', false)
+                tillitDomHelper.toggleMethod(Tillit.getInstance().isTillitMethodHidden)
+
                 // If shop defaults payment method to Tillit, run Tillit code
                 if (tillitDomHelper.isSelectedPaymentTillit()) {
                     Tillit.getInstance().initialize(false)
@@ -1290,7 +1293,9 @@ console.log('updated_checkout')
                 // Also, run Tillit code if payment method selected is Tillit
                 if (window.tillit.invoice_fee_to_buyer === 'yes') {
                     isSelectedPaymentTillit = tillitDomHelper.isSelectedPaymentTillit()
-                    if (isSelectedPaymentTillit) Tillit.getInstance().initialize(false)
+                    if (isSelectedPaymentTillit) {
+                        Tillit.getInstance().initialize(false)
+                    }
 
                     // Update right sidebar order review when the payment method changes
                     jQuery('.woocommerce-checkout [name="payment_method"]').on('change', function() {

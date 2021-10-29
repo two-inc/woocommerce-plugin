@@ -3,7 +3,7 @@
  * Plugin Name: Tillit Payment Gateway
  * Plugin URI: https://tillit.ai
  * Description: Integration between WooCommerce and Tillit.
- * Version: 1.4.7
+ * Version: 2.0.0
  * Author: Tillit
  * Author URI: https://tillit.ai
  * Text Domain: tillit-payment-gateway
