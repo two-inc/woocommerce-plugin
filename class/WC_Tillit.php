@@ -71,7 +71,7 @@ if (!class_exists('WC_Tillit')) {
                 add_action('admin_enqueue_scripts', [$this, 'tillit_admin_styles_scripts']);
 
                 // On setting updated
-                // add_action('woocommerce_update_options_payment_gateways_' . $this->id, [$this, 'process_admin_options']);
+                add_action('woocommerce_update_options_payment_gateways_' . $this->id, [$this, 'process_admin_options']); // Built-in process_admin_options
                 add_action('woocommerce_update_options_checkout', [$this, 'update_checkout_options']);
             }
 
