@@ -204,6 +204,55 @@ let tillitSelectWooHelper = {
 let tillitDomHelper = {
 
     /**
+     * Initialize account type buttons
+     */
+    initAccountTypeButtons: function($el, name) {
+
+        setTimeout(function(){
+            // Select the account type button based on radio val
+            let accountType = tillitDomHelper.getAccountType()
+            if (accountType) {
+                jQuery('.account-type-button[account-type-name="' + accountType + '"]').addClass('selected')
+                if (jQuery('#klarna-checkout-container').length > 0) {
+                    jQuery('#klarna-checkout-container').prepend(jQuery('.account-type-wrapper'))
+                } else if (jQuery('.woocommerce-account-type-fields').length > 0) {
+                    jQuery('.woocommerce-account-type-fields').prepend(jQuery('.account-type-wrapper'))
+                } else {
+                    jQuery('.account-type-wrapper').outerWidth('60%')
+                }
+            }
+        }, 1000)
+
+        // Remove buttons without corresponding account type radios
+        jQuery('.account-type-button').each(function(){
+            let accountType = jQuery(this).attr('account-type-name')
+            if (jQuery('#account_type_' + accountType).length == 0) {
+                jQuery(this).remove()
+            }
+        })
+
+        // Styling
+        if (jQuery('input[name="account_type"]').length > 1) {
+            jQuery('.account-type-button').eq(jQuery('input[name="account_type"]').length - 1).addClass('last')
+            jQuery('.account-type-wrapper').addClass('actp-col-' + jQuery('input[name="account_type"]').length)
+        } else {
+            jQuery('.account-type-wrapper').hide()
+        }
+
+        // Hide the radio buttons
+        jQuery('.woocommerce-account-type-fields__field-wrapper').hide()
+
+        // On click the buttons, update the radio vals
+        jQuery('.account-type-button').on('click', function(){
+            let accountType = jQuery(this).attr('account-type-name')
+            jQuery('#account_type_' + accountType).click()
+            jQuery('.account-type-button').removeClass('selected')
+            jQuery('.account-type-button[account-type-name="' + accountType + '"]').addClass('selected')
+        })
+
+    },
+
+    /**
      * Add a placeholder after an input, used for moving the fields in HTML DOM
      */
     addPlaceholder: function($el, name) {
@@ -666,6 +715,7 @@ class Tillit {
     withCompanyNameSearch = false
     isTillitMethodHidden = true
     isTillitApproved = null
+    billingPhoneInput = null
     orderIntentCheck = {
         'interval': null,
         'pendingCheck': false,
@@ -889,6 +939,7 @@ class Tillit {
         }, 3000)
 
         if (loadSavedInputs) tillitDomHelper.loadCheckoutInputs()
+        this.initBillingPhoneDisplay()
         this.customerCompany = tillitDomHelper.getCompanyData()
         this.customerRepresentative = tillitDomHelper.getRepresentativeData()
         this.updateElements()
@@ -903,6 +954,21 @@ class Tillit {
         return Tillit.instance
     }
 
+
+    /**
+     * Initialize billing phone display
+     */
+    initBillingPhoneDisplay() {
+
+        let billingPhoneInputField = document.querySelector("#billing_phone_display")
+        this.billingPhoneInput = window.intlTelInput(billingPhoneInputField, {
+            utilsScript: "https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.8/js/utils.js",
+            preferredCountries: [window.tillit.shop_base_country]
+        })
+        if (jQuery('#billing_phone').length > 0) {
+            this.billingPhoneInput.setNumber(jQuery('#billing_phone').val())
+        }
+    }
 
     /**
      * Check if all the required details are collected
@@ -1182,7 +1248,7 @@ class Tillit {
         tillitDomHelper.positionFields()
 
         // Show or hide the payment method
-        tillitDomHelper.toggleMethod(Tillit.getInstance().isTillitMethodHidden)
+        // tillitDomHelper.toggleMethod(Tillit.getInstance().isTillitMethodHidden)
 
     }
 
@@ -1239,7 +1305,7 @@ class Tillit {
     {
 
         setTimeout(function(){
-            jQuery('#billing_phone').val(billingPhoneInput.getNumber())
+            jQuery('#billing_phone').val(Tillit.getInstance().billingPhoneInput.getNumber())
             Tillit.getInstance().customerRepresentative['phone_number'] = jQuery('#billing_phone').val()
             Tillit.getInstance().getApproval()
         }, 100)
@@ -1269,6 +1335,7 @@ class Tillit {
 let isSelectedPaymentTillit = null
 jQuery(function(){
     if (window.tillit) {
+
         if (window.tillit.enable_order_intent === 'yes') {
             // Run Tillit code if order intent is enabled
             Tillit.getInstance().initialize(true)
@@ -1277,14 +1344,20 @@ jQuery(function(){
             // Handle payment method radio select every time order review (right panel) is updated
             jQuery(document.body).on('updated_checkout', function(){
 
-                jQuery('#payment .wc_payment_methods input.input-radio').prop('checked', false)
+                // Hide and clear unnecessary payment methods
                 tillitDomHelper.toggleMethod(Tillit.getInstance().isTillitMethodHidden)
+                jQuery('#payment .wc_payment_methods input.input-radio').each(function() {
+                    if (jQuery(this).is(":hidden")) {
+                        jQuery(this).prop('checked', false)
+                    }
+                })
 
                 // If shop defaults payment method to Tillit, run Tillit code
                 if (tillitDomHelper.isSelectedPaymentTillit()) {
                     Tillit.getInstance().initialize(false)
                 }
 
+                // Run Tillit code if Tillit payment is selected
                 jQuery('#payment_method_woocommerce-gateway-tillit').on('change', function(){
                     Tillit.getInstance().initialize(false)
                 })
@@ -1327,5 +1400,12 @@ jQuery(function(){
 
             // Otherwise do not run Tillit code
         }
+
+        // Show or hide Tillit payment method on account type change
+        jQuery('.woocommerce-checkout [name="account_type"]').on('change', function() {
+            tillitDomHelper.toggleMethod(Tillit.getInstance().isTillitMethodHidden)
+        })
+        tillitDomHelper.initAccountTypeButtons()
+
     }
 })

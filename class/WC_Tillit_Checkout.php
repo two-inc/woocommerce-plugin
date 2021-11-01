@@ -29,6 +29,7 @@ if (!class_exists('WC_Tillit_Checkout')) {
             add_filter('woocommerce_checkout_fields', [$this, 'add_account_fields'], 22);
             add_filter('woocommerce_checkout_fields', [$this, 'update_company_fields'], 23);
             add_filter('woocommerce_checkout_fields', [$this, 'update_phone_fields'], 24);
+            add_action('woocommerce_before_checkout_form', [$this, 'add_account_buttons'], 20);
 
             // Render the fields on checkout page
             add_action('woocommerce_checkout_billing', [$this, 'render_tillit_fields'], 1);
@@ -36,7 +37,6 @@ if (!class_exists('WC_Tillit_Checkout')) {
 
             // Inject the cart details in header
             add_action('woocommerce_before_checkout_billing_form', [$this, 'inject_cart_details']);
-
         }
 
         /**
@@ -52,6 +52,35 @@ if (!class_exists('WC_Tillit_Checkout')) {
 
             // Return the fields list
             return $fields;
+
+        }
+
+        /**
+         * Add the account type buttons to the checkout page
+         *
+         * @param $fields
+         *
+         * @return mixed
+         */
+        public function add_account_buttons($fields)
+        {
+
+            printf(
+                '<div class="account-type-wrapper">
+                    <h3>' . esc_html__('Account type', 'tillit-payment-gateway') . '</h3>
+                    <div class="account-type-button" account-type-name="personal">
+                        <img src = "/wp-content/plugins/tillit-payment-gateway/assets/images/personal.svg"/>
+                        <span>Personal</span>
+                    </div>
+                    <div class="account-type-button" account-type-name="sole_trader">
+                        <img src = "/wp-content/plugins/tillit-payment-gateway/assets/images/business.svg"/>
+                        <span>Sole trader/other</span>
+                    </div>
+                    <div class="account-type-button" account-type-name="business">
+                        <img src = "/wp-content/plugins/tillit-payment-gateway/assets/images/business.svg"/>
+                        <span>Business</span>
+                    </div>
+                </div>');
 
         }
 
@@ -95,7 +124,6 @@ if (!class_exists('WC_Tillit_Checkout')) {
                     'account_type' => [
                         'required' => false,
                         'type' => 'radio',
-                        'class' => array('hidden'),
                         'priority' => 30,
                         'value' => $default_account_type,
                         'options' => $available_account_types
