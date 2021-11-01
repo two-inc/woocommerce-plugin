@@ -32,11 +32,11 @@ if (!class_exists('WC_Tillit_Checkout')) {
             add_action('woocommerce_before_checkout_form', [$this, 'add_account_buttons'], 20);
 
             // Render the fields on checkout page
-            add_action('woocommerce_checkout_billing', [$this, 'render_tillit_fields'], 1);
-            add_action('woocommerce_before_checkout_billing_form', [$this, 'render_tillit_representative_fields'], 1);
+            add_action('woocommerce_before_checkout_billing_form', [$this, 'render_tillit_fields'], 20);
+            add_action('woocommerce_before_checkout_billing_form', [$this, 'render_tillit_representative_fields'], 21);
 
             // Inject the cart details in header
-            add_action('woocommerce_before_checkout_billing_form', [$this, 'inject_cart_details']);
+            add_action('woocommerce_before_checkout_billing_form', [$this, 'inject_cart_details'], 22);
         }
 
         /**

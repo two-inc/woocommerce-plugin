@@ -209,12 +209,17 @@ let tillitDomHelper = {
     initAccountTypeButtons: function($el, name) {
 
         setTimeout(function(){
+            // Move the account type DOM to before Billing
+            jQuery('#woocommerce-account-type-container').parent().parent().prepend(jQuery('#woocommerce-account-type-container'))
             // Select the account type button based on radio val
             let accountType = tillitDomHelper.getAccountType()
             if (accountType) {
                 jQuery('.account-type-button[account-type-name="' + accountType + '"]').addClass('selected')
                 if (jQuery('#klarna-checkout-container').length > 0) {
                     jQuery('#klarna-checkout-container').prepend(jQuery('.account-type-wrapper'))
+                    jQuery('.account-type-wrapper').css('padding', '0 16px')
+                    jQuery('.account-type-wrapper h3').hide()
+                    jQuery('.account-type-button[account-type-name="business"]').on('click', function() {jQuery('#klarna-checkout-select-other').click()})
                 } else if (jQuery('.woocommerce-account-type-fields').length > 0) {
                     jQuery('.woocommerce-account-type-fields').prepend(jQuery('.account-type-wrapper'))
                 } else {
@@ -241,6 +246,7 @@ let tillitDomHelper = {
 
         // Hide the radio buttons
         jQuery('.woocommerce-account-type-fields__field-wrapper').hide()
+        jQuery('#account_type_field').hide()
 
         // On click the buttons, update the radio vals
         jQuery('.account-type-button').on('click', function(){
@@ -362,10 +368,21 @@ let tillitDomHelper = {
             const $row = $input.parents('.form-row')
 
             // Toggle the required property
-            $input.attr('required', is_required)
+            if (is_required) {
+                $input.attr('required', true)
 
-            // Replace the optional visual cue with the required one
-            $row.find('label .optional').replaceWith('<abbr class="required" title="required">*</abbr>')
+                // Add 'required' visual cue
+                if ($row.find('label .tillit-required').length == 0) {
+                    $row.find('label').append('<abbr class="required tillit-required" title="required">*</abbr>')
+                }
+                $row.find('label .optional').hide()
+            } else {
+                $input.attr('required', false)
+
+                // Show the hidden optional visual cue
+                $row.find('label .tillit-required').remove()
+                $row.find('label .optional').show()
+            }
 
         })
 
@@ -377,12 +394,20 @@ let tillitDomHelper = {
     toggleCompanyFields(accountType) {
 
         // Get the targets
-        let $requiredCompanyTargets = jQuery('#billing_phone_display_field')
-        if (window.tillit.mark_tillit_fields_required === 'yes') {
-            $requiredCompanyTargets = jQuery('.woocommerce-company-fields, .woocommerce-representative-fields, #company_id_field, #billing_company_display_field, #billing_phone_display_field')
+        let $visibleNoncompanyTargets = '#billing_phone_field, #billing_company_field'
+        let $visibleCompanyTargets = '.woocommerce-company-fields, .woocommerce-representative-fields, #company_id_field, #billing_company_display_field, #billing_phone_display_field'
+        let $requiredCompanyTargets = '#billing_phone_display_field'
+        if (window.tillit.company_name_search !== 'yes') {
+            $visibleCompanyTargets += ', #billing_company_field'
+            $requiredCompanyTargets += ', #billing_company_field'
         }
-        const $visibleCompanyTargets = jQuery('.woocommerce-company-fields, .woocommerce-representative-fields, #company_id_field, #billing_company_display_field, #billing_phone_display_field, #department_field, #project_field')
-        const $visibleNoncompanyTargets = jQuery('#billing_company_field, #billing_phone_field')
+        if (window.tillit.mark_tillit_fields_required === 'yes') {
+            $requiredCompanyTargets = $visibleCompanyTargets
+        }
+        $visibleCompanyTargets += ', #department_field, #project_field'
+        $requiredCompanyTargets = jQuery($requiredCompanyTargets)
+        $visibleCompanyTargets = jQuery($visibleCompanyTargets)
+        $visibleNoncompanyTargets = jQuery($visibleNoncompanyTargets)
 
         // Toggle the targets based on the account type
         const isTillitVisible = jQuery('#payment_method_woocommerce-gateway-tillit').length !== 0
@@ -393,8 +418,8 @@ let tillitDomHelper = {
         }
         const isTillitAvailable = isTillitVisible && tillitUtilHelper.isCompany(accountType)
         if (isTillitAvailable) {
-            $visibleCompanyTargets.removeClass('hidden')
             $visibleNoncompanyTargets.addClass('hidden')
+            $visibleCompanyTargets.removeClass('hidden')
         } else {
             $visibleCompanyTargets.addClass('hidden')
             $visibleNoncompanyTargets.removeClass('hidden')
@@ -511,6 +536,7 @@ let tillitDomHelper = {
      * Update company name in payment method aggrement section
      */
     updateCompanyNameAgreement: function() {
+
         if (document.querySelector('#select2-billing_company_display-container') && document.querySelector('#select2-billing_company_display-container').innerText) {
             document.querySelector('.tillit-buyer-name').innerText = document.querySelector('#select2-billing_company_display-container').innerText
             document.querySelector('.tillit-buyer-name').classList.remove('hidden')
@@ -523,6 +549,7 @@ let tillitDomHelper = {
             document.querySelector('.tillit-buyer-name').classList.add('hidden')
             document.querySelector('.tillit-buyer-name-placeholder').classList.remove('hidden')
         }
+
     },
 
     /**
@@ -530,11 +557,13 @@ let tillitDomHelper = {
      */
     getCompanyData: function()
     {
+
         return {
             'company_name': jQuery('#billing_company').val(),
             'country_prefix': jQuery('#billing_country').val(),
             'organization_number': jQuery('#company_id').val()
         }
+
     },
 
     /**
@@ -542,12 +571,14 @@ let tillitDomHelper = {
      */
     getRepresentativeData: function()
     {
+
         return {
             'email': jQuery('#billing_email').val(),
             'first_name': jQuery('#billing_first_name').val(),
             'last_name': jQuery('#billing_last_name').val(),
             'phone_number': jQuery('#billing_phone').val()
         }
+
     },
 
     /**
