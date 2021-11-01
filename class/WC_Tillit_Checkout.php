@@ -67,18 +67,17 @@ if (!class_exists('WC_Tillit_Checkout')) {
 
             printf(
                 '<div class="account-type-wrapper">
-                    <h3>' . esc_html__('Account type', 'tillit-payment-gateway') . '</h3>
                     <div class="account-type-button" account-type-name="personal">
                         <img src = "/wp-content/plugins/tillit-payment-gateway/assets/images/personal.svg"/>
-                        <span>Personal</span>
+                        <span>Private Customer</span>
                     </div>
                     <div class="account-type-button" account-type-name="sole_trader">
-                        <img src = "/wp-content/plugins/tillit-payment-gateway/assets/images/business.svg"/>
-                        <span>Sole trader/other</span>
+                        <img src = "/wp-content/plugins/tillit-payment-gateway/assets/images/personal.svg"/>
+                        <span>Sole Trader/Other Customer</span>
                     </div>
                     <div class="account-type-button" account-type-name="business">
                         <img src = "/wp-content/plugins/tillit-payment-gateway/assets/images/business.svg"/>
-                        <span>Business</span>
+                        <span>Business Customer</span>
                     </div>
                 </div>');
 
