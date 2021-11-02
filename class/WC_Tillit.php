@@ -39,9 +39,10 @@ if (!class_exists('WC_Tillit')) {
             // Define user set variables
             $this->title = sprintf(__($this->get_option('title'), 'tillit-payment-gateway'), strval($this->get_option('days_on_invoice')));
             $this->description = sprintf(
-                '<p>%s <span class="tillit-buyer-name-placeholder">%s</span><span class="tillit-buyer-name"></span>.</p>',
+                '<p>%s <span class="tillit-buyer-name-placeholder">%s</span><span class="tillit-buyer-name"></span>.</p>%s',
                 __('By completing the purchase, you verify that you have the legal right to purchase on behalf of', 'tillit-payment-gateway'),
-                __('your company', 'tillit-payment-gateway')
+                __('your company', 'tillit-payment-gateway'),
+                '<div id="abt-tillit-link">&nbsp;<a href="https://tillitai.notion.site/tillitai/What-is-Tillit-4e12960d8e834e5aa20f879d59e0b32f" onclick="javascript:window.open(\'https://tillitai.notion.site/tillitai/What-is-Tillit-4e12960d8e834e5aa20f879d59e0b32f\',\'WhatIsTillit\',\'toolbar=no, location=no, directories=no, status=no, menubar=no, scrollbars=yes, resizable=yes, width=1060, height=700\'); return false;">What is Tillit?</a></div>'
             );
             $this->api_key = $this->get_option('api_key');
 
