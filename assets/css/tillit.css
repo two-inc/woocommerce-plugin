@@ -65,7 +65,15 @@ form.checkout.woocommerce-checkout .woocommerce-account-type-fields__field-wrapp
 }
 
 #billing_phone_display {
-    padding-left: 48px;
+    padding-left: 88px;
+}
+#billing_phone_display::placeholder {
+    opacity: 0.1;
+}
+
+#abt-tillit-link a {
+    float: right;
+    font-size: 0.8em;
 }
 
 .account-type-wrapper {

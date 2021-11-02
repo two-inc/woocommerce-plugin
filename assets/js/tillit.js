@@ -653,6 +653,19 @@ let tillitDomHelper = {
     },
 
     /**
+     * Rearrange descriptions in Tillit payment to make it cleaner
+     */
+    rearrangeDescription: function() {
+
+        let tillitSubtitle = document.querySelector('label[for="payment_method_woocommerce-gateway-tillit"] .tillit-subtitle')
+        if (tillitSubtitle) tillitSubtitle.parentElement.appendChild(tillitSubtitle)
+
+        let tillitAbt = document.querySelector('#abt-tillit-link')
+        if (tillitAbt && tillitSubtitle) tillitSubtitle.parentElement.appendChild(tillitAbt)
+
+    },
+
+    /**
      * Save checkout inputs
      */
     saveCheckoutInputs: function() {
@@ -947,7 +960,7 @@ class Tillit {
         }
 
         // Disable or enable actions based on the account type
-        $body.on('updated_checkout', function(){Tillit.getInstance().updateElements})
+        $body.on('updated_checkout', Tillit.getInstance().updateElements)
 
         // Handle the representative inputs blur event
         $body.on('blur', '#billing_first_name, #billing_last_name, #billing_email, #billing_phone', this.onRepresentativeInputBlur)
@@ -1020,7 +1033,17 @@ class Tillit {
         let billingPhoneInputField = document.querySelector("#billing_phone_display")
         this.billingPhoneInput = window.intlTelInput(billingPhoneInputField, {
             utilsScript: "https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.8/js/utils.js",
-            preferredCountries: [window.tillit.shop_base_country]
+            preferredCountries: [window.tillit.shop_base_country],
+            separateDialCode: true,
+            customPlaceholder: function(selectedCountryPlaceholder, selectedCountryData) {
+                console.log(selectedCountryData)
+                if (selectedCountryData.iso2 === 'gb') {
+                    return '7700 900077'
+                } else if (selectedCountryData.iso2 === 'no') {
+                    return '073 70143'
+                }
+                return selectedCountryPlaceholder.replace(/[0-9]/g, 'X')
+            }
         })
         if (jQuery('#billing_phone').length > 0) {
             this.billingPhoneInput.setNumber(jQuery('#billing_phone').val())
@@ -1046,8 +1069,8 @@ class Tillit {
         // Enable or disable the Tillit method
         tillitDomHelper.updateCompanyNameAgreement()
 
-        let tillitSubtitle = document.querySelector('label[for="payment_method_woocommerce-gateway-tillit"] .tillit-subtitle')
-        if (tillitSubtitle) tillitSubtitle.parentElement.appendChild(tillitSubtitle)
+        // Rearrange the DOMs in Tillit payment
+        tillitDomHelper.rearrangeDescription()
 
     }
 
@@ -1408,6 +1431,7 @@ jQuery(function(){
                         jQuery(this).prop('checked', false)
                     }
                 })
+                tillitDomHelper.rearrangeDescription()
 
                 // If shop defaults payment method to Tillit, run Tillit code
                 if (tillitDomHelper.isSelectedPaymentTillit()) {
@@ -1444,7 +1468,8 @@ jQuery(function(){
             })
 
             // If last selected payment method is Tillit, run Tillit code anyway
-            if (tillitDomHelper.getCheckoutInput('INPUT', 'radio', 'payment_method').id === 'payment_method_woocommerce-gateway-tillit') {
+            let lastSelectedPayment = tillitDomHelper.getCheckoutInput('INPUT', 'radio', 'payment_method')
+            if (lastSelectedPayment && lastSelectedPayment.id === 'payment_method_woocommerce-gateway-tillit') {
                 Tillit.getInstance().initialize(true)
             }
 
