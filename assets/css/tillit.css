@@ -67,3 +67,53 @@ form.checkout.woocommerce-checkout .woocommerce-account-type-fields__field-wrapp
 #billing_phone_display {
     padding-left: 48px;
 }
+
+.account-type-wrapper {
+    display: flex;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+    margin-left: auto;
+    margin-right: auto;
+}
+.account-type-wrapper h3 {
+    width: 100%;
+}
+.account-type-wrapper.actp-col-2 {
+    width: 60%;
+}
+.account-type-wrapper.actp-col-3 {
+    width: 100%;
+}
+.account-type-wrapper.actp-col-2 .account-type-button {
+    width: 48%;
+    margin-right: 4%;
+}
+.account-type-wrapper.actp-col-3 .account-type-button {
+    width: 32%;
+    margin-right: 2%;
+}
+.account-type-wrapper .account-type-button {
+    border: 2px solid #ebebeb;
+    padding: 12px 20px;
+    margin-right: 20px;
+    display: flex;
+}
+.account-type-wrapper .account-type-button img {
+    margin: auto 20px auto auto;
+    width: 16px;
+    height: 16px;
+}
+.account-type-wrapper .account-type-button span {
+    margin-right: auto;
+}
+.account-type-wrapper .account-type-button.last {
+    margin-left: auto;
+    margin-right: 0;
+}
+.account-type-wrapper .account-type-button.selected {
+    border-color: #000000;
+    color: #000000;
+}
+.account-type-wrapper .account-type-button.selected img {
+    filter: brightness(0);
+}
