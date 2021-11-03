@@ -29,7 +29,7 @@ if (!class_exists('WC_Tillit_Checkout')) {
             add_filter('woocommerce_checkout_fields', [$this, 'add_account_fields'], 22);
             add_filter('woocommerce_checkout_fields', [$this, 'update_company_fields'], 23);
             add_filter('woocommerce_checkout_fields', [$this, 'update_phone_fields'], 24);
-            add_action('woocommerce_before_checkout_form', [$this, 'add_account_buttons'], 20);
+            add_action('woocommerce_before_checkout_billing_form', [$this, 'add_account_buttons'], 20);
 
             // Render the fields on checkout page
             add_action('woocommerce_before_checkout_billing_form', [$this, 'render_tillit_fields'], 20);
