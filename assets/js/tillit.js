@@ -216,27 +216,31 @@ let tillitDomHelper = {
             if (accountType) {
                 jQuery('form.checkout.woocommerce-checkout').prepend(jQuery('.account-type-wrapper'))
                 jQuery('.account-type-button[account-type-name="' + accountType + '"]').addClass('selected')
-                if (jQuery('#klarna-checkout-container').length > 0) {
-                    jQuery('.account-type-button[account-type-name="business"]').on('click', function() {
-                        sessionStorage.setItem('tillitAccountType', tillitDomHelper.getAccountType())
-                        jQuery('#klarna-checkout-select-other').click()
-                    })
-                } else if (jQuery('.woocommerce-account-type-fields').length > 0) {
-                    jQuery('.account-type-button[account-type-name="personal"]').on('click', function() {
-                        sessionStorage.setItem('tillitAccountType', tillitDomHelper.getAccountType())
-                        jQuery('#payment_method_kco').click()
-                    })
-                    jQuery('.account-type-button[account-type-name="sole_trader"]').on('click', function() {
-                        sessionStorage.setItem('tillitAccountType', tillitDomHelper.getAccountType())
-                        jQuery('#payment_method_kco').click()
-                    })
-                }
+            }
 
-                // Select last saved account type in case of redirect from another payment method
-                accountType = sessionStorage.getItem('tillitAccountType')
-                if (accountType) {
-                    jQuery('.account-type-button[account-type-name="' + accountType + '"]').click()
-                }
+            if (jQuery('#klarna-checkout-select-other').length > 0) {
+                jQuery('#klarna-checkout-select-other').on('click', function() {
+                    sessionStorage.setItem('tillitAccountType', 'business')
+                })
+                jQuery('.account-type-button[account-type-name="business"]').on('click', function() {
+                    sessionStorage.setItem('tillitAccountType', tillitDomHelper.getAccountType())
+                    jQuery('#klarna-checkout-select-other').click()
+                })
+            } else if (jQuery('.woocommerce-account-type-fields').length > 0) {
+                jQuery('.account-type-button[account-type-name="personal"]').on('click', function() {
+                    sessionStorage.setItem('tillitAccountType', tillitDomHelper.getAccountType())
+                    jQuery('#payment_method_kco').click()
+                })
+                jQuery('.account-type-button[account-type-name="sole_trader"]').on('click', function() {
+                    sessionStorage.setItem('tillitAccountType', tillitDomHelper.getAccountType())
+                    jQuery('#payment_method_kco').click()
+                })
+            }
+
+            // Select last saved account type in case of redirect from another payment method
+            accountType = sessionStorage.getItem('tillitAccountType')
+            if (accountType) {
+                jQuery('.account-type-button[account-type-name="' + accountType + '"]').click()
             }
         }, 1000)
 
@@ -820,7 +824,6 @@ class Tillit {
      * Initialize Tillit code
      */
     initialize(loadSavedInputs) {
-        console.log('try init: ' + this.isInitialized)
         if (this.isInitialized) {
             return
         }
@@ -960,7 +963,9 @@ class Tillit {
         }
 
         // Disable or enable actions based on the account type
-        $body.on('updated_checkout', Tillit.getInstance().updateElements)
+        $body.on('updated_checkout', function() {
+            Tillit.getInstance().updateElements() // must be in function
+        })
 
         // Handle the representative inputs blur event
         $body.on('blur', '#billing_first_name, #billing_last_name, #billing_email, #billing_phone', this.onRepresentativeInputBlur)
@@ -970,6 +975,7 @@ class Tillit {
 
         // Handle the phone inputs change event
         $body.on('change', '#billing_phone_display', this.onPhoneInputChange)
+        $body.on('keyup', '#billing_phone_display', this.onPhoneInputChange)
         setTimeout(function(){
             jQuery('.iti__country-list').on('click', Tillit.getInstance().onPhoneInputChange)
         }, 1000)
@@ -1036,7 +1042,6 @@ class Tillit {
             preferredCountries: [window.tillit.shop_base_country],
             separateDialCode: true,
             customPlaceholder: function(selectedCountryPlaceholder, selectedCountryData) {
-                console.log(selectedCountryData)
                 if (selectedCountryData.iso2 === 'gb') {
                     return '7700 900077'
                 } else if (selectedCountryData.iso2 === 'no') {
@@ -1385,9 +1390,14 @@ class Tillit {
     {
 
         setTimeout(function(){
-            jQuery('#billing_phone').val(Tillit.getInstance().billingPhoneInput.getNumber())
-            Tillit.getInstance().customerRepresentative['phone_number'] = jQuery('#billing_phone').val()
-            Tillit.getInstance().getApproval()
+            let currentVal = jQuery('#billing_phone').attr('value')
+            let newVal = Tillit.getInstance().billingPhoneInput.getNumber()
+            if (currentVal !== newVal) {
+                jQuery('#billing_phone').val(newVal)
+                jQuery('#billing_phone').attr('value', newVal)
+                Tillit.getInstance().customerRepresentative['phone_number'] = newVal
+                Tillit.getInstance().getApproval()
+            }
         }, 100)
 
     }
@@ -1457,7 +1467,7 @@ jQuery(function(){
                         if (currentSelectedPaymentTillit || isSelectedPaymentTillit) {
                             jQuery(document.body).trigger('update_checkout')
                         }
-                        console.log('selected: ' + isSelectedPaymentTillit + ' -> ' + currentSelectedPaymentTillit)
+                        // console.log('selected: ' + isSelectedPaymentTillit + ' -> ' + currentSelectedPaymentTillit)
                         isSelectedPaymentTillit = currentSelectedPaymentTillit
                         if (isSelectedPaymentTillit) {
                             Tillit.getInstance().initialize(false)
@@ -1480,6 +1490,8 @@ jQuery(function(){
         jQuery('.woocommerce-checkout [name="account_type"]').on('change', function() {
             tillitDomHelper.toggleMethod(Tillit.getInstance().isTillitMethodHidden)
         })
+
+        // Intitialization of DOMs
         tillitDomHelper.initAccountTypeButtons()
 
     }
