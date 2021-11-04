@@ -12,12 +12,8 @@
     margin-bottom: 1em;
 }
 
-.woocommerce-checkout #payment ul.payment_methods li.wc_payment_method.payment_method_woocommerce-gateway-tillit label {
-    position: relative;
-}
-
 .woocommerce-checkout #payment ul.payment_methods li.wc_payment_method.payment_method_woocommerce-gateway-tillit .tillit-subtitle {
-    color: #ccc;
+    color: #777777;
     margin-left: 31px;
     font-size: 0.9em;
 }
@@ -62,4 +58,84 @@ form.checkout.woocommerce-checkout .woocommerce-account-type-fields__field-wrapp
 
 .iti.iti--allow-dropdown {
     width: 100%;
+}
+.iti--allow-dropdown .iti__flag-container, .iti--separate-dial-code .iti__flag-container {
+    width: unset;
+    height: unset;
+}
+
+#billing_phone_display {
+    padding-left: 88px;
+}
+#billing_phone_display::placeholder {
+    opacity: 0.1;
+}
+
+#abt-tillit-link a {
+    float: right;
+    font-size: 0.8em;
+}
+
+.account-type-wrapper {
+    display: flex;
+    flex-wrap: wrap;
+    margin: auto;
+    margin-bottom: 20px;
+}
+.account-type-wrapper h3 {
+    width: 100%;
+}
+.account-type-wrapper.actp-col-2 {
+    width: 60%;
+}
+.account-type-wrapper.actp-col-3 {
+    width: 100%;
+}
+.account-type-wrapper.actp-col-2 .account-type-button {
+    width: 48%;
+    margin-right: 4%;
+}
+.account-type-wrapper.actp-col-3 .account-type-button {
+    width: 32%;
+    margin-right: 2%;
+}
+.account-type-wrapper .account-type-button {
+    border: 2px solid #ebebeb;
+    padding: 12px 20px;
+    margin-right: 20px;
+    display: flex;
+    min-width: 160px;
+}
+.account-type-wrapper .account-type-button img {
+    margin: auto 20px auto auto;
+    width: 16px;
+    height: 16px;
+}
+.account-type-wrapper .account-type-button span {
+    margin: auto;
+    margin-left: 0;
+}
+.account-type-wrapper .account-type-button.last {
+    margin-left: auto;
+    margin-right: 0;
+}
+.account-type-wrapper .account-type-button.selected {
+    border-color: #000000;
+    color: #000000;
+}
+.account-type-wrapper .account-type-button.selected img {
+    filter: brightness(0);
+}
+
+@media (max-width: 639px) {
+    .account-type-wrapper.actp-col-2 {
+        width: 100%;
+    }
+    .account-type-wrapper.actp-col-2 .account-type-button, .account-type-wrapper.actp-col-3 .account-type-button {
+        width: 100%;
+        margin-right: 0;
+    }
+    .account-type-wrapper .account-type-button.last {
+        margin: auto;
+    }
 }

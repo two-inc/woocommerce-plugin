@@ -31,3 +31,6 @@
 	margin-left: unset;
 	color: #777;
 }
+#billing_phone_display {
+    padding: 0;
+}
