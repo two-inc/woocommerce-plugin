@@ -321,9 +321,6 @@ let tillitDomHelper = {
         // Move the input
         $el.insertAfter($target)
 
-        // Hide the current divs
-        jQuery('.tillit-source').hide()
-
     },
 
     /**
@@ -342,9 +339,6 @@ let tillitDomHelper = {
             $el.insertAfter($source)
         }
 
-        // Hide the current divs
-        jQuery('.tillit-target').hide()
-
     },
 
     /**
@@ -362,11 +356,19 @@ let tillitDomHelper = {
                 tillitDomHelper.moveField('billing_last_name_field', 'ln')
                 tillitDomHelper.moveField('billing_phone_display_field', 'ph')
                 tillitDomHelper.moveField('billing_email_field', 'em')
+
+                // Hide/Show the divs
+                jQuery('.tillit-source').hide()
+                jQuery('.tillit-target').show()
             } else {
                 tillitDomHelper.revertField('billing_first_name_field', 'fn')
                 tillitDomHelper.revertField('billing_last_name_field', 'ln')
                 tillitDomHelper.revertField('billing_phone_display_field', 'ph')
                 tillitDomHelper.revertField('billing_email_field', 'em')
+
+                // Hide/Show the divs
+                jQuery('.tillit-target').hide()
+                jQuery('.tillit-source').show()
             }
         }, 100)
 
@@ -678,13 +680,18 @@ let tillitDomHelper = {
      */
     rearrangeDescription: function() {
 
-        let parent = document.querySelector('.wc_payment_method.payment_method_woocommerce-gateway-tillit')
+        let parent = jQuery('.wc_payment_method.payment_method_woocommerce-gateway-tillit')
 
-        let tillitSubtitle = document.querySelector('label[for="payment_method_woocommerce-gateway-tillit"] .tillit-subtitle')
-        if (tillitSubtitle) parent.appendChild(tillitSubtitle)
+        if (parent.length > 0) {
+            parent.append(jQuery('label[for="payment_method_woocommerce-gateway-tillit"] .tillit-subtitle'))
 
-        let tillitAbt = document.querySelector('#abt-tillit-link')
-        if (tillitAbt) parent.appendChild(tillitAbt)
+            parent.append(jQuery('#abt-tillit-link'))
+
+            if (parent.innerWidth() > 600) {
+                jQuery('#abt-tillit-link').css('float', 'left')
+                jQuery('#abt-tillit-link').css('margin-left', '28px')
+            }
+        }
 
     },
 
