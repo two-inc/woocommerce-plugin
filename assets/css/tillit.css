@@ -56,6 +56,10 @@ form.checkout.woocommerce-checkout .woocommerce-account-type-fields__field-wrapp
     width: unset;
 }
 
+.tillit-source, .tillit-target {
+    display: none;
+}
+
 .iti.iti--allow-dropdown {
     width: 100%;
 }

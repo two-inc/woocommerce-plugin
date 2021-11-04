@@ -271,9 +271,12 @@ let tillitDomHelper = {
             jQuery('.account-type-wrapper').hide()
         }
 
-        // Hide the radio buttons
-        jQuery('.woocommerce-account-type-fields__field-wrapper').hide()
-        jQuery('#account_type_field').hide()
+        // Hide the radios or the buttons for account type
+        if (window.tillit.use_account_type_buttons === 'yes') {
+            jQuery('.woocommerce-account-type-fields__field-wrapper').hide()
+        } else {
+            jQuery('.account-type-wrapper').hide()
+        }
 
         // On click the buttons, update the radio vals
         jQuery('.account-type-button').on('click', function(){
@@ -321,9 +324,6 @@ let tillitDomHelper = {
         // Move the input
         $el.insertAfter($target)
 
-        // Hide the current divs
-        jQuery('.tillit-source').hide()
-
     },
 
     /**
@@ -341,9 +341,6 @@ let tillitDomHelper = {
         if ($source.length > 0) {
             $el.insertAfter($source)
         }
-
-        // Hide the current divs
-        jQuery('.tillit-target').hide()
 
     },
 
@@ -678,13 +675,18 @@ let tillitDomHelper = {
      */
     rearrangeDescription: function() {
 
-        let parent = document.querySelector('.wc_payment_method.payment_method_woocommerce-gateway-tillit')
+        let parent = jQuery('.wc_payment_method.payment_method_woocommerce-gateway-tillit')
 
-        let tillitSubtitle = document.querySelector('label[for="payment_method_woocommerce-gateway-tillit"] .tillit-subtitle')
-        if (tillitSubtitle) parent.appendChild(tillitSubtitle)
+        if (parent.length > 0) {
+            parent.append(jQuery('label[for="payment_method_woocommerce-gateway-tillit"] .tillit-subtitle'))
 
-        let tillitAbt = document.querySelector('#abt-tillit-link')
-        if (tillitAbt) parent.appendChild(tillitAbt)
+            parent.append(jQuery('#abt-tillit-link'))
+
+            if (parent.innerWidth() > 600) {
+                jQuery('#abt-tillit-link').css('float', 'left')
+                jQuery('#abt-tillit-link').css('margin-left', '28px')
+            }
+        }
 
     },
 

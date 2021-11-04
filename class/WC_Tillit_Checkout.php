@@ -325,6 +325,7 @@ if (!class_exists('WC_Tillit_Checkout')) {
                 'enable_order_intent' => $this->wc_tillit->get_option('enable_order_intent'),
                 'invoice_fee_to_buyer' => $this->wc_tillit->get_option('invoice_fee_to_buyer'),
                 'mark_tillit_fields_required' => $this->wc_tillit->get_option('mark_tillit_fields_required'),
+                'use_account_type_buttons' => $this->wc_tillit->get_option('use_account_type_buttons'),
                 'product_type' => $product_type,
                 'merchant_short_name' => $this->wc_tillit->get_option('tillit_merchant_id'),
                 'shop_base_country' => strtolower(WC()->countries->get_base_country()),
