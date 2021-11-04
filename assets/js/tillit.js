@@ -293,7 +293,7 @@ let tillitDomHelper = {
         if ($placeholder.length > 0) return
 
         // Create a placeholder
-        $placeholder = jQuery('<div id="tillit-'+ name +'-source"></div>')
+        $placeholder = jQuery('<div id="tillit-'+ name +'-source" class="tillit-source"></div>')
 
         // Add placeholder after element
         $placeholder.insertAfter($el)
@@ -317,6 +317,9 @@ let tillitDomHelper = {
         // Move the input
         $el.insertAfter($target)
 
+        // Hide the current divs
+        jQuery('.tillit-source').hide()
+
     },
 
     /**
@@ -328,12 +331,15 @@ let tillitDomHelper = {
         const $el = jQuery('#' + selector)
 
         // Get the target
-        const $target = jQuery('#tillit-' + name + '-source')
+        const $source = jQuery('#tillit-' + name + '-source')
 
         // Move the input
-        if ($target.length > 0) {
-            $el.insertAfter($target)
+        if ($source.length > 0) {
+            $el.insertAfter($source)
         }
+
+        // Hide the current divs
+        jQuery('.tillit-target').hide()
 
     },
 
@@ -668,11 +674,13 @@ let tillitDomHelper = {
      */
     rearrangeDescription: function() {
 
+        let parent = document.querySelector('.wc_payment_method.payment_method_woocommerce-gateway-tillit')
+
         let tillitSubtitle = document.querySelector('label[for="payment_method_woocommerce-gateway-tillit"] .tillit-subtitle')
-        if (tillitSubtitle) tillitSubtitle.parentElement.appendChild(tillitSubtitle)
+        if (tillitSubtitle) parent.appendChild(tillitSubtitle)
 
         let tillitAbt = document.querySelector('#abt-tillit-link')
-        if (tillitAbt && tillitSubtitle) tillitSubtitle.parentElement.appendChild(tillitAbt)
+        if (tillitAbt) parent.appendChild(tillitAbt)
 
     },
 
