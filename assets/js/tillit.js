@@ -271,9 +271,12 @@ let tillitDomHelper = {
             jQuery('.account-type-wrapper').hide()
         }
 
-        // Hide the radio buttons
-        jQuery('.woocommerce-account-type-fields__field-wrapper').hide()
-        jQuery('#account_type_field').hide()
+        // Hide the radios or the buttons for account type
+        if (window.tillit.use_account_type_buttons === 'yes') {
+            jQuery('.woocommerce-account-type-fields__field-wrapper').hide()
+        } else {
+            jQuery('.account-type-wrapper').hide()
+        }
 
         // On click the buttons, update the radio vals
         jQuery('.account-type-button').on('click', function(){
@@ -356,19 +359,11 @@ let tillitDomHelper = {
                 tillitDomHelper.moveField('billing_last_name_field', 'ln')
                 tillitDomHelper.moveField('billing_phone_display_field', 'ph')
                 tillitDomHelper.moveField('billing_email_field', 'em')
-
-                // Hide/Show the divs
-                jQuery('.tillit-source').hide()
-                jQuery('.tillit-target').show()
             } else {
                 tillitDomHelper.revertField('billing_first_name_field', 'fn')
                 tillitDomHelper.revertField('billing_last_name_field', 'ln')
                 tillitDomHelper.revertField('billing_phone_display_field', 'ph')
                 tillitDomHelper.revertField('billing_email_field', 'em')
-
-                // Hide/Show the divs
-                jQuery('.tillit-target').hide()
-                jQuery('.tillit-source').show()
             }
         }, 100)
 

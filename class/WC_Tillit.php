@@ -957,10 +957,10 @@ if (!class_exists('WC_Tillit')) {
         {
             $tillit_form_fields = [
                 'enabled' => [
-                    'title'       => __('Turn on/off', 'tillit-payment-gateway'),
-                    'type'        => 'checkbox',
-                    'label'       => __('Enable Tillit Payments', 'tillit-payment-gateway'),
-                    'default'     => 'yes'
+                    'title'     => __('Turn on/off', 'tillit-payment-gateway'),
+                    'type'      => 'checkbox',
+                    'label'     => __('Enable Tillit Payments', 'tillit-payment-gateway'),
+                    'default'   => 'yes'
                 ],
                 'title' => [
                     'title'     => __('Title', 'tillit-payment-gateway'),
@@ -1078,11 +1078,17 @@ if (!class_exists('WC_Tillit')) {
                     'type'      => 'checkbox',
                     'default'   => 'yes'
                 ],
+                'use_account_type_buttons' => [
+                    'title'     => __('Use buttons instead of radios to select account type', 'tillit-payment-gateway'),
+                    'label'     => ' ',
+                    'type'      => 'checkbox',
+                    'default'   => 'no'
+                ],
                 'show_abt_link' => [
                     'title'     => __('Show "What is Tillit" link in Checkout', 'tillit-payment-gateway'),
                     'label'     => ' ',
                     'type'      => 'checkbox',
-                    'default'   => 'yes'
+                    'default'   => 'no'
                 ],
                 'default_to_b2c' => [
                     'title'     => __('Default to B2C check-out', 'tillit-payment-gateway'),
