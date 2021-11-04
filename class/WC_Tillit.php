@@ -957,10 +957,10 @@ if (!class_exists('WC_Tillit')) {
         {
             $tillit_form_fields = [
                 'enabled' => [
-                    'title'     => __('Enable/Disable', 'tillit-payment-gateway'),
-                    'type'      => 'checkbox',
-                    'label'     => __('Enable Tillit Payments', 'tillit-payment-gateway'),
-                    'default'   => 'yes'
+                    'title'       => __('Turn on/off', 'tillit-payment-gateway'),
+                    'type'        => 'checkbox',
+                    'label'       => __('Enable Tillit Payments', 'tillit-payment-gateway'),
+                    'default'     => 'yes'
                 ],
                 'title' => [
                     'title'     => __('Title', 'tillit-payment-gateway'),
@@ -968,64 +968,9 @@ if (!class_exists('WC_Tillit')) {
                     'default'   => __('Business invoice %s days', 'tillit-payment-gateway')
                 ],
                 'subtitle' => [
-                    'title'     => __('Subtitle', 'tillit-payment-gateway'),
+                    'title'     => __('Description', 'tillit-payment-gateway'),
                     'type'      => 'text',
                     'default'   => __('Receive the invoice via PDF and email', 'tillit-payment-gateway')
-                ],
-                'tillit_merchant_id' => [
-                    'title'     => __('Tillit Merchant ID', 'tillit-payment-gateway'),
-                    'type'      => 'text'
-                ],
-                'api_key' => [
-                    'title'     => __('API Key', 'tillit-payment-gateway'),
-                    'type'      => 'password'
-                ],
-                'merchant_logo' => [
-                    'title'     => __('Logo', 'tillit-payment-gateway'),
-                    'type'      => 'logo'
-                ],
-                'section_title_checkout_for' => [
-                    'type'      => 'separator',
-                    'title'     => __('Enable checkout for', 'tillit-payment-gateway')
-                ],
-                'checkout_personal' => [
-                    'title'     => __('Personal', 'tillit-payment-gateway'),
-                    'label'     => ' ',
-                    'type'      => 'checkbox',
-                    'default'   => 'yes'
-                ],
-                'checkout_sole_trader' => [
-                    'title'     => __('Sole trader/other', 'tillit-payment-gateway'),
-                    'label'     => ' ',
-                    'type'      => 'checkbox'
-                ],
-                'checkout_business' => [
-                    'title'     => __('Business', 'tillit-payment-gateway'),
-                    'label'     => ' ',
-                    'type'      => 'checkbox',
-                    'default'   => 'yes'
-                ],
-                'section_title_product' => [
-                    'type'      => 'separator',
-                    'title'     => __('Choose your product', 'tillit-payment-gateway')
-                ],
-                'product_type' => [
-                    'type'      => 'select',
-                    'title'     => __('Choose your product', 'tillit-payment-gateway'),
-                    'default'   => 'FUNDED_INVOICE',
-                    'options'   => array(
-                          'FUNDED_INVOICE' => 'Funded Invoice',
-                          'DIRECT_INVOICE' => 'Direct Invoice'
-                     )
-                ],
-                'days_on_invoice' => [
-                    'title'     => __('Number of days on invoice', 'tillit-payment-gateway'),
-                    'type'      => 'text',
-                    'default'   => '14'
-                ],
-                'section_title_settings' => [
-                    'type'      => 'separator',
-                    'title'     => __('Settings', 'tillit-payment-gateway')
                 ],
                 'test_checkout_host' => [
                     'type'      => 'text',
@@ -1041,27 +986,74 @@ if (!class_exists('WC_Tillit')) {
                           'SANDBOX'  => 'Sandbox'
                      )
                 ],
-                'display_other_payments' => [
-                    'title'     => __('Always enable all available payment methods', 'tillit-payment-gateway'),
+                'clear_options_on_deactivation' => [
+                    'title'     => __('Clear settings on deactivation', 'tillit-payment-gateway'),
+                    'label'     => ' ',
+                    'type'      => 'checkbox',
+                    'default'   => 'no'
+                ],
+                'section_api_credentials' => [
+                    'type'      => 'title',
+                    'title'     => __('API credentials', 'tillit-payment-gateway')
+                ],
+                'tillit_merchant_id' => [
+                    'title'     => __('Tillit Merchant Username', 'tillit-payment-gateway'),
+                    'type'      => 'text'
+                ],
+                'api_key' => [
+                    'title'     => __('Tillit API Key', 'tillit-payment-gateway'),
+                    'type'      => 'password'
+                ],
+                'section_invoice_settings' => [
+                    'type'      => 'title',
+                    'title'     => __('Payment and Invoice settings', 'tillit-payment-gateway')
+                ],
+                'product_type' => [
+                    'type'      => 'select',
+                    'title'     => __('Choose product', 'tillit-payment-gateway'),
+                    'default'   => 'FUNDED_INVOICE',
+                    'options'   => array(
+                          'FUNDED_INVOICE' => 'Funded Invoice',
+                          'DIRECT_INVOICE' => 'Direct Invoice'
+                     )
+                ],
+                'days_on_invoice' => [
+                    'title'     => __('Default number of buyer payment days', 'tillit-payment-gateway'),
+                    'type'      => 'text',
+                    'default'   => '14'
+                ],
+                'merchant_logo' => [
+                    'title'     => __('Add a logo to the invoice', 'tillit-payment-gateway'),
+                    'type'      => 'logo'
+                ],
+                'section_checkout_options' => [
+                    'type'      => 'title',
+                    'title'     => __('Checkout options', 'tillit-payment-gateway')
+                ],
+                'enable_order_intent' => [
+                    'title'     => __('Pre-approve buyer during checkout', 'tillit-payment-gateway'),
+                    'description' => __('Approves buyer when phone and company name is filled out. Disables Tillit payment method if buyer is declined.', 'tillit-payment-gateway'),
+                    'desc_tip'    => true,
                     'label'     => ' ',
                     'type'      => 'checkbox',
                     'default'   => 'yes'
                 ],
-                'fallback_to_another_payment' => [
-                    'title'     => __('Fallback to other payment methods if Tillit is not available', 'tillit-payment-gateway'),
+                'checkout_personal' => [
+                    'title'     => __('Show account type for Private Customer', 'tillit-payment-gateway'),
                     'label'     => ' ',
                     'type'      => 'checkbox',
                     'default'   => 'yes'
                 ],
-                'enable_company_name' => [
-                    'title'     => __('Activate company name auto-complete', 'tillit-payment-gateway'),
+                'checkout_sole_trader' => [
+                    'title'     => __('Show account type for Sole trader/other Customer', 'tillit-payment-gateway'),
                     'label'     => ' ',
                     'type'      => 'checkbox'
                 ],
-                'enable_company_id' => [
-                    'title'     => __('Activate company org.id auto-complete', 'tillit-payment-gateway'),
+                'checkout_business' => [
+                    'title'     => __('Show account type for Business Customer', 'tillit-payment-gateway'),
                     'label'     => ' ',
-                    'type'      => 'checkbox'
+                    'type'      => 'checkbox',
+                    'default'   => 'yes'
                 ],
                 'finalize_purchase' => [
                     'title'     => __('Finalize purchase when order is fulfilled', 'tillit-payment-gateway'),
@@ -1074,20 +1066,20 @@ if (!class_exists('WC_Tillit')) {
                     'type'      => 'checkbox',
                     'default'   => 'yes'
                 ],
-                'add_additional_fields' => [
-                    'title'     => __('Add department and project fields to Checkout', 'tillit-payment-gateway'),
+                'add_field_department' => [
+                    'title'     => __('Add department field to Checkout page', 'tillit-payment-gateway'),
+                    'label'     => ' ',
+                    'type'      => 'checkbox',
+                    'default'   => 'yes'
+                ],
+                'add_field_project' => [
+                    'title'     => __('Add project field to Checkout page', 'tillit-payment-gateway'),
                     'label'     => ' ',
                     'type'      => 'checkbox',
                     'default'   => 'yes'
                 ],
                 'show_abt_link' => [
                     'title'     => __('Show "What is Tillit" link in Checkout', 'tillit-payment-gateway'),
-                    'label'     => ' ',
-                    'type'      => 'checkbox',
-                    'default'   => 'yes'
-                ],
-                'enable_order_intent' => [
-                    'title'     => __('Pre-approve the buyer during checkout and disable Tillit if the buyer is declined', 'tillit-payment-gateway'),
                     'label'     => ' ',
                     'type'      => 'checkbox',
                     'default'   => 'yes'
@@ -1108,11 +1100,31 @@ if (!class_exists('WC_Tillit')) {
                     'type'      => 'checkbox',
                     'default'   => 'yes'
                 ],
-                'clear_options_on_deactivation' => [
-                    'title'     => __('Clear settings on deactivation', 'tillit-payment-gateway'),
+                'display_other_payments' => [
+                    'title'     => __('Always enable all available payment methods', 'tillit-payment-gateway'),
                     'label'     => ' ',
                     'type'      => 'checkbox',
                     'default'   => 'yes'
+                ],
+                'fallback_to_another_payment' => [
+                    'title'     => __('Fallback to other payment methods if Tillit is not available', 'tillit-payment-gateway'),
+                    'label'     => ' ',
+                    'type'      => 'checkbox',
+                    'default'   => 'yes'
+                ],
+                'section_auto_complete_settings' => [
+                    'type'      => 'title',
+                    'title'     => __('Auto-complete settings', 'tillit-payment-gateway')
+                ],
+                'enable_company_name' => [
+                    'title'     => __('Activate company name auto-complete', 'tillit-payment-gateway'),
+                    'label'     => ' ',
+                    'type'      => 'checkbox'
+                ],
+                'enable_company_id' => [
+                    'title'     => __('Activate company org.id auto-complete', 'tillit-payment-gateway'),
+                    'label'     => ' ',
+                    'type'      => 'checkbox'
                 ]
             ];
 
@@ -1195,27 +1207,6 @@ if (!class_exists('WC_Tillit')) {
                         <button class="button-secondary woocommerce-tillit-logo" type="button"><?php _e('Select image', 'tillit-payment-gateway'); ?></button>
                     </fieldset>
                 </td>
-            </tr>
-            <?php
-            return ob_get_clean();
-        }
-
-        /**
-         * Generate the section title
-         *
-         * @param $field_id
-         * @param $field_args
-         *
-         * @return string
-         */
-        public function generate_separator_html($field_id, $field_args)
-        {
-            ob_start();
-            ?>
-            <tr valign="top">
-                <th colspan="2">
-                    <h3 style="margin-bottom: 0;"><?php echo $field_args['title']; ?></h3>
-                </th>
             </tr>
             <?php
             return ob_get_clean();

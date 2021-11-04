@@ -244,6 +244,10 @@ let tillitDomHelper = {
                 })
             }
 
+            jQuery('.account-type-button').on('click', function() {
+                sessionStorage.setItem('tillitAccountType', tillitDomHelper.getAccountType())
+            })
+
             // Select last saved account type in case of redirect from another payment method
             accountType = sessionStorage.getItem('tillitAccountType')
             if (accountType) {
