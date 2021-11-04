@@ -1064,6 +1064,12 @@ if (!class_exists('WC_Tillit')) {
                     'type'      => 'checkbox',
                     'default'   => 'yes'
                 ],
+                'add_additional_fields' => [
+                    'title'     => __('Add department and project fields to Checkout', 'tillit-payment-gateway'),
+                    'label'     => ' ',
+                    'type'      => 'checkbox',
+                    'default'   => 'yes'
+                ],
                 'enable_order_intent' => [
                     'title'     => __('Pre-approve the buyer during checkout and disable Tillit if the buyer is declined', 'tillit-payment-gateway'),
                     'label'     => ' ',
