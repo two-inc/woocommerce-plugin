@@ -1427,8 +1427,10 @@ jQuery(function(){
     if (window.tillit) {
 
         if (window.tillit.enable_order_intent === 'yes') {
-            // Run Tillit code if order intent is enabled
-            Tillit.getInstance().initialize(true)
+            if (jQuery('#payment_method_woocommerce-gateway-tillit').length > 0) {
+                // Run Tillit code if order intent is enabled
+                Tillit.getInstance().initialize(true)
+            }
         } else {
 
             // Handle payment method radio select every time order review (right panel) is updated
