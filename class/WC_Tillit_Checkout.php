@@ -186,7 +186,7 @@ if (!class_exists('WC_Tillit_Checkout')) {
 
             }
 
-            if ($this->wc_tillit->get_option('add_additional_fields') === 'yes') {
+            if ($this->wc_tillit->get_option('add_field_department') === 'yes') {
 
                 $fields['billing']['department'] = [
                     'label' => __('Department', 'tillit-payment-gateway'),
@@ -194,6 +194,10 @@ if (!class_exists('WC_Tillit_Checkout')) {
                     'required' => false,
                     'priority' => $company_name_priority + 2
                 ];
+
+            }
+
+            if ($this->wc_tillit->get_option('add_field_project') === 'yes') {
 
                 $fields['billing']['project'] = [
                     'label' => __('Project', 'tillit-payment-gateway'),
