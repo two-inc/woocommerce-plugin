@@ -224,16 +224,23 @@ let tillitDomHelper = {
                 })
                 jQuery('.account-type-button[account-type-name="business"]').on('click', function() {
                     sessionStorage.setItem('tillitAccountType', tillitDomHelper.getAccountType())
+                    sessionStorage.setItem('privateClickToKlarna', 'y')
                     jQuery('#klarna-checkout-select-other').click()
                 })
             } else if (jQuery('.woocommerce-account-type-fields').length > 0) {
                 jQuery('.account-type-button[account-type-name="personal"]').on('click', function() {
                     sessionStorage.setItem('tillitAccountType', tillitDomHelper.getAccountType())
-                    jQuery('#payment_method_kco').click()
+                    if (sessionStorage.getItem('privateClickToKlarna') === 'y') {
+                        jQuery('#payment_method_kco').click()
+                        sessionStorage.removeItem('privateClickToKlarna')
+                    }
                 })
                 jQuery('.account-type-button[account-type-name="sole_trader"]').on('click', function() {
                     sessionStorage.setItem('tillitAccountType', tillitDomHelper.getAccountType())
-                    jQuery('#payment_method_kco').click()
+                    if (sessionStorage.getItem('privateClickToKlarna') === 'y') {
+                        jQuery('#payment_method_kco').click()
+                        sessionStorage.removeItem('privateClickToKlarna')
+                    }
                 })
             }
 
@@ -1444,6 +1451,11 @@ jQuery(function(){
                     }
                 })
                 tillitDomHelper.rearrangeDescription()
+
+                // Disable click to return to Klarna if some other payment method is selected
+                jQuery('.wc_payment_method:not(.payment_method_woocommerce-gateway-tillit):not(.payment_method_kco)').on('click', function() {
+                    sessionStorage.removeItem('privateClickToKlarna')
+                })
 
                 // If shop defaults payment method to Tillit, run Tillit code
                 if (tillitDomHelper.isSelectedPaymentTillit()) {
