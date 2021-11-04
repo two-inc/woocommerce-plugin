@@ -12,12 +12,8 @@
     margin-bottom: 1em;
 }
 
-.woocommerce-checkout #payment ul.payment_methods li.wc_payment_method.payment_method_woocommerce-gateway-tillit label {
-    position: relative;
-}
-
 .woocommerce-checkout #payment ul.payment_methods li.wc_payment_method.payment_method_woocommerce-gateway-tillit .tillit-subtitle {
-    color: #ccc;
+    color: #777777;
     margin-left: 31px;
     font-size: 0.9em;
 }
@@ -62,6 +58,10 @@ form.checkout.woocommerce-checkout .woocommerce-account-type-fields__field-wrapp
 
 .iti.iti--allow-dropdown {
     width: 100%;
+}
+.iti--allow-dropdown .iti__flag-container, .iti--separate-dial-code .iti__flag-container {
+    width: unset;
+    height: unset;
 }
 
 #billing_phone_display {

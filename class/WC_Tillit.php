@@ -42,7 +42,7 @@ if (!class_exists('WC_Tillit')) {
                 '<p>%s <span class="tillit-buyer-name-placeholder">%s</span><span class="tillit-buyer-name"></span>.</p>%s',
                 __('By completing the purchase, you verify that you have the legal right to purchase on behalf of', 'tillit-payment-gateway'),
                 __('your company', 'tillit-payment-gateway'),
-                '<div id="abt-tillit-link">&nbsp;<a href="https://tillitai.notion.site/tillitai/What-is-Tillit-4e12960d8e834e5aa20f879d59e0b32f" onclick="javascript:window.open(\'https://tillitai.notion.site/tillitai/What-is-Tillit-4e12960d8e834e5aa20f879d59e0b32f\',\'WhatIsTillit\',\'toolbar=no, location=no, directories=no, status=no, menubar=no, scrollbars=yes, resizable=yes, width=1060, height=700\'); return false;">What is Tillit?</a></div>'
+                $this->get_abt_tillit_html()
             );
             $this->api_key = $this->get_option('api_key');
 
@@ -132,7 +132,7 @@ if (!class_exists('WC_Tillit')) {
         /**
          * Get tillit checkout host based on current settings
          */
-        public function get_tillit_checkout_host(){
+        private function get_tillit_checkout_host(){
             if (WC_Tillit_Helper::is_tillit_development()) {
                 return $this->get_option('test_checkout_host');
             } else if ($this->get_option('checkout_env') === 'SANDBOX') {
@@ -140,6 +140,16 @@ if (!class_exists('WC_Tillit')) {
             } else {
                 return 'https://api.tillit.ai';
             }
+        }
+
+        /**
+         * Get about tillit html
+         */
+        private function get_abt_tillit_html(){
+            if ($this->get_option('show_abt_link') === 'yes') {
+                return '<div id="abt-tillit-link">&nbsp;<a href="https://tillitai.notion.site/tillitai/What-is-Tillit-4e12960d8e834e5aa20f879d59e0b32f" onclick="javascript:window.open(\'https://tillitai.notion.site/tillitai/What-is-Tillit-4e12960d8e834e5aa20f879d59e0b32f\',\'WhatIsTillit\',\'toolbar=no, location=no, directories=no, status=no, menubar=no, scrollbars=yes, resizable=yes, width=1060, height=700\'); return false;">What is Tillit?</a></div>';
+            }
+            return '';
         }
 
         /**
@@ -422,7 +432,7 @@ if (!class_exists('WC_Tillit')) {
          *
          * @param $order_id
          */
-        function add_invoice_fees() {
+        public function add_invoice_fees() {
 
             if ($this->get_option('invoice_fee_to_buyer') === 'yes' && 'woocommerce-gateway-tillit' === WC()->session->get('chosen_payment_method')) {
                 global $woocommerce;
@@ -1066,6 +1076,12 @@ if (!class_exists('WC_Tillit')) {
                 ],
                 'add_additional_fields' => [
                     'title'     => __('Add department and project fields to Checkout', 'tillit-payment-gateway'),
+                    'label'     => ' ',
+                    'type'      => 'checkbox',
+                    'default'   => 'yes'
+                ],
+                'show_abt_link' => [
+                    'title'     => __('Show "What is Tillit" link in Checkout', 'tillit-payment-gateway'),
                     'label'     => ' ',
                     'type'      => 'checkbox',
                     'default'   => 'yes'
