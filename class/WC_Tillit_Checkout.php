@@ -69,15 +69,15 @@ if (!class_exists('WC_Tillit_Checkout')) {
                 '<div class="account-type-wrapper">
                     <div class="account-type-button" account-type-name="personal">
                         <img src = "/wp-content/plugins/tillit-payment-gateway/assets/images/personal.svg"/>
-                        <span>Private Customer</span>
+                        <span>' . __('Private Customer', 'tillit-payment-gateway') . '</span>
                     </div>
                     <div class="account-type-button" account-type-name="sole_trader">
                         <img src = "/wp-content/plugins/tillit-payment-gateway/assets/images/personal.svg"/>
-                        <span>Sole Trader/Other Customer</span>
+                        <span>' . __('Sole Trader/Other Custome', 'tillit-payment-gateway') . 'r</span>
                     </div>
                     <div class="account-type-button" account-type-name="business">
                         <img src = "/wp-content/plugins/tillit-payment-gateway/assets/images/business.svg"/>
-                        <span>Business Customer</span>
+                        <span>' . __('Business Customer', 'tillit-payment-gateway') . '</span>
                     </div>
                 </div>');
 
