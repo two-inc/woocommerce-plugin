@@ -244,9 +244,13 @@ let tillitDomHelper = {
                 })
             }
 
+            // If account type button is clicked, account type is saved in case the page will be reloaded
             jQuery('.account-type-button').on('click', function() {
                 sessionStorage.setItem('tillitAccountType', tillitDomHelper.getAccountType())
             })
+
+            // If Klarna button is clicked, account type must not be business
+            jQuery('#payment_method_kco').on('change', Tillit.getInstance().onChangedToKco)
 
             // Select last saved account type in case of redirect from another payment method
             accountType = sessionStorage.getItem('tillitAccountType')
@@ -272,9 +276,9 @@ let tillitDomHelper = {
         }
 
         // Hide the radios or the buttons for account type
-        if (window.tillit.use_account_type_buttons === 'yes') {
-            jQuery('.woocommerce-account-type-fields__field-wrapper').hide()
-        } else {
+        if (window.tillit.use_account_type_buttons !== 'yes') {
+            jQuery('#account_type_field').show()
+            jQuery('.woocommerce-account-type-fields__field-wrapper').show()
             jQuery('.account-type-wrapper').hide()
         }
 
@@ -984,7 +988,8 @@ class Tillit {
 
         // Disable or enable actions based on the account type
         $body.on('updated_checkout', function() {
-            Tillit.getInstance().updateElements() // must be in function
+            Tillit.getInstance().updateElements()
+            jQuery('#payment_method_kco').on('change', Tillit.getInstance().onChangedToKco)
         })
 
         // Handle the representative inputs blur event
@@ -1439,6 +1444,21 @@ class Tillit {
         Tillit.getInstance().customerCompany.country_prefix = $input.val()
 
         Tillit.getInstance().getApproval()
+
+    }
+
+    /**
+     * Handle when Kco payment is selected
+     *
+     * @param event
+     */
+
+    onChangedToKco(event)
+    {
+
+        let accountType = tillitDomHelper.getAccountType()
+        if (tillitUtilHelper.isCompany(accountType)) accountType = 'personal'
+        sessionStorage.setItem('tillitAccountType', accountType)
 
     }
 
