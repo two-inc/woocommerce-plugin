@@ -75,6 +75,10 @@ form.checkout.woocommerce-checkout .woocommerce-account-type-fields__field-wrapp
     opacity: 0.1;
 }
 
+#abt-tillit-link {
+    width: 100%;
+    padding-left: 31px;
+}
 #abt-tillit-link a {
     float: right;
     font-size: 0.8em;
