@@ -567,15 +567,13 @@ let tillitDomHelper = {
      */
     updateCompanyNameAgreement: function() {
 
-        if (document.querySelector('#select2-billing_company_display-container') && document.querySelector('#select2-billing_company_display-container').innerText) {
-            document.querySelector('.tillit-buyer-name').innerText = document.querySelector('#select2-billing_company_display-container').innerText
-            document.querySelector('.tillit-buyer-name').classList.remove('hidden')
-            document.querySelector('.tillit-buyer-name-placeholder').classList.add('hidden')
-        } else if (document.querySelector('#billing_company') && document.querySelector('#billing_company').value) {
-            document.querySelector('.tillit-buyer-name').innerText = document.querySelector('#billing_company').value
+        let companyName = Tillit.getInstance().customerCompany.company_name
+        if (companyName) {
+            document.querySelector('.tillit-buyer-name').innerText = companyName
             document.querySelector('.tillit-buyer-name').classList.remove('hidden')
             document.querySelector('.tillit-buyer-name-placeholder').classList.add('hidden')
         } else {
+            document.querySelector('.tillit-buyer-name').innerText = ''
             document.querySelector('.tillit-buyer-name').classList.add('hidden')
             document.querySelector('.tillit-buyer-name-placeholder').classList.remove('hidden')
         }
@@ -675,16 +673,14 @@ let tillitDomHelper = {
      */
     rearrangeDescription: function() {
 
-        let parent = jQuery('.wc_payment_method.payment_method_woocommerce-gateway-tillit')
+        let tillitPaymentLine = jQuery('label[for="payment_method_woocommerce-gateway-tillit"]')
 
-        if (parent.length > 0) {
-            parent.append(jQuery('label[for="payment_method_woocommerce-gateway-tillit"] .tillit-subtitle'))
+        if (tillitPaymentLine.length > 0) {
+            tillitPaymentLine.after(jQuery('#abt-tillit-link'))
+            tillitPaymentLine.after(jQuery('.payment_method_woocommerce-gateway-tillit .tillit-subtitle'))
 
-            parent.append(jQuery('#abt-tillit-link'))
-
-            if (parent.innerWidth() > 600) {
-                jQuery('#abt-tillit-link').css('float', 'left')
-                jQuery('#abt-tillit-link').css('margin-left', '28px')
+            if (tillitPaymentLine.parent().innerWidth() > 600) {
+                jQuery('#abt-tillit-link a').css('float', 'left')
             }
         }
 
@@ -913,6 +909,9 @@ class Tillit {
                     // Get the option data
                     const data = e.params.data
 
+                    // Set the company name
+                    Tillit.getInstance().customerCompany.company_name = data.id
+
                     if (window.tillit.company_id_search && window.tillit.company_id_search === 'yes') {
 
                         // Set the company ID
@@ -926,8 +925,8 @@ class Tillit {
 
                     }
 
-                    // Set the company name
-                    Tillit.getInstance().customerCompany.company_name = data.id
+                    // Update the company name in agreement sentence
+                    tillitDomHelper.updateCompanyNameAgreement()
 
                     // Get the company approval status
                     Tillit.getInstance().getApproval()
@@ -1003,7 +1002,10 @@ class Tillit {
 
         // Handle the company inputs change event
         $body.on('change', '#select2-billing_company_display-container', tillitDomHelper.updateCompanyNameAgreement)
-        $body.on('change', '#billing_company', tillitDomHelper.updateCompanyNameAgreement)
+        $body.on('change', '#billing_company', function() {
+            Tillit.getInstance().customerCompany.company_name = jQuery(this).val()
+            tillitDomHelper.updateCompanyNameAgreement()
+        })
 
         // Handle the country inputs change event
         $body.on('change', '#billing_country', this.onCountryInputChange)
