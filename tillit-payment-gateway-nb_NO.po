@@ -3,7 +3,7 @@ msgstr ""
 "Project-Id-Version: Tillit Payment Gateway\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2021-04-07 07:50+0000\n"
-"PO-Revision-Date: 2021-11-05 14:04+0000\n"
+"PO-Revision-Date: 2021-11-07 02:58+0000\n"
 "Last-Translator: \n"
 "Language-Team: Norwegian (Bokmål)\n"
 "Language: nb_NO\n"
@@ -25,37 +25,39 @@ msgstr "Skru på forhåndsutfylling av organisasjonsnummer"
 
 #: class/WC_Tillit.php:1026
 msgid "Add a logo to the invoice"
-msgstr ""
+msgstr "Legg til en logo på fakturaen"
 
 #: class/WC_Tillit.php:1070
 msgid "Add department field to Checkout page"
-msgstr ""
+msgstr "Legg til et felt for avdeling"
 
 #: class/WC_Tillit.php:1076
 msgid "Add project field to Checkout page"
-msgstr ""
+msgstr "Legg til et felt for prosjekt"
 
 #: class/WC_Tillit.php:1110
 msgid "Always enable all available payment methods"
-msgstr ""
+msgstr "Alltid gjør alle betalingsmetoder tilgjengelige"
 
 #: class/WC_Tillit.php:1064
 msgid "Always mark Tillit fields as required"
-msgstr ""
+msgstr "Merk tillit felt som påkrevd"
 
 #: class/WC_Tillit.php:997
 msgid "API credentials"
-msgstr ""
+msgstr "API informasjon"
 
 #: class/WC_Tillit.php:1035
 msgid ""
 "Approves buyer when phone and company name is filled out. Disables Tillit "
 "payment method if buyer is declined."
 msgstr ""
+"Godkjenn kjøper når telefon og selskapsnavn er utfylt. Skru av tillit dersom "
+"kjøper ikke godkjennes"
 
 #: class/WC_Tillit.php:1123
 msgid "Auto-complete settings"
-msgstr ""
+msgstr "Auto-utfyllings innstillinger"
 
 #: class/WC_Tillit.php:944
 msgid "Business"
@@ -80,15 +82,15 @@ msgstr ""
 
 #: class/WC_Tillit.php:1031
 msgid "Checkout options"
-msgstr ""
+msgstr "Checkout side instillinger"
 
 #: class/WC_Tillit.php:1013
 msgid "Choose product"
-msgstr ""
+msgstr "Velg produkt"
 
 #: class/WC_Tillit.php:982
 msgid "Choose your settings"
-msgstr ""
+msgstr "Velg dine innstillinger"
 
 #: class/WC_Tillit.php:990
 msgid "Clear settings on deactivation"
@@ -110,11 +112,11 @@ msgstr "Kunne ikke redigere Tillit-orderen"
 #: class/WC_Tillit.php:1332
 #| msgid "Could not recreate new Tillit order, please check with Tillit admin"
 msgid "Could not edit the Tillit order, please check with Tillit admin"
-msgstr "Kunne ikke redigereTillit-ordre. Ta kontakt med Tillit-admini"
+msgstr "Kunne ikke redigere Tillit-ordre. Ta kontakt med Tillit-admin"
 
 #: class/WC_Tillit.php:680
 msgid "Could not initiate refund by Tillit"
-msgstr ""
+msgstr "Kan ikke refundere med tillit"
 
 #: class/WC_Tillit.php:609
 msgid "Could not request to create tillit order"
@@ -126,7 +128,7 @@ msgstr "Kunne ikke oppdatere status"
 
 #: class/WC_Tillit.php:537
 msgid "Could not update status to cancelled"
-msgstr ""
+msgstr "Kunne ikke oppdatere status til kansellert"
 
 #: class/WC_Tillit.php:543
 #, php-format
@@ -145,15 +147,15 @@ msgstr ""
 
 #: class/WC_Tillit.php:898
 msgid "Dashboard"
-msgstr ""
+msgstr "Dashbord"
 
 #: class/WC_Tillit.php:1021
 msgid "Default number of buyer payment days"
-msgstr ""
+msgstr "Antall betalingsdager"
 
 #: class/WC_Tillit.php:1094
 msgid "Default to B2C check-out"
-msgstr ""
+msgstr "Sett B2C checkout som standard"
 
 #: class/WC_Tillit_Checkout.php:192
 msgid "Department"
@@ -161,7 +163,7 @@ msgstr "Avdeling"
 
 #: class/WC_Tillit.php:971
 msgid "Description"
-msgstr ""
+msgstr "Beskrivelse"
 
 #: class/WC_Tillit.php:962
 msgid "Enable Tillit Payments"
@@ -177,17 +179,19 @@ msgstr "Kunne ikke behandle betalingen"
 
 #: class/WC_Tillit.php:715
 msgid "Failed to refund order by Tillit"
-msgstr ""
+msgstr "Kunner ikke refundere ordren med Tillit"
 
 #: class/WC_Tillit.php:713
 #, php-format
 msgid ""
 "Failed to refund order by Tillit, please check with Tillit admin for id %s"
 msgstr ""
+"Kunner ikke refundere ordren med Tillit, ta kontakt med Tillit admin for id "
+"%s"
 
 #: class/WC_Tillit.php:697
 msgid "Failed to request refund order to Tillit"
-msgstr ""
+msgstr "Kunne ikke be om refusjon på ordren fra Tillit"
 
 #: class/WC_Tillit.php:703
 #, php-format
@@ -195,10 +199,13 @@ msgid ""
 "Failed to request refund order to Tillit, please check with Tillit admin for "
 "id %s"
 msgstr ""
+"Kunner ikke be om refusjon på ordren med Tillit, ta kontakt med Tillit admin "
+"for id %s"
 
 #: class/WC_Tillit.php:1116
 msgid "Fallback to other payment methods if Tillit is not available"
 msgstr ""
+"Fall tilbake til andre betalingsmetoder når tillit ikke er tilgjengelig"
 
 #: class/WC_Tillit.php:1059
 msgid "Finalize purchase when order is fulfilled"
@@ -211,7 +218,7 @@ msgstr "https://tillit.ai"
 
 #: class/WC_Tillit.php:1104
 msgid "Initiate payment to buyer on refund"
-msgstr ""
+msgstr "Start utbetaling til kunde ved refusjon"
 
 #. Description of the plugin
 msgid "Integration between WooCommerce and Tillit."
@@ -223,7 +230,7 @@ msgstr "Faktura er ikke tilgjengelig for dette kjøpet"
 
 #: class/WC_Tillit.php:824
 msgid "Log in"
-msgstr ""
+msgstr "Logg inn"
 
 #: class/WC_Tillit.php:31
 msgid "Making it easy for businesses to buy online."
@@ -233,13 +240,13 @@ msgstr "Morgendagens betalingsløsning for bedrifter"
 #, php-format
 #| msgid "Maximum Payment using Tillit is %s NOK"
 msgid "Maximum Payment using Tillit is %s"
-msgstr ""
+msgstr "Max betaling med tillit er %s"
 
 #: class/WC_Tillit_Checkout.php:313
 #, php-format
 #| msgid "Minimum Payment using Tillit is %s NOK"
 msgid "Minimum Payment using Tillit is %s"
-msgstr ""
+msgstr "Minimums betaling med tillit er %s"
 
 #: class/WC_Tillit.php:1271
 #, php-format
@@ -248,11 +255,11 @@ msgstr "Mangler organisasjonsnummer. Ta kontakt med Tillit admin %s"
 
 #: class/WC_Tillit.php:668
 msgid "Only Completed order can be refunded by Tillit"
-msgstr ""
+msgstr "Bare en ordre som er satt som fullført kan refunderes av Tillit"
 
 #: class/WC_Tillit.php:1009
 msgid "Payment and Invoice settings"
-msgstr ""
+msgstr "Betaling og faktura innstillinger"
 
 #: class/WC_Tillit.php:936
 msgid "Personal"
@@ -260,11 +267,11 @@ msgstr "Privat"
 
 #: class/WC_Tillit_Checkout.php:227
 msgid "Phone"
-msgstr ""
+msgstr "Telefon"
 
 #: class/WC_Tillit_Checkout.php:315
 msgid "Phone number is invalid"
-msgstr ""
+msgstr "Telefon nummer er ugyldig"
 
 #: class/WC_Tillit.php:29
 msgid "Place order"
@@ -272,7 +279,7 @@ msgstr "Fullfør kjøpet"
 
 #: class/WC_Tillit.php:1034
 msgid "Pre-approve buyer during checkout"
-msgstr ""
+msgstr "Godkjenn kjøper under checkout"
 
 #: class/WC_Tillit_Checkout.php:72
 msgid "Private Customer"
@@ -288,7 +295,7 @@ msgstr "Motta faktura på PDF og email"
 
 #: class/WC_Tillit.php:705
 msgid "Request refund order to Tillit has errors"
-msgstr ""
+msgstr "Forespørsel om refusjon til Tillit har feil"
 
 #: class/WC_Tillit.php:1213
 msgid "Select image"
@@ -300,31 +307,31 @@ msgstr "Velg kontotype"
 
 #: class/WC_Tillit.php:1099
 msgid "Shift invoice fee to the buyers"
-msgstr ""
+msgstr "Flytt fakturagebyr til kjøper"
 
 #: class/WC_Tillit.php:1088
 msgid "Show \"What is Tillit\" link in Checkout"
-msgstr ""
+msgstr "Vis \"Hva er Tillit\" link i Checkout"
 
 #: class/WC_Tillit.php:1053
 msgid "Show account type for Business Customer"
-msgstr ""
+msgstr "Vis checkout for bedriftskunder"
 
 #: class/WC_Tillit.php:1042
 msgid "Show account type for Private Customer"
-msgstr ""
+msgstr "Vis checkout for privatpersoner"
 
 #: class/WC_Tillit.php:1048
 msgid "Show account type for Sole trader/other Customer"
-msgstr ""
+msgstr "Vis checkout for enkeltmannsforetak"
 
 #: class/WC_Tillit.php:940
 msgid "Sole trader/other"
-msgstr ""
+msgstr "Enkeltmannsforetak"
 
 #: class/WC_Tillit_Checkout.php:76
 msgid "Sole Trader/Other Custome"
-msgstr ""
+msgstr "Enkeltmannsforetak"
 
 #: class/WC_Tillit.php:743
 msgid "The security code is not valid."
@@ -338,7 +345,7 @@ msgstr "Tillit"
 
 #: class/WC_Tillit.php:1004
 msgid "Tillit API Key"
-msgstr ""
+msgstr "Tillit API nøkler"
 
 #: class/WC_Tillit_Helper.php:44
 msgid "Tillit empty response"
@@ -346,7 +353,7 @@ msgstr "Tillit tomt svar"
 
 #: class/WC_Tillit.php:1000
 msgid "Tillit Merchant Username"
-msgstr ""
+msgstr "Tillit brukernavn"
 
 #. Name of the plugin
 msgid "Tillit Payment Gateway"
@@ -359,7 +366,7 @@ msgstr "Tillit responskode %d"
 
 #: class/WC_Tillit.php:977
 msgid "Tillit Test Server"
-msgstr ""
+msgstr "Tillit test server"
 
 #: class/WC_Tillit.php:966
 msgid "Title"
@@ -367,7 +374,7 @@ msgstr "Tittel"
 
 #: class/WC_Tillit.php:960
 msgid "Turn on/off"
-msgstr ""
+msgstr "Skru på/ac"
 
 #: class/WC_Tillit.php:752
 #| msgid "Unable to find the requested order."
@@ -385,7 +392,7 @@ msgstr "Betalingsinformasjon for ordren mangler"
 
 #: class/WC_Tillit.php:1082
 msgid "Use buttons instead of radios to select account type"
-msgstr ""
+msgstr "Bruk bannerknapper istedet for radioknapper"
 
 #: class/WC_Tillit.php:823
 #, php-format
@@ -395,4 +402,4 @@ msgstr ""
 
 #: class/WC_Tillit.php:44
 msgid "your company"
-msgstr ""
+msgstr "ditt selskap"
