@@ -1,6 +1,6 @@
 #billing_phone_display_field, #billing_company_display_field, #company_id_field, #billing_country_field, #department_field, #project_field {
-	width: 100%;
+    width: 100%;
 }
 .account-type-wrapper.actp-col-2 .account-type-button {
-	width: 40%;
+    width: 40%;
 }
