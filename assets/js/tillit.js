@@ -158,21 +158,6 @@ let tillitSelectWooHelper = {
     },
 
     /**
-     * Fix for themes not supporting selectWoo css
-     */
-    fixSelectWooHeightUnsupportedCss: function() {
-
-        setTimeout(function(){
-            if (jQuery('#billing_company_display_field .select2-container').outerHeight() < 0.9 * jQuery('#billing_email').outerHeight()) {
-                jQuery('span[aria-labelledby="select2-billing_company_display-container"]').outerHeight(jQuery('#billing_email').outerHeight())
-                jQuery('[aria-labelledby="select2-billing_company_display-container"]>span').css('height', '100%')
-                jQuery('#select2-billing_company_display-container').css('line-height', jQuery('#select2-billing_company_display-container').innerHeight() + 'px')
-            }
-        }, 2000)
-
-    },
-
-    /**
      * Extract and format the dropdown options
      */
     extractItems: function(results) {
@@ -267,18 +252,19 @@ let tillitDomHelper = {
             }
         })
 
+        // Hide the radios or the buttons for account type
+        if (window.tillit.use_account_type_buttons !== 'yes') {
+            jQuery('#account_type_field').show()
+            jQuery('.woocommerce-account-type-fields__field-wrapper').show()
+            jQuery('.account-type-wrapper').hide()
+        }
+
         // Styling
         if (jQuery('input[name="account_type"]').length > 1) {
             jQuery('.account-type-button').eq(jQuery('input[name="account_type"]').length - 1).addClass('last')
             jQuery('.account-type-wrapper').addClass('actp-col-' + jQuery('input[name="account_type"]').length)
         } else {
-            jQuery('.account-type-wrapper').hide()
-        }
-
-        // Hide the radios or the buttons for account type
-        if (window.tillit.use_account_type_buttons !== 'yes') {
-            jQuery('#account_type_field').show()
-            jQuery('.woocommerce-account-type-fields__field-wrapper').show()
+            jQuery('.woocommerce-account-type-fields__field-wrapper').hide()
             jQuery('.account-type-wrapper').hide()
         }
 
@@ -838,6 +824,31 @@ let tillitDomHelper = {
                 }
             }
         }
+    },
+
+    /**
+     * Get id of current or parent theme, return null if not found
+     */
+    getThemeBase: function() {
+        if (jQuery('#webtron-css-css').length > 0) {
+            return 'webtron'
+        } else if (jQuery('#biagiotti-mikado-default-style-css').length > 0) {
+            return 'biagiotti-mikado'
+        } else if (jQuery('#kava-theme-style-css').length > 0) {
+            return 'kava'
+        } else if (jQuery('#divi-style-css').length > 0) {
+            return 'divi'
+        }
+    },
+
+    /**
+     * Get id of current or parent theme, return null if not found
+     */
+    insertCustomCss: function() {
+        let themeBase = tillitDomHelper.getThemeBase()
+        if (themeBase) {
+            jQuery('head').append('<link href="/wp-content/plugins/tillit-payment-gateway/assets/css/c-' + themeBase + '.css" type="text/css" rel="stylesheet" />');
+        }
     }
 
 }
@@ -1068,8 +1079,6 @@ class Tillit {
 
         // Handle account type change
         $checkout.on('change', '[name="account_type"]', this.onChangeAccountType)
-
-        tillitSelectWooHelper.fixSelectWooHeightUnsupportedCss()
 
         // If setting is to hide other payment methods, hide when page load by default
         if (window.tillit.display_other_payments !== 'yes') {
@@ -1582,6 +1591,9 @@ jQuery(function(){
 
         // Intitialization of DOMs
         tillitDomHelper.initAccountTypeButtons()
+
+        // Add customization for current theme if any
+        tillitDomHelper.insertCustomCss()
 
     }
 })
