@@ -134,8 +134,8 @@ if (!class_exists('WC_Tillit_Helper')) {
                     'net_amount' =>  strval(WC_Tillit_Helper::round_amt($line_item['line_total'])),
                     'discount_amount' => strval(WC_Tillit_Helper::round_amt($line_item['line_subtotal'] - $line_item['line_total'])),
                     'tax_amount' => strval(WC_Tillit_Helper::round_amt($line_item['line_tax'])),
-                    'tax_class_name' => 'VAT ' . strval($tax_rate * 100) . '%',
-                    'tax_rate' => strval($tax_rate),
+                    'tax_class_name' => $tax_rate['name'],
+                    'tax_rate' => strval($tax_rate['rate']),
                     'unit_price' => strval($order->get_item_subtotal($line_item, false, true)),
                     'quantity' => $line_item['quantity'],
                     'quantity_unit' => 'item',
@@ -175,8 +175,8 @@ if (!class_exists('WC_Tillit_Helper')) {
                     'net_amount' =>  strval(WC_Tillit_Helper::round_amt($shipping->get_total())),
                     'discount_amount' => '0',
                     'tax_amount' => strval(WC_Tillit_Helper::round_amt($shipping->get_total_tax())),
-                    'tax_class_name' => 'VAT ' . strval($tax_rate * 100) . '%',
-                    'tax_rate' => strval($tax_rate),
+                    'tax_class_name' => $tax_rate['name'],
+                    'tax_rate' => strval($tax_rate['rate']),
                     'unit_price' => strval(WC_Tillit_Helper::round_amt($shipping->get_total())),
                     'quantity' => 1,
                     'quantity_unit' => 'sc', // shipment charge
@@ -199,8 +199,8 @@ if (!class_exists('WC_Tillit_Helper')) {
                     'net_amount' =>  strval(WC_Tillit_Helper::round_amt($fee->get_total())),
                     'discount_amount' => '0',
                     'tax_amount' => strval(WC_Tillit_Helper::round_amt($fee->get_total_tax())),
-                    'tax_class_name' => 'VAT ' . strval($tax_rate * 100) . '%',
-                    'tax_rate' => strval($tax_rate),
+                    'tax_class_name' => $tax_rate['name'],
+                    'tax_rate' => strval($tax_rate['rate']),
                     'unit_price' => strval(WC_Tillit_Helper::round_amt($fee->get_total())),
                     'quantity' => 1,
                     'quantity_unit' => 'fee',
@@ -545,17 +545,23 @@ if (!class_exists('WC_Tillit_Helper')) {
          * @param $line_item
          * @param $product
          *
-         * @return float
+         * @return array
          */
         private static function get_item_tax_rate($line_item, $product) {
+            $item_tax_rate_list = [];
             if ($product->is_taxable() && $line_item['line_subtotal_tax'] != 0) {
                 $tax_rates = WC_Tax::get_rates($product->get_tax_class());
-                $tax_rate = array_shift($tax_rates);
-                if (isset($tax_rate['rate'])) {
-                    return round($tax_rate['rate'] / 100, 3); // e.g. 0.125 for 12.5%
+                foreach ($tax_rates as $rate_id => $tax_rate) {
+                    if (isset($tax_rate['rate'])) {
+                        $tax_name = isset($tax_rate['label']) ? $tax_rate['label'] : '';
+                        array_push($item_tax_rate_list, [
+                            'rate' => round($tax_rate['rate'] / 100, 3), // e.g. 0.125 for 12.5%
+                            'name' => $tax_name
+                        ]);
+                    }
                 }
             }
-            return 0;
+            return WC_Tillit_Helper::get_tax_rate_from_tax_list($item_tax_rate_list);
         }
 
         /**
@@ -564,20 +570,26 @@ if (!class_exists('WC_Tillit_Helper')) {
          * @param $shipping
          * @param $order
          *
-         * @return float
+         * @return array
          */
         private static function get_shipping_tax_rate($shipping, $order) {
-            $shipping_tax_rate = 0;
+            $shipping_tax_rate_list = [];
             if ($shipping->get_taxes()['total']) {
                 foreach ($shipping->get_taxes()['total'] as $rate_id => $tax_amt) {
-                    foreach ($order->get_taxes() as $order_tax) {
-                        if ($rate_id == $order_tax->get_rate_id()) {
-                            $shipping_tax_rate += $order_tax->get_rate_percent();
+                    if ($tax_amt) {
+                        foreach ($order->get_taxes() as $order_tax) {
+                            if ($rate_id == $order_tax->get_rate_id()) {
+                                $tax_name = isset($order_tax['label']) ? $order_tax['label'] : '';
+                                array_push($shipping_tax_rate_list, [
+                                    'rate' => round($order_tax->get_rate_percent() / 100, 3),
+                                    'name' => $tax_name
+                                ]);
+                            }
                         }
                     }
                 }
             }
-            return round($shipping_tax_rate / 100, 3);
+            return WC_Tillit_Helper::get_tax_rate_from_tax_list($shipping_tax_rate_list);
         }
 
         /**
@@ -586,20 +598,49 @@ if (!class_exists('WC_Tillit_Helper')) {
          * @param $fee
          * @param $order
          *
-         * @return float
+         * @return array
          */
         private static function get_fee_tax_rate($fee, $order) {
-            $fee_tax_rate = 0;
+            $fee_tax_rate_list = [];
             if ($fee->get_taxes()['total']) {
                 foreach ($fee->get_taxes()['total'] as $rate_id => $tax_amt) {
-                    foreach ($order->get_taxes() as $order_tax) {
-                        if ($rate_id == $order_tax->get_rate_id()) {
-                            $fee_tax_rate += $order_tax->get_rate_percent();
+                    if ($tax_amt) {
+                        foreach ($order->get_taxes() as $order_tax) {
+                            if ($rate_id == $order_tax->get_rate_id()) {
+                                $tax_name = isset($order_tax['label']) ? $order_tax['label'] : '';
+                                array_push($fee_tax_rate_list, [
+                                    'rate' => round($order_tax->get_rate_percent() / 100, 3),
+                                    'name' => $tax_name
+                                ]);
+                            }
                         }
                     }
                 }
             }
-            return round($fee_tax_rate / 100, 3);
+            return WC_Tillit_Helper::get_tax_rate_from_tax_list($fee_tax_rate_list);
+        }
+
+        /**
+         * Get tax rate element from a list of tax rate
+         *
+         * @param $tax_rate_list
+         *
+         * @return array
+         */
+        private static function get_tax_rate_from_tax_list($tax_rate_list) {
+            if (count($tax_rate_list) == 1) {
+                // return the 1st element
+                return reset($tax_rate_list);
+            } else {
+                $sum_rate = 0;
+                foreach ($tax_rate_list as $id => $tax_rate) {
+                    $sum_rate += $tax_rate['rate'];
+                }
+                return [
+                    'rate' => $sum_rate,
+                    'name' => 'Compound Tax'
+                ];
+            }
         }
 
     }
