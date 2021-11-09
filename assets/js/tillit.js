@@ -930,6 +930,9 @@ class Tillit {
 
         }
 
+        // Tillit is hidden if selected account type is not company
+        this.isTillitMethodHidden = !tillitUtilHelper.isCompany(tillitDomHelper.getAccountType())
+
         if (this.withCompanyNameSearch) {
 
             // Reinitiate company select on country change
