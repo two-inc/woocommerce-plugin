@@ -625,6 +625,11 @@ if (!class_exists('WC_Tillit')) {
             // Decode the response
             $body = json_decode($response['body'], true);
 
+            if ($body['status'] == 'REJECTED') {
+                WC_Tillit_Helper::display_ajax_error(__('Invoice is not available for this purchase', 'tillit-payment-gateway'));
+                return;
+            }
+
             // Store the Tillit Order Id for future use
             update_post_meta($order_id, 'tillit_order_id', $body['id']);
             update_post_meta($order_id, '_tillit_original_order_id', $body['id']);
