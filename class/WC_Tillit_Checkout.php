@@ -66,7 +66,7 @@ if (!class_exists('WC_Tillit_Checkout')) {
         {
 
             printf(
-                '<div class="account-type-wrapper">
+                '<div class="account-type-wrapper" style="display: none;">
                     <div class="account-type-button" account-type-name="personal">
                         <img src = "/wp-content/plugins/tillit-payment-gateway/assets/images/personal.svg"/>
                         <span>' . __('Private Customer', 'tillit-payment-gateway') . '</span>

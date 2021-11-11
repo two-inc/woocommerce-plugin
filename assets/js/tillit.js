@@ -254,9 +254,12 @@ let tillitDomHelper = {
 
         // Hide the radios or the buttons for account type
         if (window.tillit.use_account_type_buttons !== 'yes') {
-            jQuery('#account_type_field').show()
-            jQuery('.woocommerce-account-type-fields__field-wrapper').show()
-            jQuery('.account-type-wrapper').hide()
+            if (jQuery('#klarna-checkout-select-other').length == 0) {
+                jQuery('#account_type_field').show()
+                jQuery('.woocommerce-account-type-fields__field-wrapper').show()
+            }
+        } else {
+            jQuery('.account-type-wrapper').show()
         }
 
         // Styling
