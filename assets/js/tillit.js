@@ -99,7 +99,7 @@ let tillitSelectWooHelper = {
                     delay: 200,
                     url: function(params){
                         params.page = params.page || 1
-                        return countryParams[country].tillit_search_host + '/search?limit=' + tillitSearchLimit + '&offset=' + ((params.page - 1) * tillitSearchLimit) + '&q=' + params.term
+                        return countryParams[country].tillit_search_host + '/search?limit=' + tillitSearchLimit + '&offset=' + ((params.page - 1) * tillitSearchLimit) + '&q=' + escape(params.term)
                     },
                     data: function()
                     {
@@ -204,28 +204,40 @@ let tillitDomHelper = {
             }
 
             if (jQuery('#klarna-checkout-select-other').length > 0) {
+                // If Kco checkout page is displayed
+                // Switching to another payment method would make account type "business" after page is reloaded
                 jQuery('#klarna-checkout-select-other').on('click', function() {
                     sessionStorage.setItem('tillitAccountType', 'business')
                 })
+                // Clicking Business button
                 jQuery('.account-type-button[account-type-name="business"]').on('click', function() {
+                    // Save the account type
                     sessionStorage.setItem('tillitAccountType', tillitDomHelper.getAccountType())
-                    sessionStorage.setItem('privateClickToKlarna', 'y')
+
+                    // After page is reloaded, clicking private button will route user back to Kco
+                    sessionStorage.setItem('privateClickToKco', 'y')
                     jQuery('#klarna-checkout-select-other').click()
                 })
             } else if (jQuery('.woocommerce-account-type-fields').length > 0) {
-                jQuery('.account-type-button[account-type-name="personal"]').on('click', function() {
-                    sessionStorage.setItem('tillitAccountType', tillitDomHelper.getAccountType())
-                    if (sessionStorage.getItem('privateClickToKlarna') === 'y') {
-                        jQuery('#payment_method_kco').click()
-                        sessionStorage.removeItem('privateClickToKlarna')
+                // If Normal checkout page is displayed, and Tillit's account type radios are present
+                jQuery('.account-type-button[account-type-name="personal"], .account-type-button[account-type-name="sole_trader"]').on('click', function() {
+
+                    let hasNoPaymentExceptTillitKco = jQuery('.wc_payment_method:not(.payment_method_woocommerce-gateway-tillit):not(.payment_method_kco)').length == 0
+                    if (hasNoPaymentExceptTillitKco) {
+                        // Kco is the only payment method in private/soletrader, so clear and click it to trigger
+                        jQuery('#payment_method_kco').prop('checked', false)
                     }
-                })
-                jQuery('.account-type-button[account-type-name="sole_trader"]').on('click', function() {
                     sessionStorage.setItem('tillitAccountType', tillitDomHelper.getAccountType())
-                    if (sessionStorage.getItem('privateClickToKlarna') === 'y') {
+
+                    if (sessionStorage.getItem('privateClickToKco') === 'y' || hasNoPaymentExceptTillitKco) {
+                        // Clicking private button will route user back to Kco, only if user visited Kco before, or if Kco is the only payment left
                         jQuery('#payment_method_kco').click()
-                        sessionStorage.removeItem('privateClickToKlarna')
+                        sessionStorage.removeItem('privateClickToKco')
+                    } else if (sessionStorage.getItem('businessClickToTillit') === 'y' && tillitDomHelper.isTillitVisible()) {
+                        // Clicking business button will auto select Tillit payment, if Tillit was selected before account type is changed
+                        jQuery('#payment_method_woocommerce-gateway-tillit').click()
                     }
+
                 })
             }
 
@@ -234,7 +246,15 @@ let tillitDomHelper = {
                 sessionStorage.setItem('tillitAccountType', tillitDomHelper.getAccountType())
             })
 
-            // If Klarna button is clicked, account type must not be business
+            // If business account type is selected and the payment method selected was Tillit, reselect it
+            jQuery('.account-type-button[account-type-name="business"]').on('click', function() {
+                if (sessionStorage.getItem('businessClickToTillit') === 'y') {
+                    // Clicking business button will auto select Tillit payment, if Tillit was selected before account type is changed
+                    jQuery('#payment_method_woocommerce-gateway-tillit').click()
+                }
+            })
+
+            // If Kco button is clicked, account type must not be business
             jQuery('#payment_method_kco').on('change', Tillit.getInstance().onChangedToKco)
 
             // Select last saved account type in case of redirect from another payment method
@@ -433,13 +453,7 @@ let tillitDomHelper = {
         $visibleNoncompanyTargets = jQuery($visibleNoncompanyTargets)
 
         // Toggle the targets based on the account type
-        const isTillitVisible = jQuery('#payment_method_woocommerce-gateway-tillit').length !== 0
-        if (isTillitVisible) {
-            jQuery('#account_type_field').removeClass('hidden')
-        } else {
-            jQuery('#account_type_field').addClass('hidden')
-        }
-        const isTillitAvailable = isTillitVisible && tillitUtilHelper.isCompany(accountType)
+        const isTillitAvailable = tillitDomHelper.isTillitVisible() && tillitUtilHelper.isCompany(accountType)
         if (isTillitAvailable) {
             $visibleNoncompanyTargets.addClass('hidden')
             $visibleCompanyTargets.removeClass('hidden')
@@ -458,13 +472,20 @@ let tillitDomHelper = {
      */
     deselectPaymentMethod: function(paymentMethodRadioObj) {
 
+        // Do nothing if not selected
+        if (!paymentMethodRadioObj.prop('checked')) {
+            return
+        }
+
         // Deselect the current payment method
-        paymentMethodRadioObj.prop('checked', false)
+        if (paymentMethodRadioObj) {
+            paymentMethodRadioObj.prop('checked', false)
+        }
 
         // Select the first visible payment method
         let otherPaymentMethods = jQuery('#payment .wc_payment_methods input.input-radio:visible')
         if (otherPaymentMethods.length > 0) {
-            if (paymentMethodRadioObj.attr('id')) {
+            if (paymentMethodRadioObj && paymentMethodRadioObj.attr('id')) {
                 jQuery('#payment .wc_payment_methods input.input-radio:visible:not(#' + paymentMethodRadioObj.attr('id') + ')').first().prop('checked', true)
             } else {
                 jQuery('#payment .wc_payment_methods input.input-radio:visible').first().prop('checked', true)
@@ -643,6 +664,13 @@ let tillitDomHelper = {
      */
     isSelectedPaymentTillit: function() {
         return jQuery('input[name="payment_method"]:checked').val() === 'woocommerce-gateway-tillit'
+    },
+
+    /**
+     * Check if tillit payment is currently visible
+     */
+    isTillitVisible: function() {
+        return jQuery('#payment_method_woocommerce-gateway-tillit:visible').length !== 0
     },
 
     /**
@@ -1044,8 +1072,22 @@ class Tillit {
 
         // Disable or enable actions based on the account type
         $body.on('updated_checkout', function() {
+
             Tillit.getInstance().updateElements()
+
             jQuery('#payment_method_kco').on('change', Tillit.getInstance().onChangedToKco)
+
+            jQuery('#payment_method_woocommerce-gateway-tillit').on('change', function(){
+                // If current selected payment is Tillit, clicking "business" will select Tillit payment again
+                if (tillitDomHelper.isSelectedPaymentTillit()) {
+                    sessionStorage.setItem('businessClickToTillit', 'y')
+                }
+            })
+
+            if (tillitDomHelper.isSelectedPaymentTillit()) {
+                sessionStorage.setItem('businessClickToTillit', 'y')
+            }
+
         })
 
         // Handle the representative inputs blur event
@@ -1530,22 +1572,8 @@ jQuery(function(){
             }
         } else {
 
-            // Handle payment method radio select every time order review (right panel) is updated
+            // Handle initialization every time order review (right panel) is updated
             jQuery(document.body).on('updated_checkout', function(){
-
-                // Hide and clear unnecessary payment methods
-                tillitDomHelper.toggleMethod(Tillit.getInstance().isTillitMethodHidden)
-                jQuery('#payment .wc_payment_methods input.input-radio').each(function() {
-                    if (jQuery(this).is(":hidden")) {
-                        tillitDomHelper.deselectPaymentMethod(jQuery(this))
-                    }
-                })
-                tillitDomHelper.rearrangeDescription()
-
-                // Disable click to return to Klarna if some other payment method is selected
-                jQuery('.wc_payment_method:not(.payment_method_woocommerce-gateway-tillit):not(.payment_method_kco)').on('click', function() {
-                    sessionStorage.removeItem('privateClickToKlarna')
-                })
 
                 // If shop defaults payment method to Tillit, run Tillit code
                 if (tillitDomHelper.isSelectedPaymentTillit()) {
@@ -1571,7 +1599,6 @@ jQuery(function(){
                         if (currentSelectedPaymentTillit || isSelectedPaymentTillit) {
                             jQuery(document.body).trigger('update_checkout')
                         }
-                        // console.log('selected: ' + isSelectedPaymentTillit + ' -> ' + currentSelectedPaymentTillit)
                         isSelectedPaymentTillit = currentSelectedPaymentTillit
                         if (isSelectedPaymentTillit) {
                             Tillit.getInstance().initialize(false)
@@ -1589,6 +1616,26 @@ jQuery(function(){
 
             // Otherwise do not run Tillit code
         }
+
+        // Handle payment method radio select every time order review (right panel) is updated
+        jQuery(document.body).on('updated_checkout', function(){
+
+            // Hide and clear unnecessary payment methods
+            tillitDomHelper.toggleMethod(Tillit.getInstance().isTillitMethodHidden)
+            jQuery('#payment .wc_payment_methods input.input-radio').each(function() {
+                if (jQuery(this).is(":hidden")) {
+                    tillitDomHelper.deselectPaymentMethod(jQuery(this))
+                }
+            })
+            tillitDomHelper.rearrangeDescription()
+
+            // Disable click to return to Tillit/Kco if some other payment method is selected
+            jQuery('.wc_payment_method:not(.payment_method_woocommerce-gateway-tillit):not(.payment_method_kco)').on('click', function() {
+                sessionStorage.removeItem('privateClickToKco')
+                sessionStorage.removeItem('businessClickToTillit')
+            })
+
+        })
 
         // Show or hide Tillit payment method on account type change
         jQuery('.woocommerce-checkout [name="account_type"]').on('change', function() {
