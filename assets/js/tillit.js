@@ -203,6 +203,16 @@ let tillitDomHelper = {
                 jQuery('.account-type-button[account-type-name="' + accountType + '"]').addClass('selected')
             }
 
+            // Hide the radios or the buttons for account type
+            if (window.tillit.use_account_type_buttons !== 'yes') {
+                if (jQuery('#klarna-checkout-select-other').length == 0) {
+                    jQuery('#account_type_field').show()
+                    jQuery('.woocommerce-account-type-fields__field-wrapper').show()
+                }
+            } else {
+                jQuery('.account-type-wrapper').show()
+            }
+
             if (jQuery('#klarna-checkout-select-other').length > 0) {
                 // If Kco checkout page is displayed
                 // Switching to another payment method would make account type "business" after page is reloaded
@@ -271,16 +281,6 @@ let tillitDomHelper = {
                 jQuery(this).remove()
             }
         })
-
-        // Hide the radios or the buttons for account type
-        if (window.tillit.use_account_type_buttons !== 'yes') {
-            if (jQuery('#klarna-checkout-select-other').length == 0) {
-                jQuery('#account_type_field').show()
-                jQuery('.woocommerce-account-type-fields__field-wrapper').show()
-            }
-        } else {
-            jQuery('.account-type-wrapper').show()
-        }
 
         // Styling
         if (jQuery('input[name="account_type"]').length > 1) {
@@ -1088,6 +1088,21 @@ class Tillit {
                 sessionStorage.setItem('businessClickToTillit', 'y')
             }
 
+            // Hide and clear unnecessary payment methods
+            tillitDomHelper.toggleMethod(Tillit.getInstance().isTillitMethodHidden)
+            jQuery('#payment .wc_payment_methods input.input-radio').each(function() {
+                if (jQuery(this).is(":hidden")) {
+                    tillitDomHelper.deselectPaymentMethod(jQuery(this))
+                }
+            })
+            tillitDomHelper.rearrangeDescription()
+
+            // Disable click to return to Tillit/Kco if some other payment method is selected
+            jQuery('.wc_payment_method:not(.payment_method_woocommerce-gateway-tillit):not(.payment_method_kco)').on('click', function() {
+                sessionStorage.removeItem('privateClickToKco')
+                sessionStorage.removeItem('businessClickToTillit')
+            })
+
         })
 
         // Handle the representative inputs blur event
@@ -1137,6 +1152,9 @@ class Tillit {
             if (Tillit.getInstance().orderIntentCheck.pendingCheck) Tillit.getInstance().getApproval()
             tillitDomHelper.saveCheckoutInputs()
         }, 3000)
+
+        // Add customization for current theme if any
+        tillitDomHelper.insertCustomCss()
 
         if (loadSavedInputs) tillitDomHelper.loadCheckoutInputs()
         this.initBillingPhoneDisplay()
@@ -1617,26 +1635,6 @@ jQuery(function(){
             // Otherwise do not run Tillit code
         }
 
-        // Handle payment method radio select every time order review (right panel) is updated
-        jQuery(document.body).on('updated_checkout', function(){
-
-            // Hide and clear unnecessary payment methods
-            tillitDomHelper.toggleMethod(Tillit.getInstance().isTillitMethodHidden)
-            jQuery('#payment .wc_payment_methods input.input-radio').each(function() {
-                if (jQuery(this).is(":hidden")) {
-                    tillitDomHelper.deselectPaymentMethod(jQuery(this))
-                }
-            })
-            tillitDomHelper.rearrangeDescription()
-
-            // Disable click to return to Tillit/Kco if some other payment method is selected
-            jQuery('.wc_payment_method:not(.payment_method_woocommerce-gateway-tillit):not(.payment_method_kco)').on('click', function() {
-                sessionStorage.removeItem('privateClickToKco')
-                sessionStorage.removeItem('businessClickToTillit')
-            })
-
-        })
-
         // Show or hide Tillit payment method on account type change
         jQuery('.woocommerce-checkout [name="account_type"]').on('change', function() {
             tillitDomHelper.toggleMethod(Tillit.getInstance().isTillitMethodHidden)
@@ -1644,9 +1642,6 @@ jQuery(function(){
 
         // Intitialization of DOMs
         tillitDomHelper.initAccountTypeButtons()
-
-        // Add customization for current theme if any
-        tillitDomHelper.insertCustomCss()
 
     }
 })
