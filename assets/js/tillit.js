@@ -260,6 +260,11 @@ let tillitDomHelper = {
                 sessionStorage.setItem('tillitAccountType', tillitDomHelper.getAccountType())
             })
 
+            // Temporarily click the banner buttons if radio button is changed
+            jQuery('[name="account_type"]').on('change', function() {
+                jQuery('.account-type-button[account-type-name="' + jQuery(this).attr('value') + '"]').click()
+            })
+
             // If business account type is selected and the payment method selected was Tillit, reselect it
             jQuery('.account-type-button[account-type-name="business"]').on('click', function() {
                 if (sessionStorage.getItem('businessClickToTillit') === 'y') {
