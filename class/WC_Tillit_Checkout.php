@@ -146,10 +146,9 @@ if (!class_exists('WC_Tillit_Checkout')) {
         public function update_company_fields($fields)
         {
 
-            $with_company_search = $this->wc_tillit->get_option('enable_company_name') === 'yes';
             $company_name_priority = $fields['billing']['billing_company']['priority'];
 
-            if($with_company_search) {
+            if($this->wc_tillit->get_option('enable_company_name') === 'yes') {
 
                 $fields['billing']['billing_company_display'] = [
                     'label' => __('Company name', 'tillit-payment-gateway'),
@@ -166,6 +165,10 @@ if (!class_exists('WC_Tillit_Checkout')) {
                     'required' => false,
                     'priority' => $company_name_priority
                 ];
+
+            }
+
+            if($this->wc_tillit->get_option('enable_company_name') === 'yes' && $this->wc_tillit->get_option('enable_company_id') === 'yes') {
 
                 $fields['billing']['company_id'] = [
                     'label' => __('Company ID', 'tillit-payment-gateway'),
