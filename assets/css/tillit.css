@@ -85,6 +85,11 @@ form.checkout.woocommerce-checkout .woocommerce-account-type-fields__field-wrapp
     font-size: 0.8em;
 }
 
+.floating-company-id {
+    float: right;
+    color: #dddddd;
+}
+
 .account-type-wrapper {
     display: flex;
     flex-wrap: wrap;

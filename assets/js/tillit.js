@@ -203,14 +203,18 @@ let tillitDomHelper = {
                 jQuery('.account-type-button[account-type-name="' + accountType + '"]').addClass('selected')
             }
 
-            // Hide the radios or the buttons for account type
-            if (window.tillit.use_account_type_buttons !== 'yes') {
-                if (jQuery('#klarna-checkout-select-other').length == 0) {
-                    jQuery('#account_type_field').show()
-                    jQuery('.woocommerce-account-type-fields__field-wrapper').show()
+            // Show the radios or the buttons for account type if number of options > 1
+            if (jQuery('input[name="account_type"]').length > 1) {
+                if (window.tillit.use_account_type_buttons !== 'yes') {
+                    // Show if shop configured to use buttons (and provided Kco is not displayed)
+                    if (jQuery('#klarna-checkout-select-other').length == 0) {
+                        jQuery('#account_type_field').show()
+                        jQuery('.woocommerce-account-type-fields__field-wrapper').show()
+                    }
+                } else {
+                    // Show if shop configured to use banners
+                    jQuery('.account-type-wrapper').show()
                 }
-            } else {
-                jQuery('.account-type-wrapper').show()
             }
 
             if (jQuery('#klarna-checkout-select-other').length > 0) {
@@ -438,11 +442,14 @@ let tillitDomHelper = {
 
         // Get the targets
         let $visibleNoncompanyTargets = '#billing_phone_field, #billing_company_field'
-        let $visibleCompanyTargets = '.woocommerce-company-fields, .woocommerce-representative-fields, #company_id_field, #billing_company_display_field, #billing_phone_display_field'
+        let $visibleCompanyTargets = '.woocommerce-company-fields, .woocommerce-representative-fields, #billing_company_display_field, #billing_phone_display_field'
         let $requiredCompanyTargets = '#billing_phone_display_field'
         if (window.tillit.company_name_search !== 'yes') {
             $visibleCompanyTargets += ', #billing_company_field'
             $requiredCompanyTargets += ', #billing_company_field'
+        }
+        if (window.tillit.company_name_search !== 'yes' || window.tillit.company_id_search !== 'yes') {
+            $visibleCompanyTargets += ', #company_id_field'
         }
         if (window.tillit.mark_tillit_fields_required === 'yes') {
             $requiredCompanyTargets = $visibleCompanyTargets
@@ -733,10 +740,15 @@ let tillitDomHelper = {
         let tillitPaymentLine = jQuery('label[for="payment_method_woocommerce-gateway-tillit"]')
 
         if (tillitPaymentLine.length > 0) {
-            tillitPaymentLine.after(jQuery('#abt-tillit-link'))
             tillitPaymentLine.after(jQuery('.payment_method_woocommerce-gateway-tillit .tillit-subtitle'))
+        }
 
-            if (tillitPaymentLine.parent().innerWidth() > 600) {
+        let tillitPaymentBox = jQuery('.payment_box.payment_method_woocommerce-gateway-tillit')
+
+        if (tillitPaymentBox.length > 0) {
+            tillitPaymentBox.after(jQuery('#abt-tillit-link'))
+
+            if (tillitPaymentBox.parent().innerWidth() > 600) {
                 jQuery('#abt-tillit-link a').css('float', 'left')
             }
         }
@@ -773,6 +785,15 @@ let tillitDomHelper = {
         }
         for (let inp of checkoutForm.querySelectorAll('span[id$="-container"]')) {
             if (inp.getAttribute('id')) {
+                let textOnly = inp.textContent
+                let subs = []
+                inp.childNodes.forEach(function(val){
+                    if(val.nodeType === Node.TEXT_NODE) {
+                        textOnly = val.nodeValue.trim()
+                    } else if (val.nodeType === Node.ELEMENT_NODE) {
+                        subs.push(val.outerHTML)
+                    }
+                })
                 checkoutInputs.push({
                     'htmlTag': inp.tagName,
                     'id': inp.getAttribute('id'),
@@ -780,7 +801,8 @@ let tillitDomHelper = {
                     'html': inp.outerHTML,
                     'type': 'select',
                     'name': inp.getAttribute('id'),
-                    'val': inp.textContent,
+                    'val': textOnly,
+                    'subs': subs,
                 })
             }
         }
@@ -841,7 +863,19 @@ let tillitDomHelper = {
                         document.querySelector('#' + inp.id).remove()
                     }
                     let parentNode = document.querySelector('[aria-labelledby="' + inp.parentLabel + '"]')
-                    if (parentNode) parentNode.innerHTML = inp.html + parentNode.innerHTML
+                    if (parentNode) {
+                        parentNode.innerHTML = inp.html + parentNode.innerHTML
+                    }
+                    if (inp.subs && inp.subs.length > 0) {
+                        setTimeout(function(inp){
+                            let elem = document.querySelector('#' + inp.id)
+                            if (elem) {
+                                for (let sub of inp.subs) {
+                                    elem.innerHTML += sub
+                                }
+                            }
+                        }, 1000, inp)
+                    }
                 }
             } else if (inp.htmlTag === 'SELECT') {
                 if (inp.val && inp.optionHtml) {
@@ -1010,6 +1044,12 @@ class Tillit {
 
                         // Set the company name to HTML DOM
                         $billingCompany.val(data.id)
+
+                        // Display company ID on the right of selected company name
+                        setTimeout(function(){
+                            jQuery('#select2-billing_company_display-container').append(
+                                '<span class="floating-company-id">' + data.company_id + '</span>')
+                        }, 0)
 
                     }
 
