@@ -473,9 +473,6 @@ if (!class_exists('WC_Tillit')) {
          */
         public function on_order_completed($order_id)
         {
-            if($this->get_option('finalize_purchase') !== 'yes') {
-                return;
-            }
 
             // Get the order
             $order = wc_get_order($order_id);
@@ -880,7 +877,6 @@ if (!class_exists('WC_Tillit')) {
                     if (isset($body['fallback_to_another_payment'])) $this->update_option('fallback_to_another_payment', $body['fallback_to_another_payment'] ? 'yes' : 'no');
                     if (isset($body['enable_company_name'])) $this->update_option('enable_company_name', $body['enable_company_name'] ? 'yes' : 'no');
                     if (isset($body['enable_company_id'])) $this->update_option('enable_company_id', $body['enable_company_id'] ? 'yes' : 'no');
-                    if (isset($body['finalize_purchase'])) $this->update_option('finalize_purchase', $body['finalize_purchase'] ? 'yes' : 'no');
                     if (isset($body['mark_tillit_fields_required'])) $this->update_option('mark_tillit_fields_required', $body['mark_tillit_fields_required'] ? 'yes' : 'no');
                     if (isset($body['enable_order_intent'])) $this->update_option('enable_order_intent', $body['enable_order_intent'] ? 'yes' : 'no');
                     if (isset($body['default_to_b2c'])) $this->update_option('default_to_b2c', $body['default_to_b2c'] ? 'yes' : 'no');
@@ -1059,11 +1055,6 @@ if (!class_exists('WC_Tillit')) {
                     'label'     => ' ',
                     'type'      => 'checkbox',
                     'default'   => 'yes'
-                ],
-                'finalize_purchase' => [
-                    'title'     => __('Finalize purchase when order is fulfilled', 'tillit-payment-gateway'),
-                    'label'     => ' ',
-                    'type'      => 'checkbox'
                 ],
                 'mark_tillit_fields_required' => [
                     'title'     => __('Always mark Tillit fields as required', 'tillit-payment-gateway'),
