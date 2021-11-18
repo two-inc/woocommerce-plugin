@@ -1,6 +1,9 @@
 #billing_phone_display {
     border: none;
 }
+.floating-company-id {
+    margin-right: 8px;
+}
 @media (min-width: 1200px){
     .account-type-wrapper.actp-col-2 {
         width: 100%;
