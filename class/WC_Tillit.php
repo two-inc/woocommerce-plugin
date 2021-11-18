@@ -147,7 +147,7 @@ if (!class_exists('WC_Tillit')) {
          */
         private function get_abt_tillit_html(){
             if ($this->get_option('show_abt_link') === 'yes') {
-                return '<div id="abt-tillit-link"><a href="https://tillitai.notion.site/tillitai/What-is-Tillit-4e12960d8e834e5aa20f879d59e0b32f" onclick="javascript:window.open(\'https://tillitai.notion.site/tillitai/What-is-Tillit-4e12960d8e834e5aa20f879d59e0b32f\',\'WhatIsTillit\',\'toolbar=no, location=no, directories=no, status=no, menubar=no, scrollbars=yes, resizable=yes, width=1060, height=700\'); return false;">What is Tillit?</a>&nbsp;</div>';
+                return '<div id="abt-tillit-link"><a href="https://twoinc.notion.site/What-is-Tillit-4e12960d8e834e5aa20f879d59e0b32f" onclick="javascript:window.open(\'https://twoinc.notion.site/What-is-Tillit-4e12960d8e834e5aa20f879d59e0b32f\',\'WhatIsTillit\',\'toolbar=no, location=no, directories=no, status=no, menubar=no, scrollbars=yes, resizable=yes, width=1060, height=700\'); return false;">What is Tillit?</a>&nbsp;</div>';
             }
             return '';
         }

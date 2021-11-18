@@ -99,7 +99,7 @@ let tillitSelectWooHelper = {
                     delay: 200,
                     url: function(params){
                         params.page = params.page || 1
-                        return countryParams[country].tillit_search_host + '/search?limit=' + tillitSearchLimit + '&offset=' + ((params.page - 1) * tillitSearchLimit) + '&q=' + escape(params.term)
+                        return countryParams[country].tillit_search_host + '/search?limit=' + tillitSearchLimit + '&offset=' + ((params.page - 1) * tillitSearchLimit) + '&q=' + encodeURIComponent(params.term)
                     },
                     data: function()
                     {
