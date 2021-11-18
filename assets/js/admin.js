@@ -29,6 +29,19 @@ jQuery(function($){
 
     })
 
+    $('body').on('change', '#woocommerce_woocommerce-gateway-tillit_enable_company_name', function(e){
+
+        let radioCompanyId = $('#woocommerce_woocommerce-gateway-tillit_enable_company_id')
+
+        if(!$(this).prop('checked')) {
+            radioCompanyId.prop('checked', false)
+            radioCompanyId.attr('disabled', true)
+        } else {
+            radioCompanyId.attr('disabled', false)
+        }
+
+    })
+
     jQuery('h3.wc-settings-sub-title').append('<a href="#" class="collapsed setting-dropdown"><span class="dashicons dashicons-arrow-down-alt2"></span></a>')
     jQuery('h3.wc-settings-sub-title a').click(function(e) {
         e.preventDefault()

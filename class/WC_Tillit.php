@@ -147,7 +147,7 @@ if (!class_exists('WC_Tillit')) {
          */
         private function get_abt_tillit_html(){
             if ($this->get_option('show_abt_link') === 'yes') {
-                return '<div id="abt-tillit-link">&nbsp;<a href="https://twoinc.notion.site/What-is-Tillit-4e12960d8e834e5aa20f879d59e0b32f" onclick="javascript:window.open(\'https://twoinc.notion.site/What-is-Tillit-4e12960d8e834e5aa20f879d59e0b32f\',\'WhatIsTillit\',\'toolbar=no, location=no, directories=no, status=no, menubar=no, scrollbars=yes, resizable=yes, width=1060, height=700\'); return false;">What is Tillit?</a></div>';
+                return '<div id="abt-tillit-link"><a href="https://twoinc.notion.site/What-is-Tillit-4e12960d8e834e5aa20f879d59e0b32f" onclick="javascript:window.open(\'https://twoinc.notion.site/What-is-Tillit-4e12960d8e834e5aa20f879d59e0b32f\',\'WhatIsTillit\',\'toolbar=no, location=no, directories=no, status=no, menubar=no, scrollbars=yes, resizable=yes, width=1060, height=700\'); return false;">What is Tillit?</a>&nbsp;</div>';
             }
             return '';
         }
@@ -473,9 +473,6 @@ if (!class_exists('WC_Tillit')) {
          */
         public function on_order_completed($order_id)
         {
-            if($this->get_option('finalize_purchase') !== 'yes') {
-                return;
-            }
 
             // Get the order
             $order = wc_get_order($order_id);
@@ -624,6 +621,11 @@ if (!class_exists('WC_Tillit')) {
 
             // Decode the response
             $body = json_decode($response['body'], true);
+
+            if ($body['status'] == 'REJECTED') {
+                WC_Tillit_Helper::display_ajax_error(__('Invoice is not available for this purchase', 'tillit-payment-gateway'));
+                return;
+            }
 
             // Store the Tillit Order Id for future use
             update_post_meta($order_id, 'tillit_order_id', $body['id']);
@@ -875,7 +877,6 @@ if (!class_exists('WC_Tillit')) {
                     if (isset($body['fallback_to_another_payment'])) $this->update_option('fallback_to_another_payment', $body['fallback_to_another_payment'] ? 'yes' : 'no');
                     if (isset($body['enable_company_name'])) $this->update_option('enable_company_name', $body['enable_company_name'] ? 'yes' : 'no');
                     if (isset($body['enable_company_id'])) $this->update_option('enable_company_id', $body['enable_company_id'] ? 'yes' : 'no');
-                    if (isset($body['finalize_purchase'])) $this->update_option('finalize_purchase', $body['finalize_purchase'] ? 'yes' : 'no');
                     if (isset($body['mark_tillit_fields_required'])) $this->update_option('mark_tillit_fields_required', $body['mark_tillit_fields_required'] ? 'yes' : 'no');
                     if (isset($body['enable_order_intent'])) $this->update_option('enable_order_intent', $body['enable_order_intent'] ? 'yes' : 'no');
                     if (isset($body['default_to_b2c'])) $this->update_option('default_to_b2c', $body['default_to_b2c'] ? 'yes' : 'no');
@@ -957,10 +958,10 @@ if (!class_exists('WC_Tillit')) {
         {
             $tillit_form_fields = [
                 'enabled' => [
-                    'title'       => __('Turn on/off', 'tillit-payment-gateway'),
-                    'type'        => 'checkbox',
-                    'label'       => __('Enable Tillit Payments', 'tillit-payment-gateway'),
-                    'default'     => 'yes'
+                    'title'     => __('Turn on/off', 'tillit-payment-gateway'),
+                    'type'      => 'checkbox',
+                    'label'     => __('Enable Tillit Payments', 'tillit-payment-gateway'),
+                    'default'   => 'yes'
                 ],
                 'title' => [
                     'title'     => __('Title', 'tillit-payment-gateway'),
@@ -1055,11 +1056,6 @@ if (!class_exists('WC_Tillit')) {
                     'type'      => 'checkbox',
                     'default'   => 'yes'
                 ],
-                'finalize_purchase' => [
-                    'title'     => __('Finalize purchase when order is fulfilled', 'tillit-payment-gateway'),
-                    'label'     => ' ',
-                    'type'      => 'checkbox'
-                ],
                 'mark_tillit_fields_required' => [
                     'title'     => __('Always mark Tillit fields as required', 'tillit-payment-gateway'),
                     'label'     => ' ',
@@ -1078,11 +1074,17 @@ if (!class_exists('WC_Tillit')) {
                     'type'      => 'checkbox',
                     'default'   => 'yes'
                 ],
+                'use_account_type_buttons' => [
+                    'title'     => __('Use buttons instead of radios to select account type', 'tillit-payment-gateway'),
+                    'label'     => ' ',
+                    'type'      => 'checkbox',
+                    'default'   => 'no'
+                ],
                 'show_abt_link' => [
                     'title'     => __('Show "What is Tillit" link in Checkout', 'tillit-payment-gateway'),
                     'label'     => ' ',
                     'type'      => 'checkbox',
-                    'default'   => 'yes'
+                    'default'   => 'no'
                 ],
                 'default_to_b2c' => [
                     'title'     => __('Default to B2C check-out', 'tillit-payment-gateway'),

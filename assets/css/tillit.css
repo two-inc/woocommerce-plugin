@@ -39,21 +39,26 @@
     display: unset!important;
 }
 
+form.checkout.woocommerce-checkout .woocommerce-account-type-fields__field-wrapper, #account_type_field {
+    display: none;
+}
 form.checkout.woocommerce-checkout .woocommerce-account-type-fields__field-wrapper #account_type_field > label {
     position: unset;
     display: block;
 }
-
 form.checkout.woocommerce-checkout .woocommerce-account-type-fields__field-wrapper label[for="account_type_personal"],
 form.checkout.woocommerce-checkout .woocommerce-account-type-fields__field-wrapper label[for="account_type_sole_trader"],
 form.checkout.woocommerce-checkout .woocommerce-account-type-fields__field-wrapper label[for="account_type_business"] {
     position: unset;
     display: inline;
 }
-
 form.checkout.woocommerce-checkout .woocommerce-account-type-fields__field-wrapper input[name="account_type"] {
     height: unset;
     width: unset;
+}
+
+.tillit-source, .tillit-target {
+    display: none;
 }
 
 .iti.iti--allow-dropdown {
@@ -71,9 +76,18 @@ form.checkout.woocommerce-checkout .woocommerce-account-type-fields__field-wrapp
     opacity: 0.1;
 }
 
+#abt-tillit-link {
+    width: 100%;
+    padding-left: 31px;
+}
 #abt-tillit-link a {
     float: right;
     font-size: 0.8em;
+}
+
+.floating-company-id {
+    float: right;
+    color: #dddddd;
 }
 
 .account-type-wrapper {
