@@ -2,9 +2,9 @@
 /**
  * Plugin Name: Tillit Payment Gateway
  * Plugin URI: https://tillit.ai
- * Description: Integration between WooCommerce and Tillit.
+ * Description: Integration between WooCommerce and Twoinc.
  * Version: 2.3.4
- * Author: Tillit
+ * Author: Two.
  * Author URI: https://tillit.ai
  * Text Domain: tillit-payment-gateway
  * License: GPLv2 or later
@@ -18,23 +18,23 @@ if (!in_array('woocommerce/woocommerce.php', apply_filters('active_plugins', get
 define('WC_TILLIT_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('WC_TILLIT_PLUGIN_PATH', plugin_dir_path(__FILE__));
 
-add_filter('woocommerce_payment_gateways', 'wc_tillit_add_to_gateways');
-add_action('plugins_loaded', 'woocommerce_gateway_tillit_classes');
+add_filter('woocommerce_payment_gateways', 'wc_twoinc_add_to_gateways');
+add_action('plugins_loaded', 'load_twoinc_classes');
 
 if (is_admin() && !defined('DOING_AJAX')) {
-    add_filter("plugin_action_links_" . plugin_basename(__FILE__), 'tillit_settings_link');
+    add_filter("plugin_action_links_" . plugin_basename(__FILE__), 'twoinc_settings_link');
 }
 
 if (!is_admin() && !defined('DOING_AJAX')) {
-    add_action('wp_enqueue_scripts', 'wc_tillit_enqueue_styles');
-    add_action('wp_enqueue_scripts', 'wc_tillit_enqueue_scripts');
+    add_action('wp_enqueue_scripts', 'wc_twoinc_enqueue_styles');
+    add_action('wp_enqueue_scripts', 'wc_twoinc_enqueue_scripts');
 }
 
 
-function woocommerce_gateway_tillit_classes()
+function load_twoinc_classes()
 {
     // Support i18n
-    init_tillit_translation();
+    init_twoinc_translation();
 
     // JSON endpoint to check plugin status
     add_action('rest_api_init', 'plugin_status_checking');
@@ -45,14 +45,14 @@ function woocommerce_gateway_tillit_classes()
     require_once __DIR__ . '/class/WC_Tillit.php';
 
     // Endpoint for plugin setting in one click
-    $tillit_payment_gateway = WC_Tillit::get_instance();
-    $tillit_payment_gateway->one_click_setup();
+    $twoinc_obj = WC_Twoinc::get_instance();
+    $twoinc_obj->one_click_setup();
 }
 
 /**
  * Initiate the text translation for domain tillit-payment-gateway
  */
-function init_tillit_translation()
+function init_twoinc_translation()
 {
     $plugin_rel_path = basename(dirname(__FILE__));
     load_plugin_textdomain('tillit-payment-gateway', false, $plugin_rel_path);
@@ -65,7 +65,7 @@ function plugin_status_checking()
 {
     register_rest_route(
         'tillit-payment-gateway',
-        'tillit_plugin_status_checking',
+        'twoinc_plugin_status_checking',
         array(
             'methods' => 'GET',
             'callback' => function($request) {
@@ -80,32 +80,32 @@ function plugin_status_checking()
 /**
  * Add plugin to payment gateways list
  */
-function wc_tillit_add_to_gateways($gateways)
+function wc_twoinc_add_to_gateways($gateways)
 {
-    $gateways[] = 'WC_Tillit';
+    $gateways[] = 'WC_Twoinc';
     return $gateways;
 }
 
 /**
  * Enqueue plugin styles
  */
-function wc_tillit_enqueue_styles()
+function wc_twoinc_enqueue_styles()
 {
-    wp_enqueue_style('tillit-payment-gateway-css', WC_TILLIT_PLUGIN_URL . '/assets/css/tillit.css', false, '1.1.3');
+    wp_enqueue_style('twoinc-payment-gateway-css', WC_TILLIT_PLUGIN_URL . '/assets/css/twoinc.css', false, '1.1.3');
 }
 
 /**
  * Enqueue plugin javascripts
  */
-function wc_tillit_enqueue_scripts()
+function wc_twoinc_enqueue_scripts()
 {
-    wp_enqueue_script('tillit-payment-gateway-js', WC_TILLIT_PLUGIN_URL . '/assets/js/tillit.js', ['jquery'], '2.2.4');
+    wp_enqueue_script('twoinc-payment-gateway-js', WC_TILLIT_PLUGIN_URL . '/assets/js/twoinc.js', ['jquery'], '2.2.4');
 }
 
 /**
  * Add setting link next to plugin name in plugin list
  */
-function tillit_settings_link($links)
+function twoinc_settings_link($links)
 {
     $settings_link = '<a href="admin.php?page=wc-settings&tab=checkout&section=woocommerce-gateway-tillit">Settings</a>';
     array_unshift($links, $settings_link);
@@ -113,7 +113,7 @@ function tillit_settings_link($links)
 }
 
 /**
- * Get the version of this Tillit plugin
+ * Get the version of this Twoinc plugin
  */
 function get_plugin_version()
 {
