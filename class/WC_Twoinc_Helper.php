@@ -34,7 +34,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
         /**
          * Get error message from twoinc response
          *
-         * @param $message
+         * @param $response
          *
          * @return string|void
          */
@@ -44,18 +44,73 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 return __('Two. empty response', 'twoinc-payment-gateway');
             }
 
-            if($response['response']['code'] && $response['response'] && $response['response']['code'] && $response['response']['code'] >= 400) {
+            if($response['response'] && $response['response']['code'] && $response['response']['code'] >= 400) {
                 return sprintf(__('Two. response code %d', 'twoinc-payment-gateway'), $response['response']['code']);
             }
 
-            if($response && $response['body']) {
+            if($response['body']) {
                 $body = json_decode($response['body'], true);
-                if (is_string($body))
+                if (is_string($body)) {
                     return __($body, 'twoinc-payment-gateway');
-                else if (isset($body['error_details']) && is_string($body['error_details']))
+                } else if (isset($body['error_details']) && is_string($body['error_details'])) {
                     return __($body['error_details'], 'twoinc-payment-gateway');
-                else if (isset($body['error_code']) && is_string($body['error_code']))
+                } else if (isset($body['error_code']) && is_string($body['error_code'])) {
                     return __($body['error_code'], 'twoinc-payment-gateway');
+                }
+            }
+        }
+
+        /**
+         * Get validation message from twoinc response
+         *
+         * @param $response
+         *
+         * @return string|void
+         */
+        public static function get_twoinc_validation_msg($response)
+        {
+            $err_msg = __('Invoice is not available for this purchase', 'twoinc-payment-gateway');
+            if (!$response) {
+                return $err_msg;
+            }
+
+            if($response['response'] && $response['response']['code'] && $response['response']['code'] >= 400) {
+                if($response['body']) {
+                    $body = json_decode($response['body'], true);
+                    if (!is_string($body) && isset($body['error_json']) && is_array($body['error_json'])) {
+                        $errs = array();
+                        foreach ($body['error_json'] as $er) {
+                            if ($er && $er['loc']) {
+                                $display_msg = WC_Twoinc_Helper::get_msg_from_loc(json_encode($er['loc']));
+                                if ($display_msg) {
+                                    array_push($errs, $display_msg);
+                                }
+                            }
+                        }
+                        if (count($errs) > 0) {
+                            return $errs;
+                        }
+                    }
+                }
+
+                return $err_msg;
+            }
+        }
+
+        /**
+         * Get validation message
+         *
+         * @param $loc_str
+         *
+         * @return string|void
+         */
+        public static function get_msg_from_loc($loc_str)
+        {
+            if ($loc_str === '["buyer","representative","phone_number"]') {
+                return __('Please submit a valid phone number', 'twoinc-payment-gateway');
+            }
+            if ($loc_str === '["buyer","company","organization_number"]') {
+                return __('Please submit a valid Company ID and name', 'twoinc-payment-gateway');
             }
         }
 
@@ -68,8 +123,16 @@ if (!class_exists('WC_Twoinc_Helper')) {
          */
         public static function display_ajax_error($message)
         {
-            if (!is_string($message)) return;
-            wc_add_notice($message, 'error');
+            if (is_string($message)) {
+                wc_add_notice($message, 'error');
+            } else if (is_array($message)) {
+                foreach ($message as $msg) {
+                    wc_add_notice($msg, 'error');
+                }
+            } else {
+                return;
+            }
+
             if (!wp_is_json_request()) {
                 wc_print_notices();
             }

@@ -559,16 +559,22 @@ if (!class_exists('WC_Twoinc')) {
                 return;
             }
 
-            // Genereate an order reference string
+            // Get data
+            $company_id = array_key_exists('company_id', $_POST) ? sanitize_text_field($_POST['company_id']) : '';
+            $department = array_key_exists('department', $_POST) ? sanitize_text_field($_POST['department']) : '';
+            $project = array_key_exists('project', $_POST) ? sanitize_text_field($_POST['project']) : '';
+            $tracking_id = array_key_exists('tracking_id', $_POST) ? sanitize_text_field($_POST['tracking_id']) : '';
+            $days_on_invoice = $this->get_option('days_on_invoice');
+            $tillit_merchant_id = $this->get_option('tillit_merchant_id');
             $order_reference = wp_generate_password(64, false, false);
 
             // Store the order meta
             update_post_meta($order_id, '_tillit_order_reference', $order_reference);
-            update_post_meta($order_id, '_tillit_merchant_id', $this->get_option('tillit_merchant_id'));
-            update_post_meta($order_id, '_days_on_invoice', $this->get_option('days_on_invoice'));
-            update_post_meta($order_id, 'company_id', sanitize_text_field($_POST['company_id']));
-            update_post_meta($order_id, 'department', sanitize_text_field($_POST['department']));
-            update_post_meta($order_id, 'project', sanitize_text_field($_POST['project']));
+            update_post_meta($order_id, '_tillit_merchant_id', $tillit_merchant_id);
+            update_post_meta($order_id, '_days_on_invoice', $days_on_invoice);
+            update_post_meta($order_id, 'company_id', $company_id);
+            update_post_meta($order_id, 'department', $department);
+            update_post_meta($order_id, 'project', $project);
 
             // Get payment details
             $product_type = $this->get_option('product_type');
@@ -590,13 +596,13 @@ if (!class_exists('WC_Twoinc')) {
             $response = $this->make_request('/v1/order', WC_Twoinc_Helper::compose_twoinc_order(
                 $order,
                 $order_reference,
-                $this->get_option('days_on_invoice'),
-                sanitize_text_field($_POST['company_id']),
-                sanitize_text_field($_POST['department']),
-                sanitize_text_field($_POST['project']),
+                $days_on_invoice,
+                $company_id,
+                $department,
+                $project,
                 $product_type,
                 $payment_reference_message,
-                sanitize_text_field($_POST['tracking_id'])
+                $tracking_id
             ));
 
             if(is_wp_error($response)) {
@@ -610,9 +616,9 @@ if (!class_exists('WC_Twoinc')) {
                 return $response;
             }
 
-            $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
+            $twoinc_err = WC_Twoinc_Helper::get_twoinc_validation_msg($response);
             if ($twoinc_err) {
-                WC_Twoinc_Helper::display_ajax_error(__('Invoice is not available for this purchase', 'twoinc-payment-gateway'));
+                WC_Twoinc_Helper::display_ajax_error($twoinc_err);
                 return;
             }
 
