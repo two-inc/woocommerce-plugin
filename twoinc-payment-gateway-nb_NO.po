@@ -3,7 +3,7 @@ msgstr ""
 "Project-Id-Version: Tillit Payment Gateway\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2021-04-07 07:50+0000\n"
-"PO-Revision-Date: 2021-11-07 02:58+0000\n"
+"PO-Revision-Date: 2021-11-19 11:43+0000\n"
 "Last-Translator: \n"
 "Language-Team: Norwegian (Bokmål)\n"
 "Language: nb_NO\n"
@@ -13,13 +13,13 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "X-Generator: Loco https://localise.biz/\n"
 "X-Loco-Version: 2.5.2; wp-5.7.2\n"
-"X-Domain: tillit-payment-gateway"
+"X-Domain: twoinc-payment-gateway"
 
-#: class/WC_Twoinc.php:1126
+#: class/WC_Twoinc.php:1121
 msgid "Activate company name auto-complete"
 msgstr "Skru på forhåndsutfylling for selskapsnavn"
 
-#: class/WC_Twoinc.php:1131
+#: class/WC_Twoinc.php:1126
 msgid "Activate company org.id auto-complete"
 msgstr "Skru på forhåndsutfylling av organisasjonsnummer"
 
@@ -27,21 +27,21 @@ msgstr "Skru på forhåndsutfylling av organisasjonsnummer"
 msgid "Add a logo to the invoice"
 msgstr "Legg til en logo på fakturaen"
 
-#: class/WC_Twoinc.php:1070
+#: class/WC_Twoinc.php:1065
 msgid "Add department field to Checkout page"
 msgstr "Legg til et felt for avdeling"
 
-#: class/WC_Twoinc.php:1076
+#: class/WC_Twoinc.php:1071
 msgid "Add project field to Checkout page"
 msgstr "Legg til et felt for prosjekt"
 
-#: class/WC_Twoinc.php:1110
+#: class/WC_Twoinc.php:1105
 msgid "Always enable all available payment methods"
 msgstr "Alltid gjør alle betalingsmetoder tilgjengelige"
 
-#: class/WC_Twoinc.php:1064
-msgid "Always mark Two fields as required"
-msgstr "Merk Two felt som påkrevd"
+#: class/WC_Twoinc.php:1059
+msgid "Always mark Two. fields as required"
+msgstr "Merk Two. felt som påkrevd"
 
 #: class/WC_Twoinc.php:997
 msgid "API credentials"
@@ -49,13 +49,13 @@ msgstr "API informasjon"
 
 #: class/WC_Twoinc.php:1035
 msgid ""
-"Approves buyer when phone and company name is filled out. Disables Two "
+"Approves buyer when phone and company name is filled out. Disables Two. "
 "payment method if buyer is declined."
 msgstr ""
-"Godkjenn kjøper når telefon og selskapsnavn er utfylt. Skru av Two dersom "
+"Godkjenn kjøper når telefon og selskapsnavn er utfylt. Skru av Two. dersom "
 "kjøper ikke godkjennes"
 
-#: class/WC_Twoinc.php:1123
+#: class/WC_Twoinc.php:1118
 msgid "Auto-complete settings"
 msgstr "Auto-utfyllings innstillinger"
 
@@ -68,7 +68,6 @@ msgid "Business Customer"
 msgstr "Bedriftskunde"
 
 #: class/WC_Twoinc.php:968
-#| msgid "Business invoice 30 days"
 msgid "Business invoice %s days"
 msgstr "Bedriftsfaktura - %s dager"
 
@@ -96,54 +95,51 @@ msgstr "Velg dine innstillinger"
 msgid "Clear settings on deactivation"
 msgstr "Slett innstillingene ved deaktivering"
 
-#: class/WC_Twoinc_Checkout.php:171 class/WC_Twoinc_Checkout.php:181
+#: class/WC_Twoinc_Checkout.php:174 class/WC_Twoinc_Checkout.php:184
 msgid "Company ID"
 msgstr "Organisasjonsnummer"
 
-#: class/WC_Twoinc_Checkout.php:155
+#: class/WC_Twoinc_Checkout.php:154
 msgid "Company name"
 msgstr "Selskapsnavn"
 
-#: class/WC_Twoinc.php:1326
-#| msgid "Could not verify the Two order"
-msgid "Could not edit the Two order"
-msgstr "Kunne ikke redigere Two-orderen"
+#: class/WC_Twoinc.php:1321
+msgid "Could not edit the Two. order"
+msgstr "Kunne ikke redigere Two.-orderen"
 
-#: class/WC_Twoinc.php:1332
-#| msgid "Could not recreate new Two order, please check with Two admin"
-msgid "Could not edit the Two order, please check with Two admin"
+#: class/WC_Twoinc.php:1327
+msgid "Could not edit the Two. order, please check with Two. admin"
 msgstr "Kunne ikke redigere Two-ordre. Ta kontakt med Two-admin"
 
-#: class/WC_Twoinc.php:680
+#: class/WC_Twoinc.php:682
 msgid "Could not initiate refund by Two"
 msgstr "Kan ikke refundere med Two"
 
-#: class/WC_Twoinc.php:609
-msgid "Could not request to create Two order"
+#: class/WC_Twoinc.php:606
+msgid "Could not request to create Two. order"
 msgstr "Kunne ikke be om å opprette en ordre"
 
-#: class/WC_Twoinc.php:495
+#: class/WC_Twoinc.php:492
 msgid "Could not update status"
 msgstr "Kunne ikke oppdatere status"
 
-#: class/WC_Twoinc.php:537
+#: class/WC_Twoinc.php:534
 msgid "Could not update status to cancelled"
 msgstr "Kunne ikke oppdatere status til kansellert"
 
-#: class/WC_Twoinc.php:543
+#: class/WC_Twoinc.php:540
 #, php-format
 msgid ""
-"Could not update status to cancelled, please check with Two admin for id "
-"%s"
-msgstr "Kunne ikke kansellere orderen. Ta kontakt med Two admin for id %s"
+"Could not update status to cancelled, please check with Two. admin for id %s"
+msgstr "Kunne ikke kansellere orderen. Ta kontakt med Two. admin for id %s"
 
-#: class/WC_Twoinc.php:501
+#: class/WC_Twoinc.php:498
 #, php-format
 msgid ""
-"Could not update status to fulfilled on Two, please check with Two "
-"admin for id %s"
+"Could not update status to fulfilled on Two, please check with Two. admin "
+"for id %s"
 msgstr ""
-"Kunne ikke markere ordren som fullført. Ta kontakt med Two admin for id %s"
+"Kunne ikke markere ordren som fullført. Ta kontakt med Two. admin for id %s"
 
 #: class/WC_Twoinc.php:898
 msgid "Dashboard"
@@ -153,11 +149,11 @@ msgstr "Dashbord"
 msgid "Default number of buyer payment days"
 msgstr "Antall betalingsdager"
 
-#: class/WC_Twoinc.php:1094
+#: class/WC_Twoinc.php:1089
 msgid "Default to B2C check-out"
 msgstr "Sett B2C checkout som standard"
 
-#: class/WC_Twoinc_Checkout.php:192
+#: class/WC_Twoinc_Checkout.php:195
 msgid "Department"
 msgstr "Avdeling"
 
@@ -166,57 +162,49 @@ msgid "Description"
 msgstr "Beskrivelse"
 
 #: class/WC_Twoinc.php:962
-msgid "Enable Two Payments"
+msgid "Enable Two. Payments"
 msgstr "Skru på Two"
 
 #: class/WC_Twoinc.php:164
 msgid "Enter company name to pay on invoice"
 msgstr "Skriv inn selskapsnavn for å betale på faktura"
 
-#: class/WC_Twoinc.php:615
+#: class/WC_Twoinc.php:612
 msgid "Fail to process payment"
 msgstr "Kunne ikke behandle betalingen"
 
-#: class/WC_Twoinc.php:715
+#: class/WC_Twoinc.php:717
 msgid "Failed to refund order by Two"
 msgstr "Kunner ikke refundere ordren med Two"
 
-#: class/WC_Twoinc.php:713
+#: class/WC_Twoinc.php:715
 #, php-format
-msgid ""
-"Failed to refund order by Two, please check with Two admin for id %s"
+msgid "Failed to refund order by Two, please check with Two. admin for id %s"
 msgstr ""
-"Kunner ikke refundere ordren med Two, ta kontakt med Two admin for id "
-"%s"
+"Kunner ikke refundere ordren med Two, ta kontakt med Two. admin for id %s"
 
-#: class/WC_Twoinc.php:697
+#: class/WC_Twoinc.php:699
 msgid "Failed to request refund order to Two"
 msgstr "Kunne ikke be om refusjon på ordren fra Two"
 
-#: class/WC_Twoinc.php:703
+#: class/WC_Twoinc.php:705
 #, php-format
 msgid ""
-"Failed to request refund order to Two, please check with Two admin for "
+"Failed to request refund order to Two, please check with Two. admin for id %s"
+msgstr ""
+"Kunner ikke be om refusjon på ordren med Two, ta kontakt med Two. admin for "
 "id %s"
-msgstr ""
-"Kunner ikke be om refusjon på ordren med Two, ta kontakt med Two admin "
-"for id %s"
 
-#: class/WC_Twoinc.php:1116
-msgid "Fallback to other payment methods if Two is not available"
-msgstr ""
-"Fall tilbake til andre betalingsmetoder når Two ikke er tilgjengelig"
-
-#: class/WC_Twoinc.php:1059
-msgid "Finalize purchase when order is fulfilled"
-msgstr "Sluttfør salget når ordren blir sendt"
+#: class/WC_Twoinc.php:1111
+msgid "Fallback to other payment methods if Two. is not available"
+msgstr "Fall tilbake til andre betalingsmetoder når Two. ikke er tilgjengelig"
 
 #. URI of the plugin
 #. Author URI of the plugin
 msgid "https://tillit.ai"
 msgstr "https://tillit.ai"
 
-#: class/WC_Twoinc.php:1104
+#: class/WC_Twoinc.php:1099
 msgid "Initiate payment to buyer on refund"
 msgstr "Start utbetaling til kunde ved refusjon"
 
@@ -224,11 +212,12 @@ msgstr "Start utbetaling til kunde ved refusjon"
 msgid "Integration between WooCommerce and Two."
 msgstr "Integrasjon mellom WooCommerce og Two"
 
-#: class/WC_Twoinc.php:621 class/WC_Twoinc_Checkout.php:312
+#: class/WC_Twoinc.php:618 class/WC_Twoinc.php:626
+#: class/WC_Twoinc_Checkout.php:315
 msgid "Invoice is not available for this purchase"
 msgstr "Faktura er ikke tilgjengelig for dette kjøpet"
 
-#: class/WC_Twoinc.php:824
+#: class/WC_Twoinc.php:825
 msgid "Log in"
 msgstr "Logg inn"
 
@@ -236,24 +225,22 @@ msgstr "Logg inn"
 msgid "Making it easy for businesses to buy online."
 msgstr "Morgendagens betalingsløsning for bedrifter"
 
-#: class/WC_Twoinc_Checkout.php:314
+#: class/WC_Twoinc_Checkout.php:317
 #, php-format
-#| msgid "Maximum Payment using Two is %s NOK"
-msgid "Maximum Payment using Two is %s"
-msgstr "Max betaling med Two er %s"
+msgid "Maximum Payment using Two. is %s"
+msgstr "Max betaling med Two. er %s"
 
-#: class/WC_Twoinc_Checkout.php:313
+#: class/WC_Twoinc_Checkout.php:316
 #, php-format
-#| msgid "Minimum Payment using Two is %s NOK"
-msgid "Minimum Payment using Two is %s"
-msgstr "Minimums betaling med Two er %s"
+msgid "Minimum Payment using Two. is %s"
+msgstr "Minimums betaling med Two. er %s"
 
-#: class/WC_Twoinc.php:1271
+#: class/WC_Twoinc.php:1266
 #, php-format
-msgid "Missing company ID, please check with Two admin for id %s"
-msgstr "Mangler organisasjonsnummer. Ta kontakt med Two admin %s"
+msgid "Missing company ID, please check with Two. admin for id %s"
+msgstr "Mangler organisasjonsnummer. Ta kontakt med Two. admin %s"
 
-#: class/WC_Twoinc.php:668
+#: class/WC_Twoinc.php:670
 msgid "Only Completed order can be refunded by Two"
 msgstr "Bare en ordre som er satt som fullført kan refunderes av Two"
 
@@ -265,11 +252,11 @@ msgstr "Betaling og faktura innstillinger"
 msgid "Personal"
 msgstr "Privat"
 
-#: class/WC_Twoinc_Checkout.php:227
+#: class/WC_Twoinc_Checkout.php:230
 msgid "Phone"
 msgstr "Telefon"
 
-#: class/WC_Twoinc_Checkout.php:315
+#: class/WC_Twoinc_Checkout.php:318
 msgid "Phone number is invalid"
 msgstr "Telefon nummer er ugyldig"
 
@@ -285,7 +272,7 @@ msgstr "Godkjenn kjøper under checkout"
 msgid "Private Customer"
 msgstr "Privatperson"
 
-#: class/WC_Twoinc_Checkout.php:203
+#: class/WC_Twoinc_Checkout.php:206
 msgid "Project"
 msgstr "Prosjektnummer"
 
@@ -293,11 +280,11 @@ msgstr "Prosjektnummer"
 msgid "Receive the invoice via PDF and email"
 msgstr "Motta faktura på PDF og email"
 
-#: class/WC_Twoinc.php:705
-msgid "Request refund order to Two has errors"
-msgstr "Forespørsel om refusjon til Two har feil"
+#: class/WC_Twoinc.php:707
+msgid "Request refund order to Two. has errors"
+msgstr "Forespørsel om refusjon til Two. har feil"
 
-#: class/WC_Twoinc.php:1213
+#: class/WC_Twoinc.php:1208
 msgid "Select image"
 msgstr "Velg bilde"
 
@@ -305,13 +292,13 @@ msgstr "Velg bilde"
 msgid "Select the account type"
 msgstr "Velg kontotype"
 
-#: class/WC_Twoinc.php:1099
+#: class/WC_Twoinc.php:1094
 msgid "Shift invoice fee to the buyers"
 msgstr "Flytt fakturagebyr til kjøper"
 
-#: class/WC_Twoinc.php:1088
-msgid "Show \"What is Two\" link in Checkout"
-msgstr "Vis \"Hva er Two\" link i Checkout"
+#: class/WC_Twoinc.php:1083
+msgid "Show \"What is Two.\" link in Checkout"
+msgstr "Vis \"Hva er Two.\" link i Checkout"
 
 #: class/WC_Twoinc.php:1053
 msgid "Show account type for Business Customer"
@@ -333,40 +320,13 @@ msgstr "Enkeltmannsforetak"
 msgid "Sole Trader/Other Custome"
 msgstr "Enkeltmannsforetak"
 
-#: class/WC_Twoinc.php:743
+#: class/WC_Twoinc.php:745
 msgid "The security code is not valid."
 msgstr "Koden er ikke gyldig"
 
-#. Author of the plugin
-#: class/WC_Twoinc.php:30 class/WC_Twoinc.php:856 class/WC_Twoinc.php:908
-#: class/WC_Twoinc.php:920
-msgid "Two"
-msgstr "Two"
-
-#: class/WC_Twoinc.php:1004
-msgid "Two API Key"
-msgstr "Two API nøkler"
-
-#: class/WC_Twoinc_Helper.php:44
-msgid "Two empty response"
-msgstr "Two tomt svar"
-
-#: class/WC_Twoinc.php:1000
-msgid "Two Merchant Username"
-msgstr "Two brukernavn"
-
 #. Name of the plugin
-msgid "Two Payment Gateway"
-msgstr "Two Payment Gateway"
-
-#: class/WC_Twoinc_Helper.php:48
-#, php-format
-msgid "Two response code %d"
-msgstr "Two responskode %d"
-
-#: class/WC_Twoinc.php:977
-msgid "Two Test Server"
-msgstr "Two test server"
+msgid "Tillit Payment Gateway"
+msgstr "Tillit Payment Gateway"
 
 #: class/WC_Twoinc.php:966
 msgid "Title"
@@ -376,29 +336,56 @@ msgstr "Tittel"
 msgid "Turn on/off"
 msgstr "Skru på/ac"
 
-#: class/WC_Twoinc.php:752
-#| msgid "Unable to find the requested order."
+#. Author of the plugin
+#: class/WC_Twoinc.php:30 class/WC_Twoinc.php:857 class/WC_Twoinc.php:908
+#: class/WC_Twoinc.php:920
+msgid "Two."
+msgstr "Two."
+
+#: class/WC_Twoinc.php:1004
+msgid "Two. API Key"
+msgstr "Two. API nøkler"
+
+#: class/WC_Twoinc_Helper.php:44
+msgid "Two. empty response"
+msgstr "Two. tomt svar"
+
+#: class/WC_Twoinc.php:1000
+msgid "Two. Merchant Username"
+msgstr "Two. brukernavn"
+
+#: class/WC_Twoinc_Helper.php:48
+#, php-format
+msgid "Two. response code %d"
+msgstr "Two. responskode %d"
+
+#: class/WC_Twoinc.php:977
+msgid "Two. Test Server"
+msgstr "Two. test server"
+
+#: class/WC_Twoinc.php:754
 msgid "Unable to find the requested order"
 msgstr "Denne ordren finnes ikke"
 
-#: class/WC_Twoinc.php:774 class/WC_Twoinc.php:775
-#| msgid "Unable to retrieve the order information."
+#: class/WC_Twoinc.php:775 class/WC_Twoinc.php:776
 msgid "Unable to retrieve the order information"
 msgstr "Fant ingen informasjonen om denne ordren"
 
-#: class/WC_Twoinc.php:780 class/WC_Twoinc.php:781
+#: class/WC_Twoinc.php:781 class/WC_Twoinc.php:782
 msgid "Unable to retrieve the order payment information"
 msgstr "Betalingsinformasjon for ordren mangler"
 
-#: class/WC_Twoinc.php:1082
+#: class/WC_Twoinc.php:1077
 msgid "Use buttons instead of radios to select account type"
 msgstr "Bruk bannerknapper istedet for radioknapper"
 
-#: class/WC_Twoinc.php:823
+#: class/WC_Twoinc.php:824
 #, php-format
 msgid ""
-"Wordpress admin privilege is required for Two payment One-click setup. %s"
+"Wordpress admin privilege is required for Two. payment One-click setup. %s"
 msgstr ""
+"Wordpress admin tilgang kreves for å aktivere One-click betalingsoppsett med "
+"Two. %s"
 
 #: class/WC_Twoinc.php:44
 msgid "your company"

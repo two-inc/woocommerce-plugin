@@ -41,21 +41,21 @@ if (!class_exists('WC_Twoinc_Helper')) {
         public static function get_twoinc_error_msg($response)
         {
             if (!$response) {
-                return __('Twoinc empty response', 'tillit-payment-gateway');
+                return __('Two. empty response', 'twoinc-payment-gateway');
             }
 
             if($response['response']['code'] && $response['response'] && $response['response']['code'] && $response['response']['code'] >= 400) {
-                return sprintf(__('Twoinc response code %d', 'tillit-payment-gateway'), $response['response']['code']);
+                return sprintf(__('Two. response code %d', 'twoinc-payment-gateway'), $response['response']['code']);
             }
 
             if($response && $response['body']) {
                 $body = json_decode($response['body'], true);
                 if (is_string($body))
-                    return __($body, 'tillit-payment-gateway');
+                    return __($body, 'twoinc-payment-gateway');
                 else if (isset($body['error_details']) && is_string($body['error_details']))
-                    return __($body['error_details'], 'tillit-payment-gateway');
+                    return __($body['error_details'], 'twoinc-payment-gateway');
                 else if (isset($body['error_code']) && is_string($body['error_code']))
-                    return __($body['error_code'], 'tillit-payment-gateway');
+                    return __($body['error_code'], 'twoinc-payment-gateway');
             }
         }
 

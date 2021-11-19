@@ -26,10 +26,10 @@ if (!class_exists('WC_Twoinc')) {
 
             $this->id = 'woocommerce-gateway-tillit';
             $this->has_fields = false;
-            $this->order_button_text = __('Place order', 'tillit-payment-gateway');
-            $this->method_title = __('Twoinc', 'tillit-payment-gateway');
-            $this->method_description = __('Making it easy for businesses to buy online.', 'tillit-payment-gateway');
-            $this->icon = WC_HTTPS::force_https_url(WC_TILLIT_PLUGIN_URL . 'assets/images/logo.svg');
+            $this->order_button_text = __('Place order', 'twoinc-payment-gateway');
+            $this->method_title = __('Two.', 'twoinc-payment-gateway');
+            $this->method_description = __('Making it easy for businesses to buy online.', 'twoinc-payment-gateway');
+            $this->icon = WC_HTTPS::force_https_url(WC_TWOINC_PLUGIN_URL . 'assets/images/logo.svg');
             $this->supports = ['products', 'refunds'];
 
             // Load the settings
@@ -37,11 +37,11 @@ if (!class_exists('WC_Twoinc')) {
             $this->init_settings();
 
             // Define user set variables
-            $this->title = sprintf(__($this->get_option('title'), 'tillit-payment-gateway'), strval($this->get_option('days_on_invoice')));
+            $this->title = sprintf(__($this->get_option('title'), 'twoinc-payment-gateway'), strval($this->get_option('days_on_invoice')));
             $this->description = sprintf(
                 '<p>%s <span class="twoinc-buyer-name-placeholder">%s</span><span class="twoinc-buyer-name"></span>.</p>%s',
-                __('By completing the purchase, you verify that you have the legal right to purchase on behalf of', 'tillit-payment-gateway'),
-                __('your company', 'tillit-payment-gateway'),
+                __('By completing the purchase, you verify that you have the legal right to purchase on behalf of', 'twoinc-payment-gateway'),
+                __('your company', 'twoinc-payment-gateway'),
                 $this->get_abt_twoinc_html()
             );
             $this->api_key = $this->get_option('api_key');
@@ -60,7 +60,7 @@ if (!class_exists('WC_Twoinc')) {
 
             if (is_admin()) {
                 // Notice banner if plugin is not setup properly
-                if(!$this->get_option('api_key') || !$this->get_option('twoinc_merchant_id')) {
+                if(!$this->get_option('api_key') || !$this->get_option('tillit_merchant_id')) {
                     add_action('admin_notices', [$this, 'twoinc_account_init_notice']);
                     add_action('network_admin_notices', [$this, 'twoinc_account_init_notice']);
                 }
@@ -77,7 +77,7 @@ if (!class_exists('WC_Twoinc')) {
             }
 
             // Return if plugin setup is not complete
-            if(!$this->get_option('api_key') || !$this->get_option('twoinc_merchant_id') || sizeof($this->available_account_types()) == 0) return;
+            if(!$this->get_option('api_key') || !$this->get_option('tillit_merchant_id') || sizeof($this->available_account_types()) == 0) return;
 
             if (is_admin()) {
                 // Add HTML in order edit page
@@ -160,8 +160,8 @@ if (!class_exists('WC_Twoinc')) {
                 if($payment_id === 'woocommerce-gateway-tillit') {
                     $title = sprintf(
                         '%s<div class="twoinc-subtitle">%s</div> ',
-                        sprintf(__($this->get_option('title'), 'tillit-payment-gateway'), strval($this->get_option('days_on_invoice'))),
-                        __('Enter company name to pay on invoice', 'tillit-payment-gateway')
+                        sprintf(__($this->get_option('title'), 'twoinc-payment-gateway'), strval($this->get_option('days_on_invoice'))),
+                        __('Enter company name to pay on invoice', 'twoinc-payment-gateway')
                     );
                 }
                 return $title;
@@ -176,10 +176,10 @@ if (!class_exists('WC_Twoinc')) {
         public function update_checkout_options()
         {
 
-            if(!isset($_POST['woocommerce_woocommerce-gateway-tillit_merchant_logo']) && !isset($_POST['woocommerce_woocommerce-gateway-tillit_twoinc_merchant_id'])) return;
+            if(!isset($_POST['woocommerce_woocommerce-gateway-tillit_merchant_logo']) && !isset($_POST['woocommerce_woocommerce-gateway-tillit_tillit_merchant_id'])) return;
 
             $image_id = sanitize_text_field($_POST['woocommerce_woocommerce-gateway-tillit_merchant_logo']);
-            $merchant_id = sanitize_text_field($_POST['woocommerce_woocommerce-gateway-tillit_twoinc_merchant_id']);
+            $merchant_id = sanitize_text_field($_POST['woocommerce_woocommerce-gateway-tillit_tillit_merchant_id']);
 
             $image = $image_id ? wp_get_attachment_image_src($image_id, 'full') : null;
             $image_src = $image ? $image[0] : null;
@@ -251,8 +251,8 @@ if (!class_exists('WC_Twoinc')) {
                 wp_enqueue_media();
             }
 
-            wp_enqueue_script('twoinc.admin', WC_TILLIT_PLUGIN_URL . '/assets/js/admin.js', ['jquery']);
-            wp_enqueue_style('twoinc.admin', WC_TILLIT_PLUGIN_URL . '/assets/css/admin.css');
+            wp_enqueue_script('twoinc.admin', WC_TWOINC_PLUGIN_URL . '/assets/js/admin.js', ['jquery']);
+            wp_enqueue_style('twoinc.admin', WC_TWOINC_PLUGIN_URL . '/assets/css/admin.css');
 
         }
 
@@ -489,13 +489,13 @@ if (!class_exists('WC_Twoinc')) {
             $response = $this->make_request("/v1/order/${twoinc_order_id}/fulfilled");
 
             if(is_wp_error($response)) {
-                $order->add_order_note(__('Could not update status', 'tillit-payment-gateway'));
+                $order->add_order_note(__('Could not update status', 'twoinc-payment-gateway'));
                 return;
             }
 
             $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
             if ($twoinc_err) {
-                $order->add_order_note(sprintf(__('Could not update status to fulfilled on Two, please check with Two admin for id %s', 'tillit-payment-gateway'), $twoinc_order_id));
+                $order->add_order_note(sprintf(__('Could not update status to fulfilled on Two, please check with Two. admin for id %s', 'twoinc-payment-gateway'), $twoinc_order_id));
                 return;
             }
 
@@ -531,13 +531,13 @@ if (!class_exists('WC_Twoinc')) {
             $response = $this->make_request("/v1/order/${twoinc_order_id}/cancel");
 
             if(is_wp_error($response)) {
-                $order->add_order_note(__('Could not update status to cancelled', 'tillit-payment-gateway'));
+                $order->add_order_note(__('Could not update status to cancelled', 'twoinc-payment-gateway'));
                 return;
             }
 
             $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
             if ($twoinc_err) {
-                $order->add_order_note(sprintf(__('Could not update status to cancelled, please check with Two admin for id %s', 'tillit-payment-gateway'), $twoinc_order_id));
+                $order->add_order_note(sprintf(__('Could not update status to cancelled, please check with Two. admin for id %s', 'twoinc-payment-gateway'), $twoinc_order_id));
                 return;
             }
 
@@ -603,19 +603,19 @@ if (!class_exists('WC_Twoinc')) {
             ));
 
             if(is_wp_error($response)) {
-                $order->add_order_note(__('Could not request to create Two order', 'tillit-payment-gateway'));
+                $order->add_order_note(__('Could not request to create Two. order', 'twoinc-payment-gateway'));
                 return;
             }
 
             // Stop on process payment failure
             if(isset($response) && isset($response['result']) && $response['result'] === 'failure') {
-                $order->add_order_note(__('Fail to process payment', 'tillit-payment-gateway'));
+                $order->add_order_note(__('Fail to process payment', 'twoinc-payment-gateway'));
                 return $response;
             }
 
             $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
             if ($twoinc_err) {
-                WC_Twoinc_Helper::display_ajax_error(__('Invoice is not available for this purchase', 'tillit-payment-gateway'));
+                WC_Twoinc_Helper::display_ajax_error(__('Invoice is not available for this purchase', 'twoinc-payment-gateway'));
                 return;
             }
 
@@ -623,7 +623,7 @@ if (!class_exists('WC_Twoinc')) {
             $body = json_decode($response['body'], true);
 
             if ($body['status'] == 'REJECTED') {
-                WC_Twoinc_Helper::display_ajax_error(__('Invoice is not available for this purchase', 'tillit-payment-gateway'));
+                WC_Twoinc_Helper::display_ajax_error(__('Invoice is not available for this purchase', 'twoinc-payment-gateway'));
                 return;
             }
 
@@ -667,7 +667,7 @@ if (!class_exists('WC_Twoinc')) {
             // Get and check refund data
             if ($order->get_status() !== 'completed') {
                 return new WP_Error('invalid_twoinc_refund',
-                    __('Only Completed order can be refunded by Two', 'tillit-payment-gateway'));
+                    __('Only Completed order can be refunded by Two', 'twoinc-payment-gateway'));
             }
 
             $order_refunds = $order->get_refunds();
@@ -679,7 +679,7 @@ if (!class_exists('WC_Twoinc')) {
 
             if (!$order_refund || !$twoinc_order_id || !$amount) {
                 return new WP_Error('invalid_twoinc_refund',
-                    __('Could not initiate refund by Two', 'tillit-payment-gateway'));
+                    __('Could not initiate refund by Two', 'twoinc-payment-gateway'));
             }
 
             // Send refund request
@@ -696,15 +696,15 @@ if (!class_exists('WC_Twoinc')) {
 
             // Stop if request error
             if(is_wp_error($response)) {
-                $order->add_order_note(__('Failed to request refund order to Two', 'tillit-payment-gateway'));
+                $order->add_order_note(__('Failed to request refund order to Two', 'twoinc-payment-gateway'));
                 return false;
             }
 
             $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
             if ($twoinc_err) {
-                $order->add_order_note(sprintf(__('Failed to request refund order to Two, please check with Two admin for id %s', 'tillit-payment-gateway'), $twoinc_order_id));
+                $order->add_order_note(sprintf(__('Failed to request refund order to Two, please check with Two. admin for id %s', 'twoinc-payment-gateway'), $twoinc_order_id));
                 return new WP_Error('invalid_twoinc_refund',
-                    __('Request refund order to Two has errors', 'tillit-payment-gateway'));
+                    __('Request refund order to Two. has errors', 'twoinc-payment-gateway'));
             }
 
             // Decode the response
@@ -712,9 +712,9 @@ if (!class_exists('WC_Twoinc')) {
 
             // Check if response is ok
             if (!$body['amount']) {
-                $order->add_order_note(sprintf(__('Failed to refund order by Two, please check with Two admin for id %s', 'tillit-payment-gateway'), $twoinc_order_id));
+                $order->add_order_note(sprintf(__('Failed to refund order by Two, please check with Two. admin for id %s', 'twoinc-payment-gateway'), $twoinc_order_id));
                 return new WP_Error('invalid_twoinc_refund',
-                    __('Failed to refund order by Two', 'tillit-payment-gateway'));
+                    __('Failed to refund order by Two', 'twoinc-payment-gateway'));
             }
 
             return [
@@ -742,7 +742,7 @@ if (!class_exists('WC_Twoinc')) {
             $nonce = $_REQUEST['nonce'];
 
             // Stop if the code is not valid
-            if(!wp_verify_nonce($nonce, 'twoinc_confirm')) wp_die(__('The security code is not valid.', 'tillit-payment-gateway'));
+            if(!wp_verify_nonce($nonce, 'twoinc_confirm')) wp_die(__('The security code is not valid.', 'twoinc-payment-gateway'));
 
             /** @var wpdb $wpdb */
             global $wpdb;
@@ -751,7 +751,7 @@ if (!class_exists('WC_Twoinc')) {
             $row = $wpdb->get_row($sql , ARRAY_A);
 
             // Stop if no order found
-            if(!isset($row['post_id'])) wp_die(__('Unable to find the requested order', 'tillit-payment-gateway'));
+            if(!isset($row['post_id'])) wp_die(__('Unable to find the requested order', 'twoinc-payment-gateway'));
 
             // Get the order ID
             $order_id = $row['post_id'];
@@ -772,14 +772,14 @@ if (!class_exists('WC_Twoinc')) {
 
             // Stop if request error
             if(is_wp_error($response)) {
-                $order->add_order_note(__('Unable to retrieve the order information', 'tillit-payment-gateway'));
-                wp_die(__('Unable to retrieve the order information', 'tillit-payment-gateway'));
+                $order->add_order_note(__('Unable to retrieve the order information', 'twoinc-payment-gateway'));
+                wp_die(__('Unable to retrieve the order information', 'twoinc-payment-gateway'));
             }
 
             $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
             if ($twoinc_err) {
-                $order->add_order_note(__('Unable to retrieve the order payment information', 'tillit-payment-gateway'));
-                wp_die(__('Unable to retrieve the order payment information', 'tillit-payment-gateway'));
+                $order->add_order_note(__('Unable to retrieve the order payment information', 'twoinc-payment-gateway'));
+                wp_die(__('Unable to retrieve the order payment information', 'twoinc-payment-gateway'));
             }
 
             // Decode the response
@@ -821,10 +821,10 @@ if (!class_exists('WC_Twoinc')) {
                 $error = new WP_Error(
                     'init_failed',
                     sprintf(
-                        __('Wordpress admin privilege is required for Two payment One-click setup. %s', 'tillit-payment-gateway'),
-                        sprintf('<a href="%s">» %s</a>', $redirect_to_signin, __('Log in', 'tillit-payment-gateway'))
+                        __('Wordpress admin privilege is required for Two. payment One-click setup. %s', 'twoinc-payment-gateway'),
+                        sprintf('<a href="%s">» %s</a>', $redirect_to_signin, __('Log in', 'twoinc-payment-gateway'))
                     ),
-                    array('title' => _('Two payment setup failure'), 'response' => '401', 'back_link' => false));
+                    array('title' => _('Two. payment setup failure'), 'response' => '401', 'back_link' => false));
                 if(is_wp_error($error)){
                     wp_die($error, '', $error->get_error_data());
                 }
@@ -854,9 +854,9 @@ if (!class_exists('WC_Twoinc')) {
                         'init_failed',
                         sprintf(
                             'Could not connect to setup server, please contact %s for more information!',
-                            sprintf('<a href="https://tillit.ai/">%s</a>', __('Two', 'tillit-payment-gateway'))
+                            sprintf('<a href="https://tillit.ai/">%s</a>', __('Two.', 'twoinc-payment-gateway'))
                         ),
-                        array('title' => _('Two payment setup failure'), 'response' => '400', 'back_link' => false));
+                        array('title' => _('Two. payment setup failure'), 'response' => '400', 'back_link' => false));
                     wp_die($error, '', $error->get_error_data());
                 }
 
@@ -894,10 +894,10 @@ if (!class_exists('WC_Twoinc')) {
                     $error = new WP_Error(
                         'init_ok',
                         sprintf(
-                            'Successfully setup Two payment! Go to %s.',
-                            sprintf('<a href="%s">%s</a>', get_dashboard_url(), __('Dashboard', 'tillit-payment-gateway'))
+                            'Successfully setup Two. payment! Go to %s.',
+                            sprintf('<a href="%s">%s</a>', get_dashboard_url(), __('Dashboard', 'twoinc-payment-gateway'))
                         ),
-                        array('title' => _('Two payment setup success'), 'response' => '200', 'back_link' => false));
+                        array('title' => _('Two. payment setup success'), 'response' => '200', 'back_link' => false));
                     wp_die($error, '', $error->get_error_data());
                 } else if ($response['response']['code'] === 400) {
                     // Link expired or max attempts reached or wrong key
@@ -905,9 +905,9 @@ if (!class_exists('WC_Twoinc')) {
                         'init_failed',
                         sprintf(
                             'Magic setup link already used or expired, please contact %s for more information!',
-                            sprintf('<a href="https://tillit.ai/">%s</a>', __('Two', 'tillit-payment-gateway'))
+                            sprintf('<a href="https://tillit.ai/">%s</a>', __('Two.', 'twoinc-payment-gateway'))
                         ),
-                        array('title' => _('Two payment setup failure'), 'response' => '400', 'back_link' => false));
+                        array('title' => _('Two. payment setup failure'), 'response' => '400', 'back_link' => false));
                     wp_die($error, '', $error->get_error_data());
                 }
             }
@@ -916,10 +916,10 @@ if (!class_exists('WC_Twoinc')) {
             $error = new WP_Error(
                 'init_failed',
                 sprintf(
-                    'Could not setup Two payment on your website, please contact %s for more information!',
-                    sprintf('<a href="https://tillit.ai/">%s</a>', __('Two', 'tillit-payment-gateway'))
+                    'Could not setup Two. payment on your website, please contact %s for more information!',
+                    sprintf('<a href="https://tillit.ai/">%s</a>', __('Two.', 'twoinc-payment-gateway'))
                 ),
-                array('title' => _('Two payment setup failure'), 'response' => '400', 'back_link' => false));
+                array('title' => _('Two. payment setup failure'), 'response' => '400', 'back_link' => false));
             wp_die($error, '', $error->get_error_data());
 
         }
@@ -933,15 +933,15 @@ if (!class_exists('WC_Twoinc')) {
             $available_types = [];
 
             if ($this->get_option('checkout_personal') === 'yes') {
-                $available_types['personal'] = __('Personal', 'tillit-payment-gateway');
+                $available_types['personal'] = __('Personal', 'twoinc-payment-gateway');
             }
 
             if ($this->get_option('checkout_sole_trader') === 'yes') {
-                $available_types['sole_trader'] = __('Sole trader/other', 'tillit-payment-gateway');
+                $available_types['sole_trader'] = __('Sole trader/other', 'twoinc-payment-gateway');
             }
 
             if ($this->get_option('checkout_business') === 'yes') {
-                $available_types['business'] = __('Business', 'tillit-payment-gateway');
+                $available_types['business'] = __('Business', 'twoinc-payment-gateway');
             }
 
             return $available_types;
@@ -957,29 +957,29 @@ if (!class_exists('WC_Twoinc')) {
         {
             $twoinc_form_fields = [
                 'enabled' => [
-                    'title'     => __('Turn on/off', 'tillit-payment-gateway'),
+                    'title'     => __('Turn on/off', 'twoinc-payment-gateway'),
                     'type'      => 'checkbox',
-                    'label'     => __('Enable Two Payments', 'tillit-payment-gateway'),
+                    'label'     => __('Enable Two. Payments', 'twoinc-payment-gateway'),
                     'default'   => 'yes'
                 ],
                 'title' => [
-                    'title'     => __('Title', 'tillit-payment-gateway'),
+                    'title'     => __('Title', 'twoinc-payment-gateway'),
                     'type'      => 'text',
-                    'default'   => __('Business invoice %s days', 'tillit-payment-gateway')
+                    'default'   => __('Business invoice %s days', 'twoinc-payment-gateway')
                 ],
                 'subtitle' => [
-                    'title'     => __('Description', 'tillit-payment-gateway'),
+                    'title'     => __('Description', 'twoinc-payment-gateway'),
                     'type'      => 'text',
-                    'default'   => __('Receive the invoice via PDF and email', 'tillit-payment-gateway')
+                    'default'   => __('Receive the invoice via PDF and email', 'twoinc-payment-gateway')
                 ],
                 'test_checkout_host' => [
                     'type'      => 'text',
-                    'title'     => __('Two Test Server', 'tillit-payment-gateway'),
+                    'title'     => __('Two. Test Server', 'twoinc-payment-gateway'),
                     'default'   => 'https://staging.api.tillit.ai'
                 ],
                 'checkout_env' => [
                     'type'      => 'select',
-                    'title'     => __('Choose your settings', 'tillit-payment-gateway'),
+                    'title'     => __('Choose your settings', 'twoinc-payment-gateway'),
                     'default'   => 'Production',
                     'options'   => array(
                           'PROD'     => 'Production',
@@ -987,30 +987,30 @@ if (!class_exists('WC_Twoinc')) {
                      )
                 ],
                 'clear_options_on_deactivation' => [
-                    'title'     => __('Clear settings on deactivation', 'tillit-payment-gateway'),
+                    'title'     => __('Clear settings on deactivation', 'twoinc-payment-gateway'),
                     'label'     => ' ',
                     'type'      => 'checkbox',
                     'default'   => 'no'
                 ],
                 'section_api_credentials' => [
                     'type'      => 'title',
-                    'title'     => __('API credentials', 'tillit-payment-gateway')
+                    'title'     => __('API credentials', 'twoinc-payment-gateway')
                 ],
                 'tillit_merchant_id' => [
-                    'title'     => __('Two Merchant Username', 'tillit-payment-gateway'),
+                    'title'     => __('Two. Merchant Username', 'twoinc-payment-gateway'),
                     'type'      => 'text'
                 ],
                 'api_key' => [
-                    'title'     => __('Two API Key', 'tillit-payment-gateway'),
+                    'title'     => __('Two. API Key', 'twoinc-payment-gateway'),
                     'type'      => 'password'
                 ],
                 'section_invoice_settings' => [
                     'type'      => 'title',
-                    'title'     => __('Payment and Invoice settings', 'tillit-payment-gateway')
+                    'title'     => __('Payment and Invoice settings', 'twoinc-payment-gateway')
                 ],
                 'product_type' => [
                     'type'      => 'select',
-                    'title'     => __('Choose product', 'tillit-payment-gateway'),
+                    'title'     => __('Choose product', 'twoinc-payment-gateway'),
                     'default'   => 'FUNDED_INVOICE',
                     'options'   => array(
                           'FUNDED_INVOICE' => 'Funded Invoice',
@@ -1018,112 +1018,112 @@ if (!class_exists('WC_Twoinc')) {
                      )
                 ],
                 'days_on_invoice' => [
-                    'title'     => __('Default number of buyer payment days', 'tillit-payment-gateway'),
+                    'title'     => __('Default number of buyer payment days', 'twoinc-payment-gateway'),
                     'type'      => 'text',
                     'default'   => '14'
                 ],
                 'merchant_logo' => [
-                    'title'     => __('Add a logo to the invoice', 'tillit-payment-gateway'),
+                    'title'     => __('Add a logo to the invoice', 'twoinc-payment-gateway'),
                     'type'      => 'logo'
                 ],
                 'section_checkout_options' => [
                     'type'      => 'title',
-                    'title'     => __('Checkout options', 'tillit-payment-gateway')
+                    'title'     => __('Checkout options', 'twoinc-payment-gateway')
                 ],
                 'enable_order_intent' => [
-                    'title'     => __('Pre-approve buyer during checkout', 'tillit-payment-gateway'),
-                    'description' => __('Approves buyer when phone and company name is filled out. Disables Two payment method if buyer is declined.', 'tillit-payment-gateway'),
+                    'title'     => __('Pre-approve buyer during checkout', 'twoinc-payment-gateway'),
+                    'description' => __('Approves buyer when phone and company name is filled out. Disables Two. payment method if buyer is declined.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'label'     => ' ',
                     'type'      => 'checkbox',
                     'default'   => 'yes'
                 ],
                 'checkout_personal' => [
-                    'title'     => __('Show account type for Private Customer', 'tillit-payment-gateway'),
+                    'title'     => __('Show account type for Private Customer', 'twoinc-payment-gateway'),
                     'label'     => ' ',
                     'type'      => 'checkbox',
                     'default'   => 'yes'
                 ],
                 'checkout_sole_trader' => [
-                    'title'     => __('Show account type for Sole trader/other Customer', 'tillit-payment-gateway'),
+                    'title'     => __('Show account type for Sole trader/other Customer', 'twoinc-payment-gateway'),
                     'label'     => ' ',
                     'type'      => 'checkbox'
                 ],
                 'checkout_business' => [
-                    'title'     => __('Show account type for Business Customer', 'tillit-payment-gateway'),
+                    'title'     => __('Show account type for Business Customer', 'twoinc-payment-gateway'),
                     'label'     => ' ',
                     'type'      => 'checkbox',
                     'default'   => 'yes'
                 ],
                 'mark_tillit_fields_required' => [
-                    'title'     => __('Always mark Two fields as required', 'tillit-payment-gateway'),
+                    'title'     => __('Always mark Two. fields as required', 'twoinc-payment-gateway'),
                     'label'     => ' ',
                     'type'      => 'checkbox',
                     'default'   => 'yes'
                 ],
                 'add_field_department' => [
-                    'title'     => __('Add department field to Checkout page', 'tillit-payment-gateway'),
+                    'title'     => __('Add department field to Checkout page', 'twoinc-payment-gateway'),
                     'label'     => ' ',
                     'type'      => 'checkbox',
                     'default'   => 'yes'
                 ],
                 'add_field_project' => [
-                    'title'     => __('Add project field to Checkout page', 'tillit-payment-gateway'),
+                    'title'     => __('Add project field to Checkout page', 'twoinc-payment-gateway'),
                     'label'     => ' ',
                     'type'      => 'checkbox',
                     'default'   => 'yes'
                 ],
                 'use_account_type_buttons' => [
-                    'title'     => __('Use buttons instead of radios to select account type', 'tillit-payment-gateway'),
+                    'title'     => __('Use buttons instead of radios to select account type', 'twoinc-payment-gateway'),
                     'label'     => ' ',
                     'type'      => 'checkbox',
                     'default'   => 'no'
                 ],
                 'show_abt_link' => [
-                    'title'     => __('Show "What is Two" link in Checkout', 'tillit-payment-gateway'),
+                    'title'     => __('Show "What is Two." link in Checkout', 'twoinc-payment-gateway'),
                     'label'     => ' ',
                     'type'      => 'checkbox',
                     'default'   => 'no'
                 ],
                 'default_to_b2c' => [
-                    'title'     => __('Default to B2C check-out', 'tillit-payment-gateway'),
+                    'title'     => __('Default to B2C check-out', 'twoinc-payment-gateway'),
                     'label'     => ' ',
                     'type'      => 'checkbox'
                 ],
                 'invoice_fee_to_buyer' => [
-                    'title'     => __('Shift invoice fee to the buyers', 'tillit-payment-gateway'),
+                    'title'     => __('Shift invoice fee to the buyers', 'twoinc-payment-gateway'),
                     'label'     => ' ',
                     'type'      => 'checkbox'
                 ],
                 'initiate_payment_to_buyer_on_refund' => [
-                    'title'     => __('Initiate payment to buyer on refund', 'tillit-payment-gateway'),
+                    'title'     => __('Initiate payment to buyer on refund', 'twoinc-payment-gateway'),
                     'label'     => ' ',
                     'type'      => 'checkbox',
                     'default'   => 'yes'
                 ],
                 'display_other_payments' => [
-                    'title'     => __('Always enable all available payment methods', 'tillit-payment-gateway'),
+                    'title'     => __('Always enable all available payment methods', 'twoinc-payment-gateway'),
                     'label'     => ' ',
                     'type'      => 'checkbox',
                     'default'   => 'yes'
                 ],
                 'fallback_to_another_payment' => [
-                    'title'     => __('Fallback to other payment methods if Two is not available', 'tillit-payment-gateway'),
+                    'title'     => __('Fallback to other payment methods if Two. is not available', 'twoinc-payment-gateway'),
                     'label'     => ' ',
                     'type'      => 'checkbox',
                     'default'   => 'yes'
                 ],
                 'section_auto_complete_settings' => [
                     'type'      => 'title',
-                    'title'     => __('Auto-complete settings', 'tillit-payment-gateway')
+                    'title'     => __('Auto-complete settings', 'twoinc-payment-gateway')
                 ],
                 'enable_company_name' => [
-                    'title'     => __('Activate company name auto-complete', 'tillit-payment-gateway'),
+                    'title'     => __('Activate company name auto-complete', 'twoinc-payment-gateway'),
                     'label'     => ' ',
                     'type'      => 'checkbox'
                 ],
                 'enable_company_id' => [
-                    'title'     => __('Activate company org.id auto-complete', 'tillit-payment-gateway'),
+                    'title'     => __('Activate company org.id auto-complete', 'twoinc-payment-gateway'),
                     'label'     => ' ',
                     'type'      => 'checkbox'
                 ]
@@ -1205,7 +1205,7 @@ if (!class_exists('WC_Twoinc')) {
                                 <img src="<?php echo $image_src; ?>" alt="" />
                             <?php endif; ?>
                         </div>
-                        <button class="button-secondary woocommerce-twoinc-logo" type="button"><?php _e('Select image', 'tillit-payment-gateway'); ?></button>
+                        <button class="button-secondary woocommerce-twoinc-logo" type="button"><?php _e('Select image', 'twoinc-payment-gateway'); ?></button>
                     </fieldset>
                 </td>
             </tr>
@@ -1263,7 +1263,7 @@ if (!class_exists('WC_Twoinc')) {
 
                 $body = json_decode($response['body'], true);
                 if (!$body || !$body['buyer'] || !$body['buyer']['company'] || !$body['buyer']['company']['organization_number']) {
-                    $order->add_order_note(sprintf(__('Missing company ID, please check with Two admin for id %s', 'tillit-payment-gateway'), $twoinc_order_id));
+                    $order->add_order_note(sprintf(__('Missing company ID, please check with Two. admin for id %s', 'twoinc-payment-gateway'), $twoinc_order_id));
                     return;
                 }
                 $company_id = $body['buyer']['company']['organization_number'];
@@ -1318,13 +1318,13 @@ if (!class_exists('WC_Twoinc')) {
             );
 
             if(is_wp_error($response)) {
-                $order->add_order_note(__('Could not edit the Two order', 'tillit-payment-gateway'));
+                $order->add_order_note(__('Could not edit the Two. order', 'twoinc-payment-gateway'));
                 return;
             }
 
             $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
             if ($twoinc_err) {
-                $order->add_order_note(__('Could not edit the Two order, please check with Two admin', 'tillit-payment-gateway'));
+                $order->add_order_note(__('Could not edit the Two. order, please check with Two. admin', 'twoinc-payment-gateway'));
                 return;
             }
 
@@ -1367,6 +1367,24 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
+         * Get twoinc order id from post id with backward compatibility
+         *
+         * @param $post_id
+         */
+        private function get_twoinc_order_id_from_post_id($post_id)
+        {
+
+            $twoinc_order_id = get_post_meta($order_id, '_twoinc_order_id', true);
+
+            if (!isset($twoinc_order_id)) {
+                $twoinc_order_id = get_post_meta($order_id, 'tillit_order_id', true);
+            }
+
+            return $twoinc_order_id;
+
+        }
+
+        /**
          * Make a request to Twoinc API
          *
          * @param $endpoint
@@ -1403,8 +1421,8 @@ if (!class_exists('WC_Twoinc')) {
                 echo '
                 <div id="twoinc-account-init-notice" class="notice notice-info is-dismissible" style="background-color: #e2e0ff;padding: 20px;display: flex;">
                     <div style="width:60%;padding-right:40px;">
-                        <h1 style="color: #000000;font-weight:700;">Set up your Two account</h1>
-                        <p style="color: #000000;font-size: 1.3em;text-align: justify;">Happy to see you here! Before you can start selling with the Two buy now, pay later solution you need to complete our signup process. It\'s easy, fast and gives you immediate access to the <a target="_blank" href="https://portal.tillit.ai/merchant">Two Merchant Portal</a></p>
+                        <h1 style="color: #000000;font-weight:700;">Set up your Two. account</h1>
+                        <p style="color: #000000;font-size: 1.3em;text-align: justify;">Happy to see you here! Before you can start selling with the Two. buy now, pay later solution you need to complete our signup process. It\'s easy, fast and gives you immediate access to the <a target="_blank" href="https://portal.tillit.ai/merchant">Two. Merchant Portal</a></p>
                     </div>
                     <div>
                         <img style="position: absolute;top: 40px;right: 40px;width: 100px;" src="/wp-content/plugins/tillit-payment-gateway/assets/images/logo.svg">

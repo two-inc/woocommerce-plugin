@@ -2,11 +2,11 @@
 /**
  * Plugin Name: Tillit Payment Gateway
  * Plugin URI: https://tillit.ai
- * Description: Integration between WooCommerce and Twoinc.
+ * Description: Integration between WooCommerce and Two.
  * Version: 2.3.4
  * Author: Two.
  * Author URI: https://tillit.ai
- * Text Domain: tillit-payment-gateway
+ * Text Domain: twoinc-payment-gateway
  * License: GPLv2 or later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  */
@@ -15,8 +15,8 @@
 if (!in_array('woocommerce/woocommerce.php', apply_filters('active_plugins', get_option('active_plugins')))) return;
 
 // Define the plugin URL
-define('WC_TILLIT_PLUGIN_URL', plugin_dir_url(__FILE__));
-define('WC_TILLIT_PLUGIN_PATH', plugin_dir_path(__FILE__));
+define('WC_TWOINC_PLUGIN_URL', plugin_dir_url(__FILE__));
+define('WC_TWOINC_PLUGIN_PATH', plugin_dir_path(__FILE__));
 
 add_filter('woocommerce_payment_gateways', 'wc_twoinc_add_to_gateways');
 add_action('plugins_loaded', 'load_twoinc_classes');
@@ -40,9 +40,9 @@ function load_twoinc_classes()
     add_action('rest_api_init', 'plugin_status_checking');
 
     // Load classes
-    require_once __DIR__ . '/class/WC_Tillit_Helper.php';
-    require_once __DIR__ . '/class/WC_Tillit_Checkout.php';
-    require_once __DIR__ . '/class/WC_Tillit.php';
+    require_once __DIR__ . '/class/WC_Twoinc_Helper.php';
+    require_once __DIR__ . '/class/WC_Twoinc_Checkout.php';
+    require_once __DIR__ . '/class/WC_Twoinc.php';
 
     // Endpoint for plugin setting in one click
     $twoinc_obj = WC_Twoinc::get_instance();
@@ -50,12 +50,12 @@ function load_twoinc_classes()
 }
 
 /**
- * Initiate the text translation for domain tillit-payment-gateway
+ * Initiate the text translation for domain twoinc-payment-gateway
  */
 function init_twoinc_translation()
 {
     $plugin_rel_path = basename(dirname(__FILE__));
-    load_plugin_textdomain('tillit-payment-gateway', false, $plugin_rel_path);
+    load_plugin_textdomain('twoinc-payment-gateway', false, $plugin_rel_path);
 }
 
 /**
@@ -64,7 +64,7 @@ function init_twoinc_translation()
 function plugin_status_checking()
 {
     register_rest_route(
-        'tillit-payment-gateway',
+        'twoinc-payment-gateway',
         'twoinc_plugin_status_checking',
         array(
             'methods' => 'GET',
@@ -91,7 +91,7 @@ function wc_twoinc_add_to_gateways($gateways)
  */
 function wc_twoinc_enqueue_styles()
 {
-    wp_enqueue_style('twoinc-payment-gateway-css', WC_TILLIT_PLUGIN_URL . '/assets/css/twoinc.css', false, '1.1.3');
+    wp_enqueue_style('twoinc-payment-gateway-css', WC_TWOINC_PLUGIN_URL . '/assets/css/twoinc.css', false, '1.1.3');
 }
 
 /**
@@ -99,7 +99,7 @@ function wc_twoinc_enqueue_styles()
  */
 function wc_twoinc_enqueue_scripts()
 {
-    wp_enqueue_script('twoinc-payment-gateway-js', WC_TILLIT_PLUGIN_URL . '/assets/js/twoinc.js', ['jquery'], '2.2.4');
+    wp_enqueue_script('twoinc-payment-gateway-js', WC_TWOINC_PLUGIN_URL . '/assets/js/twoinc.js', ['jquery'], '2.2.4');
 }
 
 /**

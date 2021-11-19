@@ -69,15 +69,15 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 '<div class="account-type-wrapper" style="display: none;">
                     <div class="account-type-button" account-type-name="personal">
                         <img src = "/wp-content/plugins/tillit-payment-gateway/assets/images/personal.svg"/>
-                        <span>' . __('Private Customer', 'tillit-payment-gateway') . '</span>
+                        <span>' . __('Private Customer', 'twoinc-payment-gateway') . '</span>
                     </div>
                     <div class="account-type-button" account-type-name="sole_trader">
                         <img src = "/wp-content/plugins/tillit-payment-gateway/assets/images/personal.svg"/>
-                        <span>' . __('Sole Trader/Other Custome', 'tillit-payment-gateway') . 'r</span>
+                        <span>' . __('Sole Trader/Other Custome', 'twoinc-payment-gateway') . 'r</span>
                     </div>
                     <div class="account-type-button" account-type-name="business">
                         <img src = "/wp-content/plugins/tillit-payment-gateway/assets/images/business.svg"/>
-                        <span>' . __('Business Customer', 'tillit-payment-gateway') . '</span>
+                        <span>' . __('Business Customer', 'twoinc-payment-gateway') . '</span>
                     </div>
                 </div>');
 
@@ -108,7 +108,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
 
                 $fields['account_type'] = [
                     'account_type' => [
-                        'label' => __('Select the account type', 'tillit-payment-gateway'),
+                        'label' => __('Select the account type', 'twoinc-payment-gateway'),
                         'required' => false,
                         'type' => 'radio',
                         'priority' => 30,
@@ -151,7 +151,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             if($this->wc_twoinc->get_option('enable_company_name') === 'yes') {
 
                 $fields['billing']['billing_company_display'] = [
-                    'label' => __('Company name', 'tillit-payment-gateway'),
+                    'label' => __('Company name', 'twoinc-payment-gateway'),
                     'autocomplete' => 'organization',
                     'type' => 'select',
                     /*'custom_attributes' => [
@@ -171,7 +171,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             if($this->wc_twoinc->get_option('enable_company_name') === 'yes' && $this->wc_twoinc->get_option('enable_company_id') === 'yes') {
 
                 $fields['billing']['company_id'] = [
-                    'label' => __('Company ID', 'tillit-payment-gateway'),
+                    'label' => __('Company ID', 'twoinc-payment-gateway'),
                     'class' => array('hidden'),
                     'required' => false,
                     'priority' => $company_name_priority + 1,
@@ -181,7 +181,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             } else {
 
                 $fields['billing']['company_id'] = [
-                    'label' => __('Company ID', 'tillit-payment-gateway'),
+                    'label' => __('Company ID', 'twoinc-payment-gateway'),
                     'class' => array('hidden'),
                     'required' => false,
                     'priority' => $company_name_priority + 1
@@ -192,7 +192,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             if ($this->wc_twoinc->get_option('add_field_department') === 'yes') {
 
                 $fields['billing']['department'] = [
-                    'label' => __('Department', 'tillit-payment-gateway'),
+                    'label' => __('Department', 'twoinc-payment-gateway'),
                     'class' => array('hidden'),
                     'required' => false,
                     'priority' => $company_name_priority + 2
@@ -203,7 +203,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             if ($this->wc_twoinc->get_option('add_field_project') === 'yes') {
 
                 $fields['billing']['project'] = [
-                    'label' => __('Project', 'tillit-payment-gateway'),
+                    'label' => __('Project', 'twoinc-payment-gateway'),
                     'class' => array('hidden'),
                     'required' => false,
                     'priority' => $company_name_priority + 3
@@ -227,7 +227,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
         {
 
             $fields['billing']['billing_phone_display'] = [
-                'label' => __('Phone', 'tillit-payment-gateway'),
+                'label' => __('Phone', 'twoinc-payment-gateway'),
                 'class' => array('hidden'),
                 'required' => false,
                 'priority' => $fields['billing']['billing_email']['priority'] + 1 // insert email field in-between, must not be directly under first name to avoid css error
@@ -268,7 +268,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
         public function render_twoinc_fields()
         {
             ob_start();
-            require_once WC_TILLIT_PLUGIN_PATH . '/views/woocommerce_checkout.php';
+            require_once WC_TWOINC_PLUGIN_PATH . '/views/woocommerce_checkout.php';
             $content = ob_get_clean();
             echo $content;
         }
@@ -281,7 +281,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
         public function render_twoinc_representative_fields()
         {
             ob_start();
-            require_once WC_TILLIT_PLUGIN_PATH . '/views/woocommerce_after_checkout_billing_form.php';
+            require_once WC_TWOINC_PLUGIN_PATH . '/views/woocommerce_after_checkout_billing_form.php';
             $content = ob_get_clean();
             echo $content;
         }
@@ -312,12 +312,12 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             $properties = [
                 'messages' => [
                     'subtitle_order_intent_ok' =>$this->wc_twoinc->get_option('subtitle'),
-                    'subtitle_order_intent_reject' => __('Invoice is not available for this purchase', 'tillit-payment-gateway'),
-                    'amount_min' => sprintf(__('Minimum Payment using Twoinc is %s', 'tillit-payment-gateway'), $amount_min),
-                    'amount_max' => sprintf(__('Maximum Payment using Twoinc is %s', 'tillit-payment-gateway'), $amount_max),
-                    'invalid_phone' => __('Phone number is invalid', 'tillit-payment-gateway'),
+                    'subtitle_order_intent_reject' => __('Invoice is not available for this purchase', 'twoinc-payment-gateway'),
+                    'amount_min' => sprintf(__('Minimum Payment using Two. is %s', 'twoinc-payment-gateway'), $amount_min),
+                    'amount_max' => sprintf(__('Maximum Payment using Two. is %s', 'twoinc-payment-gateway'), $amount_max),
+                    'invalid_phone' => __('Phone number is invalid', 'twoinc-payment-gateway'),
                 ],
-                'twoinc_plugin_url' => WC_TILLIT_PLUGIN_URL,
+                'twoinc_plugin_url' => WC_TWOINC_PLUGIN_URL,
                 'twoinc_search_host_no' => $this->wc_twoinc->twoinc_search_host_no,
                 'twoinc_search_host_gb' => $this->wc_twoinc->twoinc_search_host_gb,
                 'twoinc_checkout_host' => $this->wc_twoinc->twoinc_checkout_host,
