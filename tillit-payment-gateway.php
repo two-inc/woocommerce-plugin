@@ -1,11 +1,11 @@
 <?php
 /**
  * Plugin Name: Tillit Payment Gateway
- * Plugin URI: https://tillit.ai
+ * Plugin URI: https://two.inc
  * Description: Integration between WooCommerce and Two.
  * Version: 2.4.0
  * Author: Two.
- * Author URI: https://tillit.ai
+ * Author URI: https://two.inc
  * Text Domain: twoinc-payment-gateway
  * License: GPLv2 or later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html

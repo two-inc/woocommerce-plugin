@@ -379,6 +379,10 @@ msgstr "Betalingsinformasjon for ordren mangler"
 msgid "Use buttons instead of radios to select account type"
 msgstr "Bruk bannerknapper istedet for radioknapper"
 
+#: class/WC_Twoinc.php:150
+msgid "What is Two.?"
+msgstr "Hva er Two.?"
+
 #: class/WC_Twoinc.php:824
 #, php-format
 msgid ""

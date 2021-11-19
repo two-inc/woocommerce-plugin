@@ -611,6 +611,7 @@ let twoincDomHelper = {
     updateCompanyNameAgreement: function() {
 
         let companyName = Twoinc.getInstance().customerCompany.company_name
+        companyName = companyName.trim()
         if (companyName) {
             document.querySelector('.twoinc-buyer-name').innerText = companyName
             document.querySelector('.twoinc-buyer-name').classList.remove('hidden')

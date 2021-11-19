@@ -373,6 +373,10 @@ msgstr ""
 msgid "Use buttons instead of radios to select account type"
 msgstr ""
 
+#: class/WC_Twoinc.php:150
+msgid "What is Two.?"
+msgstr ""
+
 #: class/WC_Twoinc.php:824
 #, php-format
 msgid ""

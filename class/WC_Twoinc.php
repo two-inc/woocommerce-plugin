@@ -29,7 +29,7 @@ if (!class_exists('WC_Twoinc')) {
             $this->order_button_text = __('Place order', 'twoinc-payment-gateway');
             $this->method_title = __('Two.', 'twoinc-payment-gateway');
             $this->method_description = __('Making it easy for businesses to buy online.', 'twoinc-payment-gateway');
-            $this->icon = WC_HTTPS::force_https_url(WC_TWOINC_PLUGIN_URL . 'assets/images/logo.svg');
+            $this->icon = WC_HTTPS::force_https_url(WC_TWOINC_PLUGIN_URL . 'assets/images/two-logo.svg');
             $this->supports = ['products', 'refunds'];
 
             // Load the settings
@@ -147,7 +147,7 @@ if (!class_exists('WC_Twoinc')) {
          */
         private function get_abt_twoinc_html(){
             if ($this->get_option('show_abt_link') === 'yes') {
-                return '<div id="abt-twoinc-link"><a href="https://twoinc.notion.site/What-is-Tillit-4e12960d8e834e5aa20f879d59e0b32f" onclick="javascript:window.open(\'https://twoinc.notion.site/What-is-Tillit-4e12960d8e834e5aa20f879d59e0b32f\',\'WhatIsTwoinc\',\'toolbar=no, location=no, directories=no, status=no, menubar=no, scrollbars=yes, resizable=yes, width=1060, height=700\'); return false;">What is Twoinc?</a>&nbsp;</div>';
+                return '<div id="abt-twoinc-link"><a href="https://twoinc.notion.site/What-is-Tillit-4e12960d8e834e5aa20f879d59e0b32f" onclick="javascript:window.open(\'https://twoinc.notion.site/What-is-Tillit-4e12960d8e834e5aa20f879d59e0b32f\',\'WhatIsTwoinc\',\'toolbar=no, location=no, directories=no, status=no, menubar=no, scrollbars=yes, resizable=yes, width=1060, height=700\'); return false;">' . __('What is Two.?', 'twoinc-payment-gateway') . '</a>&nbsp;</div>';
             }
             return '';
         }
@@ -1346,10 +1346,10 @@ if (!class_exists('WC_Twoinc')) {
         private function get_twoinc_order_id_from_post_id($post_id)
         {
 
-            $twoinc_order_id = get_post_meta($order_id, 'twoinc_order_id', true);
+            $twoinc_order_id = get_post_meta($post_id, 'twoinc_order_id', true);
 
             if (!isset($twoinc_order_id)) {
-                $twoinc_order_id = get_post_meta($order_id, 'tillit_order_id', true);
+                $twoinc_order_id = get_post_meta($post_id, 'tillit_order_id', true);
             }
 
             return $twoinc_order_id;
@@ -1397,7 +1397,7 @@ if (!class_exists('WC_Twoinc')) {
                         <p style="color: #000000;font-size: 1.3em;text-align: justify;">Happy to see you here! Before you can start selling with the Two. buy now, pay later solution you need to complete our signup process. It\'s easy, fast and gives you immediate access to the <a target="_blank" href="https://portal.tillit.ai/merchant">Two. Merchant Portal</a></p>
                     </div>
                     <div>
-                        <img style="position: absolute;top: 40px;right: 40px;width: 100px;" src="/wp-content/plugins/tillit-payment-gateway/assets/images/logo.svg">
+                        <img style="position: absolute;top: 40px;right: 40px;width: 100px;" src="/wp-content/plugins/tillit-payment-gateway/assets/images/two-logo.svg">
                         <div style="position: absolute;bottom: 20px;right:40px;">
                             <a href="#" id="dismiss-twoinc-notice" class="button" style="margin-left: 20px;background: none;font-size: 1.1em;font-weight: 600;color: #3e16a2;padding: 7px 30px;border-color: #3e16a2;border-radius: 12px;">Not now, thanks</a>
                             <a href="https://portal.tillit.ai/merchant" target="_blank" class="button" style="margin-left: 20px;background: #3e16a2;font-size: 1.1em;font-weight: 600;color: #ffffff;padding: 7px 30px;border-color: #3e16a2;border-radius: 12px;">Set up my account</a>
