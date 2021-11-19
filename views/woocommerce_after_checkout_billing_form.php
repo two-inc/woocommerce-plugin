@@ -4,7 +4,7 @@
  */
 $checkout = WC()->checkout(); ?>
 <div class="woocommerce-billing-fields woocommerce-representative-fields">
-    <!--<h3><?php /*esc_html_e('Person placing the order', 'tillit-payment-gateway'); */?></h3>-->
+    <!--<h3><?php /*esc_html_e('Person placing the order', 'twoinc-payment-gateway'); */?></h3>-->
     <div class="woocommerce-billing-fields__field-wrapper">
         <div id="tillit-fn-target" class="tillit-target"></div>
         <div id="tillit-ln-target" class="tillit-target"></div>

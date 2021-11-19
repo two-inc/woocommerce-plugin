@@ -1,4 +1,4 @@
-let tillitUtilHelper = {
+let twoincUtilHelper = {
 
     /**
      * Check if selected account type is business
@@ -8,12 +8,12 @@ let tillitUtilHelper = {
     },
 
     /**
-     * Construct url to Tillit checkout api
+     * Construct url to Twoinc checkout api
      */
-    contructTillitUrl: function(path, params = {}) {
-        params['client'] = window.tillit.client_name
-        params['client_v'] = window.tillit.client_version
-        return window.tillit.tillit_checkout_host + path + '?' + (new URLSearchParams(params)).toString()
+    contructTwoincUrl: function(path, params = {}) {
+        params['client'] = window.twoinc.client_name
+        params['client_v'] = window.twoinc.client_version
+        return window.twoinc.twoinc_checkout_host + path + '?' + (new URLSearchParams(params)).toString()
     },
 
     /**
@@ -21,8 +21,8 @@ let tillitUtilHelper = {
      */
     getMessage: function(key) {
 
-        if (key && key in window.tillit.messages) {
-            return [window.tillit.messages[key],]
+        if (key && key in window.twoinc.messages) {
+            return [window.twoinc.messages[key],]
         }
         return []
 
@@ -45,7 +45,7 @@ let tillitUtilHelper = {
 
 }
 
-let tillitSelectWooHelper = {
+let twoincSelectWooHelper = {
 
     /**
      * Generate parameters for selectwoo
@@ -53,17 +53,17 @@ let tillitSelectWooHelper = {
     genSelectWooParams: function() {
         let countryParams = {
             "NO": {
-                "tillit_search_host": window.tillit.tillit_search_host_no,
+                "twoinc_search_host": window.twoinc.twoinc_search_host_no,
             },
             "GB": {
-                "tillit_search_host": window.tillit.tillit_search_host_gb,
+                "twoinc_search_host": window.twoinc.twoinc_search_host_gb,
             }
         }
 
         let country = jQuery('#billing_country').val()
 
         if (country in countryParams) {
-            let tillitSearchLimit = 50
+            let twoincSearchLimit = 50
             return {
                 minimumInputLength: 3,
                 width: '100%',
@@ -99,7 +99,7 @@ let tillitSelectWooHelper = {
                     delay: 200,
                     url: function(params){
                         params.page = params.page || 1
-                        return countryParams[country].tillit_search_host + '/search?limit=' + tillitSearchLimit + '&offset=' + ((params.page - 1) * tillitSearchLimit) + '&q=' + encodeURIComponent(params.term)
+                        return countryParams[country].twoinc_search_host + '/search?limit=' + twoincSearchLimit + '&offset=' + ((params.page - 1) * twoincSearchLimit) + '&q=' + encodeURIComponent(params.term)
                     },
                     data: function()
                     {
@@ -109,9 +109,9 @@ let tillitSelectWooHelper = {
                     {
 
                         return {
-                            results: tillitSelectWooHelper.extractItems(response),
+                            results: twoincSelectWooHelper.extractItems(response),
                             pagination: {
-                                more: (params.page * tillitSearchLimit) < response.data.total
+                                more: (params.page * twoincSearchLimit) < response.data.total
                             }
                         }
 
@@ -138,7 +138,7 @@ let tillitSelectWooHelper = {
      */
     fixSelectWooPositionCompanyName: function() {
 
-        if (Tillit.getInstance().withCompanyNameSearch) {
+        if (Twoinc.getInstance().withCompanyNameSearch) {
 
             const instance = jQuery('.woocommerce-checkout #billing_company_display').data('select2')
 
@@ -186,7 +186,7 @@ let tillitSelectWooHelper = {
 
 }
 
-let tillitDomHelper = {
+let twoincDomHelper = {
 
     /**
      * Initialize account type buttons
@@ -197,7 +197,7 @@ let tillitDomHelper = {
             // Move the account type DOM to before Billing
             jQuery('#woocommerce-account-type-container').parent().parent().prepend(jQuery('#woocommerce-account-type-container'))
             // Select the account type button based on radio val
-            let accountType = tillitDomHelper.getAccountType()
+            let accountType = twoincDomHelper.getAccountType()
             if (accountType) {
                 jQuery('form.checkout.woocommerce-checkout').prepend(jQuery('.account-type-wrapper'))
                 jQuery('.account-type-button[account-type-name="' + accountType + '"]').addClass('selected')
@@ -205,7 +205,7 @@ let tillitDomHelper = {
 
             // Show the radios or the buttons for account type if number of options > 1
             if (jQuery('input[name="account_type"]').length > 1) {
-                if (window.tillit.use_account_type_buttons !== 'yes') {
+                if (window.twoinc.use_account_type_buttons !== 'yes') {
                     // Show if shop configured to use buttons (and provided Kco is not displayed)
                     if (jQuery('#klarna-checkout-select-other').length == 0) {
                         jQuery('#account_type_field').show()
@@ -221,34 +221,34 @@ let tillitDomHelper = {
                 // If Kco checkout page is displayed
                 // Switching to another payment method would make account type "business" after page is reloaded
                 jQuery('#klarna-checkout-select-other').on('click', function() {
-                    sessionStorage.setItem('tillitAccountType', 'business')
+                    sessionStorage.setItem('twoincAccountType', 'business')
                 })
                 // Clicking Business button
                 jQuery('.account-type-button[account-type-name="business"]').on('click', function() {
                     // Save the account type
-                    sessionStorage.setItem('tillitAccountType', tillitDomHelper.getAccountType())
+                    sessionStorage.setItem('twoincAccountType', twoincDomHelper.getAccountType())
 
                     // After page is reloaded, clicking private button will route user back to Kco
                     sessionStorage.setItem('privateClickToKco', 'y')
                     jQuery('#klarna-checkout-select-other').click()
                 })
             } else if (jQuery('.woocommerce-account-type-fields').length > 0) {
-                // If Normal checkout page is displayed, and Tillit's account type radios are present
+                // If Normal checkout page is displayed, and Twoinc's account type radios are present
                 jQuery('.account-type-button[account-type-name="personal"], .account-type-button[account-type-name="sole_trader"]').on('click', function() {
 
-                    let hasNoPaymentExceptTillitKco = jQuery('.wc_payment_method:not(.payment_method_woocommerce-gateway-tillit):not(.payment_method_kco)').length == 0
-                    if (hasNoPaymentExceptTillitKco) {
+                    let hasNoPaymentExceptTwoincKco = jQuery('.wc_payment_method:not(.payment_method_woocommerce-gateway-tillit):not(.payment_method_kco)').length == 0
+                    if (hasNoPaymentExceptTwoincKco) {
                         // Kco is the only payment method in private/soletrader, so clear and click it to trigger
                         jQuery('#payment_method_kco').prop('checked', false)
                     }
-                    sessionStorage.setItem('tillitAccountType', tillitDomHelper.getAccountType())
+                    sessionStorage.setItem('twoincAccountType', twoincDomHelper.getAccountType())
 
-                    if (sessionStorage.getItem('privateClickToKco') === 'y' || hasNoPaymentExceptTillitKco) {
+                    if (sessionStorage.getItem('privateClickToKco') === 'y' || hasNoPaymentExceptTwoincKco) {
                         sessionStorage.removeItem('privateClickToKco')
                         // Clicking private button will route user back to Kco, only if user visited Kco before, or if Kco is the only payment left
                         jQuery('#payment_method_kco').click()
-                    } else if (sessionStorage.getItem('businessClickToTillit') === 'y' && tillitDomHelper.isTillitVisible()) {
-                        // Clicking business button will auto select Tillit payment, if Tillit was selected before account type is changed
+                    } else if (sessionStorage.getItem('businessClickToTwoinc') === 'y' && twoincDomHelper.isTwoincVisible()) {
+                        // Clicking business button will auto select Twoinc payment, if Twoinc was selected before account type is changed
                         jQuery('#payment_method_woocommerce-gateway-tillit').click()
                     }
 
@@ -257,7 +257,7 @@ let tillitDomHelper = {
 
             // If account type button is clicked, account type is saved in case the page will be reloaded
             jQuery('.account-type-button').on('click', function() {
-                sessionStorage.setItem('tillitAccountType', tillitDomHelper.getAccountType())
+                sessionStorage.setItem('twoincAccountType', twoincDomHelper.getAccountType())
             })
 
             // Temporarily click the banner buttons if radio button is changed
@@ -265,19 +265,19 @@ let tillitDomHelper = {
                 jQuery('.account-type-button[account-type-name="' + jQuery(this).attr('value') + '"]').click()
             })
 
-            // If business account type is selected and the payment method selected was Tillit, reselect it
+            // If business account type is selected and the payment method selected was Twoinc, reselect it
             jQuery('.account-type-button[account-type-name="business"]').on('click', function() {
-                if (sessionStorage.getItem('businessClickToTillit') === 'y') {
-                    // Clicking business button will auto select Tillit payment, if Tillit was selected before account type is changed
+                if (sessionStorage.getItem('businessClickToTwoinc') === 'y') {
+                    // Clicking business button will auto select Twoinc payment, if Twoinc was selected before account type is changed
                     jQuery('#payment_method_woocommerce-gateway-tillit').click()
                 }
             })
 
             // If Kco button is clicked, account type must not be business
-            jQuery('#payment_method_kco').on('change', Tillit.getInstance().onChangedToKco)
+            jQuery('#payment_method_kco').on('change', Twoinc.getInstance().onChangedToKco)
 
             // Select last saved account type in case of redirect from another payment method
-            accountType = sessionStorage.getItem('tillitAccountType')
+            accountType = sessionStorage.getItem('twoincAccountType')
             if (accountType) {
                 jQuery('.account-type-button[account-type-name="' + accountType + '"]').click()
             }
@@ -316,13 +316,13 @@ let tillitDomHelper = {
     addPlaceholder: function($el, name) {
 
         // Get an existing placeholder
-        let $placeholder = jQuery('#tillit-'+ name +'-source')
+        let $placeholder = jQuery('#twoinc-'+ name +'-source')
 
         // Stop if we already have a placeholder
         if ($placeholder.length > 0) return
 
         // Create a placeholder
-        $placeholder = jQuery('<div id="tillit-'+ name +'-source" class="tillit-source"></div>')
+        $placeholder = jQuery('<div id="twoinc-'+ name +'-source" class="twoinc-source"></div>')
 
         // Add placeholder after element
         $placeholder.insertAfter($el)
@@ -330,7 +330,7 @@ let tillitDomHelper = {
     },
 
     /**
-     * Move a field to Tillit template location and leave a placeholder
+     * Move a field to Twoinc template location and leave a placeholder
      */
     moveField: function(selector, name) {
 
@@ -338,10 +338,10 @@ let tillitDomHelper = {
         const $el = jQuery('#' + selector)
 
         // Add a placeholder
-        tillitDomHelper.addPlaceholder($el, name)
+        twoincDomHelper.addPlaceholder($el, name)
 
         // Get the target
-        const $target = jQuery('#tillit-' + name + '-target')
+        const $target = jQuery('#twoinc-' + name + '-target')
 
         // Move the input
         $el.insertAfter($target)
@@ -357,7 +357,7 @@ let tillitDomHelper = {
         const $el = jQuery('#' + selector)
 
         // Get the target
-        const $source = jQuery('#tillit-' + name + '-source')
+        const $source = jQuery('#twoinc-' + name + '-source')
 
         // Move the input
         if ($source.length > 0) {
@@ -367,25 +367,25 @@ let tillitDomHelper = {
     },
 
     /**
-     * Move the fields to their original or Tillit template location
+     * Move the fields to their original or Twoinc template location
      */
     positionFields: function() {
 
         setTimeout(function(){
             // Get the account type
-            const accountType = tillitDomHelper.getAccountType()
+            const accountType = twoincDomHelper.getAccountType()
 
             // If business account
-            if (tillitUtilHelper.isCompany(accountType)) {
-                tillitDomHelper.moveField('billing_first_name_field', 'fn')
-                tillitDomHelper.moveField('billing_last_name_field', 'ln')
-                tillitDomHelper.moveField('billing_phone_display_field', 'ph')
-                tillitDomHelper.moveField('billing_email_field', 'em')
+            if (twoincUtilHelper.isCompany(accountType)) {
+                twoincDomHelper.moveField('billing_first_name_field', 'fn')
+                twoincDomHelper.moveField('billing_last_name_field', 'ln')
+                twoincDomHelper.moveField('billing_phone_display_field', 'ph')
+                twoincDomHelper.moveField('billing_email_field', 'em')
             } else {
-                tillitDomHelper.revertField('billing_first_name_field', 'fn')
-                tillitDomHelper.revertField('billing_last_name_field', 'ln')
-                tillitDomHelper.revertField('billing_phone_display_field', 'ph')
-                tillitDomHelper.revertField('billing_email_field', 'em')
+                twoincDomHelper.revertField('billing_first_name_field', 'fn')
+                twoincDomHelper.revertField('billing_last_name_field', 'ln')
+                twoincDomHelper.revertField('billing_phone_display_field', 'ph')
+                twoincDomHelper.revertField('billing_email_field', 'em')
             }
         }, 100)
 
@@ -424,15 +424,15 @@ let tillitDomHelper = {
                 $input.attr('required', true)
 
                 // Add 'required' visual cue
-                if ($row.find('label .tillit-required').length == 0) {
-                    $row.find('label').append('<abbr class="required tillit-required" title="required">*</abbr>')
+                if ($row.find('label .twoinc-required').length == 0) {
+                    $row.find('label').append('<abbr class="required twoinc-required" title="required">*</abbr>')
                 }
                 $row.find('label .optional').hide()
             } else {
                 $input.attr('required', false)
 
                 // Show the hidden optional visual cue
-                $row.find('label .tillit-required').remove()
+                $row.find('label .twoinc-required').remove()
                 $row.find('label .optional').show()
             }
 
@@ -449,14 +449,14 @@ let tillitDomHelper = {
         let $visibleNoncompanyTargets = '#billing_phone_field, #billing_company_field'
         let $visibleCompanyTargets = '.woocommerce-company-fields, .woocommerce-representative-fields, #billing_company_display_field, #billing_phone_display_field'
         let $requiredCompanyTargets = '#billing_phone_display_field'
-        if (window.tillit.company_name_search !== 'yes') {
+        if (window.twoinc.company_name_search !== 'yes') {
             $visibleCompanyTargets += ', #billing_company_field'
             $requiredCompanyTargets += ', #billing_company_field'
         }
-        if (window.tillit.company_name_search !== 'yes' || window.tillit.company_id_search !== 'yes') {
+        if (window.twoinc.company_name_search !== 'yes' || window.twoinc.company_id_search !== 'yes') {
             $visibleCompanyTargets += ', #company_id_field'
         }
-        if (window.tillit.mark_tillit_fields_required === 'yes') {
+        if (window.twoinc.mark_twoinc_fields_required === 'yes') {
             $requiredCompanyTargets = $visibleCompanyTargets
         }
         $visibleCompanyTargets += ', #department_field, #project_field'
@@ -465,8 +465,8 @@ let tillitDomHelper = {
         $visibleNoncompanyTargets = jQuery($visibleNoncompanyTargets)
 
         // Toggle the targets based on the account type
-        const isTillitAvailable = tillitDomHelper.isTillitVisible() && tillitUtilHelper.isCompany(accountType)
-        if (isTillitAvailable) {
+        const isTwoincAvailable = twoincDomHelper.isTwoincVisible() && twoincUtilHelper.isCompany(accountType)
+        if (isTwoincAvailable) {
             $visibleNoncompanyTargets.addClass('hidden')
             $visibleCompanyTargets.removeClass('hidden')
         } else {
@@ -475,7 +475,7 @@ let tillitDomHelper = {
         }
 
         // Toggle the required fields based on the account type
-        tillitDomHelper.toggleRequiredFields($requiredCompanyTargets, isTillitAvailable)
+        twoincDomHelper.toggleRequiredFields($requiredCompanyTargets, isTwoincAvailable)
 
     },
 
@@ -507,42 +507,42 @@ let tillitDomHelper = {
     },
 
     /**
-     * Hide or show the Tillit payment method
+     * Hide or show the Twoinc payment method
      */
-    toggleMethod: function(isTillitMethodHidden) {
+    toggleMethod: function(isTwoincMethodHidden) {
 
-        // Get the Tillit payment method section
-        const $tillitSection = jQuery('#payment .wc_payment_methods > li.payment_method_woocommerce-gateway-tillit')
+        // Get the Twoinc payment method section
+        const $twoincSection = jQuery('#payment .wc_payment_methods > li.payment_method_woocommerce-gateway-tillit')
         const $otherPaymentSections = jQuery('#payment .wc_payment_methods > li:not([class*="payment_method_woocommerce-gateway-tillit"])')
 
-        // Get the Tillit payment method input
-        const $tillitBox = jQuery(':input[value="woocommerce-gateway-tillit"]')
+        // Get the Twoinc payment method input
+        const $twoincBox = jQuery(':input[value="woocommerce-gateway-tillit"]')
 
-        // True if the Tillit payment method is disabled
-        const isTillitDisabled = window.tillit.enable_order_intent === 'yes' && isTillitMethodHidden === true
+        // True if the Twoinc payment method is disabled
+        const isTwoincDisabled = window.twoinc.enable_order_intent === 'yes' && isTwoincMethodHidden === true
 
-        // Disable the Tillit payment method for non-business orders
-        if (isTillitDisabled) {
-            // tillitDomHelper.deselectPaymentMethod($tillitBox)
-            // $tillitBox.attr('disabled', isTillitDisabled)
-            tillitDomHelper.deselectPaymentMethod($tillitBox)
+        // Disable the Twoinc payment method for non-business orders
+        if (isTwoincDisabled) {
+            // twoincDomHelper.deselectPaymentMethod($twoincBox)
+            // $twoincBox.attr('disabled', isTwoincDisabled)
+            twoincDomHelper.deselectPaymentMethod($twoincBox)
         }
 
-        if (tillitUtilHelper.isCompany(tillitDomHelper.getAccountType())) {
+        if (twoincUtilHelper.isCompany(twoincDomHelper.getAccountType())) {
 
-            // Show Tillit payment option
-            $tillitSection.removeClass('hidden')
+            // Show Twoinc payment option
+            $twoincSection.removeClass('hidden')
 
-            // If Tillit is approved and setting is to hide other payment methods
-            if (window.tillit.display_other_payments !== 'yes') {
-                if (isTillitDisabled) $otherPaymentSections.show()
+            // If Twoinc is approved and setting is to hide other payment methods
+            if (window.twoinc.display_other_payments !== 'yes') {
+                if (isTwoincDisabled) $otherPaymentSections.show()
                 else $otherPaymentSections.hide()
             }
 
         } else {
 
-            // Hide Tillit payment option
-            $tillitSection.addClass('hidden')
+            // Hide Twoinc payment option
+            $twoincSection.addClass('hidden')
 
             // Always show other methods for non-business purchases
             $otherPaymentSections.show()
@@ -554,33 +554,33 @@ let tillitDomHelper = {
     /**
      * Select the default payment method
      */
-    selectDefaultMethod: function(isTillitMethodHidden) {
+    selectDefaultMethod: function(isTwoincMethodHidden) {
 
-        // Get the Tillit payment method input
-        const $tillitPaymentMethod = jQuery(':input[value="woocommerce-gateway-tillit"]')
+        // Get the Twoinc payment method input
+        const $twoincPaymentMethod = jQuery(':input[value="woocommerce-gateway-tillit"]')
 
-        // Get the Tillit payment block
-        const $tillitPmBlk = jQuery('.payment_method_woocommerce-gateway-tillit')
+        // Get the Twoinc payment block
+        const $twoincPmBlk = jQuery('.payment_method_woocommerce-gateway-tillit')
 
-        // True if the Tillit payment method is disabled
-        const isTillitDisabled = window.tillit.enable_order_intent === 'yes' && isTillitMethodHidden === true
+        // True if the Twoinc payment method is disabled
+        const isTwoincDisabled = window.twoinc.enable_order_intent === 'yes' && isTwoincMethodHidden === true
 
-        // Disable the Tillit payment method for non-business orders
-        if (isTillitDisabled) {
+        // Disable the Twoinc payment method for non-business orders
+        if (isTwoincDisabled) {
 
-            // $tillitPaymentMethod.attr('disabled', isTillitDisabled)
-            tillitDomHelper.deselectPaymentMethod($tillitPaymentMethod)
+            // $twoincPaymentMethod.attr('disabled', isTwoincDisabled)
+            twoincDomHelper.deselectPaymentMethod($twoincPaymentMethod)
 
             // // Fallback if set in admin and current account type is business
-            // if (window.tillit.fallback_to_another_payment === 'yes' && tillitUtilHelper.isCompany(tillitDomHelper.getAccountType())) {
+            // if (window.twoinc.fallback_to_another_payment === 'yes' && twoincUtilHelper.isCompany(twoincDomHelper.getAccountType())) {
             //     // Select the first visible payment method
-            //     $tillitPmBlk.parent().find('li:visible').eq(0).find(':radio').click()
+            //     $twoincPmBlk.parent().find('li:visible').eq(0).find(':radio').click()
             // }
 
         } else {
 
             // Select the payment method for business accounts
-            $tillitPaymentMethod.click()
+            $twoincPaymentMethod.click()
 
         }
 
@@ -592,7 +592,7 @@ let tillitDomHelper = {
     toggleActions: function() {
 
         // Get the account type
-        const accountType = tillitDomHelper.getAccountType()
+        const accountType = twoincDomHelper.getAccountType()
 
         // Get the payment method
         const paymentMethod = jQuery(':input[name="payment_method"]:checked').val()
@@ -600,8 +600,8 @@ let tillitDomHelper = {
         // Get the place order button
         const $placeOrder = jQuery('#place_order')
 
-        // Disable the place order button if order is non-business and payment method is Tillit
-        $placeOrder.attr('disabled', !tillitUtilHelper.isCompany(accountType) && paymentMethod === 'woocommerce-gateway-tillit')
+        // Disable the place order button if order is non-business and payment method is Twoinc
+        $placeOrder.attr('disabled', !twoincUtilHelper.isCompany(accountType) && paymentMethod === 'woocommerce-gateway-tillit')
 
     },
 
@@ -610,15 +610,16 @@ let tillitDomHelper = {
      */
     updateCompanyNameAgreement: function() {
 
-        let companyName = Tillit.getInstance().customerCompany.company_name
+        let companyName = Twoinc.getInstance().customerCompany.company_name
+        companyName = companyName.trim()
         if (companyName) {
-            document.querySelector('.tillit-buyer-name').innerText = companyName
-            document.querySelector('.tillit-buyer-name').classList.remove('hidden')
-            document.querySelector('.tillit-buyer-name-placeholder').classList.add('hidden')
+            document.querySelector('.twoinc-buyer-name').innerText = companyName
+            document.querySelector('.twoinc-buyer-name').classList.remove('hidden')
+            document.querySelector('.twoinc-buyer-name-placeholder').classList.add('hidden')
         } else {
-            document.querySelector('.tillit-buyer-name').innerText = ''
-            document.querySelector('.tillit-buyer-name').classList.add('hidden')
-            document.querySelector('.tillit-buyer-name-placeholder').classList.remove('hidden')
+            document.querySelector('.twoinc-buyer-name').innerText = ''
+            document.querySelector('.twoinc-buyer-name').classList.add('hidden')
+            document.querySelector('.twoinc-buyer-name-placeholder').classList.remove('hidden')
         }
 
     },
@@ -629,8 +630,8 @@ let tillitDomHelper = {
     getCompanyName: function()
     {
 
-        if (window.tillit.company_name_search === 'yes') {
-            let companyNameObj = tillitDomHelper.getCheckoutInput('SPAN', 'select', 'select2-billing_company_display-container')
+        if (window.twoinc.company_name_search === 'yes') {
+            let companyNameObj = twoincDomHelper.getCheckoutInput('SPAN', 'select', 'select2-billing_company_display-container')
             if (companyNameObj) {
                 return companyNameObj.val
             }
@@ -649,7 +650,7 @@ let tillitDomHelper = {
     {
 
         return {
-            'company_name': tillitDomHelper.getCompanyName(),
+            'company_name': twoincDomHelper.getCompanyName(),
             'country_prefix': jQuery('#billing_country').val(),
             'organization_number': jQuery('#company_id').val()
         }
@@ -672,16 +673,16 @@ let tillitDomHelper = {
     },
 
     /**
-     * Check if tillit payment is currently selected
+     * Check if twoinc payment is currently selected
      */
-    isSelectedPaymentTillit: function() {
+    isSelectedPaymentTwoinc: function() {
         return jQuery('input[name="payment_method"]:checked').val() === 'woocommerce-gateway-tillit'
     },
 
     /**
-     * Check if tillit payment is currently visible
+     * Check if twoinc payment is currently visible
      */
-    isTillitVisible: function() {
+    isTwoincVisible: function() {
         return jQuery('#payment_method_woocommerce-gateway-tillit:visible').length !== 0
     },
 
@@ -700,7 +701,7 @@ let tillitDomHelper = {
         if (node.classList && node.classList.contains('woocommerce-Price-currencySymbol')) return
         if (node.childNodes) {
             for (let n of node.childNodes) {
-                let val = tillitDomHelper.getPriceRecursively(n)
+                let val = twoincDomHelper.getPriceRecursively(n)
                 if (val) {
                     return val
                 }
@@ -708,8 +709,8 @@ let tillitDomHelper = {
         }
         if (node.nodeName === '#text') {
             let val = node.textContent
-                .replaceAll(window.tillit.price_thousand_separator, '')
-                .replaceAll(window.tillit.price_decimal_separator, '.')
+                .replaceAll(window.twoinc.price_thousand_separator, '')
+                .replaceAll(window.twoinc.price_decimal_separator, '.')
             if (!isNaN(val) && !isNaN(parseFloat(val))) {
                 return parseFloat(val)
             }
@@ -722,7 +723,7 @@ let tillitDomHelper = {
     getPrice: function(priceName) {
         let node = document.querySelector('.' + priceName + ' .woocommerce-Price-amount bdi')
                    || document.querySelector('.' + priceName + ' .woocommerce-Price-amount')
-        return tillitDomHelper.getPriceRecursively(node)
+        return twoincDomHelper.getPriceRecursively(node)
     },
 
     /**
@@ -731,30 +732,30 @@ let tillitDomHelper = {
     getLoaderHtml: function() {
 
         let img = document.createElement("IMG")
-        img.src = window.tillit.tillit_plugin_url + '/assets/images/loader.svg'
+        img.src = window.twoinc.twoinc_plugin_url + '/assets/images/loader.svg'
         img.className = 'loader'
         return img
 
     },
 
     /**
-     * Rearrange descriptions in Tillit payment to make it cleaner
+     * Rearrange descriptions in Twoinc payment to make it cleaner
      */
     rearrangeDescription: function() {
 
-        let tillitPaymentLine = jQuery('label[for="payment_method_woocommerce-gateway-tillit"]')
+        let twoincPaymentLine = jQuery('label[for="payment_method_woocommerce-gateway-tillit"]')
 
-        if (tillitPaymentLine.length > 0) {
-            tillitPaymentLine.after(jQuery('.payment_method_woocommerce-gateway-tillit .tillit-subtitle'))
+        if (twoincPaymentLine.length > 0) {
+            twoincPaymentLine.after(jQuery('.payment_method_woocommerce-gateway-tillit .twoinc-subtitle'))
         }
 
-        let tillitPaymentBox = jQuery('.payment_box.payment_method_woocommerce-gateway-tillit')
+        let twoincPaymentBox = jQuery('.payment_box.payment_method_woocommerce-gateway-tillit')
 
-        if (tillitPaymentBox.length > 0) {
-            tillitPaymentBox.after(jQuery('#abt-tillit-link'))
+        if (twoincPaymentBox.length > 0) {
+            twoincPaymentBox.after(jQuery('#abt-twoinc-link'))
 
-            if (tillitPaymentBox.parent().innerWidth() > 600) {
-                jQuery('#abt-tillit-link a').css('float', 'left')
+            if (twoincPaymentBox.parent().innerWidth() > 600) {
+                jQuery('#abt-twoinc-link a').css('float', 'left')
             }
         }
 
@@ -915,7 +916,7 @@ let tillitDomHelper = {
      * Get id of current or parent theme, return null if not found
      */
     insertCustomCss: function() {
-        let themeBase = tillitDomHelper.getThemeBase()
+        let themeBase = twoincDomHelper.getThemeBase()
         if (themeBase) {
             jQuery('head').append('<link href="/wp-content/plugins/tillit-payment-gateway/assets/css/c-' + themeBase + '.css" type="text/css" rel="stylesheet" />');
         }
@@ -923,13 +924,13 @@ let tillitDomHelper = {
 
 }
 
-class Tillit {
+class Twoinc {
 
     static instance = null
     isInitialized = false
     withCompanyNameSearch = false
-    isTillitMethodHidden = true
-    isTillitApproved = null
+    isTwoincMethodHidden = true
+    isTwoincApproved = null
     billingPhoneInput = null
     orderIntentCheck = {
         'interval': null,
@@ -953,16 +954,16 @@ class Tillit {
     constructor()
     {
 
-        if (Tillit.instance) {
-            throw 'Tillit is a singleton';
+        if (Twoinc.instance) {
+            throw 'Twoinc is a singleton';
         }
-        Tillit.instance = this
-        this.withCompanyNameSearch = window.tillit.company_name_search && window.tillit.company_name_search === 'yes'
+        Twoinc.instance = this
+        this.withCompanyNameSearch = window.twoinc.company_name_search && window.twoinc.company_name_search === 'yes'
 
     }
 
     /**
-     * Initialize Tillit code
+     * Initialize Twoinc code
      */
     initialize(loadSavedInputs) {
         if (this.isInitialized) {
@@ -990,18 +991,18 @@ class Tillit {
         if (jQuery('[name="account_type"]:checked').length > 0) {
 
             // Get the account type
-            const accountType = tillitDomHelper.getAccountType()
+            const accountType = twoincDomHelper.getAccountType()
 
             // Toggle the company fields
-            tillitDomHelper.toggleCompanyFields(accountType)
+            twoincDomHelper.toggleCompanyFields(accountType)
 
             // Move the fields to correct positions
-            tillitDomHelper.positionFields()
+            twoincDomHelper.positionFields()
 
         }
 
-        // Tillit is hidden if selected account type is not company
-        this.isTillitMethodHidden = !tillitUtilHelper.isCompany(tillitDomHelper.getAccountType())
+        // Twoinc is hidden if selected account type is not company
+        this.isTwoincMethodHidden = !twoincUtilHelper.isCompany(twoincDomHelper.getAccountType())
 
         if (this.withCompanyNameSearch) {
 
@@ -1009,8 +1010,8 @@ class Tillit {
             $billingCountry.on('select2:select', function(e){
                 // Clear company inputs
                 $billingCompanyDisplay.html('')
-                $billingCompanyDisplay.selectWoo(tillitSelectWooHelper.genSelectWooParams())
-                tillitSelectWooHelper.fixSelectWooPositionCompanyName()
+                $billingCompanyDisplay.selectWoo(twoincSelectWooHelper.genSelectWooParams())
+                twoincSelectWooHelper.fixSelectWooPositionCompanyName()
                 jQuery('#company_id').val('')
 
                 // Clear the addresses, in case address get request fails
@@ -1030,19 +1031,19 @@ class Tillit {
 
             // Turn the select input into select2
             setTimeout(function(){
-                const $billingCompanySelect = $billingCompanyDisplay.selectWoo(tillitSelectWooHelper.genSelectWooParams())
+                const $billingCompanySelect = $billingCompanyDisplay.selectWoo(twoincSelectWooHelper.genSelectWooParams())
                 $billingCompanySelect.on('select2:select', function(e){
 
                     // Get the option data
                     const data = e.params.data
 
                     // Set the company name
-                    Tillit.getInstance().customerCompany.company_name = data.id
+                    Twoinc.getInstance().customerCompany.company_name = data.id
 
-                    if (window.tillit.company_id_search && window.tillit.company_id_search === 'yes') {
+                    if (window.twoinc.company_id_search && window.twoinc.company_id_search === 'yes') {
 
                         // Set the company ID
-                        Tillit.getInstance().customerCompany.organization_number = data.company_id
+                        Twoinc.getInstance().customerCompany.organization_number = data.company_id
 
                         // Set the company ID to HTML DOM
                         $companyId.val(data.company_id)
@@ -1059,13 +1060,13 @@ class Tillit {
                     }
 
                     // Update the company name in agreement sentence
-                    tillitDomHelper.updateCompanyNameAgreement()
+                    twoincDomHelper.updateCompanyNameAgreement()
 
                     // Get the company approval status
-                    Tillit.getInstance().getApproval()
+                    Twoinc.getInstance().getApproval()
 
                     // Get country
-                    let country_prefix = Tillit.getInstance().customerCompany.country_prefix
+                    let country_prefix = Twoinc.getInstance().customerCompany.country_prefix
                     if (!country_prefix || !['GB'].includes(country_prefix)) country_prefix = 'NO'
 
                     // Clear the addresses, in case address get request fails
@@ -1076,7 +1077,7 @@ class Tillit {
                     // Fetch the company data
                     const addressResponse = jQuery.ajax({
                         dataType: 'json',
-                        url: tillitUtilHelper.contructTillitUrl('/v1/' + country_prefix + '/company/' + jQuery('#company_id').val() + '/address')
+                        url: twoincUtilHelper.contructTwoincUrl('/v1/' + country_prefix + '/company/' + jQuery('#company_id').val() + '/address')
                     })
 
                     addressResponse.done(function(response){
@@ -1102,7 +1103,7 @@ class Tillit {
 
                 })
 
-                tillitSelectWooHelper.fixSelectWooPositionCompanyName()
+                twoincSelectWooHelper.fixSelectWooPositionCompanyName()
 
                 $billingCompanySelect.on('select2:open', function(e){
                     setTimeout(function(){
@@ -1116,7 +1117,7 @@ class Tillit {
         }
 
         // Disable or enable actions based on the account type
-        $body.on('updated_checkout', Tillit.getInstance().onUpdatedCheckout)
+        $body.on('updated_checkout', Twoinc.getInstance().onUpdatedCheckout)
 
         // Handle the representative inputs blur event
         $body.on('blur', '#billing_first_name, #billing_last_name, #billing_email, #billing_phone', this.onRepresentativeInputBlur)
@@ -1128,51 +1129,51 @@ class Tillit {
         $body.on('change', '#billing_phone_display', this.onPhoneInputChange)
         $body.on('keyup', '#billing_phone_display', this.onPhoneInputChange)
         setTimeout(function(){
-            jQuery('.iti__country-list').on('click', Tillit.getInstance().onPhoneInputChange)
+            jQuery('.iti__country-list').on('click', Twoinc.getInstance().onPhoneInputChange)
         }, 1000)
 
         // Handle the company inputs change event
-        $body.on('change', '#select2-billing_company_display-container', tillitDomHelper.updateCompanyNameAgreement)
+        $body.on('change', '#select2-billing_company_display-container', twoincDomHelper.updateCompanyNameAgreement)
         $body.on('change', '#billing_company', function() {
-            Tillit.getInstance().customerCompany.company_name = tillitDomHelper.getCompanyName()
-            tillitDomHelper.updateCompanyNameAgreement()
+            Twoinc.getInstance().customerCompany.company_name = twoincDomHelper.getCompanyName()
+            twoincDomHelper.updateCompanyNameAgreement()
         })
 
         // Handle the country inputs change event
         $body.on('change', '#billing_country', this.onCountryInputChange)
 
         $body.on('click', '#place_order', function(){
-            clearInterval(Tillit.getInstance().orderIntentCheck.interval)
-            Tillit.getInstance().orderIntentCheck.interval = null
-            Tillit.getInstance().orderIntentCheck.pendingCheck = false
+            clearInterval(Twoinc.getInstance().orderIntentCheck.interval)
+            Twoinc.getInstance().orderIntentCheck.interval = null
+            Twoinc.getInstance().orderIntentCheck.pendingCheck = false
         })
 
         $body.on('checkout_error', function(){
-            clearInterval(Tillit.getInstance().orderIntentCheck.interval)
-            Tillit.getInstance().orderIntentCheck.interval = null
-            Tillit.getInstance().orderIntentCheck.pendingCheck = false
+            clearInterval(Twoinc.getInstance().orderIntentCheck.interval)
+            Twoinc.getInstance().orderIntentCheck.interval = null
+            Twoinc.getInstance().orderIntentCheck.pendingCheck = false
         })
 
         // Handle account type change
         $checkout.on('change', '[name="account_type"]', this.onChangeAccountType)
 
         // If setting is to hide other payment methods, hide when page load by default
-        if (window.tillit.display_other_payments !== 'yes') {
+        if (window.twoinc.display_other_payments !== 'yes') {
             jQuery('#payment .wc_payment_methods > li:not([class*="payment_method_woocommerce-gateway-tillit"])').hide()
         }
 
         setInterval(function(){
-            if (Tillit.getInstance().orderIntentCheck.pendingCheck) Tillit.getInstance().getApproval()
-            tillitDomHelper.saveCheckoutInputs()
+            if (Twoinc.getInstance().orderIntentCheck.pendingCheck) Twoinc.getInstance().getApproval()
+            twoincDomHelper.saveCheckoutInputs()
         }, 3000)
 
         // Add customization for current theme if any
-        tillitDomHelper.insertCustomCss()
+        twoincDomHelper.insertCustomCss()
 
-        if (loadSavedInputs) tillitDomHelper.loadCheckoutInputs()
+        if (loadSavedInputs) twoincDomHelper.loadCheckoutInputs()
         this.initBillingPhoneDisplay()
-        this.customerCompany = tillitDomHelper.getCompanyData()
-        this.customerRepresentative = tillitDomHelper.getRepresentativeData()
+        this.customerCompany = twoincDomHelper.getCompanyData()
+        this.customerRepresentative = twoincDomHelper.getRepresentativeData()
         this.updateElements()
         this.isInitialized = true
     }
@@ -1181,8 +1182,8 @@ class Tillit {
      * Get singleton instance
      */
     static getInstance() {
-        if (!Tillit.instance) Tillit.instance = new Tillit()
-        return Tillit.instance
+        if (!Twoinc.instance) Twoinc.instance = new Twoinc()
+        return Twoinc.instance
     }
 
 
@@ -1194,7 +1195,7 @@ class Tillit {
         let billingPhoneInputField = document.querySelector("#billing_phone_display")
         this.billingPhoneInput = window.intlTelInput(billingPhoneInputField, {
             utilsScript: "https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.8/js/utils.js",
-            preferredCountries: [window.tillit.shop_base_country],
+            preferredCountries: [window.twoinc.shop_base_country],
             separateDialCode: true,
             customPlaceholder: function(selectedCountryPlaceholder, selectedCountryData) {
                 if (selectedCountryData.iso2 === 'gb') {
@@ -1221,16 +1222,16 @@ class Tillit {
         this.getApproval()
 
         // Toggle the action buttons
-        tillitDomHelper.toggleActions()
+        twoincDomHelper.toggleActions()
 
-        // Enable or disable the Tillit method
-        tillitDomHelper.toggleMethod(this.isTillitMethodHidden)
+        // Enable or disable the Twoinc method
+        twoincDomHelper.toggleMethod(this.isTwoincMethodHidden)
 
-        // Enable or disable the Tillit method
-        tillitDomHelper.updateCompanyNameAgreement()
+        // Enable or disable the Twoinc method
+        twoincDomHelper.updateCompanyNameAgreement()
 
-        // Rearrange the DOMs in Tillit payment
-        tillitDomHelper.rearrangeDescription()
+        // Rearrange the DOMs in Twoinc payment
+        twoincDomHelper.rearrangeDescription()
 
     }
 
@@ -1241,7 +1242,7 @@ class Tillit {
      */
     isReadyApprovalCheck() {
 
-        if (window.tillit.enable_order_intent !== 'yes') {
+        if (window.twoinc.enable_order_intent !== 'yes') {
             return false
         }
 
@@ -1275,8 +1276,8 @@ class Tillit {
         }
 
         this.orderIntentCheck.interval = setInterval(function() {
-            let gross_amount = tillitDomHelper.getPrice('order-total')
-            let tax_amount = tillitDomHelper.getPrice('tax-rate')
+            let gross_amount = twoincDomHelper.getPrice('order-total')
+            let tax_amount = twoincDomHelper.getPrice('tax-rate')
             if (!gross_amount) {
                 return
             }
@@ -1285,14 +1286,14 @@ class Tillit {
             }
 
             let jsonBody = JSON.stringify({
-                "merchant_short_name": window.tillit.merchant_short_name,
+                "merchant_short_name": window.twoinc.merchant_short_name,
                 "gross_amount": "" + gross_amount,
-                "invoice_type": window.tillit.product_type,
+                "invoice_type": window.twoinc.product_type,
                 "buyer": {
-                    "company": Tillit.getInstance().customerCompany,
-                    "representative": Tillit.getInstance().customerRepresentative
+                    "company": Twoinc.getInstance().customerCompany,
+                    "representative": Twoinc.getInstance().customerRepresentative
                 },
-                "currency": window.tillit.currency,
+                "currency": window.twoinc.currency,
                 "line_items": [{
                     "name": "Cart",
                     "description": "",
@@ -1315,28 +1316,28 @@ class Tillit {
                 }]
             })
 
-            let hashedBody = tillitUtilHelper.getUnsecuredHash(jsonBody)
-            if (Tillit.getInstance().orderIntentLog[hashedBody]) {
-                Tillit.getInstance().orderIntentLog[hashedBody] = Tillit.getInstance().orderIntentLog[hashedBody] + 1
+            let hashedBody = twoincUtilHelper.getUnsecuredHash(jsonBody)
+            if (Twoinc.getInstance().orderIntentLog[hashedBody]) {
+                Twoinc.getInstance().orderIntentLog[hashedBody] = Twoinc.getInstance().orderIntentLog[hashedBody] + 1
                 return
             } else {
-                Tillit.getInstance().orderIntentLog[hashedBody] = 1
+                Twoinc.getInstance().orderIntentLog[hashedBody] = 1
             }
-            Tillit.getInstance().orderIntentCheck['lastCheckHash'] = hashedBody
+            Twoinc.getInstance().orderIntentCheck['lastCheckHash'] = hashedBody
 
-            clearInterval(Tillit.getInstance().orderIntentCheck.interval)
-            Tillit.getInstance().orderIntentCheck.interval = null
-            Tillit.getInstance().orderIntentCheck.pendingCheck = false
+            clearInterval(Twoinc.getInstance().orderIntentCheck.interval)
+            Twoinc.getInstance().orderIntentCheck.interval = null
+            Twoinc.getInstance().orderIntentCheck.pendingCheck = false
 
-            let subtitleElem = document.querySelector('.payment_method_woocommerce-gateway-tillit .tillit-subtitle')
+            let subtitleElem = document.querySelector('.payment_method_woocommerce-gateway-tillit .twoinc-subtitle')
             if (subtitleElem) {
                 subtitleElem.innerHTML = ''
-                subtitleElem.appendChild(tillitDomHelper.getLoaderHtml())
+                subtitleElem.appendChild(twoincDomHelper.getLoaderHtml())
             }
 
             // Create an order intent
             const approvalResponse = jQuery.ajax({
-                url: tillitUtilHelper.contructTillitUrl('/v1/order_intent'),
+                url: twoincUtilHelper.contructTwoincUrl('/v1/order_intent'),
                 contentType: "application/json; charset=utf-8",
                 dataType: 'json',
                 method: 'POST',
@@ -1347,16 +1348,16 @@ class Tillit {
             approvalResponse.done(function(response){
 
                 // Store the approved state
-                Tillit.getInstance().isTillitApproved = response.approved
+                Twoinc.getInstance().isTwoincApproved = response.approved
 
-                // Toggle the Tillit payment method
-                Tillit.getInstance().isTillitMethodHidden = !(Tillit.getInstance().isTillitApproved && tillitUtilHelper.isCompany(tillitDomHelper.getAccountType()))
+                // Toggle the Twoinc payment method
+                Twoinc.getInstance().isTwoincMethodHidden = !(Twoinc.getInstance().isTwoincApproved && twoincUtilHelper.isCompany(twoincDomHelper.getAccountType()))
 
-                // Show or hide the Tillit payment method
-                tillitDomHelper.toggleMethod(Tillit.getInstance().isTillitMethodHidden)
+                // Show or hide the Twoinc payment method
+                twoincDomHelper.toggleMethod(Twoinc.getInstance().isTwoincMethodHidden)
 
                 // Select the default payment method
-                tillitDomHelper.selectDefaultMethod(Tillit.getInstance().isTillitMethodHidden)
+                twoincDomHelper.selectDefaultMethod(Twoinc.getInstance().isTwoincMethodHidden)
 
                 // Update tracking number
                 if (response.tracking_id && document.querySelector('#tracking_id')) {
@@ -1364,26 +1365,26 @@ class Tillit {
                 }
 
                 // Display messages and update order intent logs
-                Tillit.getInstance().processOrderIntentResponse(response)
+                Twoinc.getInstance().processOrderIntentResponse(response)
 
             })
 
             approvalResponse.fail(function(response){
 
                 // Store the approved state
-                Tillit.getInstance().isTillitApproved = false
+                Twoinc.getInstance().isTwoincApproved = false
 
-                // Toggle the Tillit payment method
-                Tillit.getInstance().isTillitMethodHidden = true
+                // Toggle the Twoinc payment method
+                Twoinc.getInstance().isTwoincMethodHidden = true
 
-                // Show or hide the Tillit payment method
-                tillitDomHelper.toggleMethod(Tillit.getInstance().isTillitMethodHidden)
+                // Show or hide the Twoinc payment method
+                twoincDomHelper.toggleMethod(Twoinc.getInstance().isTwoincMethodHidden)
 
                 // Select the default payment method
-                tillitDomHelper.selectDefaultMethod(Tillit.getInstance().isTillitMethodHidden)
+                twoincDomHelper.selectDefaultMethod(Twoinc.getInstance().isTwoincMethodHidden)
 
                 // Display messages and update order intent logs
-                Tillit.getInstance().processOrderIntentResponse(response)
+                Twoinc.getInstance().processOrderIntentResponse(response)
 
             })
         }, 1000)
@@ -1397,11 +1398,11 @@ class Tillit {
     {
         if (response.approved) {
 
-            // Update tillit message
-            let tillitSubtitleExistCheck = setInterval(function() {
-                if (document.querySelector('.tillit-subtitle')) {
-                    document.querySelector('.tillit-subtitle').innerText = tillitUtilHelper.getMessage('subtitle_order_intent_ok')
-                    clearInterval(tillitSubtitleExistCheck)
+            // Update twoinc message
+            let twoincSubtitleExistCheck = setInterval(function() {
+                if (document.querySelector('.twoinc-subtitle')) {
+                    document.querySelector('.twoinc-subtitle').innerText = twoincUtilHelper.getMessage('subtitle_order_intent_ok')
+                    clearInterval(twoincSubtitleExistCheck)
                }
             }, 1000)
 
@@ -1421,29 +1422,29 @@ class Tillit {
                              ? response.responseJSON
                              : response.responseJSON['error_details']
 
-                // Update tillit message
-                let tillitSubtitleExistCheck = setInterval(function() {
-                    if (document.querySelector('.tillit-subtitle') && jQuery('#payment .blockOverlay').length === 0) {
-                        // tillit-subtitle exists and woocommerce's update_checkout is not running
+                // Update twoinc message
+                let twoincSubtitleExistCheck = setInterval(function() {
+                    if (document.querySelector('.twoinc-subtitle') && jQuery('#payment .blockOverlay').length === 0) {
+                        // twoinc-subtitle exists and woocommerce's update_checkout is not running
                         let messageId = 'subtitle_order_intent_reject'
-                        if (errMsg.startsWith('Minimum Payment using Tillit')) {
+                        if (errMsg.startsWith('Minimum Payment using Twoinc')) {
                             messageId = 'amount_min'
-                        } else if (errMsg.startsWith('Maximum Payment using Tillit')) {
+                        } else if (errMsg.startsWith('Maximum Payment using Twoinc')) {
                             messageId = 'amount_max'
                         } else if (errMsg.includes('Invalid phone number')) {
                             messageId = 'invalid_phone'
-                            tillitDomHelper.markFieldInvalid('billing_phone_field')
+                            twoincDomHelper.markFieldInvalid('billing_phone_field')
                         }
-                        document.querySelector('.tillit-subtitle').innerHTML = tillitUtilHelper.getMessage(messageId)
-                        clearInterval(tillitSubtitleExistCheck)
+                        document.querySelector('.twoinc-subtitle').innerHTML = twoincUtilHelper.getMessage(messageId)
+                        clearInterval(twoincSubtitleExistCheck)
                    }
                 }, 1000)
             } else {
-                let tillitSubtitleExistCheck = setInterval(function() {
-                    if (document.querySelector('.tillit-subtitle') && jQuery('#payment .blockOverlay').length === 0) {
-                        // tillit-subtitle exists and woocommerce's update_checkout is not running
-                        document.querySelector('.tillit-subtitle').innerHTML = tillitUtilHelper.getMessage('subtitle_order_intent_reject')
-                        clearInterval(tillitSubtitleExistCheck)
+                let twoincSubtitleExistCheck = setInterval(function() {
+                    if (document.querySelector('.twoinc-subtitle') && jQuery('#payment .blockOverlay').length === 0) {
+                        // twoinc-subtitle exists and woocommerce's update_checkout is not running
+                        document.querySelector('.twoinc-subtitle').innerHTML = twoincUtilHelper.getMessage('subtitle_order_intent_reject')
+                        clearInterval(twoincSubtitleExistCheck)
                    }
                 }, 1000)
             }
@@ -1465,34 +1466,34 @@ class Tillit {
      */
     onUpdatedCheckout() {
 
-        Tillit.getInstance().updateElements()
+        Twoinc.getInstance().updateElements()
 
-        jQuery('#payment_method_kco').on('change', Tillit.getInstance().onChangedToKco)
+        jQuery('#payment_method_kco').on('change', Twoinc.getInstance().onChangedToKco)
 
         jQuery('#payment_method_woocommerce-gateway-tillit').on('change', function(){
-            // If current selected payment is Tillit, clicking "business" will select Tillit payment again
-            if (tillitDomHelper.isSelectedPaymentTillit()) {
-                sessionStorage.setItem('businessClickToTillit', 'y')
+            // If current selected payment is Twoinc, clicking "business" will select Twoinc payment again
+            if (twoincDomHelper.isSelectedPaymentTwoinc()) {
+                sessionStorage.setItem('businessClickToTwoinc', 'y')
             }
         })
 
-        if (tillitDomHelper.isSelectedPaymentTillit()) {
-            sessionStorage.setItem('businessClickToTillit', 'y')
+        if (twoincDomHelper.isSelectedPaymentTwoinc()) {
+            sessionStorage.setItem('businessClickToTwoinc', 'y')
         }
 
         // Hide and clear unnecessary payment methods
-        tillitDomHelper.toggleMethod(Tillit.getInstance().isTillitMethodHidden)
+        twoincDomHelper.toggleMethod(Twoinc.getInstance().isTwoincMethodHidden)
         jQuery('#payment .wc_payment_methods input.input-radio').each(function() {
             if (jQuery(this).is(":hidden")) {
-                tillitDomHelper.deselectPaymentMethod(jQuery(this))
+                twoincDomHelper.deselectPaymentMethod(jQuery(this))
             }
         })
-        tillitDomHelper.rearrangeDescription()
+        twoincDomHelper.rearrangeDescription()
 
-        // Disable click to return to Tillit/Kco if some other payment method is selected
+        // Disable click to return to Twoinc/Kco if some other payment method is selected
         jQuery('.wc_payment_method:not(.payment_method_woocommerce-gateway-tillit):not(.payment_method_kco)').on('click', function() {
             sessionStorage.removeItem('privateClickToKco')
-            sessionStorage.removeItem('businessClickToTillit')
+            sessionStorage.removeItem('businessClickToTwoinc')
         })
 
     }
@@ -1506,27 +1507,27 @@ class Tillit {
         const $input = jQuery(this)
 
         // Get the account type
-        const accountType = tillitDomHelper.getAccountType()
+        const accountType = twoincDomHelper.getAccountType()
 
         // Hide the method for non-business accounts
-        if (!tillitUtilHelper.isCompany(accountType)) {
-            Tillit.getInstance().isTillitMethodHidden = true
+        if (!twoincUtilHelper.isCompany(accountType)) {
+            Twoinc.getInstance().isTwoincMethodHidden = true
             // Clear method tick
-            tillitDomHelper.deselectPaymentMethod(jQuery('#payment_method_woocommerce-gateway-tillit'))
-        } else if (Tillit.getInstance().isTillitApproved) {
-            Tillit.getInstance().isTillitMethodHidden = false
-            // Force select tillit payment
+            twoincDomHelper.deselectPaymentMethod(jQuery('#payment_method_woocommerce-gateway-tillit'))
+        } else if (Twoinc.getInstance().isTwoincApproved) {
+            Twoinc.getInstance().isTwoincMethodHidden = false
+            // Force select twoinc payment
             jQuery('#payment_method_woocommerce-gateway-tillit').click()
         }
 
         // Toggle the company fields
-        tillitDomHelper.toggleCompanyFields($input.val())
+        twoincDomHelper.toggleCompanyFields($input.val())
 
         // Move the fields to correct positions
-        tillitDomHelper.positionFields()
+        twoincDomHelper.positionFields()
 
         // Show or hide the payment method
-        // tillitDomHelper.toggleMethod(Tillit.getInstance().isTillitMethodHidden)
+        // twoincDomHelper.toggleMethod(Twoinc.getInstance().isTwoincMethodHidden)
 
     }
 
@@ -1543,12 +1544,12 @@ class Tillit {
         let inputName = $input.attr('name')
 
         if (inputName === 'company_id') {
-            Tillit.getInstance().customerCompany.organization_number = $input.val()
+            Twoinc.getInstance().customerCompany.organization_number = $input.val()
         } else if (inputName === 'billing_company_display') {
-            Tillit.getInstance().customerCompany.company_name = $input.val()
+            Twoinc.getInstance().customerCompany.company_name = $input.val()
         }
 
-        Tillit.getInstance().getApproval()
+        Twoinc.getInstance().getApproval()
 
     }
 
@@ -1567,9 +1568,9 @@ class Tillit {
 
         if (inputName === 'phone') inputName += '_number'
 
-        Tillit.getInstance().customerRepresentative[inputName] = $input.val()
+        Twoinc.getInstance().customerRepresentative[inputName] = $input.val()
 
-        Tillit.getInstance().getApproval()
+        Twoinc.getInstance().getApproval()
 
     }
 
@@ -1584,12 +1585,12 @@ class Tillit {
 
         setTimeout(function(){
             let currentVal = jQuery('#billing_phone').attr('value')
-            let newVal = Tillit.getInstance().billingPhoneInput.getNumber()
+            let newVal = Twoinc.getInstance().billingPhoneInput.getNumber()
             if (currentVal !== newVal) {
                 jQuery('#billing_phone').val(newVal)
                 jQuery('#billing_phone').attr('value', newVal)
-                Tillit.getInstance().customerRepresentative['phone_number'] = newVal
-                Tillit.getInstance().getApproval()
+                Twoinc.getInstance().customerRepresentative['phone_number'] = newVal
+                Twoinc.getInstance().getApproval()
             }
         }, 100)
 
@@ -1606,9 +1607,9 @@ class Tillit {
 
         const $input = jQuery(this)
 
-        Tillit.getInstance().customerCompany.country_prefix = $input.val()
+        Twoinc.getInstance().customerCompany.country_prefix = $input.val()
 
-        Tillit.getInstance().getApproval()
+        Twoinc.getInstance().getApproval()
 
     }
 
@@ -1621,82 +1622,82 @@ class Tillit {
     onChangedToKco(event)
     {
 
-        let accountType = tillitDomHelper.getAccountType()
-        if (tillitUtilHelper.isCompany(accountType)) accountType = 'personal'
-        sessionStorage.setItem('tillitAccountType', accountType)
+        let accountType = twoincDomHelper.getAccountType()
+        if (twoincUtilHelper.isCompany(accountType)) accountType = 'personal'
+        sessionStorage.setItem('twoincAccountType', accountType)
 
     }
 
 }
 
 
-let isSelectedPaymentTillit = null
+let isSelectedPaymentTwoinc = null
 jQuery(function(){
-    if (window.tillit) {
+    if (window.twoinc) {
 
-        if (window.tillit.enable_order_intent === 'yes') {
+        if (window.twoinc.enable_order_intent === 'yes') {
             if (jQuery('#payment_method_woocommerce-gateway-tillit').length > 0) {
-                // Run Tillit code if order intent is enabled
-                Tillit.getInstance().initialize(true)
+                // Run Twoinc code if order intent is enabled
+                Twoinc.getInstance().initialize(true)
             }
         } else {
 
             // Handle initialization every time order review (right panel) is updated
             jQuery(document.body).on('updated_checkout', function(){
 
-                // If shop defaults payment method to Tillit, run Tillit code
-                if (tillitDomHelper.isSelectedPaymentTillit()) {
-                    Tillit.getInstance().initialize(false)
-                    Tillit.getInstance().onUpdatedCheckout()
+                // If shop defaults payment method to Twoinc, run Twoinc code
+                if (twoincDomHelper.isSelectedPaymentTwoinc()) {
+                    Twoinc.getInstance().initialize(false)
+                    Twoinc.getInstance().onUpdatedCheckout()
                 }
 
-                // Run Tillit code if Tillit payment is selected
+                // Run Twoinc code if Twoinc payment is selected
                 jQuery('#payment_method_woocommerce-gateway-tillit').on('change', function(){
-                    Tillit.getInstance().initialize(false)
-                    Tillit.getInstance().onUpdatedCheckout()
+                    Twoinc.getInstance().initialize(false)
+                    Twoinc.getInstance().onUpdatedCheckout()
                 })
 
-                // If invoice fee is charged to buyer, order price will change when payment method is changed from/to Tillit
-                // Also, run Tillit code if payment method selected is Tillit
-                if (window.tillit.invoice_fee_to_buyer === 'yes') {
-                    isSelectedPaymentTillit = tillitDomHelper.isSelectedPaymentTillit()
-                    if (isSelectedPaymentTillit) {
-                        Tillit.getInstance().initialize(false)
-                        Tillit.getInstance().onUpdatedCheckout()
+                // If invoice fee is charged to buyer, order price will change when payment method is changed from/to Twoinc
+                // Also, run Twoinc code if payment method selected is Twoinc
+                if (window.twoinc.invoice_fee_to_buyer === 'yes') {
+                    isSelectedPaymentTwoinc = twoincDomHelper.isSelectedPaymentTwoinc()
+                    if (isSelectedPaymentTwoinc) {
+                        Twoinc.getInstance().initialize(false)
+                        Twoinc.getInstance().onUpdatedCheckout()
                     }
 
                     // Update right sidebar order review when the payment method changes
                     jQuery('.woocommerce-checkout [name="payment_method"]').on('change', function() {
-                        let currentSelectedPaymentTillit = tillitDomHelper.isSelectedPaymentTillit()
-                        if (currentSelectedPaymentTillit || isSelectedPaymentTillit) {
+                        let currentSelectedPaymentTwoinc = twoincDomHelper.isSelectedPaymentTwoinc()
+                        if (currentSelectedPaymentTwoinc || isSelectedPaymentTwoinc) {
                             jQuery(document.body).trigger('update_checkout')
                         }
-                        isSelectedPaymentTillit = currentSelectedPaymentTillit
-                        if (isSelectedPaymentTillit) {
-                            Tillit.getInstance().initialize(false)
-                            Tillit.getInstance().onUpdatedCheckout()
+                        isSelectedPaymentTwoinc = currentSelectedPaymentTwoinc
+                        if (isSelectedPaymentTwoinc) {
+                            Twoinc.getInstance().initialize(false)
+                            Twoinc.getInstance().onUpdatedCheckout()
                         }
                     })
                 }
 
             })
 
-            // If last selected payment method is Tillit, run Tillit code anyway
-            let lastSelectedPayment = tillitDomHelper.getCheckoutInput('INPUT', 'radio', 'payment_method')
+            // If last selected payment method is Twoinc, run Twoinc code anyway
+            let lastSelectedPayment = twoincDomHelper.getCheckoutInput('INPUT', 'radio', 'payment_method')
             if (lastSelectedPayment && lastSelectedPayment.id === 'payment_method_woocommerce-gateway-tillit') {
-                Tillit.getInstance().initialize(true)
+                Twoinc.getInstance().initialize(true)
             }
 
-            // Otherwise do not run Tillit code
+            // Otherwise do not run Twoinc code
         }
 
-        // Show or hide Tillit payment method on account type change
+        // Show or hide Twoinc payment method on account type change
         jQuery('.woocommerce-checkout [name="account_type"]').on('change', function() {
-            tillitDomHelper.toggleMethod(Tillit.getInstance().isTillitMethodHidden)
+            twoincDomHelper.toggleMethod(Twoinc.getInstance().isTwoincMethodHidden)
         })
 
         // Intitialization of DOMs
-        tillitDomHelper.initAccountTypeButtons()
+        twoincDomHelper.initAccountTypeButtons()
 
     }
 })
