@@ -323,7 +323,6 @@ if (!class_exists('WC_Twoinc')) {
                 $twoinc_meta['project'],
                 $twoinc_meta['product_type'],
                 $twoinc_meta['payment_reference_message'],
-                $twoinc_meta['twoinc_original_order_id'],
                 ''
             );
 
@@ -364,7 +363,6 @@ if (!class_exists('WC_Twoinc')) {
                 $twoinc_meta['project'],
                 $twoinc_meta['product_type'],
                 $twoinc_meta['payment_reference_message'],
-                $twoinc_meta['twoinc_original_order_id'],
                 ''
             );
 
@@ -598,7 +596,6 @@ if (!class_exists('WC_Twoinc')) {
                 sanitize_text_field($_POST['project']),
                 $product_type,
                 $payment_reference_message,
-                '',
                 sanitize_text_field($_POST['tracking_id'])
             ));
 
@@ -629,7 +626,6 @@ if (!class_exists('WC_Twoinc')) {
 
             // Store the Twoinc Order Id for future use
             update_post_meta($order_id, 'twoinc_order_id', $body['id']);
-            update_post_meta($order_id, '_twoinc_original_order_id', $body['id']);
 
             // Return the result
             if ($this->get_option('tillit_merchant_id') === 'morgenlevering' || $this->get_option('tillit_merchant_id') === 'arkwrightx') {
@@ -1225,11 +1221,6 @@ if (!class_exists('WC_Twoinc')) {
             if (!$twoinc_order_id) {
                 return;
             }
-            $twoinc_original_order_id = $this->get_twoinc_original_order_id($order);
-            if (!$twoinc_original_order_id) {
-                $twoinc_original_order_id = $twoinc_order_id;
-                update_post_meta($order->get_id(), '_twoinc_original_order_id', $twoinc_original_order_id);
-            }
 
             $order_reference = $order->get_meta('_tillit_order_reference');
             $twoinc_merchant_id = $order->get_meta('_tillit_merchant_id');
@@ -1282,7 +1273,6 @@ if (!class_exists('WC_Twoinc')) {
                 'department' => $department,
                 'project' => $project,
                 'twoinc_order_id' => $twoinc_order_id,
-                'twoinc_original_order_id' => $twoinc_original_order_id,
                 'product_type' => $product_type,
                 'payment_reference_message' => $payment_reference_message
             );
@@ -1345,24 +1335,6 @@ if (!class_exists('WC_Twoinc')) {
             }
 
             return $twoinc_order_id;
-
-        }
-
-        /**
-         * Get twoinc original order id with backward compatibility
-         *
-         * @param $order
-         */
-        private function get_twoinc_original_order_id($order)
-        {
-
-            $twoinc_original_order_id = $order->get_meta('_twoinc_original_order_id');
-
-            if (!isset($twoinc_original_order_id)) {
-                $twoinc_original_order_id = $order->get_meta('_tillit_original_order_id');
-            }
-
-            return $twoinc_original_order_id;
 
         }
 

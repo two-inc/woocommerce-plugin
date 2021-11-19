@@ -226,7 +226,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
         public static function compose_twoinc_order(
             $order, $order_reference, $days_on_invoice,
             $company_id, $department, $project, $product_type,
-            $payment_reference_message = '', $twoinc_original_order_id = '', $tracking_id = '')
+            $payment_reference_message = '', $tracking_id = '')
         {
 
             $billing_address = [
@@ -304,10 +304,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     'expected_delivery_date' => date('Y-m-d', strtotime('+ 7 days'))
                 ]
             ];
-
-            if ($twoinc_original_order_id) {
-                $req_body['original_order_id'] = $twoinc_original_order_id;
-            }
 
             if ($tracking_id) {
                 $req_body['tracking_id'] = $tracking_id;
