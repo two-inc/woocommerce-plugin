@@ -3,7 +3,7 @@
  * Plugin Name: Tillit Payment Gateway
  * Plugin URI: https://tillit.ai
  * Description: Integration between WooCommerce and Two.
- * Version: 2.3.4
+ * Version: 2.4.0
  * Author: Two.
  * Author URI: https://tillit.ai
  * Text Domain: twoinc-payment-gateway
@@ -91,7 +91,7 @@ function wc_twoinc_add_to_gateways($gateways)
  */
 function wc_twoinc_enqueue_styles()
 {
-    wp_enqueue_style('twoinc-payment-gateway-css', WC_TWOINC_PLUGIN_URL . '/assets/css/twoinc.css', false, '1.1.3');
+    wp_enqueue_style('twoinc-payment-gateway-css', WC_TWOINC_PLUGIN_URL . '/assets/css/twoinc.css', false, '1.2.0');
 }
 
 /**
@@ -99,7 +99,7 @@ function wc_twoinc_enqueue_styles()
  */
 function wc_twoinc_enqueue_scripts()
 {
-    wp_enqueue_script('twoinc-payment-gateway-js', WC_TWOINC_PLUGIN_URL . '/assets/js/twoinc.js', ['jquery'], '2.2.4');
+    wp_enqueue_script('twoinc-payment-gateway-js', WC_TWOINC_PLUGIN_URL . '/assets/js/twoinc.js', ['jquery'], '2.3.0');
 }
 
 /**

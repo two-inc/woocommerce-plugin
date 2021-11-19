@@ -628,7 +628,7 @@ if (!class_exists('WC_Twoinc')) {
             }
 
             // Store the Twoinc Order Id for future use
-            update_post_meta($order_id, '_twoinc_order_id', $body['id']);
+            update_post_meta($order_id, 'twoinc_order_id', $body['id']);
             update_post_meta($order_id, '_twoinc_original_order_id', $body['id']);
 
             // Return the result
@@ -1338,7 +1338,7 @@ if (!class_exists('WC_Twoinc')) {
         private function get_twoinc_order_id($order)
         {
 
-            $twoinc_order_id = $order->get_meta('_twoinc_order_id');
+            $twoinc_order_id = $order->get_meta('twoinc_order_id');
 
             if (!isset($twoinc_order_id)) {
                 $twoinc_order_id = $order->get_meta('tillit_order_id');
@@ -1374,7 +1374,7 @@ if (!class_exists('WC_Twoinc')) {
         private function get_twoinc_order_id_from_post_id($post_id)
         {
 
-            $twoinc_order_id = get_post_meta($order_id, '_twoinc_order_id', true);
+            $twoinc_order_id = get_post_meta($order_id, 'twoinc_order_id', true);
 
             if (!isset($twoinc_order_id)) {
                 $twoinc_order_id = get_post_meta($order_id, 'tillit_order_id', true);
