@@ -119,7 +119,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 return __('Please submit a valid ', 'twoinc-payment-gateway') . __('First name', 'twoinc-payment-gateway');
             }
             if ($loc_str === '["buyer","representative","last_name"]') {
-                return __('Please submit a valid ', 'twoinc-payment-gateway') . __('Last_name', 'twoinc-payment-gateway');
+                return __('Please submit a valid ', 'twoinc-payment-gateway') . __('Last name', 'twoinc-payment-gateway');
             }
             if ($loc_str === '["buyer","representative","email"]') {
                 return __('Please submit a valid ', 'twoinc-payment-gateway') . __('Email', 'twoinc-payment-gateway');

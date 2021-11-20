@@ -232,7 +232,7 @@ msgid "Invoice is not available for this purchase"
 msgstr ""
 
 #: class/WC_Twoinc_Helper.php:122
-msgid "Last_name"
+msgid "Last name"
 msgstr ""
 
 #: class/WC_Twoinc.php:827
