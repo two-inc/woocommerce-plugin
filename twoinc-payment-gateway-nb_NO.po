@@ -12,7 +12,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "X-Generator: Loco https://localise.biz/\n"
-"X-Loco-Version: 2.5.2; wp-5.7.2\n"
+"X-Loco-Version: 2.5.2; wp-5.8.2\n"
 "X-Domain: twoinc-payment-gateway"
 
 #: class/WC_Twoinc.php:1123
@@ -302,7 +302,7 @@ msgstr "Fullfør kjøpet"
 #: class/WC_Twoinc_Helper.php:128 class/WC_Twoinc_Helper.php:131
 #: class/WC_Twoinc_Helper.php:134 class/WC_Twoinc_Helper.php:137
 msgid "Please submit a valid "
-msgstr "Vennligst skriv inn et gyldig"
+msgstr "Vennligst skriv inn et gyldig "
 
 #: class/WC_Twoinc_Helper.php:137
 msgid "Postal code"

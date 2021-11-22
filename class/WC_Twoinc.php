@@ -47,8 +47,8 @@ if (!class_exists('WC_Twoinc')) {
             $this->api_key = $this->get_option('api_key');
 
             // Twoinc api host
-            $this->twoinc_search_host_no = 'https://no.search.two.inc';
-            $this->twoinc_search_host_gb = 'https://gb.search.two.inc';
+            $this->twoinc_search_host_no = 'https://no.search.tillit.ai';
+            $this->twoinc_search_host_gb = 'https://gb.search.tillit.ai';
             $this->twoinc_checkout_host = $this->get_twoinc_checkout_host();
 
             $this->plugin_version = get_plugin_version();
@@ -136,9 +136,9 @@ if (!class_exists('WC_Twoinc')) {
             if (WC_Twoinc_Helper::is_twoinc_development()) {
                 return $this->get_option('test_checkout_host');
             } else if ($this->get_option('checkout_env') === 'SANDBOX') {
-                return 'https://test.api.two.inc';
+                return 'https://test.api.tillit.ai';
             } else {
-                return 'https://api.two.inc';
+                return 'https://api.tillit.ai';
             }
         }
 
@@ -886,7 +886,7 @@ if (!class_exists('WC_Twoinc')) {
                     if (isset($body['clear_options_on_deactivation'])) $this->update_option('clear_options_on_deactivation', $body['clear_options_on_deactivation'] ? 'yes' : 'no');
                     if (WC_Twoinc_Helper::is_twoinc_development()) {
                         $this->update_option('test_checkout_host', $twoinc_checkout_host);
-                    } else if (strpos($twoinc_checkout_host, 'test.api.two.inc') !== false) {
+                    } else if (strpos($twoinc_checkout_host, 'test.api.tillit.ai') !== false) {
                         $this->update_option('checkout_env', 'SANDBOX');
                     } else {
                         $this->update_option('checkout_env', 'PROD');
@@ -977,7 +977,7 @@ if (!class_exists('WC_Twoinc')) {
                 'test_checkout_host' => [
                     'type'      => 'text',
                     'title'     => __('Two. Test Server', 'twoinc-payment-gateway'),
-                    'default'   => 'https://staging.api.two.inc'
+                    'default'   => 'https://staging.api.tillit.ai'
                 ],
                 'checkout_env' => [
                     'type'      => 'select',
@@ -1295,11 +1295,9 @@ if (!class_exists('WC_Twoinc')) {
 
             $twoinc_order_id = $this->get_twoinc_order_id($order);
 
-
             // 1. Get information from the current order
             $twoinc_meta = $this->get_save_twoinc_meta($order);
             if (!$twoinc_meta) return;
-
 
             // 2. Edit the order
             $response = $this->make_request("/v1/order/${twoinc_order_id}", WC_Twoinc_Helper::compose_twoinc_edit_order(
@@ -1336,7 +1334,7 @@ if (!class_exists('WC_Twoinc')) {
 
             $twoinc_order_id = $order->get_meta('twoinc_order_id');
 
-            if (!isset($twoinc_order_id)) {
+            if (!$twoinc_order_id) {
                 $twoinc_order_id = $order->get_meta('tillit_order_id');
             }
 
@@ -1354,7 +1352,7 @@ if (!class_exists('WC_Twoinc')) {
 
             $twoinc_order_id = get_post_meta($post_id, 'twoinc_order_id', true);
 
-            if (!isset($twoinc_order_id)) {
+            if (!$twoinc_order_id) {
                 $twoinc_order_id = get_post_meta($post_id, 'tillit_order_id', true);
             }
 

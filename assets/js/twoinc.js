@@ -276,6 +276,9 @@ let twoincDomHelper = {
             // If Kco button is clicked, account type must not be business
             jQuery('#payment_method_kco').on('change', Twoinc.getInstance().onChangedToKco)
 
+            // Init the hidden Company name field
+            jQuery('#billing_company').val(twoincDomHelper.getCompanyName().trim())
+
             // Select last saved account type in case of redirect from another payment method
             accountType = sessionStorage.getItem('twoincAccountType')
             if (accountType) {
