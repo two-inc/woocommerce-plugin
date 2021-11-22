@@ -47,8 +47,8 @@ if (!class_exists('WC_Twoinc')) {
             $this->api_key = $this->get_option('api_key');
 
             // Twoinc api host
-            $this->twoinc_search_host_no = 'https://no.search.tillit.ai';
-            $this->twoinc_search_host_gb = 'https://gb.search.tillit.ai';
+            $this->twoinc_search_host_no = 'https://no.search.two.inc';
+            $this->twoinc_search_host_gb = 'https://gb.search.two.inc';
             $this->twoinc_checkout_host = $this->get_twoinc_checkout_host();
 
             $this->plugin_version = get_plugin_version();
@@ -136,9 +136,9 @@ if (!class_exists('WC_Twoinc')) {
             if (WC_Twoinc_Helper::is_twoinc_development()) {
                 return $this->get_option('test_checkout_host');
             } else if ($this->get_option('checkout_env') === 'SANDBOX') {
-                return 'https://test.api.tillit.ai';
+                return 'https://test.api.two.inc';
             } else {
-                return 'https://api.tillit.ai';
+                return 'https://api.two.inc';
             }
         }
 
@@ -856,7 +856,7 @@ if (!class_exists('WC_Twoinc')) {
                         'init_failed',
                         sprintf(
                             'Could not connect to setup server, please contact %s for more information!',
-                            sprintf('<a href="https://tillit.ai/">%s</a>', __('Two.', 'twoinc-payment-gateway'))
+                            sprintf('<a href="https://two.inc/">%s</a>', __('Two.', 'twoinc-payment-gateway'))
                         ),
                         array('title' => _('Two. payment setup failure'), 'response' => '400', 'back_link' => false));
                     wp_die($error, '', $error->get_error_data());
@@ -886,7 +886,7 @@ if (!class_exists('WC_Twoinc')) {
                     if (isset($body['clear_options_on_deactivation'])) $this->update_option('clear_options_on_deactivation', $body['clear_options_on_deactivation'] ? 'yes' : 'no');
                     if (WC_Twoinc_Helper::is_twoinc_development()) {
                         $this->update_option('test_checkout_host', $twoinc_checkout_host);
-                    } else if (strpos($twoinc_checkout_host, 'test.api.tillit.ai') !== false) {
+                    } else if (strpos($twoinc_checkout_host, 'test.api.two.inc') !== false) {
                         $this->update_option('checkout_env', 'SANDBOX');
                     } else {
                         $this->update_option('checkout_env', 'PROD');
@@ -907,7 +907,7 @@ if (!class_exists('WC_Twoinc')) {
                         'init_failed',
                         sprintf(
                             'Magic setup link already used or expired, please contact %s for more information!',
-                            sprintf('<a href="https://tillit.ai/">%s</a>', __('Two.', 'twoinc-payment-gateway'))
+                            sprintf('<a href="https://two.inc/">%s</a>', __('Two.', 'twoinc-payment-gateway'))
                         ),
                         array('title' => _('Two. payment setup failure'), 'response' => '400', 'back_link' => false));
                     wp_die($error, '', $error->get_error_data());
@@ -919,7 +919,7 @@ if (!class_exists('WC_Twoinc')) {
                 'init_failed',
                 sprintf(
                     'Could not setup Two. payment on your website, please contact %s for more information!',
-                    sprintf('<a href="https://tillit.ai/">%s</a>', __('Two.', 'twoinc-payment-gateway'))
+                    sprintf('<a href="https://two.inc/">%s</a>', __('Two.', 'twoinc-payment-gateway'))
                 ),
                 array('title' => _('Two. payment setup failure'), 'response' => '400', 'back_link' => false));
             wp_die($error, '', $error->get_error_data());
@@ -977,7 +977,7 @@ if (!class_exists('WC_Twoinc')) {
                 'test_checkout_host' => [
                     'type'      => 'text',
                     'title'     => __('Two. Test Server', 'twoinc-payment-gateway'),
-                    'default'   => 'https://staging.api.tillit.ai'
+                    'default'   => 'https://staging.api.two.inc'
                 ],
                 'checkout_env' => [
                     'type'      => 'select',
@@ -1400,13 +1400,13 @@ if (!class_exists('WC_Twoinc')) {
                 <div id="twoinc-account-init-notice" class="notice notice-info is-dismissible" style="background-color: #e2e0ff;padding: 20px;display: flex;">
                     <div style="width:60%;padding-right:40px;">
                         <h1 style="color: #000000;font-weight:700;">Set up your Two. account</h1>
-                        <p style="color: #000000;font-size: 1.3em;text-align: justify;">Happy to see you here! Before you can start selling with the Two. buy now, pay later solution you need to complete our signup process. It\'s easy, fast and gives you immediate access to the <a target="_blank" href="https://portal.tillit.ai/merchant">Two. Merchant Portal</a></p>
+                        <p style="color: #000000;font-size: 1.3em;text-align: justify;">Happy to see you here! Before you can start selling with the Two. buy now, pay later solution you need to complete our signup process. It\'s easy, fast and gives you immediate access to the <a target="_blank" href="https://portal.two.inc/merchant">Two. Merchant Portal</a></p>
                     </div>
                     <div>
                         <img style="position: absolute;top: 40px;right: 40px;width: 100px;" src="/wp-content/plugins/tillit-payment-gateway/assets/images/two-logo.svg">
                         <div style="position: absolute;bottom: 20px;right:40px;">
                             <a href="#" id="dismiss-twoinc-notice" class="button" style="margin-left: 20px;background: none;font-size: 1.1em;font-weight: 600;color: #3e16a2;padding: 7px 30px;border-color: #3e16a2;border-radius: 12px;">Not now, thanks</a>
-                            <a href="https://portal.tillit.ai/merchant" target="_blank" class="button" style="margin-left: 20px;background: #3e16a2;font-size: 1.1em;font-weight: 600;color: #ffffff;padding: 7px 30px;border-color: #3e16a2;border-radius: 12px;">Set up my account</a>
+                            <a href="https://portal.two.inc/merchant" target="_blank" class="button" style="margin-left: 20px;background: #3e16a2;font-size: 1.1em;font-weight: 600;color: #ffffff;padding: 7px 30px;border-color: #3e16a2;border-radius: 12px;">Set up my account</a>
                         </div>
                     </div>
                 </div>

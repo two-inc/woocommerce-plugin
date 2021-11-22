@@ -508,9 +508,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
             if (in_array($hostname, array('dev.tillitlocal.ai', 'localhost')) || substr($hostname, 0, 10) === 'localhost:') return true;
 
             // Production sites
-            if (strlen($hostname) > 10 && substr($hostname, -10) === '.tillit.ai') {
+            if (strlen($hostname) > 8 && substr($hostname, -8) === '.two.inc') {
                 $twoinc_prod_sites = array('shop', 'morgenlevering', 'arkwrightx', 'paguro');
-                $host_prefix = substr($hostname, 0, -10);
+                $host_prefix = substr($hostname, 0, -8);
 
                 foreach($twoinc_prod_sites as $twoinc_prod_site) {
                     if ($host_prefix === $twoinc_prod_site || $host_prefix === ('www.' . $twoinc_prod_site)) {

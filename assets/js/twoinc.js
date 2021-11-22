@@ -611,7 +611,9 @@ let twoincDomHelper = {
     updateCompanyNameAgreement: function() {
 
         let companyName = Twoinc.getInstance().customerCompany.company_name
-        companyName = companyName.trim()
+        if (companyName) {
+            companyName = companyName.trim()
+        }
         if (companyName) {
             document.querySelector('.twoinc-buyer-name').innerText = companyName
             document.querySelector('.twoinc-buyer-name').classList.remove('hidden')
@@ -1649,6 +1651,8 @@ jQuery(function(){
                 if (twoincDomHelper.isSelectedPaymentTwoinc()) {
                     Twoinc.getInstance().initialize(false)
                     Twoinc.getInstance().onUpdatedCheckout()
+                } else {
+                    twoincDomHelper.toggleMethod(Twoinc.getInstance().isTwoincMethodHidden)
                 }
 
                 // Run Twoinc code if Twoinc payment is selected
