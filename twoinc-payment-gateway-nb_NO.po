@@ -3,7 +3,7 @@ msgstr ""
 "Project-Id-Version: Tillit Payment Gateway\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2021-04-07 07:50+0000\n"
-"PO-Revision-Date: 2021-11-20 13:22+0000\n"
+"PO-Revision-Date: 2021-11-23 06:48+0000\n"
 "Last-Translator: \n"
 "Language-Team: Norwegian (Bokmål)\n"
 "Language: nb_NO\n"
@@ -296,13 +296,9 @@ msgstr "Telefon nummer er ugyldig"
 msgid "Place order"
 msgstr "Fullfør kjøpet"
 
-#: class/WC_Twoinc_Helper.php:110 class/WC_Twoinc_Helper.php:113
-#: class/WC_Twoinc_Helper.php:116 class/WC_Twoinc_Helper.php:119
-#: class/WC_Twoinc_Helper.php:122 class/WC_Twoinc_Helper.php:125
-#: class/WC_Twoinc_Helper.php:128 class/WC_Twoinc_Helper.php:131
-#: class/WC_Twoinc_Helper.php:134 class/WC_Twoinc_Helper.php:137
-msgid "Please submit a valid "
-msgstr "Vennligst skriv inn et gyldig "
+#: class/WC_Twoinc_Helper.php:110
+msgid "Please enter a valid %s to pay on invoice"
+msgstr "Vennligst skriv inn %s for å betale med faktura"
 
 #: class/WC_Twoinc_Helper.php:137
 msgid "Postal code"

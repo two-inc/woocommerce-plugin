@@ -106,35 +106,38 @@ if (!class_exists('WC_Twoinc_Helper')) {
          */
         public static function get_msg_from_loc($loc_str)
         {
+            $generic_err_template = __('Please enter a valid %s to pay on invoice', 'twoinc-payment-gateway');
+            $loc_str = preg_replace('/\s+/', '', $loc_str);
+
             if ($loc_str === '["buyer","representative","phone_number"]') {
-                return __('Please submit a valid ', 'twoinc-payment-gateway') . __('Phone number', 'twoinc-payment-gateway');
+                return sprintf($generic_err_template, __('Phone number', 'twoinc-payment-gateway'));
             }
             if ($loc_str === '["buyer","company","organization_number"]') {
-                return __('Please submit a valid ', 'twoinc-payment-gateway') . __('Organization number', 'twoinc-payment-gateway');
+                return sprintf($generic_err_template, __('Organization number', 'twoinc-payment-gateway'));
             }
             if ($loc_str === '["buyer","company","company_name"]') {
-                return __('Please submit a valid ', 'twoinc-payment-gateway') . __('Company name', 'twoinc-payment-gateway');
+                return sprintf($generic_err_template, __('Company name', 'twoinc-payment-gateway'));
             }
             if ($loc_str === '["buyer","representative","first_name"]') {
-                return __('Please submit a valid ', 'twoinc-payment-gateway') . __('First name', 'twoinc-payment-gateway');
+                return sprintf($generic_err_template, __('First name', 'twoinc-payment-gateway'));
             }
             if ($loc_str === '["buyer","representative","last_name"]') {
-                return __('Please submit a valid ', 'twoinc-payment-gateway') . __('Last name', 'twoinc-payment-gateway');
+                return sprintf($generic_err_template, __('Last name', 'twoinc-payment-gateway'));
             }
             if ($loc_str === '["buyer","representative","email"]') {
-                return __('Please submit a valid ', 'twoinc-payment-gateway') . __('Email', 'twoinc-payment-gateway');
+                return sprintf($generic_err_template, __('Email', 'twoinc-payment-gateway'));
             }
             if ($loc_str === '["billing_address","street_address"]') {
-                return __('Please submit a valid ', 'twoinc-payment-gateway') . __('Address', 'twoinc-payment-gateway');
+                return sprintf($generic_err_template, __('Address', 'twoinc-payment-gateway'));
             }
             if ($loc_str === '["billing_address","city"]') {
-                return __('Please submit a valid ', 'twoinc-payment-gateway') . __('City', 'twoinc-payment-gateway');
+                return sprintf($generic_err_template, __('City', 'twoinc-payment-gateway'));
             }
             if ($loc_str === '["billing_address","country"]') {
-                return __('Please submit a valid ', 'twoinc-payment-gateway') . __('Country', 'twoinc-payment-gateway');
+                return sprintf($generic_err_template, __('Country', 'twoinc-payment-gateway'));
             }
             if ($loc_str === '["billing_address","postal_code"]') {
-                return __('Please submit a valid ', 'twoinc-payment-gateway') . __('Postal code', 'twoinc-payment-gateway');
+                return sprintf($generic_err_template, __('Postal code', 'twoinc-payment-gateway'));
             }
         }
 
