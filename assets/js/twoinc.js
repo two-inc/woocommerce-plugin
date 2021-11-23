@@ -501,9 +501,9 @@ let twoincDomHelper = {
         let otherPaymentMethods = jQuery('#payment .wc_payment_methods input.input-radio:visible')
         if (otherPaymentMethods.length > 0) {
             if (paymentMethodRadioObj && paymentMethodRadioObj.attr('id')) {
-                jQuery('#payment .wc_payment_methods input.input-radio:visible:not(#' + paymentMethodRadioObj.attr('id') + ')').first().prop('checked', true)
+                jQuery('#payment .wc_payment_methods input.input-radio:visible:not(#' + paymentMethodRadioObj.attr('id') + ')').first().click()
             } else {
-                jQuery('#payment .wc_payment_methods input.input-radio:visible').first().prop('checked', true)
+                jQuery('#payment .wc_payment_methods input.input-radio:visible').first().click()
             }
         }
 

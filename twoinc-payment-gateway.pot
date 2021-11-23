@@ -290,12 +290,8 @@ msgstr ""
 msgid "Place order"
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:110 class/WC_Twoinc_Helper.php:113
-#: class/WC_Twoinc_Helper.php:116 class/WC_Twoinc_Helper.php:119
-#: class/WC_Twoinc_Helper.php:122 class/WC_Twoinc_Helper.php:125
-#: class/WC_Twoinc_Helper.php:128 class/WC_Twoinc_Helper.php:131
-#: class/WC_Twoinc_Helper.php:134 class/WC_Twoinc_Helper.php:137
-msgid "Please submit a valid "
+#: class/WC_Twoinc_Helper.php:110
+msgid "Please enter a valid %s to pay on invoice"
 msgstr ""
 
 #: class/WC_Twoinc_Helper.php:137
