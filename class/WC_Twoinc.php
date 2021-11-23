@@ -47,8 +47,8 @@ if (!class_exists('WC_Twoinc')) {
             $this->api_key = $this->get_option('api_key');
 
             // Twoinc api host
-            $this->twoinc_search_host_no = 'https://no.search.tillit.ai';
-            $this->twoinc_search_host_gb = 'https://gb.search.tillit.ai';
+            $this->twoinc_search_host_no = 'https://no.search.two.inc';
+            $this->twoinc_search_host_gb = 'https://gb.search.two.inc';
             $this->twoinc_checkout_host = $this->get_twoinc_checkout_host();
 
             $this->plugin_version = get_plugin_version();
@@ -136,9 +136,9 @@ if (!class_exists('WC_Twoinc')) {
             if (WC_Twoinc_Helper::is_twoinc_development()) {
                 return $this->get_option('test_checkout_host');
             } else if ($this->get_option('checkout_env') === 'SANDBOX') {
-                return 'https://test.api.tillit.ai';
+                return 'https://test.api.two.inc';
             } else {
-                return 'https://api.tillit.ai';
+                return 'https://api.two.inc';
             }
         }
 
@@ -147,7 +147,11 @@ if (!class_exists('WC_Twoinc')) {
          */
         private function get_abt_twoinc_html(){
             if ($this->get_option('show_abt_link') === 'yes') {
-                return '<div id="abt-twoinc-link"><a href="https://twoinc.notion.site/What-is-Tillit-4e12960d8e834e5aa20f879d59e0b32f" onclick="javascript:window.open(\'https://twoinc.notion.site/What-is-Tillit-4e12960d8e834e5aa20f879d59e0b32f\',\'WhatIsTwoinc\',\'toolbar=no, location=no, directories=no, status=no, menubar=no, scrollbars=yes, resizable=yes, width=1060, height=700\'); return false;">' . __('What is Two.?', 'twoinc-payment-gateway') . '</a>&nbsp;</div>';
+                $abt_url = 'https://twoinc.notion.site/What-is-Tillit-4e12960d8e834e5aa20f879d59e0b32f';
+                if (WC_Twoinc_Helper::get_locale() === 'nb_NO') {
+                    $abt_url = 'https://twoinc.notion.site/Hva-er-Two-964ee21e4da84819afb1b035ee8fe98b';
+                }
+                return '<div id="abt-twoinc-link"><a href="' . $abt_url . '" onclick="javascript:window.open(\'' . $abt_url . '\',\'WhatIsTwoinc\',\'toolbar=no, location=no, directories=no, status=no, menubar=no, scrollbars=yes, resizable=yes, width=1060, height=700\'); return false;">' . __('What is Two.?', 'twoinc-payment-gateway') . '</a>&nbsp;</div>';
             }
             return '';
         }
@@ -886,7 +890,7 @@ if (!class_exists('WC_Twoinc')) {
                     if (isset($body['clear_options_on_deactivation'])) $this->update_option('clear_options_on_deactivation', $body['clear_options_on_deactivation'] ? 'yes' : 'no');
                     if (WC_Twoinc_Helper::is_twoinc_development()) {
                         $this->update_option('test_checkout_host', $twoinc_checkout_host);
-                    } else if (strpos($twoinc_checkout_host, 'test.api.tillit.ai') !== false) {
+                    } else if (strpos($twoinc_checkout_host, 'test.api.two.inc') !== false) {
                         $this->update_option('checkout_env', 'SANDBOX');
                     } else {
                         $this->update_option('checkout_env', 'PROD');
@@ -977,7 +981,7 @@ if (!class_exists('WC_Twoinc')) {
                 'test_checkout_host' => [
                     'type'      => 'text',
                     'title'     => __('Two. Test Server', 'twoinc-payment-gateway'),
-                    'default'   => 'https://staging.api.tillit.ai'
+                    'default'   => 'https://staging.api.two.inc'
                 ],
                 'checkout_env' => [
                     'type'      => 'select',
