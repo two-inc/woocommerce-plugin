@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name: Tillit Payment Gateway
+ * Plugin Name: Two. - BNPL for businesses
  * Plugin URI: https://two.inc
  * Description: Integration between WooCommerce and Two.
  * Version: 2.4.0
