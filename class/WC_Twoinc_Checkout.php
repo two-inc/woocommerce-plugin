@@ -73,7 +73,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     </div>
                     <div class="account-type-button" account-type-name="sole_trader">
                         <img src = "/wp-content/plugins/tillit-payment-gateway/assets/images/personal.svg"/>
-                        <span>' . __('Sole Trader/Other Custome', 'twoinc-payment-gateway') . 'r</span>
+                        <span>' . __('Sole Trader/Other Customer', 'twoinc-payment-gateway') . 'r</span>
                     </div>
                     <div class="account-type-button" account-type-name="business">
                         <img src = "/wp-content/plugins/tillit-payment-gateway/assets/images/business.svg"/>

@@ -73,6 +73,7 @@ function plugin_status_checking()
                     'version' => get_plugin_version()
                 ];
             },
+            'permission_callback' => '__return_true'
         )
     );
 }
