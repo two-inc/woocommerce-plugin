@@ -36,12 +36,13 @@ if (!class_exists('WC_Twoinc')) {
             $this->init_form_fields();
             $this->init_settings();
 
-            // Define user set variables
-            $this->title = sprintf(__($this->get_option('title'), 'twoinc-payment-gateway'), strval($this->get_option('days_on_invoice')));
+            $this->title = sprintf(
+                __($this->get_option('title'), 'twoinc-payment-gateway'),
+                strval($this->get_option('days_on_invoice'))
+            );
             $this->description = sprintf(
-                '<p>%s <span class="twoinc-buyer-name-placeholder">%s</span><span class="twoinc-buyer-name"></span>.</p>%s',
-                __('By completing the purchase, you verify that you have the legal right to purchase on behalf of', 'twoinc-payment-gateway'),
-                __('your company', 'twoinc-payment-gateway'),
+                '%s%s',
+                $this->get_pay_box_description(),
                 $this->get_abt_twoinc_html()
             );
             $this->api_key = $this->get_option('api_key');
@@ -157,15 +158,77 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
+         * Get payment box description
+         */
+        private function get_pay_box_description(){
+            // Define user set variables
+            $currency = get_woocommerce_currency();
+            $amount_min = '200 NOK';
+            $amount_max = '500,000 NOK';
+            if ($currency === 'GBP') {
+                $amount_min = '10 GBP';
+                $amount_max = '10,000 GBP';
+            }
+
+            return sprintf(
+                '<div>
+                    <div class="twoinc-pay-box explain-details">%s</div>
+                    <div class="twoinc-pay-box declare-aggrement" style="display: none;">%s</div>
+                    <div class="twoinc-pay-box payment-not-accepted" style="display: none;">%s</div>
+                    <div class="twoinc-pay-box err-amt-max" style="display: none;">%s</div>
+                    <div class="twoinc-pay-box err-amt-min" style="display: none;">%s</div>
+                    <div class="twoinc-pay-box err-phone" style="display: none;">%s</div>
+                </div>',
+                sprintf(
+                    '- %s<br>- %s<br>- %s',
+                    __('Express checkout', 'twoinc-payment-gateway'),
+                    sprintf(
+                        'Pay %s days after your order is shipped, for free',
+                        '<span class="due-in-days">X<span>',
+                    ),
+                    __('Receive invoice and payment details via email', 'twoinc-payment-gateway')
+                ),
+                sprintf(
+                    '%s <span class="twoinc-buyer-name-placeholder">%s</span><span class="twoinc-buyer-name"></span>.',
+                    __('By completing the purchase, you verify that you have the legal right to purchase on behalf of', 'twoinc-payment-gateway'),
+                    __('your company', 'twoinc-payment-gateway'),
+                    $this->get_abt_twoinc_html()
+                ),
+                __('We are not able to offer your company Two. Invoice payment terms for this order', 'twoinc-payment-gateway'),
+                sprintf(__('Maximum Payment using Two. is %s', 'twoinc-payment-gateway'), $amount_max),
+                sprintf(__('Minimum Payment using Two. is %s', 'twoinc-payment-gateway'), $amount_min),
+                __('Phone number is invalid', 'twoinc-payment-gateway')
+            );
+        }
+
+        /**
          * Add filter to gateway payment title
          */
         public function change_twoinc_payment_title(){
             add_filter('woocommerce_gateway_title', function ($title, $payment_id) {
                 if($payment_id === 'woocommerce-gateway-tillit') {
                     $title = sprintf(
-                        '%s<div class="twoinc-subtitle">%s</div> ',
-                        sprintf(__($this->get_option('title'), 'twoinc-payment-gateway'), strval($this->get_option('days_on_invoice'))),
-                        __('Enter company name to pay on invoice', 'twoinc-payment-gateway')
+                        '%s
+                        <div class="twoinc-subtitle">
+                            <div class="twoinc-pay-sub require-inputs">%s</div>
+                            <div class="twoinc-pay-sub explain-details" style="display: none;">%s</div>
+                            <img class="twoinc-pay-sub loader" style="display: none;" src="%s" />
+                        </div> ',
+                        sprintf(
+                            __($this->get_option('title'), 'twoinc-payment-gateway'),
+                            '<span class="due-in-days">' . strval($this->get_option('days_on_invoice')) . '<span>'
+                        ),
+                        __('Enter company name to pay on invoice', 'twoinc-payment-gateway'),
+                        sprintf(
+                            '- %s<br>- %s<br>- %s',
+                            __('Express checkout', 'twoinc-payment-gateway'),
+                            sprintf(
+                                'Pay %s days after your order is shipped, for free',
+                                '<span class="due-in-days">' . strval($this->get_option('days_on_invoice')) . '<span>',
+                            ),
+                            __('Receive invoice and payment details via email', 'twoinc-payment-gateway')
+                        ),
+                        WC_TWOINC_PLUGIN_URL . '/assets/images/loader.svg'
                     );
                 }
                 return $title;
@@ -630,7 +693,7 @@ if (!class_exists('WC_Twoinc')) {
             $body = json_decode($response['body'], true);
 
             if ($body['status'] == 'REJECTED') {
-                WC_Twoinc_Helper::display_ajax_error(__('Invoice is not available for this purchase', 'twoinc-payment-gateway'));
+                WC_Twoinc_Helper::display_ajax_error(__('We are not able to offer your company Two. Invoice payment terms for this order', 'twoinc-payment-gateway'));
                 return;
             }
 
@@ -872,7 +935,6 @@ if (!class_exists('WC_Twoinc')) {
                     $this->update_option('api_key', $body['merchant_secret_api_key']);
                     if (isset($body['enabled'])) $this->update_option('enabled', $body['enabled'] ? 'yes' : 'no');
                     if (isset($body['title'])) $this->update_option('title', $body['title']);
-                    if (isset($body['subtitle'])) $this->update_option('subtitle', $body['subtitle']);
                     if (isset($body['checkout_personal'])) $this->update_option('checkout_personal', $body['checkout_personal'] ? 'yes' : 'no');
                     if (isset($body['checkout_sole_trader'])) $this->update_option('checkout_sole_trader', $body['checkout_sole_trader'] ? 'yes' : 'no');
                     if (isset($body['checkout_business'])) $this->update_option('checkout_business', $body['checkout_business'] ? 'yes' : 'no');
@@ -972,11 +1034,6 @@ if (!class_exists('WC_Twoinc')) {
                     'title'     => __('Title', 'twoinc-payment-gateway'),
                     'type'      => 'text',
                     'default'   => __('Business invoice %s days', 'twoinc-payment-gateway')
-                ],
-                'subtitle' => [
-                    'title'     => __('Description', 'twoinc-payment-gateway'),
-                    'type'      => 'text',
-                    'default'   => __('Receive the invoice via PDF and email', 'twoinc-payment-gateway')
                 ],
                 'test_checkout_host' => [
                     'type'      => 'text',

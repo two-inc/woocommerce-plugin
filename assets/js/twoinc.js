@@ -17,18 +17,6 @@ let twoincUtilHelper = {
     },
 
     /**
-     * Get error messages from plugin translation
-     */
-    getMessage: function(key) {
-
-        if (key && key in window.twoinc.messages) {
-            return [window.twoinc.messages[key],]
-        }
-        return []
-
-    },
-
-    /**
      * Hash some input to store as key
      */
     getUnsecuredHash: function(inp, seed = 0) {
@@ -732,18 +720,6 @@ let twoincDomHelper = {
     },
 
     /**
-     * Get HTML for ajax loader icon
-     */
-    getLoaderHtml: function() {
-
-        let img = document.createElement("IMG")
-        img.src = window.twoinc.twoinc_plugin_url + '/assets/images/loader.svg'
-        img.className = 'loader'
-        return img
-
-    },
-
-    /**
      * Rearrange descriptions in Twoinc payment to make it cleaner
      */
     rearrangeDescription: function() {
@@ -1334,11 +1310,8 @@ class Twoinc {
             Twoinc.getInstance().orderIntentCheck.interval = null
             Twoinc.getInstance().orderIntentCheck.pendingCheck = false
 
-            let subtitleElem = document.querySelector('.payment_method_woocommerce-gateway-tillit .twoinc-subtitle')
-            if (subtitleElem) {
-                subtitleElem.innerHTML = ''
-                subtitleElem.appendChild(twoincDomHelper.getLoaderHtml())
-            }
+            jQuery('.twoinc-pay-sub').hide()
+            jQuery('.twoinc-pay-sub.loader').show()
 
             // Create an order intent
             const approvalResponse = jQuery.ajax({
@@ -1405,10 +1378,10 @@ class Twoinc {
 
             // Update twoinc message
             let twoincSubtitleExistCheck = setInterval(function() {
-                if (document.querySelector('.twoinc-subtitle')) {
-                    document.querySelector('.twoinc-subtitle').innerText = twoincUtilHelper.getMessage('subtitle_order_intent_ok')
-                    clearInterval(twoincSubtitleExistCheck)
-               }
+                jQuery('.twoinc-pay-box, .twoinc-pay-sub').hide()
+                jQuery('.twoinc-pay-sub.explain-details').show()
+                jQuery('.twoinc-pay-box.declare-aggrement').show()
+                clearInterval(twoincSubtitleExistCheck)
             }, 1000)
 
             // Update order intent log
@@ -1429,26 +1402,28 @@ class Twoinc {
 
                 // Update twoinc message
                 let twoincSubtitleExistCheck = setInterval(function() {
-                    if (document.querySelector('.twoinc-subtitle') && jQuery('#payment .blockOverlay').length === 0) {
-                        // twoinc-subtitle exists and woocommerce's update_checkout is not running
-                        let messageId = 'subtitle_order_intent_reject'
-                        if (errMsg.startsWith('Minimum Payment using Twoinc')) {
-                            messageId = 'amount_min'
-                        } else if (errMsg.startsWith('Maximum Payment using Twoinc')) {
-                            messageId = 'amount_max'
+                    if (jQuery('#payment .blockOverlay').length === 0) {
+                        jQuery('.twoinc-pay-box, .twoinc-pay-sub').hide()
+                        // woocommerce's update_checkout is not running
+                        if (errMsg.startsWith('Minimum Payment using ')) {
+                            jQuery('.twoinc-pay-box.err-amt-min').show()
+                        } else if (errMsg.startsWith('Maximum Payment using ')) {
+                            jQuery('.twoinc-pay-box.err-amt-max').show()
                         } else if (errMsg.includes('Invalid phone number')) {
-                            messageId = 'invalid_phone'
+                            jQuery('.twoinc-pay-box.err-phone').show()
                             twoincDomHelper.markFieldInvalid('billing_phone_field')
+                        } else {
+                            jQuery('.twoinc-pay-box.payment-not-accepted').show()
                         }
-                        document.querySelector('.twoinc-subtitle').innerHTML = twoincUtilHelper.getMessage(messageId)
                         clearInterval(twoincSubtitleExistCheck)
                    }
                 }, 1000)
             } else {
                 let twoincSubtitleExistCheck = setInterval(function() {
-                    if (document.querySelector('.twoinc-subtitle') && jQuery('#payment .blockOverlay').length === 0) {
-                        // twoinc-subtitle exists and woocommerce's update_checkout is not running
-                        document.querySelector('.twoinc-subtitle').innerHTML = twoincUtilHelper.getMessage('subtitle_order_intent_reject')
+                    if (jQuery('#payment .blockOverlay').length === 0) {
+                        // woocommerce's update_checkout is not running
+                        jQuery('.twoinc-pay-box, .twoinc-pay-sub').hide()
+                        jQuery('.twoinc-pay-box.payment-not-accepted').show()
                         clearInterval(twoincSubtitleExistCheck)
                    }
                 }, 1000)
@@ -1597,7 +1572,7 @@ class Twoinc {
                 Twoinc.getInstance().customerRepresentative['phone_number'] = newVal
                 Twoinc.getInstance().getApproval()
             }
-        }, 100)
+        }, 2000)
 
     }
 

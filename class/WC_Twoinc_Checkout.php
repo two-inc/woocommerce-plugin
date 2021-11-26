@@ -302,22 +302,8 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             }
 
             $currency = get_woocommerce_currency();
-            $amount_min = '200 NOK';
-            $amount_max = '500,000 NOK';
-            if ($currency === 'GBP') {
-                $amount_min = '10 GBP';
-                $amount_max = '10,000 GBP';
-            }
 
             $properties = [
-                'messages' => [
-                    'subtitle_order_intent_ok' =>$this->wc_twoinc->get_option('subtitle'),
-                    'subtitle_order_intent_reject' => __('Invoice is not available for this purchase', 'twoinc-payment-gateway'),
-                    'amount_min' => sprintf(__('Minimum Payment using Two. is %s', 'twoinc-payment-gateway'), $amount_min),
-                    'amount_max' => sprintf(__('Maximum Payment using Two. is %s', 'twoinc-payment-gateway'), $amount_max),
-                    'invalid_phone' => __('Phone number is invalid', 'twoinc-payment-gateway'),
-                ],
-                'twoinc_plugin_url' => WC_TWOINC_PLUGIN_URL,
                 'twoinc_search_host_no' => $this->wc_twoinc->twoinc_search_host_no,
                 'twoinc_search_host_gb' => $this->wc_twoinc->twoinc_search_host_gb,
                 'twoinc_checkout_host' => $this->wc_twoinc->twoinc_checkout_host,
@@ -331,6 +317,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 'use_account_type_buttons' => $this->wc_twoinc->get_option('use_account_type_buttons'),
                 'product_type' => $product_type,
                 'merchant_short_name' => $this->wc_twoinc->get_option('tillit_merchant_id'),
+                'days_on_invoice' => $this->wc_twoinc->get_option('days_on_invoice'),
                 'shop_base_country' => strtolower(WC()->countries->get_base_country()),
                 'currency' => $currency,
                 'price_decimal_separator' => wc_get_price_decimal_separator(),
