@@ -15,7 +15,11 @@
 .woocommerce-checkout #payment ul.payment_methods li.wc_payment_method.payment_method_woocommerce-gateway-tillit .twoinc-subtitle {
     color: #777777;
     margin-left: 31px;
-    font-size: 0.9em;
+    font-size: 0.8em;
+}
+
+.woocommerce-checkout #payment ul.payment_methods li.wc_payment_method.payment_method_woocommerce-gateway-tillit .explain-details {
+    font-size: 0.8em;
 }
 
 .woocommerce-checkout #payment ul.payment_methods li.wc_payment_method.payment_method_woocommerce-gateway-tillit .twoinc-buyer-name {
