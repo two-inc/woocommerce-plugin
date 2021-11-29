@@ -1164,6 +1164,12 @@ if (!class_exists('WC_Twoinc')) {
                     'type'      => 'checkbox',
                     'default'   => 'yes'
                 ],
+                'display_tooltips' => [
+                    'title'     => __('Display input tooltips', 'twoinc-payment-gateway'),
+                    'label'     => ' ',
+                    'type'      => 'checkbox',
+                    'default'   => 'no'
+                ],
                 'display_other_payments' => [
                     'title'     => __('Always enable all available payment methods', 'twoinc-payment-gateway'),
                     'label'     => ' ',

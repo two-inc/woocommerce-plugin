@@ -378,6 +378,13 @@ let twoincDomHelper = {
                 twoincDomHelper.revertField('billing_phone_display_field', 'ph')
                 twoincDomHelper.revertField('billing_email_field', 'em')
             }
+
+            twoincDomHelper.toggleTooltip(
+                '#billing_phone_display, label[for="billing_phone_display"], #billing_phone, label[for="billing_phone"]',
+                window.twoinc.text.tooltip_phone)
+            twoincDomHelper.toggleTooltip(
+                '#billing_company_display_field .select2-container, label[for="billing_company_display"], #billing_company, label[for="billing_company"]',
+                window.twoinc.text.tooltip_company)
         }, 100)
 
     },
@@ -543,6 +550,29 @@ let twoincDomHelper = {
             $otherPaymentSections.show()
 
         }
+
+    },
+
+    /**
+     * Toggle the tooltip for input fields
+     */
+    toggleTooltip: function(selectorStr, tooltip) {
+
+        if (window.twoinc.display_tooltips !== 'yes') return
+
+        let isCurrentlyCompany = twoincUtilHelper.isCompany(twoincDomHelper.getAccountType())
+
+        jQuery(selectorStr).each(function(){
+            if(isCurrentlyCompany) {
+                if (!jQuery(this).attr('original-title') && tooltip !== jQuery(this).attr('title')) {
+                    jQuery(this).attr('original-title', jQuery(this).attr('title'))
+                }
+                jQuery(this).attr('title', tooltip)
+            } else {
+                jQuery(this).attr('title', jQuery(this).attr('original-title'))
+                jQuery(this).attr('original-title', '')
+            }
+        })
 
     },
 
@@ -903,7 +933,7 @@ let twoincDomHelper = {
     insertCustomCss: function() {
         let themeBase = twoincDomHelper.getThemeBase()
         if (themeBase) {
-            jQuery('head').append('<link href="/wp-content/plugins/tillit-payment-gateway/assets/css/c-' + themeBase + '.css" type="text/css" rel="stylesheet" />');
+            jQuery('head').append('<link href="/wp-content/plugins/tillit-payment-gateway/assets/css/c-' + themeBase + '.css" type="text/css" rel="stylesheet" />')
         }
     }
 
@@ -940,7 +970,7 @@ class Twoinc {
     {
 
         if (Twoinc.instance) {
-            throw 'Twoinc is a singleton';
+            throw 'Twoinc is a singleton'
         }
         Twoinc.instance = this
         this.withCompanyNameSearch = window.twoinc.company_name_search && window.twoinc.company_name_search === 'yes'
@@ -996,6 +1026,7 @@ class Twoinc {
                 // Clear company inputs
                 $billingCompanyDisplay.html('')
                 $billingCompanyDisplay.selectWoo(twoincSelectWooHelper.genSelectWooParams())
+                twoincDomHelper.toggleTooltip('#billing_company_display_field .select2-container', window.twoinc.text.tooltip_company)
                 twoincSelectWooHelper.fixSelectWooPositionCompanyName()
                 jQuery('#company_id').val('')
 
@@ -1017,6 +1048,7 @@ class Twoinc {
             // Turn the select input into select2
             setTimeout(function(){
                 const $billingCompanySelect = $billingCompanyDisplay.selectWoo(twoincSelectWooHelper.genSelectWooParams())
+                twoincDomHelper.toggleTooltip('#billing_company_display_field .select2-container', window.twoinc.text.tooltip_company)
                 $billingCompanySelect.on('select2:select', function(e){
 
                     // Get the option data

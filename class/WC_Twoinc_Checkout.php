@@ -304,6 +304,10 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             $currency = get_woocommerce_currency();
 
             $properties = [
+                'text' => [
+                    'tooltip_phone' => __('We require your phone number so we can verify your purchase', 'twoinc-payment-gateway'),
+                    'tooltip_company' => __('We use your company name to automatically populate your address and register the company that made the purchase', 'twoinc-payment-gateway'),
+                ],
                 'twoinc_search_host_no' => $this->wc_twoinc->twoinc_search_host_no,
                 'twoinc_search_host_gb' => $this->wc_twoinc->twoinc_search_host_gb,
                 'twoinc_checkout_host' => $this->wc_twoinc->twoinc_checkout_host,
@@ -315,6 +319,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 'invoice_fee_to_buyer' => $this->wc_twoinc->get_option('invoice_fee_to_buyer'),
                 'mark_twoinc_fields_required' => $this->wc_twoinc->get_option('mark_tillit_fields_required'),
                 'use_account_type_buttons' => $this->wc_twoinc->get_option('use_account_type_buttons'),
+                'display_tooltips' => $this->wc_twoinc->get_option('display_tooltips'),
                 'product_type' => $product_type,
                 'merchant_short_name' => $this->wc_twoinc->get_option('tillit_merchant_id'),
                 'days_on_invoice' => $this->wc_twoinc->get_option('days_on_invoice'),
