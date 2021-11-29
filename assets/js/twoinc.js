@@ -489,7 +489,11 @@ let twoincDomHelper = {
         let otherPaymentMethods = jQuery('#payment .wc_payment_methods input.input-radio:visible')
         if (otherPaymentMethods.length > 0) {
             if (paymentMethodRadioObj && paymentMethodRadioObj.attr('id')) {
-                jQuery('#payment .wc_payment_methods input.input-radio:visible:not(#' + paymentMethodRadioObj.attr('id') + ')').first().click()
+                let radios = jQuery('#payment .wc_payment_methods input.input-radio:visible:not(#' + paymentMethodRadioObj.attr('id') + ')')
+                if (sessionStorage.getItem('twoincAccountType') === 'business') {
+                    radios = radios.filter(':not(#payment_method_kco)')
+                }
+                radios.first().click()
             } else {
                 jQuery('#payment .wc_payment_methods input.input-radio:visible').first().click()
             }
@@ -606,13 +610,13 @@ let twoincDomHelper = {
             companyName = companyName.trim()
         }
         if (companyName) {
-            document.querySelector('.twoinc-buyer-name').innerText = companyName
-            document.querySelector('.twoinc-buyer-name').classList.remove('hidden')
-            document.querySelector('.twoinc-buyer-name-placeholder').classList.add('hidden')
+            jQuery('.twoinc-buyer-name').text(companyName)
+            jQuery('.twoinc-buyer-name').show()
+            jQuery('.twoinc-buyer-name-placeholder').hide()
         } else {
-            document.querySelector('.twoinc-buyer-name').innerText = ''
-            document.querySelector('.twoinc-buyer-name').classList.add('hidden')
-            document.querySelector('.twoinc-buyer-name-placeholder').classList.remove('hidden')
+            jQuery('.twoinc-buyer-name').text('')
+            jQuery('.twoinc-buyer-name').hide()
+            jQuery('.twoinc-buyer-name-placeholder').show()
         }
 
     },
