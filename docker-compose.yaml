@@ -3,29 +3,57 @@ version: '3.1'
 services:
 
   wordpress:
-    image: wordpress
+    container_name: wordpress
+    extra_hosts:
+      - "portal.localhost:host-gateway"
+    image: ${REPO}wordpress:latest
     restart: always
     ports:
-      - 8080:80
+      - 5000:80
     environment:
-      WORDPRESS_DB_HOST: db
-      WORDPRESS_DB_USER: tillit
-      WORDPRESS_DB_PASSWORD: examplepass
-      WORDPRESS_DB_NAME: exampledb
+      WORDPRESS_DB_HOST: mariadb
+      WORDPRESS_DB_USER: twocommerce
+      WORDPRESS_DB_PASSWORD: twocommerce
+      WORDPRESS_DB_NAME: twocommerce
     volumes:
-      - wordpress:/var/www/html
+      - ./volumes/wordpress:/var/www/html
+      - ./volumes/log/:/var/log/apache2/
+    depends_on:
+      - mariadb
 
-  db:
-    image: mysql:5.7
+  wpcli:
+    container_name: wpcli
+    image: ${REPO}wordpress:cli
+    user: "33:33"
+    entrypoint: /opt/tillit-payment-gateway/docker/entrypoint.sh
     restart: always
     environment:
-      MYSQL_DATABASE: exampledb
-      MYSQL_USER: tillit
-      MYSQL_PASSWORD: examplepass
+      WORDPRESS_DB_HOST: mariadb
+      WORDPRESS_DB_USER: twocommerce
+      WORDPRESS_DB_PASSWORD: twocommerce
+      WORDPRESS_DB_NAME: twocommerce
+      WORDPRESS_URL: "http://localhost:5000"
+      WORDPRESS_TITLE: "Twocommerce Wordpress"
+      WORDPRESS_ADMIN_USER: admin
+      WORDPRESS_ADMIN_PASSWORD: twoinb2b
+      WORDPRESS_ADMIN_EMAIL: admin@two.inc
+      WOOCOM_PLUGIN_CONFIG_JSON: config-local.json
+      WOOCOM_CURRENCY: NOK
+    volumes:
+      - ./volumes/wordpress:/var/www/html
+      - .:/opt/tillit-payment-gateway
+    depends_on:
+      - mariadb
+      - wordpress
+
+  mariadb:
+    container_name: mariadb
+    image: ${REPO}mariadb:10.2
+    restart: always
+    environment:
+      MYSQL_DATABASE: twocommerce
+      MYSQL_USER: twocommerce
+      MYSQL_PASSWORD: twocommerce
       MYSQL_RANDOM_ROOT_PASSWORD: '1'
     volumes:
-      - db:/var/lib/mysql
-
-volumes:
-  wordpress:
-  db:
+      - ./volumes/mariadb:/var/lib/mysql
