@@ -53,11 +53,9 @@ msgstr "API informasjon"
 
 #: class/WC_Twoinc.php:1098
 msgid ""
-"Approves buyer when phone and company name is filled out. Disables Two. "
-"payment method if buyer is declined."
+"Approves buyer when phone and company name is filled out."
 msgstr ""
-"Godkjenn kjøper når telefon og selskapsnavn er utfylt. Skru av Two. dersom "
-"kjøper ikke godkjennes"
+"Godkjenn kjøper når telefon og selskapsnavn er utfylt."
 
 #: class/WC_Twoinc.php:1181
 msgid "Auto-complete settings"
@@ -341,15 +339,15 @@ msgid "Show \"What is Two.\" link in Checkout"
 msgstr "Vis \"Hva er Two.\" link i Checkout"
 
 #: class/WC_Twoinc.php:1116
-msgid "Show account type for Business Customer"
+msgid "Separate checkout for business customers"
 msgstr "Vis checkout for bedriftskunder"
 
 #: class/WC_Twoinc.php:1105
-msgid "Show account type for Private Customer"
+msgid "Extra page for private customers"
 msgstr "Vis checkout for privatpersoner"
 
 #: class/WC_Twoinc.php:1111
-msgid "Show account type for Sole trader/other Customer"
+msgid "Extra page for private soletraders"
 msgstr "Vis checkout for enkeltmannsforetak"
 
 #: class/WC_Twoinc.php:1008

@@ -971,7 +971,7 @@ class Twoinc {
             throw 'Twoinc is a singleton'
         }
         Twoinc.instance = this
-        this.withCompanyNameSearch = window.twoinc.company_name_search && window.twoinc.company_name_search === 'yes'
+        this.withCompanyNameSearch = window.twoinc.company_name_search === 'yes'
 
     }
 
@@ -1029,7 +1029,7 @@ class Twoinc {
                 jQuery('#company_id').val('')
 
                 // Clear the addresses, in case address get request fails
-                if (window.twoinc.address_search !== 'yes') {
+                if (window.twoinc.address_search === 'yes') {
                     jQuery('#billing_address_1').val('')
                     jQuery('#billing_city').val('')
                     jQuery('#billing_postcode').val('')
@@ -1083,7 +1083,7 @@ class Twoinc {
                     if (!country_prefix || !['GB'].includes(country_prefix)) country_prefix = 'NO'
 
                     // Clear the addresses, in case address get request fails
-                    if (window.twoinc.address_search !== 'yes') {
+                    if (window.twoinc.address_search === 'yes') {
                         jQuery('#billing_address_1').val('')
                         jQuery('#billing_city').val('')
                         jQuery('#billing_postcode').val('')
