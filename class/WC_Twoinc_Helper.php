@@ -507,8 +507,10 @@ if (!class_exists('WC_Twoinc_Helper')) {
         {
             $hostname = str_replace(array('http://', 'https://'), '', get_home_url());
 
-            // Local
+            // Local or configured in env var
             if (in_array($hostname, array('dev.tillitlocal.ai', 'localhost')) || substr($hostname, 0, 10) === 'localhost:') return true;
+            $env_dev_hostnames = getenv('TWOINC_DEV_HOSTNAMES');
+            if ($env_dev_hostnames && in_array($hostname, explode(',', $env_dev_hostnames))) return true;
 
             // Production sites
             if (strlen($hostname) > 8 && substr($hostname, -8) === '.two.inc') {
