@@ -166,10 +166,6 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     'priority' => $company_name_priority
                 ];
 
-            }
-
-            if($this->wc_twoinc->get_option('enable_company_name') === 'yes' && $this->wc_twoinc->get_option('enable_company_id') === 'yes') {
-
                 $fields['billing']['company_id'] = [
                     'label' => __('Company ID', 'twoinc-payment-gateway'),
                     'class' => array('hidden'),
@@ -314,7 +310,6 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 'display_other_payments' => $this->wc_twoinc->get_option('display_other_payments'),
                 'fallback_to_another_payment' => $this->wc_twoinc->get_option('fallback_to_another_payment'),
                 'company_name_search' => $this->wc_twoinc->get_option('enable_company_name'),
-                'company_id_search' => $this->wc_twoinc->get_option('enable_company_id'),
                 'address_search' => $this->wc_twoinc->get_option('autocomplete_address'),
                 'enable_order_intent' => $this->wc_twoinc->get_option('enable_order_intent'),
                 'invoice_fee_to_buyer' => $this->wc_twoinc->get_option('invoice_fee_to_buyer'),

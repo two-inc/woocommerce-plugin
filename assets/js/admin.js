@@ -41,11 +41,6 @@ jQuery(function($){
     })
 
     $('body').on('change', '#woocommerce_woocommerce-gateway-tillit_enable_company_name', function(e) {
-        toggleChildrenFields($(this), $('#woocommerce_woocommerce-gateway-tillit_enable_company_id'))
-        toggleChildrenFields($('#woocommerce_woocommerce-gateway-tillit_enable_company_id'), $('#woocommerce_woocommerce-gateway-tillit_address_search'))
-    })
-
-    $('body').on('change', '#woocommerce_woocommerce-gateway-tillit_enable_company_id', function(e) {
         toggleChildrenFields($(this), $('#woocommerce_woocommerce-gateway-tillit_address_search'))
     })
 
@@ -68,7 +63,6 @@ jQuery(function($){
 
     jQuery('h3.wc-settings-sub-title').next().hide()
 
-    toggleChildrenFields($('#woocommerce_woocommerce-gateway-tillit_enable_company_name'), $('#woocommerce_woocommerce-gateway-tillit_enable_company_id'))
-    toggleChildrenFields($('#woocommerce_woocommerce-gateway-tillit_enable_company_id'), $('#woocommerce_woocommerce-gateway-tillit_address_search'))
+    toggleChildrenFields($('#woocommerce_woocommerce-gateway-tillit_enable_company_name'), $('#woocommerce_woocommerce-gateway-tillit_address_search'))
 
 })

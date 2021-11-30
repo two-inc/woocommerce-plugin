@@ -943,7 +943,6 @@ if (!class_exists('WC_Twoinc')) {
                     if (isset($body['display_other_payments'])) $this->update_option('display_other_payments', $body['display_other_payments'] ? 'yes' : 'no');
                     if (isset($body['fallback_to_another_payment'])) $this->update_option('fallback_to_another_payment', $body['fallback_to_another_payment'] ? 'yes' : 'no');
                     if (isset($body['enable_company_name'])) $this->update_option('enable_company_name', $body['enable_company_name'] ? 'yes' : 'no');
-                    if (isset($body['enable_company_id'])) $this->update_option('enable_company_id', $body['enable_company_id'] ? 'yes' : 'no');
                     if (isset($body['address_search'])) $this->update_option('address_search', $body['address_search'] ? 'yes' : 'no');
                     if (isset($body['mark_tillit_fields_required'])) $this->update_option('mark_tillit_fields_required', $body['mark_tillit_fields_required'] ? 'yes' : 'no');
                     if (isset($body['enable_order_intent'])) $this->update_option('enable_order_intent', $body['enable_order_intent'] ? 'yes' : 'no');
@@ -1189,11 +1188,6 @@ if (!class_exists('WC_Twoinc')) {
                 ],
                 'enable_company_name' => [
                     'title'     => __('Company name search and auto-complete', 'twoinc-payment-gateway'),
-                    'label'     => ' ',
-                    'type'      => 'checkbox'
-                ],
-                'enable_company_id' => [
-                    'title'     => __('Company ID auto-complete', 'twoinc-payment-gateway'),
                     'label'     => ' ',
                     'type'      => 'checkbox'
                 ],
