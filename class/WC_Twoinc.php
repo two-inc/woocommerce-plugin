@@ -184,7 +184,7 @@ if (!class_exists('WC_Twoinc')) {
                     __('Express checkout', 'twoinc-payment-gateway'),
                     sprintf(
                         __('Pay %s days after your order is shipped, for free', 'twoinc-payment-gateway'),
-                        '<span class="due-in-days">X<span>',
+                        '<span class="due-in-days">' . strval($this->get_option('days_on_invoice')) . '<span>',
                     ),
                     __('Receive invoice and payment details via email', 'twoinc-payment-gateway')
                 ),
@@ -194,7 +194,7 @@ if (!class_exists('WC_Twoinc')) {
                     __('your company', 'twoinc-payment-gateway'),
                     $this->get_abt_twoinc_html()
                 ),
-                __('We are not able to offer your company Two. Invoice payment terms for this order', 'twoinc-payment-gateway'),
+                __('Invoice purchase is not available for this order', 'twoinc-payment-gateway'),
                 sprintf(__('Maximum Payment using Two. is %s', 'twoinc-payment-gateway'), $amount_max),
                 sprintf(__('Minimum Payment using Two. is %s', 'twoinc-payment-gateway'), $amount_min),
                 __('Phone number is invalid', 'twoinc-payment-gateway')
@@ -693,7 +693,7 @@ if (!class_exists('WC_Twoinc')) {
             $body = json_decode($response['body'], true);
 
             if ($body['status'] == 'REJECTED') {
-                WC_Twoinc_Helper::display_ajax_error(__('We are not able to offer your company Two. Invoice payment terms for this order', 'twoinc-payment-gateway'));
+                WC_Twoinc_Helper::display_ajax_error(__('Invoice purchase is not available for this order', 'twoinc-payment-gateway'));
                 return;
             }
 
@@ -943,7 +943,7 @@ if (!class_exists('WC_Twoinc')) {
                     if (isset($body['display_other_payments'])) $this->update_option('display_other_payments', $body['display_other_payments'] ? 'yes' : 'no');
                     if (isset($body['fallback_to_another_payment'])) $this->update_option('fallback_to_another_payment', $body['fallback_to_another_payment'] ? 'yes' : 'no');
                     if (isset($body['enable_company_name'])) $this->update_option('enable_company_name', $body['enable_company_name'] ? 'yes' : 'no');
-                    if (isset($body['enable_company_id'])) $this->update_option('enable_company_id', $body['enable_company_id'] ? 'yes' : 'no');
+                    if (isset($body['address_search'])) $this->update_option('address_search', $body['address_search'] ? 'yes' : 'no');
                     if (isset($body['mark_tillit_fields_required'])) $this->update_option('mark_tillit_fields_required', $body['mark_tillit_fields_required'] ? 'yes' : 'no');
                     if (isset($body['enable_order_intent'])) $this->update_option('enable_order_intent', $body['enable_order_intent'] ? 'yes' : 'no');
                     if (isset($body['default_to_b2c'])) $this->update_option('default_to_b2c', $body['default_to_b2c'] ? 'yes' : 'no');
@@ -1025,176 +1025,188 @@ if (!class_exists('WC_Twoinc')) {
         {
             $twoinc_form_fields = [
                 'enabled' => [
-                    'title'     => __('Turn on/off', 'twoinc-payment-gateway'),
-                    'type'      => 'checkbox',
-                    'label'     => __('Enable Two. Payments', 'twoinc-payment-gateway'),
-                    'default'   => 'yes'
+                    'title'       => __('Turn on/off', 'twoinc-payment-gateway'),
+                    'type'        => 'checkbox',
+                    'label'       => __('Enable Two. Payments', 'twoinc-payment-gateway'),
+                    'default'     => 'yes'
                 ],
                 'title' => [
-                    'title'     => __('Title', 'twoinc-payment-gateway'),
-                    'type'      => 'text',
-                    'default'   => __('Business invoice %s days', 'twoinc-payment-gateway')
+                    'title'       => __('Title', 'twoinc-payment-gateway'),
+                    'type'        => 'text',
+                    'default'     => __('Business invoice %s days', 'twoinc-payment-gateway')
                 ],
                 'test_checkout_host' => [
-                    'type'      => 'text',
-                    'title'     => __('Two. Test Server', 'twoinc-payment-gateway'),
-                    'default'   => 'https://staging.api.tillit.ai'
+                    'type'        => 'text',
+                    'title'       => __('Two. Test Server', 'twoinc-payment-gateway'),
+                    'default'     => 'https://staging.api.tillit.ai'
                 ],
                 'checkout_env' => [
-                    'type'      => 'select',
-                    'title'     => __('Choose your settings', 'twoinc-payment-gateway'),
-                    'default'   => 'Production',
-                    'options'   => array(
+                    'type'        => 'select',
+                    'title'       => __('Choose your settings', 'twoinc-payment-gateway'),
+                    'default'     => 'Production',
+                    'options'     => array(
                           'PROD'     => 'Production',
                           'SANDBOX'  => 'Sandbox'
                      )
                 ],
                 'clear_options_on_deactivation' => [
-                    'title'     => __('Clear settings on deactivation', 'twoinc-payment-gateway'),
-                    'label'     => ' ',
-                    'type'      => 'checkbox',
-                    'default'   => 'no'
+                    'title'       => __('Clear settings on deactivation', 'twoinc-payment-gateway'),
+                    'label'       => ' ',
+                    'type'        => 'checkbox',
+                    'default'     => 'no'
                 ],
                 'section_api_credentials' => [
-                    'type'      => 'title',
-                    'title'     => __('API credentials', 'twoinc-payment-gateway')
+                    'type'        => 'title',
+                    'title'       => __('API credentials', 'twoinc-payment-gateway')
                 ],
                 'tillit_merchant_id' => [
-                    'title'     => __('Two. Merchant Username', 'twoinc-payment-gateway'),
-                    'type'      => 'text'
+                    'title'       => __('Two. username', 'twoinc-payment-gateway'),
+                    'type'        => 'text'
                 ],
                 'api_key' => [
-                    'title'     => __('Two. API Key', 'twoinc-payment-gateway'),
-                    'type'      => 'password'
+                    'title'       => __('Two. API Key', 'twoinc-payment-gateway'),
+                    'type'        => 'password'
                 ],
                 'section_invoice_settings' => [
-                    'type'      => 'title',
-                    'title'     => __('Payment and Invoice settings', 'twoinc-payment-gateway')
+                    'type'        => 'title',
+                    'title'       => __('Payment and Invoice settings', 'twoinc-payment-gateway')
                 ],
                 'product_type' => [
-                    'type'      => 'select',
-                    'title'     => __('Choose product', 'twoinc-payment-gateway'),
-                    'default'   => 'FUNDED_INVOICE',
-                    'options'   => array(
+                    'type'        => 'select',
+                    'title'       => __('Choose product', 'twoinc-payment-gateway'),
+                    'default'     => 'FUNDED_INVOICE',
+                    'options'     => array(
                           'FUNDED_INVOICE' => 'Funded Invoice',
                           'DIRECT_INVOICE' => 'Direct Invoice'
                      )
                 ],
                 'days_on_invoice' => [
-                    'title'     => __('Default number of buyer payment days', 'twoinc-payment-gateway'),
-                    'type'      => 'text',
-                    'default'   => '14'
+                    'title'       => __('Default number of buyer payment days', 'twoinc-payment-gateway'),
+                    'type'        => 'text',
+                    'default'     => '14'
                 ],
                 'merchant_logo' => [
-                    'title'     => __('Add a logo to the invoice', 'twoinc-payment-gateway'),
-                    'type'      => 'logo'
+                    'title'       => __('Add a logo to the invoice', 'twoinc-payment-gateway'),
+                    'type'        => 'logo'
                 ],
                 'section_checkout_options' => [
-                    'type'      => 'title',
-                    'title'     => __('Checkout options', 'twoinc-payment-gateway')
+                    'type'        => 'title',
+                    'title'       => __('Checkout options', 'twoinc-payment-gateway')
                 ],
                 'enable_order_intent' => [
-                    'title'     => __('Pre-approve buyer during checkout', 'twoinc-payment-gateway'),
-                    'description' => __('Approves buyer when phone and company name is filled out. Disables Two. payment method if buyer is declined.', 'twoinc-payment-gateway'),
+                    'title'       => __('Pre-approve buyer during checkout', 'twoinc-payment-gateway'),
+                    'description' => __('Approves buyer when phone and company name is filled out.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
-                    'label'     => ' ',
-                    'type'      => 'checkbox',
-                    'default'   => 'yes'
-                ],
-                'checkout_personal' => [
-                    'title'     => __('Show account type for Private Customer', 'twoinc-payment-gateway'),
-                    'label'     => ' ',
-                    'type'      => 'checkbox',
-                    'default'   => 'yes'
-                ],
-                'checkout_sole_trader' => [
-                    'title'     => __('Show account type for Sole trader/other Customer', 'twoinc-payment-gateway'),
-                    'label'     => ' ',
-                    'type'      => 'checkbox'
+                    'label'       => ' ',
+                    'type'        => 'checkbox',
+                    'default'     => 'yes'
                 ],
                 'checkout_business' => [
-                    'title'     => __('Show account type for Business Customer', 'twoinc-payment-gateway'),
-                    'label'     => ' ',
-                    'type'      => 'checkbox',
-                    'default'   => 'yes'
+                    'title'       => __('Separate checkout for business customers', 'twoinc-payment-gateway'),
+                    'description' => __('Adds a separate checkout for business customers. Two. is only available in the business checkout.', 'twoinc-payment-gateway'),
+                    'desc_tip'    => true,
+                    'label'       => ' ',
+                    'type'        => 'checkbox',
+                    'default'     => 'yes'
+                ],
+                'checkout_personal' => [
+                    'title'       => __('Extra page for private customers', 'twoinc-payment-gateway'),
+                    'label'       => ' ',
+                    'type'        => 'checkbox',
+                    'default'     => 'yes'
+                ],
+                'checkout_sole_trader' => [
+                    'title'       => __('Extra page for private soletraders', 'twoinc-payment-gateway'),
+                    'label'       => ' ',
+                    'type'        => 'checkbox'
                 ],
                 'mark_tillit_fields_required' => [
-                    'title'     => __('Always mark Two. fields as required', 'twoinc-payment-gateway'),
-                    'label'     => ' ',
-                    'type'      => 'checkbox',
-                    'default'   => 'yes'
+                    'title'       => __('Mark Two. fields required', 'twoinc-payment-gateway'),
+                    'description' => __('Marks phone number and company name fields as required.', 'twoinc-payment-gateway'),
+                    'desc_tip'    => true,
+                    'label'       => ' ',
+                    'type'        => 'checkbox',
+                    'default'     => 'yes'
                 ],
                 'add_field_department' => [
-                    'title'     => __('Add department field to Checkout page', 'twoinc-payment-gateway'),
-                    'label'     => ' ',
-                    'type'      => 'checkbox',
-                    'default'   => 'yes'
+                    'title'       => __('Enable department input field', 'twoinc-payment-gateway'),
+                    'description' => __('Adds an input field where buyers can input their department, input is shown on invoice.', 'twoinc-payment-gateway'),
+                    'desc_tip'    => true,
+                    'label'       => ' ',
+                    'type'        => 'checkbox',
+                    'default'     => 'yes'
                 ],
                 'add_field_project' => [
-                    'title'     => __('Add project field to Checkout page', 'twoinc-payment-gateway'),
-                    'label'     => ' ',
-                    'type'      => 'checkbox',
-                    'default'   => 'yes'
+                    'title'       => __('Enable project input field', 'twoinc-payment-gateway'),
+                    'description' => __('Adds an input field where buyers can input their project in the company, input is shown on invoice.', 'twoinc-payment-gateway'),
+                    'desc_tip'    => true,
+                    'label'       => ' ',
+                    'type'        => 'checkbox',
+                    'default'     => 'yes'
                 ],
                 'use_account_type_buttons' => [
-                    'title'     => __('Use buttons instead of radios to select account type', 'twoinc-payment-gateway'),
-                    'label'     => ' ',
-                    'type'      => 'checkbox',
-                    'default'   => 'no'
+                    'title'       => __('Use buttons instead of radios to select account type', 'twoinc-payment-gateway'),
+                    'label'       => ' ',
+                    'type'        => 'checkbox',
+                    'default'     => 'no'
                 ],
                 'show_abt_link' => [
-                    'title'     => __('Show "What is Two." link in Checkout', 'twoinc-payment-gateway'),
-                    'label'     => ' ',
-                    'type'      => 'checkbox',
-                    'default'   => 'no'
+                    'title'       => __('Show "What is Two." link in Checkout', 'twoinc-payment-gateway'),
+                    'label'       => ' ',
+                    'type'        => 'checkbox',
+                    'default'     => 'no'
                 ],
                 'default_to_b2c' => [
-                    'title'     => __('Default to B2C check-out', 'twoinc-payment-gateway'),
-                    'label'     => ' ',
-                    'type'      => 'checkbox'
+                    'title'       => __('Default to B2C check-out', 'twoinc-payment-gateway'),
+                    'label'       => ' ',
+                    'type'        => 'checkbox'
                 ],
                 'invoice_fee_to_buyer' => [
-                    'title'     => __('Shift invoice fee to the buyers', 'twoinc-payment-gateway'),
-                    'label'     => ' ',
-                    'type'      => 'checkbox'
+                    'title'       => __('Shift invoice fee to the buyers', 'twoinc-payment-gateway'),
+                    'label'       => ' ',
+                    'type'        => 'checkbox'
                 ],
                 'initiate_payment_to_buyer_on_refund' => [
-                    'title'     => __('Initiate payment to buyer on refund', 'twoinc-payment-gateway'),
-                    'label'     => ' ',
-                    'type'      => 'checkbox',
-                    'default'   => 'yes'
+                    'title'       => __('Initiate payment to buyer on refund', 'twoinc-payment-gateway'),
+                    'label'       => ' ',
+                    'type'        => 'checkbox',
+                    'default'     => 'yes'
                 ],
                 'display_tooltips' => [
-                    'title'     => __('Display input tooltips', 'twoinc-payment-gateway'),
-                    'label'     => ' ',
-                    'type'      => 'checkbox',
-                    'default'   => 'no'
+                    'title'       => __('Display input tooltips', 'twoinc-payment-gateway'),
+                    'label'       => ' ',
+                    'type'        => 'checkbox',
+                    'default'     => 'no'
                 ],
                 'display_other_payments' => [
-                    'title'     => __('Always enable all available payment methods', 'twoinc-payment-gateway'),
-                    'label'     => ' ',
-                    'type'      => 'checkbox',
-                    'default'   => 'yes'
+                    'title'       => __('Always enable all available payment methods', 'twoinc-payment-gateway'),
+                    'label'       => ' ',
+                    'type'        => 'checkbox',
+                    'default'     => 'yes'
                 ],
                 'fallback_to_another_payment' => [
-                    'title'     => __('Fallback to other payment methods if Two. is not available', 'twoinc-payment-gateway'),
-                    'label'     => ' ',
-                    'type'      => 'checkbox',
-                    'default'   => 'yes'
+                    'title'       => __('Fallback to other payment methods if Two. is not available', 'twoinc-payment-gateway'),
+                    'label'       => ' ',
+                    'type'        => 'checkbox',
+                    'default'     => 'yes'
                 ],
                 'section_auto_complete_settings' => [
-                    'type'      => 'title',
-                    'title'     => __('Auto-complete settings', 'twoinc-payment-gateway')
+                    'type'        => 'title',
+                    'title'       => __('Auto-complete settings', 'twoinc-payment-gateway')
                 ],
                 'enable_company_name' => [
-                    'title'     => __('Activate company name auto-complete', 'twoinc-payment-gateway'),
-                    'label'     => ' ',
-                    'type'      => 'checkbox'
+                    'title'       => __('Company name search and auto-complete', 'twoinc-payment-gateway'),
+                    'description' => __('Enables searching for company name in the national registry and automatically filling in name and ID number.', 'twoinc-payment-gateway'),
+                    'desc_tip'    => true,
+                    'label'       => ' ',
+                    'type'        => 'checkbox'
                 ],
-                'enable_company_id' => [
-                    'title'     => __('Activate company org.id auto-complete', 'twoinc-payment-gateway'),
-                    'label'     => ' ',
-                    'type'      => 'checkbox'
+                'address_search' => [
+                    'title'       => __('Address auto-complete', 'twoinc-payment-gateway'),
+                    'description' => __('Enables automatically filling in the registered address from the national registry.', 'twoinc-payment-gateway'),
+                    'desc_tip'    => true,
+                    'label'       => ' ',
+                    'type'        => 'checkbox'
                 ]
             ];
 
