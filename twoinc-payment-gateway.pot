@@ -17,11 +17,11 @@ msgstr ""
 "X-Domain: twoinc-payment-gateway"
 
 #: class/WC_Twoinc.php:1184
-msgid "Activate company name auto-complete"
+msgid "Company name search and auto-complete"
 msgstr ""
 
 #: class/WC_Twoinc.php:1189
-msgid "Activate company org.id auto-complete"
+msgid "Company ID auto-complete"
 msgstr ""
 
 #: class/WC_Twoinc.php:1089
@@ -29,11 +29,11 @@ msgid "Add a logo to the invoice"
 msgstr ""
 
 #: class/WC_Twoinc.php:1128
-msgid "Add department field to Checkout page"
+msgid "Enable department input field"
 msgstr ""
 
 #: class/WC_Twoinc.php:1134
-msgid "Add project field to Checkout page"
+msgid "Enable project input field"
 msgstr ""
 
 #: class/WC_Twoinc_Helper.php:131
@@ -45,7 +45,7 @@ msgid "Always enable all available payment methods"
 msgstr ""
 
 #: class/WC_Twoinc.php:1122
-msgid "Always mark Two. fields as required"
+msgid "Mark Two. fields required"
 msgstr ""
 
 #: class/WC_Twoinc.php:1060
@@ -385,7 +385,7 @@ msgid "Two. empty response"
 msgstr ""
 
 #: class/WC_Twoinc.php:1063
-msgid "Two. Merchant Username"
+msgid "Two. username"
 msgstr ""
 
 #: class/WC_Twoinc_Helper.php:48
@@ -416,8 +416,7 @@ msgstr ""
 #: class/WC_Twoinc.php:197 class/WC_Twoinc.php:696
 #: class/WC_Twoinc_Helper.php:72
 msgid ""
-"We are not able to offer your company Two. Invoice payment terms for this "
-"order"
+"Invoice purchase is not available for this order"
 msgstr ""
 
 #: class/WC_Twoinc.php:155

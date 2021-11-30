@@ -16,11 +16,11 @@ msgstr ""
 "X-Domain: twoinc-payment-gateway"
 
 #: class/WC_Twoinc.php:1184
-msgid "Activate company name auto-complete"
+msgid "Company name search and auto-complete"
 msgstr "Skru på forhåndsutfylling for selskapsnavn"
 
 #: class/WC_Twoinc.php:1189
-msgid "Activate company org.id auto-complete"
+msgid "Company ID auto-complete"
 msgstr "Skru på forhåndsutfylling av organisasjonsnummer"
 
 #: class/WC_Twoinc.php:1089
@@ -28,11 +28,11 @@ msgid "Add a logo to the invoice"
 msgstr "Legg til en logo på fakturaen"
 
 #: class/WC_Twoinc.php:1128
-msgid "Add department field to Checkout page"
+msgid "Enable department input field"
 msgstr "Legg til et felt for avdeling"
 
 #: class/WC_Twoinc.php:1134
-msgid "Add project field to Checkout page"
+msgid "Enable project input field"
 msgstr "Legg til et felt for prosjekt"
 
 #: class/WC_Twoinc_Helper.php:131
@@ -44,7 +44,7 @@ msgid "Always enable all available payment methods"
 msgstr "Alltid gjør alle betalingsmetoder tilgjengelige"
 
 #: class/WC_Twoinc.php:1122
-msgid "Always mark Two. fields as required"
+msgid "Mark Two. fields required"
 msgstr "Merk Two. felt som påkrevd"
 
 #: class/WC_Twoinc.php:1060
@@ -391,7 +391,7 @@ msgid "Two. empty response"
 msgstr "Two. tomt svar"
 
 #: class/WC_Twoinc.php:1063
-msgid "Two. Merchant Username"
+msgid "Two. username"
 msgstr "Two. brukernavn"
 
 #: class/WC_Twoinc_Helper.php:48
@@ -421,10 +421,8 @@ msgstr "Bruk bannerknapper istedet for radioknapper"
 
 #: class/WC_Twoinc.php:197 class/WC_Twoinc.php:696
 #: class/WC_Twoinc_Helper.php:72
-msgid ""
-"We are not able to offer your company Two. Invoice payment terms for this "
-"order"
-msgstr "Vi kan ikke tilby ditt selskap Two. betalingsvilkår på denne ordren"
+msgid "Invoice purchase is not available for this order"
+msgstr "Faktura er ikke tilgjengelig for dette kjøpet"
 
 #: class/WC_Twoinc.php:155
 msgid "What is Two.?"

@@ -184,7 +184,7 @@ if (!class_exists('WC_Twoinc')) {
                     __('Express checkout', 'twoinc-payment-gateway'),
                     sprintf(
                         __('Pay %s days after your order is shipped, for free', 'twoinc-payment-gateway'),
-                        '<span class="due-in-days">X<span>',
+                        '<span class="due-in-days">' . strval($this->get_option('days_on_invoice')) . '<span>',
                     ),
                     __('Receive invoice and payment details via email', 'twoinc-payment-gateway')
                 ),
@@ -194,7 +194,7 @@ if (!class_exists('WC_Twoinc')) {
                     __('your company', 'twoinc-payment-gateway'),
                     $this->get_abt_twoinc_html()
                 ),
-                __('We are not able to offer your company Two. Invoice payment terms for this order', 'twoinc-payment-gateway'),
+                __('Invoice purchase is not available for this order', 'twoinc-payment-gateway'),
                 sprintf(__('Maximum Payment using Two. is %s', 'twoinc-payment-gateway'), $amount_max),
                 sprintf(__('Minimum Payment using Two. is %s', 'twoinc-payment-gateway'), $amount_min),
                 __('Phone number is invalid', 'twoinc-payment-gateway')
@@ -693,7 +693,7 @@ if (!class_exists('WC_Twoinc')) {
             $body = json_decode($response['body'], true);
 
             if ($body['status'] == 'REJECTED') {
-                WC_Twoinc_Helper::display_ajax_error(__('We are not able to offer your company Two. Invoice payment terms for this order', 'twoinc-payment-gateway'));
+                WC_Twoinc_Helper::display_ajax_error(__('Invoice purchase is not available for this order', 'twoinc-payment-gateway'));
                 return;
             }
 
@@ -944,6 +944,7 @@ if (!class_exists('WC_Twoinc')) {
                     if (isset($body['fallback_to_another_payment'])) $this->update_option('fallback_to_another_payment', $body['fallback_to_another_payment'] ? 'yes' : 'no');
                     if (isset($body['enable_company_name'])) $this->update_option('enable_company_name', $body['enable_company_name'] ? 'yes' : 'no');
                     if (isset($body['enable_company_id'])) $this->update_option('enable_company_id', $body['enable_company_id'] ? 'yes' : 'no');
+                    if (isset($body['address_search'])) $this->update_option('address_search', $body['address_search'] ? 'yes' : 'no');
                     if (isset($body['mark_tillit_fields_required'])) $this->update_option('mark_tillit_fields_required', $body['mark_tillit_fields_required'] ? 'yes' : 'no');
                     if (isset($body['enable_order_intent'])) $this->update_option('enable_order_intent', $body['enable_order_intent'] ? 'yes' : 'no');
                     if (isset($body['default_to_b2c'])) $this->update_option('default_to_b2c', $body['default_to_b2c'] ? 'yes' : 'no');
@@ -1060,7 +1061,7 @@ if (!class_exists('WC_Twoinc')) {
                     'title'     => __('API credentials', 'twoinc-payment-gateway')
                 ],
                 'tillit_merchant_id' => [
-                    'title'     => __('Two. Merchant Username', 'twoinc-payment-gateway'),
+                    'title'     => __('Two. username', 'twoinc-payment-gateway'),
                     'type'      => 'text'
                 ],
                 'api_key' => [
@@ -1119,19 +1120,19 @@ if (!class_exists('WC_Twoinc')) {
                     'default'   => 'yes'
                 ],
                 'mark_tillit_fields_required' => [
-                    'title'     => __('Always mark Two. fields as required', 'twoinc-payment-gateway'),
+                    'title'     => __('Mark Two. fields required', 'twoinc-payment-gateway'),
                     'label'     => ' ',
                     'type'      => 'checkbox',
                     'default'   => 'yes'
                 ],
                 'add_field_department' => [
-                    'title'     => __('Add department field to Checkout page', 'twoinc-payment-gateway'),
+                    'title'     => __('Enable department input field', 'twoinc-payment-gateway'),
                     'label'     => ' ',
                     'type'      => 'checkbox',
                     'default'   => 'yes'
                 ],
                 'add_field_project' => [
-                    'title'     => __('Add project field to Checkout page', 'twoinc-payment-gateway'),
+                    'title'     => __('Enable project input field', 'twoinc-payment-gateway'),
                     'label'     => ' ',
                     'type'      => 'checkbox',
                     'default'   => 'yes'
@@ -1187,12 +1188,17 @@ if (!class_exists('WC_Twoinc')) {
                     'title'     => __('Auto-complete settings', 'twoinc-payment-gateway')
                 ],
                 'enable_company_name' => [
-                    'title'     => __('Activate company name auto-complete', 'twoinc-payment-gateway'),
+                    'title'     => __('Company name search and auto-complete', 'twoinc-payment-gateway'),
                     'label'     => ' ',
                     'type'      => 'checkbox'
                 ],
                 'enable_company_id' => [
-                    'title'     => __('Activate company org.id auto-complete', 'twoinc-payment-gateway'),
+                    'title'     => __('Company ID auto-complete', 'twoinc-payment-gateway'),
+                    'label'     => ' ',
+                    'type'      => 'checkbox'
+                ],
+                'address_search' => [
+                    'title'     => __('Address auto-complete', 'twoinc-payment-gateway'),
                     'label'     => ' ',
                     'type'      => 'checkbox'
                 ]

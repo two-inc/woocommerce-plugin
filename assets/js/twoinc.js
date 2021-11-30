@@ -1031,9 +1031,11 @@ class Twoinc {
                 jQuery('#company_id').val('')
 
                 // Clear the addresses, in case address get request fails
-                jQuery('#billing_address_1').val('')
-                jQuery('#billing_city').val('')
-                jQuery('#billing_postcode').val('')
+                if (window.twoinc.address_search !== 'yes') {
+                    jQuery('#billing_address_1').val('')
+                    jQuery('#billing_city').val('')
+                    jQuery('#billing_postcode').val('')
+                }
             })
 
             // Focus on search input on country open
@@ -1057,7 +1059,7 @@ class Twoinc {
                     // Set the company name
                     Twoinc.getInstance().customerCompany.company_name = data.id
 
-                    if (window.twoinc.company_id_search && window.twoinc.company_id_search === 'yes') {
+                    if (window.twoinc.company_id_search === 'yes') {
 
                         // Set the company ID
                         Twoinc.getInstance().customerCompany.organization_number = data.company_id
@@ -1087,36 +1089,38 @@ class Twoinc {
                     if (!country_prefix || !['GB'].includes(country_prefix)) country_prefix = 'NO'
 
                     // Clear the addresses, in case address get request fails
-                    jQuery('#billing_address_1').val('')
-                    jQuery('#billing_city').val('')
-                    jQuery('#billing_postcode').val('')
+                    if (window.twoinc.address_search !== 'yes') {
+                        jQuery('#billing_address_1').val('')
+                        jQuery('#billing_city').val('')
+                        jQuery('#billing_postcode').val('')
 
-                    // Fetch the company data
-                    const addressResponse = jQuery.ajax({
-                        dataType: 'json',
-                        url: twoincUtilHelper.contructTwoincUrl('/v1/' + country_prefix + '/company/' + jQuery('#company_id').val() + '/address')
-                    })
+                        // Fetch the company data
+                        const addressResponse = jQuery.ajax({
+                            dataType: 'json',
+                            url: twoincUtilHelper.contructTwoincUrl('/v1/' + country_prefix + '/company/' + jQuery('#company_id').val() + '/address')
+                        })
 
-                    addressResponse.done(function(response){
+                        addressResponse.done(function(response){
 
-                        // If we have the company location
-                        if (response.address) {
+                            // If we have the company location
+                            if (response.address) {
 
-                            // Get the company location object
-                            const companyLocation = response.address
+                                // Get the company location object
+                                const companyLocation = response.address
 
-                            // Populate the street name and house number fields
-                            jQuery('#billing_address_1').val(companyLocation.streetAddress)
+                                // Populate the street name and house number fields
+                                jQuery('#billing_address_1').val(companyLocation.streetAddress)
 
-                            // Populate the city
-                            jQuery('#billing_city').val(companyLocation.city)
+                                // Populate the city
+                                jQuery('#billing_city').val(companyLocation.city)
 
-                            // Populate the postal code
-                            jQuery('#billing_postcode').val(companyLocation.postalCode)
+                                // Populate the postal code
+                                jQuery('#billing_postcode').val(companyLocation.postalCode)
 
-                        }
+                            }
 
-                    })
+                        })
+                    }
 
                 })
 

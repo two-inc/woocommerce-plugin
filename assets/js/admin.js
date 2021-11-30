@@ -1,5 +1,16 @@
 jQuery(function($){
 
+    function toggleChildrenFields(parentRadio, childrenRadios){
+
+        if(!parentRadio.prop('checked')) {
+            childrenRadios.prop('checked', false)
+            childrenRadios.attr('disabled', true)
+        } else {
+            childrenRadios.attr('disabled', false)
+        }
+
+    }
+
     $('body').on('click', '.woocommerce-tillit-logo', function(e){
 
         e.preventDefault()
@@ -29,17 +40,13 @@ jQuery(function($){
 
     })
 
-    $('body').on('change', '#woocommerce_woocommerce-gateway-tillit_enable_company_name', function(e){
+    $('body').on('change', '#woocommerce_woocommerce-gateway-tillit_enable_company_name', function(e) {
+        toggleChildrenFields($(this), $('#woocommerce_woocommerce-gateway-tillit_enable_company_id'))
+        toggleChildrenFields($('#woocommerce_woocommerce-gateway-tillit_enable_company_id'), $('#woocommerce_woocommerce-gateway-tillit_address_search'))
+    })
 
-        let radioCompanyId = $('#woocommerce_woocommerce-gateway-tillit_enable_company_id')
-
-        if(!$(this).prop('checked')) {
-            radioCompanyId.prop('checked', false)
-            radioCompanyId.attr('disabled', true)
-        } else {
-            radioCompanyId.attr('disabled', false)
-        }
-
+    $('body').on('change', '#woocommerce_woocommerce-gateway-tillit_enable_company_id', function(e) {
+        toggleChildrenFields($(this), $('#woocommerce_woocommerce-gateway-tillit_address_search'))
     })
 
     jQuery('h3.wc-settings-sub-title').append('<a href="#" class="collapsed setting-dropdown"><span class="dashicons dashicons-arrow-down-alt2"></span></a>')
@@ -60,4 +67,8 @@ jQuery(function($){
     jQuery('h3.wc-settings-sub-title, p.submit').before('<hr class="setting-separator" />')
 
     jQuery('h3.wc-settings-sub-title').next().hide()
+
+    toggleChildrenFields($('#woocommerce_woocommerce-gateway-tillit_enable_company_name'), $('#woocommerce_woocommerce-gateway-tillit_enable_company_id'))
+    toggleChildrenFields($('#woocommerce_woocommerce-gateway-tillit_enable_company_id'), $('#woocommerce_woocommerce-gateway-tillit_address_search'))
+
 })
