@@ -1,8 +1,3 @@
-<?php
-/**
- * @global WC_Checkout $checkout
- */
-$checkout = WC()->checkout(); ?>
 <div class="woocommerce-billing-fields woocommerce-representative-fields">
     <!--<h3><?php /*esc_html_e('Person placing the order', 'twoinc-payment-gateway'); */?></h3>-->
     <div class="woocommerce-billing-fields__field-wrapper">

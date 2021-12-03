@@ -85,7 +85,7 @@ let twoincSelectWooHelper = {
                 ajax: {
                     dataType: 'json',
                     delay: 200,
-                    url: function(params){
+                    url: function(params) {
                         params.page = params.page || 1
                         return countryParams[country].twoinc_search_host + '/search?limit=' + twoincSearchLimit + '&offset=' + ((params.page - 1) * twoincSearchLimit) + '&q=' + encodeURIComponent(params.term)
                     },
@@ -126,9 +126,9 @@ let twoincSelectWooHelper = {
      */
     fixSelectWooPositionCompanyName: function() {
 
-        if (Twoinc.getInstance().withCompanyNameSearch) {
+        if (window.twoinc.company_name_search === 'yes') {
 
-            const instance = jQuery('.woocommerce-checkout #billing_company_display').data('select2')
+            const instance = jQuery('#billing_company_display').data('select2')
 
             if (instance) {
                 instance.on('open', function(e) {
@@ -444,8 +444,8 @@ let twoincDomHelper = {
     toggleCompanyFields(accountType) {
 
         // Get the targets
-        let $visibleNoncompanyTargets = '#billing_phone_field, #billing_company_field'
-        let $visibleCompanyTargets = '.woocommerce-company-fields, .woocommerce-representative-fields, #billing_company_display_field, #billing_phone_display_field'
+        let $visibleNoncompanyTargets = '#billing_phone_field, #billing_company_field, #billing_country_field'
+        let $visibleCompanyTargets = '.woocommerce-company-fields, .woocommerce-representative-fields, #billing_company_display_field, #billing_phone_display_field, #billing_country_field'
         let $requiredCompanyTargets = '#billing_phone_display_field'
         if (window.twoinc.company_name_search !== 'yes') {
             $visibleCompanyTargets += ', #billing_company_field'
@@ -531,7 +531,7 @@ let twoincDomHelper = {
         if (twoincUtilHelper.isCompany(twoincDomHelper.getAccountType())) {
 
             // Show Twoinc payment option
-            $twoincSection.removeClass('hidden')
+            $twoincSection.show()
 
             // If Twoinc is approved and setting is to hide other payment methods
             if (window.twoinc.display_other_payments !== 'yes') {
@@ -542,7 +542,7 @@ let twoincDomHelper = {
         } else {
 
             // Hide Twoinc payment option
-            $twoincSection.addClass('hidden')
+            $twoincSection.hide()
 
             // Always show other methods for non-business purchases
             $otherPaymentSections.show()
@@ -780,7 +780,11 @@ let twoincDomHelper = {
     saveCheckoutInputs: function() {
         let checkoutInputs = []
         let checkoutForm = document.querySelector('form[name="checkout"]')
+        // if page is order-pay
+        if (!checkoutForm) checkoutForm = document.querySelector('div.checkout.woocommerce-checkout.custom-checkout')
+        // still not found
         if (!checkoutForm) return
+
         for (let inp of checkoutForm.querySelectorAll('input:not([type="radio"],[type="checkbox"])')) {
             if (inp.getAttribute('id')) {
                 checkoutInputs.push({
@@ -941,7 +945,6 @@ class Twoinc {
 
     static instance = null
     isInitialized = false
-    withCompanyNameSearch = false
     isTwoincMethodHidden = true
     isTwoincApproved = null
     billingPhoneInput = null
@@ -971,7 +974,6 @@ class Twoinc {
             throw 'Twoinc is a singleton'
         }
         Twoinc.instance = this
-        this.withCompanyNameSearch = window.twoinc.company_name_search === 'yes'
 
     }
 
@@ -984,21 +986,18 @@ class Twoinc {
         }
         const $body = jQuery(document.body)
 
-        // Get the checkout form
-        const $checkout = jQuery('.woocommerce-checkout')
-
         // Stop if not the checkout page
-        if ($checkout.length === 0) return
+        if (jQuery('#order_review').length === 0) return
 
         // Get the billing country field
-        const $billingCountry = $checkout.find('#billing_country')
+        const $billingCountry = $body.find('#billing_country')
 
         // Get the billing company field
-        const $billingCompanyDisplay = $checkout.find('#billing_company_display')
-        const $billingCompany = $checkout.find('#billing_company')
+        const $billingCompanyDisplay = $body.find('#billing_company_display')
+        const $billingCompany = $body.find('#billing_company')
 
         // Get the company ID field
-        const $companyId = $checkout.find('#company_id')
+        const $companyId = $body.find('#company_id')
 
         // If we found the field
         if (jQuery('[name="account_type"]:checked').length > 0) {
@@ -1017,7 +1016,7 @@ class Twoinc {
         // Twoinc is hidden if selected account type is not company
         this.isTwoincMethodHidden = !twoincUtilHelper.isCompany(twoincDomHelper.getAccountType())
 
-        if (this.withCompanyNameSearch) {
+        if (window.twoinc.company_name_search === 'yes') {
 
             // Reinitiate company select on country change
             $billingCountry.on('select2:select', function(e){
@@ -1170,7 +1169,7 @@ class Twoinc {
         })
 
         // Handle account type change
-        $checkout.on('change', '[name="account_type"]', this.onChangeAccountType)
+        $body.on('change', '[name="account_type"]', this.onChangeAccountType)
 
         // If setting is to hide other payment methods, hide when page load by default
         if (window.twoinc.display_other_payments !== 'yes') {
@@ -1208,6 +1207,8 @@ class Twoinc {
     initBillingPhoneDisplay() {
 
         let billingPhoneInputField = document.querySelector("#billing_phone_display")
+        if (!billingPhoneInputField) return
+
         this.billingPhoneInput = window.intlTelInput(billingPhoneInputField, {
             utilsScript: "https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.8/js/utils.js",
             preferredCountries: [window.twoinc.shop_base_country],
