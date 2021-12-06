@@ -16,11 +16,11 @@ msgstr ""
 "X-Domain: twoinc-payment-gateway"
 
 #: class/WC_Twoinc.php:1184
-msgid "Company name search and auto-complete"
+msgid "Enable company name search and auto-complete"
 msgstr "Aktiver automatisk utfylling av selskapsnavn"
 
 #: class/WC_Twoinc.php:1189
-msgid "Company ID auto-complete"
+msgid "Enable Company ID auto-complete"
 msgstr "Aktiver automatisk utfylling av organisasjonsnummer"
 
 #: class/WC_Twoinc.php:1089
@@ -28,12 +28,12 @@ msgid "Add a logo to the invoice"
 msgstr "Legg til en logo på fakturaen"
 
 #: class/WC_Twoinc.php:1128
-msgid "Enable department input field"
-msgstr "Legg til felt for avdeling"
+msgid "Add input field for \"Department\""
+msgstr "Legg til felt for \"Avdeling\""
 
 #: class/WC_Twoinc.php:1134
-msgid "Enable project input field"
-msgstr "Legg til felt for prosjekt"
+msgid "Add input field for \"Project\""
+msgstr "Legg til felt for \"Prosjekt\""
 
 #: class/WC_Twoinc_Helper.php:131
 msgid "Address"
@@ -41,7 +41,7 @@ msgstr "Adresse"
 
 #: class/WC_Twoinc.php:1168
 msgid "Enable all available payment methods"
-msgstr "Tilgjengeliggjør alle tilgjengelige betalingsmetoder"
+msgstr "Tilgjengeliggjør alle betalingsmetoder"
 
 #: class/WC_Twoinc.php:1122
 msgid "Mark Two fields required"
@@ -53,7 +53,7 @@ msgstr "Påloggingsinformasjon for API"
 
 #: class/WC_Twoinc.php:1098
 msgid ""
-"Approves buyer when phone and company name is filled out."
+"Approve buyer when phone and company name is filled out."
 msgstr ""
 "Godkjenn kjøper når telefonnummer og selskapsnavn er utfylt."
 
@@ -130,22 +130,22 @@ msgid "Could not update status"
 msgstr "Kunne ikke oppdatere status"
 
 #: class/WC_Twoinc.php:599
-msgid "Could not update status to cancelled"
-msgstr "Kunne ikke oppdatere status til kansellert"
+msgid "Could not update status to \"Cancelled\""
+msgstr "Kunne ikke oppdatere status til \"Kansellert\""
 
 #: class/WC_Twoinc.php:605
 #, php-format
 msgid ""
-"Could not update status to cancelled, please check with Two admin for id %s"
+"Could not update status to \"Cancelled\", please check with Two admin for id %s"
 msgstr "Kunne ikke kansellere orderen. Ta kontakt med Two-admin for id %s"
 
 #: class/WC_Twoinc.php:563
 #, php-format
 msgid ""
-"Could not update status to fulfilled on Two, please check with Two admin "
+"Could not update status to \"Fulfilled\" with Two, please check with Two admin "
 "for id %s"
 msgstr ""
-"Kunne ikke endre ordrestatus til fullført. Ta kontakt med Two-admin for id %s"
+"Kunne ikke endre ordrestatus til \"Fullført\". Ta kontakt med Two-admin for id %s"
 
 #: class/WC_Twoinc_Helper.php:137
 msgid "Country"
@@ -188,14 +188,14 @@ msgid "Failed to process payment"
 msgstr "Kunne ikke behandle betalingen"
 
 #: class/WC_Twoinc.php:786
-msgid "Failed to refund order by Two"
-msgstr "Kunner ikke refundere ordren med Two"
+msgid "Failed to refund order with Two"
+msgstr "Kunne ikke refundere ordren med Two"
 
 #: class/WC_Twoinc.php:784
 #, php-format
-msgid "Failed to refund order by Two, please check with Two admin for id %s"
+msgid "Failed to refund order with Two, please check with Two admin for id %s"
 msgstr ""
-"Kunner ikke refundere ordren med Two, ta kontakt med Two-admin for id %s"
+"Kunne ikke refundere ordren med Two, ta kontakt med Two-admin for id %s"
 
 #: class/WC_Twoinc.php:768
 msgid "Failed to request refund order to Two"
@@ -211,7 +211,7 @@ msgstr ""
 
 #: class/WC_Twoinc.php:1174
 msgid "Fallback to other payment methods if Two is not available"
-msgstr "Fall tilbake på andre betalingsmetoder når Two ikke er tilgjengelig"
+msgstr "Fall tilbake på andre betalingsmetoder dersom Two ikke er tilgjengelig"
 
 #: class/WC_Twoinc_Helper.php:122
 msgid "First name"
@@ -343,11 +343,11 @@ msgid "Separate checkout for business customers"
 msgstr "Vis checkout for bedriftskunder"
 
 #: class/WC_Twoinc.php:1105
-msgid "Extra page for private customers"
+msgid "Separate checkout for private customers"
 msgstr "Vis checkout for privatpersoner"
 
 #: class/WC_Twoinc.php:1111
-msgid "Extra page for private sole traders"
+msgid "Separate checkout for private sole traders"
 msgstr "Vis checkout for enkeltpersonforetak"
 
 #: class/WC_Twoinc.php:1008
@@ -431,7 +431,7 @@ msgstr "Hva er Two?"
 msgid ""
 "Wordpress admin privilege is required for Two payment One-click setup. %s"
 msgstr ""
-"Wordpress admin-tilgang kreves for å aktivere One-click betalingsoppsett med "
+"Wordpress admin-tilgang kreves for å aktivere \"One-click\"-betalingsoppsett med "
 "Two %s"
 
 #: class/WC_Twoinc.php:194
