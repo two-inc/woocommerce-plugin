@@ -347,16 +347,16 @@ msgid "Extra page for private customers"
 msgstr "Vis checkout for privatpersoner"
 
 #: class/WC_Twoinc.php:1111
-msgid "Extra page for private soletraders"
-msgstr "Vis checkout for enkeltmannsforetak"
+msgid "Extra page for private sole traders"
+msgstr "Vis checkout for enkeltpersonforetak"
 
 #: class/WC_Twoinc.php:1008
 msgid "Sole trader/other"
-msgstr "Enkeltmannsforetak"
+msgstr "Enkeltpersonforetak"
 
 #: class/WC_Twoinc_Checkout.php:76
 msgid "Sole Trader/Other Customer"
-msgstr "Enkeltmannsforetak"
+msgstr "Enkeltpersonforetak"
 
 #: class/WC_Twoinc.php:814
 msgid "The security code is not valid."
