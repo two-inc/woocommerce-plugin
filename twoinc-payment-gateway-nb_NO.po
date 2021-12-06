@@ -119,7 +119,7 @@ msgstr "Kunne ikke redigere Two-ordren. Ta kontakt med Two-admin"
 
 #: class/WC_Twoinc.php:751
 msgid "Could not initiate refund by Two"
-msgstr "Kunne ikke refundere via Two"
+msgstr "Kunne ikke refundere med Two"
 
 #: class/WC_Twoinc.php:676
 msgid "Could not request to create Two order"
@@ -199,14 +199,14 @@ msgstr ""
 
 #: class/WC_Twoinc.php:768
 msgid "Failed to request refund order to Two"
-msgstr "Kunne ikke sende forespørsel om refusjon via Two"
+msgstr "Kunne ikke sende forespørsel om refusjon med Two"
 
 #: class/WC_Twoinc.php:774
 #, php-format
 msgid ""
 "Failed to request refund order to Two, please check with Two admin for id %s"
 msgstr ""
-"Kunne ikke sende forespørsel om refusjon via Two, ta kontakt med Two-admin for "
+"Kunne ikke sende forespørsel om refusjon med Two, ta kontakt med Two-admin for "
 "id %s"
 
 #: class/WC_Twoinc.php:1174
@@ -258,8 +258,8 @@ msgid "Missing company ID, please check with Two admin for id %s"
 msgstr "Mangler organisasjonsnummer. Ta kontakt med Two-admin %s"
 
 #: class/WC_Twoinc.php:739
-msgid "Only Completed orders can be refunded by Two"
-msgstr "Bare ordre som er satt som fullført kan refunderes via Two"
+msgid "Only \"Completed\" orders can be refunded by Two"
+msgstr "Bare ordre som er satt som \"Fullført\" kan refunderes med Two"
 
 #: class/WC_Twoinc_Helper.php:116
 msgid "Organization number"
@@ -320,7 +320,7 @@ msgstr "Motta faktura og betalingsdetaljer på E-post og EHF"
 
 #: class/WC_Twoinc.php:776
 msgid "Request refund order to Two has errors"
-msgstr "Forespørsel om refusjon via Two har feilet"
+msgstr "Forespørsel om refusjon med Two har feilet"
 
 #: class/WC_Twoinc.php:1271
 msgid "Select image"
