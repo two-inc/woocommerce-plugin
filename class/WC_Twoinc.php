@@ -137,9 +137,9 @@ if (!class_exists('WC_Twoinc')) {
             if (WC_Twoinc_Helper::is_twoinc_development()) {
                 return $this->get_option('test_checkout_host');
             } else if ($this->get_option('checkout_env') === 'SANDBOX') {
-                return 'https://test.api.tillit.ai';
+                return 'https://sandbox.api.two.inc';
             } else {
-                return 'https://api.tillit.ai';
+                return 'https://api.two.inc';
             }
         }
 
@@ -952,7 +952,7 @@ if (!class_exists('WC_Twoinc')) {
                     if (isset($body['clear_options_on_deactivation'])) $this->update_option('clear_options_on_deactivation', $body['clear_options_on_deactivation'] ? 'yes' : 'no');
                     if (WC_Twoinc_Helper::is_twoinc_development()) {
                         $this->update_option('test_checkout_host', $twoinc_checkout_host);
-                    } else if (strpos($twoinc_checkout_host, 'test.api.tillit.ai') !== false) {
+                    } else if (strpos($twoinc_checkout_host, 'sandbox.api.two.inc') !== false) {
                         $this->update_option('checkout_env', 'SANDBOX');
                     } else {
                         $this->update_option('checkout_env', 'PROD');
@@ -1038,7 +1038,7 @@ if (!class_exists('WC_Twoinc')) {
                 'test_checkout_host' => [
                     'type'        => 'text',
                     'title'       => __('Two. Test Server', 'twoinc-payment-gateway'),
-                    'default'     => 'https://staging.api.tillit.ai'
+                    'default'     => 'https://staging.api.two.inc'
                 ],
                 'checkout_env' => [
                     'type'        => 'select',
