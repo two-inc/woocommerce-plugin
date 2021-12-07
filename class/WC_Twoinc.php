@@ -634,6 +634,10 @@ if (!class_exists('WC_Twoinc')) {
             $days_on_invoice = $this->get_option('days_on_invoice');
             $tillit_merchant_id = $this->get_option('tillit_merchant_id');
             $order_reference = wp_generate_password(64, false, false);
+            // For requests from order pay page
+            $billing_country = array_key_exists('billing_country', $_POST) ? sanitize_text_field($_POST['billing_country']) : '';
+            $billing_company = array_key_exists('billing_company', $_POST) ? sanitize_text_field($_POST['billing_company']) : '';
+            $billing_phone = array_key_exists('billing_phone', $_POST) ? sanitize_text_field($_POST['billing_phone']) : '';
 
             // Store the order meta
             update_post_meta($order_id, '_tillit_order_reference', $order_reference);
@@ -642,6 +646,16 @@ if (!class_exists('WC_Twoinc')) {
             update_post_meta($order_id, 'company_id', $company_id);
             update_post_meta($order_id, 'department', $department);
             update_post_meta($order_id, 'project', $project);
+            // For requests from order pay page: Store in order object, not DB
+            if ($billing_country) {
+                $order->set_billing_country($billing_country);
+            }
+            if ($billing_company) {
+                $order->set_billing_company($billing_company);
+            }
+            if ($billing_phone) {
+                $order->set_billing_phone($billing_phone);
+            }
 
             // Get payment details
             $product_type = $this->get_option('product_type');

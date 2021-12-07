@@ -4,10 +4,6 @@
  */
 $checkout = WC()->checkout(); ?>
 
-<!-- selectable phone country -->
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.8/css/intlTelInput.css" />
-<script src="https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.8/js/intlTelInput.min.js"></script>
-
 <div class="woocommerce-billing-fields woocommerce-account-type-fields" id="woocommerce-account-type-container">
     <div id="tillit-account-type"></div>
     <div class="woocommerce-account-type-fields__field-wrapper">

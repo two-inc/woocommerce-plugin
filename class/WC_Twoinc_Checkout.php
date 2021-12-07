@@ -30,13 +30,23 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             add_filter('woocommerce_checkout_fields', [$this, 'update_company_fields'], 23);
             add_filter('woocommerce_checkout_fields', [$this, 'update_phone_fields'], 24);
             add_action('woocommerce_before_checkout_billing_form', [$this, 'add_account_buttons'], 20);
+            add_action('woocommerce_pay_order_before_submit', [$this, 'add_account_buttons'], 20);
 
             // Render the fields on checkout page
-            add_action('woocommerce_before_checkout_billing_form', [$this, 'render_twoinc_fields'], 20);
-            add_action('woocommerce_before_checkout_billing_form', [$this, 'render_twoinc_representative_fields'], 21);
+            add_action('woocommerce_before_checkout_billing_form', [$this, 'render_twoinc_fields'], 21);
+            add_action('woocommerce_pay_order_before_submit', [$this, 'render_twoinc_fields'], 21);
+            add_action('woocommerce_before_checkout_billing_form', [$this, 'render_twoinc_representative_fields'], 22);
 
             // Inject the cart details in header
-            add_action('woocommerce_before_checkout_billing_form', [$this, 'inject_cart_details'], 22);
+            add_action('woocommerce_before_checkout_billing_form', [$this, 'inject_cart_details'], 23);
+            add_action('woocommerce_pay_order_before_submit', [$this, 'inject_cart_details'], 22);
+
+            // Load addtional js/css
+            add_action('woocommerce_before_checkout_billing_form', [$this, 'load_intl_js_css'], 24);
+            add_action('woocommerce_pay_order_before_submit', [$this, 'load_intl_js_css'], 23);
+
+            //
+            add_action('woocommerce_pay_order_before_submit', [$this, 'order_pay_page_customize'], 24);
         }
 
         /**
@@ -283,7 +293,28 @@ if (!class_exists('WC_Twoinc_Checkout')) {
         }
 
         /**
-         * Use the ca
+         * Load custom 3rd-party js and css files
+         */
+        public function load_intl_js_css() {
+
+            // selectable phone country prefix
+            printf('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.8/css/intlTelInput.css" />');
+            printf('<script src="https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.8/js/intlTelInput.min.js"></script>');
+
+        }
+
+        /**
+         * Customize for Order Pay page when merchant installed "Phone Orders for WooCommerce" plugin
+         */
+        public function order_pay_page_customize() {
+            ob_start();
+            require_once WC_TWOINC_PLUGIN_PATH . '/views/woocommerce_order_pay.php';
+            $content = ob_get_clean();
+            echo $content;
+        }
+
+        /**
+         * Passing config to javascript
          *
          * @return array
          */

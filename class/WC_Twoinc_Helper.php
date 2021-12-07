@@ -321,7 +321,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
 
             $billing_address = [
                 'organization_name' => $order->get_billing_company(),
-                'street_address' => $order->get_billing_address_1() . (null !== $order->get_billing_address_2() ? $order->get_billing_address_2() : ''),
+                'street_address' => $order->get_billing_address_1() . (null !== $order->get_billing_address_2() ? (', ' . $order->get_billing_address_2()) : ''),
                 'postal_code' => $order->get_billing_postcode(),
                 'city' => $order->get_billing_city(),
                 'region' => $order->get_billing_state(),
@@ -329,7 +329,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
             ];
             $shipping_address = [
                 'organization_name' => $order->get_billing_company(),
-                'street_address' => $order->get_shipping_address_1() . (null !== $order->get_shipping_address_2() ? $order->get_shipping_address_2() : ''),
+                'street_address' => $order->get_shipping_address_1() . (null !== $order->get_shipping_address_2() ? (', ' . $order->get_shipping_address_2()) : ''),
                 'postal_code' => $order->get_shipping_postcode(),
                 'city' => $order->get_shipping_city(),
                 'region' => $order->get_shipping_state(),
@@ -415,7 +415,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
 
             $billing_address = [
                 'organization_name' => $order->get_billing_company(),
-                'street_address' => $order->get_billing_address_1() . (null !== $order->get_billing_address_2() ? $order->get_billing_address_2() : ''),
+                'street_address' => $order->get_billing_address_1() . (null !== $order->get_billing_address_2() ? (', ' . $order->get_billing_address_2()) : ''),
                 'postal_code' => $order->get_billing_postcode(),
                 'city' => $order->get_billing_city(),
                 'region' => $order->get_billing_state(),
@@ -423,7 +423,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
             ];
             $shipping_address = [
                 'organization_name' => $order->get_billing_company(),
-                'street_address' => $order->get_shipping_address_1() . (null !== $order->get_shipping_address_2() ? $order->get_shipping_address_2() : ''),
+                'street_address' => $order->get_shipping_address_1() . (null !== $order->get_shipping_address_2() ? (', ' . $order->get_shipping_address_2()) : ''),
                 'postal_code' => $order->get_shipping_postcode(),
                 'city' => $order->get_shipping_city(),
                 'region' => $order->get_shipping_state(),
