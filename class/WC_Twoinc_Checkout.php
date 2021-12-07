@@ -46,7 +46,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             add_action('woocommerce_pay_order_before_submit', [$this, 'load_intl_js_css'], 23);
 
             //
-            add_action('woocommerce_pay_order_before_submit', [$this, 'order_pay_page_customize'], 22);
+            add_action('woocommerce_pay_order_before_submit', [$this, 'order_pay_page_customize'], 24);
         }
 
         /**

@@ -11,7 +11,7 @@
             <input type="text" name="billing_phone" id="billing_phone">
         </div>
     </div>
-    <div class="twoinc-inp-container">
+    <div class="twoinc-inp-container hidden">
         <div id="billing_country_field">
             <label for="billing_country"><?php esc_html_e('Country / Region', 'twoinc-payment-gateway'); ?> <abbr class="required" title="required">*</abbr></label>
             <br>
@@ -71,9 +71,7 @@
         jQuery("#billing_country").selectWoo()
         setTimeout(function(){
             initInpFields()
-            if (jQuery('.account-type-button.selected').attr('account-type-name')) { // business is selected
-                jQuery('.account-type-button[account-type-name="business"]').click()
-            }
+            jQuery('.account-type-button[account-type-name="business"]').click()
         }, 1000)
         jQuery('.account-type-button[account-type-name="personal"], .account-type-button[account-type-name="sole_trader"]').on('click', function(){
             jQuery('.twoinc-inp-container').hide()
@@ -96,6 +94,8 @@
     }
     .custom-checkout .twoinc-inp-container {
         margin: auto;
-        display: none;
+    }
+    .account-type-wrapper {
+        display: none!important;
     }
 </style>
