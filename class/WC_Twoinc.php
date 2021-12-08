@@ -161,14 +161,6 @@ if (!class_exists('WC_Twoinc')) {
          * Get payment box description
          */
         private function get_pay_box_description(){
-            // Define user set variables
-            $currency = get_woocommerce_currency();
-            $amount_min = '200 NOK';
-            $amount_max = '500,000 NOK';
-            if ($currency === 'GBP') {
-                $amount_min = '10 GBP';
-                $amount_max = '10,000 GBP';
-            }
 
             return sprintf(
                 '<div>
@@ -195,10 +187,11 @@ if (!class_exists('WC_Twoinc')) {
                     $this->get_abt_twoinc_html()
                 ),
                 __('Invoice purchase is not available for this order', 'twoinc-payment-gateway'),
-                sprintf(__('Maximum payment using Two is %s', 'twoinc-payment-gateway'), $amount_max),
-                sprintf(__('Minimum payment using Two is %s', 'twoinc-payment-gateway'), $amount_min),
+                __('Order value exceeds maximum limit', 'twoinc-payment-gateway'),
+                __('Order value is below minimum limit', 'twoinc-payment-gateway'),
                 __('Phone number is invalid', 'twoinc-payment-gateway')
             );
+
         }
 
         /**
