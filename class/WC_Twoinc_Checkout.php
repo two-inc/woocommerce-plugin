@@ -118,7 +118,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
 
                 $fields['account_type'] = [
                     'account_type' => [
-                        'label' => __('Select the account type', 'twoinc-payment-gateway'),
+                        'label' => __('Select account type', 'twoinc-payment-gateway'),
                         'required' => false,
                         'type' => 'radio',
                         'priority' => 30,
