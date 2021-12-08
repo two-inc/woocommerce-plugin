@@ -27,7 +27,7 @@ if (!class_exists('WC_Twoinc')) {
             $this->id = 'woocommerce-gateway-tillit';
             $this->has_fields = false;
             $this->order_button_text = __('Place order', 'twoinc-payment-gateway');
-            $this->method_title = __('Two.', 'twoinc-payment-gateway');
+            $this->method_title = __('Two', 'twoinc-payment-gateway');
             $this->method_description = __('Making it easy for businesses to buy online.', 'twoinc-payment-gateway');
             $this->icon = WC_HTTPS::force_https_url(WC_TWOINC_PLUGIN_URL . 'assets/images/two-logo.svg');
             $this->supports = ['products', 'refunds'];
@@ -152,7 +152,7 @@ if (!class_exists('WC_Twoinc')) {
                 if (WC_Twoinc_Helper::get_locale() === 'nb_NO') {
                     $abt_url = 'https://twoinc.notion.site/Hva-er-Two-964ee21e4da84819afb1b035ee8fe98b';
                 }
-                return '<div id="abt-twoinc-link"><a href="' . $abt_url . '" onclick="javascript:window.open(\'' . $abt_url . '\',\'WhatIsTwoinc\',\'toolbar=no, location=no, directories=no, status=no, menubar=no, scrollbars=yes, resizable=yes, width=1060, height=700\'); return false;">' . __('What is Two.?', 'twoinc-payment-gateway') . '</a>&nbsp;</div>';
+                return '<div id="abt-twoinc-link"><a href="' . $abt_url . '" onclick="javascript:window.open(\'' . $abt_url . '\',\'WhatIsTwoinc\',\'toolbar=no, location=no, directories=no, status=no, menubar=no, scrollbars=yes, resizable=yes, width=1060, height=700\'); return false;">' . __('What is Two?', 'twoinc-payment-gateway') . '</a>&nbsp;</div>';
             }
             return '';
         }
@@ -195,8 +195,8 @@ if (!class_exists('WC_Twoinc')) {
                     $this->get_abt_twoinc_html()
                 ),
                 __('Invoice purchase is not available for this order', 'twoinc-payment-gateway'),
-                sprintf(__('Maximum Payment using Two. is %s', 'twoinc-payment-gateway'), $amount_max),
-                sprintf(__('Minimum Payment using Two. is %s', 'twoinc-payment-gateway'), $amount_min),
+                sprintf(__('Maximum payment using Two is %s', 'twoinc-payment-gateway'), $amount_max),
+                sprintf(__('Minimum payment using Two is %s', 'twoinc-payment-gateway'), $amount_min),
                 __('Phone number is invalid', 'twoinc-payment-gateway')
             );
         }
@@ -560,7 +560,7 @@ if (!class_exists('WC_Twoinc')) {
 
             $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
             if ($twoinc_err) {
-                $order->add_order_note(sprintf(__('Could not update status to fulfilled on Two, please check with Two. admin for id %s', 'twoinc-payment-gateway'), $twoinc_order_id));
+                $order->add_order_note(sprintf(__('Could not update status to "Fulfilled" with Two, please check with Two admin for id %s', 'twoinc-payment-gateway'), $twoinc_order_id));
                 return;
             }
 
@@ -596,13 +596,13 @@ if (!class_exists('WC_Twoinc')) {
             $response = $this->make_request("/v1/order/${twoinc_order_id}/cancel");
 
             if(is_wp_error($response)) {
-                $order->add_order_note(__('Could not update status to cancelled', 'twoinc-payment-gateway'));
+                $order->add_order_note(__('Could not update status to "Cancelled"', 'twoinc-payment-gateway'));
                 return;
             }
 
             $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
             if ($twoinc_err) {
-                $order->add_order_note(sprintf(__('Could not update status to cancelled, please check with Two. admin for id %s', 'twoinc-payment-gateway'), $twoinc_order_id));
+                $order->add_order_note(sprintf(__('Could not update status to "Cancelled", please check with Two admin for id %s', 'twoinc-payment-gateway'), $twoinc_order_id));
                 return;
             }
 
@@ -687,13 +687,13 @@ if (!class_exists('WC_Twoinc')) {
             ));
 
             if(is_wp_error($response)) {
-                $order->add_order_note(__('Could not request to create Two. order', 'twoinc-payment-gateway'));
+                $order->add_order_note(__('Could not request to create Two order', 'twoinc-payment-gateway'));
                 return;
             }
 
             // Stop on process payment failure
             if(isset($response) && isset($response['result']) && $response['result'] === 'failure') {
-                $order->add_order_note(__('Fail to process payment', 'twoinc-payment-gateway'));
+                $order->add_order_note(__('Failed to process payment', 'twoinc-payment-gateway'));
                 return $response;
             }
 
@@ -750,7 +750,7 @@ if (!class_exists('WC_Twoinc')) {
             // Get and check refund data
             if ($order->get_status() !== 'completed') {
                 return new WP_Error('invalid_twoinc_refund',
-                    __('Only Completed order can be refunded by Two', 'twoinc-payment-gateway'));
+                    __('Only "Completed" orders can be refunded by Two', 'twoinc-payment-gateway'));
             }
 
             $order_refunds = $order->get_refunds();
@@ -785,9 +785,9 @@ if (!class_exists('WC_Twoinc')) {
 
             $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
             if ($twoinc_err) {
-                $order->add_order_note(sprintf(__('Failed to request refund order to Two, please check with Two. admin for id %s', 'twoinc-payment-gateway'), $twoinc_order_id));
+                $order->add_order_note(sprintf(__('Failed to request refund order to Two, please check with Two admin for id %s', 'twoinc-payment-gateway'), $twoinc_order_id));
                 return new WP_Error('invalid_twoinc_refund',
-                    __('Request refund order to Two. has errors', 'twoinc-payment-gateway'));
+                    __('Request refund order to Two has errors', 'twoinc-payment-gateway'));
             }
 
             // Decode the response
@@ -795,9 +795,9 @@ if (!class_exists('WC_Twoinc')) {
 
             // Check if response is ok
             if (!$body['amount']) {
-                $order->add_order_note(sprintf(__('Failed to refund order by Two, please check with Two. admin for id %s', 'twoinc-payment-gateway'), $twoinc_order_id));
+                $order->add_order_note(sprintf(__('Failed to refund order with Two, please check with Two admin for id %s', 'twoinc-payment-gateway'), $twoinc_order_id));
                 return new WP_Error('invalid_twoinc_refund',
-                    __('Failed to refund order by Two', 'twoinc-payment-gateway'));
+                    __('Failed to refund order with Two', 'twoinc-payment-gateway'));
             }
 
             return [
@@ -904,10 +904,10 @@ if (!class_exists('WC_Twoinc')) {
                 $error = new WP_Error(
                     'init_failed',
                     sprintf(
-                        __('Wordpress admin privilege is required for Two. payment One-click setup. %s', 'twoinc-payment-gateway'),
+                        __('Wordpress admin privilege is required for Two payment One-click setup. %s', 'twoinc-payment-gateway'),
                         sprintf('<a href="%s">» %s</a>', $redirect_to_signin, __('Log in', 'twoinc-payment-gateway'))
                     ),
-                    array('title' => _('Two. payment setup failure'), 'response' => '401', 'back_link' => false));
+                    array('title' => _('Two payment setup failure'), 'response' => '401', 'back_link' => false));
                 if(is_wp_error($error)){
                     wp_die($error, '', $error->get_error_data());
                 }
@@ -937,9 +937,9 @@ if (!class_exists('WC_Twoinc')) {
                         'init_failed',
                         sprintf(
                             'Could not connect to setup server, please contact %s for more information!',
-                            sprintf('<a href="https://two.inc/">%s</a>', __('Two.', 'twoinc-payment-gateway'))
+                            sprintf('<a href="https://two.inc/">%s</a>', __('Two', 'twoinc-payment-gateway'))
                         ),
-                        array('title' => _('Two. payment setup failure'), 'response' => '400', 'back_link' => false));
+                        array('title' => _('Two payment setup failure'), 'response' => '400', 'back_link' => false));
                     wp_die($error, '', $error->get_error_data());
                 }
 
@@ -976,10 +976,10 @@ if (!class_exists('WC_Twoinc')) {
                     $error = new WP_Error(
                         'init_ok',
                         sprintf(
-                            'Successfully setup Two. payment! Go to %s.',
+                            'Successfully setup Two payment! Go to %s.',
                             sprintf('<a href="%s">%s</a>', get_dashboard_url(), __('Dashboard', 'twoinc-payment-gateway'))
                         ),
-                        array('title' => _('Two. payment setup success'), 'response' => '200', 'back_link' => false));
+                        array('title' => _('Two payment setup success'), 'response' => '200', 'back_link' => false));
                     wp_die($error, '', $error->get_error_data());
                 } else if ($response['response']['code'] === 400) {
                     // Link expired or max attempts reached or wrong key
@@ -987,9 +987,9 @@ if (!class_exists('WC_Twoinc')) {
                         'init_failed',
                         sprintf(
                             'Magic setup link already used or expired, please contact %s for more information!',
-                            sprintf('<a href="https://two.inc/">%s</a>', __('Two.', 'twoinc-payment-gateway'))
+                            sprintf('<a href="https://two.inc/">%s</a>', __('Two', 'twoinc-payment-gateway'))
                         ),
-                        array('title' => _('Two. payment setup failure'), 'response' => '400', 'back_link' => false));
+                        array('title' => _('Two payment setup failure'), 'response' => '400', 'back_link' => false));
                     wp_die($error, '', $error->get_error_data());
                 }
             }
@@ -998,10 +998,10 @@ if (!class_exists('WC_Twoinc')) {
             $error = new WP_Error(
                 'init_failed',
                 sprintf(
-                    'Could not setup Two. payment on your website, please contact %s for more information!',
-                    sprintf('<a href="https://two.inc/">%s</a>', __('Two.', 'twoinc-payment-gateway'))
+                    'Could not setup Two payment on your website, please contact %s for more information!',
+                    sprintf('<a href="https://two.inc/">%s</a>', __('Two', 'twoinc-payment-gateway'))
                 ),
-                array('title' => _('Two. payment setup failure'), 'response' => '400', 'back_link' => false));
+                array('title' => _('Two payment setup failure'), 'response' => '400', 'back_link' => false));
             wp_die($error, '', $error->get_error_data());
 
         }
@@ -1041,7 +1041,7 @@ if (!class_exists('WC_Twoinc')) {
                 'enabled' => [
                     'title'       => __('Turn on/off', 'twoinc-payment-gateway'),
                     'type'        => 'checkbox',
-                    'label'       => __('Enable Two. Payments', 'twoinc-payment-gateway'),
+                    'label'       => __('Enable Two Payments', 'twoinc-payment-gateway'),
                     'default'     => 'yes'
                 ],
                 'title' => [
@@ -1051,7 +1051,7 @@ if (!class_exists('WC_Twoinc')) {
                 ],
                 'test_checkout_host' => [
                     'type'        => 'text',
-                    'title'       => __('Two. Test Server', 'twoinc-payment-gateway'),
+                    'title'       => __('Two Test Server', 'twoinc-payment-gateway'),
                     'default'     => 'https://staging.api.two.inc'
                 ],
                 'checkout_env' => [
@@ -1064,7 +1064,7 @@ if (!class_exists('WC_Twoinc')) {
                      )
                 ],
                 'clear_options_on_deactivation' => [
-                    'title'       => __('Clear settings on deactivation', 'twoinc-payment-gateway'),
+                    'title'       => __('Clear settings on deactivation of plug-in', 'twoinc-payment-gateway'),
                     'label'       => ' ',
                     'type'        => 'checkbox',
                     'default'     => 'no'
@@ -1074,11 +1074,11 @@ if (!class_exists('WC_Twoinc')) {
                     'title'       => __('API credentials', 'twoinc-payment-gateway')
                 ],
                 'tillit_merchant_id' => [
-                    'title'       => __('Two. username', 'twoinc-payment-gateway'),
+                    'title'       => __('Two username', 'twoinc-payment-gateway'),
                     'type'        => 'text'
                 ],
                 'api_key' => [
-                    'title'       => __('Two. API Key', 'twoinc-payment-gateway'),
+                    'title'       => __('Two API Key', 'twoinc-payment-gateway'),
                     'type'        => 'password'
                 ],
                 'section_invoice_settings' => [
@@ -1109,7 +1109,7 @@ if (!class_exists('WC_Twoinc')) {
                 ],
                 'enable_order_intent' => [
                     'title'       => __('Pre-approve buyer during checkout', 'twoinc-payment-gateway'),
-                    'description' => __('Approves buyer when phone and company name is filled out.', 'twoinc-payment-gateway'),
+                    'description' => __('Approve buyer when phone and company name is filled out.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'label'       => ' ',
                     'type'        => 'checkbox',
@@ -1117,25 +1117,25 @@ if (!class_exists('WC_Twoinc')) {
                 ],
                 'checkout_business' => [
                     'title'       => __('Separate checkout for business customers', 'twoinc-payment-gateway'),
-                    'description' => __('Adds a separate checkout for business customers. Two. is only available in the business checkout.', 'twoinc-payment-gateway'),
+                    'description' => __('Adds a separate checkout for business customers. Two is only available in the business checkout.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'label'       => ' ',
                     'type'        => 'checkbox',
                     'default'     => 'yes'
                 ],
                 'checkout_personal' => [
-                    'title'       => __('Extra page for private customers', 'twoinc-payment-gateway'),
+                    'title'       => __('Separate checkout for private customers', 'twoinc-payment-gateway'),
                     'label'       => ' ',
                     'type'        => 'checkbox',
                     'default'     => 'yes'
                 ],
                 'checkout_sole_trader' => [
-                    'title'       => __('Extra page for private soletraders', 'twoinc-payment-gateway'),
+                    'title'       => __('Separate checkout for private sole traders', 'twoinc-payment-gateway'),
                     'label'       => ' ',
                     'type'        => 'checkbox'
                 ],
                 'mark_tillit_fields_required' => [
-                    'title'       => __('Mark Two. fields required', 'twoinc-payment-gateway'),
+                    'title'       => __('Mark Two fields required', 'twoinc-payment-gateway'),
                     'description' => __('Marks phone number and company name fields as required.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'label'       => ' ',
@@ -1143,7 +1143,7 @@ if (!class_exists('WC_Twoinc')) {
                     'default'     => 'yes'
                 ],
                 'add_field_department' => [
-                    'title'       => __('Enable department input field', 'twoinc-payment-gateway'),
+                    'title'       => __('Add input field for "Department"', 'twoinc-payment-gateway'),
                     'description' => __('Adds an input field where buyers can input their department, input is shown on invoice.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'label'       => ' ',
@@ -1151,7 +1151,7 @@ if (!class_exists('WC_Twoinc')) {
                     'default'     => 'yes'
                 ],
                 'add_field_project' => [
-                    'title'       => __('Enable project input field', 'twoinc-payment-gateway'),
+                    'title'       => __('Add input field for "Project"', 'twoinc-payment-gateway'),
                     'description' => __('Adds an input field where buyers can input their project in the company, input is shown on invoice.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'label'       => ' ',
@@ -1165,7 +1165,7 @@ if (!class_exists('WC_Twoinc')) {
                     'default'     => 'no'
                 ],
                 'show_abt_link' => [
-                    'title'       => __('Show "What is Two." link in Checkout', 'twoinc-payment-gateway'),
+                    'title'       => __('Show "What is Two" link in Checkout', 'twoinc-payment-gateway'),
                     'label'       => ' ',
                     'type'        => 'checkbox',
                     'default'     => 'no'
@@ -1193,13 +1193,13 @@ if (!class_exists('WC_Twoinc')) {
                     'default'     => 'no'
                 ],
                 'display_other_payments' => [
-                    'title'       => __('Always enable all available payment methods', 'twoinc-payment-gateway'),
+                    'title'       => __('Enable all available payment methods', 'twoinc-payment-gateway'),
                     'label'       => ' ',
                     'type'        => 'checkbox',
                     'default'     => 'yes'
                 ],
                 'fallback_to_another_payment' => [
-                    'title'       => __('Fallback to other payment methods if Two. is not available', 'twoinc-payment-gateway'),
+                    'title'       => __('Fallback to other payment methods if Two is not available', 'twoinc-payment-gateway'),
                     'label'       => ' ',
                     'type'        => 'checkbox',
                     'default'     => 'yes'
@@ -1209,7 +1209,7 @@ if (!class_exists('WC_Twoinc')) {
                     'title'       => __('Auto-complete settings', 'twoinc-payment-gateway')
                 ],
                 'enable_company_name' => [
-                    'title'       => __('Company name search and auto-complete', 'twoinc-payment-gateway'),
+                    'title'       => __('Enable company name search and auto-complete', 'twoinc-payment-gateway'),
                     'description' => __('Enables searching for company name in the national registry and automatically filling in name and ID number.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'label'       => ' ',
@@ -1353,7 +1353,7 @@ if (!class_exists('WC_Twoinc')) {
 
                 $body = json_decode($response['body'], true);
                 if (!$body || !$body['buyer'] || !$body['buyer']['company'] || !$body['buyer']['company']['organization_number']) {
-                    $order->add_order_note(sprintf(__('Missing company ID, please check with Two. admin for id %s', 'twoinc-payment-gateway'), $twoinc_order_id));
+                    $order->add_order_note(sprintf(__('Missing company ID, please check with Two admin for id %s', 'twoinc-payment-gateway'), $twoinc_order_id));
                     return;
                 }
                 $company_id = $body['buyer']['company']['organization_number'];
@@ -1405,13 +1405,13 @@ if (!class_exists('WC_Twoinc')) {
             );
 
             if(is_wp_error($response)) {
-                $order->add_order_note(__('Could not edit the Two. order', 'twoinc-payment-gateway'));
+                $order->add_order_note(__('Could not edit the Two order', 'twoinc-payment-gateway'));
                 return;
             }
 
             $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
             if ($twoinc_err) {
-                $order->add_order_note(__('Could not edit the Two. order, please check with Two. admin', 'twoinc-payment-gateway'));
+                $order->add_order_note(__('Could not edit the Two order, please check with Two admin', 'twoinc-payment-gateway'));
                 return;
             }
 
@@ -1490,8 +1490,8 @@ if (!class_exists('WC_Twoinc')) {
                 echo '
                 <div id="twoinc-account-init-notice" class="notice notice-info is-dismissible" style="background-color: #e2e0ff;padding: 20px;display: flex;">
                     <div style="width:60%;padding-right:40px;">
-                        <h1 style="color: #000000;font-weight:700;">Set up your Two. account</h1>
-                        <p style="color: #000000;font-size: 1.3em;text-align: justify;">Happy to see you here! Before you can start selling with the Two. buy now, pay later solution you need to complete our signup process. It\'s easy, fast and gives you immediate access to the <a target="_blank" href="https://portal.two.inc/merchant">Two. Merchant Portal</a></p>
+                        <h1 style="color: #000000;font-weight:700;">Set up your Two account</h1>
+                        <p style="color: #000000;font-size: 1.3em;text-align: justify;">Happy to see you here! Before you can start selling with the Two buy now, pay later solution you need to complete our signup process. It\'s easy, fast and gives you immediate access to the <a target="_blank" href="https://portal.two.inc/merchant">Two Merchant Portal</a></p>
                     </div>
                     <div>
                         <img style="position: absolute;top: 40px;right: 40px;width: 100px;" src="/wp-content/plugins/tillit-payment-gateway/assets/images/two-logo.svg">

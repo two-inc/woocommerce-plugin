@@ -1,7 +1,7 @@
 #, fuzzy
 msgid ""
 msgstr ""
-"Project-Id-Version: Two. - BNPL for businesses\n"
+"Project-Id-Version: Two - BNPL for businesses\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2021-11-20 13:13+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
@@ -17,11 +17,7 @@ msgstr ""
 "X-Domain: twoinc-payment-gateway"
 
 #: class/WC_Twoinc.php:1184
-msgid "Company name search and auto-complete"
-msgstr ""
-
-#: class/WC_Twoinc.php:1189
-msgid "Company ID auto-complete"
+msgid "Enable company name search and auto-complete"
 msgstr ""
 
 #: class/WC_Twoinc.php:1089
@@ -29,11 +25,11 @@ msgid "Add a logo to the invoice"
 msgstr ""
 
 #: class/WC_Twoinc.php:1128
-msgid "Enable department input field"
+msgid "Add input field for \"Department\""
 msgstr ""
 
 #: class/WC_Twoinc.php:1134
-msgid "Enable project input field"
+msgid "Add input field for \"Project\""
 msgstr ""
 
 #: class/WC_Twoinc_Helper.php:131
@@ -41,11 +37,11 @@ msgid "Address"
 msgstr ""
 
 #: class/WC_Twoinc.php:1168
-msgid "Always enable all available payment methods"
+msgid "Enable all available payment methods"
 msgstr ""
 
 #: class/WC_Twoinc.php:1122
-msgid "Mark Two. fields required"
+msgid "Mark Two fields required"
 msgstr ""
 
 #: class/WC_Twoinc.php:1060
@@ -54,7 +50,7 @@ msgstr ""
 
 #: class/WC_Twoinc.php:1098
 msgid ""
-"Approves buyer when phone and company name is filled out."
+"Approve buyer when phone and company name is filled out."
 msgstr ""
 
 #: class/WC_Twoinc.php:1181
@@ -97,7 +93,7 @@ msgid "City"
 msgstr ""
 
 #: class/WC_Twoinc.php:1053
-msgid "Clear settings on deactivation"
+msgid "Clear settings on deactivation of plug-in"
 msgstr ""
 
 #: class/WC_Twoinc_Checkout.php:174 class/WC_Twoinc_Checkout.php:184
@@ -109,11 +105,11 @@ msgid "Company name"
 msgstr ""
 
 #: class/WC_Twoinc.php:1376
-msgid "Could not edit the Two. order"
+msgid "Could not edit the Two order"
 msgstr ""
 
 #: class/WC_Twoinc.php:1382
-msgid "Could not edit the Two. order, please check with Two. admin"
+msgid "Could not edit the Two order, please check with Two admin"
 msgstr ""
 
 #: class/WC_Twoinc.php:751
@@ -121,7 +117,7 @@ msgid "Could not initiate refund by Two"
 msgstr ""
 
 #: class/WC_Twoinc.php:676
-msgid "Could not request to create Two. order"
+msgid "Could not request to create Two order"
 msgstr ""
 
 #: class/WC_Twoinc.php:557
@@ -129,19 +125,19 @@ msgid "Could not update status"
 msgstr ""
 
 #: class/WC_Twoinc.php:599
-msgid "Could not update status to cancelled"
+msgid "Could not update status to \"Cancelled\""
 msgstr ""
 
 #: class/WC_Twoinc.php:605
 #, php-format
 msgid ""
-"Could not update status to cancelled, please check with Two. admin for id %s"
+"Could not update status to \"Cancelled\", please check with Two admin for id %s"
 msgstr ""
 
 #: class/WC_Twoinc.php:563
 #, php-format
 msgid ""
-"Could not update status to fulfilled on Two, please check with Two. admin "
+"Could not update status to \"Fulfilled\" with Two, please check with Two admin "
 "for id %s"
 msgstr ""
 
@@ -170,7 +166,7 @@ msgid "Email"
 msgstr ""
 
 #: class/WC_Twoinc.php:1030
-msgid "Enable Two. Payments"
+msgid "Enable Two Payments"
 msgstr ""
 
 #: class/WC_Twoinc.php:221
@@ -182,16 +178,16 @@ msgid "Express checkout"
 msgstr ""
 
 #: class/WC_Twoinc.php:682
-msgid "Fail to process payment"
+msgid "Failed to process payment"
 msgstr ""
 
 #: class/WC_Twoinc.php:786
-msgid "Failed to refund order by Two"
+msgid "Failed to refund order with Two"
 msgstr ""
 
 #: class/WC_Twoinc.php:784
 #, php-format
-msgid "Failed to refund order by Two, please check with Two. admin for id %s"
+msgid "Failed to refund order with Two, please check with Two admin for id %s"
 msgstr ""
 
 #: class/WC_Twoinc.php:768
@@ -201,11 +197,11 @@ msgstr ""
 #: class/WC_Twoinc.php:774
 #, php-format
 msgid ""
-"Failed to request refund order to Two, please check with Two. admin for id %s"
+"Failed to request refund order to Two, please check with Two admin for id %s"
 msgstr ""
 
 #: class/WC_Twoinc.php:1174
-msgid "Fallback to other payment methods if Two. is not available"
+msgid "Fallback to other payment methods if Two is not available"
 msgstr ""
 
 #: class/WC_Twoinc_Helper.php:122
@@ -222,7 +218,7 @@ msgid "Initiate payment to buyer on refund"
 msgstr ""
 
 #. Description of the plugin
-msgid "Integration between WooCommerce and Two."
+msgid "Integration between WooCommerce and Two"
 msgstr ""
 
 #: class/WC_Twoinc_Helper.php:125
@@ -239,21 +235,21 @@ msgstr ""
 
 #: class/WC_Twoinc.php:198
 #, php-format
-msgid "Maximum Payment using Two. is %s"
+msgid "Maximum payment using Two is %s"
 msgstr ""
 
 #: class/WC_Twoinc.php:199
 #, php-format
-msgid "Minimum Payment using Two. is %s"
+msgid "Minimum payment using Two is %s"
 msgstr ""
 
 #: class/WC_Twoinc.php:1324
 #, php-format
-msgid "Missing company ID, please check with Two. admin for id %s"
+msgid "Missing company ID, please check with Two admin for id %s"
 msgstr ""
 
 #: class/WC_Twoinc.php:739
-msgid "Only Completed order can be refunded by Two"
+msgid "Only \"Completed\" orders can be refunded by Two"
 msgstr ""
 
 #: class/WC_Twoinc_Helper.php:116
@@ -314,7 +310,7 @@ msgid "Receive invoice and payment details via email"
 msgstr ""
 
 #: class/WC_Twoinc.php:776
-msgid "Request refund order to Two. has errors"
+msgid "Request refund order to Two has errors"
 msgstr ""
 
 #: class/WC_Twoinc.php:1271
@@ -322,7 +318,7 @@ msgid "Select image"
 msgstr ""
 
 #: class/WC_Twoinc_Checkout.php:111
-msgid "Select the account type"
+msgid "Select account type"
 msgstr ""
 
 #: class/WC_Twoinc.php:1157
@@ -330,7 +326,7 @@ msgid "Shift invoice fee to the buyers"
 msgstr ""
 
 #: class/WC_Twoinc.php:1146
-msgid "Show \"What is Two.\" link in Checkout"
+msgid "Show \"What is Two\" link in Checkout"
 msgstr ""
 
 #: class/WC_Twoinc.php:1116
@@ -338,11 +334,11 @@ msgid "Separate checkout for business customers"
 msgstr ""
 
 #: class/WC_Twoinc.php:1105
-msgid "Extra page for private customers"
+msgid "Separate checkout for private customers"
 msgstr ""
 
 #: class/WC_Twoinc.php:1111
-msgid "Extra page for private soletraders"
+msgid "Separate checkout for private sole traders"
 msgstr ""
 
 #: class/WC_Twoinc.php:1008
@@ -368,32 +364,32 @@ msgstr ""
 #. Author of the plugin
 #: class/WC_Twoinc.php:30 class/WC_Twoinc.php:926 class/WC_Twoinc.php:976
 #: class/WC_Twoinc.php:988
-msgid "Two."
+msgid "Two"
 msgstr ""
 
 #. Name of the plugin
-msgid "Two. - BNPL for businesses"
+msgid "Two - BNPL for businesses"
 msgstr ""
 
 #: class/WC_Twoinc.php:1067
-msgid "Two. API Key"
+msgid "Two API Key"
 msgstr ""
 
 #: class/WC_Twoinc_Helper.php:44
-msgid "Two. empty response"
+msgid "Two empty response"
 msgstr ""
 
 #: class/WC_Twoinc.php:1063
-msgid "Two. username"
+msgid "Two username"
 msgstr ""
 
 #: class/WC_Twoinc_Helper.php:48
 #, php-format
-msgid "Two. response code %d"
+msgid "Two response code %d"
 msgstr ""
 
 #: class/WC_Twoinc.php:1040
-msgid "Two. Test Server"
+msgid "Two Test Server"
 msgstr ""
 
 #: class/WC_Twoinc.php:823
@@ -419,13 +415,13 @@ msgid ""
 msgstr ""
 
 #: class/WC_Twoinc.php:155
-msgid "What is Two.?"
+msgid "What is Two?"
 msgstr ""
 
 #: class/WC_Twoinc.php:893
 #, php-format
 msgid ""
-"Wordpress admin privilege is required for Two. payment One-click setup. %s"
+"Wordpress admin privilege is required for Two payment One-click setup. %s"
 msgstr ""
 
 #: class/WC_Twoinc.php:194

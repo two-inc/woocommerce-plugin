@@ -19,10 +19,6 @@ msgstr ""
 msgid "Enable company name search and auto-complete"
 msgstr "Aktiver automatisk utfylling av selskapsnavn"
 
-#: class/WC_Twoinc.php:1189
-msgid "Enable Company ID auto-complete"
-msgstr "Aktiver automatisk utfylling av organisasjonsnummer"
-
 #: class/WC_Twoinc.php:1089
 msgid "Add a logo to the invoice"
 msgstr "Legg til en logo på fakturaen"
