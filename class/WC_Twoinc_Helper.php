@@ -41,11 +41,11 @@ if (!class_exists('WC_Twoinc_Helper')) {
         public static function get_twoinc_error_msg($response)
         {
             if (!$response) {
-                return __('Two. empty response', 'twoinc-payment-gateway');
+                return __('Two empty response', 'twoinc-payment-gateway');
             }
 
             if($response['response'] && $response['response']['code'] && $response['response']['code'] >= 400) {
-                return sprintf(__('Two. response code %d', 'twoinc-payment-gateway'), $response['response']['code']);
+                return sprintf(__('Two response code %d', 'twoinc-payment-gateway'), $response['response']['code']);
             }
 
             if($response['body']) {
