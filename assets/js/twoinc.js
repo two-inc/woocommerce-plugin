@@ -10,7 +10,8 @@ let twoincUtilHelper = {
     /**
      * Construct url to Twoinc checkout api
      */
-    contructTwoincUrl: function(path, params = {}) {
+    contructTwoincUrl: function(path, params) {
+        if (!params) params = {}
         params['client'] = window.twoinc.client_name
         params['client_v'] = window.twoinc.client_version
         return window.twoinc.twoinc_checkout_host + path + '?' + (new URLSearchParams(params)).toString()
@@ -19,8 +20,10 @@ let twoincUtilHelper = {
     /**
      * Hash some input to store as key
      */
-    getUnsecuredHash: function(inp, seed = 0) {
-        let h1 = 0xdeadbeef ^ seed, h2 = 0x41c6ce57 ^ seed
+    getUnsecuredHash: function(inp, seed) {
+        if (!seed) seed = 0
+        let h1 = 0xdeadbeef ^ seed
+        let h2 = 0x41c6ce57 ^ seed
         for (let i = 0, ch; i < inp.length; i++) {
             ch = inp.charCodeAt(i)
             h1 = Math.imul(h1 ^ ch, 2654435761)
@@ -128,14 +131,14 @@ let twoincSelectWooHelper = {
 
         if (window.twoinc.company_name_search === 'yes') {
 
-            const instance = jQuery('#billing_company_display').data('select2')
+            const billingCompanyDisplay = jQuery('#billing_company_display').data('select2')
 
-            if (instance) {
-                instance.on('open', function(e) {
+            if (billingCompanyDisplay) {
+                billingCompanyDisplay.on('open', function(e) {
                     this.results.clear()
                     this.dropdown._positionDropdown()
                 })
-                instance.on('results:message', function(e) {
+                billingCompanyDisplay.on('results:message', function(e) {
                     this.dropdown._resizeDropdown()
                     this.dropdown._positionDropdown()
                 })
@@ -406,7 +409,7 @@ let twoincDomHelper = {
     /**
      * Toggle the required property for company fields
      */
-    toggleRequiredFields($targets, is_required) {
+    toggleRequiredFields: function($targets, is_required) {
 
         // For each input
         $targets.find(':input').each(function(){
@@ -441,7 +444,7 @@ let twoincDomHelper = {
     /**
      * Toggle the company fields
      */
-    toggleCompanyFields(accountType) {
+    toggleCompanyFields: function(accountType) {
 
         // Get the targets
         let $visibleNoncompanyTargets = '#billing_phone_field, #billing_company_field, #billing_country_field'
@@ -943,37 +946,36 @@ let twoincDomHelper = {
 
 class Twoinc {
 
-    static instance = null
-    isInitialized = false
-    isTwoincMethodHidden = true
-    isTwoincApproved = null
-    billingPhoneInput = null
-    orderIntentCheck = {
-        'interval': null,
-        'pendingCheck': false,
-        'lastCheckOk': false,
-        'lastCheckHash': null
-    }
-    orderIntentLog = {}
-    customerCompany = {
-        'company_name': null,
-        'country_prefix': null,
-        'organization_number': null
-    }
-    customerRepresentative = {
-        'email': null,
-        'first_name': null,
-        'last_name': null,
-        'phone_number': null
-    }
-
     constructor()
     {
 
-        if (Twoinc.instance) {
+        if (instance) {
             throw 'Twoinc is a singleton'
         }
-        Twoinc.instance = this
+        instance = this
+
+        this.isInitialized = false
+        this.isTwoincMethodHidden = true
+        this.isTwoincApproved = null
+        this.billingPhoneInput = null
+        this.orderIntentCheck = {
+            'interval': null,
+            'pendingCheck': false,
+            'lastCheckOk': false,
+            'lastCheckHash': null
+        }
+        this.orderIntentLog = {}
+        this.customerCompany = {
+            'company_name': null,
+            'country_prefix': null,
+            'organization_number': null
+        }
+        this.customerRepresentative = {
+            'email': null,
+            'first_name': null,
+            'last_name': null,
+            'phone_number': null
+        }
 
     }
 
@@ -1196,8 +1198,8 @@ class Twoinc {
      * Get singleton instance
      */
     static getInstance() {
-        if (!Twoinc.instance) Twoinc.instance = new Twoinc()
-        return Twoinc.instance
+        if (!instance) instance = new Twoinc()
+        return instance
     }
 
 
@@ -1646,6 +1648,7 @@ class Twoinc {
 }
 
 
+let instance = null
 let isSelectedPaymentTwoinc = null
 jQuery(function(){
     if (window.twoinc) {
