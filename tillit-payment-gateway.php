@@ -4,7 +4,7 @@
  * Plugin URI: https://two.inc
  * Description: Integration between WooCommerce and Two
  * Version: 2.6.0
- * Author: Two.
+ * Author: Two
  * Author URI: https://two.inc
  * Text Domain: twoinc-payment-gateway
  * License: GPLv2 or later

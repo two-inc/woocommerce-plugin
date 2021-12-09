@@ -8,7 +8,7 @@
  * @class WC_Twoinc
  * @extends WC_Payment_Gateway
  * @package WooCommerce/Classes/Payment
- * @author Two.
+ * @author Two
  */
 
 
@@ -1158,7 +1158,7 @@ if (!class_exists('WC_Twoinc')) {
                     'default'     => 'no'
                 ],
                 'show_abt_link' => [
-                    'title'       => __('Show "What is Two" link in Checkout', 'twoinc-payment-gateway'),
+                    'title'       => __('Show "What is Two" link in checkout', 'twoinc-payment-gateway'),
                     'label'       => ' ',
                     'type'        => 'checkbox',
                     'default'     => 'no'
@@ -1203,7 +1203,7 @@ if (!class_exists('WC_Twoinc')) {
                 ],
                 'enable_company_name' => [
                     'title'       => __('Enable company name search and auto-complete', 'twoinc-payment-gateway'),
-                    'description' => __('Enables searching for company name in the national registry and automatically filling in name and ID number.', 'twoinc-payment-gateway'),
+                    'description' => __('Enables searching for company name in the national registry and automatically filling in name and national ID.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'label'       => ' ',
                     'type'        => 'checkbox'

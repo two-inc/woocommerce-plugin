@@ -4,7 +4,7 @@
  * Twoinc Checkout page modifier
  *
  * @class WC_Twoinc_Checkout
- * @author Two.
+ * @author Two
  */
 
 if (!class_exists('WC_Twoinc_Checkout')) {

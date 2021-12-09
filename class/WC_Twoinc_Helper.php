@@ -4,7 +4,7 @@
  * Twoinc Helper utilities
  *
  * @class WC_Twoinc_Helper
- * @author Two.
+ * @author Two
  */
 
 if (!class_exists('WC_Twoinc_Helper')) {
