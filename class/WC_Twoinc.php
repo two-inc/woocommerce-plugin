@@ -764,8 +764,7 @@ if (!class_exists('WC_Twoinc')) {
                 WC_Twoinc_Helper::compose_twoinc_refund(
                     $order_refund,
                     -$amount,
-                    $order->get_currency(),
-                    $this->get_option('initiate_payment_to_buyer_on_refund') === 'yes'
+                    $order->get_currency()
                 ),
                 'POST'
             );
@@ -955,7 +954,6 @@ if (!class_exists('WC_Twoinc')) {
                     if (isset($body['enable_order_intent'])) $this->update_option('enable_order_intent', $body['enable_order_intent'] ? 'yes' : 'no');
                     if (isset($body['default_to_b2c'])) $this->update_option('default_to_b2c', $body['default_to_b2c'] ? 'yes' : 'no');
                     if (isset($body['invoice_fee_to_buyer'])) $this->update_option('invoice_fee_to_buyer', $body['invoice_fee_to_buyer'] ? 'yes' : 'no');
-                    if (isset($body['initiate_payment_to_buyer_on_refund'])) $this->update_option('initiate_payment_to_buyer_on_refund', $body['initiate_payment_to_buyer_on_refund'] ? 'yes' : 'no');
                     if (isset($body['clear_options_on_deactivation'])) $this->update_option('clear_options_on_deactivation', $body['clear_options_on_deactivation'] ? 'yes' : 'no');
                     if (WC_Twoinc_Helper::is_twoinc_development()) {
                         $this->update_option('test_checkout_host', $twoinc_checkout_host);
@@ -1172,12 +1170,6 @@ if (!class_exists('WC_Twoinc')) {
                     'title'       => __('Shift invoice fee to the buyers', 'twoinc-payment-gateway'),
                     'label'       => ' ',
                     'type'        => 'checkbox'
-                ],
-                'initiate_payment_to_buyer_on_refund' => [
-                    'title'       => __('Initiate payment to buyer on refund', 'twoinc-payment-gateway'),
-                    'label'       => ' ',
-                    'type'        => 'checkbox',
-                    'default'     => 'yes'
                 ],
                 'display_tooltips' => [
                     'title'       => __('Display input tooltips', 'twoinc-payment-gateway'),

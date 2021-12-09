@@ -473,13 +473,13 @@ if (!class_exists('WC_Twoinc_Helper')) {
          *
          * @return bool
          */
-        public static function compose_twoinc_refund($order_refund, $amount, $currency, $initiate_payment_to_buyer)
+        public static function compose_twoinc_refund($order_refund, $amount, $currency)
         {
 
             $req_body = [
                 'amount' => strval(WC_Twoinc_Helper::round_amt($amount)),
                 'currency' => $currency,
-                'initiate_payment_to_buyer' => $initiate_payment_to_buyer,
+                'initiate_payment_to_buyer' => true,
                 'line_items' => WC_Twoinc_Helper::get_line_items($order_refund->get_items(), $order_refund->get_items('shipping'), $order_refund->get_items('fee'), $order_refund)
             ];
 
@@ -543,7 +543,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
          */
         public static function get_locale()
         {
-            $locale = get_locale();
+            $locale = get_user_locale();
             if ($locale && strlen($locale) > 0) {
                 return $locale;
             }
