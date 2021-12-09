@@ -33,25 +33,28 @@ msgstr "Adresse"
 
 #: class/WC_Twoinc.php:1219
 msgid "Address auto-complete"
-msgstr ""
+msgstr "Automatisk utfylling av adresse"
 
 #: class/WC_Twoinc.php:1120
 msgid ""
 "Adds a separate checkout for business customers. Two is only available in "
 "the business checkout."
-msgstr ""
+msgstr "Legger til en separat checkout for bedriftkunder. "
+"Two er kun tilgjengelig i checkout for bedriftskunder."
 
 #: class/WC_Twoinc.php:1147
 msgid ""
 "Adds an input field where buyers can input their department, input is shown "
 "on invoice."
-msgstr ""
+msgstr "Legger til et inndatfelt hvor kjøper kan legge inn \"Avdeling\" "
+"inndataen vil bli lagt til på fakturaen"
 
 #: class/WC_Twoinc.php:1155
 msgid ""
 "Adds an input field where buyers can input their project in the company, "
 "input is shown on invoice."
-msgstr ""
+msgstr "Legger til et inndatafelt hvor kjøper kan legge inn \"Prosjekt\" / \"prosjektkode\" "
+"som blir lagt til på fakturaen."
 
 #: class/WC_Twoinc.php:1074
 msgid "API credentials"
@@ -59,7 +62,7 @@ msgstr "Påloggingsinformasjon for API"
 
 #: class/WC_Twoinc.php:1112
 msgid "Approve buyer when phone and company name is filled out."
-msgstr "Godkjenn kjøper når telefonnummer og selskapsnavn er utfylt."
+msgstr "Godkjenn kjøper når telefonnummer og selskapsnavn er fylt ut."
 
 #: class/WC_Twoinc.php:1209
 msgid "Auto-complete settings"
@@ -82,7 +85,7 @@ msgid ""
 "By completing the purchase, you verify that you have the legal right to "
 "purchase on behalf of"
 msgstr ""
-"Ved å fullføre kjøpet bekrefter jeg at jeg har fullmakt til å handle på "
+"Ved å fullføre kjøpet bekrefter du at du har fullmakt til å handle på "
 "vegne av"
 
 #: class/WC_Twoinc.php:1108
@@ -160,7 +163,7 @@ msgstr "Land"
 
 #: views/woocommerce_order_pay.php:16
 msgid "Country / Region"
-msgstr ""
+msgstr "Land / Region"
 
 #: class/WC_Twoinc.php:980
 msgid "Dashboard"
@@ -180,7 +183,7 @@ msgstr "Avdeling"
 
 #: class/WC_Twoinc.php:1190
 msgid "Display input tooltips"
-msgstr ""
+msgstr "Vis tooltips for inndatafelter"
 
 #: class/WC_Twoinc_Helper.php:128
 msgid "Email"
@@ -202,13 +205,15 @@ msgstr "Aktiver Two"
 msgid ""
 "Enables automatically filling in the registered address from the national "
 "registry."
-msgstr ""
+msgstr "Muliggjør automatisk utfylling av addresse fra søk i det nasjonale "
+"selskapsregisteret"
 
 #: class/WC_Twoinc.php:1213
 msgid ""
 "Enables searching for company name in the national registry and "
-"automatically filling in name and ID number."
-msgstr ""
+"automatically filling in name and national ID."
+msgstr "Muliggjør søk etter selskapsnavn i det nasjonale selskapsregisteret "
+"og fyller automatisk inn navn og organisasjonsnummer"
 
 #: class/WC_Twoinc.php:221
 msgid "Enter company name to pay on invoice"
@@ -216,7 +221,7 @@ msgstr "Skriv inn selskapsnavn for å betale på faktura"
 
 #: class/WC_Twoinc.php:184 class/WC_Twoinc.php:224
 msgid "Express checkout"
-msgstr "Rask utsjekk"
+msgstr "Rask checkout"
 
 #: class/WC_Twoinc.php:696
 msgid "Failed to process payment"
@@ -288,7 +293,7 @@ msgstr "Merk Two-felt som påkrevd"
 
 #: class/WC_Twoinc.php:1139
 msgid "Marks phone number and company name fields as required."
-msgstr ""
+msgstr "Merk telefonnummer og selskapsnavn som obligatorisk"
 
 #: class/WC_Twoinc.php:198
 #, php-format
@@ -364,7 +369,7 @@ msgstr "Prosjektnummer"
 
 #: class/WC_Twoinc.php:189 class/WC_Twoinc.php:229
 msgid "Receive invoice and payment details via email"
-msgstr "Motta faktura og betalingsdetaljer på E-post og EHF"
+msgstr "Motta faktura og betalingsdetaljer på e-post og EHF"
 
 #: class/WC_Twoinc.php:790
 msgid "Request refund order to Two has errors"
@@ -395,8 +400,8 @@ msgid "Shift invoice fee to the buyers"
 msgstr "Flytt fakturagebyr til kjøper"
 
 #: class/WC_Twoinc.php:1168
-msgid "Show \"What is Two\" link in Checkout"
-msgstr "Vis \"Hva er Two\" link i checkout"
+msgid "Show \"What is Two\" link in checkout"
+msgstr "Vis link til \"Hva er Two\" i checkout"
 
 #: class/WC_Twoinc.php:1022
 msgid "Sole trader/other"
@@ -449,8 +454,8 @@ msgid "Two username"
 msgstr "Two brukernavn"
 
 #. Author of the plugin
-msgid "Two."
-msgstr ""
+msgid "Two"
+msgstr "Two"
 
 #: class/WC_Twoinc.php:837
 msgid "Unable to find the requested order"
@@ -470,13 +475,15 @@ msgstr "Benytt bannerknapper istedenfor radioknapper"
 
 #: class/WC_Twoinc_Checkout.php:335
 msgid "We require your phone number so we can verify your purchase"
-msgstr ""
+msgstr "Vi krever ditt telefonnummer for å verifisere ditt kjøp"
 
 #: class/WC_Twoinc_Checkout.php:336
 msgid ""
 "We use your company name to automatically populate your address and register "
 "the company that made the purchase"
 msgstr ""
+"Vi benytter ditt selskapsnavn til å automatisk fylle ut adresse og registrere "
+"selskapet som foretok kjøpet"
 
 #: class/WC_Twoinc.php:155
 msgid "What is Two?"
