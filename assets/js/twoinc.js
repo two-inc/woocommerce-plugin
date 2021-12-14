@@ -597,12 +597,6 @@ let twoincDomHelper = {
             // $twoincPaymentMethod.attr('disabled', isTwoincDisabled)
             twoincDomHelper.deselectPaymentMethod($twoincPaymentMethod)
 
-            // // Fallback if set in admin and current account type is business
-            // if (window.twoinc.fallback_to_another_payment === 'yes' && twoincUtilHelper.isCompany(twoincDomHelper.getAccountType())) {
-            //     // Select the first visible payment method
-            //     $twoincPmBlk.parent().find('li:visible').eq(0).find(':radio').click()
-            // }
-
         } else {
 
             // Select the payment method for business accounts
