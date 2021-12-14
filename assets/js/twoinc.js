@@ -516,7 +516,6 @@ let twoincDomHelper = {
 
         // Get the Twoinc payment method section
         const $twoincSection = jQuery('#payment .wc_payment_methods > li.payment_method_woocommerce-gateway-tillit')
-        const $otherPaymentSections = jQuery('#payment .wc_payment_methods > li:not([class*="payment_method_woocommerce-gateway-tillit"])')
 
         // Get the Twoinc payment method input
         const $twoincBox = jQuery(':input[value="woocommerce-gateway-tillit"]')
@@ -536,19 +535,10 @@ let twoincDomHelper = {
             // Show Twoinc payment option
             $twoincSection.show()
 
-            // If Twoinc is approved and setting is to hide other payment methods
-            if (window.twoinc.display_other_payments !== 'yes') {
-                if (isTwoincDisabled) $otherPaymentSections.show()
-                else $otherPaymentSections.hide()
-            }
-
         } else {
 
             // Hide Twoinc payment option
             $twoincSection.hide()
-
-            // Always show other methods for non-business purchases
-            $otherPaymentSections.show()
 
         }
 
@@ -596,12 +586,6 @@ let twoincDomHelper = {
 
             // $twoincPaymentMethod.attr('disabled', isTwoincDisabled)
             twoincDomHelper.deselectPaymentMethod($twoincPaymentMethod)
-
-            // // Fallback if set in admin and current account type is business
-            // if (window.twoinc.fallback_to_another_payment === 'yes' && twoincUtilHelper.isCompany(twoincDomHelper.getAccountType())) {
-            //     // Select the first visible payment method
-            //     $twoincPmBlk.parent().find('li:visible').eq(0).find(':radio').click()
-            // }
 
         } else {
 
@@ -1172,11 +1156,6 @@ class Twoinc {
 
         // Handle account type change
         $body.on('change', '[name="account_type"]', this.onChangeAccountType)
-
-        // If setting is to hide other payment methods, hide when page load by default
-        if (window.twoinc.display_other_payments !== 'yes') {
-            jQuery('#payment .wc_payment_methods > li:not([class*="payment_method_woocommerce-gateway-tillit"])').hide()
-        }
 
         setInterval(function(){
             if (Twoinc.getInstance().orderIntentCheck.pendingCheck) Twoinc.getInstance().getApproval()
