@@ -946,7 +946,6 @@ if (!class_exists('WC_Twoinc')) {
                     if (isset($body['checkout_business'])) $this->update_option('checkout_business', $body['checkout_business'] ? 'yes' : 'no');
                     if (isset($body['product_type'])) $this->update_option('product_type', $body['product_type']);
                     if (isset($body['days_on_invoice'])) $this->update_option('days_on_invoice', $body['days_on_invoice']);
-                    if (isset($body['display_other_payments'])) $this->update_option('display_other_payments', $body['display_other_payments'] ? 'yes' : 'no');
                     if (isset($body['enable_company_name'])) $this->update_option('enable_company_name', $body['enable_company_name'] ? 'yes' : 'no');
                     if (isset($body['address_search'])) $this->update_option('address_search', $body['address_search'] ? 'yes' : 'no');
                     if (isset($body['mark_tillit_fields_required'])) $this->update_option('mark_tillit_fields_required', $body['mark_tillit_fields_required'] ? 'yes' : 'no');
@@ -1175,12 +1174,6 @@ if (!class_exists('WC_Twoinc')) {
                     'label'       => ' ',
                     'type'        => 'checkbox',
                     'default'     => 'no'
-                ],
-                'display_other_payments' => [
-                    'title'       => __('Enable all available payment methods', 'twoinc-payment-gateway'),
-                    'label'       => ' ',
-                    'type'        => 'checkbox',
-                    'default'     => 'yes'
                 ],
                 'section_auto_complete_settings' => [
                     'type'        => 'title',
