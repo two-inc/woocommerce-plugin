@@ -425,7 +425,7 @@ let twoincDomHelper = {
                 $input.attr('required', true)
 
                 // Add 'required' visual cue
-                if ($row.find('label .twoinc-required').length == 0) {
+                if ($row.find('label .twoinc-required, label .required').length == 0) {
                     $row.find('label').append('<abbr class="required twoinc-required" title="required">*</abbr>')
                 }
                 $row.find('label .optional').hide()
