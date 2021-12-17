@@ -911,6 +911,8 @@ let twoincDomHelper = {
             return 'biagiotti-mikado'
         } else if (jQuery('#kava-theme-style-css').length > 0) {
             return 'kava'
+        } else if (jQuery('#storefront-style-inline-css').length > 0) {
+            return 'storefront'
         } else if (jQuery('#divi-style-css').length > 0) {
             return 'divi'
         }
