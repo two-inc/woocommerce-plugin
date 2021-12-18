@@ -12,13 +12,17 @@
     margin-bottom: 1em;
 }
 
-.woocommerce-checkout #payment ul.payment_methods li.wc_payment_method.payment_method_woocommerce-gateway-tillit .tillit-subtitle {
+.woocommerce-checkout #payment ul.payment_methods li.wc_payment_method.payment_method_woocommerce-gateway-tillit .twoinc-subtitle {
     color: #777777;
     margin-left: 31px;
-    font-size: 0.9em;
+    font-size: 0.8em;
 }
 
-.woocommerce-checkout #payment ul.payment_methods li.wc_payment_method.payment_method_woocommerce-gateway-tillit .tillit-buyer-name {
+.woocommerce-checkout #payment ul.payment_methods li.wc_payment_method.payment_method_woocommerce-gateway-tillit .explain-details {
+    font-size: 0.8em;
+}
+
+.woocommerce-checkout #payment ul.payment_methods li.wc_payment_method.payment_method_woocommerce-gateway-tillit .twoinc-buyer-name {
     font-weight: bold;
 }
 
@@ -57,7 +61,7 @@ form.checkout.woocommerce-checkout .woocommerce-account-type-fields__field-wrapp
     width: unset;
 }
 
-.tillit-source, .tillit-target {
+.twoinc-source, .twoinc-target {
     display: none;
 }
 
@@ -76,11 +80,11 @@ form.checkout.woocommerce-checkout .woocommerce-account-type-fields__field-wrapp
     opacity: 0.1;
 }
 
-#abt-tillit-link {
+#abt-twoinc-link {
     width: 100%;
     padding-left: 31px;
 }
-#abt-tillit-link a {
+#abt-twoinc-link a {
     float: right;
     font-size: 0.8em;
 }

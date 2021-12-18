@@ -1,14 +1,14 @@
 <?php
 
 /**
- * Tillit Helper utilities
+ * Twoinc Helper utilities
  *
- * @class WC_Tillit_Helper
- * @author Tillit
+ * @class WC_Twoinc_Helper
+ * @author Two
  */
 
-if (!class_exists('WC_Tillit_Helper')) {
-    class WC_Tillit_Helper
+if (!class_exists('WC_Twoinc_Helper')) {
+    class WC_Twoinc_Helper
     {
 
         /**
@@ -32,30 +32,112 @@ if (!class_exists('WC_Tillit_Helper')) {
         }
 
         /**
-         * Get error message from tillit response
+         * Get error message from twoinc response
          *
-         * @param $message
+         * @param $response
          *
          * @return string|void
          */
-        public static function get_tillit_error_msg($response)
+        public static function get_twoinc_error_msg($response)
         {
             if (!$response) {
-                return __('Tillit empty response', 'tillit-payment-gateway');
+                return __('Two empty response', 'twoinc-payment-gateway');
             }
 
-            if($response['response']['code'] && $response['response'] && $response['response']['code'] && $response['response']['code'] >= 400) {
-                return sprintf(__('Tillit response code %d', 'tillit-payment-gateway'), $response['response']['code']);
+            if($response['response'] && $response['response']['code'] && $response['response']['code'] >= 400) {
+                return sprintf(__('Two response code %d', 'twoinc-payment-gateway'), $response['response']['code']);
             }
 
-            if($response && $response['body']) {
+            if($response['body']) {
                 $body = json_decode($response['body'], true);
-                if (is_string($body))
-                    return __($body, 'tillit-payment-gateway');
-                else if (isset($body['error_details']) && is_string($body['error_details']))
-                    return __($body['error_details'], 'tillit-payment-gateway');
-                else if (isset($body['error_code']) && is_string($body['error_code']))
-                    return __($body['error_code'], 'tillit-payment-gateway');
+                if (is_string($body)) {
+                    return __($body, 'twoinc-payment-gateway');
+                } else if (isset($body['error_details']) && is_string($body['error_details'])) {
+                    return __($body['error_details'], 'twoinc-payment-gateway');
+                } else if (isset($body['error_code']) && is_string($body['error_code'])) {
+                    return __($body['error_code'], 'twoinc-payment-gateway');
+                }
+            }
+        }
+
+        /**
+         * Get validation message from twoinc response
+         *
+         * @param $response
+         *
+         * @return string|void
+         */
+        public static function get_twoinc_validation_msg($response)
+        {
+            $err_msg = __('Invoice purchase is not available for this order', 'twoinc-payment-gateway');
+            if (!$response) {
+                return $err_msg;
+            }
+
+            if($response['response'] && $response['response']['code'] && $response['response']['code'] >= 400) {
+                if($response['body']) {
+                    $body = json_decode($response['body'], true);
+                    if (!is_string($body) && isset($body['error_json']) && is_array($body['error_json'])) {
+                        $errs = array();
+                        foreach ($body['error_json'] as $er) {
+                            if ($er && $er['loc']) {
+                                $display_msg = WC_Twoinc_Helper::get_msg_from_loc(json_encode($er['loc']));
+                                if ($display_msg) {
+                                    array_push($errs, $display_msg);
+                                }
+                            }
+                        }
+                        if (count($errs) > 0) {
+                            return $errs;
+                        }
+                    }
+                }
+
+                return $err_msg;
+            }
+        }
+
+        /**
+         * Get validation message
+         *
+         * @param $loc_str
+         *
+         * @return string|void
+         */
+        public static function get_msg_from_loc($loc_str)
+        {
+            $generic_err_template = __('Please enter a valid %s to pay on invoice', 'twoinc-payment-gateway');
+            $loc_str = preg_replace('/\s+/', '', $loc_str);
+
+            if ($loc_str === '["buyer","representative","phone_number"]') {
+                return sprintf($generic_err_template, __('Phone number', 'twoinc-payment-gateway'));
+            }
+            if ($loc_str === '["buyer","company","organization_number"]') {
+                return sprintf($generic_err_template, __('Organization number', 'twoinc-payment-gateway'));
+            }
+            if ($loc_str === '["buyer","company","company_name"]') {
+                return sprintf($generic_err_template, __('Company name', 'twoinc-payment-gateway'));
+            }
+            if ($loc_str === '["buyer","representative","first_name"]') {
+                return sprintf($generic_err_template, __('First name', 'twoinc-payment-gateway'));
+            }
+            if ($loc_str === '["buyer","representative","last_name"]') {
+                return sprintf($generic_err_template, __('Last name', 'twoinc-payment-gateway'));
+            }
+            if ($loc_str === '["buyer","representative","email"]') {
+                return sprintf($generic_err_template, __('Email', 'twoinc-payment-gateway'));
+            }
+            if ($loc_str === '["billing_address","street_address"]') {
+                return sprintf($generic_err_template, __('Address', 'twoinc-payment-gateway'));
+            }
+            if ($loc_str === '["billing_address","city"]') {
+                return sprintf($generic_err_template, __('City', 'twoinc-payment-gateway'));
+            }
+            if ($loc_str === '["billing_address","country"]') {
+                return sprintf($generic_err_template, __('Country', 'twoinc-payment-gateway'));
+            }
+            if ($loc_str === '["billing_address","postal_code"]') {
+                return sprintf($generic_err_template, __('Postal code', 'twoinc-payment-gateway'));
             }
         }
 
@@ -68,40 +150,48 @@ if (!class_exists('WC_Tillit_Helper')) {
          */
         public static function display_ajax_error($message)
         {
-            if (!is_string($message)) return;
-            wc_add_notice($message, 'error');
+            if (is_string($message)) {
+                wc_add_notice($message, 'error');
+            } else if (is_array($message)) {
+                foreach ($message as $msg) {
+                    wc_add_notice($msg, 'error');
+                }
+            } else {
+                return;
+            }
+
             if (!wp_is_json_request()) {
                 wc_print_notices();
             }
         }
 
         /**
-         * Check if order is paid by tillit
+         * Check if order is paid by twoinc
          *
          * @param $order
          *
          * @return bool
          */
-        public static function is_tillit_order($order)
+        public static function is_twoinc_order($order)
         {
             return $order && $order->get_payment_method() && $order->get_payment_method() === 'woocommerce-gateway-tillit';
         }
 
         /**
-         * Check if address json to send to Tillit is empty
+         * Check if address json to send to Twoinc is empty
          *
-         * @param $tillit_address
+         * @param $twoinc_address
          *
          * @return bool
          */
-        public static function is_tillit_address_empty($tillit_address)
+        public static function is_twoinc_address_empty($twoinc_address)
         {
 
             $is_empty = true;
 
-            if ($tillit_address) {
-                $is_empty = !$tillit_address['city'] && !$tillit_address['region'] && !$tillit_address['country']
-                            && !$tillit_address['postal_code'] && !$tillit_address['street_address'];
+            if ($twoinc_address) {
+                $is_empty = !$twoinc_address['city'] && !$twoinc_address['region'] && !$twoinc_address['country']
+                            && !$twoinc_address['postal_code'] && !$twoinc_address['street_address'];
             }
 
             return $is_empty;
@@ -121,19 +211,19 @@ if (!class_exists('WC_Tillit_Helper')) {
             /** @var WC_Order_Item_Product $line_item */
             foreach($line_items as $line_item) {
 
-                $product_simple = WC_Tillit_Helper::get_product($line_item);
+                $product_simple = WC_Twoinc_Helper::get_product($line_item);
 
-                $tax_rate = WC_Tillit_Helper::get_item_tax_rate($line_item, $product_simple);
+                $tax_rate = WC_Twoinc_Helper::get_item_tax_rate($line_item, $product_simple);
 
                 $image_url = get_the_post_thumbnail_url($product_simple->get_id());
 
                 $product = [
                     'name' => $product_simple->get_name(),
                     'description' => substr($product_simple->get_description(), 0, 255),
-                    'gross_amount' => strval(WC_Tillit_Helper::round_amt($line_item['line_total'] + $line_item['line_tax'])),
-                    'net_amount' =>  strval(WC_Tillit_Helper::round_amt($line_item['line_total'])),
-                    'discount_amount' => strval(WC_Tillit_Helper::round_amt($line_item['line_subtotal'] - $line_item['line_total'])),
-                    'tax_amount' => strval(WC_Tillit_Helper::round_amt($line_item['line_tax'])),
+                    'gross_amount' => strval(WC_Twoinc_Helper::round_amt($line_item['line_total'] + $line_item['line_tax'])),
+                    'net_amount' =>  strval(WC_Twoinc_Helper::round_amt($line_item['line_total'])),
+                    'discount_amount' => strval(WC_Twoinc_Helper::round_amt($line_item['line_subtotal'] - $line_item['line_total'])),
+                    'tax_amount' => strval(WC_Twoinc_Helper::round_amt($line_item['line_tax'])),
                     'tax_class_name' => $tax_rate['name'],
                     'tax_rate' => strval($tax_rate['rate']),
                     'unit_price' => strval($order->get_item_subtotal($line_item, false, true)),
@@ -167,17 +257,17 @@ if (!class_exists('WC_Tillit_Helper')) {
             // Shipping
             foreach($shippings as $shipping) {
                 if ($shipping->get_total() == 0) continue;
-                $tax_rate = WC_Tillit_Helper::get_shipping_tax_rate($shipping, $order);
+                $tax_rate = WC_Twoinc_Helper::get_shipping_tax_rate($shipping, $order);
                 $shipping_line = [
                     'name' => 'Shipping - ' . $shipping->get_name(),
                     'description' => '',
-                    'gross_amount' => strval(WC_Tillit_Helper::round_amt($shipping->get_total() + $shipping->get_total_tax())),
-                    'net_amount' =>  strval(WC_Tillit_Helper::round_amt($shipping->get_total())),
+                    'gross_amount' => strval(WC_Twoinc_Helper::round_amt($shipping->get_total() + $shipping->get_total_tax())),
+                    'net_amount' =>  strval(WC_Twoinc_Helper::round_amt($shipping->get_total())),
                     'discount_amount' => '0',
-                    'tax_amount' => strval(WC_Tillit_Helper::round_amt($shipping->get_total_tax())),
+                    'tax_amount' => strval(WC_Twoinc_Helper::round_amt($shipping->get_total_tax())),
                     'tax_class_name' => $tax_rate['name'],
                     'tax_rate' => strval($tax_rate['rate']),
-                    'unit_price' => strval(WC_Tillit_Helper::round_amt($shipping->get_total())),
+                    'unit_price' => strval(WC_Twoinc_Helper::round_amt($shipping->get_total())),
                     'quantity' => 1,
                     'quantity_unit' => 'sc', // shipment charge
                     'image_url' => '',
@@ -191,17 +281,17 @@ if (!class_exists('WC_Tillit_Helper')) {
             // Fee
             foreach($fees as $fee) {
                 if ($fee->get_total() == 0) continue;
-                $tax_rate = WC_Tillit_Helper::get_fee_tax_rate($fee, $order);
+                $tax_rate = WC_Twoinc_Helper::get_fee_tax_rate($fee, $order);
                 $fee_line = [
                     'name' => 'Fee - ' . $fee->get_name(),
                     'description' => '',
-                    'gross_amount' => strval(WC_Tillit_Helper::round_amt($fee->get_total() + $fee->get_total_tax())),
-                    'net_amount' =>  strval(WC_Tillit_Helper::round_amt($fee->get_total())),
+                    'gross_amount' => strval(WC_Twoinc_Helper::round_amt($fee->get_total() + $fee->get_total_tax())),
+                    'net_amount' =>  strval(WC_Twoinc_Helper::round_amt($fee->get_total())),
                     'discount_amount' => '0',
-                    'tax_amount' => strval(WC_Tillit_Helper::round_amt($fee->get_total_tax())),
+                    'tax_amount' => strval(WC_Twoinc_Helper::round_amt($fee->get_total_tax())),
                     'tax_class_name' => $tax_rate['name'],
                     'tax_rate' => strval($tax_rate['rate']),
-                    'unit_price' => strval(WC_Tillit_Helper::round_amt($fee->get_total())),
+                    'unit_price' => strval(WC_Twoinc_Helper::round_amt($fee->get_total())),
                     'quantity' => 1,
                     'quantity_unit' => 'fee',
                     'image_url' => '',
@@ -217,21 +307,21 @@ if (!class_exists('WC_Tillit_Helper')) {
         }
 
         /**
-         * Compose request body for tillit create order
+         * Compose request body for twoinc create order
          *
          * @param $order
          *
          * @return bool
          */
-        public static function compose_tillit_order(
+        public static function compose_twoinc_order(
             $order, $order_reference, $days_on_invoice,
             $company_id, $department, $project, $product_type,
-            $payment_reference_message = '', $tillit_original_order_id = '', $tracking_id = '')
+            $payment_reference_message = '', $tracking_id = '')
         {
 
             $billing_address = [
                 'organization_name' => $order->get_billing_company(),
-                'street_address' => $order->get_billing_address_1() . (null !== $order->get_billing_address_2() ? $order->get_billing_address_2() : ''),
+                'street_address' => $order->get_billing_address_1() . (null !== $order->get_billing_address_2() ? (', ' . $order->get_billing_address_2()) : ''),
                 'postal_code' => $order->get_billing_postcode(),
                 'city' => $order->get_billing_city(),
                 'region' => $order->get_billing_state(),
@@ -239,22 +329,22 @@ if (!class_exists('WC_Tillit_Helper')) {
             ];
             $shipping_address = [
                 'organization_name' => $order->get_billing_company(),
-                'street_address' => $order->get_shipping_address_1() . (null !== $order->get_shipping_address_2() ? $order->get_shipping_address_2() : ''),
+                'street_address' => $order->get_shipping_address_1() . (null !== $order->get_shipping_address_2() ? (', ' . $order->get_shipping_address_2()) : ''),
                 'postal_code' => $order->get_shipping_postcode(),
                 'city' => $order->get_shipping_city(),
                 'region' => $order->get_shipping_state(),
                 'country' => $order->get_shipping_country()
             ];
-            if (WC_Tillit_Helper::is_tillit_address_empty($shipping_address)) {
+            if (WC_Twoinc_Helper::is_twoinc_address_empty($shipping_address)) {
                 $shipping_address = $billing_address;
             }
 
             $req_body = [
                 'currency' => $order->get_currency(),
-                'gross_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total())),
-                'net_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total() - $order->get_total_tax())),
-                'tax_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total_tax())),
-                'discount_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total_discount())),
+                'gross_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total())),
+                'net_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total() - $order->get_total_tax())),
+                'tax_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total_tax())),
+                'discount_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total_discount())),
                 'discount_rate' => '0',
                 'invoice_type' => $product_type,
                 'invoice_details' => [
@@ -278,17 +368,17 @@ if (!class_exists('WC_Tillit_Helper')) {
                 'buyer_department' => $department,
                 'buyer_project' => $project,
                 'order_note' => $order->get_customer_note(),
-                'line_items' => WC_Tillit_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'), $order),
+                'line_items' => WC_Twoinc_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'), $order),
                 'recurring' => false,
                 'merchant_additional_info' => '',
                 'merchant_order_id' => strval($order->get_id()),
                 'merchant_reference' => '',
                 'merchant_urls' => [
                     // 'merchant_confirmation_url' => $order->get_checkout_order_received_url(),
-                    'merchant_confirmation_url' => sprintf('%s?tillit_confirm_order=%s&nonce=%s',
+                    'merchant_confirmation_url' => sprintf('%s?twoinc_confirm_order=%s&nonce=%s',
                                                         wc_get_checkout_url(),
                                                         $order_reference,
-                                                        wp_create_nonce('tillit_confirm')),
+                                                        wp_create_nonce('twoinc_confirm')),
                     'merchant_cancel_order_url' => wp_specialchars_decode($order->get_cancel_order_url()),
                     'merchant_edit_order_url' => wp_specialchars_decode($order->get_edit_order_url()),
                     'merchant_order_verification_failed_url' => wp_specialchars_decode($order->get_cancel_order_url()),
@@ -305,10 +395,6 @@ if (!class_exists('WC_Tillit_Helper')) {
                 ]
             ];
 
-            if ($tillit_original_order_id) {
-                $req_body['original_order_id'] = $tillit_original_order_id;
-            }
-
             if ($tracking_id) {
                 $req_body['tracking_id'] = $tracking_id;
             }
@@ -317,19 +403,19 @@ if (!class_exists('WC_Tillit_Helper')) {
         }
 
         /**
-         * Compose request body for tillit edit order
+         * Compose request body for twoinc edit order
          *
          * @param $order
          *
          * @return bool
          */
-        public static function compose_tillit_edit_order(
+        public static function compose_twoinc_edit_order(
             $order, $days_on_invoice, $department, $project, $product_type, $payment_reference_message = '')
         {
 
             $billing_address = [
                 'organization_name' => $order->get_billing_company(),
-                'street_address' => $order->get_billing_address_1() . (null !== $order->get_billing_address_2() ? $order->get_billing_address_2() : ''),
+                'street_address' => $order->get_billing_address_1() . (null !== $order->get_billing_address_2() ? (', ' . $order->get_billing_address_2()) : ''),
                 'postal_code' => $order->get_billing_postcode(),
                 'city' => $order->get_billing_city(),
                 'region' => $order->get_billing_state(),
@@ -337,22 +423,22 @@ if (!class_exists('WC_Tillit_Helper')) {
             ];
             $shipping_address = [
                 'organization_name' => $order->get_billing_company(),
-                'street_address' => $order->get_shipping_address_1() . (null !== $order->get_shipping_address_2() ? $order->get_shipping_address_2() : ''),
+                'street_address' => $order->get_shipping_address_1() . (null !== $order->get_shipping_address_2() ? (', ' . $order->get_shipping_address_2()) : ''),
                 'postal_code' => $order->get_shipping_postcode(),
                 'city' => $order->get_shipping_city(),
                 'region' => $order->get_shipping_state(),
                 'country' => $order->get_shipping_country()
             ];
-            if (WC_Tillit_Helper::is_tillit_address_empty($shipping_address)) {
+            if (WC_Twoinc_Helper::is_twoinc_address_empty($shipping_address)) {
                 $shipping_address = $billing_address;
             }
 
             $req_body = [
                 'currency' => $order->get_currency(),
-                'gross_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total())),
-                'net_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total() - $order->get_total_tax())),
-                'tax_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total_tax())),
-                'discount_amount' => strval(WC_Tillit_Helper::round_amt($order->get_total_discount())),
+                'gross_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total())),
+                'net_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total() - $order->get_total_tax())),
+                'tax_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total_tax())),
+                'discount_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total_discount())),
                 'discount_rate' => '0',
                 'invoice_type' => $product_type,
                 'invoice_details' => [
@@ -363,7 +449,7 @@ if (!class_exists('WC_Tillit_Helper')) {
                 'buyer_department' => $department,
                 'buyer_project' => $project,
                 'order_note' => $order->get_customer_note(),
-                'line_items' => WC_Tillit_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'), $order),
+                'line_items' => WC_Twoinc_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'), $order),
                 'recurring' => false,
                 'merchant_additional_info' => '',
                 'merchant_reference' => '',
@@ -381,20 +467,20 @@ if (!class_exists('WC_Tillit_Helper')) {
         }
 
         /**
-         * Compose request body for tillit create order
+         * Compose request body for twoinc create order
          *
          * @param $order
          *
          * @return bool
          */
-        public static function compose_tillit_refund($order_refund, $amount, $currency, $initiate_payment_to_buyer)
+        public static function compose_twoinc_refund($order_refund, $amount, $currency)
         {
 
             $req_body = [
-                'amount' => strval(WC_Tillit_Helper::round_amt($amount)),
+                'amount' => strval(WC_Twoinc_Helper::round_amt($amount)),
                 'currency' => $currency,
-                'initiate_payment_to_buyer' => $initiate_payment_to_buyer,
-                'line_items' => WC_Tillit_Helper::get_line_items($order_refund->get_items(), $order_refund->get_items('shipping'), $order_refund->get_items('fee'), $order_refund)
+                'initiate_payment_to_buyer' => true,
+                'line_items' => WC_Twoinc_Helper::get_line_items($order_refund->get_items(), $order_refund->get_items('shipping'), $order_refund->get_items('fee'), $order_refund)
             ];
 
             return $req_body;
@@ -413,37 +499,39 @@ if (!class_exists('WC_Tillit_Helper')) {
         }
 
         /**
-         * Check if current server is tillit development
+         * Check if current server is twoinc development
          *
          * @return string
          */
-        public static function is_tillit_development()
+        public static function is_twoinc_development()
         {
             $hostname = str_replace(array('http://', 'https://'), '', get_home_url());
 
-            // Local
+            // Local or configured in env var
             if (in_array($hostname, array('dev.tillitlocal.ai', 'localhost')) || substr($hostname, 0, 10) === 'localhost:') return true;
+            $env_dev_hostnames = getenv('TWOINC_DEV_HOSTNAMES');
+            if ($env_dev_hostnames && in_array($hostname, explode(',', $env_dev_hostnames))) return true;
 
             // Production sites
-            if (strlen($hostname) > 10 && substr($hostname, -10) === '.tillit.ai') {
-                $tillit_prod_sites = array('shop', 'morgenlevering', 'arkwrightx', 'paguro');
-                $host_prefix = substr($hostname, 0, -10);
+            if (strlen($hostname) > 8 && substr($hostname, -8) === '.two.inc') {
+                $twoinc_prod_sites = array('shop', 'morgenlevering', 'arkwrightx', 'paguro');
+                $host_prefix = substr($hostname, 0, -8);
 
-                foreach($tillit_prod_sites as $tillit_prod_site) {
-                    if ($host_prefix === $tillit_prod_site || $host_prefix === ('www.' . $tillit_prod_site)) {
-                        // Tillit site but not for development
+                foreach($twoinc_prod_sites as $twoinc_prod_site) {
+                    if ($host_prefix === $twoinc_prod_site || $host_prefix === ('www.' . $twoinc_prod_site)) {
+                        // Twoinc site but not for development
                         return false;
                     }
                 }
 
-                // Tillit development site
+                // Twoinc development site
                 return true;
             }
 
             // Merchant's staging
             if (in_array($hostname, array('staging.torn.no', 'proof-3.redflamingostudio.com', 'icecreamextreme.no'))) return true;
 
-            // Neither local nor tillit development site
+            // Neither local nor twoinc development site
             return false;
 
         }
@@ -455,7 +543,7 @@ if (!class_exists('WC_Tillit_Helper')) {
          */
         public static function get_locale()
         {
-            $locale = get_locale();
+            $locale = get_user_locale();
             if ($locale && strlen($locale) > 0) {
                 return $locale;
             }
@@ -470,11 +558,11 @@ if (!class_exists('WC_Tillit_Helper')) {
         public static function utf8ize($d) {
             if (is_array($d)) {
                 foreach ($d as $k => $v) {
-                    $d[$k] = WC_Tillit_Helper::utf8ize($v);
+                    $d[$k] = WC_Twoinc_Helper::utf8ize($v);
                 }
             } else if(is_object($d)) {
                 foreach ($d as $k => $v) {
-                    $d->$k = WC_Tillit_Helper::utf8ize($v);
+                    $d->$k = WC_Twoinc_Helper::utf8ize($v);
                 }
             } else if (is_string($d)) {
                 if (mb_detect_encoding($d, ['UTF-8'], true)) { // already in UTF-8
@@ -500,7 +588,7 @@ if (!class_exists('WC_Tillit_Helper')) {
             foreach ($src_arr as $key => $val) {
                 if (array_key_exists($key, $dst_arr)) {
                     if (is_array($val)) {
-                        $sub_diff = WC_Tillit_Helper::array_diff_r($val, $dst_arr[$key]);
+                        $sub_diff = WC_Twoinc_Helper::array_diff_r($val, $dst_arr[$key]);
                         if (count($sub_diff)) {
                             $diff[$key] = $sub_diff;
                         }
@@ -561,7 +649,7 @@ if (!class_exists('WC_Tillit_Helper')) {
                     }
                 }
             }
-            return WC_Tillit_Helper::get_tax_rate_from_tax_list($item_tax_rate_list);
+            return WC_Twoinc_Helper::get_tax_rate_from_tax_list($item_tax_rate_list);
         }
 
         /**
@@ -589,7 +677,7 @@ if (!class_exists('WC_Tillit_Helper')) {
                     }
                 }
             }
-            return WC_Tillit_Helper::get_tax_rate_from_tax_list($shipping_tax_rate_list);
+            return WC_Twoinc_Helper::get_tax_rate_from_tax_list($shipping_tax_rate_list);
         }
 
         /**
@@ -617,7 +705,7 @@ if (!class_exists('WC_Tillit_Helper')) {
                     }
                 }
             }
-            return WC_Tillit_Helper::get_tax_rate_from_tax_list($fee_tax_rate_list);
+            return WC_Twoinc_Helper::get_tax_rate_from_tax_list($fee_tax_rate_list);
         }
 
         /**
