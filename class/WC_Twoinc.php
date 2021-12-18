@@ -1191,7 +1191,8 @@ if (!class_exists('WC_Twoinc')) {
                     'description' => __('Enables automatically filling in the registered address from the national registry.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'label'       => ' ',
-                    'type'        => 'checkbox'
+                    'type'        => 'checkbox',
+                    'default'     => 'yes'
                 ]
             ];
 
