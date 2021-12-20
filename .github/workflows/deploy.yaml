@@ -4,7 +4,7 @@ on:
     types: [published]
 jobs:
   tag:
-    name: New tag
+    name: New release
     runs-on: ubuntu-latest
     env:
       slug: tillit-payment-gateway
