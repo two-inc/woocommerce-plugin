@@ -90,12 +90,13 @@
     .custom-checkout {
         display: flex;
         flex-wrap: wrap;
+        margin-top: 20px;
         margin-bottom: 20px;
     }
     .custom-checkout .twoinc-inp-container {
         margin: auto;
     }
-    .account-type-wrapper {
+    .account-type-wrapper, #account_type_field {
         display: none!important;
     }
 </style>
