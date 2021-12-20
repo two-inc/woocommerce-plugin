@@ -1,9 +1,12 @@
-.wordpress-org
-.git
-.github
-cypress
-docker
+# Folders to ignore
+.wordpress-org/
+.git/
+.github/
+cypress/
+docker/
+snippets/
 
+# Files to ignore
 .distignore
 .gitignore
 .gitattributes
