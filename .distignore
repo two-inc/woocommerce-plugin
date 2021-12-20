@@ -6,6 +6,6 @@ docker
 
 .distignore
 .gitignore
+.gitattributes
 docker-compose.yaml
 README.md
-get-zip.sh
