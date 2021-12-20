@@ -1,0 +1,14 @@
+# Folders to ignore
+.wordpress-org/
+.git/
+.github/
+cypress/
+docker/
+snippets/
+
+# Files to ignore
+.distignore
+.gitignore
+.gitattributes
+docker-compose.yaml
+README.md
