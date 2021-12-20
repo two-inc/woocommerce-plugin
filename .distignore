@@ -1,0 +1,11 @@
+.wordpress-org
+.git
+.github
+cypress
+docker
+
+.distignore
+.gitignore
+docker-compose.yaml
+README.md
+get-zip.sh
