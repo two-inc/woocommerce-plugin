@@ -97,8 +97,9 @@ if (!class_exists('WC_Twoinc')) {
                 add_action('save_post_shop_order', [$this, 'before_order_update'], 10, 2);
                 add_action('wp_after_insert_post', [$this, 'after_order_update'], 10, 4);
             } else {
-                // Confirm order after returning from twoinc checkout-page
-                add_action('woocommerce_before_checkout_form', [$this, 'process_confirmation']);
+                // Confirm order after returning from twoinc checkout-page, DO NOT CHANGE HOOKS
+                add_action('get_header', [$this, 'process_confirmation']);
+                add_action('init', [$this, 'process_confirmation']); // some theme does not call get_header()
 
                 // Calculate fees in order review panel on the right of shop checkout page
                 add_action('woocommerce_cart_calculate_fees', [$this, 'add_invoice_fees']);
@@ -711,7 +712,7 @@ if (!class_exists('WC_Twoinc')) {
             if ($this->get_option('tillit_merchant_id') === 'morgenlevering' || $this->get_option('tillit_merchant_id') === 'arkwrightx') {
                 return [
                     'result'    => 'success',
-                    'redirect' => $body['merchant_urls']['merchant_confirmation_url']
+                    'redirect'  => $body['merchant_urls']['merchant_confirmation_url']
                 ];
             } else {
                 return [
@@ -808,7 +809,10 @@ if (!class_exists('WC_Twoinc')) {
         {
 
             // Stop if no Twoinc order reference and no nonce
-            if(!isset($_REQUEST['twoinc_confirm_order']) || !isset($_REQUEST['nonce'])) return;
+            if(strtok($_SERVER["REQUEST_URI"], '?s') !== '/twoinc-payment-gateway/confirm' || !isset($_REQUEST['twoinc_confirm_order']) || !isset($_REQUEST['nonce'])) return;
+
+            // Make sure this function is called only once per run
+            if (property_exists($this, 'twoinc_confirmed')) return;
 
             // Get the order reference
             $order_reference = sanitize_text_field($_REQUEST['twoinc_confirm_order']);
@@ -817,7 +821,9 @@ if (!class_exists('WC_Twoinc')) {
             $nonce = $_REQUEST['nonce'];
 
             // Stop if the code is not valid
-            if(!wp_verify_nonce($nonce, 'twoinc_confirm')) wp_die(__('The security code is not valid.', 'twoinc-payment-gateway'));
+            if(!wp_verify_nonce($nonce, 'twoinc_confirm')) {
+                wp_die(__('The security code is not valid.', 'twoinc-payment-gateway'));
+            }
 
             /** @var wpdb $wpdb */
             global $wpdb;
@@ -826,7 +832,9 @@ if (!class_exists('WC_Twoinc')) {
             $row = $wpdb->get_row($sql , ARRAY_A);
 
             // Stop if no order found
-            if(!isset($row['post_id'])) wp_die(__('Unable to find the requested order', 'twoinc-payment-gateway'));
+            if(!isset($row['post_id'])) {
+                wp_die(__('Unable to find the requested order', 'twoinc-payment-gateway'));
+            }
 
             // Get the order ID
             $order_id = $row['post_id'];
@@ -863,20 +871,29 @@ if (!class_exists('WC_Twoinc')) {
             // Get the order state
             $state = $body['state'];
 
+            // Get the redirect url based on status
+            $redirect_url = '/';
             if($state === 'VERIFIED') {
 
                 // Mark order as processing
                 $order->payment_complete();
 
+                // Make sure this function is called only once per run
+                $this->twoinc_confirmed = true;
+
                 // Redirect the user to confirmation page
-                wp_redirect(wp_specialchars_decode($order->get_checkout_order_received_url()));
+                $redirect_url = wp_specialchars_decode($order->get_checkout_order_received_url());
 
             } else {
 
                 // Redirect the user to Woocom cancellation page
-                wp_redirect(wp_specialchars_decode($order->get_cancel_order_url()));
+                $redirect_url = wp_specialchars_decode($order->get_cancel_order_url());
 
             }
+
+            // Execute redirection by header, with JS as a backup in case get_header is not called by theme
+            printf('<script>window.location.href = "%s";</script>', $redirect_url);
+            wp_redirect($redirect_url);
 
         }
 

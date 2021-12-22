@@ -375,10 +375,10 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 'merchant_reference' => '',
                 'merchant_urls' => [
                     // 'merchant_confirmation_url' => $order->get_checkout_order_received_url(),
-                    'merchant_confirmation_url' => sprintf('%s?twoinc_confirm_order=%s&nonce=%s',
-                                                        wc_get_checkout_url(),
-                                                        $order_reference,
-                                                        wp_create_nonce('twoinc_confirm')),
+                    'merchant_confirmation_url' => sprintf('%s/twoinc-payment-gateway/confirm?twoinc_confirm_order=%s&nonce=%s',
+                                                            get_home_url(),
+                                                            $order_reference,
+                                                            wp_create_nonce('twoinc_confirm')),
                     'merchant_cancel_order_url' => wp_specialchars_decode($order->get_cancel_order_url()),
                     'merchant_edit_order_url' => wp_specialchars_decode($order->get_edit_order_url()),
                     'merchant_order_verification_failed_url' => wp_specialchars_decode($order->get_cancel_order_url()),
@@ -529,7 +529,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
             }
 
             // Merchant's staging
-            if (in_array($hostname, array('staging.torn.no', 'proof-3.redflamingostudio.com', 'icecreamextreme.no'))) return true;
+            if (in_array($hostname, array('staging.torn.no', 'proof-3.redflamingostudio.com', 'icecreamextreme.no', 'www.staging83.avshop.no'))) return true;
 
             // Neither local nor twoinc development site
             return false;
