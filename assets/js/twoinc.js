@@ -1098,6 +1098,9 @@ class Twoinc {
                                 // Populate the postal code
                                 jQuery('#billing_postcode').val(companyLocation.postalCode)
 
+                                // Update order review in case there is a shipping change
+                                jQuery(document.body).trigger('update_checkout')
+
                             }
 
                         })
