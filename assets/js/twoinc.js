@@ -597,6 +597,21 @@ let twoincDomHelper = {
     },
 
     /**
+     * Toggle payment description based on country and invoice type
+     */
+    togglePaymentDesc: function() {
+
+        // Display only the correct payment description
+        jQuery('.twoinc-payment-desc').hide()
+        if (window.twoinc.product_type === 'FUNDED_INVOICE' && window.twoinc.shop_base_country === 'no') {
+            jQuery('.twoinc-payment-desc.payment-desc-no-funded').show()
+        } else {
+            jQuery('.twoinc-payment-desc.payment-desc-global').show()
+        }
+
+    },
+
+    /**
      * Toggle Place order button
      */
     toggleActions: function() {
@@ -1235,6 +1250,9 @@ class Twoinc {
         // Rearrange the DOMs in Twoinc payment
         twoincDomHelper.rearrangeDescription()
 
+        // Display correct payment description
+        twoincDomHelper.togglePaymentDesc()
+
     }
 
     /**
@@ -1354,6 +1372,10 @@ class Twoinc {
 
                 // Show or hide the Twoinc payment method
                 twoincDomHelper.toggleMethod(Twoinc.getInstance().isTwoincMethodHidden)
+
+                // Display correct payment description
+                window.twoinc.product_type = response.invoice_type
+                twoincDomHelper.togglePaymentDesc()
 
                 // Select the default payment method
                 twoincDomHelper.selectDefaultMethod(Twoinc.getInstance().isTwoincMethodHidden)
