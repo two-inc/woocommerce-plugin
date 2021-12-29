@@ -144,6 +144,9 @@ form.checkout.woocommerce-checkout .woocommerce-account-type-fields__field-wrapp
 .account-type-wrapper .account-type-button.selected img {
     filter: brightness(0);
 }
+.twoinc-payment-desc.payment-desc-no-funded {
+    display: none;
+}
 
 @media (max-width: 639px) {
     .account-type-wrapper.actp-col-2 {

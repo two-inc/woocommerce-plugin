@@ -159,6 +159,19 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
+         * Get payment description message
+         */
+        private function get_payment_description_msg(){
+
+            return sprintf(
+                '<span class="twoinc-payment-desc payment-desc-global">%s</span><span class="twoinc-payment-desc payment-desc-no-funded">%s</span>',
+                __('Receive invoice and payment details via email', 'twoinc-payment-gateway'),
+                __('Receive invoice and payment details via email and EHF', 'twoinc-payment-gateway')
+            );
+
+        }
+
+        /**
          * Get payment box description
          */
         private function get_pay_box_description(){
@@ -179,7 +192,7 @@ if (!class_exists('WC_Twoinc')) {
                         __('Pay %s days after your order is shipped, for free', 'twoinc-payment-gateway'),
                         '<span class="due-in-days">' . strval($this->get_option('days_on_invoice')) . '<span>',
                     ),
-                    __('Receive invoice and payment details via email', 'twoinc-payment-gateway')
+                    $this->get_payment_description_msg()
                 ),
                 sprintf(
                     '%s <span class="twoinc-buyer-name-placeholder">%s</span><span class="twoinc-buyer-name"></span>.',
@@ -220,7 +233,7 @@ if (!class_exists('WC_Twoinc')) {
                                 __('Pay %s days after your order is shipped, for free', 'twoinc-payment-gateway'),
                                 '<span class="due-in-days">' . strval($this->get_option('days_on_invoice')) . '<span>',
                             ),
-                            __('Receive invoice and payment details via email', 'twoinc-payment-gateway')
+                            $this->get_payment_description_msg()
                         ),
                         WC_TWOINC_PLUGIN_URL . '/assets/images/loader.svg'
                     );
@@ -884,6 +897,9 @@ if (!class_exists('WC_Twoinc')) {
             // Get the Twoinc order ID from shop order ID
             $twoinc_order_id = $this->get_twoinc_order_id_from_post_id($order_id);
 
+            // Make sure this function is called only once per run
+            $this->twoinc_confirmed = true;
+
             // Get the Twoinc order details
             $response = $this->make_request("/v1/order/${twoinc_order_id}", [], 'GET');
 
@@ -910,9 +926,6 @@ if (!class_exists('WC_Twoinc')) {
 
                 // Mark order as processing
                 $order->payment_complete();
-
-                // Make sure this function is called only once per run
-                $this->twoinc_confirmed = true;
 
                 // Redirect the user to confirmation page
                 return wp_specialchars_decode($order->get_checkout_order_received_url());
