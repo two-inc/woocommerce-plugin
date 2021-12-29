@@ -98,8 +98,8 @@ if (!class_exists('WC_Twoinc')) {
                 add_action('wp_after_insert_post', [$this, 'after_order_update'], 10, 4);
             } else {
                 // Confirm order after returning from twoinc checkout-page, DO NOT CHANGE HOOKS
-                add_action('get_header', [$this, 'process_confirmation']);
-                add_action('init', [$this, 'process_confirmation']); // some theme does not call get_header()
+                add_action('get_header', [$this, 'process_confirmation_header_redirect']);
+                add_action('init', [$this, 'process_confirmation_js_redirect']); // some theme does not call get_header()
 
                 // Calculate fees in order review panel on the right of shop checkout page
                 add_action('woocommerce_cart_calculate_fees', [$this, 'add_invoice_fees']);
@@ -801,11 +801,45 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * Process the order confirmation
+         * Process the order confirmation, with redirection to confirmation/cancel page using PHP header
          *
          * @return void
          */
-        public function process_confirmation()
+        public function process_confirmation_header_redirect()
+        {
+
+            $redirect_url = $this->process_confirmation();
+
+            // Execute redirection by header
+            if (isset($redirect_url)) {
+                wp_redirect($redirect_url);
+            }
+
+        }
+
+        /**
+         * Process the order confirmation, with redirection to confirmation/cancel page using JS
+         *
+         * @return void
+         */
+        public function process_confirmation_js_redirect()
+        {
+
+            $redirect_url = $this->process_confirmation();
+
+            // Execute redirection JS
+            if (isset($redirect_url)) {
+                printf('<script>window.location.href = "%s";</script>', $redirect_url);
+            }
+
+        }
+
+        /**
+         * Process the order confirmation
+         *
+         * @return void|string
+         */
+        private function process_confirmation()
         {
 
             // Stop if no Twoinc order reference and no nonce
@@ -872,7 +906,6 @@ if (!class_exists('WC_Twoinc')) {
             $state = $body['state'];
 
             // Get the redirect url based on status
-            $redirect_url = '/';
             if($state === 'VERIFIED') {
 
                 // Mark order as processing
@@ -882,18 +915,14 @@ if (!class_exists('WC_Twoinc')) {
                 $this->twoinc_confirmed = true;
 
                 // Redirect the user to confirmation page
-                $redirect_url = wp_specialchars_decode($order->get_checkout_order_received_url());
+                return wp_specialchars_decode($order->get_checkout_order_received_url());
 
             } else {
 
                 // Redirect the user to Woocom cancellation page
-                $redirect_url = wp_specialchars_decode($order->get_cancel_order_url());
+                return wp_specialchars_decode($order->get_cancel_order_url());
 
             }
-
-            // Execute redirection by header, with JS as a backup in case get_header is not called by theme
-            printf('<script>window.location.href = "%s";</script>', $redirect_url);
-            wp_redirect($redirect_url);
 
         }
 
