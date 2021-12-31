@@ -690,12 +690,12 @@ let twoincDomHelper = {
     getRepresentativeData: function()
     {
 
-        return {
-            'email': jQuery('#billing_email').val(),
-            'first_name': jQuery('#billing_first_name').val(),
-            'last_name': jQuery('#billing_last_name').val(),
-            'phone_number': jQuery('#billing_phone').val()
-        }
+        let representativeData = {}
+        if (jQuery('#billing_email').val()) representativeData['email'] = jQuery('#billing_email').val()
+        if (jQuery('#billing_phone').val()) representativeData['phone_number'] = jQuery('#billing_phone').val()
+        representativeData['first_name'] = jQuery('#billing_first_name').val()
+        representativeData['last_name'] = jQuery('#billing_last_name').val()
+        return representativeData
 
     },
 
@@ -1267,7 +1267,7 @@ class Twoinc {
         }
 
         let can = true
-        let values = [].concat(Object.values(this.customerCompany), Object.values(this.customerRepresentative))
+        let values = [].concat(Object.values(this.customerCompany))
 
         for(let i = 0; i < values.length; i++) {
             const value = values[i]
@@ -1609,11 +1609,11 @@ class Twoinc {
         setTimeout(function(){
             let currentVal = jQuery('#billing_phone').attr('value')
             let newVal = Twoinc.getInstance().billingPhoneInput.getNumber()
-            if (currentVal !== newVal) {
+            if (newVal && currentVal !== newVal) {
                 jQuery('#billing_phone').val(newVal)
                 jQuery('#billing_phone').attr('value', newVal)
                 Twoinc.getInstance().customerRepresentative['phone_number'] = newVal
-                Twoinc.getInstance().getApproval()
+                // Twoinc.getInstance().getApproval()
             }
         }, 2000)
 
