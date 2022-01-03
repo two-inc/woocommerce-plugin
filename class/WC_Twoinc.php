@@ -61,7 +61,7 @@ if (!class_exists('WC_Twoinc')) {
 
             if (is_admin()) {
                 // Notice banner if plugin is not setup properly
-                if(!$this->get_option('api_key') || !$this->get_option('tillit_merchant_id')) {
+                if (!$this->get_option('api_key') || !$this->get_option('tillit_merchant_id')) {
                     add_action('admin_notices', [$this, 'twoinc_account_init_notice']);
                     add_action('network_admin_notices', [$this, 'twoinc_account_init_notice']);
                 }
@@ -78,7 +78,7 @@ if (!class_exists('WC_Twoinc')) {
             }
 
             // Return if plugin setup is not complete
-            if(!$this->get_option('api_key') || !$this->get_option('tillit_merchant_id') || sizeof($this->available_account_types()) == 0) return;
+            if (!$this->get_option('api_key') || !$this->get_option('tillit_merchant_id') || sizeof($this->available_account_types()) == 0) return;
 
             if (is_admin()) {
                 // Add HTML in order edit page
@@ -179,6 +179,7 @@ if (!class_exists('WC_Twoinc')) {
             return sprintf(
                 '<div>
                     <div class="twoinc-pay-box explain-details">%s</div>
+                    <div class="twoinc-pay-box err-country" style="display: none;">%s</div>
                     <div class="twoinc-pay-box declare-aggrement" style="display: none;">%s</div>
                     <div class="twoinc-pay-box payment-not-accepted" style="display: none;">%s</div>
                     <div class="twoinc-pay-box err-amt-max" style="display: none;">%s</div>
@@ -194,6 +195,7 @@ if (!class_exists('WC_Twoinc')) {
                     ),
                     $this->get_payment_description_msg()
                 ),
+                __('Two is not available as a payment option in the selected region', 'twoinc-payment-gateway'),
                 sprintf(
                     '%s <span class="twoinc-buyer-name-placeholder">%s</span><span class="twoinc-buyer-name"></span>.',
                     __('By completing the purchase, you verify that you have the legal right to purchase on behalf of', 'twoinc-payment-gateway'),
@@ -213,7 +215,7 @@ if (!class_exists('WC_Twoinc')) {
          */
         public function change_twoinc_payment_title(){
             add_filter('woocommerce_gateway_title', function ($title, $payment_id) {
-                if($payment_id === 'woocommerce-gateway-tillit') {
+                if ($payment_id === 'woocommerce-gateway-tillit') {
                     $title = sprintf(
                         '%s
                         <div class="twoinc-subtitle">
@@ -250,7 +252,7 @@ if (!class_exists('WC_Twoinc')) {
         public function update_checkout_options()
         {
 
-            if(!isset($_POST['woocommerce_woocommerce-gateway-tillit_merchant_logo']) && !isset($_POST['woocommerce_woocommerce-gateway-tillit_tillit_merchant_id'])) return;
+            if (!isset($_POST['woocommerce_woocommerce-gateway-tillit_merchant_logo']) && !isset($_POST['woocommerce_woocommerce-gateway-tillit_tillit_merchant_id'])) return;
 
             $image_id = sanitize_text_field($_POST['woocommerce_woocommerce-gateway-tillit_merchant_logo']);
             $merchant_id = sanitize_text_field($_POST['woocommerce_woocommerce-gateway-tillit_tillit_merchant_id']);
@@ -258,7 +260,7 @@ if (!class_exists('WC_Twoinc')) {
             $image = $image_id ? wp_get_attachment_image_src($image_id, 'full') : null;
             $image_src = $image ? $image[0] : null;
 
-            if(!$image_src) return;
+            if (!$image_src) return;
 
             $this->make_request("/v1/merchant/${merchant_id}/update", [
                 'logo_path' => $image_src
@@ -517,7 +519,7 @@ if (!class_exists('WC_Twoinc')) {
                 $twoinc_merchant_id = $this->get_option('tillit_merchant_id');
                 $response = $this->make_request("/v1/merchant/${twoinc_merchant_id}", [], 'GET');
 
-                if(is_wp_error($response)) {
+                if (is_wp_error($response)) {
                     WC()->session->set('chosen_payment_method', 'cod');
                     return;
                 }
@@ -560,7 +562,7 @@ if (!class_exists('WC_Twoinc')) {
             // Change the order status
             $response = $this->make_request("/v1/order/${twoinc_order_id}/fulfilled");
 
-            if(is_wp_error($response)) {
+            if (is_wp_error($response)) {
                 $order->add_order_note(__('Could not update status', 'twoinc-payment-gateway'));
                 return;
             }
@@ -602,7 +604,7 @@ if (!class_exists('WC_Twoinc')) {
             // Change the order status
             $response = $this->make_request("/v1/order/${twoinc_order_id}/cancel");
 
-            if(is_wp_error($response)) {
+            if (is_wp_error($response)) {
                 $order->add_order_note(__('Could not update status to "Cancelled"', 'twoinc-payment-gateway'));
                 return;
             }
@@ -630,6 +632,11 @@ if (!class_exists('WC_Twoinc')) {
 
             // Check payment method
             if (!WC_Twoinc_Helper::is_twoinc_order($order)) {
+                return;
+            }
+
+            if (!WC_Twoinc_Helper::is_country_supported($order->get_billing_country())) {
+                WC_Twoinc_Helper::display_ajax_error(__('Two is not available as a payment option in the selected region', 'twoinc-payment-gateway'));
                 return;
             }
 
@@ -693,13 +700,13 @@ if (!class_exists('WC_Twoinc')) {
                 $tracking_id
             ));
 
-            if(is_wp_error($response)) {
+            if (is_wp_error($response)) {
                 $order->add_order_note(__('Could not request to create Two order', 'twoinc-payment-gateway'));
                 return;
             }
 
             // Stop on process payment failure
-            if(isset($response) && isset($response['result']) && $response['result'] === 'failure') {
+            if (isset($response) && isset($response['result']) && $response['result'] === 'failure') {
                 $order->add_order_note(__('Failed to process payment', 'twoinc-payment-gateway'));
                 return $response;
             }
@@ -784,7 +791,7 @@ if (!class_exists('WC_Twoinc')) {
             );
 
             // Stop if request error
-            if(is_wp_error($response)) {
+            if (is_wp_error($response)) {
                 $order->add_order_note(__('Failed to request refund order to Two', 'twoinc-payment-gateway'));
                 return false;
             }
@@ -856,7 +863,7 @@ if (!class_exists('WC_Twoinc')) {
         {
 
             // Stop if no Twoinc order reference and no nonce
-            if(strtok($_SERVER["REQUEST_URI"], '?s') !== '/twoinc-payment-gateway/confirm' || !isset($_REQUEST['twoinc_confirm_order']) || !isset($_REQUEST['nonce'])) return;
+            if (strtok($_SERVER["REQUEST_URI"], '?s') !== '/twoinc-payment-gateway/confirm' || !isset($_REQUEST['twoinc_confirm_order']) || !isset($_REQUEST['nonce'])) return;
 
             // Make sure this function is called only once per run
             if (property_exists($this, 'twoinc_confirmed')) return;
@@ -868,7 +875,7 @@ if (!class_exists('WC_Twoinc')) {
             $nonce = $_REQUEST['nonce'];
 
             // Stop if the code is not valid
-            if(!wp_verify_nonce($nonce, 'twoinc_confirm')) {
+            if (!wp_verify_nonce($nonce, 'twoinc_confirm')) {
                 wp_die(__('The security code is not valid.', 'twoinc-payment-gateway'));
             }
 
@@ -879,7 +886,7 @@ if (!class_exists('WC_Twoinc')) {
             $row = $wpdb->get_row($sql , ARRAY_A);
 
             // Stop if no order found
-            if(!isset($row['post_id'])) {
+            if (!isset($row['post_id'])) {
                 wp_die(__('Unable to find the requested order', 'twoinc-payment-gateway'));
             }
 
@@ -904,7 +911,7 @@ if (!class_exists('WC_Twoinc')) {
             $response = $this->make_request("/v1/order/${twoinc_order_id}", [], 'GET');
 
             // Stop if request error
-            if(is_wp_error($response)) {
+            if (is_wp_error($response)) {
                 $order->add_order_note(__('Unable to retrieve the order information', 'twoinc-payment-gateway'));
                 wp_die(__('Unable to retrieve the order information', 'twoinc-payment-gateway'));
             }
@@ -922,7 +929,7 @@ if (!class_exists('WC_Twoinc')) {
             $state = $body['state'];
 
             // Get the redirect url based on status
-            if($state === 'VERIFIED') {
+            if ($state === 'VERIFIED') {
 
                 // Mark order as processing
                 $order->payment_complete();
@@ -948,7 +955,7 @@ if (!class_exists('WC_Twoinc')) {
         {
 
             // Stop if this is not setup request
-            if(strtok($_SERVER["REQUEST_URI"], '?s') !== '/twoinc-payment-gateway/init' || !isset($_REQUEST['m']) || !isset($_REQUEST['k']) || !isset($_REQUEST['t']) || !isset($_REQUEST['c'])) return;
+            if (strtok($_SERVER["REQUEST_URI"], '?s') !== '/twoinc-payment-gateway/init' || !isset($_REQUEST['m']) || !isset($_REQUEST['k']) || !isset($_REQUEST['t']) || !isset($_REQUEST['c'])) return;
 
             if (!current_user_can('manage_options')) {
                 $redirect_to_signin = wp_login_url() . '?redirect_to=' . urlencode($_SERVER["REQUEST_URI"]);
@@ -959,7 +966,7 @@ if (!class_exists('WC_Twoinc')) {
                         sprintf('<a href="%s">» %s</a>', $redirect_to_signin, __('Log in', 'twoinc-payment-gateway'))
                     ),
                     array('title' => _('Two payment setup failure'), 'response' => '401', 'back_link' => false));
-                if(is_wp_error($error)){
+                if (is_wp_error($error)){
                     wp_die($error, '', $error->get_error_data());
                 }
             }
@@ -983,7 +990,7 @@ if (!class_exists('WC_Twoinc')) {
                     'data_format' => 'body'
                 ]);
 
-                if(is_wp_error($response)) {
+                if (is_wp_error($response)) {
                     $error = new WP_Error(
                         'init_failed',
                         sprintf(
@@ -1435,7 +1442,7 @@ if (!class_exists('WC_Twoinc')) {
                 'PUT'
             );
 
-            if(is_wp_error($response)) {
+            if (is_wp_error($response)) {
                 $order->add_order_note(__('Could not edit the Two order', 'twoinc-payment-gateway'));
                 return;
             }
@@ -1551,7 +1558,7 @@ if (!class_exists('WC_Twoinc')) {
          */
         public function on_deactivate_plugin()
         {
-            if($this->get_option('clear_options_on_deactivation') === 'yes') {
+            if ($this->get_option('clear_options_on_deactivation') === 'yes') {
                 delete_option('woocommerce_woocommerce-gateway-tillit_settings');
             }
         }
