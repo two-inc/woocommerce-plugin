@@ -1260,8 +1260,13 @@ class Twoinc {
             return false
         }
 
+        jQuery('.twoinc-pay-box, .twoinc-pay-sub').hide()
         if (!twoincUtilHelper.isCountrySupported()) {
+            jQuery('.twoinc-pay-box.err-country').show()
             return false
+        } else {
+            jQuery('.twoinc-pay-sub.explain-details').show()
+            jQuery('.twoinc-pay-box.declare-aggrement').show()
         }
 
         let can = true

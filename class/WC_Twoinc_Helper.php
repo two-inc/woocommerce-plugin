@@ -499,6 +499,18 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
+         * Check if country is supported by twoinc
+         *
+         * @param $country
+         *
+         * @return bool
+         */
+        public static function is_country_supported($country)
+        {
+            return in_array($hostname, array('NO', 'GB'));
+        }
+
+        /**
          * Check if current server is twoinc development
          *
          * @return string
