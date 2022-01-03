@@ -8,6 +8,13 @@ let twoincUtilHelper = {
     },
 
     /**
+     * Check if selected country is supported by Twoinc
+     */
+    isCountrySupported: function() {
+        return ['NO', 'GB'].includes(jQuery('#billing_country').val())
+    },
+
+    /**
      * Construct url to Twoinc checkout api
      */
     contructTwoincUrl: function(path, params) {
@@ -407,9 +414,9 @@ let twoincDomHelper = {
     },
 
     /**
-     * Toggle the required property for company fields
+     * Toggle the visual cues for required fields
      */
-    toggleRequiredFields: function($targets, is_required) {
+    toggleRequiredCues: function($targets, is_required) {
 
         // For each input
         $targets.find(':input').each(function(){
@@ -442,39 +449,48 @@ let twoincDomHelper = {
     },
 
     /**
-     * Toggle the company fields
+     * Toggle the custom business fields for Twoinc
      */
-    toggleCompanyFields: function(accountType) {
+    toggleBusinessFields: function(accountType) {
 
         // Get the targets
-        let $visibleNoncompanyTargets = '#billing_phone_field, #billing_company_field, #billing_country_field'
-        let $visibleCompanyTargets = '.woocommerce-company-fields, .woocommerce-representative-fields, #billing_company_display_field, #billing_phone_display_field, #billing_country_field'
-        let $requiredCompanyTargets = '#billing_phone_display_field'
-        if (window.twoinc.company_name_search !== 'yes') {
-            $visibleCompanyTargets += ', #billing_company_field'
-            $requiredCompanyTargets += ', #billing_company_field'
-            $visibleCompanyTargets += ', #company_id_field'
+        let allTargets = ['.woocommerce-company-fields', '.woocommerce-representative-fields', '#billing_phone_display_field', '#billing_phone_field',
+                          '#billing_company_display_field', '#billing_company_field', '#company_id_field']
+        let visibleNonbusinessTargets = ['#billing_phone_field', '#billing_company_field']
+        let visibleBusinessTargets = ['.woocommerce-company-fields', '.woocommerce-representative-fields', '#billing_phone_display_field']
+        let requiredBusinessTargets = ['#billing_phone_display_field']
+
+        if (twoincUtilHelper.isCountrySupported()) {
+            if (window.twoinc.company_name_search === 'yes') {
+                visibleBusinessTargets.push('#billing_company_display_field')
+            } else {
+                visibleBusinessTargets.push('#billing_company_field', '#company_id_field')
+                requiredBusinessTargets.push('#billing_company_field')
+            }
+        } else {
+            visibleBusinessTargets.push('#billing_company_field')
         }
         if (window.twoinc.mark_twoinc_fields_required === 'yes') {
-            $requiredCompanyTargets = $visibleCompanyTargets
+            requiredBusinessTargets = visibleBusinessTargets
         }
-        $visibleCompanyTargets += ', #department_field, #project_field'
-        $requiredCompanyTargets = jQuery($requiredCompanyTargets)
-        $visibleCompanyTargets = jQuery($visibleCompanyTargets)
-        $visibleNoncompanyTargets = jQuery($visibleNoncompanyTargets)
+        visibleBusinessTargets.push('#department_field', '#project_field')
+        allTargets = jQuery(allTargets.join(','))
+        requiredBusinessTargets = jQuery(requiredBusinessTargets.join(','))
+        visibleBusinessTargets = jQuery(visibleBusinessTargets.join(','))
+        visibleNonbusinessTargets = jQuery(visibleNonbusinessTargets.join(','))
 
         // Toggle the targets based on the account type
         const isTwoincAvailable = twoincDomHelper.isTwoincVisible() && twoincUtilHelper.isCompany(accountType)
+        allTargets.addClass('hidden')
         if (isTwoincAvailable) {
-            $visibleNoncompanyTargets.addClass('hidden')
-            $visibleCompanyTargets.removeClass('hidden')
+            visibleBusinessTargets.removeClass('hidden')
         } else {
-            $visibleCompanyTargets.addClass('hidden')
-            $visibleNoncompanyTargets.removeClass('hidden')
+            visibleNonbusinessTargets.removeClass('hidden')
         }
 
         // Toggle the required fields based on the account type
-        twoincDomHelper.toggleRequiredFields($requiredCompanyTargets, isTwoincAvailable)
+        twoincDomHelper.toggleRequiredCues(allTargets, false)
+        twoincDomHelper.toggleRequiredCues(requiredBusinessTargets, isTwoincAvailable)
 
     },
 
@@ -1004,39 +1020,17 @@ class Twoinc {
 
         // If we found the field
         if (jQuery('[name="account_type"]:checked').length > 0) {
-
-            // Get the account type
-            const accountType = twoincDomHelper.getAccountType()
-
-            // Toggle the company fields
-            twoincDomHelper.toggleCompanyFields(accountType)
+            // Toggle the business fields
+            twoincDomHelper.toggleBusinessFields(twoincDomHelper.getAccountType())
 
             // Move the fields to correct positions
             twoincDomHelper.positionFields()
-
         }
 
         // Twoinc is hidden if selected account type is not company
         this.isTwoincMethodHidden = !twoincUtilHelper.isCompany(twoincDomHelper.getAccountType())
 
         if (window.twoinc.company_name_search === 'yes') {
-
-            // Reinitiate company select on country change
-            $billingCountry.on('select2:select', function(e){
-                // Clear company inputs
-                $billingCompanyDisplay.html('')
-                $billingCompanyDisplay.selectWoo(twoincSelectWooHelper.genSelectWooParams())
-                twoincDomHelper.toggleTooltip('#billing_company_display_field .select2-container', window.twoinc.text.tooltip_company)
-                twoincSelectWooHelper.fixSelectWooPositionCompanyName()
-                jQuery('#company_id').val('')
-
-                // Clear the addresses, in case address get request fails
-                if (window.twoinc.address_search === 'yes') {
-                    jQuery('#billing_address_1').val('')
-                    jQuery('#billing_city').val('')
-                    jQuery('#billing_postcode').val('')
-                }
-            })
 
             // Focus on search input on country open
             $billingCountry.on('select2:open', function(e){
@@ -1266,6 +1260,10 @@ class Twoinc {
             return false
         }
 
+        if (!twoincUtilHelper.isCountrySupported()) {
+            return false
+        }
+
         let can = true
         let values = [].concat(Object.values(this.customerCompany))
 
@@ -1286,9 +1284,7 @@ class Twoinc {
      */
     getApproval() {
 
-        const isReadyApprovalCheck = this.isReadyApprovalCheck()
-
-        if (!isReadyApprovalCheck) return
+        if (!this.isReadyApprovalCheck()) return
 
         if (this.orderIntentCheck.interval) {
             this.orderIntentCheck.pendingCheck = true
@@ -1348,6 +1344,8 @@ class Twoinc {
             clearInterval(Twoinc.getInstance().orderIntentCheck.interval)
             Twoinc.getInstance().orderIntentCheck.interval = null
             Twoinc.getInstance().orderIntentCheck.pendingCheck = false
+
+            if (!Twoinc.getInstance().isReadyApprovalCheck()) return
 
             jQuery('.twoinc-pay-sub').hide()
             jQuery('.twoinc-pay-sub.loader').show()
@@ -1543,8 +1541,8 @@ class Twoinc {
             jQuery('#payment_method_woocommerce-gateway-tillit').click()
         }
 
-        // Toggle the company fields
-        twoincDomHelper.toggleCompanyFields($input.val())
+        // Toggle the business fields
+        twoincDomHelper.toggleBusinessFields($input.val())
 
         // Move the fields to correct positions
         twoincDomHelper.positionFields()
@@ -1631,6 +1629,26 @@ class Twoinc {
         const $input = jQuery(this)
 
         Twoinc.getInstance().customerCompany.country_prefix = $input.val()
+
+        twoincDomHelper.toggleBusinessFields(twoincDomHelper.getAccountType())
+
+        // Clear company inputs
+        let billingCompanyDisplay = jQuery('#billing_company_display')
+        billingCompanyDisplay.html('')
+        billingCompanyDisplay.selectWoo(twoincSelectWooHelper.genSelectWooParams())
+        twoincDomHelper.toggleTooltip('#billing_company_display_field .select2-container', window.twoinc.text.tooltip_company)
+        twoincSelectWooHelper.fixSelectWooPositionCompanyName()
+        jQuery('#company_id').val('')
+
+        // Clear the addresses, in case address get request fails
+        if (window.twoinc.address_search === 'yes') {
+            jQuery('#billing_address_1').val('')
+            jQuery('#billing_address_2').val('')
+            jQuery('#billing_city').val('')
+            jQuery('#billing_postcode').val('')
+        }
+
+        Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData()
 
         Twoinc.getInstance().getApproval()
 
