@@ -1313,7 +1313,6 @@ class Twoinc {
                 "invoice_type": window.twoinc.product_type,
                 "buyer": {
                     "company": Twoinc.getInstance().customerCompany,
-                    "representative": Twoinc.getInstance().customerRepresentative
                 },
                 "currency": window.twoinc.currency,
                 "line_items": [{
