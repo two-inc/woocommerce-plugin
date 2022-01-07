@@ -635,10 +635,11 @@ if (!class_exists('WC_Twoinc')) {
                 return;
             }
 
-            if (!WC_Twoinc_Helper::is_country_supported($order->get_billing_country())) {
-                WC_Twoinc_Helper::display_ajax_error(__('Two is not available as a payment option in the selected region', 'twoinc-payment-gateway'));
-                return;
-            }
+            // Temporarily disable the feature
+            // if (!WC_Twoinc_Helper::is_country_supported($order->get_billing_country())) {
+            //     WC_Twoinc_Helper::display_ajax_error(__('Two is not available as a payment option in the selected region', 'twoinc-payment-gateway') . $order->get_billing_country());
+            //     return;
+            // }
 
             // Get data
             $company_id = array_key_exists('company_id', $_POST) ? sanitize_text_field($_POST['company_id']) : '';
@@ -1512,7 +1513,7 @@ if (!class_exists('WC_Twoinc')) {
                     'X-API-Key' => $this->get_option('api_key')
                 ],
                 'timeout' => 30,
-                'body' => empty($payload) ? '' : json_encode($payload),
+                'body' => empty($payload) ? '' : json_encode(WC_Twoinc_Helper::utf8ize($payload)),
                 'data_format' => 'body'
             ]);
         }

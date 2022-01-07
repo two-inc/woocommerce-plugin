@@ -81,7 +81,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                         $errs = array();
                         foreach ($body['error_json'] as $er) {
                             if ($er && $er['loc']) {
-                                $display_msg = WC_Twoinc_Helper::get_msg_from_loc(json_encode($er['loc']));
+                                $display_msg = WC_Twoinc_Helper::get_msg_from_loc(json_encode(WC_Twoinc_Helper::utf8ize($er['loc'])));
                                 if ($display_msg) {
                                     array_push($errs, $display_msg);
                                 }
@@ -507,7 +507,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
          */
         public static function is_country_supported($country)
         {
-            return in_array($hostname, array('NO', 'GB'));
+            return in_array($country, array('NO', 'GB'));
         }
 
         /**
