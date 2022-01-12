@@ -262,9 +262,22 @@ if (!class_exists('WC_Twoinc')) {
 
             if (!$image_src) return;
 
-            $this->make_request("/v1/merchant/${merchant_id}/update", [
+            // Update the logo url for the invoice
+            $response = $this->make_request("/v1/merchant/${merchant_id}/update", [
                 'logo_path' => $image_src
             ]);
+
+            if (is_wp_error($response)) {
+                WC_Admin_Settings::add_error(__('Could not forward invoice image url to Two', 'twoinc-payment-gateway'));
+                return;
+            }
+
+            $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
+            if ($twoinc_err) {
+                WC_Admin_Settings::add_error(__('Could not forward invoice image url to Two', 'twoinc-payment-gateway'));
+                //$this->update_option('merchant_logo');
+                return;
+            }
 
         }
 
@@ -730,7 +743,7 @@ if (!class_exists('WC_Twoinc')) {
             update_post_meta($order_id, 'twoinc_order_id', $body['id']);
 
             // Return the result
-            if ($this->get_option('tillit_merchant_id') === 'morgenlevering' || $this->get_option('tillit_merchant_id') === 'arkwrightx') {
+            if ($this->get_option('tillit_merchant_id') === 'arkwrightx') {
                 return [
                     'result'    => 'success',
                     'redirect'  => $body['merchant_urls']['merchant_confirmation_url']

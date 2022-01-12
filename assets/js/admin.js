@@ -11,7 +11,7 @@ jQuery(function($){
 
     }
 
-    $('body').on('click', '.woocommerce-tillit-logo', function(e){
+    $('body').on('click', '.woocommerce-twoinc-logo', function(e){
 
         e.preventDefault()
 
