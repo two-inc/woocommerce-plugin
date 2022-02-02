@@ -726,7 +726,8 @@ let twoincDomHelper = {
      * Check if twoinc payment is currently visible
      */
     isTwoincVisible: function() {
-        return jQuery('#payment_method_woocommerce-gateway-tillit:visible').length !== 0
+        return jQuery('li.wc_payment_method.payment_method_woocommerce-gateway-tillit').css('display') !== 'none'
+        //return jQuery('#payment_method_woocommerce-gateway-tillit:visible').length !== 0
     },
 
     /**
