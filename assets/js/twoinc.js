@@ -1248,6 +1248,8 @@ class Twoinc {
         // Display correct payment description
         twoincDomHelper.togglePaymentDesc()
 
+        this.getDueInDays()
+
     }
 
     /**
@@ -1486,6 +1488,53 @@ class Twoinc {
 
         }
 
+    }
+
+    /**
+     * Get the actual due in days to display on page
+     */
+    getDueInDays()
+    {
+
+        let jsonBody = JSON.stringify({
+            "merchant_short_name": window.twoinc.merchant_short_name,
+            "buyer_organization_number": Twoinc.getInstance().customerCompany ? Twoinc.getInstance().customerCompany.organization_number : "",
+            "code": ""
+        })
+
+        // Create a get due in days request
+        const dueInDaysResponse = jQuery.ajax({
+            url: twoincUtilHelper.contructTwoincUrl('/v1/payment_info'),
+            contentType: "application/json; charset=utf-8",
+            dataType: 'json',
+            method: 'POST',
+            xhrFields: {withCredentials: true},
+            data: jsonBody
+        })
+
+        dueInDaysResponse.done(function(response){
+
+            if (response.due_in_days) window.twoinc.days_on_invoice = response.due_in_days
+
+            if (window.twoinc.days_on_invoice) Twoinc.getInstance().displayDueInDays()
+
+        })
+
+        dueInDaysResponse.fail(function(response){
+
+            if (window.twoinc.days_on_invoice) Twoinc.getInstance().displayDueInDays()
+
+        })
+    }
+
+
+    /**
+     * Update actual due in days from saved values
+     */
+    displayDueInDays() {
+        jQuery('span.due-in-days').each(function() {
+            jQuery(this).contents().filter(function(){ return this.nodeType == 3; }).first().replaceWith(window.twoinc.days_on_invoice)
+        })
     }
 
 
