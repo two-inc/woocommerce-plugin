@@ -81,7 +81,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                         $errs = array();
                         foreach ($body['error_json'] as $er) {
                             if ($er && $er['loc']) {
-                                $display_msg = WC_Twoinc_Helper::get_msg_from_loc(json_encode($er['loc']));
+                                $display_msg = WC_Twoinc_Helper::get_msg_from_loc(json_encode(WC_Twoinc_Helper::utf8ize($er['loc'])));
                                 if ($display_msg) {
                                     array_push($errs, $display_msg);
                                 }
@@ -190,11 +190,28 @@ if (!class_exists('WC_Twoinc_Helper')) {
             $is_empty = true;
 
             if ($twoinc_address) {
-                $is_empty = !$twoinc_address['city'] && !$twoinc_address['region'] && !$twoinc_address['country']
-                            && !$twoinc_address['postal_code'] && !$twoinc_address['street_address'];
+                $is_empty = WC_Twoinc_Helper::is_str_no_word($twoinc_address['city'])
+                            && WC_Twoinc_Helper::is_str_no_word($twoinc_address['region'])
+                            && WC_Twoinc_Helper::is_str_no_word($twoinc_address['country'])
+                            && WC_Twoinc_Helper::is_str_no_word($twoinc_address['postal_code'])
+                            && WC_Twoinc_Helper::is_str_no_word($twoinc_address['street_address']);
             }
 
             return $is_empty;
+
+        }
+
+        /**
+         * Check if string has no content except special characters
+         *
+         * @param $twoinc_address
+         *
+         * @return bool
+         */
+        public static function is_str_no_word($s)
+        {
+
+            return !$s || !preg_replace('/[\s,.-]/', '', $s);
 
         }
 
@@ -321,15 +338,15 @@ if (!class_exists('WC_Twoinc_Helper')) {
 
             $billing_address = [
                 'organization_name' => $order->get_billing_company(),
-                'street_address' => $order->get_billing_address_1() . (null !== $order->get_billing_address_2() ? (', ' . $order->get_billing_address_2()) : ''),
+                'street_address' => $order->get_billing_address_1() . ($order->get_billing_address_2() ? (', ' . $order->get_billing_address_2()) : ''),
                 'postal_code' => $order->get_billing_postcode(),
                 'city' => $order->get_billing_city(),
                 'region' => $order->get_billing_state(),
                 'country' => $order->get_billing_country()
             ];
             $shipping_address = [
-                'organization_name' => $order->get_billing_company(),
-                'street_address' => $order->get_shipping_address_1() . (null !== $order->get_shipping_address_2() ? (', ' . $order->get_shipping_address_2()) : ''),
+                'organization_name' => $order->get_shipping_company(),
+                'street_address' => $order->get_shipping_address_1() . ($order->get_shipping_address_2() ? (', ' . $order->get_shipping_address_2()) : ''),
                 'postal_code' => $order->get_shipping_postcode(),
                 'city' => $order->get_shipping_city(),
                 'region' => $order->get_shipping_state(),
@@ -337,6 +354,14 @@ if (!class_exists('WC_Twoinc_Helper')) {
             ];
             if (WC_Twoinc_Helper::is_twoinc_address_empty($shipping_address)) {
                 $shipping_address = $billing_address;
+            }
+
+            $invoice_details = [
+                'payment_reference_message' => $payment_reference_message,
+                'payment_reference_ocr' => ''
+            ];
+            if (isset($days_on_invoice)) {
+                $invoice_details['due_in_days'] = intval($days_on_invoice);
             }
 
             $req_body = [
@@ -347,11 +372,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 'discount_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total_discount())),
                 'discount_rate' => '0',
                 'invoice_type' => $product_type,
-                'invoice_details' => [
-                    'due_in_days' => intval($days_on_invoice),
-                    'payment_reference_message' => $payment_reference_message,
-                    'payment_reference_ocr' => ''
-                ],
+                'invoice_details' => $invoice_details,
                 'buyer' => [
                     'company' => [
                         'organization_number' => $company_id,
@@ -375,10 +396,10 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 'merchant_reference' => '',
                 'merchant_urls' => [
                     // 'merchant_confirmation_url' => $order->get_checkout_order_received_url(),
-                    'merchant_confirmation_url' => sprintf('%s?twoinc_confirm_order=%s&nonce=%s',
-                                                        wc_get_checkout_url(),
-                                                        $order_reference,
-                                                        wp_create_nonce('twoinc_confirm')),
+                    'merchant_confirmation_url' => sprintf('%s/twoinc-payment-gateway/confirm?twoinc_confirm_order=%s&nonce=%s',
+                                                            get_home_url(),
+                                                            $order_reference,
+                                                            wp_create_nonce('twoinc_confirm')),
                     'merchant_cancel_order_url' => wp_specialchars_decode($order->get_cancel_order_url()),
                     'merchant_edit_order_url' => wp_specialchars_decode($order->get_edit_order_url()),
                     'merchant_order_verification_failed_url' => wp_specialchars_decode($order->get_cancel_order_url()),
@@ -415,15 +436,15 @@ if (!class_exists('WC_Twoinc_Helper')) {
 
             $billing_address = [
                 'organization_name' => $order->get_billing_company(),
-                'street_address' => $order->get_billing_address_1() . (null !== $order->get_billing_address_2() ? (', ' . $order->get_billing_address_2()) : ''),
+                'street_address' => $order->get_billing_address_1() . ($order->get_billing_address_2() ? (', ' . $order->get_billing_address_2()) : ''),
                 'postal_code' => $order->get_billing_postcode(),
                 'city' => $order->get_billing_city(),
                 'region' => $order->get_billing_state(),
                 'country' => $order->get_billing_country()
             ];
             $shipping_address = [
-                'organization_name' => $order->get_billing_company(),
-                'street_address' => $order->get_shipping_address_1() . (null !== $order->get_shipping_address_2() ? (', ' . $order->get_shipping_address_2()) : ''),
+                'organization_name' => $order->get_shipping_company(),
+                'street_address' => $order->get_shipping_address_1() . ($order->get_shipping_address_2() ? (', ' . $order->get_shipping_address_2()) : ''),
                 'postal_code' => $order->get_shipping_postcode(),
                 'city' => $order->get_shipping_city(),
                 'region' => $order->get_shipping_state(),
@@ -431,6 +452,14 @@ if (!class_exists('WC_Twoinc_Helper')) {
             ];
             if (WC_Twoinc_Helper::is_twoinc_address_empty($shipping_address)) {
                 $shipping_address = $billing_address;
+            }
+
+            $invoice_details = [
+                'payment_reference_message' => $payment_reference_message,
+                'payment_reference_ocr' => ''
+            ];
+            if (isset($days_on_invoice)) {
+                $invoice_details['due_in_days'] = intval($days_on_invoice);
             }
 
             $req_body = [
@@ -441,11 +470,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 'discount_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total_discount())),
                 'discount_rate' => '0',
                 'invoice_type' => $product_type,
-                'invoice_details' => [
-                    'due_in_days' => intval($days_on_invoice),
-                    'payment_reference_message' => $payment_reference_message,
-                    'payment_reference_ocr' => ''
-                ],
+                'invoice_details' => $invoice_details,
                 'buyer_department' => $department,
                 'buyer_project' => $project,
                 'order_note' => $order->get_customer_note(),
@@ -499,6 +524,18 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
+         * Check if country is supported by twoinc
+         *
+         * @param $country
+         *
+         * @return bool
+         */
+        public static function is_country_supported($country)
+        {
+            return in_array($country, array('NO', 'GB'));
+        }
+
+        /**
          * Check if current server is twoinc development
          *
          * @return string
@@ -529,7 +566,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
             }
 
             // Merchant's staging
-            if (in_array($hostname, array('staging.torn.no', 'proof-3.redflamingostudio.com', 'icecreamextreme.no'))) return true;
+            if (in_array($hostname, array('staging.torn.no', 'proof-3.redflamingostudio.com', 'icecreamextreme.no', 'www.staging83.avshop.no'))) return true;
 
             // Neither local nor twoinc development site
             return false;

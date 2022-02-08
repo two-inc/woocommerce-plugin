@@ -176,24 +176,14 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     'priority' => $company_name_priority
                 ];
 
-                $fields['billing']['company_id'] = [
-                    'label' => __('Company ID', 'twoinc-payment-gateway'),
-                    'class' => array('hidden'),
-                    'required' => false,
-                    'priority' => $company_name_priority + 1,
-                    'custom_attributes' => array('readonly' => 'readonly')
-                ];
-
-            } else {
-
-                $fields['billing']['company_id'] = [
-                    'label' => __('Company ID', 'twoinc-payment-gateway'),
-                    'class' => array('hidden'),
-                    'required' => false,
-                    'priority' => $company_name_priority + 1
-                ];
-
             }
+
+            $fields['billing']['company_id'] = [
+                'label' => __('Company ID', 'twoinc-payment-gateway'),
+                'class' => array('hidden'),
+                'required' => false,
+                'priority' => $company_name_priority + 1
+            ];
 
             if ($this->wc_twoinc->get_option('add_field_department') === 'yes') {
 
