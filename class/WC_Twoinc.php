@@ -701,6 +701,15 @@ if (!class_exists('WC_Twoinc')) {
             update_post_meta($order_id, '_product_type', $product_type);
             update_post_meta($order_id, '_payment_reference_message', $payment_reference_message);
 
+            // Save to user meta
+            $user_id = wp_get_current_user()->ID;
+            if ($user_id) {
+                update_user_meta($user_id, 'twoinc_company_id', $company_id);
+                update_user_meta($user_id, 'twoinc_billing_company', $billing_company);
+                update_user_meta($user_id, 'twoinc_department', $department);
+                update_user_meta($user_id, 'twoinc_project', $project);
+            }
+
             // Create order
             $response = $this->make_request('/v1/order', WC_Twoinc_Helper::compose_twoinc_order(
                 $order,

@@ -455,7 +455,7 @@ let twoincDomHelper = {
 
         // Get the targets
         let allTargets = ['.woocommerce-company-fields', '.woocommerce-representative-fields', '#billing_phone_display_field', '#billing_phone_field',
-                          '#billing_company_display_field', '#billing_company_field', '#company_id_field']
+                          '#billing_company_display_field', '#billing_company_field', '#company_id_field', '#department_field', '#project_field']
         let visibleNonbusinessTargets = ['#billing_phone_field', '#billing_company_field']
         let visibleBusinessTargets = ['.woocommerce-company-fields', '.woocommerce-representative-fields', '#billing_phone_display_field']
         let requiredBusinessTargets = ['#billing_phone_display_field']
@@ -878,9 +878,9 @@ let twoincDomHelper = {
     },
 
     /**
-     * Load checkout inputs
+     * Load sessionStorage checkout inputs
      */
-    loadCheckoutInputs: function() {
+    loadStorageInputs: function() {
         let checkoutInputs = sessionStorage.getItem('checkoutInputs')
         if (!checkoutInputs) return
         checkoutInputs = JSON.parse(checkoutInputs)
@@ -923,7 +923,7 @@ let twoincDomHelper = {
                 if (inp.val && inp.optionHtml) {
                     let selectElem = document.querySelector('#' + inp.id)
                     if (selectElem) {
-                        if (!selectElem.querySelector('option[value="' + inp.value + '"]')) {
+                        if (!selectElem.querySelector('option:not([value=""])')) {
                             selectElem.innerHTML = inp.optionHtml + selectElem.innerHTML
                         }
                         selectElem.value = inp.val
@@ -931,6 +931,40 @@ let twoincDomHelper = {
                 }
             }
         }
+    },
+
+    /**
+     * Load usermeta checkout inputs
+     */
+    loadUserMetaInputs: function() {
+        if (document.querySelector('#billing_company_display')) {
+            let selectElem = document.querySelector('#billing_company_display')
+            if (!selectElem.querySelector('option:not([value=""])') && window.twoinc.billing_company) {
+                // Append to selectWoo
+                if (!selectElem.querySelector('option[value="' + window.twoinc.billing_company + '"]')) {
+                    selectElem.innerHTML = '<option value="' + window.twoinc.billing_company + '">' + window.twoinc.billing_company + '</option>' + selectElem.innerHTML
+                }
+                selectElem.value = window.twoinc.billing_company
+
+                // Append company id to company name select box
+                setTimeout(function(){
+                    if (!document.querySelector('.floating-company-id')) {
+                        jQuery('#select2-billing_company_display-container').append(
+                            '<span class="floating-company-id">' + window.twoinc.company_id + '</span>')
+                    }
+                }, 2000)
+            }
+        }
+        if (document.querySelector('#department') && !(document.querySelector('#department').value) && window.twoinc.department) {
+            document.querySelector('#department').value = window.twoinc.department
+        }
+        if (document.querySelector('#project') && !(document.querySelector('#project').value) && window.twoinc.project) {
+            document.querySelector('#project').value = window.twoinc.project
+        }
+
+        // Update the object values
+        document.querySelector('#billing_company').value = window.twoinc.billing_company
+        document.querySelector('#company_id').value = window.twoinc.company_id
     },
 
     /**
@@ -1180,10 +1214,14 @@ class Twoinc {
         // Add customization for current theme if any
         twoincDomHelper.insertCustomCss()
 
-        if (loadSavedInputs) twoincDomHelper.loadCheckoutInputs()
+        if (loadSavedInputs) twoincDomHelper.loadStorageInputs()
+        twoincDomHelper.loadUserMetaInputs()
         this.initBillingPhoneDisplay()
-        this.customerCompany = twoincDomHelper.getCompanyData()
-        this.customerRepresentative = twoincDomHelper.getRepresentativeData()
+        setTimeout(function(){
+            twoincDomHelper.saveCheckoutInputs()
+            Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData()
+            Twoinc.getInstance().customerRepresentative = twoincDomHelper.getRepresentativeData()
+        }, 1000)
         this.updateElements()
         this.isInitialized = true
     }
@@ -1428,10 +1466,12 @@ class Twoinc {
 
             // Update twoinc message
             let twoincSubtitleExistCheck = setInterval(function() {
-                jQuery('.twoinc-pay-box, .twoinc-pay-sub').hide()
-                jQuery('.twoinc-pay-sub.explain-details').show()
-                jQuery('.twoinc-pay-box.declare-aggrement').show()
-                clearInterval(twoincSubtitleExistCheck)
+                if (jQuery('#payment .blockOverlay').length === 0) {
+                    jQuery('.twoinc-pay-box, .twoinc-pay-sub').hide()
+                    jQuery('.twoinc-pay-sub.explain-details').show()
+                    jQuery('.twoinc-pay-box.declare-aggrement').show()
+                    clearInterval(twoincSubtitleExistCheck)
+                }
             }, 1000)
 
             // Update order intent log

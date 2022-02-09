@@ -346,6 +346,14 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 'client_version' => get_plugin_version()
             ];
 
+            $user_id = wp_get_current_user()->ID;
+            if ($user_id) {
+                $properties['company_id'] = get_user_meta($user_id, 'twoinc_company_id', true);
+                $properties['billing_company'] = get_user_meta($user_id, 'twoinc_billing_company', true);
+                $properties['department'] = get_user_meta($user_id, 'twoinc_department', true);
+                $properties['project'] = get_user_meta($user_id, 'twoinc_project', true);
+            }
+
             return $properties;
 
         }
