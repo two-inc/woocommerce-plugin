@@ -836,6 +836,13 @@ if (!class_exists('WC_Twoinc')) {
                     __('Failed to refund order with Two', 'twoinc-payment-gateway'));
             }
 
+            $remaining_amt = $order->get_total() + (float) $body['amount'];
+            if ($remaining_amt < 0.0001 && $remaining_amt > -0.0001) { // full refund, 0.0001 for float inaccuracy
+                $order->add_order_note(__('Invoice has been refunded, and credit note has been sent', 'twoinc-payment-gateway'));
+            } else { // partial refund
+                $order->add_order_note(__('Invoice has been partially refunded and credit note has been sent', 'twoinc-payment-gateway'));
+            }
+
             return [
                 'result'    => 'success',
                 'refresh'  => true
@@ -956,6 +963,13 @@ if (!class_exists('WC_Twoinc')) {
 
                 // Mark order as processing
                 $order->payment_complete();
+
+                // Add order note
+                if (isset($body['invoice_type']) && $body['invoice_type'] == 'FUNDED_INVOICE' && strtolower(WC()->countries->get_base_country()) == 'no') {
+                    $order->add_order_note(__('Invoice has been sent from Two via email and EHF', 'twoinc-payment-gateway'));
+                } else {
+                    $order->add_order_note(__('Invoice has been sent from Two via email', 'twoinc-payment-gateway'));
+                }
 
                 // Redirect the user to confirmation page
                 return wp_specialchars_decode($order->get_checkout_order_received_url());
