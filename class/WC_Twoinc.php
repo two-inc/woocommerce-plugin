@@ -594,6 +594,13 @@ if (!class_exists('WC_Twoinc')) {
                 update_post_meta($order->get_id(), 'invoice_number', $body['invoice_details']['invoice_number']);
             }
 
+            // Add order note
+            if (isset($body['invoice_type']) && $body['invoice_type'] == 'FUNDED_INVOICE' && strtolower(WC()->countries->get_base_country()) == 'no') {
+                $order->add_order_note(__('Invoice has been sent from Two via email and EHF', 'twoinc-payment-gateway'));
+            } else {
+                $order->add_order_note(__('Invoice has been sent from Two via email', 'twoinc-payment-gateway'));
+            }
+
         }
 
         /**
@@ -963,13 +970,6 @@ if (!class_exists('WC_Twoinc')) {
 
                 // Mark order as processing
                 $order->payment_complete();
-
-                // Add order note
-                if (isset($body['invoice_type']) && $body['invoice_type'] == 'FUNDED_INVOICE' && strtolower(WC()->countries->get_base_country()) == 'no') {
-                    $order->add_order_note(__('Invoice has been sent from Two via email and EHF', 'twoinc-payment-gateway'));
-                } else {
-                    $order->add_order_note(__('Invoice has been sent from Two via email', 'twoinc-payment-gateway'));
-                }
 
                 // Redirect the user to confirmation page
                 return wp_specialchars_decode($order->get_checkout_order_received_url());
