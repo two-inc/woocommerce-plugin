@@ -268,12 +268,14 @@ msgid "Integration between WooCommerce and Two"
 msgstr "Integrasjon mellom WooCommerce og Two"
 
 #: class/WC_Twoinc.php:843
-msgid "Invoice has been partially refunded and credit note has been sent"
-msgstr "Faktura har blitt delvis refundert og kreditt nota har blitt sendt"
+msgid ""
+"Invoice has been partially refunded and credit note has been sent by Two"
+msgstr ""
+"Faktura har blitt delvis refundert og kreditt nota har blitt sendt av Two"
 
 #: class/WC_Twoinc.php:841
-msgid "Invoice has been refunded, and credit note has been sent"
-msgstr "Faktura har blitt refundert og kreditnota er sendt"
+msgid "Invoice has been refunded and credit note has been sent by Two"
+msgstr "Faktura har blitt refundert og kreditt nota har blitt sendt av Two"
 
 #: class/WC_Twoinc.php:971
 msgid "Invoice has been sent from Two via email"
