@@ -845,9 +845,9 @@ if (!class_exists('WC_Twoinc')) {
 
             $remaining_amt = $order->get_total() + (float) $body['amount'];
             if ($remaining_amt < 0.0001 && $remaining_amt > -0.0001) { // full refund, 0.0001 for float inaccuracy
-                $order->add_order_note(__('Invoice has been refunded, and credit note has been sent', 'twoinc-payment-gateway'));
+                $order->add_order_note(__('Invoice has been refunded and credit note has been sent by Two', 'twoinc-payment-gateway'));
             } else { // partial refund
-                $order->add_order_note(__('Invoice has been partially refunded and credit note has been sent', 'twoinc-payment-gateway'));
+                $order->add_order_note(__('Invoice has been partially refunded and credit note has been sent by Two', 'twoinc-payment-gateway'));
             }
 
             return [
