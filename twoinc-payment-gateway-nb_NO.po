@@ -283,7 +283,7 @@ msgstr "Faktura har blitt sendt til kunde på e-post"
 
 #: class/WC_Twoinc.php:969
 msgid "Invoice has been sent from Two via email and EHF"
-msgstr "Faktura har blitt sendt til kunde på e-post og EHF"
+msgstr "Faktura har blitt sendt til kunde på e-post og EHF av Two"
 
 #: class/WC_Twoinc.php:205 class/WC_Twoinc.php:747
 #: class/WC_Twoinc_Helper.php:72
