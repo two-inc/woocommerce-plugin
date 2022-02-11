@@ -310,7 +310,7 @@ msgstr ""
 
 #: class/WC_Twoinc.php:186 class/WC_Twoinc.php:226
 #, php-format
-msgid "Pay %s days after your order is shipped, for free"
+msgid "Pay %s days after your purchase has been completed, for free"
 msgstr ""
 
 #: class/WC_Twoinc.php:1086

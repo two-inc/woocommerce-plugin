@@ -320,8 +320,8 @@ msgstr "Organisasjonsnummer"
 
 #: class/WC_Twoinc.php:186 class/WC_Twoinc.php:226
 #, php-format
-msgid "Pay %s days after your order is shipped, for free"
-msgstr "Betal %s dager etter din ordre er sendt, helt gratis"
+msgid "Pay %s days after your purchase has been completed, for free"
+msgstr "Betal %s dager etter at kjøpet er behandlet, helt gratis"
 
 #: class/WC_Twoinc.php:1086
 msgid "Payment and Invoice settings"
