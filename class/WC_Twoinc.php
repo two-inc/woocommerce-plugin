@@ -197,7 +197,7 @@ if (!class_exists('WC_Twoinc')) {
                     '- %s<br>- %s<br>- %s',
                     __('Express checkout', 'twoinc-payment-gateway'),
                     sprintf(
-                        __('Pay %s days after your order is shipped, for free', 'twoinc-payment-gateway'),
+                        __('Pay %s days after your purchase has been completed, for free', 'twoinc-payment-gateway'),
                         '<span class="due-in-days">' . strval($this->get_option('days_on_invoice')) . '<span>'
                     ),
                     $this->get_payment_description_msg()
@@ -239,7 +239,7 @@ if (!class_exists('WC_Twoinc')) {
                             '- %s<br>- %s<br>- %s',
                             __('Express checkout', 'twoinc-payment-gateway'),
                             sprintf(
-                                __('Pay %s days after your order is shipped, for free', 'twoinc-payment-gateway'),
+                                __('Pay %s days after your purchase has been completed, for free', 'twoinc-payment-gateway'),
                                 '<span class="due-in-days">' . strval($this->get_option('days_on_invoice')) . '<span>'
                             ),
                             $this->get_payment_description_msg()
