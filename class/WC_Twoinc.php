@@ -96,6 +96,13 @@ if (!class_exists('WC_Twoinc')) {
                 // For order update using Update post
                 add_action('save_post_shop_order', [$this, 'before_order_update'], 10, 2);
                 add_action('wp_after_insert_post', [$this, 'after_order_update'], 10, 4);
+
+                // Load user meta fields to user profile admin page
+                add_action('show_user_profile', [$this, 'display_user_meta_edit'], 10, 1);
+                add_action('edit_user_profile', [$this, 'display_user_meta_edit'], 10, 1);
+                // Save user meta fields on profile update
+                add_action('personal_options_update', [$this, 'save_user_meta'], 10, 1);
+                add_action('edit_user_profile_update', [$this, 'save_user_meta'], 10, 1);
             } else {
                 // Confirm order after returning from twoinc checkout-page, DO NOT CHANGE HOOKS
                 add_action('get_header', [$this, 'process_confirmation_header_redirect']);
@@ -634,6 +641,72 @@ if (!class_exists('WC_Twoinc')) {
                 $order->add_order_note(sprintf(__('Could not update status to "Cancelled", please check with Two admin for id %s', 'twoinc-payment-gateway'), $twoinc_order_id));
                 return;
             }
+
+        }
+
+        /**
+         * Display user meta fields on user edit admin page
+         *
+         * @return void
+         */
+        public function display_user_meta_edit($user)
+        {
+            ?>
+                <h3><?php _e('Two pre-filled fields', 'twoinc-payment-gateway'); ?></h3>
+
+                <table class="form-table">
+                <tr>
+                    <th><label for="twoinc_billing_company"><?php _e('Billing Company name', 'twoinc-payment-gateway'); ?></label></th>
+                    <td>
+                        <input type="text" name="twoinc_billing_company" id="twoinc_billing_company" value="<?php echo esc_attr(get_the_author_meta('twoinc_billing_company', $user->ID)); ?>" class="regular-text" />
+                    </td>
+                </tr>
+                <tr>
+                    <th><label for="twoinc_company_id"><?php _e('Billing Company ID', 'twoinc-payment-gateway'); ?></label></th>
+                    <td>
+                        <input type="text" name="twoinc_company_id" id="twoinc_company_id" value="<?php echo esc_attr(get_the_author_meta('twoinc_company_id', $user->ID)); ?>" class="regular-text" />
+                    </td>
+                </tr>
+                <tr>
+                    <th><label for="twoinc_department"><?php _e('Department', 'twoinc-payment-gateway'); ?></label></th>
+                    <td>
+                        <input type="text" name="twoinc_department" id="twoinc_department" value="<?php echo esc_attr(get_the_author_meta('twoinc_department', $user->ID)); ?>" class="regular-text" />
+                        <br />
+                        <span class="description"><?php _e("The department displayed on the invoices"); ?></span>
+                    </td>
+                </tr>
+                <tr>
+                    <th><label for="twoinc_project"><?php _e('Project', 'twoinc-payment-gateway'); ?></label></th>
+                    <td>
+                        <input type="text" name="twoinc_project" id="twoinc_project" value="<?php echo esc_attr(get_the_author_meta('twoinc_project', $user->ID)); ?>" class="regular-text" />
+                        <br />
+                        <span class="description"><?php _e("The project displayed on the invoices"); ?></span>
+                    </td>
+                </tr>
+                </table>
+            <?php
+        }
+
+        /**
+         * Save user meta to DB on user edit
+         *
+         * @return void
+         */
+        public function save_user_meta($user_id)
+        {
+
+            if (empty($_POST['_wpnonce']) || ! wp_verify_nonce($_POST['_wpnonce'], 'update-user_' . $user_id)) {
+                return;
+            }
+
+            if (!current_user_can('edit_user', $user_id)) {
+                return false;
+            }
+
+            update_user_meta($user_id, 'twoinc_company_id', $_POST['twoinc_company_id']);
+            update_user_meta($user_id, 'twoinc_billing_company', $_POST['twoinc_billing_company']);
+            update_user_meta($user_id, 'twoinc_department', $_POST['twoinc_department']);
+            update_user_meta($user_id, 'twoinc_project', $_POST['twoinc_project']);
 
         }
 
