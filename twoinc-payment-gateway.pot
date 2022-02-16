@@ -325,7 +325,7 @@ msgstr ""
 
 #: class/WC_Twoinc.php:200 class/WC_Twoinc.php:242
 #, php-format
-msgid "Pay %s days after your order is shipped, for free"
+msgid "Pay in %s days, at no extra cost"
 msgstr ""
 
 #: class/WC_Twoinc.php:1251
