@@ -963,8 +963,12 @@ let twoincDomHelper = {
         }
 
         // Update the object values
-        document.querySelector('#billing_company').value = window.twoinc.billing_company
-        document.querySelector('#company_id').value = window.twoinc.company_id
+        if (document.querySelector('#billing_company') && !(document.querySelector('#billing_company').value) && window.twoinc.billing_company) {
+            document.querySelector('#billing_company').value = window.twoinc.billing_company
+        }
+        if (document.querySelector('#company_id') && !(document.querySelector('#company_id').value) && window.twoinc.company_id) {
+            document.querySelector('#company_id').value = window.twoinc.company_id
+        }
     },
 
     /**
@@ -1537,15 +1541,17 @@ class Twoinc {
     getDueInDays()
     {
 
+        if (!Twoinc.getInstance().customerCompany || !Twoinc.getInstance().customerCompany.organization_number) return
+
         let jsonBody = JSON.stringify({
             "merchant_short_name": window.twoinc.merchant_short_name,
-            "buyer_organization_number": Twoinc.getInstance().customerCompany ? Twoinc.getInstance().customerCompany.organization_number : "",
+            "buyer_organization_number": Twoinc.getInstance().customerCompany.organization_number,
             "code": ""
         })
 
         // Create a get due in days request
         const dueInDaysResponse = jQuery.ajax({
-            url: twoincUtilHelper.contructTwoincUrl('/v1/payment_info'),
+            url: twoincUtilHelper.contructTwoincUrl('/v1/payment_terms'),
             contentType: "application/json; charset=utf-8",
             dataType: 'json',
             method: 'POST',
@@ -1555,27 +1561,31 @@ class Twoinc {
 
         dueInDaysResponse.done(function(response){
 
-            if (response.due_in_days) window.twoinc.days_on_invoice = response.due_in_days
+            window.twoinc.custom_due_in_days = typeof response.due_in_days !== 'undefined'
 
-            if (window.twoinc.days_on_invoice) Twoinc.getInstance().displayDueInDays()
+            Twoinc.getInstance().toggleDueInDays()
 
         })
 
         dueInDaysResponse.fail(function(response){
 
-            if (window.twoinc.days_on_invoice) Twoinc.getInstance().displayDueInDays()
+            Twoinc.getInstance().toggleDueInDays()
 
         })
     }
 
 
     /**
-     * Update actual due in days from saved values
+     * Display due in days only if the buyer does not have custom payment term
      */
-    displayDueInDays() {
-        jQuery('span.due-in-days').each(function() {
-            jQuery(this).contents().filter(function(){ return this.nodeType == 3 }).first().replaceWith(window.twoinc.days_on_invoice)
-        })
+    toggleDueInDays() {
+        if (window.twoinc.custom_due_in_days) {
+            jQuery('.payment-term-number').hide()
+            jQuery('.payment-term-nonumber').show()
+        } else {
+            jQuery('.payment-term-nonumber').hide()
+            jQuery('.payment-term-number').show()
+        }
     }
 
 

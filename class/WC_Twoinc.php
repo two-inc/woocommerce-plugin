@@ -194,12 +194,13 @@ if (!class_exists('WC_Twoinc')) {
                     <div class="twoinc-pay-box err-phone" style="display: none;">%s</div>
                 </div>',
                 sprintf(
-                    '- %s<br>- %s<br>- %s',
+                    '- %s<br>- <span class="payment-term-number">%s</span><span class="payment-term-nonumber">%s</span><br>- %s',
                     __('Express checkout', 'twoinc-payment-gateway'),
                     sprintf(
                         __('Pay in %s days, at no extra cost', 'twoinc-payment-gateway'),
-                        '<span class="due-in-days">' . strval($this->get_option('days_on_invoice')) . '<span>'
+                        '<span class="due-in-days">' . strval($this->get_option('days_on_invoice')) . '</span>'
                     ),
+                    __('Pay on invoice with agreed terms', 'twoinc-payment-gateway'),
                     $this->get_payment_description_msg()
                 ),
                 __('Two is not available as a payment option in the selected region', 'twoinc-payment-gateway'),
@@ -224,7 +225,7 @@ if (!class_exists('WC_Twoinc')) {
             add_filter('woocommerce_gateway_title', function ($title, $payment_id) {
                 if ($payment_id === 'woocommerce-gateway-tillit') {
                     $title = sprintf(
-                        '%s
+                        '<span class="payment-term-number">%s</span><span class="payment-term-nonumber">%s</span>
                         <div class="twoinc-subtitle">
                             <div class="twoinc-pay-sub require-inputs">%s</div>
                             <div class="twoinc-pay-sub explain-details" style="display: none;">%s</div>
@@ -232,16 +233,18 @@ if (!class_exists('WC_Twoinc')) {
                         </div> ',
                         sprintf(
                             __($this->get_option('title'), 'twoinc-payment-gateway'),
-                            '<span class="due-in-days">' . strval($this->get_option('days_on_invoice')) . '<span>'
+                            '<span class="due-in-days">' . strval($this->get_option('days_on_invoice')) . '</span>'
                         ),
+                        __('Pay on invoice with agreed terms', 'twoinc-payment-gateway'),
                         __('Enter company name to pay on invoice', 'twoinc-payment-gateway'),
                         sprintf(
-                            '- %s<br>- %s<br>- %s',
+                            '- %s<br>- <span class="payment-term-number">%s</span><span class="payment-term-nonumber">%s</span><br>- %s',
                             __('Express checkout', 'twoinc-payment-gateway'),
                             sprintf(
                                 __('Pay in %s days, at no extra cost', 'twoinc-payment-gateway'),
-                                '<span class="due-in-days">' . strval($this->get_option('days_on_invoice')) . '<span>'
+                                '<span class="due-in-days">' . strval($this->get_option('days_on_invoice')) . '</span>'
                             ),
+                            __('Pay on invoice with agreed terms', 'twoinc-payment-gateway'),
                             $this->get_payment_description_msg()
                         ),
                         WC_TWOINC_PLUGIN_URL . '/assets/images/loader.svg'
