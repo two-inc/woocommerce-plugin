@@ -1221,6 +1221,7 @@ class Twoinc {
             twoincDomHelper.saveCheckoutInputs()
             Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData()
             Twoinc.getInstance().customerRepresentative = twoincDomHelper.getRepresentativeData()
+            Twoinc.getInstance().getApproval()
         }, 1000)
         this.updateElements()
         this.isInitialized = true
@@ -1573,7 +1574,7 @@ class Twoinc {
      */
     displayDueInDays() {
         jQuery('span.due-in-days').each(function() {
-            jQuery(this).contents().filter(function(){ return this.nodeType == 3; }).first().replaceWith(window.twoinc.days_on_invoice)
+            jQuery(this).contents().filter(function(){ return this.nodeType == 3 }).first().replaceWith(window.twoinc.days_on_invoice)
         })
     }
 
