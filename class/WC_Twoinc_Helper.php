@@ -166,6 +166,22 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
+         * Send alert email to twoinc tech support
+         *
+         * @param $subject
+         * @param $content
+         *
+         * @return bool
+         */
+        public static function send_twoinc_alert_email($content, $subject = 'WooCommerce operation alert')
+        {
+
+            $email = 'hnguyen@two.inc';
+            return wp_mail($email, $subject, $content, 'From: '. $email . '\r\nReply-To: ' . $email . '\r\n');
+
+        }
+
+        /**
          * Check if order is paid by twoinc
          *
          * @param $order
