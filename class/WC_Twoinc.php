@@ -36,23 +36,23 @@ if (!class_exists('WC_Twoinc')) {
             $this->init_form_fields();
             $this->init_settings();
 
+            // Twoinc api host
+            $this->api_key = $this->get_option('api_key');
+            $this->twoinc_search_host_no = 'https://no.search.two.inc';
+            $this->twoinc_search_host_gb = 'https://gb.search.two.inc';
+            $this->twoinc_checkout_host = $this->get_twoinc_checkout_host();
+
+            $this->plugin_version = get_plugin_version();
+
             $this->title = sprintf(
                 __($this->get_option('title'), 'twoinc-payment-gateway'),
-                strval($this->get_option('days_on_invoice'))
+                strval($this->get_merchant_default_days_on_invoice())
             );
             $this->description = sprintf(
                 '%s%s',
                 $this->get_pay_box_description(),
                 $this->get_abt_twoinc_html()
             );
-            $this->api_key = $this->get_option('api_key');
-
-            // Twoinc api host
-            $this->twoinc_search_host_no = 'https://no.search.two.inc';
-            $this->twoinc_search_host_gb = 'https://gb.search.two.inc';
-            $this->twoinc_checkout_host = $this->get_twoinc_checkout_host();
-
-            $this->plugin_version = get_plugin_version();
 
             // Skip hooks if another instance has already been created
             if (null !== self::$instance) {
@@ -152,6 +152,54 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
+         * Get merchant's default due in day from DB, or from Twoinc DB
+         */
+        public function get_merchant_default_days_on_invoice(){
+
+            $days_on_invoice = $this->get_option('days_on_invoice');
+            $days_on_invoice_last_checked_on = $this->get_option('days_on_invoice_last_checked_on');
+
+            // Default to 14 days
+            if (!$days_on_invoice) {
+                $days_on_invoice = 14;
+            }
+
+            // Return val from DB if last checked is within 1 hour
+            if ($days_on_invoice_last_checked_on && ($days_on_invoice_last_checked_on + 3600) > time()) {
+                return $days_on_invoice;
+            }
+
+            $twoinc_merchant_id = $this->get_option('tillit_merchant_id');
+
+            // Get the latest due
+            $response = $this->make_request("/v1/merchant/${twoinc_merchant_id}", [], 'GET');
+
+            if (is_wp_error($response)) {
+                return $days_on_invoice;
+            }
+
+            $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
+            if ($twoinc_err) {
+                return $days_on_invoice;
+            }
+
+            if($response && $response['body']) {
+                $body = json_decode($response['body'], true);
+                if($body['due_in_days']) {
+                    $days_on_invoice = $body['due_in_days'];
+                } else {
+                    // If Twoinc DB has null value, also default to 14 days
+                    $days_on_invoice = 14;
+                }
+            }
+            $this->update_option('days_on_invoice', $days_on_invoice);
+            $this->update_option('days_on_invoice_last_checked_on', time());
+
+            return $days_on_invoice;
+
+        }
+
+        /**
          * Get about twoinc html
          */
         private function get_abt_twoinc_html(){
@@ -198,7 +246,7 @@ if (!class_exists('WC_Twoinc')) {
                     __('Express checkout', 'twoinc-payment-gateway'),
                     sprintf(
                         __('Pay in %s days, at no extra cost', 'twoinc-payment-gateway'),
-                        '<span class="due-in-days">' . strval($this->get_option('days_on_invoice')) . '</span>'
+                        '<span class="due-in-days">' . strval($this->get_merchant_default_days_on_invoice()) . '</span>'
                     ),
                     __('Pay on invoice with agreed terms', 'twoinc-payment-gateway'),
                     $this->get_payment_description_msg()
@@ -233,7 +281,7 @@ if (!class_exists('WC_Twoinc')) {
                         </div> ',
                         sprintf(
                             __($this->get_option('title'), 'twoinc-payment-gateway'),
-                            '<span class="due-in-days">' . strval($this->get_option('days_on_invoice')) . '</span>'
+                            '<span class="due-in-days">' . strval($this->get_merchant_default_days_on_invoice()) . '</span>'
                         ),
                         __('Pay on invoice with agreed terms', 'twoinc-payment-gateway'),
                         __('Enter company name to pay on invoice', 'twoinc-payment-gateway'),
@@ -242,7 +290,7 @@ if (!class_exists('WC_Twoinc')) {
                             __('Express checkout', 'twoinc-payment-gateway'),
                             sprintf(
                                 __('Pay in %s days, at no extra cost', 'twoinc-payment-gateway'),
-                                '<span class="due-in-days">' . strval($this->get_option('days_on_invoice')) . '</span>'
+                                '<span class="due-in-days">' . strval($this->get_merchant_default_days_on_invoice()) . '</span>'
                             ),
                             __('Pay on invoice with agreed terms', 'twoinc-payment-gateway'),
                             $this->get_payment_description_msg()
@@ -416,7 +464,7 @@ if (!class_exists('WC_Twoinc')) {
             $original_order = WC_Twoinc_Helper::compose_twoinc_order(
                 $order,
                 $twoinc_meta['order_reference'],
-                $twoinc_meta['days_on_invoice'],
+                $this->get_merchant_default_days_on_invoice(),
                 $twoinc_meta['company_id'],
                 $twoinc_meta['department'],
                 $twoinc_meta['project'],
@@ -456,7 +504,7 @@ if (!class_exists('WC_Twoinc')) {
             $updated_order = WC_Twoinc_Helper::compose_twoinc_order(
                 $order,
                 $twoinc_meta['order_reference'],
-                $twoinc_meta['days_on_invoice'],
+                $this->get_merchant_default_days_on_invoice(),
                 $twoinc_meta['company_id'],
                 $twoinc_meta['department'],
                 $twoinc_meta['project'],
@@ -742,7 +790,6 @@ if (!class_exists('WC_Twoinc')) {
             $department = array_key_exists('department', $_POST) ? sanitize_text_field($_POST['department']) : '';
             $project = array_key_exists('project', $_POST) ? sanitize_text_field($_POST['project']) : '';
             $tracking_id = array_key_exists('tracking_id', $_POST) ? sanitize_text_field($_POST['tracking_id']) : '';
-            $days_on_invoice = $this->get_option('days_on_invoice');
             $tillit_merchant_id = $this->get_option('tillit_merchant_id');
             $order_reference = wp_generate_password(64, false, false);
             // For requests from order pay page
@@ -753,7 +800,6 @@ if (!class_exists('WC_Twoinc')) {
             // Store the order meta
             update_post_meta($order_id, '_tillit_order_reference', $order_reference);
             update_post_meta($order_id, '_tillit_merchant_id', $tillit_merchant_id);
-            update_post_meta($order_id, '_days_on_invoice', $days_on_invoice);
             update_post_meta($order_id, 'company_id', $company_id);
             update_post_meta($order_id, 'department', $department);
             update_post_meta($order_id, 'project', $project);
@@ -797,7 +843,7 @@ if (!class_exists('WC_Twoinc')) {
             $response = $this->make_request('/v1/order', WC_Twoinc_Helper::compose_twoinc_order(
                 $order,
                 $order_reference,
-                $days_on_invoice,
+                $this->get_merchant_default_days_on_invoice(),
                 $company_id,
                 $department,
                 $project,
@@ -1124,7 +1170,6 @@ if (!class_exists('WC_Twoinc')) {
                     if (isset($body['checkout_sole_trader'])) $this->update_option('checkout_sole_trader', $body['checkout_sole_trader'] ? 'yes' : 'no');
                     if (isset($body['checkout_business'])) $this->update_option('checkout_business', $body['checkout_business'] ? 'yes' : 'no');
                     if (isset($body['product_type'])) $this->update_option('product_type', $body['product_type']);
-                    if (isset($body['days_on_invoice'])) $this->update_option('days_on_invoice', $body['days_on_invoice']);
                     if (isset($body['enable_company_name'])) $this->update_option('enable_company_name', $body['enable_company_name'] ? 'yes' : 'no');
                     if (isset($body['address_search'])) $this->update_option('address_search', $body['address_search'] ? 'yes' : 'no');
                     if (isset($body['mark_tillit_fields_required'])) $this->update_option('mark_tillit_fields_required', $body['mark_tillit_fields_required'] ? 'yes' : 'no');
@@ -1261,11 +1306,6 @@ if (!class_exists('WC_Twoinc')) {
                           'FUNDED_INVOICE' => 'Funded Invoice',
                           'DIRECT_INVOICE' => 'Direct Invoice'
                      )
-                ],
-                'days_on_invoice' => [
-                    'title'       => __('Default number of buyer payment days', 'twoinc-payment-gateway'),
-                    'type'        => 'text',
-                    'default'     => '14'
                 ],
                 'merchant_logo' => [
                     'title'       => __('Add a logo to the invoice', 'twoinc-payment-gateway'),
@@ -1478,11 +1518,6 @@ if (!class_exists('WC_Twoinc')) {
                 $twoinc_merchant_id = $this->get_option('tillit_merchant_id');
                 update_post_meta($order->get_id(), '_tillit_merchant_id', $twoinc_merchant_id);
             }
-            $days_on_invoice = $order->get_meta('_days_on_invoice');
-            if (!$days_on_invoice) {
-                $days_on_invoice = $this->get_option('days_on_invoice');
-                update_post_meta($order->get_id(), '_days_on_invoice', $days_on_invoice);
-            }
 
             $product_type = $order->get_meta('_product_type');
             $payment_reference_message = '';
@@ -1518,7 +1553,6 @@ if (!class_exists('WC_Twoinc')) {
             return array(
                 'order_reference' => $order_reference,
                 'tillit_merchant_id' => $twoinc_merchant_id,
-                'days_on_invoice' => $days_on_invoice,
                 'company_id' => $company_id,
                 'department' => $department,
                 'project' => $project,
@@ -1546,7 +1580,7 @@ if (!class_exists('WC_Twoinc')) {
             // 2. Edit the order
             $response = $this->make_request("/v1/order/${twoinc_order_id}", WC_Twoinc_Helper::compose_twoinc_edit_order(
                     $order,
-                    $twoinc_meta['days_on_invoice'],
+                    $this->get_merchant_default_days_on_invoice(),
                     $twoinc_meta['department'],
                     $twoinc_meta['project'],
                     $twoinc_meta['product_type'],
