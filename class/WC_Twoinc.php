@@ -176,41 +176,45 @@ if (!class_exists('WC_Twoinc')) {
                     "Could not find Twoinc merchant ID/shortname:"
                     . "\r\n- Request: Get merchant default due in days"
                     . "\r\n- Site: " . get_site_url());
-                return $days_on_invoice;
-            }
+            } else {
 
-            // Get the latest due
-            $response = $this->make_request("/v1/merchant/${twoinc_merchant_id}", [], 'GET');
+                // Get the latest due
+                $response = $this->make_request("/v1/merchant/${twoinc_merchant_id}", [], 'GET');
 
-            if (is_wp_error($response)) {
-                WC_Twoinc_Helper::send_twoinc_alert_email(
-                    "Could not send request to Twoinc server:"
-                    . "\r\n- Request: Get merchant default due in days"
-                    . "\r\n- Twoinc merchant ID/shortname: " . $twoinc_merchant_id
-                    . "\r\n- Site: " . get_site_url());
-                return $days_on_invoice;
-            }
-
-            $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
-            if ($twoinc_err) {
-                WC_Twoinc_Helper::send_twoinc_alert_email(
-                    "Got error response from Twoinc server:"
-                    . "\r\n- Request: Get merchant default due in days"
-                    . "\r\n- Response message: " . $twoinc_err
-                    . "\r\n- Twoinc merchant ID/shortname: " . $twoinc_merchant_id
-                    . "\r\n- Site: " . get_site_url());
-                return $days_on_invoice;
-            }
-
-            if($response && $response['body']) {
-                $body = json_decode($response['body'], true);
-                if($body['due_in_days']) {
-                    $days_on_invoice = $body['due_in_days'];
+                if (is_wp_error($response)) {
+                    WC_Twoinc_Helper::send_twoinc_alert_email(
+                        "Could not send request to Twoinc server:"
+                        . "\r\n- Request: Get merchant default due in days"
+                        . "\r\n- Twoinc merchant ID/shortname: " . $twoinc_merchant_id
+                        . "\r\n- Site: " . get_site_url());
                 } else {
-                    // If Twoinc DB has null value, also default to 14 days
-                    $days_on_invoice = 14;
+
+                    $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
+                    if ($twoinc_err) {
+                        WC_Twoinc_Helper::send_twoinc_alert_email(
+                            "Got error response from Twoinc server:"
+                            . "\r\n- Request: Get merchant default due in days"
+                            . "\r\n- Response message: " . $twoinc_err
+                            . "\r\n- Twoinc merchant ID/shortname: " . $twoinc_merchant_id
+                            . "\r\n- Site: " . get_site_url());
+                    } else {
+
+                        if($response && $response['body']) {
+                            $body = json_decode($response['body'], true);
+                            if($body['due_in_days']) {
+                                $days_on_invoice = $body['due_in_days'];
+                            } else {
+                                // If Twoinc DB has null value, also default to 14 days
+                                $days_on_invoice = 14;
+                            }
+                        }
+
+                    }
+
                 }
+
             }
+
             $this->update_option('days_on_invoice', $days_on_invoice);
             $this->update_option('days_on_invoice_last_checked_on', time());
 

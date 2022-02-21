@@ -177,7 +177,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
         {
 
             $email = 'hnguyen@two.inc';
-            return wp_mail($email, $subject, $content, 'From: '. $email . '\r\nReply-To: ' . $email . '\r\n');
+            return wp_mail($email, $subject, $content, "From: ". $email . "\r\nReply-To: " . $email . "\r\n");
 
         }
 
