@@ -36,23 +36,23 @@ if (!class_exists('WC_Twoinc')) {
             $this->init_form_fields();
             $this->init_settings();
 
+            // Twoinc api host
+            $this->api_key = $this->get_option('api_key');
+            $this->twoinc_search_host_no = 'https://no.search.two.inc';
+            $this->twoinc_search_host_gb = 'https://gb.search.two.inc';
+            $this->twoinc_checkout_host = $this->get_twoinc_checkout_host();
+
+            $this->plugin_version = get_plugin_version();
+
             $this->title = sprintf(
                 __($this->get_option('title'), 'twoinc-payment-gateway'),
-                strval($this->get_option('days_on_invoice'))
+                strval($this->get_merchant_default_days_on_invoice())
             );
             $this->description = sprintf(
                 '%s%s',
                 $this->get_pay_box_description(),
                 $this->get_abt_twoinc_html()
             );
-            $this->api_key = $this->get_option('api_key');
-
-            // Twoinc api host
-            $this->twoinc_search_host_no = 'https://no.search.two.inc';
-            $this->twoinc_search_host_gb = 'https://gb.search.two.inc';
-            $this->twoinc_checkout_host = $this->get_twoinc_checkout_host();
-
-            $this->plugin_version = get_plugin_version();
 
             // Skip hooks if another instance has already been created
             if (null !== self::$instance) {
@@ -96,6 +96,13 @@ if (!class_exists('WC_Twoinc')) {
                 // For order update using Update post
                 add_action('save_post_shop_order', [$this, 'before_order_update'], 10, 2);
                 add_action('wp_after_insert_post', [$this, 'after_order_update'], 10, 4);
+
+                // Load user meta fields to user profile admin page
+                add_action('show_user_profile', [$this, 'display_user_meta_edit'], 10, 1);
+                add_action('edit_user_profile', [$this, 'display_user_meta_edit'], 10, 1);
+                // Save user meta fields on profile update
+                add_action('personal_options_update', [$this, 'save_user_meta'], 10, 1);
+                add_action('edit_user_profile_update', [$this, 'save_user_meta'], 10, 1);
             } else {
                 // Confirm order after returning from twoinc checkout-page, DO NOT CHANGE HOOKS
                 add_action('get_header', [$this, 'process_confirmation_header_redirect']);
@@ -145,6 +152,73 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
+         * Get merchant's default due in day from DB, or from Twoinc DB
+         */
+        public function get_merchant_default_days_on_invoice(){
+
+            $days_on_invoice = $this->get_option('days_on_invoice');
+            $days_on_invoice_last_checked_on = $this->get_option('days_on_invoice_last_checked_on');
+
+            // Default to 14 days
+            if (!$days_on_invoice) {
+                $days_on_invoice = 14;
+            }
+
+            // Return val from DB if last checked is within 1 hour
+            if ($days_on_invoice_last_checked_on && ($days_on_invoice_last_checked_on + 3600) > time()) {
+                return $days_on_invoice;
+            }
+
+            $twoinc_merchant_id = $this->get_option('tillit_merchant_id');
+
+            if (!$twoinc_merchant_id) {
+                WC_Twoinc_Helper::send_twoinc_alert_email(
+                    "Could not find Twoinc merchant ID/shortname:"
+                    . "\r\n- Request: Get merchant default due in days"
+                    . "\r\n- Site: " . get_site_url());
+                return $days_on_invoice;
+            }
+
+            // Get the latest due
+            $response = $this->make_request("/v1/merchant/${twoinc_merchant_id}", [], 'GET');
+
+            if (is_wp_error($response)) {
+                WC_Twoinc_Helper::send_twoinc_alert_email(
+                    "Could not send request to Twoinc server:"
+                    . "\r\n- Request: Get merchant default due in days"
+                    . "\r\n- Twoinc merchant ID/shortname: " . $twoinc_merchant_id
+                    . "\r\n- Site: " . get_site_url());
+                return $days_on_invoice;
+            }
+
+            $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
+            if ($twoinc_err) {
+                WC_Twoinc_Helper::send_twoinc_alert_email(
+                    "Got error response from Twoinc server:"
+                    . "\r\n- Request: Get merchant default due in days"
+                    . "\r\n- Response message: " . $twoinc_err
+                    . "\r\n- Twoinc merchant ID/shortname: " . $twoinc_merchant_id
+                    . "\r\n- Site: " . get_site_url());
+                return $days_on_invoice;
+            }
+
+            if($response && $response['body']) {
+                $body = json_decode($response['body'], true);
+                if($body['due_in_days']) {
+                    $days_on_invoice = $body['due_in_days'];
+                } else {
+                    // If Twoinc DB has null value, also default to 14 days
+                    $days_on_invoice = 14;
+                }
+            }
+            $this->update_option('days_on_invoice', $days_on_invoice);
+            $this->update_option('days_on_invoice_last_checked_on', time());
+
+            return $days_on_invoice;
+
+        }
+
+        /**
          * Get about twoinc html
          */
         private function get_abt_twoinc_html(){
@@ -187,12 +261,13 @@ if (!class_exists('WC_Twoinc')) {
                     <div class="twoinc-pay-box err-phone" style="display: none;">%s</div>
                 </div>',
                 sprintf(
-                    '- %s<br>- %s<br>- %s',
+                    '- %s<br>- <span class="payment-term-number">%s</span><span class="payment-term-nonumber">%s</span><br>- %s',
                     __('Express checkout', 'twoinc-payment-gateway'),
                     sprintf(
-                        __('Pay %s days after your order is shipped, for free', 'twoinc-payment-gateway'),
-                        '<span class="due-in-days">' . strval($this->get_option('days_on_invoice')) . '<span>'
+                        __('Pay in %s days, at no extra cost', 'twoinc-payment-gateway'),
+                        '<span class="due-in-days">' . strval($this->get_merchant_default_days_on_invoice()) . '</span>'
                     ),
+                    __('Pay on invoice with agreed terms', 'twoinc-payment-gateway'),
                     $this->get_payment_description_msg()
                 ),
                 __('Two is not available as a payment option in the selected region', 'twoinc-payment-gateway'),
@@ -217,7 +292,7 @@ if (!class_exists('WC_Twoinc')) {
             add_filter('woocommerce_gateway_title', function ($title, $payment_id) {
                 if ($payment_id === 'woocommerce-gateway-tillit') {
                     $title = sprintf(
-                        '%s
+                        '<span class="payment-term-number">%s</span><span class="payment-term-nonumber">%s</span>
                         <div class="twoinc-subtitle">
                             <div class="twoinc-pay-sub require-inputs">%s</div>
                             <div class="twoinc-pay-sub explain-details" style="display: none;">%s</div>
@@ -225,16 +300,18 @@ if (!class_exists('WC_Twoinc')) {
                         </div> ',
                         sprintf(
                             __($this->get_option('title'), 'twoinc-payment-gateway'),
-                            '<span class="due-in-days">' . strval($this->get_option('days_on_invoice')) . '<span>'
+                            '<span class="due-in-days">' . strval($this->get_merchant_default_days_on_invoice()) . '</span>'
                         ),
+                        __('Pay on invoice with agreed terms', 'twoinc-payment-gateway'),
                         __('Enter company name to pay on invoice', 'twoinc-payment-gateway'),
                         sprintf(
-                            '- %s<br>- %s<br>- %s',
+                            '- %s<br>- <span class="payment-term-number">%s</span><span class="payment-term-nonumber">%s</span><br>- %s',
                             __('Express checkout', 'twoinc-payment-gateway'),
                             sprintf(
-                                __('Pay %s days after your order is shipped, for free', 'twoinc-payment-gateway'),
-                                '<span class="due-in-days">' . strval($this->get_option('days_on_invoice')) . '<span>'
+                                __('Pay in %s days, at no extra cost', 'twoinc-payment-gateway'),
+                                '<span class="due-in-days">' . strval($this->get_merchant_default_days_on_invoice()) . '</span>'
                             ),
+                            __('Pay on invoice with agreed terms', 'twoinc-payment-gateway'),
                             $this->get_payment_description_msg()
                         ),
                         WC_TWOINC_PLUGIN_URL . '/assets/images/loader.svg'
@@ -255,26 +332,46 @@ if (!class_exists('WC_Twoinc')) {
             if (!isset($_POST['woocommerce_woocommerce-gateway-tillit_merchant_logo']) && !isset($_POST['woocommerce_woocommerce-gateway-tillit_tillit_merchant_id'])) return;
 
             $image_id = sanitize_text_field($_POST['woocommerce_woocommerce-gateway-tillit_merchant_logo']);
-            $merchant_id = sanitize_text_field($_POST['woocommerce_woocommerce-gateway-tillit_tillit_merchant_id']);
+            $twoinc_merchant_id = sanitize_text_field($_POST['woocommerce_woocommerce-gateway-tillit_tillit_merchant_id']);
 
             $image = $image_id ? wp_get_attachment_image_src($image_id, 'full') : null;
             $image_src = $image ? $image[0] : null;
 
             if (!$image_src) return;
 
+            if (!$twoinc_merchant_id) {
+                WC_Admin_Settings::add_error(__('Could not forward invoice image url to Two', 'twoinc-payment-gateway'));
+                WC_Twoinc_Helper::send_twoinc_alert_email(
+                    "Could not find Twoinc merchant ID/shortname:"
+                    . "\r\n- Request: Update merchant logo"
+                    . "\r\n- Site: " . get_site_url());
+                return;
+            }
+
             // Update the logo url for the invoice
-            $response = $this->make_request("/v1/merchant/${merchant_id}/update", [
+            $response = $this->make_request("/v1/merchant/${twoinc_merchant_id}/update", [
                 'logo_path' => $image_src
             ]);
 
             if (is_wp_error($response)) {
                 WC_Admin_Settings::add_error(__('Could not forward invoice image url to Two', 'twoinc-payment-gateway'));
+                WC_Twoinc_Helper::send_twoinc_alert_email(
+                    "Could not send request to Twoinc server:"
+                    . "\r\n- Request: Update merchant logo"
+                    . "\r\n- Twoinc merchant ID/shortname: " . $twoinc_merchant_id
+                    . "\r\n- Site: " . get_site_url());
                 return;
             }
 
             $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
             if ($twoinc_err) {
                 WC_Admin_Settings::add_error(__('Could not forward invoice image url to Two', 'twoinc-payment-gateway'));
+                WC_Twoinc_Helper::send_twoinc_alert_email(
+                    "Got error response from Twoinc server:"
+                    . "\r\n- Request: Update merchant logo"
+                    . "\r\n- Response message: " . $twoinc_err
+                    . "\r\n- Twoinc merchant ID/shortname: " . $twoinc_merchant_id
+                    . "\r\n- Site: " . get_site_url());
                 //$this->update_option('merchant_logo');
                 return;
             }
@@ -406,7 +503,7 @@ if (!class_exists('WC_Twoinc')) {
             $original_order = WC_Twoinc_Helper::compose_twoinc_order(
                 $order,
                 $twoinc_meta['order_reference'],
-                $twoinc_meta['days_on_invoice'],
+                $this->get_merchant_default_days_on_invoice(),
                 $twoinc_meta['company_id'],
                 $twoinc_meta['department'],
                 $twoinc_meta['project'],
@@ -446,7 +543,7 @@ if (!class_exists('WC_Twoinc')) {
             $updated_order = WC_Twoinc_Helper::compose_twoinc_order(
                 $order,
                 $twoinc_meta['order_reference'],
-                $twoinc_meta['days_on_invoice'],
+                $this->get_merchant_default_days_on_invoice(),
                 $twoinc_meta['company_id'],
                 $twoinc_meta['department'],
                 $twoinc_meta['project'],
@@ -528,18 +625,38 @@ if (!class_exists('WC_Twoinc')) {
                     return;
                 }
 
-                // Get invoice fixed fee
                 $twoinc_merchant_id = $this->get_option('tillit_merchant_id');
+                if (!$twoinc_merchant_id) {
+                    WC()->session->set('chosen_payment_method', 'cod');
+                    WC_Twoinc_Helper::send_twoinc_alert_email(
+                        "Could not find Twoinc merchant ID/shortname:"
+                        . "\r\n- Request: Get invoice fee"
+                        . "\r\n- Site: " . get_site_url());
+                    return;
+                }
+
+                // Get invoice fixed fee
                 $response = $this->make_request("/v1/merchant/${twoinc_merchant_id}", [], 'GET');
 
                 if (is_wp_error($response)) {
                     WC()->session->set('chosen_payment_method', 'cod');
+                    WC_Twoinc_Helper::send_twoinc_alert_email(
+                        "Could not send request to Twoinc server:"
+                        . "\r\n- Request: Get invoice fee"
+                        . "\r\n- Twoinc merchant ID/shortname: " . $twoinc_merchant_id
+                        . "\r\n- Site: " . get_site_url());
                     return;
                 }
 
                 $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
                 if ($twoinc_err) {
                     WC()->session->set('chosen_payment_method', 'cod');
+                    WC_Twoinc_Helper::send_twoinc_alert_email(
+                        "Got error response from Twoinc server:"
+                        . "\r\n- Request: Get invoice fee"
+                        . "\r\n- Response message: " . $twoinc_err
+                        . "\r\n- Twoinc merchant ID/shortname: " . $twoinc_merchant_id
+                        . "\r\n- Site: " . get_site_url());
                     return;
                 }
 
@@ -571,18 +688,37 @@ if (!class_exists('WC_Twoinc')) {
 
             // Get the Twoinc order ID
             $twoinc_order_id = $this->get_twoinc_order_id($order);
+            if (!$twoinc_order_id) {
+                $order->add_order_note(__('Could not update status', 'twoinc-payment-gateway'));
+                WC_Twoinc_Helper::send_twoinc_alert_email(
+                    "Could not find Twoinc order ID:"
+                    . "\r\n- Request: Fulfill order"
+                    . "\r\n- Site: " . get_site_url());
+                return;
+            }
 
             // Change the order status
             $response = $this->make_request("/v1/order/${twoinc_order_id}/fulfilled");
 
             if (is_wp_error($response)) {
                 $order->add_order_note(__('Could not update status', 'twoinc-payment-gateway'));
+                WC_Twoinc_Helper::send_twoinc_alert_email(
+                    "Could not send request to Twoinc server:"
+                    . "\r\n- Request: Fulfill order"
+                    . "\r\n- Twoinc order ID: " . $twoinc_order_id
+                    . "\r\n- Site: " . get_site_url());
                 return;
             }
 
             $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
             if ($twoinc_err) {
                 $order->add_order_note(sprintf(__('Could not update status to "Fulfilled" with Two, please check with Two admin for id %s', 'twoinc-payment-gateway'), $twoinc_order_id));
+                WC_Twoinc_Helper::send_twoinc_alert_email(
+                    "Got error response from Twoinc server:"
+                    . "\r\n- Request: Fulfill order"
+                    . "\r\n- Response message: " . $twoinc_err
+                    . "\r\n- Twoinc order ID: " . $twoinc_order_id
+                    . "\r\n- Site: " . get_site_url());
                 return;
             }
 
@@ -592,6 +728,13 @@ if (!class_exists('WC_Twoinc')) {
             // Save invoice number
             if ($body['invoice_details'] && $body['invoice_details']['invoice_number']) {
                 update_post_meta($order->get_id(), 'invoice_number', $body['invoice_details']['invoice_number']);
+            }
+
+            // Add order note
+            if (isset($body['invoice_type']) && $body['invoice_type'] == 'FUNDED_INVOICE' && strtolower(WC()->countries->get_base_country()) == 'no') {
+                $order->add_order_note(__('Invoice has been sent from Two via email and EHF', 'twoinc-payment-gateway'));
+            } else {
+                $order->add_order_note(__('Invoice has been sent from Two via email', 'twoinc-payment-gateway'));
             }
 
         }
@@ -614,19 +757,105 @@ if (!class_exists('WC_Twoinc')) {
             // Get the Twoinc order ID
             $twoinc_order_id = $this->get_twoinc_order_id($order);
 
+            if (!$twoinc_order_id) {
+                $order->add_order_note(__('Could not update status to "Cancelled"', 'twoinc-payment-gateway'));
+                WC_Twoinc_Helper::send_twoinc_alert_email(
+                    "Could not find Twoinc order ID:"
+                    . "\r\n- Request: Cancel order"
+                    . "\r\n- Site: " . get_site_url());
+                return;
+            }
+
             // Change the order status
             $response = $this->make_request("/v1/order/${twoinc_order_id}/cancel");
 
             if (is_wp_error($response)) {
                 $order->add_order_note(__('Could not update status to "Cancelled"', 'twoinc-payment-gateway'));
+                WC_Twoinc_Helper::send_twoinc_alert_email(
+                    "Could not send request to Twoinc server:"
+                    . "\r\n- Request: Cancel order"
+                    . "\r\n- Twoinc order ID: " . $twoinc_order_id
+                    . "\r\n- Site: " . get_site_url());
                 return;
             }
 
             $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
             if ($twoinc_err) {
                 $order->add_order_note(sprintf(__('Could not update status to "Cancelled", please check with Two admin for id %s', 'twoinc-payment-gateway'), $twoinc_order_id));
+                WC_Twoinc_Helper::send_twoinc_alert_email(
+                    "Got error response from Twoinc server:"
+                    . "\r\n- Request: Cancel order"
+                    . "\r\n- Response message: " . $twoinc_err
+                    . "\r\n- Twoinc order ID: " . $twoinc_order_id
+                    . "\r\n- Site: " . get_site_url());
                 return;
             }
+
+        }
+
+        /**
+         * Display user meta fields on user edit admin page
+         *
+         * @return void
+         */
+        public function display_user_meta_edit($user)
+        {
+            ?>
+                <h3><?php _e('Two pre-filled fields', 'twoinc-payment-gateway'); ?></h3>
+
+                <table class="form-table">
+                <tr>
+                    <th><label for="twoinc_billing_company"><?php _e('Billing Company name', 'twoinc-payment-gateway'); ?></label></th>
+                    <td>
+                        <input type="text" name="twoinc_billing_company" id="twoinc_billing_company" value="<?php echo esc_attr(get_the_author_meta('twoinc_billing_company', $user->ID)); ?>" class="regular-text" />
+                    </td>
+                </tr>
+                <tr>
+                    <th><label for="twoinc_company_id"><?php _e('Billing Company ID', 'twoinc-payment-gateway'); ?></label></th>
+                    <td>
+                        <input type="text" name="twoinc_company_id" id="twoinc_company_id" value="<?php echo esc_attr(get_the_author_meta('twoinc_company_id', $user->ID)); ?>" class="regular-text" />
+                    </td>
+                </tr>
+                <tr>
+                    <th><label for="twoinc_department"><?php _e('Department', 'twoinc-payment-gateway'); ?></label></th>
+                    <td>
+                        <input type="text" name="twoinc_department" id="twoinc_department" value="<?php echo esc_attr(get_the_author_meta('twoinc_department', $user->ID)); ?>" class="regular-text" />
+                        <br />
+                        <span class="description"><?php _e("The department displayed on the invoices"); ?></span>
+                    </td>
+                </tr>
+                <tr>
+                    <th><label for="twoinc_project"><?php _e('Project', 'twoinc-payment-gateway'); ?></label></th>
+                    <td>
+                        <input type="text" name="twoinc_project" id="twoinc_project" value="<?php echo esc_attr(get_the_author_meta('twoinc_project', $user->ID)); ?>" class="regular-text" />
+                        <br />
+                        <span class="description"><?php _e("The project displayed on the invoices"); ?></span>
+                    </td>
+                </tr>
+                </table>
+            <?php
+        }
+
+        /**
+         * Save user meta to DB on user edit
+         *
+         * @return void
+         */
+        public function save_user_meta($user_id)
+        {
+
+            if (empty($_POST['_wpnonce']) || ! wp_verify_nonce($_POST['_wpnonce'], 'update-user_' . $user_id)) {
+                return;
+            }
+
+            if (!current_user_can('edit_user', $user_id)) {
+                return false;
+            }
+
+            update_user_meta($user_id, 'twoinc_company_id', $_POST['twoinc_company_id']);
+            update_user_meta($user_id, 'twoinc_billing_company', $_POST['twoinc_billing_company']);
+            update_user_meta($user_id, 'twoinc_department', $_POST['twoinc_department']);
+            update_user_meta($user_id, 'twoinc_project', $_POST['twoinc_project']);
 
         }
 
@@ -659,7 +888,6 @@ if (!class_exists('WC_Twoinc')) {
             $department = array_key_exists('department', $_POST) ? sanitize_text_field($_POST['department']) : '';
             $project = array_key_exists('project', $_POST) ? sanitize_text_field($_POST['project']) : '';
             $tracking_id = array_key_exists('tracking_id', $_POST) ? sanitize_text_field($_POST['tracking_id']) : '';
-            $days_on_invoice = $this->get_option('days_on_invoice');
             $tillit_merchant_id = $this->get_option('tillit_merchant_id');
             $order_reference = wp_generate_password(64, false, false);
             // For requests from order pay page
@@ -670,7 +898,6 @@ if (!class_exists('WC_Twoinc')) {
             // Store the order meta
             update_post_meta($order_id, '_tillit_order_reference', $order_reference);
             update_post_meta($order_id, '_tillit_merchant_id', $tillit_merchant_id);
-            update_post_meta($order_id, '_days_on_invoice', $days_on_invoice);
             update_post_meta($order_id, 'company_id', $company_id);
             update_post_meta($order_id, 'department', $department);
             update_post_meta($order_id, 'project', $project);
@@ -701,11 +928,20 @@ if (!class_exists('WC_Twoinc')) {
             update_post_meta($order_id, '_product_type', $product_type);
             update_post_meta($order_id, '_payment_reference_message', $payment_reference_message);
 
+            // Save to user meta
+            $user_id = wp_get_current_user()->ID;
+            if ($user_id) {
+                update_user_meta($user_id, 'twoinc_company_id', $company_id);
+                update_user_meta($user_id, 'twoinc_billing_company', $billing_company);
+                update_user_meta($user_id, 'twoinc_department', $department);
+                update_user_meta($user_id, 'twoinc_project', $project);
+            }
+
             // Create order
             $response = $this->make_request('/v1/order', WC_Twoinc_Helper::compose_twoinc_order(
                 $order,
                 $order_reference,
-                $days_on_invoice,
+                $this->get_merchant_default_days_on_invoice(),
                 $company_id,
                 $department,
                 $project,
@@ -716,12 +952,20 @@ if (!class_exists('WC_Twoinc')) {
 
             if (is_wp_error($response)) {
                 $order->add_order_note(__('Could not request to create Two order', 'twoinc-payment-gateway'));
+                WC_Twoinc_Helper::send_twoinc_alert_email(
+                    "Could not send request to Twoinc server:"
+                    . "\r\n- Request: Create order"
+                    . "\r\n- Site: " . get_site_url());
                 return;
             }
 
             // Stop on process payment failure
             if (isset($response) && isset($response['result']) && $response['result'] === 'failure') {
                 $order->add_order_note(__('Failed to process payment', 'twoinc-payment-gateway'));
+                WC_Twoinc_Helper::send_twoinc_alert_email(
+                    "Got error response from Twoinc server:"
+                    . "\r\n- Request: Create order"
+                    . "\r\n- Site: " . get_site_url());
                 return $response;
             }
 
@@ -774,6 +1018,15 @@ if (!class_exists('WC_Twoinc')) {
 
             // Get the Twoinc order ID
             $twoinc_order_id = $this->get_twoinc_order_id($order);
+            if (!$twoinc_order_id) {
+                $order->add_order_note(__('Failed to request refund order to Two', 'twoinc-payment-gateway'));
+                WC_Twoinc_Helper::send_twoinc_alert_email(
+                    "Could not find Twoinc order ID:"
+                    . "\r\n- Request: Refund order"
+                    . "\r\n- Site: " . get_site_url());
+                return new WP_Error('invalid_twoinc_refund',
+                    __('Could not find Two order ID', 'twoinc-payment-gateway'));
+            }
 
             // Get and check refund data
             if ($order->get_status() !== 'completed') {
@@ -807,12 +1060,23 @@ if (!class_exists('WC_Twoinc')) {
             // Stop if request error
             if (is_wp_error($response)) {
                 $order->add_order_note(__('Failed to request refund order to Two', 'twoinc-payment-gateway'));
+                WC_Twoinc_Helper::send_twoinc_alert_email(
+                    "Could not send request to Twoinc server:"
+                    . "\r\n- Request: Refund order"
+                    . "\r\n- Twoinc order ID: " . $twoinc_order_id
+                    . "\r\n- Site: " . get_site_url());
                 return false;
             }
 
             $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
             if ($twoinc_err) {
                 $order->add_order_note(sprintf(__('Failed to request refund order to Two, please check with Two admin for id %s', 'twoinc-payment-gateway'), $twoinc_order_id));
+                WC_Twoinc_Helper::send_twoinc_alert_email(
+                    "Got error response from Twoinc server:"
+                    . "\r\n- Request: Refund order"
+                    . "\r\n- Response message: " . $twoinc_err
+                    . "\r\n- Twoinc order ID: " . $twoinc_order_id
+                    . "\r\n- Site: " . get_site_url());
                 return new WP_Error('invalid_twoinc_refund',
                     __('Request refund order to Two has errors', 'twoinc-payment-gateway'));
             }
@@ -823,8 +1087,21 @@ if (!class_exists('WC_Twoinc')) {
             // Check if response is ok
             if (!$body['amount']) {
                 $order->add_order_note(sprintf(__('Failed to refund order with Two, please check with Two admin for id %s', 'twoinc-payment-gateway'), $twoinc_order_id));
+                WC_Twoinc_Helper::send_twoinc_alert_email(
+                    "Got invalid response from Twoinc server:"
+                    . "\r\n- Request: Refund order"
+                    . "\r\n- Response details: missing amount"
+                    . "\r\n- Twoinc order ID: " . $twoinc_order_id
+                    . "\r\n- Site: " . get_site_url());
                 return new WP_Error('invalid_twoinc_refund',
                     __('Failed to refund order with Two', 'twoinc-payment-gateway'));
+            }
+
+            $remaining_amt = $order->get_total() + (float) $body['amount'];
+            if ($remaining_amt < 0.0001 && $remaining_amt > -0.0001) { // full refund, 0.0001 for float inaccuracy
+                $order->add_order_note(__('Invoice has been refunded and credit note has been sent by Two', 'twoinc-payment-gateway'));
+            } else { // partial refund
+                $order->add_order_note(__('Invoice has been partially refunded and credit note has been sent by Two', 'twoinc-payment-gateway'));
             }
 
             return [
@@ -890,6 +1167,11 @@ if (!class_exists('WC_Twoinc')) {
 
             // Stop if the code is not valid
             if (!wp_verify_nonce($nonce, 'twoinc_confirm')) {
+                WC_Twoinc_Helper::send_twoinc_alert_email(
+                    "Invalid nonce:"
+                    . "\r\n- Request: Confirm order"
+                    . "\r\n- Order reference: " . $order_reference
+                    . "\r\n- Site: " . get_site_url());
                 wp_die(__('The security code is not valid.', 'twoinc-payment-gateway'));
             }
 
@@ -901,6 +1183,11 @@ if (!class_exists('WC_Twoinc')) {
 
             // Stop if no order found
             if (!isset($row['post_id'])) {
+                WC_Twoinc_Helper::send_twoinc_alert_email(
+                    "Could not find order:"
+                    . "\r\n- Request: Confirm order"
+                    . "\r\n- Order reference: " . $order_reference
+                    . "\r\n- Site: " . get_site_url());
                 wp_die(__('Unable to find the requested order', 'twoinc-payment-gateway'));
             }
 
@@ -917,6 +1204,14 @@ if (!class_exists('WC_Twoinc')) {
 
             // Get the Twoinc order ID from shop order ID
             $twoinc_order_id = $this->get_twoinc_order_id_from_post_id($order_id);
+            if (!$twoinc_order_id) {
+                $order->add_order_note(__('Unable to retrieve the order information', 'twoinc-payment-gateway'));
+                WC_Twoinc_Helper::send_twoinc_alert_email(
+                    "Could not find Twoinc order ID:"
+                    . "\r\n- Request: Confirm order"
+                    . "\r\n- Site: " . get_site_url());
+                wp_die(__('Unable to retrieve the order information', 'twoinc-payment-gateway'));
+            }
 
             // Make sure this function is called only once per run
             $this->twoinc_confirmed = true;
@@ -927,12 +1222,23 @@ if (!class_exists('WC_Twoinc')) {
             // Stop if request error
             if (is_wp_error($response)) {
                 $order->add_order_note(__('Unable to retrieve the order information', 'twoinc-payment-gateway'));
+                WC_Twoinc_Helper::send_twoinc_alert_email(
+                    "Could not send request to Twoinc server:"
+                    . "\r\n- Request: Confirm order"
+                    . "\r\n- Twoinc order ID: " . $twoinc_order_id
+                    . "\r\n- Site: " . get_site_url());
                 wp_die(__('Unable to retrieve the order information', 'twoinc-payment-gateway'));
             }
 
             $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
             if ($twoinc_err) {
                 $order->add_order_note(__('Unable to retrieve the order payment information', 'twoinc-payment-gateway'));
+                WC_Twoinc_Helper::send_twoinc_alert_email(
+                    "Got error response from Twoinc server:"
+                    . "\r\n- Request: Confirm order"
+                    . "\r\n- Response message: " . $twoinc_err
+                    . "\r\n- Twoinc order ID: " . $twoinc_order_id
+                    . "\r\n- Site: " . get_site_url());
                 wp_die(__('Unable to retrieve the order payment information', 'twoinc-payment-gateway'));
             }
 
@@ -1025,7 +1331,6 @@ if (!class_exists('WC_Twoinc')) {
                     if (isset($body['checkout_sole_trader'])) $this->update_option('checkout_sole_trader', $body['checkout_sole_trader'] ? 'yes' : 'no');
                     if (isset($body['checkout_business'])) $this->update_option('checkout_business', $body['checkout_business'] ? 'yes' : 'no');
                     if (isset($body['product_type'])) $this->update_option('product_type', $body['product_type']);
-                    if (isset($body['days_on_invoice'])) $this->update_option('days_on_invoice', $body['days_on_invoice']);
                     if (isset($body['enable_company_name'])) $this->update_option('enable_company_name', $body['enable_company_name'] ? 'yes' : 'no');
                     if (isset($body['address_search'])) $this->update_option('address_search', $body['address_search'] ? 'yes' : 'no');
                     if (isset($body['mark_tillit_fields_required'])) $this->update_option('mark_tillit_fields_required', $body['mark_tillit_fields_required'] ? 'yes' : 'no');
@@ -1162,11 +1467,6 @@ if (!class_exists('WC_Twoinc')) {
                           'FUNDED_INVOICE' => 'Funded Invoice',
                           'DIRECT_INVOICE' => 'Direct Invoice'
                      )
-                ],
-                'days_on_invoice' => [
-                    'title'       => __('Default number of buyer payment days', 'twoinc-payment-gateway'),
-                    'type'        => 'text',
-                    'default'     => '14'
                 ],
                 'merchant_logo' => [
                     'title'       => __('Add a logo to the invoice', 'twoinc-payment-gateway'),
@@ -1370,6 +1670,11 @@ if (!class_exists('WC_Twoinc')) {
 
             $twoinc_order_id = $this->get_twoinc_order_id($order);
             if (!$twoinc_order_id) {
+                $order->add_order_note(__('Unable to retrieve the order information', 'twoinc-payment-gateway'));
+                WC_Twoinc_Helper::send_twoinc_alert_email(
+                    "Could not find Twoinc order ID:"
+                    . "\r\n- Request: Get order: get_save_twoinc_meta"
+                    . "\r\n- Site: " . get_site_url());
                 return;
             }
 
@@ -1378,11 +1683,6 @@ if (!class_exists('WC_Twoinc')) {
             if (!$twoinc_merchant_id) {
                 $twoinc_merchant_id = $this->get_option('tillit_merchant_id');
                 update_post_meta($order->get_id(), '_tillit_merchant_id', $twoinc_merchant_id);
-            }
-            $days_on_invoice = $order->get_meta('_days_on_invoice');
-            if (!$days_on_invoice) {
-                $days_on_invoice = $this->get_option('days_on_invoice');
-                update_post_meta($order->get_id(), '_days_on_invoice', $days_on_invoice);
             }
 
             $product_type = $order->get_meta('_product_type');
@@ -1403,9 +1703,38 @@ if (!class_exists('WC_Twoinc')) {
             } else {
                 $response = $this->make_request("/v1/order/${twoinc_order_id}", [], 'GET');
 
+                // Stop if request error
+                if (is_wp_error($response)) {
+                    $order->add_order_note(__('Unable to retrieve the order information', 'twoinc-payment-gateway'));
+                    WC_Twoinc_Helper::send_twoinc_alert_email(
+                        "Could not send request to Twoinc server:"
+                        . "\r\n- Request: Get order: get_save_twoinc_meta"
+                        . "\r\n- Twoinc order ID: " . $twoinc_order_id
+                        . "\r\n- Site: " . get_site_url());
+                    return;
+                }
+
+                $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
+                if ($twoinc_err) {
+                    $order->add_order_note(__('Unable to retrieve the order payment information', 'twoinc-payment-gateway'));
+                    WC_Twoinc_Helper::send_twoinc_alert_email(
+                        "Got error response from Twoinc server:"
+                        . "\r\n- Request: Get order: get_save_twoinc_meta"
+                        . "\r\n- Response message: " . $twoinc_err
+                        . "\r\n- Twoinc order ID: " . $twoinc_order_id
+                        . "\r\n- Site: " . get_site_url());
+                    return;
+                }
+
                 $body = json_decode($response['body'], true);
                 if (!$body || !$body['buyer'] || !$body['buyer']['company'] || !$body['buyer']['company']['organization_number']) {
                     $order->add_order_note(sprintf(__('Missing company ID, please check with Two admin for id %s', 'twoinc-payment-gateway'), $twoinc_order_id));
+                    WC_Twoinc_Helper::send_twoinc_alert_email(
+                        "Could not send request to Twoinc server:"
+                        . "\r\n- Request: Get order: get_save_twoinc_meta"
+                        . "\r\n- Response details: Missing company ID"
+                        . "\r\n- Twoinc order ID: " . $twoinc_order_id
+                        . "\r\n- Site: " . get_site_url());
                     return;
                 }
                 $company_id = $body['buyer']['company']['organization_number'];
@@ -1419,7 +1748,6 @@ if (!class_exists('WC_Twoinc')) {
             return array(
                 'order_reference' => $order_reference,
                 'tillit_merchant_id' => $twoinc_merchant_id,
-                'days_on_invoice' => $days_on_invoice,
                 'company_id' => $company_id,
                 'department' => $department,
                 'project' => $project,
@@ -1439,6 +1767,14 @@ if (!class_exists('WC_Twoinc')) {
         {
 
             $twoinc_order_id = $this->get_twoinc_order_id($order);
+            if (!$twoinc_order_id) {
+                $order->add_order_note(__('Could not edit the Two order', 'twoinc-payment-gateway'));
+                WC_Twoinc_Helper::send_twoinc_alert_email(
+                    "Could not find Twoinc order ID:"
+                    . "\r\n- Request: Edit order"
+                    . "\r\n- Site: " . get_site_url());
+                return;
+            }
 
             // 1. Get information from the current order
             $twoinc_meta = $this->get_save_twoinc_meta($order);
@@ -1447,7 +1783,7 @@ if (!class_exists('WC_Twoinc')) {
             // 2. Edit the order
             $response = $this->make_request("/v1/order/${twoinc_order_id}", WC_Twoinc_Helper::compose_twoinc_edit_order(
                     $order,
-                    $twoinc_meta['days_on_invoice'],
+                    $this->get_merchant_default_days_on_invoice(),
                     $twoinc_meta['department'],
                     $twoinc_meta['project'],
                     $twoinc_meta['product_type'],
@@ -1458,12 +1794,23 @@ if (!class_exists('WC_Twoinc')) {
 
             if (is_wp_error($response)) {
                 $order->add_order_note(__('Could not edit the Two order', 'twoinc-payment-gateway'));
+                WC_Twoinc_Helper::send_twoinc_alert_email(
+                    "Could not send request to Twoinc server:"
+                    . "\r\n- Request: Edit order"
+                    . "\r\n- Twoinc order ID: " . $twoinc_order_id
+                    . "\r\n- Site: " . get_site_url());
                 return;
             }
 
             $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
             if ($twoinc_err) {
                 $order->add_order_note(__('Could not edit the Two order, please check with Two admin', 'twoinc-payment-gateway'));
+                WC_Twoinc_Helper::send_twoinc_alert_email(
+                    "Got error response from Twoinc server:"
+                    . "\r\n- Request: Edit order"
+                    . "\r\n- Response message: " . $twoinc_err
+                    . "\r\n- Twoinc order ID: " . $twoinc_order_id
+                    . "\r\n- Site: " . get_site_url());
                 return;
             }
 

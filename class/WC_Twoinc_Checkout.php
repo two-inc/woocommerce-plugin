@@ -337,7 +337,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 'display_tooltips' => $this->wc_twoinc->get_option('display_tooltips'),
                 'product_type' => $product_type,
                 'merchant_short_name' => $this->wc_twoinc->get_option('tillit_merchant_id'),
-                'days_on_invoice' => $this->wc_twoinc->get_option('days_on_invoice'),
+                'days_on_invoice' => $this->wc_twoinc->get_merchant_default_days_on_invoice(),
                 'shop_base_country' => strtolower(WC()->countries->get_base_country()),
                 'currency' => $currency,
                 'price_decimal_separator' => wc_get_price_decimal_separator(),
@@ -345,6 +345,14 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 'client_name' => 'wp',
                 'client_version' => get_plugin_version()
             ];
+
+            $user_id = wp_get_current_user()->ID;
+            if ($user_id) {
+                $properties['company_id'] = get_user_meta($user_id, 'twoinc_company_id', true);
+                $properties['billing_company'] = get_user_meta($user_id, 'twoinc_billing_company', true);
+                $properties['department'] = get_user_meta($user_id, 'twoinc_department', true);
+                $properties['project'] = get_user_meta($user_id, 'twoinc_project', true);
+            }
 
             return $properties;
 
