@@ -1291,6 +1291,7 @@ class Twoinc {
         // Display correct payment description
         twoincDomHelper.togglePaymentDesc()
 
+        this.toggleDueInDays()
         this.getDueInDays()
 
     }
