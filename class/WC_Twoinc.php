@@ -490,7 +490,6 @@ if (!class_exists('WC_Twoinc')) {
             $original_order = WC_Twoinc_Helper::compose_twoinc_order(
                 $order,
                 $twoinc_meta['order_reference'],
-                $this->get_merchant_default_days_on_invoice(),
                 $twoinc_meta['company_id'],
                 $twoinc_meta['department'],
                 $twoinc_meta['project'],
@@ -530,7 +529,6 @@ if (!class_exists('WC_Twoinc')) {
             $updated_order = WC_Twoinc_Helper::compose_twoinc_order(
                 $order,
                 $twoinc_meta['order_reference'],
-                $this->get_merchant_default_days_on_invoice(),
                 $twoinc_meta['company_id'],
                 $twoinc_meta['department'],
                 $twoinc_meta['project'],
@@ -934,7 +932,6 @@ if (!class_exists('WC_Twoinc')) {
             $response = $this->make_request('/v1/order', WC_Twoinc_Helper::compose_twoinc_order(
                 $order,
                 $order_reference,
-                $this->get_merchant_default_days_on_invoice(),
                 $company_id,
                 $department,
                 $project,
@@ -1790,7 +1787,6 @@ if (!class_exists('WC_Twoinc')) {
             // 2. Edit the order
             $response = $this->make_request("/v1/order/${twoinc_order_id}", WC_Twoinc_Helper::compose_twoinc_edit_order(
                     $order,
-                    $this->get_merchant_default_days_on_invoice(),
                     $twoinc_meta['department'],
                     $twoinc_meta['project'],
                     $twoinc_meta['product_type'],
