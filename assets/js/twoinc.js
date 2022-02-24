@@ -1318,7 +1318,7 @@ class Twoinc {
         // }
 
         let can = true
-        let values = [].concat(Object.values(this.customerCompany), Object.values(this.customerRepresentative))
+        let values = [].concat(Object.values(this.customerCompany))
 
         for(let i = 0; i < values.length; i++) {
             const value = values[i]
@@ -1359,8 +1359,7 @@ class Twoinc {
                 "gross_amount": "" + gross_amount,
                 "invoice_type": window.twoinc.product_type,
                 "buyer": {
-                    "company": Twoinc.getInstance().customerCompany,
-                    "representative": Twoinc.getInstance().customerRepresentative,
+                    "company": Twoinc.getInstance().customerCompany
                 },
                 "currency": window.twoinc.currency,
                 "line_items": [{
