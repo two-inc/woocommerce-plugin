@@ -171,7 +171,7 @@ if (!class_exists('WC_Twoinc')) {
 
             $twoinc_merchant_id = $this->get_option('tillit_merchant_id');
 
-            if ($twoinc_merchant_id) {
+            if ($twoinc_merchant_id && $this->get_option('api_key')) {
 
                 // Get the latest due
                 $response = $this->make_request("/v1/merchant/${twoinc_merchant_id}", [], 'GET');
@@ -743,7 +743,7 @@ if (!class_exists('WC_Twoinc')) {
             }
 
             // Get the Twoinc order ID
-            $twoinc_order_id = $this->get_twoinc_order_id($order);
+            $twoinc_order_id = $this->get_twoinc_order_id_from_post_id($order_id);
 
             if (!$twoinc_order_id) {
                 $order->add_order_note(__('Could not update status to "Cancelled"', 'twoinc-payment-gateway'));
@@ -1841,6 +1841,8 @@ if (!class_exists('WC_Twoinc')) {
 
         /**
          * Get twoinc order id from post id with backward compatibility
+         * This function uses get_post_meta() instead of $order->get_meta() in get_twoinc_order_id()
+         * The intention is to query from DB in case the meta has not been loaded into $order object
          *
          * @param $post_id
          */
