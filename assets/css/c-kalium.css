@@ -1,0 +1,7 @@
+.woocommerce-checkout #payment ul.payment_methods li.wc_payment_method.payment_method_woocommerce-gateway-tillit #payment_method_woocommerce-gateway-tillit {
+    display: inline-block!important;
+}
+form.checkout.woocommerce-checkout .woocommerce-account-type-fields__field-wrapper input[name="account_type"] {
+    height: 16px;
+    width: 16px;
+}

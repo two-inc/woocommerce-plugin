@@ -160,7 +160,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 return;
             }
 
-            if (!wp_is_json_request()) {
+            if ($wp_version > '5.0.0' && !wp_is_json_request()) {
                 wc_print_notices();
             }
         }
