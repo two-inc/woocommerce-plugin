@@ -171,46 +171,45 @@ if (!class_exists('WC_Twoinc')) {
 
             $twoinc_merchant_id = $this->get_option('tillit_merchant_id');
 
-            if (!$twoinc_merchant_id) {
-                WC_Twoinc_Helper::send_twoinc_alert_email(
-                    "Could not find Twoinc merchant ID/shortname:"
-                    . "\r\n- Request: Get merchant default due in days"
-                    . "\r\n- Site: " . get_site_url());
-                return $days_on_invoice;
-            }
+            if ($twoinc_merchant_id && $this->get_option('api_key')) {
 
-            // Get the latest due
-            $response = $this->make_request("/v1/merchant/${twoinc_merchant_id}", [], 'GET');
+                // Get the latest due
+                $response = $this->make_request("/v1/merchant/${twoinc_merchant_id}", [], 'GET');
 
-            if (is_wp_error($response)) {
-                WC_Twoinc_Helper::send_twoinc_alert_email(
-                    "Could not send request to Twoinc server:"
-                    . "\r\n- Request: Get merchant default due in days"
-                    . "\r\n- Twoinc merchant ID/shortname: " . $twoinc_merchant_id
-                    . "\r\n- Site: " . get_site_url());
-                return $days_on_invoice;
-            }
-
-            $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
-            if ($twoinc_err) {
-                WC_Twoinc_Helper::send_twoinc_alert_email(
-                    "Got error response from Twoinc server:"
-                    . "\r\n- Request: Get merchant default due in days"
-                    . "\r\n- Response message: " . $twoinc_err
-                    . "\r\n- Twoinc merchant ID/shortname: " . $twoinc_merchant_id
-                    . "\r\n- Site: " . get_site_url());
-                return $days_on_invoice;
-            }
-
-            if($response && $response['body']) {
-                $body = json_decode($response['body'], true);
-                if($body['due_in_days']) {
-                    $days_on_invoice = $body['due_in_days'];
+                if (is_wp_error($response)) {
+                    WC_Twoinc_Helper::send_twoinc_alert_email(
+                        "Could not send request to Twoinc server:"
+                        . "\r\n- Request: Get merchant default due in days"
+                        . "\r\n- Twoinc merchant ID/shortname: " . $twoinc_merchant_id
+                        . "\r\n- Site: " . get_site_url());
                 } else {
-                    // If Twoinc DB has null value, also default to 14 days
-                    $days_on_invoice = 14;
+
+                    $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
+                    if ($twoinc_err) {
+                        WC_Twoinc_Helper::send_twoinc_alert_email(
+                            "Got error response from Twoinc server:"
+                            . "\r\n- Request: Get merchant default due in days"
+                            . "\r\n- Response message: " . $twoinc_err
+                            . "\r\n- Twoinc merchant ID/shortname: " . $twoinc_merchant_id
+                            . "\r\n- Site: " . get_site_url());
+                    } else {
+
+                        if($response && $response['body']) {
+                            $body = json_decode($response['body'], true);
+                            if($body['due_in_days']) {
+                                $days_on_invoice = $body['due_in_days'];
+                            } else {
+                                // If Twoinc DB has null value, also default to 14 days
+                                $days_on_invoice = 14;
+                            }
+                        }
+
+                    }
+
                 }
+
             }
+
             $this->update_option('days_on_invoice', $days_on_invoice);
             $this->update_option('days_on_invoice_last_checked_on', time());
 
@@ -332,24 +331,14 @@ if (!class_exists('WC_Twoinc')) {
             if (!isset($_POST['woocommerce_woocommerce-gateway-tillit_merchant_logo']) && !isset($_POST['woocommerce_woocommerce-gateway-tillit_tillit_merchant_id'])) return;
 
             $image_id = sanitize_text_field($_POST['woocommerce_woocommerce-gateway-tillit_merchant_logo']);
-            $twoinc_merchant_id = sanitize_text_field($_POST['woocommerce_woocommerce-gateway-tillit_tillit_merchant_id']);
 
             $image = $image_id ? wp_get_attachment_image_src($image_id, 'full') : null;
             $image_src = $image ? $image[0] : null;
 
             if (!$image_src) return;
 
-            if (!$twoinc_merchant_id) {
-                WC_Admin_Settings::add_error(__('Could not forward invoice image url to Two', 'twoinc-payment-gateway'));
-                WC_Twoinc_Helper::send_twoinc_alert_email(
-                    "Could not find Twoinc merchant ID/shortname:"
-                    . "\r\n- Request: Update merchant logo"
-                    . "\r\n- Site: " . get_site_url());
-                return;
-            }
-
             // Update the logo url for the invoice
-            $response = $this->make_request("/v1/merchant/${twoinc_merchant_id}/update", [
+            $response = $this->make_request("/v1/merchant/update", [
                 'logo_path' => $image_src
             ]);
 
@@ -358,7 +347,6 @@ if (!class_exists('WC_Twoinc')) {
                 WC_Twoinc_Helper::send_twoinc_alert_email(
                     "Could not send request to Twoinc server:"
                     . "\r\n- Request: Update merchant logo"
-                    . "\r\n- Twoinc merchant ID/shortname: " . $twoinc_merchant_id
                     . "\r\n- Site: " . get_site_url());
                 return;
             }
@@ -370,7 +358,6 @@ if (!class_exists('WC_Twoinc')) {
                     "Got error response from Twoinc server:"
                     . "\r\n- Request: Update merchant logo"
                     . "\r\n- Response message: " . $twoinc_err
-                    . "\r\n- Twoinc merchant ID/shortname: " . $twoinc_merchant_id
                     . "\r\n- Site: " . get_site_url());
                 //$this->update_option('merchant_logo');
                 return;
@@ -503,7 +490,6 @@ if (!class_exists('WC_Twoinc')) {
             $original_order = WC_Twoinc_Helper::compose_twoinc_order(
                 $order,
                 $twoinc_meta['order_reference'],
-                $this->get_merchant_default_days_on_invoice(),
                 $twoinc_meta['company_id'],
                 $twoinc_meta['department'],
                 $twoinc_meta['project'],
@@ -543,7 +529,6 @@ if (!class_exists('WC_Twoinc')) {
             $updated_order = WC_Twoinc_Helper::compose_twoinc_order(
                 $order,
                 $twoinc_meta['order_reference'],
-                $this->get_merchant_default_days_on_invoice(),
                 $twoinc_meta['company_id'],
                 $twoinc_meta['department'],
                 $twoinc_meta['project'],
@@ -693,6 +678,7 @@ if (!class_exists('WC_Twoinc')) {
                 WC_Twoinc_Helper::send_twoinc_alert_email(
                     "Could not find Twoinc order ID:"
                     . "\r\n- Request: Fulfill order"
+                    . "\r\n- Merchant post ID: " . strval($order->get_id())
                     . "\r\n- Site: " . get_site_url());
                 return;
             }
@@ -706,6 +692,7 @@ if (!class_exists('WC_Twoinc')) {
                     "Could not send request to Twoinc server:"
                     . "\r\n- Request: Fulfill order"
                     . "\r\n- Twoinc order ID: " . $twoinc_order_id
+                    . "\r\n- Merchant post ID: " . strval($order->get_id())
                     . "\r\n- Site: " . get_site_url());
                 return;
             }
@@ -718,6 +705,7 @@ if (!class_exists('WC_Twoinc')) {
                     . "\r\n- Request: Fulfill order"
                     . "\r\n- Response message: " . $twoinc_err
                     . "\r\n- Twoinc order ID: " . $twoinc_order_id
+                    . "\r\n- Merchant post ID: " . strval($order->get_id())
                     . "\r\n- Site: " . get_site_url());
                 return;
             }
@@ -755,13 +743,14 @@ if (!class_exists('WC_Twoinc')) {
             }
 
             // Get the Twoinc order ID
-            $twoinc_order_id = $this->get_twoinc_order_id($order);
+            $twoinc_order_id = $this->get_twoinc_order_id_from_post_id($order_id);
 
             if (!$twoinc_order_id) {
                 $order->add_order_note(__('Could not update status to "Cancelled"', 'twoinc-payment-gateway'));
                 WC_Twoinc_Helper::send_twoinc_alert_email(
                     "Could not find Twoinc order ID:"
                     . "\r\n- Request: Cancel order"
+                    . "\r\n- Merchant post ID: " . strval($order->get_id())
                     . "\r\n- Site: " . get_site_url());
                 return;
             }
@@ -775,6 +764,7 @@ if (!class_exists('WC_Twoinc')) {
                     "Could not send request to Twoinc server:"
                     . "\r\n- Request: Cancel order"
                     . "\r\n- Twoinc order ID: " . $twoinc_order_id
+                    . "\r\n- Merchant post ID: " . strval($order->get_id())
                     . "\r\n- Site: " . get_site_url());
                 return;
             }
@@ -787,6 +777,7 @@ if (!class_exists('WC_Twoinc')) {
                     . "\r\n- Request: Cancel order"
                     . "\r\n- Response message: " . $twoinc_err
                     . "\r\n- Twoinc order ID: " . $twoinc_order_id
+                    . "\r\n- Merchant post ID: " . strval($order->get_id())
                     . "\r\n- Site: " . get_site_url());
                 return;
             }
@@ -941,7 +932,6 @@ if (!class_exists('WC_Twoinc')) {
             $response = $this->make_request('/v1/order', WC_Twoinc_Helper::compose_twoinc_order(
                 $order,
                 $order_reference,
-                $this->get_merchant_default_days_on_invoice(),
                 $company_id,
                 $department,
                 $project,
@@ -955,6 +945,7 @@ if (!class_exists('WC_Twoinc')) {
                 WC_Twoinc_Helper::send_twoinc_alert_email(
                     "Could not send request to Twoinc server:"
                     . "\r\n- Request: Create order"
+                    . "\r\n- Merchant post ID: " . strval($order->get_id())
                     . "\r\n- Site: " . get_site_url());
                 return;
             }
@@ -965,6 +956,7 @@ if (!class_exists('WC_Twoinc')) {
                 WC_Twoinc_Helper::send_twoinc_alert_email(
                     "Got error response from Twoinc server:"
                     . "\r\n- Request: Create order"
+                    . "\r\n- Merchant post ID: " . strval($order->get_id())
                     . "\r\n- Site: " . get_site_url());
                 return $response;
             }
@@ -1023,6 +1015,7 @@ if (!class_exists('WC_Twoinc')) {
                 WC_Twoinc_Helper::send_twoinc_alert_email(
                     "Could not find Twoinc order ID:"
                     . "\r\n- Request: Refund order"
+                    . "\r\n- Merchant post ID: " . strval($order->get_id())
                     . "\r\n- Site: " . get_site_url());
                 return new WP_Error('invalid_twoinc_refund',
                     __('Could not find Two order ID', 'twoinc-payment-gateway'));
@@ -1064,6 +1057,7 @@ if (!class_exists('WC_Twoinc')) {
                     "Could not send request to Twoinc server:"
                     . "\r\n- Request: Refund order"
                     . "\r\n- Twoinc order ID: " . $twoinc_order_id
+                    . "\r\n- Merchant post ID: " . strval($order->get_id())
                     . "\r\n- Site: " . get_site_url());
                 return false;
             }
@@ -1076,6 +1070,7 @@ if (!class_exists('WC_Twoinc')) {
                     . "\r\n- Request: Refund order"
                     . "\r\n- Response message: " . $twoinc_err
                     . "\r\n- Twoinc order ID: " . $twoinc_order_id
+                    . "\r\n- Merchant post ID: " . strval($order->get_id())
                     . "\r\n- Site: " . get_site_url());
                 return new WP_Error('invalid_twoinc_refund',
                     __('Request refund order to Two has errors', 'twoinc-payment-gateway'));
@@ -1092,6 +1087,7 @@ if (!class_exists('WC_Twoinc')) {
                     . "\r\n- Request: Refund order"
                     . "\r\n- Response details: missing amount"
                     . "\r\n- Twoinc order ID: " . $twoinc_order_id
+                    . "\r\n- Merchant post ID: " . strval($order->get_id())
                     . "\r\n- Site: " . get_site_url());
                 return new WP_Error('invalid_twoinc_refund',
                     __('Failed to refund order with Two', 'twoinc-payment-gateway'));
@@ -1209,6 +1205,7 @@ if (!class_exists('WC_Twoinc')) {
                 WC_Twoinc_Helper::send_twoinc_alert_email(
                     "Could not find Twoinc order ID:"
                     . "\r\n- Request: Confirm order"
+                    . "\r\n- Merchant post ID: " . strval($order->get_id())
                     . "\r\n- Site: " . get_site_url());
                 wp_die(__('Unable to retrieve the order information', 'twoinc-payment-gateway'));
             }
@@ -1226,6 +1223,7 @@ if (!class_exists('WC_Twoinc')) {
                     "Could not send request to Twoinc server:"
                     . "\r\n- Request: Confirm order"
                     . "\r\n- Twoinc order ID: " . $twoinc_order_id
+                    . "\r\n- Merchant post ID: " . strval($order->get_id())
                     . "\r\n- Site: " . get_site_url());
                 wp_die(__('Unable to retrieve the order information', 'twoinc-payment-gateway'));
             }
@@ -1238,6 +1236,7 @@ if (!class_exists('WC_Twoinc')) {
                     . "\r\n- Request: Confirm order"
                     . "\r\n- Response message: " . $twoinc_err
                     . "\r\n- Twoinc order ID: " . $twoinc_order_id
+                    . "\r\n- Merchant post ID: " . strval($order->get_id())
                     . "\r\n- Site: " . get_site_url());
                 wp_die(__('Unable to retrieve the order payment information', 'twoinc-payment-gateway'));
             }
@@ -1674,6 +1673,7 @@ if (!class_exists('WC_Twoinc')) {
                 WC_Twoinc_Helper::send_twoinc_alert_email(
                     "Could not find Twoinc order ID:"
                     . "\r\n- Request: Get order: get_save_twoinc_meta"
+                    . "\r\n- Merchant post ID: " . strval($order->get_id())
                     . "\r\n- Site: " . get_site_url());
                 return;
             }
@@ -1710,6 +1710,7 @@ if (!class_exists('WC_Twoinc')) {
                         "Could not send request to Twoinc server:"
                         . "\r\n- Request: Get order: get_save_twoinc_meta"
                         . "\r\n- Twoinc order ID: " . $twoinc_order_id
+                        . "\r\n- Merchant post ID: " . strval($order->get_id())
                         . "\r\n- Site: " . get_site_url());
                     return;
                 }
@@ -1722,6 +1723,7 @@ if (!class_exists('WC_Twoinc')) {
                         . "\r\n- Request: Get order: get_save_twoinc_meta"
                         . "\r\n- Response message: " . $twoinc_err
                         . "\r\n- Twoinc order ID: " . $twoinc_order_id
+                        . "\r\n- Merchant post ID: " . strval($order->get_id())
                         . "\r\n- Site: " . get_site_url());
                     return;
                 }
@@ -1734,6 +1736,7 @@ if (!class_exists('WC_Twoinc')) {
                         . "\r\n- Request: Get order: get_save_twoinc_meta"
                         . "\r\n- Response details: Missing company ID"
                         . "\r\n- Twoinc order ID: " . $twoinc_order_id
+                        . "\r\n- Merchant post ID: " . strval($order->get_id())
                         . "\r\n- Site: " . get_site_url());
                     return;
                 }
@@ -1772,6 +1775,7 @@ if (!class_exists('WC_Twoinc')) {
                 WC_Twoinc_Helper::send_twoinc_alert_email(
                     "Could not find Twoinc order ID:"
                     . "\r\n- Request: Edit order"
+                    . "\r\n- Merchant post ID: " . strval($order->get_id())
                     . "\r\n- Site: " . get_site_url());
                 return;
             }
@@ -1783,7 +1787,6 @@ if (!class_exists('WC_Twoinc')) {
             // 2. Edit the order
             $response = $this->make_request("/v1/order/${twoinc_order_id}", WC_Twoinc_Helper::compose_twoinc_edit_order(
                     $order,
-                    $this->get_merchant_default_days_on_invoice(),
                     $twoinc_meta['department'],
                     $twoinc_meta['project'],
                     $twoinc_meta['product_type'],
@@ -1798,6 +1801,7 @@ if (!class_exists('WC_Twoinc')) {
                     "Could not send request to Twoinc server:"
                     . "\r\n- Request: Edit order"
                     . "\r\n- Twoinc order ID: " . $twoinc_order_id
+                    . "\r\n- Merchant post ID: " . strval($order->get_id())
                     . "\r\n- Site: " . get_site_url());
                 return;
             }
@@ -1810,6 +1814,7 @@ if (!class_exists('WC_Twoinc')) {
                     . "\r\n- Request: Edit order"
                     . "\r\n- Response message: " . $twoinc_err
                     . "\r\n- Twoinc order ID: " . $twoinc_order_id
+                    . "\r\n- Merchant post ID: " . strval($order->get_id())
                     . "\r\n- Site: " . get_site_url());
                 return;
             }
@@ -1836,6 +1841,8 @@ if (!class_exists('WC_Twoinc')) {
 
         /**
          * Get twoinc order id from post id with backward compatibility
+         * This function uses get_post_meta() instead of $order->get_meta() in get_twoinc_order_id()
+         * The intention is to query from DB in case the meta has not been loaded into $order object
          *
          * @param $post_id
          */

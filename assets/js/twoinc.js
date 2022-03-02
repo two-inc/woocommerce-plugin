@@ -204,8 +204,8 @@ let twoincDomHelper = {
             // Show the radios or the buttons for account type if number of options > 1
             if (jQuery('input[name="account_type"]').length > 1) {
                 if (window.twoinc.use_account_type_buttons !== 'yes') {
-                    // Show if shop configured to use buttons (and provided Kco is not displayed)
-                    if (jQuery('#klarna-checkout-select-other').length == 0) {
+                    // Show if shop configured to use buttons (and customer details form is visible, i.e. no custom payment page is displayed)
+                    if (jQuery('#customer_details:visible').length !== 0) {
                         jQuery('#account_type_field').show()
                         jQuery('.woocommerce-account-type-fields__field-wrapper').show()
                     }
@@ -985,6 +985,8 @@ let twoincDomHelper = {
             return 'storefront'
         } else if (jQuery('#divi-style-css').length > 0) {
             return 'divi'
+        } else if (jQuery('#kalium-style-css-css').length > 0) {
+            return 'kalium'
         }
     },
 
@@ -1291,6 +1293,7 @@ class Twoinc {
         // Display correct payment description
         twoincDomHelper.togglePaymentDesc()
 
+        this.toggleDueInDays()
         this.getDueInDays()
 
     }
@@ -1317,7 +1320,7 @@ class Twoinc {
         // }
 
         let can = true
-        let values = [].concat(Object.values(this.customerCompany), Object.values(this.customerRepresentative))
+        let values = [].concat(Object.values(this.customerCompany))
 
         for(let i = 0; i < values.length; i++) {
             const value = values[i]
@@ -1358,8 +1361,7 @@ class Twoinc {
                 "gross_amount": "" + gross_amount,
                 "invoice_type": window.twoinc.product_type,
                 "buyer": {
-                    "company": Twoinc.getInstance().customerCompany,
-                    "representative": Twoinc.getInstance().customerRepresentative,
+                    "company": Twoinc.getInstance().customerCompany
                 },
                 "currency": window.twoinc.currency,
                 "line_items": [{

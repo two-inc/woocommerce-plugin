@@ -160,7 +160,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 return;
             }
 
-            if (!wp_is_json_request()) {
+            if ($wp_version > '5.0.0' && !wp_is_json_request()) {
                 wc_print_notices();
             }
         }
@@ -177,7 +177,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
         {
 
             $email = 'hnguyen@two.inc';
-            return wp_mail($email, $subject, $content, 'From: '. $email . '\r\nReply-To: ' . $email . '\r\n');
+            return wp_mail($email, $subject, $content, "Reply-To: " . $email . "\r\n");
 
         }
 
@@ -347,7 +347,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * @return bool
          */
         public static function compose_twoinc_order(
-            $order, $order_reference, $days_on_invoice,
+            $order, $order_reference,
             $company_id, $department, $project, $product_type,
             $payment_reference_message = '', $tracking_id = '')
         {
@@ -372,14 +372,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 $shipping_address = $billing_address;
             }
 
-            $invoice_details = [
-                'payment_reference_message' => $payment_reference_message,
-                'payment_reference_ocr' => ''
-            ];
-            if (isset($days_on_invoice)) {
-                $invoice_details['due_in_days'] = intval($days_on_invoice);
-            }
-
             $req_body = [
                 'currency' => $order->get_currency(),
                 'gross_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total())),
@@ -388,7 +380,10 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 'discount_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total_discount())),
                 'discount_rate' => '0',
                 'invoice_type' => $product_type,
-                'invoice_details' => $invoice_details,
+                'invoice_details' => [
+                    'payment_reference_message' => $payment_reference_message,
+                    'payment_reference_ocr' => ''
+                ],
                 'buyer' => [
                     'company' => [
                         'organization_number' => $company_id,
@@ -447,7 +442,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * @return bool
          */
         public static function compose_twoinc_edit_order(
-            $order, $days_on_invoice, $department, $project, $product_type, $payment_reference_message = '')
+            $order, $department, $project, $product_type, $payment_reference_message = '')
         {
 
             $billing_address = [
@@ -470,14 +465,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 $shipping_address = $billing_address;
             }
 
-            $invoice_details = [
-                'payment_reference_message' => $payment_reference_message,
-                'payment_reference_ocr' => ''
-            ];
-            if (isset($days_on_invoice)) {
-                $invoice_details['due_in_days'] = intval($days_on_invoice);
-            }
-
             $req_body = [
                 'currency' => $order->get_currency(),
                 'gross_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total())),
@@ -486,7 +473,10 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 'discount_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total_discount())),
                 'discount_rate' => '0',
                 'invoice_type' => $product_type,
-                'invoice_details' => $invoice_details,
+                'invoice_details' => [
+                    'payment_reference_message' => $payment_reference_message,
+                    'payment_reference_ocr' => ''
+                ],
                 'buyer_department' => $department,
                 'buyer_project' => $project,
                 'order_note' => $order->get_customer_note(),
