@@ -105,8 +105,10 @@ if (!class_exists('WC_Twoinc')) {
                 add_action('edit_user_profile_update', [$this, 'save_user_meta'], 10, 1);
             } else {
                 // Confirm order after returning from twoinc checkout-page, DO NOT CHANGE HOOKS
-                add_action('get_header', [$this, 'process_confirmation_header_redirect']);
-                add_action('init', [$this, 'process_confirmation_js_redirect']); // some theme does not call get_header()
+                add_action('template_redirect', [$this, 'process_confirmation_header_redirect']);
+                // add_action('template_redirect', [$this, 'before_process_confirmation']);
+                // add_action('get_header', [$this, 'process_confirmation_header_redirect']);
+                // add_action('init', [$this, 'process_confirmation_js_redirect']); // some theme does not call get_header()
 
                 // Calculate fees in order review panel on the right of shop checkout page
                 add_action('woocommerce_cart_calculate_fees', [$this, 'add_invoice_fees']);
@@ -1120,6 +1122,7 @@ if (!class_exists('WC_Twoinc')) {
             // Execute redirection by header
             if (isset($redirect_url)) {
                 wp_redirect($redirect_url);
+                exit;
             }
 
         }
@@ -1142,6 +1145,31 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
+         * Set header to avoid 404 on confirmation page
+         *
+         * @return void
+         */
+        public function before_process_confirmation()
+        {
+
+            // Set status to avoid 404 for confirmation page
+            if ($this->is_confirmation_page()) status_header(200);
+
+        }
+
+        /**
+         * Check if current page is Two confirmation page
+         *
+         * @return bool
+         */
+        private function is_confirmation_page()
+        {
+
+            return strtok($_SERVER["REQUEST_URI"], '?s') === isset($_REQUEST['twoinc_confirm_order']) && isset($_REQUEST['nonce']) && '/twoinc-payment-gateway/confirm';
+
+        }
+
+        /**
          * Process the order confirmation
          *
          * @return void|string
@@ -1149,11 +1177,14 @@ if (!class_exists('WC_Twoinc')) {
         private function process_confirmation()
         {
 
-            // Stop if no Twoinc order reference and no nonce
-            if (strtok($_SERVER["REQUEST_URI"], '?s') !== '/twoinc-payment-gateway/confirm' || !isset($_REQUEST['twoinc_confirm_order']) || !isset($_REQUEST['nonce'])) return;
+            // Stop if this is not confirmation page
+            if (!$this->is_confirmation_page()) return;
 
             // Make sure this function is called only once per run
             if (property_exists($this, 'twoinc_confirmed')) return;
+
+            // Add status header to avoid being mistaken as 404 by other plugins
+            status_header(200);
 
             // Get the order reference
             $order_reference = sanitize_text_field($_REQUEST['twoinc_confirm_order']);
