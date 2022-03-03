@@ -1181,7 +1181,10 @@ if (!class_exists('WC_Twoinc')) {
             if (!$this->is_confirmation_page()) return;
 
             // Make sure this function is called only once per run
-            if (property_exists($this, 'twoinc_confirmed')) return;
+            if (property_exists($this, 'twoinc_process_confirmation_called')) return;
+
+            // Make sure this function is called only once per run
+            $this->twoinc_process_confirmation_called = true;
 
             // Add status header to avoid being mistaken as 404 by other plugins
             status_header(200);
@@ -1240,9 +1243,6 @@ if (!class_exists('WC_Twoinc')) {
                     . "\r\n- Site: " . get_site_url());
                 wp_die(__('Unable to retrieve the order information', 'twoinc-payment-gateway'));
             }
-
-            // Make sure this function is called only once per run
-            $this->twoinc_confirmed = true;
 
             // Get the Twoinc order details
             $response = $this->make_request("/v1/order/${twoinc_order_id}", [], 'GET');
@@ -1723,9 +1723,8 @@ if (!class_exists('WC_Twoinc')) {
                 $product_type = 'FUNDED_INVOICE'; // First product type as default for older orders
                 update_post_meta($order->get_id(), '_product_type', $product_type);
             }
-            if ($product_type === 'DIRECT_INVOICE') {
-                $payment_reference_message = strval($order->get_id());
-            }
+
+            $payment_reference_message = strval($order->get_id());
 
             $company_id = $order->get_meta('company_id');
             if ($company_id) {
