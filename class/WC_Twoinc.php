@@ -1110,7 +1110,7 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * Process the order confirmation, with redirection to confirmation/cancel page using PHP header
+         * Process the order confirmation, with redirection to confirmation/cancel page using response header
          *
          * @return void
          */
@@ -1165,7 +1165,7 @@ if (!class_exists('WC_Twoinc')) {
         private function is_confirmation_page()
         {
 
-            return strtok($_SERVER["REQUEST_URI"], '?s') === isset($_REQUEST['twoinc_confirm_order']) && isset($_REQUEST['nonce']) && '/twoinc-payment-gateway/confirm';
+            return isset($_REQUEST['twoinc_confirm_order']) && isset($_REQUEST['nonce']) && strtok($_SERVER["REQUEST_URI"], '?s') === '/twoinc-payment-gateway/confirm';
 
         }
 
@@ -1245,7 +1245,7 @@ if (!class_exists('WC_Twoinc')) {
             }
 
             // Get the Twoinc order details
-            $response = $this->make_request("/v1/order/${twoinc_order_id}", [], 'GET');
+            $response = $this->make_request("/v1/order/${twoinc_order_id}/confirm", [], 'POST');
 
             // Stop if request error
             if (is_wp_error($response)) {
@@ -1261,7 +1261,7 @@ if (!class_exists('WC_Twoinc')) {
 
             $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
             if ($twoinc_err) {
-                $order->add_order_note(__('Unable to retrieve the order payment information', 'twoinc-payment-gateway'));
+                $order->add_order_note(__('Unable to confirm the order with Two', 'twoinc-payment-gateway'));
                 WC_Twoinc_Helper::send_twoinc_alert_email(
                     "Got error response from Twoinc server:"
                     . "\r\n- Request: Confirm order"
@@ -1269,30 +1269,18 @@ if (!class_exists('WC_Twoinc')) {
                     . "\r\n- Twoinc order ID: " . $twoinc_order_id
                     . "\r\n- Merchant post ID: " . strval($order->get_id())
                     . "\r\n- Site: " . get_site_url());
-                wp_die(__('Unable to retrieve the order payment information', 'twoinc-payment-gateway'));
-            }
-
-            // Decode the response
-            $body = json_decode($response['body'], true);
-
-            // Get the order state
-            $state = $body['state'];
-
-            // Get the redirect url based on status
-            if ($state === 'VERIFIED') {
-
-                // Mark order as processing
-                $order->payment_complete();
-
-                // Redirect the user to confirmation page
-                return wp_specialchars_decode($order->get_checkout_order_received_url());
-
-            } else {
 
                 // Redirect the user to Woocom cancellation page
                 return wp_specialchars_decode($order->get_cancel_order_url());
 
             }
+            // After get_twoinc_error_msg, we can assume $response['response']['code'] < 400
+
+            // Mark order as processing
+            $order->payment_complete();
+
+            // Redirect the user to confirmation page
+            return wp_specialchars_decode($order->get_checkout_order_received_url());
 
         }
 
