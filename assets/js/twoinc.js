@@ -460,8 +460,8 @@ let twoincDomHelper = {
         let visibleBusinessTargets = ['.woocommerce-company-fields', '.woocommerce-representative-fields', '#billing_phone_display_field']
         let requiredBusinessTargets = ['#billing_phone_display_field']
 
-        if (twoincUtilHelper.isCountrySupported() && !companyNotFound) {
-            if (window.twoinc.company_name_search === 'yes') {
+        if (twoincUtilHelper.isCountrySupported()) {
+            if (window.twoinc.company_name_search === 'yes' && !companyNotFound) {
                 visibleBusinessTargets.push('#billing_company_display_field')
             } else {
                 visibleBusinessTargets.push('#billing_company_field', '#company_id_field')
@@ -1179,6 +1179,8 @@ class Twoinc {
         $body.on('updated_checkout', Twoinc.getInstance().onUpdatedCheckout)
 
         $body.on('click', '#cannot_find_btn', function() {
+            jQuery('#billing_company_display').val("")
+		    jQuery('#company_id').val("")
             twoincDomHelper.toggleBusinessFields(twoincDomHelper.getAccountType(), true)
         })
 
