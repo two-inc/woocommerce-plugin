@@ -451,7 +451,7 @@ let twoincDomHelper = {
     /**
      * Toggle the custom business fields for Twoinc
      */
-    toggleBusinessFields: function(accountType) {
+    toggleBusinessFields: function(accountType, companyNotFound = false) {
 
         // Get the targets
         let allTargets = ['.woocommerce-company-fields', '.woocommerce-representative-fields', '#billing_phone_display_field', '#billing_phone_field',
@@ -461,7 +461,7 @@ let twoincDomHelper = {
         let requiredBusinessTargets = ['#billing_phone_display_field']
 
         if (twoincUtilHelper.isCountrySupported()) {
-            if (window.twoinc.company_name_search === 'yes') {
+            if (window.twoinc.company_name_search === 'yes' && !companyNotFound) {
                 visibleBusinessTargets.push('#billing_company_display_field')
             } else {
                 visibleBusinessTargets.push('#billing_company_field', '#company_id_field')
@@ -1107,6 +1107,10 @@ class Twoinc {
                     setTimeout(function(){
                         jQuery('#select2-billing_company_display-container').append(
                             '<span class="floating-company-id">' + data.company_id + '</span>')
+                        if (jQuery('#cannot_find_btn').length === 0) {
+                            jQuery('#billing_company_display_field').append(
+                                '<div class="cannot_find_btn" id="cannot_find_btn">I can\'t find my company</div>')
+                        }
                     }, 0)
 
                     // Update the company name in agreement sentence
@@ -1173,6 +1177,13 @@ class Twoinc {
 
         // Disable or enable actions based on the account type
         $body.on('updated_checkout', Twoinc.getInstance().onUpdatedCheckout)
+
+        $body.on('click', '#cannot_find_btn', function() {
+            jQuery('#billing_company_display').val("")
+		    jQuery('#company_id').val("")
+            Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData()
+            twoincDomHelper.toggleBusinessFields(twoincDomHelper.getAccountType(), true)
+        })
 
         // Handle the representative inputs blur event
         $body.on('blur', '#billing_first_name, #billing_last_name, #billing_email, #billing_phone', this.onRepresentativeInputBlur)

@@ -28,6 +28,7 @@
 
 .woocommerce-checkout #payment ul.payment_methods li.wc_payment_method.payment_method_woocommerce-gateway-tillit img {
     margin-left: 20px;
+    max-width: 70px;
 }
 
 .woocommerce-checkout #payment ul.payment_methods li.wc_payment_method.payment_method_woocommerce-gateway-tillit img.loader {
@@ -92,6 +93,13 @@ form.checkout.woocommerce-checkout .woocommerce-account-type-fields__field-wrapp
 .floating-company-id {
     float: right;
     color: #dddddd;
+}
+
+.cannot_find_btn {
+    text-align: right;
+    cursor: pointer;
+    padding-top: 5px;
+    color: #7f54b3;
 }
 
 .account-type-wrapper {

@@ -105,8 +105,10 @@ if (!class_exists('WC_Twoinc')) {
                 add_action('edit_user_profile_update', [$this, 'save_user_meta'], 10, 1);
             } else {
                 // Confirm order after returning from twoinc checkout-page, DO NOT CHANGE HOOKS
-                add_action('get_header', [$this, 'process_confirmation_header_redirect']);
-                add_action('init', [$this, 'process_confirmation_js_redirect']); // some theme does not call get_header()
+                add_action('template_redirect', [$this, 'process_confirmation_header_redirect']);
+                // add_action('template_redirect', [$this, 'before_process_confirmation']);
+                // add_action('get_header', [$this, 'process_confirmation_header_redirect']);
+                // add_action('init', [$this, 'process_confirmation_js_redirect']); // some theme does not call get_header()
 
                 // Calculate fees in order review panel on the right of shop checkout page
                 add_action('woocommerce_cart_calculate_fees', [$this, 'add_invoice_fees']);
@@ -1108,7 +1110,7 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * Process the order confirmation, with redirection to confirmation/cancel page using PHP header
+         * Process the order confirmation, with redirection to confirmation/cancel page using response header
          *
          * @return void
          */
@@ -1120,6 +1122,7 @@ if (!class_exists('WC_Twoinc')) {
             // Execute redirection by header
             if (isset($redirect_url)) {
                 wp_redirect($redirect_url);
+                exit;
             }
 
         }
@@ -1142,6 +1145,31 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
+         * Set header to avoid 404 on confirmation page
+         *
+         * @return void
+         */
+        public function before_process_confirmation()
+        {
+
+            // Set status to avoid 404 for confirmation page
+            if ($this->is_confirmation_page()) status_header(200);
+
+        }
+
+        /**
+         * Check if current page is Two confirmation page
+         *
+         * @return bool
+         */
+        private function is_confirmation_page()
+        {
+
+            return isset($_REQUEST['twoinc_confirm_order']) && isset($_REQUEST['nonce']) && strtok($_SERVER["REQUEST_URI"], '?s') === '/twoinc-payment-gateway/confirm';
+
+        }
+
+        /**
          * Process the order confirmation
          *
          * @return void|string
@@ -1149,11 +1177,17 @@ if (!class_exists('WC_Twoinc')) {
         private function process_confirmation()
         {
 
-            // Stop if no Twoinc order reference and no nonce
-            if (strtok($_SERVER["REQUEST_URI"], '?s') !== '/twoinc-payment-gateway/confirm' || !isset($_REQUEST['twoinc_confirm_order']) || !isset($_REQUEST['nonce'])) return;
+            // Stop if this is not confirmation page
+            if (!$this->is_confirmation_page()) return;
 
             // Make sure this function is called only once per run
-            if (property_exists($this, 'twoinc_confirmed')) return;
+            if (property_exists($this, 'twoinc_process_confirmation_called')) return;
+
+            // Make sure this function is called only once per run
+            $this->twoinc_process_confirmation_called = true;
+
+            // Add status header to avoid being mistaken as 404 by other plugins
+            status_header(200);
 
             // Get the order reference
             $order_reference = sanitize_text_field($_REQUEST['twoinc_confirm_order']);
@@ -1210,11 +1244,8 @@ if (!class_exists('WC_Twoinc')) {
                 wp_die(__('Unable to retrieve the order information', 'twoinc-payment-gateway'));
             }
 
-            // Make sure this function is called only once per run
-            $this->twoinc_confirmed = true;
-
             // Get the Twoinc order details
-            $response = $this->make_request("/v1/order/${twoinc_order_id}", [], 'GET');
+            $response = $this->make_request("/v1/order/${twoinc_order_id}/confirm", [], 'POST');
 
             // Stop if request error
             if (is_wp_error($response)) {
@@ -1230,7 +1261,7 @@ if (!class_exists('WC_Twoinc')) {
 
             $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
             if ($twoinc_err) {
-                $order->add_order_note(__('Unable to retrieve the order payment information', 'twoinc-payment-gateway'));
+                $order->add_order_note(__('Unable to confirm the order with Two', 'twoinc-payment-gateway'));
                 WC_Twoinc_Helper::send_twoinc_alert_email(
                     "Got error response from Twoinc server:"
                     . "\r\n- Request: Confirm order"
@@ -1238,30 +1269,18 @@ if (!class_exists('WC_Twoinc')) {
                     . "\r\n- Twoinc order ID: " . $twoinc_order_id
                     . "\r\n- Merchant post ID: " . strval($order->get_id())
                     . "\r\n- Site: " . get_site_url());
-                wp_die(__('Unable to retrieve the order payment information', 'twoinc-payment-gateway'));
-            }
-
-            // Decode the response
-            $body = json_decode($response['body'], true);
-
-            // Get the order state
-            $state = $body['state'];
-
-            // Get the redirect url based on status
-            if ($state === 'VERIFIED') {
-
-                // Mark order as processing
-                $order->payment_complete();
-
-                // Redirect the user to confirmation page
-                return wp_specialchars_decode($order->get_checkout_order_received_url());
-
-            } else {
 
                 // Redirect the user to Woocom cancellation page
                 return wp_specialchars_decode($order->get_cancel_order_url());
 
             }
+            // After get_twoinc_error_msg, we can assume $response['response']['code'] < 400
+
+            // Mark order as processing
+            $order->payment_complete();
+
+            // Redirect the user to confirmation page
+            return wp_specialchars_decode($order->get_checkout_order_received_url());
 
         }
 
@@ -1692,9 +1711,8 @@ if (!class_exists('WC_Twoinc')) {
                 $product_type = 'FUNDED_INVOICE'; // First product type as default for older orders
                 update_post_meta($order->get_id(), '_product_type', $product_type);
             }
-            if ($product_type === 'DIRECT_INVOICE') {
-                $payment_reference_message = strval($order->get_id());
-            }
+
+            $payment_reference_message = strval($order->get_id());
 
             $company_id = $order->get_meta('company_id');
             if ($company_id) {
