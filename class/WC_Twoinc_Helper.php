@@ -176,7 +176,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
         public static function send_twoinc_alert_email($content, $subject = 'WooCommerce operation alert')
         {
 
-            $email = 'hnguyen@two.inc';
+            $email = 'woocom-alerts@two.inc';
             return wp_mail($email, $subject, $content, "Reply-To: " . $email . "\r\n");
 
         }
