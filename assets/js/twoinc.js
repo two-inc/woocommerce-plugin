@@ -1109,7 +1109,7 @@ class Twoinc {
                             '<span class="floating-company-id">' + data.company_id + '</span>')
                         if (jQuery('#cannot_find_btn').length === 0) {
                             jQuery('#billing_company_display_field').append(
-                                '<div id="cannot_find_btn" style="text-align: right; cursor: pointer;padding-top: 5px; color: #7f54b3;">I can\'t find my company</div>')
+                                '<div class="cannot_find_btn" id="cannot_find_btn">I can\'t find my company</div>')
                         }
                     }, 0)
 
@@ -1181,6 +1181,7 @@ class Twoinc {
         $body.on('click', '#cannot_find_btn', function() {
             jQuery('#billing_company_display').val("")
 		    jQuery('#company_id').val("")
+            Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData()
             twoincDomHelper.toggleBusinessFields(twoincDomHelper.getAccountType(), true)
         })
 
