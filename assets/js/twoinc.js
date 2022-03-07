@@ -1109,7 +1109,7 @@ class Twoinc {
                             '<span class="floating-company-id">' + data.company_id + '</span>')
                         if (jQuery('#cannot_find_btn').length === 0) {
                             jQuery('#billing_company_display_field').append(
-                                '<div id="cannot_find_btn" style="text-align: right; cursor: pointer;padding-top: 5px; color: #7f54b3;">I cannot find my company</div>')
+                                '<div id="cannot_find_btn" style="text-align: right; cursor: pointer;padding-top: 5px; color: #7f54b3;">I can\'t find my company</div>')
                         }
                     }, 0)
 
