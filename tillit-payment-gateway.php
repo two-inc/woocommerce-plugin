@@ -92,7 +92,7 @@ function wc_twoinc_add_to_gateways($gateways)
  */
 function wc_twoinc_enqueue_styles()
 {
-    wp_enqueue_style('twoinc-payment-gateway-css', WC_TWOINC_PLUGIN_URL . '/assets/css/twoinc.css', false, '1.2.3');
+    wp_enqueue_style('twoinc-payment-gateway-css', WC_TWOINC_PLUGIN_URL . '/assets/css/twoinc.css', false, '1.2.4');
 }
 
 /**

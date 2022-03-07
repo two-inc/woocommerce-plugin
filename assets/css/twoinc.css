@@ -95,6 +95,13 @@ form.checkout.woocommerce-checkout .woocommerce-account-type-fields__field-wrapp
     color: #dddddd;
 }
 
+.cannot_find_btn {
+    text-align: right;
+    cursor: pointer;
+    padding-top: 5px;
+    color: #7f54b3;
+}
+
 .account-type-wrapper {
     display: flex;
     flex-wrap: wrap;
