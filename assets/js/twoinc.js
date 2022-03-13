@@ -948,9 +948,13 @@ let twoincDomHelper = {
 
                 // Append company id to company name select box
                 setTimeout(function(){
-                    if (!document.querySelector('.floating-company-id')) {
-                        jQuery('#select2-billing_company_display-container').append(
-                            '<span class="floating-company-id">' + window.twoinc.company_id + '</span>')
+                    if (jQuery(".floating-company-id").length == 1) {
+                        jQuery('.floating-company-id').replaceWith(
+                            '<span class="floating-company-id">' + data.company_id + '</span>')
+                    }
+                    else {
+                        jQuery('#select2-billing_company_display-container').before(
+                            '<span class="floating-company-id">' + data.company_id + '</span>')
                     }
                 }, 2000)
             }
@@ -1105,8 +1109,14 @@ class Twoinc {
 
                     // Display company ID on the right of selected company name
                     setTimeout(function(){
-                        jQuery('#select2-billing_company_display-container').append(
-                            '<span class="floating-company-id">' + data.company_id + '</span>')
+                        if (jQuery(".floating-company-id").length == 1) {
+                            jQuery('.floating-company-id').replaceWith(
+                                '<span class="floating-company-id">' + data.company_id + '</span>')
+                        }
+                        else {
+                            jQuery('#select2-billing_company_display-container').before(
+                                '<span class="floating-company-id">' + data.company_id + '</span>')
+                        }
                         if (jQuery('#cannot_find_btn').length === 0) {
                             jQuery('#billing_company_display_field').append(
                                 '<div class="cannot_find_btn" id="cannot_find_btn">I can\'t find my company</div>')
@@ -1183,6 +1193,25 @@ class Twoinc {
 		    jQuery('#company_id').val("")
             Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData()
             twoincDomHelper.toggleBusinessFields(twoincDomHelper.getAccountType(), true)
+
+            jQuery('#cannot_find_btn').remove()
+            if (jQuery('#enable_company_search').length === 0) {
+            jQuery('#billing_company_field').append(
+                '<div class="cannot_find_btn" id="enable_company_search">Turn on company search</div>')
+            }
+        })
+
+        $body.on('click', '#enable_company_search', function() {
+            jQuery('#billing_company').val("")
+		    jQuery('#company_id').val("")
+            Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData()
+            twoincDomHelper.toggleBusinessFields(twoincDomHelper.getAccountType(), false)
+
+            jQuery('#enable_company_search').remove()
+            if (jQuery('#cannot_find_btn').length === 0) {
+                jQuery('#billing_company_display_field').append(
+                    '<div class="cannot_find_btn" id="cannot_find_btn">I can\'t find my company</div>')
+            }
         })
 
         // Handle the representative inputs blur event
