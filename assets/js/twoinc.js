@@ -949,13 +949,9 @@ let twoincDomHelper = {
                 // Append company id to company name select box
                 setTimeout(function(){
                     if (jQuery(".floating-company-id").length == 1) {
-                        jQuery('.floating-company-id').replaceWith(
-                            '<span class="floating-company-id">' + data.company_id + '</span>')
+                        jQuery('.floating-company-id').remove()
                     }
-                    else {
-                        jQuery('#select2-billing_company_display-container').before(
-                            '<span class="floating-company-id">' + data.company_id + '</span>')
-                    }
+                    jQuery('<span class="floating-company-id">' + data.company_id + '</span>').insertBefore('#select2-billing_company_display-container')
                 }, 2000)
             }
         }
@@ -1110,13 +1106,10 @@ class Twoinc {
                     // Display company ID on the right of selected company name
                     setTimeout(function(){
                         if (jQuery(".floating-company-id").length == 1) {
-                            jQuery('.floating-company-id').replaceWith(
-                                '<span class="floating-company-id">' + data.company_id + '</span>')
+                            jQuery('.floating-company-id').remove()
                         }
-                        else {
-                            jQuery('#select2-billing_company_display-container').before(
-                                '<span class="floating-company-id">' + data.company_id + '</span>')
-                        }
+                        jQuery('<span class="floating-company-id">' + data.company_id + '</span>').insertBefore('#select2-billing_company_display-container')
+
                         if (jQuery('#cannot_find_btn').length === 0) {
                             jQuery('#billing_company_display_field').append(
                                 '<div class="cannot_find_btn" id="cannot_find_btn">I can\'t find my company</div>')

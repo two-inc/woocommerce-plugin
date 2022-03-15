@@ -101,10 +101,10 @@ form.checkout.woocommerce-checkout .woocommerce-account-type-fields__field-wrapp
 .floating-company-id {
     float: right;
     color: #dddddd;
-    height: 48px;
-    line-height: 48px;
-    display: flex;
     margin-right: 25px;
+    height: 100%;
+    display: flex;
+    align-items: center;
 }
 
 .cannot_find_btn {
