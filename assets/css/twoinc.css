@@ -89,10 +89,22 @@ form.checkout.woocommerce-checkout .woocommerce-account-type-fields__field-wrapp
     float: right;
     font-size: 0.8em;
 }
+#billing_company_display_field {
+    position: relative;
+    padding-bottom: 15px;
+}
+#billing_company_field {
+    position: relative;
+    padding-bottom: 15px;
+}
 
 .floating-company-id {
     float: right;
     color: #dddddd;
+    margin-right: 25px;
+    height: 100%;
+    display: flex;
+    align-items: center;
 }
 
 .cannot_find_btn {
@@ -100,6 +112,8 @@ form.checkout.woocommerce-checkout .woocommerce-account-type-fields__field-wrapp
     cursor: pointer;
     padding-top: 5px;
     color: #7f54b3;
+    position: absolute;
+    right: 0px;
 }
 
 .account-type-wrapper {
