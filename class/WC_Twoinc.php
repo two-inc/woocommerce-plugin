@@ -188,12 +188,15 @@ if (!class_exists('WC_Twoinc')) {
 
                     $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
                     if ($twoinc_err) {
-                        WC_Twoinc_Helper::send_twoinc_alert_email(
-                            "Got error response from Twoinc server:"
-                            . "\r\n- Request: Get merchant default due in days"
-                            . "\r\n- Response message: " . $twoinc_err
-                            . "\r\n- Twoinc merchant ID/shortname: " . $twoinc_merchant_id
-                            . "\r\n- Site: " . get_site_url());
+                        // Send alert, except when the api key is wrong
+                        if(!($response['response'] && $response['response']['code'] && $response['response']['code'] == 401)) {
+                            WC_Twoinc_Helper::send_twoinc_alert_email(
+                                "Got error response from Twoinc server:"
+                                . "\r\n- Request: Get merchant default due in days"
+                                . "\r\n- Response message: " . $twoinc_err
+                                . "\r\n- Twoinc merchant ID/shortname: " . $twoinc_merchant_id
+                                . "\r\n- Site: " . get_site_url());
+                        }
                     } else {
 
                         if($response && $response['body']) {
