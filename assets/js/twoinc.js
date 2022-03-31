@@ -1253,8 +1253,8 @@ class Twoinc {
         // Add customization for current theme if any
         twoincDomHelper.insertCustomCss()
 
-        if (loadSavedInputs) twoincDomHelper.loadStorageInputs()
         twoincDomHelper.loadUserMetaInputs()
+        if (loadSavedInputs) twoincDomHelper.loadStorageInputs()
         this.initBillingPhoneDisplay()
         setTimeout(function(){
             twoincDomHelper.saveCheckoutInputs()
@@ -1647,9 +1647,11 @@ class Twoinc {
         // Hide and clear unnecessary payment methods
         twoincDomHelper.toggleMethod(Twoinc.getInstance().isTwoincMethodHidden)
         jQuery('#payment .wc_payment_methods input.input-radio').each(function() {
-            if (jQuery(this).is(":hidden")) {
-                twoincDomHelper.deselectPaymentMethod(jQuery(this))
-            }
+            setTimeout(function() {
+                if (jQuery(this).is(":hidden")) {
+                    twoincDomHelper.deselectPaymentMethod(jQuery(this))
+                }
+            }, 1000)
         })
         twoincDomHelper.rearrangeDescription()
 
@@ -1842,6 +1844,12 @@ jQuery(function(){
                     Twoinc.getInstance().initialize(false)
                     Twoinc.getInstance().onUpdatedCheckout()
                 })
+
+                // Run Twoinc code if Business is selected
+                if (twoincUtilHelper.isCompany(twoincDomHelper.getAccountType())) {
+                    Twoinc.getInstance().initialize(false)
+                    Twoinc.getInstance().onUpdatedCheckout()
+                }
 
                 // If invoice fee is charged to buyer, order price will change when payment method is changed from/to Twoinc
                 // Also, run Twoinc code if payment method selected is Twoinc
