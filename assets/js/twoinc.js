@@ -947,11 +947,18 @@ let twoincDomHelper = {
                 selectElem.value = window.twoinc.billing_company
 
                 // Append company id to company name select box
-                setTimeout(function(){
+                if (window.twoinc.company_id) {
                     if (jQuery(".floating-company-id").length == 1) {
                         jQuery('.floating-company-id').remove()
                     }
-                    jQuery('<span class="floating-company-id">' + data.company_id + '</span>').insertBefore('#select2-billing_company_display-container')
+                    let floatingCompanyId = jQuery('<span class="floating-company-id">' + window.twoinc.company_id + '</span>')
+                    floatingCompanyId.hide()
+                    floatingCompanyId.insertBefore(selectElem)
+                }
+                setTimeout(function(){
+                    let floatingCompanyId = jQuery('.floating-company-id')
+                    floatingCompanyId.insertBefore('#select2-billing_company_display-container')
+                    floatingCompanyId.show()
                 }, 2000)
             }
         }
@@ -1122,45 +1129,15 @@ class Twoinc {
                     // Get the company approval status
                     Twoinc.getInstance().getApproval()
 
-                    // Get country
-                    let country_prefix = Twoinc.getInstance().customerCompany.country_prefix
-                    if (!country_prefix || !['GB'].includes(country_prefix)) country_prefix = 'NO'
-
-                    // Clear the addresses, in case address get request fails
+                    // Address search
                     if (window.twoinc.address_search === 'yes') {
+                        // Clear the addresses, in case address get request fails
                         jQuery('#billing_address_1').val('')
                         jQuery('#billing_city').val('')
                         jQuery('#billing_postcode').val('')
 
                         // Fetch the company data
-                        const addressResponse = jQuery.ajax({
-                            dataType: 'json',
-                            url: twoincUtilHelper.contructTwoincUrl('/v1/' + country_prefix + '/company/' + jQuery('#company_id').val() + '/address')
-                        })
-
-                        addressResponse.done(function(response){
-
-                            // If we have the company location
-                            if (response.address) {
-
-                                // Get the company location object
-                                const companyLocation = response.address
-
-                                // Populate the street name and house number fields
-                                jQuery('#billing_address_1').val(companyLocation.streetAddress)
-
-                                // Populate the city
-                                jQuery('#billing_city').val(companyLocation.city)
-
-                                // Populate the postal code
-                                jQuery('#billing_postcode').val(companyLocation.postalCode)
-
-                                // Update order review in case there is a shipping change
-                                jQuery(document.body).trigger('update_checkout')
-
-                            }
-
-                        })
+                        Twoinc.getInstance().getAddress()
                     }
 
                 })
@@ -1255,6 +1232,10 @@ class Twoinc {
 
         twoincDomHelper.loadUserMetaInputs()
         if (loadSavedInputs) twoincDomHelper.loadStorageInputs()
+        if (jQuery('.floating-company-id') && jQuery('.floating-company-id').text()) {
+            // Trigger address search
+            Twoinc.getInstance().getAddress()
+        }
         this.initBillingPhoneDisplay()
         setTimeout(function(){
             twoincDomHelper.saveCheckoutInputs()
@@ -1567,6 +1548,49 @@ class Twoinc {
             }
 
         }
+
+    }
+
+    /**
+     * Get the address from address search
+     */
+    getAddress()
+    {
+
+        // Get country
+        let country_prefix = Twoinc.getInstance().customerCompany.country_prefix
+        if (!country_prefix || !['GB'].includes(country_prefix)) country_prefix = 'NO'
+        // Get company ID
+        let company_id = jQuery('#company_id').val()
+
+        const addressResponse = jQuery.ajax({
+            dataType: 'json',
+            url: twoincUtilHelper.contructTwoincUrl('/v1/' + country_prefix + '/company/' + company_id + '/address')
+        })
+
+        addressResponse.done(function(response){
+
+            // If we have the company location
+            if (response.address) {
+
+                // Get the company location object
+                const companyLocation = response.address
+
+                // Populate the street name and house number fields
+                jQuery('#billing_address_1').val(companyLocation.streetAddress)
+
+                // Populate the city
+                jQuery('#billing_city').val(companyLocation.city)
+
+                // Populate the postal code
+                jQuery('#billing_postcode').val(companyLocation.postalCode)
+
+                // Update order review in case there is a shipping change
+                jQuery(document.body).trigger('update_checkout')
+
+            }
+
+        })
 
     }
 
