@@ -927,10 +927,10 @@ if (!class_exists('WC_Twoinc')) {
             // Save to user meta
             $user_id = wp_get_current_user()->ID;
             if ($user_id) {
-                update_user_meta($user_id, 'twoinc_company_id', $company_id);
-                update_user_meta($user_id, 'twoinc_billing_company', $billing_company);
-                update_user_meta($user_id, 'twoinc_department', $department);
-                update_user_meta($user_id, 'twoinc_project', $project);
+                if (!get_the_author_meta('twoinc_company_id', $user_id)) update_user_meta($user_id, 'twoinc_company_id', $company_id);
+                if (!get_the_author_meta('twoinc_billing_company', $user_id)) update_user_meta($user_id, 'twoinc_billing_company', $billing_company);
+                if (!get_the_author_meta('twoinc_department', $user_id)) update_user_meta($user_id, 'twoinc_department', $department);
+                if (!get_the_author_meta('twoinc_project', $user_id)) update_user_meta($user_id, 'twoinc_project', $project);
             }
 
             // Create order
