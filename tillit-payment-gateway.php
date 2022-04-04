@@ -44,9 +44,11 @@ function load_twoinc_classes()
     require_once __DIR__ . '/class/WC_Twoinc_Checkout.php';
     require_once __DIR__ . '/class/WC_Twoinc.php';
 
-    // Endpoint for plugin setting in one click
-    $twoinc_obj = WC_Twoinc::get_instance();
-    $twoinc_obj->one_click_setup();
+    add_action('template_redirect', function(){
+        // Endpoint for plugin setting in one click
+        $twoinc_obj = WC_Twoinc::get_instance();
+        $twoinc_obj->one_click_setup();
+    });
 }
 
 /**

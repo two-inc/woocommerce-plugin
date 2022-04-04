@@ -1298,9 +1298,11 @@ if (!class_exists('WC_Twoinc')) {
          */
         public function one_click_setup()
         {
-
             // Stop if this is not setup request
-            if (strtok($_SERVER["REQUEST_URI"], '?s') !== '/twoinc-payment-gateway/init' || !isset($_REQUEST['m']) || !isset($_REQUEST['k']) || !isset($_REQUEST['t']) || !isset($_REQUEST['c'])) return;
+            if (!isset($_REQUEST['m']) || !isset($_REQUEST['k']) || !isset($_REQUEST['t']) || !isset($_REQUEST['c'])) return;
+            $ocs_path = '/twoinc-payment-gateway/init';
+            $req_path = strtok($_SERVER["REQUEST_URI"], '?');
+            if (strlen($req_path) < strlen($ocs_path) || substr($req_path, -strlen($ocs_path)) !== $ocs_path) return;
 
             if (!current_user_can('manage_options')) {
                 $redirect_to_signin = wp_login_url() . '?redirect_to=' . urlencode($_SERVER["REQUEST_URI"]);
@@ -1323,6 +1325,18 @@ if (!class_exists('WC_Twoinc')) {
             $twoinc_checkout_host = sanitize_text_field($_REQUEST['c']);
 
             if ($site_type === 'WOOCOMMERCE') {
+
+                $allowed_twoinc_checkout_hosts = array('https://api.two.inc/', 'https://staging.api.two.inc/', 'https://sandbox.api.two.inc/', 'http://localhost:8080');
+                if (!in_array($twoinc_checkout_host, $allowed_twoinc_checkout_hosts)) {
+                    $error = new WP_Error(
+                        'init_failed',
+                        __('Two checkout host name is not correct', 'twoinc-payment-gateway'),
+                        array('title' => _('Two payment setup failure'), 'response' => '401', 'back_link' => false));
+                    if (is_wp_error($error)){
+                        wp_die($error, '', $error->get_error_data());
+                    }
+                }
+
                 $params = [
                     'm' => $merchant_id,
                     'k' => $twoinc_init_tk,
@@ -1607,7 +1621,7 @@ if (!class_exists('WC_Twoinc')) {
                 unset($twoinc_form_fields['test_checkout_host']);
             }
 
-            $this->form_fields = apply_filters('wc_tillit_form_fields', $twoinc_form_fields);
+            $this->form_fields = apply_filters('wc_two_form_fields', $twoinc_form_fields);
         }
 
         /**
