@@ -431,6 +431,10 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 $req_body['tracking_id'] = $tracking_id;
             }
 
+            if(has_filter('two_order_create')) {
+                $req_body = apply_filters('two_order_create', $req_body);
+            }
+
             return $req_body;
         }
 
@@ -493,6 +497,10 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     'expected_delivery_date' => date('Y-m-d', strtotime('+ 7 days'))
                 ]
             ];
+
+            if(has_filter('two_order_edit')) {
+                $req_body = apply_filters('two_order_edit', $req_body);
+            }
 
             return $req_body;
         }
