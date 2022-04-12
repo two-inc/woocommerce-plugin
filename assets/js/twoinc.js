@@ -891,12 +891,12 @@ let twoincDomHelper = {
                         document.querySelector('#' + inp.id).value = inp.val
                     }
                 } else if (inp.type === 'radio') {
-                    if (document.querySelector('#' + inp.id)) {
+                    if (document.querySelector('#' + inp.id) && inp.id != 'payment_method_kco') {
                         document.querySelector('#' + inp.id).click()
                     }
                 } else if (inp.type === 'checkbox') {
-                    if (inp.val && document.querySelector('#' + inp.id)) {
-                        document.querySelector('#' + inp.id).checked = true
+                    if (document.querySelector('#' + inp.id)) {
+                        document.querySelector('#' + inp.id).click()
                     }
                 }
             } else if (inp.htmlTag === 'SPAN') {
