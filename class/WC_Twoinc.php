@@ -188,12 +188,15 @@ if (!class_exists('WC_Twoinc')) {
 
                     $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
                     if ($twoinc_err) {
-                        WC_Twoinc_Helper::send_twoinc_alert_email(
-                            "Got error response from Twoinc server:"
-                            . "\r\n- Request: Get merchant default due in days"
-                            . "\r\n- Response message: " . $twoinc_err
-                            . "\r\n- Twoinc merchant ID/shortname: " . $twoinc_merchant_id
-                            . "\r\n- Site: " . get_site_url());
+                        // Send alert, except when the api key is wrong
+                        if(!($response['response'] && $response['response']['code'] && $response['response']['code'] == 401)) {
+                            WC_Twoinc_Helper::send_twoinc_alert_email(
+                                "Got error response from Twoinc server:"
+                                . "\r\n- Request: Get merchant default due in days"
+                                . "\r\n- Response message: " . $twoinc_err
+                                . "\r\n- Twoinc merchant ID/shortname: " . $twoinc_merchant_id
+                                . "\r\n- Site: " . get_site_url());
+                        }
                     } else {
 
                         if($response && $response['body']) {
@@ -924,10 +927,10 @@ if (!class_exists('WC_Twoinc')) {
             // Save to user meta
             $user_id = wp_get_current_user()->ID;
             if ($user_id) {
-                update_user_meta($user_id, 'twoinc_company_id', $company_id);
-                update_user_meta($user_id, 'twoinc_billing_company', $billing_company);
-                update_user_meta($user_id, 'twoinc_department', $department);
-                update_user_meta($user_id, 'twoinc_project', $project);
+                if (!get_the_author_meta('twoinc_company_id', $user_id)) update_user_meta($user_id, 'twoinc_company_id', $company_id);
+                if (!get_the_author_meta('twoinc_billing_company', $user_id)) update_user_meta($user_id, 'twoinc_billing_company', $billing_company);
+                if (!get_the_author_meta('twoinc_department', $user_id)) update_user_meta($user_id, 'twoinc_department', $department);
+                if (!get_the_author_meta('twoinc_project', $user_id)) update_user_meta($user_id, 'twoinc_project', $project);
             }
 
             // Create order
@@ -1165,8 +1168,12 @@ if (!class_exists('WC_Twoinc')) {
         private function is_confirmation_page()
         {
 
-            return isset($_REQUEST['twoinc_confirm_order']) && isset($_REQUEST['nonce']) && strtok($_SERVER["REQUEST_URI"], '?s') === '/twoinc-payment-gateway/confirm';
-
+            if (isset($_REQUEST['twoinc_confirm_order']) && isset($_REQUEST['nonce'])) {
+                $confirm_path = '/twoinc-payment-gateway/confirm';
+                $req_path = strtok($_SERVER["REQUEST_URI"], '?');
+                return strlen($req_path) >= strlen($confirm_path) && substr($req_path, -strlen($confirm_path)) === $confirm_path;
+            }
+            return false;
         }
 
         /**
@@ -1291,9 +1298,11 @@ if (!class_exists('WC_Twoinc')) {
          */
         public function one_click_setup()
         {
-
             // Stop if this is not setup request
-            if (strtok($_SERVER["REQUEST_URI"], '?s') !== '/twoinc-payment-gateway/init' || !isset($_REQUEST['m']) || !isset($_REQUEST['k']) || !isset($_REQUEST['t']) || !isset($_REQUEST['c'])) return;
+            if (!isset($_REQUEST['m']) || !isset($_REQUEST['k']) || !isset($_REQUEST['t']) || !isset($_REQUEST['c'])) return;
+            $ocs_path = '/twoinc-payment-gateway/init';
+            $req_path = strtok($_SERVER["REQUEST_URI"], '?');
+            if (strlen($req_path) < strlen($ocs_path) || substr($req_path, -strlen($ocs_path)) !== $ocs_path) return;
 
             if (!current_user_can('manage_options')) {
                 $redirect_to_signin = wp_login_url() . '?redirect_to=' . urlencode($_SERVER["REQUEST_URI"]);
@@ -1316,6 +1325,18 @@ if (!class_exists('WC_Twoinc')) {
             $twoinc_checkout_host = sanitize_text_field($_REQUEST['c']);
 
             if ($site_type === 'WOOCOMMERCE') {
+
+                $allowed_twoinc_checkout_hosts = array('https://api.two.inc/', 'https://staging.api.two.inc/', 'https://sandbox.api.two.inc/', 'http://localhost:8080');
+                if (!in_array($twoinc_checkout_host, $allowed_twoinc_checkout_hosts)) {
+                    $error = new WP_Error(
+                        'init_failed',
+                        __('Two checkout host name is not correct', 'twoinc-payment-gateway'),
+                        array('title' => _('Two payment setup failure'), 'response' => '401', 'back_link' => false));
+                    if (is_wp_error($error)){
+                        wp_die($error, '', $error->get_error_data());
+                    }
+                }
+
                 $params = [
                     'm' => $merchant_id,
                     'k' => $twoinc_init_tk,
@@ -1600,7 +1621,7 @@ if (!class_exists('WC_Twoinc')) {
                 unset($twoinc_form_fields['test_checkout_host']);
             }
 
-            $this->form_fields = apply_filters('wc_tillit_form_fields', $twoinc_form_fields);
+            $this->form_fields = apply_filters('wc_two_form_fields', $twoinc_form_fields);
         }
 
         /**

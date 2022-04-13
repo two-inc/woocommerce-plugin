@@ -3,7 +3,7 @@
  * Plugin Name: Two - BNPL for businesses
  * Plugin URI: https://two.inc
  * Description: Integration between WooCommerce and Two
- * Version: 2.8.3
+ * Version: 2.8.4
  * Author: Two
  * Author URI: https://two.inc
  * Text Domain: twoinc-payment-gateway
@@ -44,9 +44,11 @@ function load_twoinc_classes()
     require_once __DIR__ . '/class/WC_Twoinc_Checkout.php';
     require_once __DIR__ . '/class/WC_Twoinc.php';
 
-    // Endpoint for plugin setting in one click
-    $twoinc_obj = WC_Twoinc::get_instance();
-    $twoinc_obj->one_click_setup();
+    add_action('template_redirect', function(){
+        // Endpoint for plugin setting in one click
+        $twoinc_obj = WC_Twoinc::get_instance();
+        $twoinc_obj->one_click_setup();
+    });
 }
 
 /**
@@ -92,7 +94,7 @@ function wc_twoinc_add_to_gateways($gateways)
  */
 function wc_twoinc_enqueue_styles()
 {
-    wp_enqueue_style('twoinc-payment-gateway-css', WC_TWOINC_PLUGIN_URL . '/assets/css/twoinc.css', false, '1.2.4');
+    wp_enqueue_style('twoinc-payment-gateway-css', WC_TWOINC_PLUGIN_URL . '/assets/css/twoinc.css', false, '1.2.5');
 }
 
 /**
@@ -100,7 +102,7 @@ function wc_twoinc_enqueue_styles()
  */
 function wc_twoinc_enqueue_scripts()
 {
-    wp_enqueue_script('twoinc-payment-gateway-js', WC_TWOINC_PLUGIN_URL . '/assets/js/twoinc.js', ['jquery'], '2.4.2');
+    wp_enqueue_script('twoinc-payment-gateway-js', WC_TWOINC_PLUGIN_URL . '/assets/js/twoinc.js', ['jquery'], '2.4.3');
 }
 
 /**

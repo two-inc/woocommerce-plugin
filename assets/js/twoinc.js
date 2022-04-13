@@ -891,12 +891,12 @@ let twoincDomHelper = {
                         document.querySelector('#' + inp.id).value = inp.val
                     }
                 } else if (inp.type === 'radio') {
-                    if (document.querySelector('#' + inp.id)) {
+                    if (document.querySelector('#' + inp.id) && inp.id != 'payment_method_kco') {
                         document.querySelector('#' + inp.id).click()
                     }
                 } else if (inp.type === 'checkbox') {
-                    if (inp.val && document.querySelector('#' + inp.id)) {
-                        document.querySelector('#' + inp.id).checked = true
+                    if (document.querySelector('#' + inp.id)) {
+                        document.querySelector('#' + inp.id).click()
                     }
                 }
             } else if (inp.htmlTag === 'SPAN') {
@@ -947,11 +947,18 @@ let twoincDomHelper = {
                 selectElem.value = window.twoinc.billing_company
 
                 // Append company id to company name select box
-                setTimeout(function(){
-                    if (!document.querySelector('.floating-company-id')) {
-                        jQuery('#select2-billing_company_display-container').append(
-                            '<span class="floating-company-id">' + window.twoinc.company_id + '</span>')
+                if (window.twoinc.company_id) {
+                    if (jQuery(".floating-company-id").length == 1) {
+                        jQuery('.floating-company-id').remove()
                     }
+                    let floatingCompanyId = jQuery('<span class="floating-company-id">' + window.twoinc.company_id + '</span>')
+                    floatingCompanyId.hide()
+                    floatingCompanyId.insertBefore(selectElem)
+                }
+                setTimeout(function(){
+                    let floatingCompanyId = jQuery('.floating-company-id')
+                    floatingCompanyId.insertBefore('#select2-billing_company_display-container')
+                    floatingCompanyId.show()
                 }, 2000)
             }
         }
@@ -1105,8 +1112,11 @@ class Twoinc {
 
                     // Display company ID on the right of selected company name
                     setTimeout(function(){
-                        jQuery('#select2-billing_company_display-container').append(
-                            '<span class="floating-company-id">' + data.company_id + '</span>')
+                        if (jQuery(".floating-company-id").length == 1) {
+                            jQuery('.floating-company-id').remove()
+                        }
+                        jQuery('<span class="floating-company-id">' + data.company_id + '</span>').insertBefore('#select2-billing_company_display-container')
+
                         if (jQuery('#cannot_find_btn').length === 0) {
                             jQuery('#billing_company_display_field').append(
                                 '<div class="cannot_find_btn" id="cannot_find_btn">I can\'t find my company</div>')
@@ -1119,45 +1129,15 @@ class Twoinc {
                     // Get the company approval status
                     Twoinc.getInstance().getApproval()
 
-                    // Get country
-                    let country_prefix = Twoinc.getInstance().customerCompany.country_prefix
-                    if (!country_prefix || !['GB'].includes(country_prefix)) country_prefix = 'NO'
-
-                    // Clear the addresses, in case address get request fails
+                    // Address search
                     if (window.twoinc.address_search === 'yes') {
+                        // Clear the addresses, in case address get request fails
                         jQuery('#billing_address_1').val('')
                         jQuery('#billing_city').val('')
                         jQuery('#billing_postcode').val('')
 
                         // Fetch the company data
-                        const addressResponse = jQuery.ajax({
-                            dataType: 'json',
-                            url: twoincUtilHelper.contructTwoincUrl('/v1/' + country_prefix + '/company/' + jQuery('#company_id').val() + '/address')
-                        })
-
-                        addressResponse.done(function(response){
-
-                            // If we have the company location
-                            if (response.address) {
-
-                                // Get the company location object
-                                const companyLocation = response.address
-
-                                // Populate the street name and house number fields
-                                jQuery('#billing_address_1').val(companyLocation.streetAddress)
-
-                                // Populate the city
-                                jQuery('#billing_city').val(companyLocation.city)
-
-                                // Populate the postal code
-                                jQuery('#billing_postcode').val(companyLocation.postalCode)
-
-                                // Update order review in case there is a shipping change
-                                jQuery(document.body).trigger('update_checkout')
-
-                            }
-
-                        })
+                        Twoinc.getInstance().getAddress()
                     }
 
                 })
@@ -1183,6 +1163,25 @@ class Twoinc {
 		    jQuery('#company_id').val("")
             Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData()
             twoincDomHelper.toggleBusinessFields(twoincDomHelper.getAccountType(), true)
+
+            jQuery('#cannot_find_btn').remove()
+            if (jQuery('#enable_company_search').length === 0) {
+            jQuery('#billing_company_field').append(
+                '<div class="cannot_find_btn" id="enable_company_search">Turn on company search</div>')
+            }
+        })
+
+        $body.on('click', '#enable_company_search', function() {
+            jQuery('#billing_company').val("")
+		    jQuery('#company_id').val("")
+            Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData()
+            twoincDomHelper.toggleBusinessFields(twoincDomHelper.getAccountType(), false)
+
+            jQuery('#enable_company_search').remove()
+            if (jQuery('#cannot_find_btn').length === 0) {
+                jQuery('#billing_company_display_field').append(
+                    '<div class="cannot_find_btn" id="cannot_find_btn">I can\'t find my company</div>')
+            }
         })
 
         // Handle the representative inputs blur event
@@ -1231,8 +1230,12 @@ class Twoinc {
         // Add customization for current theme if any
         twoincDomHelper.insertCustomCss()
 
-        if (loadSavedInputs) twoincDomHelper.loadStorageInputs()
         twoincDomHelper.loadUserMetaInputs()
+        if (loadSavedInputs) twoincDomHelper.loadStorageInputs()
+        if (jQuery('.floating-company-id') && jQuery('.floating-company-id').text()) {
+            // Trigger address search
+            Twoinc.getInstance().getAddress()
+        }
         this.initBillingPhoneDisplay()
         setTimeout(function(){
             twoincDomHelper.saveCheckoutInputs()
@@ -1549,6 +1552,49 @@ class Twoinc {
     }
 
     /**
+     * Get the address from address search
+     */
+    getAddress()
+    {
+
+        // Get country
+        let country_prefix = Twoinc.getInstance().customerCompany.country_prefix
+        if (!country_prefix || !['GB'].includes(country_prefix)) country_prefix = 'NO'
+        // Get company ID
+        let company_id = jQuery('#company_id').val()
+
+        const addressResponse = jQuery.ajax({
+            dataType: 'json',
+            url: twoincUtilHelper.contructTwoincUrl('/v1/' + country_prefix + '/company/' + company_id + '/address')
+        })
+
+        addressResponse.done(function(response){
+
+            // If we have the company location
+            if (response.address) {
+
+                // Get the company location object
+                const companyLocation = response.address
+
+                // Populate the street name and house number fields
+                jQuery('#billing_address_1').val(companyLocation.streetAddress)
+
+                // Populate the city
+                jQuery('#billing_city').val(companyLocation.city)
+
+                // Populate the postal code
+                jQuery('#billing_postcode').val(companyLocation.postalCode)
+
+                // Update order review in case there is a shipping change
+                jQuery(document.body).trigger('update_checkout')
+
+            }
+
+        })
+
+    }
+
+    /**
      * Get the actual due in days to display on page
      */
     getDueInDays()
@@ -1625,9 +1671,11 @@ class Twoinc {
         // Hide and clear unnecessary payment methods
         twoincDomHelper.toggleMethod(Twoinc.getInstance().isTwoincMethodHidden)
         jQuery('#payment .wc_payment_methods input.input-radio').each(function() {
-            if (jQuery(this).is(":hidden")) {
-                twoincDomHelper.deselectPaymentMethod(jQuery(this))
-            }
+            setTimeout(function() {
+                if (jQuery(this).is(":hidden")) {
+                    twoincDomHelper.deselectPaymentMethod(jQuery(this))
+                }
+            }, 1000)
         })
         twoincDomHelper.rearrangeDescription()
 
@@ -1820,6 +1868,12 @@ jQuery(function(){
                     Twoinc.getInstance().initialize(false)
                     Twoinc.getInstance().onUpdatedCheckout()
                 })
+
+                // Run Twoinc code if Business is selected
+                if (twoincUtilHelper.isCompany(twoincDomHelper.getAccountType())) {
+                    Twoinc.getInstance().initialize(false)
+                    Twoinc.getInstance().onUpdatedCheckout()
+                }
 
                 // If invoice fee is charged to buyer, order price will change when payment method is changed from/to Twoinc
                 // Also, run Twoinc code if payment method selected is Twoinc
