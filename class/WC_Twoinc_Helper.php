@@ -348,8 +348,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
          */
         public static function compose_twoinc_order(
             $order, $order_reference,
-            $company_id, $department, $project, $product_type,
-            $payment_reference_message = '', $tracking_id = '')
+            $company_id, $department, $project, $purchase_order_number,
+            $product_type, $payment_reference_message = '', $tracking_id = '')
         {
 
             $billing_address = [
@@ -427,6 +427,10 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 ]
             ];
 
+            if ($purchase_order_number) {
+                $req_body['buyer_purchase_order_number'] = $purchase_order_number;
+            }
+
             if ($tracking_id) {
                 $req_body['tracking_id'] = $tracking_id;
             }
@@ -446,7 +450,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * @return bool
          */
         public static function compose_twoinc_edit_order(
-            $order, $department, $project, $product_type, $payment_reference_message = '')
+            $order, $department, $project, $purchase_order_number, $product_type, $payment_reference_message = '')
         {
 
             $billing_address = [
@@ -497,6 +501,10 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     'expected_delivery_date' => date('Y-m-d', strtotime('+ 7 days'))
                 ]
             ];
+
+            if ($purchase_order_number) {
+                $req_body['buyer_purchase_order_number'] = $purchase_order_number;
+            }
 
             if(has_filter('two_order_edit')) {
                 $req_body = apply_filters('two_order_edit', $req_body);
