@@ -498,6 +498,7 @@ if (!class_exists('WC_Twoinc')) {
                 $twoinc_meta['company_id'],
                 $twoinc_meta['department'],
                 $twoinc_meta['project'],
+                $twoinc_meta['purchase_order_number'],
                 $twoinc_meta['product_type'],
                 $twoinc_meta['payment_reference_message'],
                 ''
@@ -537,6 +538,7 @@ if (!class_exists('WC_Twoinc')) {
                 $twoinc_meta['company_id'],
                 $twoinc_meta['department'],
                 $twoinc_meta['project'],
+                $twoinc_meta['purchase_order_number'],
                 $twoinc_meta['product_type'],
                 $twoinc_meta['payment_reference_message'],
                 ''
@@ -883,6 +885,7 @@ if (!class_exists('WC_Twoinc')) {
             $company_id = array_key_exists('company_id', $_POST) ? sanitize_text_field($_POST['company_id']) : '';
             $department = array_key_exists('department', $_POST) ? sanitize_text_field($_POST['department']) : '';
             $project = array_key_exists('project', $_POST) ? sanitize_text_field($_POST['project']) : '';
+            $purchase_order_number = array_key_exists('purchase_order_number', $_POST) ? sanitize_text_field($_POST['purchase_order_number']) : '';
             $tracking_id = array_key_exists('tracking_id', $_POST) ? sanitize_text_field($_POST['tracking_id']) : '';
             $tillit_merchant_id = $this->get_option('tillit_merchant_id');
             $order_reference = wp_generate_password(64, false, false);
@@ -897,6 +900,7 @@ if (!class_exists('WC_Twoinc')) {
             update_post_meta($order_id, 'company_id', $company_id);
             update_post_meta($order_id, 'department', $department);
             update_post_meta($order_id, 'project', $project);
+            update_post_meta($order_id, 'purchase_order_number', $purchase_order_number);
             // For requests from order pay page: Store in order object, not DB
             if ($billing_country) {
                 $order->set_billing_country($billing_country);
@@ -940,6 +944,7 @@ if (!class_exists('WC_Twoinc')) {
                 $company_id,
                 $department,
                 $project,
+                $purchase_order_number,
                 $product_type,
                 $payment_reference_message,
                 $tracking_id
@@ -1566,6 +1571,14 @@ if (!class_exists('WC_Twoinc')) {
                     'type'        => 'checkbox',
                     'default'     => 'yes'
                 ],
+                'add_field_purchase_order_number' => [
+                    'title'       => __('Add input field for "Purchase order number"', 'twoinc-payment-gateway'),
+                    'description' => __('Adds an input field where buyers can input their purchase order number, input is shown on invoice.', 'twoinc-payment-gateway'),
+                    'desc_tip'    => true,
+                    'label'       => ' ',
+                    'type'        => 'checkbox',
+                    'default'     => 'yes'
+                ],
                 'use_account_type_buttons' => [
                     'title'       => __('Use buttons instead of radios to select account type', 'twoinc-payment-gateway'),
                     'label'       => ' ',
@@ -1739,6 +1752,7 @@ if (!class_exists('WC_Twoinc')) {
             if ($company_id) {
                 $department = $order->get_meta('department');
                 $project = $order->get_meta('project');
+                $purchase_order_number = $order->get_meta('purchase_order_number');
             } else {
                 $response = $this->make_request("/v1/order/${twoinc_order_id}", [], 'GET');
 
@@ -1782,9 +1796,11 @@ if (!class_exists('WC_Twoinc')) {
                 $company_id = $body['buyer']['company']['organization_number'];
                 $department = $body['buyer_department'];
                 $project = $body['buyer_project'];
+                $purchase_order_number = $body['buyer_purchase_order_number'];
                 update_post_meta($order->get_id(), 'company_id', $company_id);
                 update_post_meta($order->get_id(), 'department', $department);
                 update_post_meta($order->get_id(), 'project', $project);
+                update_post_meta($order->get_id(), 'purchase_order_number', $purchase_order_number);
             }
 
             return array(
@@ -1793,6 +1809,7 @@ if (!class_exists('WC_Twoinc')) {
                 'company_id' => $company_id,
                 'department' => $department,
                 'project' => $project,
+                'purchase_order_number' => $purchase_order_number,
                 'twoinc_order_id' => $twoinc_order_id,
                 'product_type' => $product_type,
                 'payment_reference_message' => $payment_reference_message
@@ -1828,6 +1845,7 @@ if (!class_exists('WC_Twoinc')) {
                     $order,
                     $twoinc_meta['department'],
                     $twoinc_meta['project'],
+                    $twoinc_meta['purchase_order_number'],
                     $twoinc_meta['product_type'],
                     $twoinc_meta['payment_reference_message']
                 ),
