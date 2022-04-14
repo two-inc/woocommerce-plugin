@@ -164,7 +164,7 @@ let twoincSelectWooHelper = {
 
         const items = []
 
-        for(let i = 0; i < results.data.items.length; i++) {
+        for (let i = 0; i < results.data.items.length; i++) {
 
             const item = results.data.items[i]
 
@@ -471,7 +471,11 @@ let twoincDomHelper = {
             visibleBusinessTargets.push('#billing_company_field')
         }
         if (window.twoinc.mark_twoinc_fields_required === 'yes') {
-            requiredBusinessTargets = visibleBusinessTargets
+            //requiredBusinessTargets = [...visibleBusinessTargets]
+            requiredBusinessTargets = []
+            for (let i = 0; i < visibleBusinessTargets.length; i++) {
+                requiredBusinessTargets[i] = visibleBusinessTargets[i]
+            }
         }
         visibleBusinessTargets.push('#department_field', '#project_field')
         allTargets = jQuery(allTargets.join(','))
@@ -1336,7 +1340,7 @@ class Twoinc {
         let can = true
         let values = [].concat(Object.values(this.customerCompany))
 
-        for(let i = 0; i < values.length; i++) {
+        for (let i = 0; i < values.length; i++) {
             const value = values[i]
             if (!value || value.length === 0) {
                 can = false
