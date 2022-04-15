@@ -105,9 +105,9 @@ if (!class_exists('WC_Twoinc')) {
                 add_action('edit_user_profile_update', [$this, 'save_user_meta'], 10, 1);
             } else {
                 // Confirm order after returning from twoinc checkout-page, DO NOT CHANGE HOOKS
-                add_action('template_redirect', [$this, 'process_confirmation_header_redirect']);
+                // add_action('template_redirect', 'WC_Twoinc::process_confirmation_header_redirect');
                 // add_action('template_redirect', [$this, 'before_process_confirmation']);
-                // add_action('get_header', [$this, 'process_confirmation_header_redirect']);
+                // add_action('get_header', 'WC_Twoinc::process_confirmation_header_redirect');
                 // add_action('init', [$this, 'process_confirmation_js_redirect']); // some theme does not call get_header()
 
                 // Calculate fees in order review panel on the right of shop checkout page
@@ -1122,10 +1122,11 @@ if (!class_exists('WC_Twoinc')) {
          *
          * @return void
          */
-        public function process_confirmation_header_redirect()
+        static public function process_confirmation_header_redirect()
         {
 
-            $redirect_url = $this->process_confirmation();
+            $wc_twoinc_instance = WC_Twoinc::get_instance();
+            $redirect_url = $wc_twoinc_instance->process_confirmation();
 
             // Execute redirection by header
             if (isset($redirect_url)) {
@@ -1288,6 +1289,9 @@ if (!class_exists('WC_Twoinc')) {
             }
             // After get_twoinc_error_msg, we can assume $response['response']['code'] < 400
 
+            // Add note
+            $order->add_order_note(sprintf(__('Order ID: %s has been placed with Two', 'twoinc-payment-gateway'), $twoinc_order_id));
+
             // Mark order as processing
             $order->payment_complete();
 
@@ -1301,7 +1305,7 @@ if (!class_exists('WC_Twoinc')) {
          *
          * @return void
          */
-        public function one_click_setup()
+        public static function one_click_setup()
         {
             // Stop if this is not setup request
             if (!isset($_REQUEST['m']) || !isset($_REQUEST['k']) || !isset($_REQUEST['t']) || !isset($_REQUEST['c'])) return;
@@ -1367,27 +1371,28 @@ if (!class_exists('WC_Twoinc')) {
 
                 $body = json_decode($response['body'], true);
                 if ($response['response']['code'] === 200 && $body && $body['merchant_secret_api_key']) {
-                    $this->update_option('tillit_merchant_id', $body['merchant_short_name']);
-                    $this->update_option('api_key', $body['merchant_secret_api_key']);
-                    if (isset($body['enabled'])) $this->update_option('enabled', $body['enabled'] ? 'yes' : 'no');
-                    if (isset($body['title'])) $this->update_option('title', $body['title']);
-                    if (isset($body['checkout_personal'])) $this->update_option('checkout_personal', $body['checkout_personal'] ? 'yes' : 'no');
-                    if (isset($body['checkout_sole_trader'])) $this->update_option('checkout_sole_trader', $body['checkout_sole_trader'] ? 'yes' : 'no');
-                    if (isset($body['checkout_business'])) $this->update_option('checkout_business', $body['checkout_business'] ? 'yes' : 'no');
-                    if (isset($body['product_type'])) $this->update_option('product_type', $body['product_type']);
-                    if (isset($body['enable_company_name'])) $this->update_option('enable_company_name', $body['enable_company_name'] ? 'yes' : 'no');
-                    if (isset($body['address_search'])) $this->update_option('address_search', $body['address_search'] ? 'yes' : 'no');
-                    if (isset($body['mark_tillit_fields_required'])) $this->update_option('mark_tillit_fields_required', $body['mark_tillit_fields_required'] ? 'yes' : 'no');
-                    if (isset($body['enable_order_intent'])) $this->update_option('enable_order_intent', $body['enable_order_intent'] ? 'yes' : 'no');
-                    if (isset($body['default_to_b2c'])) $this->update_option('default_to_b2c', $body['default_to_b2c'] ? 'yes' : 'no');
-                    if (isset($body['invoice_fee_to_buyer'])) $this->update_option('invoice_fee_to_buyer', $body['invoice_fee_to_buyer'] ? 'yes' : 'no');
-                    if (isset($body['clear_options_on_deactivation'])) $this->update_option('clear_options_on_deactivation', $body['clear_options_on_deactivation'] ? 'yes' : 'no');
+                    $wc_twoinc_instance = WC_Twoinc::get_instance();
+                    $wc_twoinc_instance->update_option('tillit_merchant_id', $body['merchant_short_name']);
+                    $wc_twoinc_instance->update_option('api_key', $body['merchant_secret_api_key']);
+                    if (isset($body['enabled'])) $wc_twoinc_instance->update_option('enabled', $body['enabled'] ? 'yes' : 'no');
+                    if (isset($body['title'])) $wc_twoinc_instance->update_option('title', $body['title']);
+                    if (isset($body['checkout_personal'])) $wc_twoinc_instance->update_option('checkout_personal', $body['checkout_personal'] ? 'yes' : 'no');
+                    if (isset($body['checkout_sole_trader'])) $wc_twoinc_instance->update_option('checkout_sole_trader', $body['checkout_sole_trader'] ? 'yes' : 'no');
+                    if (isset($body['checkout_business'])) $wc_twoinc_instance->update_option('checkout_business', $body['checkout_business'] ? 'yes' : 'no');
+                    if (isset($body['product_type'])) $wc_twoinc_instance->update_option('product_type', $body['product_type']);
+                    if (isset($body['enable_company_name'])) $wc_twoinc_instance->update_option('enable_company_name', $body['enable_company_name'] ? 'yes' : 'no');
+                    if (isset($body['address_search'])) $wc_twoinc_instance->update_option('address_search', $body['address_search'] ? 'yes' : 'no');
+                    if (isset($body['mark_tillit_fields_required'])) $wc_twoinc_instance->update_option('mark_tillit_fields_required', $body['mark_tillit_fields_required'] ? 'yes' : 'no');
+                    if (isset($body['enable_order_intent'])) $wc_twoinc_instance->update_option('enable_order_intent', $body['enable_order_intent'] ? 'yes' : 'no');
+                    if (isset($body['default_to_b2c'])) $wc_twoinc_instance->update_option('default_to_b2c', $body['default_to_b2c'] ? 'yes' : 'no');
+                    if (isset($body['invoice_fee_to_buyer'])) $wc_twoinc_instance->update_option('invoice_fee_to_buyer', $body['invoice_fee_to_buyer'] ? 'yes' : 'no');
+                    if (isset($body['clear_options_on_deactivation'])) $wc_twoinc_instance->update_option('clear_options_on_deactivation', $body['clear_options_on_deactivation'] ? 'yes' : 'no');
                     if (WC_Twoinc_Helper::is_twoinc_development()) {
-                        $this->update_option('test_checkout_host', $twoinc_checkout_host);
+                        $wc_twoinc_instance->update_option('test_checkout_host', $twoinc_checkout_host);
                     } else if (strpos($twoinc_checkout_host, 'sandbox.api.two.inc') !== false) {
-                        $this->update_option('checkout_env', 'SANDBOX');
+                        $wc_twoinc_instance->update_option('checkout_env', 'SANDBOX');
                     } else {
-                        $this->update_option('checkout_env', 'PROD');
+                        $wc_twoinc_instance->update_option('checkout_env', 'PROD');
                     }
 
                     // Init done
@@ -1874,6 +1879,22 @@ if (!class_exists('WC_Twoinc')) {
                     . "\r\n- Merchant post ID: " . strval($order->get_id())
                     . "\r\n- Site: " . get_site_url());
                 return;
+            }
+
+            // Get returned gross amount
+            $gross_amount = null;
+            if($response && $response['body']) {
+                $body = json_decode($response['body'], true);
+                if($body['gross_amount']) {
+                    $gross_amount = $body['gross_amount'];
+                }
+            }
+
+            // Add note
+            if ($gross_amount) {
+                $order->add_order_note(sprintf(__('The order has been edited in the Two order system. Order is now registered for %s Amount in Two', 'twoinc-payment-gateway'), strval($gross_amount)));
+            } else {
+                $order->add_order_note(__('The order has been edited in the Two order system', 'twoinc-payment-gateway'));
             }
 
         }
