@@ -1288,6 +1288,9 @@ if (!class_exists('WC_Twoinc')) {
             }
             // After get_twoinc_error_msg, we can assume $response['response']['code'] < 400
 
+            // Add note
+            $order->add_order_note(sprintf(__('Order ID: %s has been placed with Two', 'twoinc-payment-gateway'), $twoinc_order_id));
+
             // Mark order as processing
             $order->payment_complete();
 
@@ -1874,6 +1877,22 @@ if (!class_exists('WC_Twoinc')) {
                     . "\r\n- Merchant post ID: " . strval($order->get_id())
                     . "\r\n- Site: " . get_site_url());
                 return;
+            }
+
+            // Get returned gross amount
+            $gross_amount = null;
+            if($response && $response['body']) {
+                $body = json_decode($response['body'], true);
+                if($body['gross_amount']) {
+                    $gross_amount = $body['gross_amount'];
+                }
+            }
+
+            // Add note
+            if ($gross_amount) {
+                $order->add_order_note(sprintf(__('The order has been edited in the Two order system. Order is now registered for %s Amount in Two', 'twoinc-payment-gateway'), strval($gross_amount)));
+            } else {
+                $order->add_order_note(__('The order has been edited in the Two order system', 'twoinc-payment-gateway'));
             }
 
         }
