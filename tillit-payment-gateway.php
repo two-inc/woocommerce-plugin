@@ -45,7 +45,11 @@ function load_twoinc_classes()
     require_once __DIR__ . '/class/WC_Twoinc.php';
 
     add_action('template_redirect', 'WC_Twoinc::one_click_setup');
+    // Confirm order after returning from twoinc checkout-page, DO NOT CHANGE HOOKS
     add_action('template_redirect', 'WC_Twoinc::process_confirmation_header_redirect');
+    // add_action('template_redirect', 'WC_Twoinc::before_process_confirmation');
+    // add_action('get_header', 'WC_Twoinc::process_confirmation_header_redirect');
+    // add_action('init', 'WC_Twoinc::process_confirmation_js_redirect'); // some theme does not call get_header()
 }
 
 /**
