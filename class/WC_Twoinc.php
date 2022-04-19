@@ -104,12 +104,6 @@ if (!class_exists('WC_Twoinc')) {
                 add_action('personal_options_update', [$this, 'save_user_meta'], 10, 1);
                 add_action('edit_user_profile_update', [$this, 'save_user_meta'], 10, 1);
             } else {
-                // Confirm order after returning from twoinc checkout-page, DO NOT CHANGE HOOKS
-                // add_action('template_redirect', 'WC_Twoinc::process_confirmation_header_redirect');
-                // add_action('template_redirect', [$this, 'before_process_confirmation']);
-                // add_action('get_header', 'WC_Twoinc::process_confirmation_header_redirect');
-                // add_action('init', [$this, 'process_confirmation_js_redirect']); // some theme does not call get_header()
-
                 // Calculate fees in order review panel on the right of shop checkout page
                 add_action('woocommerce_cart_calculate_fees', [$this, 'add_invoice_fees']);
 
@@ -1141,10 +1135,11 @@ if (!class_exists('WC_Twoinc')) {
          *
          * @return void
          */
-        public function process_confirmation_js_redirect()
+        static public function process_confirmation_js_redirect()
         {
 
-            $redirect_url = $this->process_confirmation();
+            $wc_twoinc_instance = WC_Twoinc::get_instance();
+            $redirect_url = $wc_twoinc_instance->process_confirmation();
 
             // Execute redirection JS
             if (isset($redirect_url)) {
@@ -1158,11 +1153,12 @@ if (!class_exists('WC_Twoinc')) {
          *
          * @return void
          */
-        public function before_process_confirmation()
+        static public function before_process_confirmation()
         {
 
+            $wc_twoinc_instance = WC_Twoinc::get_instance();
             // Set status to avoid 404 for confirmation page
-            if ($this->is_confirmation_page()) status_header(200);
+            if ($wc_twoinc_instance->is_confirmation_page()) status_header(200);
 
         }
 
