@@ -75,18 +75,19 @@ if (!class_exists('WC_Twoinc_Checkout')) {
         public function add_account_buttons($fields)
         {
 
+            $home_url = get_home_url();
             printf(
                 '<div class="account-type-wrapper" style="display: none;">
                     <div class="account-type-button" account-type-name="personal">
-                        <img src = "/wp-content/plugins/tillit-payment-gateway/assets/images/personal.svg"/>
+                        <img src = "' . WC_TWOINC_PLUGIN_URL . 'assets/images/personal.svg"/>
                         <span>' . __('Private Customer', 'twoinc-payment-gateway') . '</span>
                     </div>
                     <div class="account-type-button" account-type-name="sole_trader">
-                        <img src = "/wp-content/plugins/tillit-payment-gateway/assets/images/personal.svg"/>
+                        <img src = "' . WC_TWOINC_PLUGIN_URL . 'assets/images/personal.svg"/>
                         <span>' . __('Sole Trader/Other Customer', 'twoinc-payment-gateway') . 'r</span>
                     </div>
                     <div class="account-type-button" account-type-name="business">
-                        <img src = "/wp-content/plugins/tillit-payment-gateway/assets/images/business.svg"/>
+                        <img src = "' . WC_TWOINC_PLUGIN_URL . 'assets/images/business.svg"/>
                         <span>' . __('Business Customer', 'twoinc-payment-gateway') . '</span>
                     </div>
                 </div>');
@@ -353,6 +354,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 'currency' => $currency,
                 'price_decimal_separator' => wc_get_price_decimal_separator(),
                 'price_thousand_separator' => wc_get_price_thousand_separator(),
+                'twoinc_plugin_url' => WC_TWOINC_PLUGIN_URL,
                 'client_name' => 'wp',
                 'client_version' => get_plugin_version()
             ];

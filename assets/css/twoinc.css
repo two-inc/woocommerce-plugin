@@ -98,13 +98,17 @@ form.checkout.woocommerce-checkout .woocommerce-account-type-fields__field-wrapp
     padding-bottom: 15px;
 }
 
-.floating-company-id {
+.floating-company {
     float: right;
-    color: #dddddd;
     margin-right: 25px;
     height: 100%;
     display: flex;
+}
+
+.floating-company-id {
+    color: #dddddd;
     align-items: center;
+    margin-right: 3px;
 }
 
 .cannot_find_btn {
