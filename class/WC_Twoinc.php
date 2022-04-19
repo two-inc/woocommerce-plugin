@@ -1974,7 +1974,7 @@ if (!class_exists('WC_Twoinc')) {
                         <p style="color: #000000;font-size: 1.3em;text-align: justify;">Happy to see you here! Before you can start selling with the Two buy now, pay later solution you need to complete our signup process. It\'s easy, fast and gives you immediate access to the <a target="_blank" href="https://portal.two.inc/auth/merchant/signup">Two Merchant Portal</a></p>
                     </div>
                     <div>
-                        <img style="position: absolute;top: 40px;right: 40px;width: 100px;" src="/wp-content/plugins/tillit-payment-gateway/assets/images/two-logo.svg">
+                        <img style="position: absolute;top: 40px;right: 40px;width: 100px;" src="' . WC_TWOINC_PLUGIN_URL . 'assets/images/two-logo.svg">
                         <div style="position: absolute;bottom: 20px;right:40px;">
                             <a href="#" id="dismiss-twoinc-notice" class="button" style="margin-left: 20px;background: none;font-size: 1.1em;font-weight: 600;color: #3e16a2;padding: 7px 30px;border-color: #3e16a2;border-radius: 12px;">Not now, thanks</a>
                             <a href="https://portal.two.inc/auth/merchant/signup" target="_blank" class="button" style="margin-left: 20px;background: #3e16a2;font-size: 1.1em;font-weight: 600;color: #ffffff;padding: 7px 30px;border-color: #3e16a2;border-radius: 12px;">Set up my account</a>

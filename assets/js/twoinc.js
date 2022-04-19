@@ -720,6 +720,56 @@ let twoincDomHelper = {
     },
 
     /**
+     * Clear the selected selectWoo company name and id
+     */
+    clearSelectedCompany: function()
+    {
+
+        // Clear company inputs
+        let billingCompanyDisplay = jQuery('#billing_company_display')
+        billingCompanyDisplay.html('')
+        billingCompanyDisplay.selectWoo(twoincSelectWooHelper.genSelectWooParams())
+        twoincDomHelper.toggleTooltip('#billing_company_display_field .select2-container', window.twoinc.text.tooltip_company)
+        twoincSelectWooHelper.fixSelectWooPositionCompanyName()
+        jQuery('#company_id').val('')
+
+        // Clear the addresses, in case address get request fails
+        if (window.twoinc.address_search === 'yes') {
+            jQuery('#billing_address_1').val('')
+            jQuery('#billing_address_2').val('')
+            jQuery('#billing_city').val('')
+            jQuery('#billing_postcode').val('')
+        }
+
+        Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData()
+
+    },
+
+    /**
+     * Insert the floating company id and closing button
+     */
+    insertFloatingCompany: function(companyId, delayInSecs)
+    {
+
+        // Remove if exist
+        jQuery(".floating-company").remove()
+
+        let floatingCompany = jQuery(
+            '<span class="floating-company">'
+            + '  <span class="floating-company-id">' + companyId + '</span>'
+            + '  <img src="' + window.twoinc.twoinc_plugin_url + 'assets/images/x-button.svg" onclick="twoincDomHelper.clearSelectedCompany()"></img>'
+            + '</span>')
+        floatingCompany.hide()
+        floatingCompany.insertBefore('#billing_company_display')
+        setTimeout(function(){
+            let floatingCompany = jQuery('.floating-company')
+            floatingCompany.insertBefore('#select2-billing_company_display-container')
+            floatingCompany.show()
+        }, delayInSecs)
+
+    },
+
+    /**
      * Check if twoinc payment is currently selected
      */
     isSelectedPaymentTwoinc: function() {
@@ -952,18 +1002,8 @@ let twoincDomHelper = {
 
                 // Append company id to company name select box
                 if (window.twoinc.company_id) {
-                    if (jQuery(".floating-company-id").length == 1) {
-                        jQuery('.floating-company-id').remove()
-                    }
-                    let floatingCompanyId = jQuery('<span class="floating-company-id">' + window.twoinc.company_id + '</span>')
-                    floatingCompanyId.hide()
-                    floatingCompanyId.insertBefore(selectElem)
+                    twoincDomHelper.insertFloatingCompany(window.twoinc.company_id, 2000)
                 }
-                setTimeout(function(){
-                    let floatingCompanyId = jQuery('.floating-company-id')
-                    floatingCompanyId.insertBefore('#select2-billing_company_display-container')
-                    floatingCompanyId.show()
-                }, 2000)
             }
         }
         if (document.querySelector('#department') && !(document.querySelector('#department').value) && window.twoinc.department) {
@@ -1007,7 +1047,7 @@ let twoincDomHelper = {
     insertCustomCss: function() {
         let themeBase = twoincDomHelper.getThemeBase()
         if (themeBase) {
-            jQuery('head').append('<link href="/wp-content/plugins/tillit-payment-gateway/assets/css/c-' + themeBase + '.css" type="text/css" rel="stylesheet" />')
+            jQuery('head').append('<link href="' + window.twoinc.twoinc_plugin_url + 'assets/css/c-' + themeBase + '.css" type="text/css" rel="stylesheet" />')
         }
     }
 
@@ -1116,10 +1156,7 @@ class Twoinc {
 
                     // Display company ID on the right of selected company name
                     setTimeout(function(){
-                        if (jQuery(".floating-company-id").length == 1) {
-                            jQuery('.floating-company-id').remove()
-                        }
-                        jQuery('<span class="floating-company-id">' + data.company_id + '</span>').insertBefore('#select2-billing_company_display-container')
+                        twoincDomHelper.insertFloatingCompany(data.company_id, 0)
 
                         if (jQuery('#cannot_find_btn').length === 0) {
                             jQuery('#billing_company_display_field').append(
@@ -1804,23 +1841,7 @@ class Twoinc {
 
         twoincDomHelper.toggleBusinessFields(twoincDomHelper.getAccountType())
 
-        // Clear company inputs
-        let billingCompanyDisplay = jQuery('#billing_company_display')
-        billingCompanyDisplay.html('')
-        billingCompanyDisplay.selectWoo(twoincSelectWooHelper.genSelectWooParams())
-        twoincDomHelper.toggleTooltip('#billing_company_display_field .select2-container', window.twoinc.text.tooltip_company)
-        twoincSelectWooHelper.fixSelectWooPositionCompanyName()
-        jQuery('#company_id').val('')
-
-        // Clear the addresses, in case address get request fails
-        if (window.twoinc.address_search === 'yes') {
-            jQuery('#billing_address_1').val('')
-            jQuery('#billing_address_2').val('')
-            jQuery('#billing_city').val('')
-            jQuery('#billing_postcode').val('')
-        }
-
-        Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData()
+        twoincDomHelper.clearSelectedCompany()
 
         Twoinc.getInstance().getApproval()
 
