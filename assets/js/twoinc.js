@@ -741,6 +741,8 @@ let twoincDomHelper = {
             jQuery('#billing_postcode').val('')
         }
 
+        jQuery('#select2-billing_company_display-container').parent().find('.select2-selection__arrow').show()
+
         Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData()
 
     },
@@ -765,7 +767,23 @@ let twoincDomHelper = {
             let floatingCompany = jQuery('.floating-company')
             floatingCompany.insertBefore('#select2-billing_company_display-container')
             floatingCompany.show()
+            jQuery('#select2-billing_company_display-container').parent().find('.select2-selection__arrow').hide()
         }, delayInSecs)
+
+    },
+
+    /**
+     * Get the company-not-in-btn, generate if not found
+     */
+    getCompanyNotInBtnNode: function()
+    {
+
+        if (jQuery('#company_not_in_btn').length) return jQuery('#company_not_in_btn')
+
+        let companyNotInBtn = jQuery('.company_not_in_btn').clone()
+        companyNotInBtn.attr('id', 'company_not_in_btn')
+        companyNotInBtn.removeClass('company_not_in_btn')
+        return companyNotInBtn
 
     },
 
@@ -1085,6 +1103,7 @@ class Twoinc {
             'last_name': null,
             'phone_number': null
         }
+        this.billingCompanySelect = null
 
     }
 
@@ -1135,9 +1154,9 @@ class Twoinc {
 
             // Turn the select input into select2
             setTimeout(function(){
-                const $billingCompanySelect = $billingCompanyDisplay.selectWoo(twoincSelectWooHelper.genSelectWooParams())
+                Twoinc.getInstance().billingCompanySelect = $billingCompanyDisplay.selectWoo(twoincSelectWooHelper.genSelectWooParams())
                 twoincDomHelper.toggleTooltip('#billing_company_display_field .select2-container', window.twoinc.text.tooltip_company)
-                $billingCompanySelect.on('select2:select', function(e){
+                Twoinc.getInstance().billingCompanySelect.on('select2:select', function(e){
 
                     // Get the option data
                     const data = e.params.data
@@ -1157,11 +1176,6 @@ class Twoinc {
                     // Display company ID on the right of selected company name
                     setTimeout(function(){
                         twoincDomHelper.insertFloatingCompany(data.company_id, 0)
-
-                        if (jQuery('#cannot_find_btn').length === 0) {
-                            jQuery('#billing_company_display_field').append(
-                                '<div class="cannot_find_btn" id="cannot_find_btn">I can\'t find my company</div>')
-                        }
                     }, 0)
 
                     // Update the company name in agreement sentence
@@ -1185,13 +1199,24 @@ class Twoinc {
 
                 twoincSelectWooHelper.fixSelectWooPositionCompanyName()
 
-                $billingCompanySelect.on('select2:open', function(e){
+                Twoinc.getInstance().billingCompanySelect.on('select2:open', function(e){
+                    let companyNotInBtn = twoincDomHelper.getCompanyNotInBtnNode()
+                    jQuery('#select2-billing_company_display-results').parent().append(companyNotInBtn)
                     setTimeout(function(){
                         if (jQuery('input[aria-owns="select2-billing_company_display-results"]').get(0)) {
                             jQuery('input[aria-owns="select2-billing_company_display-results"]').get(0).focus()
+                            jQuery('input[aria-owns="select2-billing_company_display-results"]').on('input', function(e){
+                                let selectWooParams = twoincSelectWooHelper.genSelectWooParams()
+                                if (jQuery(this).val() && jQuery(this).val().length >= selectWooParams.minimumInputLength) {
+                                    jQuery('#company_not_in_btn').show()
+                                } else {
+                                    jQuery('#company_not_in_btn').hide()
+                                }
+                            })
                         }
                     }, 200)
                 })
+
             }, 800)
 
         }
@@ -1199,30 +1224,24 @@ class Twoinc {
         // Disable or enable actions based on the account type
         $body.on('updated_checkout', Twoinc.getInstance().onUpdatedCheckout)
 
-        $body.on('click', '#cannot_find_btn', function() {
+        $body.on('click', '#company_not_in_btn', function() {
             jQuery('#billing_company_display').val("")
 		    jQuery('#company_id').val("")
             Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData()
             twoincDomHelper.toggleBusinessFields(twoincDomHelper.getAccountType(), true)
 
-            jQuery('#cannot_find_btn').remove()
-            if (jQuery('#enable_company_search').length === 0) {
-            jQuery('#billing_company_field').append(
-                '<div class="cannot_find_btn" id="enable_company_search">Turn on company search</div>')
-            }
+            jQuery('#company_not_in_btn').hide()
+            jQuery('#search_company_btn').show()
+            Twoinc.getInstance().billingCompanySelect.select2('close')
         })
 
-        $body.on('click', '#enable_company_search', function() {
+        $body.on('click', '#search_company_btn', function() {
             jQuery('#billing_company').val("")
 		    jQuery('#company_id').val("")
             Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData()
             twoincDomHelper.toggleBusinessFields(twoincDomHelper.getAccountType(), false)
 
-            jQuery('#enable_company_search').remove()
-            if (jQuery('#cannot_find_btn').length === 0) {
-                jQuery('#billing_company_display_field').append(
-                    '<div class="cannot_find_btn" id="cannot_find_btn">I can\'t find my company</div>')
-            }
+            jQuery('#search_company_btn').hide()
         })
 
         // Handle the representative inputs blur event
@@ -1938,6 +1957,11 @@ jQuery(function(){
         jQuery('.woocommerce-checkout [name="account_type"]').on('change', function() {
             twoincDomHelper.toggleMethod(Twoinc.getInstance().isTwoincMethodHidden)
         })
+
+        // I can not find my company button
+        jQuery('#billing_company_field').append(jQuery('#search_company_btn'))
+        jQuery('#company_not_in_btn').hide()
+        jQuery('#search_company_btn').hide()
 
         // Intitialization of DOMs
         twoincDomHelper.initAccountTypeButtons()

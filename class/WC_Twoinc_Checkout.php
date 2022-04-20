@@ -84,7 +84,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     </div>
                     <div class="account-type-button" account-type-name="sole_trader">
                         <img src = "' . WC_TWOINC_PLUGIN_URL . 'assets/images/personal.svg"/>
-                        <span>' . __('Sole Trader/Other Customer', 'twoinc-payment-gateway') . 'r</span>
+                        <span>' . __('Sole Trader/Other Customer', 'twoinc-payment-gateway') . '</span>
                     </div>
                     <div class="account-type-button" account-type-name="business">
                         <img src = "' . WC_TWOINC_PLUGIN_URL . 'assets/images/business.svg"/>
