@@ -1,9 +1,9 @@
-#billing_phone_display_field, #billing_company_display_field, #company_id_field, #billing_country_field, #department_field, #project_field {
+#billing_phone_display_field, #billing_company_display_field, #company_id_field, #billing_country_field, #department_field, #project_field, #purchase_order_number_field {
     width: 100%;
 }
 .account-type-wrapper.actp-col-2 .account-type-button {
     width: 40%;
 }
-.floating-company-id {
+.floating-company {
     margin-right: 20px;
 }

@@ -98,22 +98,37 @@ form.checkout.woocommerce-checkout .woocommerce-account-type-fields__field-wrapp
     padding-bottom: 15px;
 }
 
-.floating-company-id {
-    float: right;
-    color: #dddddd;
-    margin-right: 25px;
-    height: 100%;
-    display: flex;
-    align-items: center;
+.floating-company {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    -ms-transform: translateY(-50%);
+    transform: translateY(-50%);
 }
 
-.cannot_find_btn {
+.floating-company-id {
+    position: absolute;
+    right: 24px;
+    margin-top: 0.8px;
+    top: 50%;
+    -ms-transform: translateY(-50%);
+    transform: translateY(-50%);
+    color: #dddddd;
+}
+
+#company_not_in_btn {
+    cursor: pointer;
+    color: #3043d1;
+    margin: 4px 12px;
+}
+
+#search_company_btn {
     text-align: right;
     cursor: pointer;
     padding-top: 5px;
-    color: #7f54b3;
+    color: #3043d1;
     position: absolute;
-    right: 0px;
+    right: 4px;
 }
 
 .account-type-wrapper {
