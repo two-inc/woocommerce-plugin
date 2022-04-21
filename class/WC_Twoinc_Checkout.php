@@ -344,7 +344,6 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 'address_search' => $this->wc_twoinc->get_option('address_search'),
                 'enable_order_intent' => $this->wc_twoinc->get_option('enable_order_intent'),
                 'invoice_fee_to_buyer' => $this->wc_twoinc->get_option('invoice_fee_to_buyer'),
-                'mark_twoinc_fields_required' => $this->wc_twoinc->get_option('mark_tillit_fields_required'),
                 'use_account_type_buttons' => $this->wc_twoinc->get_option('use_account_type_buttons'),
                 'display_tooltips' => $this->wc_twoinc->get_option('display_tooltips'),
                 'product_type' => $product_type,
