@@ -451,32 +451,34 @@ let twoincDomHelper = {
     /**
      * Toggle the custom business fields for Twoinc
      */
-    toggleBusinessFields: function(accountType, companyNotFound = false) {
+    toggleBusinessFields: function(accountType) {
 
         // Get the targets
         let allTargets = ['.woocommerce-company-fields', '.woocommerce-representative-fields', '#billing_phone_display_field', '#billing_phone_field',
                           '#billing_company_display_field', '#billing_company_field', '#company_id_field', '#department_field', '#project_field', '#purchase_order_number_field']
         let visibleNonbusinessTargets = ['#billing_phone_field', '#billing_company_field']
         let visibleBusinessTargets = ['.woocommerce-company-fields', '.woocommerce-representative-fields', '#billing_phone_display_field']
-        let requiredBusinessTargets = ['#billing_phone_display_field']
+        let requiredBusinessTargets = []
 
+        if (twoincDomHelper.isSelectedPaymentTwoinc()) {
+            requiredBusinessTargets.push('#billing_phone_display_field')
+        }
         if (twoincUtilHelper.isCountrySupported()) {
-            if (window.twoinc.company_name_search === 'yes' && !companyNotFound) {
+            if (window.twoinc.company_name_search === 'yes') {
                 visibleBusinessTargets.push('#billing_company_display_field')
+                if (twoincDomHelper.isSelectedPaymentTwoinc()) {
+                    requiredBusinessTargets.push('#billing_company_display_field')
+                }
             } else {
                 visibleBusinessTargets.push('#billing_company_field', '#company_id_field')
-                requiredBusinessTargets.push('#billing_company_field')
+                if (twoincDomHelper.isSelectedPaymentTwoinc()) {
+                    requiredBusinessTargets.push('#billing_company_field', '#company_id_field')
+                }
             }
         } else {
             visibleBusinessTargets.push('#billing_company_field')
         }
-        if (window.twoinc.mark_twoinc_fields_required === 'yes') {
-            //requiredBusinessTargets = [...visibleBusinessTargets]
-            requiredBusinessTargets = []
-            for (let i = 0; i < visibleBusinessTargets.length; i++) {
-                requiredBusinessTargets[i] = visibleBusinessTargets[i]
-            }
-        }
+
         visibleBusinessTargets.push('#department_field', '#project_field', '#purchase_order_number_field')
         allTargets = jQuery(allTargets.join(','))
         requiredBusinessTargets = jQuery(requiredBusinessTargets.join(','))
@@ -742,8 +744,14 @@ let twoincDomHelper = {
         }
 
         jQuery('#select2-billing_company_display-container').parent().find('.select2-selection__arrow').show()
+        Twoinc.getInstance().customerCompany = {}
+        twoincDomHelper.updateCompanyNameAgreement()
 
-        Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData()
+        // Update again after all elements are updated
+        setTimeout(function(){
+            Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData()
+            twoincDomHelper.updateCompanyNameAgreement()
+        }, 3000)
 
     },
 
@@ -1228,20 +1236,24 @@ class Twoinc {
             jQuery('#billing_company_display').val("")
 		    jQuery('#company_id').val("")
             Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData()
-            twoincDomHelper.toggleBusinessFields(twoincDomHelper.getAccountType(), true)
+            window.twoinc.company_name_search = 'no'
 
             jQuery('#company_not_in_btn').hide()
             jQuery('#search_company_btn').show()
             Twoinc.getInstance().billingCompanySelect.select2('close')
+
+            twoincDomHelper.toggleBusinessFields(twoincDomHelper.getAccountType())
         })
 
         $body.on('click', '#search_company_btn', function() {
             jQuery('#billing_company').val("")
 		    jQuery('#company_id').val("")
             Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData()
-            twoincDomHelper.toggleBusinessFields(twoincDomHelper.getAccountType(), false)
 
             jQuery('#search_company_btn').hide()
+            window.twoinc.company_name_search = 'yes'
+
+            twoincDomHelper.toggleBusinessFields(twoincDomHelper.getAccountType())
         })
 
         // Handle the representative inputs blur event
@@ -1674,7 +1686,6 @@ class Twoinc {
             contentType: "application/json; charset=utf-8",
             dataType: 'json',
             method: 'POST',
-            xhrFields: {withCredentials: true},
             data: jsonBody
         })
 
@@ -1722,6 +1733,10 @@ class Twoinc {
             if (twoincDomHelper.isSelectedPaymentTwoinc()) {
                 sessionStorage.setItem('businessClickToTwoinc', 'y')
             }
+        })
+
+        jQuery('input[name="payment_method"]').on('change', function(){
+            twoincDomHelper.toggleBusinessFields(twoincDomHelper.getAccountType())
         })
 
         if (twoincDomHelper.isSelectedPaymentTwoinc()) {

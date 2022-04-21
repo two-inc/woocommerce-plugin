@@ -1378,7 +1378,6 @@ if (!class_exists('WC_Twoinc')) {
                     if (isset($body['product_type'])) $wc_twoinc_instance->update_option('product_type', $body['product_type']);
                     if (isset($body['enable_company_name'])) $wc_twoinc_instance->update_option('enable_company_name', $body['enable_company_name'] ? 'yes' : 'no');
                     if (isset($body['address_search'])) $wc_twoinc_instance->update_option('address_search', $body['address_search'] ? 'yes' : 'no');
-                    if (isset($body['mark_tillit_fields_required'])) $wc_twoinc_instance->update_option('mark_tillit_fields_required', $body['mark_tillit_fields_required'] ? 'yes' : 'no');
                     if (isset($body['enable_order_intent'])) $wc_twoinc_instance->update_option('enable_order_intent', $body['enable_order_intent'] ? 'yes' : 'no');
                     if (isset($body['default_to_b2c'])) $wc_twoinc_instance->update_option('default_to_b2c', $body['default_to_b2c'] ? 'yes' : 'no');
                     if (isset($body['invoice_fee_to_buyer'])) $wc_twoinc_instance->update_option('invoice_fee_to_buyer', $body['invoice_fee_to_buyer'] ? 'yes' : 'no');
@@ -1547,14 +1546,6 @@ if (!class_exists('WC_Twoinc')) {
                     'title'       => __('Separate checkout for private sole traders', 'twoinc-payment-gateway'),
                     'label'       => ' ',
                     'type'        => 'checkbox'
-                ],
-                'mark_tillit_fields_required' => [
-                    'title'       => __('Mark Two fields required', 'twoinc-payment-gateway'),
-                    'description' => __('Marks phone number and company name fields as required.', 'twoinc-payment-gateway'),
-                    'desc_tip'    => true,
-                    'label'       => ' ',
-                    'type'        => 'checkbox',
-                    'default'     => 'yes'
                 ],
                 'add_field_department' => [
                     'title'       => __('Add input field for "Department"', 'twoinc-payment-gateway'),
