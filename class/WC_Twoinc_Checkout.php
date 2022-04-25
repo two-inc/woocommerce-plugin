@@ -339,6 +339,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 ],
                 'twoinc_search_host_no' => $this->wc_twoinc->twoinc_search_host_no,
                 'twoinc_search_host_gb' => $this->wc_twoinc->twoinc_search_host_gb,
+                'twoinc_search_host_se' => $this->wc_twoinc->twoinc_search_host_se,
                 'twoinc_checkout_host' => $this->wc_twoinc->twoinc_checkout_host,
                 'company_name_search' => $this->wc_twoinc->get_option('enable_company_name'),
                 'address_search' => $this->wc_twoinc->get_option('address_search'),
