@@ -50,6 +50,13 @@ function load_twoinc_classes()
     // add_action('template_redirect', 'WC_Twoinc::before_process_confirmation');
     // add_action('get_header', 'WC_Twoinc::process_confirmation_header_redirect');
     // add_action('init', 'WC_Twoinc::process_confirmation_js_redirect'); // some theme does not call get_header()
+
+    // Load user meta fields to user profile admin page
+    add_action('show_user_profile', 'WC_Twoinc::display_user_meta_edit', 10, 1);
+    add_action('edit_user_profile', 'WC_Twoinc::display_user_meta_edit', 10, 1);
+    // Save user meta fields on profile update
+    add_action('personal_options_update', 'WC_Twoinc::save_user_meta', 10, 1);
+    add_action('edit_user_profile_update', 'WC_Twoinc::save_user_meta', 10, 1);
 }
 
 /**
