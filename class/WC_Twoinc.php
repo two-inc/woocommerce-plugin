@@ -96,13 +96,6 @@ if (!class_exists('WC_Twoinc')) {
                 // For order update using Update post
                 add_action('save_post_shop_order', [$this, 'before_order_update'], 10, 2);
                 add_action('wp_after_insert_post', [$this, 'after_order_update'], 10, 4);
-
-                // Load user meta fields to user profile admin page
-                add_action('show_user_profile', [$this, 'display_user_meta_edit'], 10, 1);
-                add_action('edit_user_profile', [$this, 'display_user_meta_edit'], 10, 1);
-                // Save user meta fields on profile update
-                add_action('personal_options_update', [$this, 'save_user_meta'], 10, 1);
-                add_action('edit_user_profile_update', [$this, 'save_user_meta'], 10, 1);
             } else {
                 // Calculate fees in order review panel on the right of shop checkout page
                 add_action('woocommerce_cart_calculate_fees', [$this, 'add_invoice_fees']);
@@ -790,7 +783,7 @@ if (!class_exists('WC_Twoinc')) {
          *
          * @return void
          */
-        public function display_user_meta_edit($user)
+        static public function display_user_meta_edit($user)
         {
             ?>
                 <h3><?php _e('Two pre-filled fields', 'twoinc-payment-gateway'); ?></h3>
@@ -833,7 +826,7 @@ if (!class_exists('WC_Twoinc')) {
          *
          * @return void
          */
-        public function save_user_meta($user_id)
+        static public function save_user_meta($user_id)
         {
 
             if (empty($_POST['_wpnonce']) || ! wp_verify_nonce($_POST['_wpnonce'], 'update-user_' . $user_id)) {
@@ -1378,7 +1371,6 @@ if (!class_exists('WC_Twoinc')) {
                     if (isset($body['product_type'])) $wc_twoinc_instance->update_option('product_type', $body['product_type']);
                     if (isset($body['enable_company_name'])) $wc_twoinc_instance->update_option('enable_company_name', $body['enable_company_name'] ? 'yes' : 'no');
                     if (isset($body['address_search'])) $wc_twoinc_instance->update_option('address_search', $body['address_search'] ? 'yes' : 'no');
-                    if (isset($body['mark_tillit_fields_required'])) $wc_twoinc_instance->update_option('mark_tillit_fields_required', $body['mark_tillit_fields_required'] ? 'yes' : 'no');
                     if (isset($body['enable_order_intent'])) $wc_twoinc_instance->update_option('enable_order_intent', $body['enable_order_intent'] ? 'yes' : 'no');
                     if (isset($body['default_to_b2c'])) $wc_twoinc_instance->update_option('default_to_b2c', $body['default_to_b2c'] ? 'yes' : 'no');
                     if (isset($body['invoice_fee_to_buyer'])) $wc_twoinc_instance->update_option('invoice_fee_to_buyer', $body['invoice_fee_to_buyer'] ? 'yes' : 'no');
@@ -1547,14 +1539,6 @@ if (!class_exists('WC_Twoinc')) {
                     'title'       => __('Separate checkout for private sole traders', 'twoinc-payment-gateway'),
                     'label'       => ' ',
                     'type'        => 'checkbox'
-                ],
-                'mark_tillit_fields_required' => [
-                    'title'       => __('Mark Two fields required', 'twoinc-payment-gateway'),
-                    'description' => __('Marks phone number and company name fields as required.', 'twoinc-payment-gateway'),
-                    'desc_tip'    => true,
-                    'label'       => ' ',
-                    'type'        => 'checkbox',
-                    'default'     => 'yes'
                 ],
                 'add_field_department' => [
                     'title'       => __('Add input field for "Department"', 'twoinc-payment-gateway'),
