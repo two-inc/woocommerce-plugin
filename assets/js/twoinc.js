@@ -11,7 +11,7 @@ let twoincUtilHelper = {
      * Check if selected country is supported by Twoinc
      */
     isCountrySupported: function() {
-        return ['NO', 'GB'].includes(jQuery('#billing_country').val())
+        return ['NO', 'GB', 'SE'].includes(jQuery('#billing_country').val())
     },
 
     /**
@@ -55,6 +55,9 @@ let twoincSelectWooHelper = {
             },
             "GB": {
                 "twoinc_search_host": window.twoinc.twoinc_search_host_gb,
+            },
+            "SE": {
+                "twoinc_search_host": window.twoinc.twoinc_search_host_se,
             }
         }
 
@@ -1346,6 +1349,9 @@ class Twoinc {
                 } else if (selectedCountryData.iso2 === 'no') {
                     return '073 70143'
                 }
+                else if(selectedCountryData.iso2 === 'se') {
+                    return '765 195 285'
+                }
                 return selectedCountryPlaceholder.replace(/[0-9]/g, 'X')
             }
         })
@@ -1631,7 +1637,9 @@ class Twoinc {
 
         // Get country
         let country_prefix = Twoinc.getInstance().customerCompany.country_prefix
-        if (!country_prefix || !['GB'].includes(country_prefix)) country_prefix = 'NO'
+        if (!country_prefix || !['GB', 'SE'].includes(country_prefix)) country_prefix = 'NO'
+
+
         // Get company ID
         let company_id = jQuery('#company_id').val()
 
