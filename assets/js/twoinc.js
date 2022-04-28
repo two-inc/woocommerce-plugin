@@ -1349,8 +1349,7 @@ class Twoinc {
                 } else if (selectedCountryData.iso2 === 'no') {
                     return '073 70143'
                 }
-                else if(selectedCountryData.iso2 === 'se')
-                {
+                else if(selectedCountryData.iso2 === 'se') {
                     return '765 195 285'
                 }
                 return selectedCountryPlaceholder.replace(/[0-9]/g, 'X')
