@@ -1349,6 +1349,10 @@ class Twoinc {
                 } else if (selectedCountryData.iso2 === 'no') {
                     return '073 70143'
                 }
+                else if(selectedCountryData.iso2 === 'se')
+                {
+                    return '765 195 285'
+                }
                 return selectedCountryPlaceholder.replace(/[0-9]/g, 'X')
             }
         })
@@ -1634,7 +1638,7 @@ class Twoinc {
 
         // Get country
         let country_prefix = Twoinc.getInstance().customerCompany.country_prefix
-        if (!country_prefix || !['GB'].includes(country_prefix) || !['SE'].includes(country_prefix)) country_prefix = 'NO'
+        if (!country_prefix || !['GB', 'SE'].includes(country_prefix)) country_prefix = 'NO'
 
 
         // Get company ID
