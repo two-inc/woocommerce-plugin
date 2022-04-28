@@ -40,7 +40,7 @@ if (!class_exists('WC_Twoinc')) {
             $this->api_key = $this->get_option('api_key');
             $this->twoinc_search_host_no = 'https://no.search.two.inc';
             $this->twoinc_search_host_gb = 'https://gb.search.two.inc';
-            $this->twoinc_search_host_gb = 'https://se.search.two.inc';
+            $this->twoinc_search_host_se = 'https://se.search.two.inc';
             $this->twoinc_checkout_host = $this->get_twoinc_checkout_host();
 
             $this->plugin_version = get_plugin_version();
