@@ -38,9 +38,9 @@ if (!class_exists('WC_Twoinc')) {
 
             // Twoinc api host
             $this->api_key = $this->get_option('api_key');
-            $this->twoinc_search_host_no = 'https://no.search.two.inc';
-            $this->twoinc_search_host_gb = 'https://gb.search.two.inc';
-            $this->twoinc_search_host_se = 'https://se.search.two.inc';
+            $this->twoinc_search_host_no = $this->get_twoinc_search_host('no');
+            $this->twoinc_search_host_gb = $this->get_twoinc_search_host('gb');
+            $this->twoinc_search_host_se = $this->get_twoinc_search_host('se');
             $this->twoinc_checkout_host = $this->get_twoinc_checkout_host();
 
             $this->plugin_version = get_plugin_version();
@@ -138,6 +138,14 @@ if (!class_exists('WC_Twoinc')) {
                 return 'https://sandbox.api.two.inc';
             } else {
                 return 'https://api.two.inc';
+            }
+        }
+
+        private function get_twoinc_search_host(string $countryCode){
+            if (WC_Twoinc_Helper::is_twoinc_development()) {
+                return "https://{$countryCode}.staging.search.two.inc";
+            } else if ($this->get_option('checkout_env') === 'SANDBOX') {
+                return "https://{$countryCode}.search.two.inc";
             }
         }
 
