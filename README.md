@@ -14,10 +14,26 @@ docker-compose up
 npx cypress run --browser chrome --config baseUrl=http://localhost
 ```
 
-# Random Notes
+## Set up wordpress for local development
+For Mac users, follow this guide:
+https://skillcrush.com/blog/install-wordpress-mac/
 
-* Copy code into `plugins`
-* Update `wp-config(.php?)` for logs:
+Once wordpress has been set up, the following plugins need to be installed:
+- Elementor (optional but easy way to get started) - select an ecommerce template
+- Loco translate
+- WooCommerce
+- WooCommerce Cart Abdandonment Recovery
+- WooCommerce Shipping & Tax
+- WPForms Lite
+
+To install the two plugin, it can be found in the wp portal for plugins **'Two - BNPL for businesses'**, or you can manually add the files:
+- create a zip file of this repo, which contains only the required folders and file types:
+    `zip -r tillit-payment-gateway.zip 'assets' 'class' 'views' 'readme.txt' *.php *.pot *.mo *.po`
+- Unzip the folder into `Sites/wp-content/plugins`
+
+In the wordpress portal, update the WooCommerce plugin settings to suit, and add api credentials.
+
+To enable logging, update `Sites/wp-config(.php?)` with:
 
 ```php
 @ini_set( 'display_errors', 1 );
