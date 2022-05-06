@@ -1602,20 +1602,29 @@ class Twoinc {
                         } else if (errMsg.includes('Invalid phone number')) {
                             jQuery('.twoinc-pay-box.err-phone').show()
                             twoincDomHelper.markFieldInvalid('billing_phone_field')
-                        } else if (errMsg == 'SAME_BUYER_SELLER_ERROR') {
-                            jQuery('.twoinc-pay-box.buyer-same-seller').show()
+                        } else if (errMsg === 'SAME_BUYER_SELLER_ERROR') {
+                            jQuery('.twoinc-pay-box.err-buyer-same-seller').show()
                         } else {
-                            jQuery('.twoinc-pay-box.payment-not-accepted').show()
+                            jQuery('.twoinc-pay-box.err-payment-default').show()
                         }
                         clearInterval(twoincSubtitleExistCheck)
                    }
                 }, 1000)
             } else {
+                let errMsg = null
+                if (response.approved === false) {
+                    errMsg = 'REJECTED'
+                }
+
                 let twoincSubtitleExistCheck = setInterval(function() {
                     if (jQuery('#payment .blockOverlay').length === 0) {
                         // woocommerce's update_checkout is not running
                         jQuery('.twoinc-pay-box, .twoinc-pay-sub').hide()
-                        jQuery('.twoinc-pay-box.payment-not-accepted').show()
+                        if (errMsg === 'REJECTED') {
+                            jQuery('.twoinc-pay-box.err-payment-rejected').show()
+                        } else {
+                            jQuery('.twoinc-pay-box.err-payment-default').show()
+                        }
                         clearInterval(twoincSubtitleExistCheck)
                    }
                 }, 1000)
