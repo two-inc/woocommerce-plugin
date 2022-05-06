@@ -77,6 +77,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
             if($response['response'] && $response['response']['code'] && $response['response']['code'] >= 400) {
                 if($response['body']) {
                     $body = json_decode($response['body'], true);
+                    // Parameters validation errors
                     if (!is_string($body) && isset($body['error_json']) && is_array($body['error_json'])) {
                         $errs = array();
                         foreach ($body['error_json'] as $er) {
@@ -90,6 +91,10 @@ if (!class_exists('WC_Twoinc_Helper')) {
                         if (count($errs) > 0) {
                             return $errs;
                         }
+                    }
+                    // Custom errors
+                    if (isset($body['error_code']) && $body['error_code'] == 'SAME_BUYER_SELLER_ERROR') {
+                        return __('Buyer and merchant may not be the same company', 'twoinc-payment-gateway');
                     }
                 }
 

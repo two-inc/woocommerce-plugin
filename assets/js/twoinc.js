@@ -1581,9 +1581,14 @@ class Twoinc {
             // Display error messages
             if (response.status >= 400) {
                 // @TODO: use code in checkout-api
-                let errMsg = (typeof response.responseJSON === 'string' || !('error_details' in response.responseJSON))
-                             ? response.responseJSON
-                             : response.responseJSON['error_details']
+                let errMsg = response.responseJSON
+                if (typeof response.responseJSON !== 'string') {
+                    if ('error_details' in response.responseJSON && response.responseJSON['error_details']) {
+                        errMsg = response.responseJSON['error_details']
+                    } else if ('error_code' in response.responseJSON && response.responseJSON['error_code']) {
+                        errMsg = response.responseJSON['error_code']
+                    }
+                }
 
                 // Update twoinc message
                 let twoincSubtitleExistCheck = setInterval(function() {
@@ -1597,6 +1602,8 @@ class Twoinc {
                         } else if (errMsg.includes('Invalid phone number')) {
                             jQuery('.twoinc-pay-box.err-phone').show()
                             twoincDomHelper.markFieldInvalid('billing_phone_field')
+                        } else if (errMsg == 'SAME_BUYER_SELLER_ERROR') {
+                            jQuery('.twoinc-pay-box.buyer-same-seller').show()
                         } else {
                             jQuery('.twoinc-pay-box.payment-not-accepted').show()
                         }

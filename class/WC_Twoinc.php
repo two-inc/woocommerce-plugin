@@ -247,6 +247,7 @@ if (!class_exists('WC_Twoinc')) {
                     <div class="twoinc-pay-box err-country" style="display: none;">%s</div>
                     <div class="twoinc-pay-box declare-aggrement" style="display: none;">%s</div>
                     <div class="twoinc-pay-box payment-not-accepted" style="display: none;">%s</div>
+                    <div class="twoinc-pay-box buyer-same-seller" style="display: none;">%s</div>
                     <div class="twoinc-pay-box err-amt-max" style="display: none;">%s</div>
                     <div class="twoinc-pay-box err-amt-min" style="display: none;">%s</div>
                     <div class="twoinc-pay-box err-phone" style="display: none;">%s</div>
@@ -269,6 +270,7 @@ if (!class_exists('WC_Twoinc')) {
                     $this->get_abt_twoinc_html()
                 ),
                 __('Invoice purchase is not available for this order', 'twoinc-payment-gateway'),
+                __('Buyer and merchant may not be the same company', 'twoinc-payment-gateway'),
                 __('Order value exceeds maximum limit', 'twoinc-payment-gateway'),
                 __('Order value is below minimum limit', 'twoinc-payment-gateway'),
                 __('Phone number is invalid', 'twoinc-payment-gateway')
