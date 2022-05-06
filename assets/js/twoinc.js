@@ -1064,6 +1064,8 @@ let twoincDomHelper = {
             return 'divi'
         } else if (jQuery('#kalium-style-css-css').length > 0) {
             return 'kalium'
+        } else if (jQuery('#flatsome-style-css').length > 0) {
+            return 'flatsome'
         }
     },
 

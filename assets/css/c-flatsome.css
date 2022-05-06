@@ -1,0 +1,13 @@
+form.checkout.woocommerce-checkout #billing_company_display_field label[for="billing_company_display"] {
+    z-index: 1;
+    opacity: unset;
+}
+form.checkout.woocommerce-checkout #select2-billing_company_display-container {
+    margin-top: 7px;
+}
+form.checkout.woocommerce-checkout .iti__flag {
+    margin-top: 7px;
+}
+form.checkout.woocommerce-checkout .iti__selected-dial-code {
+    margin-top: 7px;
+}
