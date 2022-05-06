@@ -244,10 +244,11 @@ if (!class_exists('WC_Twoinc')) {
             return sprintf(
                 '<div>
                     <div class="twoinc-pay-box explain-details">%s</div>
-                    <div class="twoinc-pay-box err-country" style="display: none;">%s</div>
                     <div class="twoinc-pay-box declare-aggrement" style="display: none;">%s</div>
-                    <div class="twoinc-pay-box payment-not-accepted" style="display: none;">%s</div>
-                    <div class="twoinc-pay-box buyer-same-seller" style="display: none;">%s</div>
+                    <div class="twoinc-pay-box err-payment-default" style="display: none;">%s</div>
+                    <div class="twoinc-pay-box err-payment-rejected" style="display: none;">%s</div>
+                    <div class="twoinc-pay-box err-country" style="display: none;">%s</div>
+                    <div class="twoinc-pay-box err-buyer-same-seller" style="display: none;">%s</div>
                     <div class="twoinc-pay-box err-amt-max" style="display: none;">%s</div>
                     <div class="twoinc-pay-box err-amt-min" style="display: none;">%s</div>
                     <div class="twoinc-pay-box err-phone" style="display: none;">%s</div>
@@ -262,7 +263,6 @@ if (!class_exists('WC_Twoinc')) {
                     __('Pay on invoice with agreed terms', 'twoinc-payment-gateway'),
                     $this->get_payment_description_msg()
                 ),
-                __('Two is not available as a payment option in the selected region', 'twoinc-payment-gateway'),
                 sprintf(
                     '%s <span class="twoinc-buyer-name-placeholder">%s</span><span class="twoinc-buyer-name"></span>.',
                     __('By completing the purchase, you verify that you have the legal right to purchase on behalf of', 'twoinc-payment-gateway'),
@@ -270,6 +270,8 @@ if (!class_exists('WC_Twoinc')) {
                     $this->get_abt_twoinc_html()
                 ),
                 __('Invoice purchase is not available for this order', 'twoinc-payment-gateway'),
+                __('We\'ve checked your company\'s details and are unable to provide invoice credit for this order', 'twoinc-payment-gateway'),
+                __('Two is not available as a payment option in the selected region', 'twoinc-payment-gateway'),
                 __('Buyer and merchant may not be the same company', 'twoinc-payment-gateway'),
                 __('Order value exceeds maximum limit', 'twoinc-payment-gateway'),
                 __('Order value is below minimum limit', 'twoinc-payment-gateway'),
@@ -970,7 +972,7 @@ if (!class_exists('WC_Twoinc')) {
             $body = json_decode($response['body'], true);
 
             if ($body['status'] == 'REJECTED') {
-                WC_Twoinc_Helper::display_ajax_error(__('Invoice purchase is not available for this order', 'twoinc-payment-gateway'));
+                WC_Twoinc_Helper::display_ajax_error(__('We\'ve checked your company\'s details and are unable to provide invoice credit for this order', 'twoinc-payment-gateway'));
                 return;
             }
 
