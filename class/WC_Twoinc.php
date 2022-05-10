@@ -144,12 +144,11 @@ if (!class_exists('WC_Twoinc')) {
         /**
          * Get twoinc company seach host based on current settings
          */
-        private function get_twoinc_search_host(string $countryCode){
+        private function get_twoinc_search_host($countryCode){
             if (WC_Twoinc_Helper::is_twoinc_development()) {
                 return "https://{$countryCode}.staging.search.two.inc";
-            } else if ($this->get_option('checkout_env') === 'SANDBOX') {
-                return "https://{$countryCode}.search.two.inc";
             }
+            return "https://{$countryCode}.search.two.inc";
         }
 
         /**

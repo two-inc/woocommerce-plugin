@@ -18,13 +18,12 @@ npx cypress run --browser chrome --config baseUrl=http://localhost
 For Mac users, follow this guide:
 https://skillcrush.com/blog/install-wordpress-mac/
 
-Once wordpress has been set up, the following plugins need to be installed:
-- Elementor (optional but easy way to get started) - select an ecommerce template
-- Loco translate
-- WooCommerce
+Once wordpress has been set up, a recommended plugin theme to install is:
+- Elementor, select an ecommerce template
+WooCommerce then needs to be installed as a plugin
+Other recommended WooCommerce plugins are:
 - WooCommerce Cart Abdandonment Recovery
 - WooCommerce Shipping & Tax
-- WPForms Lite
 
 To install the two plugin, it can be found in the wp portal for plugins **'Two - BNPL for businesses'**, or you can manually add the files:
 - create a zip file of this repo, which contains only the required folders and file types:
