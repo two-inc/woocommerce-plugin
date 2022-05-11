@@ -628,7 +628,7 @@ let twoincDomHelper = {
 
         // Display only the correct payment description
         jQuery('.twoinc-payment-desc').hide()
-        if (window.twoinc.product_type === 'FUNDED_INVOICE' && window.twoinc.shop_base_country === 'no') {
+        if (window.twoinc.is_direct_invoice && window.twoinc.shop_base_country === 'no') {
             jQuery('.twoinc-payment-desc.payment-desc-no-funded').show()
         } else {
             jQuery('.twoinc-payment-desc.payment-desc-global').show()
@@ -1460,7 +1460,7 @@ class Twoinc {
             let jsonBody = JSON.stringify({
                 "merchant_short_name": window.twoinc.merchant_short_name,
                 "gross_amount": "" + gross_amount,
-                "invoice_type": window.twoinc.product_type,
+                "invoice_type": 'FUNDED_INVOICE',
                 "buyer": {
                     "company": Twoinc.getInstance().customerCompany
                 },
@@ -1527,7 +1527,7 @@ class Twoinc {
                 twoincDomHelper.toggleMethod(Twoinc.getInstance().isTwoincMethodHidden)
 
                 // Display correct payment description
-                window.twoinc.product_type = response.invoice_type
+                window.twoinc.is_direct_invoice = (response.invoice_type && response.invoice_type === 'DIRECT_INVOICE')
                 twoincDomHelper.togglePaymentDesc()
 
                 // Select the default payment method

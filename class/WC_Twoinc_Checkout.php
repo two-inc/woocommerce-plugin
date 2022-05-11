@@ -323,13 +323,6 @@ if (!class_exists('WC_Twoinc_Checkout')) {
         private function prepare_twoinc_object()
         {
 
-            $product_type = $this->wc_twoinc->get_option('product_type');
-
-            // Backward compatible
-            if ($product_type === 'MERCHANT_INVOICE') {
-                $product_type = 'DIRECT_INVOICE';
-            }
-
             $currency = get_woocommerce_currency();
 
             $properties = [
@@ -347,7 +340,6 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 'invoice_fee_to_buyer' => $this->wc_twoinc->get_option('invoice_fee_to_buyer'),
                 'use_account_type_buttons' => $this->wc_twoinc->get_option('use_account_type_buttons'),
                 'display_tooltips' => $this->wc_twoinc->get_option('display_tooltips'),
-                'product_type' => $product_type,
                 'merchant_short_name' => $this->wc_twoinc->get_option('tillit_merchant_id'),
                 'days_on_invoice' => $this->wc_twoinc->get_merchant_default_days_on_invoice(),
                 'shop_base_country' => strtolower(WC()->countries->get_base_country()),
