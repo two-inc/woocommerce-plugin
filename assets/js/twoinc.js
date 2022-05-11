@@ -968,6 +968,12 @@ let twoincDomHelper = {
         if (!checkoutInputs) return
         checkoutInputs = JSON.parse(checkoutInputs)
         for (let inp of checkoutInputs) {
+            // Skip load company id/name if user logged in and has Two meta set
+            if (window.twoinc.user_meta_exists) {
+                let skipIds = ['company_id', 'billing_company', 'billing_company_display']
+                if (skipIds.includes(inp.id)) continue
+            }
+            // Load all other fields
             if (inp.htmlTag === 'INPUT') {
                 if (inp.val && ['text', 'tel', 'email', 'hidden'].indexOf(inp.type) >= 0) {
                     if (document.querySelector('#' + inp.id) && !(document.querySelector('#' + inp.id).value)) {
@@ -1020,9 +1026,10 @@ let twoincDomHelper = {
      * Load usermeta checkout inputs
      */
     loadUserMetaInputs: function() {
+        window.twoinc.user_meta_exists = window.twoinc.billing_company && window.twoinc.company_id
         if (document.querySelector('#billing_company_display')) {
             let selectElem = document.querySelector('#billing_company_display')
-            if (!selectElem.querySelector('option:not([value=""])') && window.twoinc.billing_company) {
+            if (!selectElem.querySelector('option:not([value=""])') && window.twoinc.user_meta_exists) {
                 // Append to selectWoo
                 if (!selectElem.querySelector('option[value="' + window.twoinc.billing_company + '"]')) {
                     selectElem.innerHTML = '<option value="' + window.twoinc.billing_company + '">' + window.twoinc.billing_company + '</option>' + selectElem.innerHTML
@@ -1030,23 +1037,23 @@ let twoincDomHelper = {
                 selectElem.value = window.twoinc.billing_company
 
                 // Append company id to company name select box
-                if (window.twoinc.company_id) {
+                if (window.twoinc.user_meta_exists) {
                     twoincDomHelper.insertFloatingCompany(window.twoinc.company_id, 2000)
                 }
             }
         }
-        if (document.querySelector('#department') && !(document.querySelector('#department').value) && window.twoinc.department) {
+        if (document.querySelector('#department') && window.twoinc.department) {
             document.querySelector('#department').value = window.twoinc.department
         }
-        if (document.querySelector('#project') && !(document.querySelector('#project').value) && window.twoinc.project) {
+        if (document.querySelector('#project') && window.twoinc.project) {
             document.querySelector('#project').value = window.twoinc.project
         }
 
         // Update the object values
-        if (document.querySelector('#billing_company') && !(document.querySelector('#billing_company').value) && window.twoinc.billing_company) {
+        if (document.querySelector('#billing_company') && window.twoinc.billing_company) {
             document.querySelector('#billing_company').value = window.twoinc.billing_company
         }
-        if (document.querySelector('#company_id') && !(document.querySelector('#company_id').value) && window.twoinc.company_id) {
+        if (document.querySelector('#company_id') && window.twoinc.company_id) {
             document.querySelector('#company_id').value = window.twoinc.company_id
         }
     },
