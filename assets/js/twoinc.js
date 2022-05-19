@@ -183,6 +183,54 @@ let twoincSelectWooHelper = {
 
         return items
 
+    },
+
+    /**
+     * Wait until element appear and focus
+     */
+    waitToFocus: function(selectWooElemId, hitsRequired, intervalDuration, callbackFunc) {
+
+        if (isNaN(intervalDuration)) intervalDuration = 300
+        if (isNaN(hitsRequired)) hitsRequired = 2
+        let attemptsLeft = hitsRequired * 8
+
+        let focusInterval = setInterval(function(){
+
+            let inpElem = jQuery('input[aria-owns="select2-' + selectWooElemId + '-results"]').get(0)
+            if (inpElem) {
+                // Focus on the element if not already focused
+                if (inpElem != document.activeElement) inpElem.focus()
+                // Mark this as a hit attempt
+                hitsRequired--
+                // If reached number of required hits, do not attempt again
+                if (hitsRequired <= 0) attemptsLeft = 0
+            }
+
+            attemptsLeft--
+            if (attemptsLeft <= 0) {
+                clearInterval(focusInterval)
+                if (inpElem && callbackFunc) callbackFunc()
+            }
+
+        }, intervalDuration)
+
+    },
+
+    /**
+     * Wait until element appear and focus
+     */
+    addSelectWooFocusFixHandler: function(selectWooElemId) {
+
+        let billingCompanyDisplayResult = jQuery('#select2-' + selectWooElemId + '-results')
+        if (billingCompanyDisplayResult && !billingCompanyDisplayResult.attr('two-focused-handler')) {
+            billingCompanyDisplayResult.attr('two-focused-handler', true)
+            billingCompanyDisplayResult.on('DOMNodeInserted', function(event) {
+                if(event.target.parentNode.id == 'select2-' + selectWooElemId + '-results') {
+                    twoincSelectWooHelper.waitToFocus('billing_company_display', 80, 20)
+                }
+            })
+        }
+
     }
 
 }
@@ -1165,11 +1213,7 @@ class Twoinc {
 
             // Focus on search input on country open
             $billingCountry.on('select2:open', function(e){
-                setTimeout(function(){
-                    if (jQuery('input[aria-owns="select2-billing_country-results"]').get(0)) {
-                        jQuery('input[aria-owns="select2-billing_country-results"]').get(0).focus()
-                    }
-                }, 200)
+                twoincSelectWooHelper.waitToFocus('billing_country')
             })
 
             // Turn the select input into select2
@@ -1222,19 +1266,17 @@ class Twoinc {
                 Twoinc.getInstance().billingCompanySelect.on('select2:open', function(e){
                     let companyNotInBtn = twoincDomHelper.getCompanyNotInBtnNode()
                     jQuery('#select2-billing_company_display-results').parent().append(companyNotInBtn)
-                    setTimeout(function(){
-                        if (jQuery('input[aria-owns="select2-billing_company_display-results"]').get(0)) {
-                            jQuery('input[aria-owns="select2-billing_company_display-results"]').get(0).focus()
-                            jQuery('input[aria-owns="select2-billing_company_display-results"]').on('input', function(e){
-                                let selectWooParams = twoincSelectWooHelper.genSelectWooParams()
-                                if (jQuery(this).val() && jQuery(this).val().length >= selectWooParams.minimumInputLength) {
-                                    jQuery('#company_not_in_btn').show()
-                                } else {
-                                    jQuery('#company_not_in_btn').hide()
-                                }
-                            })
-                        }
-                    }, 200)
+                    twoincSelectWooHelper.waitToFocus('billing_company_display', null, null, function(){
+                        jQuery('input[aria-owns="select2-billing_company_display-results"]').on('input', function(e){
+                            let selectWooParams = twoincSelectWooHelper.genSelectWooParams()
+                            if (jQuery(this).val() && jQuery(this).val().length >= selectWooParams.minimumInputLength) {
+                                jQuery('#company_not_in_btn').show()
+                            } else {
+                                jQuery('#company_not_in_btn').hide()
+                            }
+                        })
+                    })
+                    twoincSelectWooHelper.addSelectWooFocusFixHandler('billing_company_display')
                 })
 
             }, 800)
