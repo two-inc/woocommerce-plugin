@@ -302,7 +302,7 @@ if (!class_exists('WC_Twoinc')) {
                         <div class="twoinc-subtitle">
                             <div class="twoinc-pay-sub require-inputs">%s</div>
                             <div class="twoinc-pay-sub explain-details" style="display: none;">%s</div>
-                            <img class="twoinc-pay-sub loader" style="display: none;" src="%s" />
+                            <img class="twoinc-pay-sub loader" style="display: none!important;" src="%s" />
                         </div> ',
                         sprintf(
                             __($this->get_option('title'), 'twoinc-payment-gateway'),
