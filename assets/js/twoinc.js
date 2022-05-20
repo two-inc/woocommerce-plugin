@@ -902,6 +902,18 @@ let twoincDomHelper = {
     },
 
     /**
+     * Toggle hide with !important
+     */
+    showHideImportant: function(selector, action) {
+        if (action == 'show') {
+            jQuery('.twoinc-pay-sub.loader').css('display', '')
+        } else if (action == 'hide') {
+            jQuery('.twoinc-pay-sub.loader').css('display', '')
+            jQuery('.twoinc-pay-sub.loader').attr('style', jQuery('.twoinc-pay-sub.loader').attr('style') + 'display: none!important;')
+        }
+    },
+
+    /**
      * Rearrange descriptions in Twoinc payment to make it cleaner
      */
     rearrangeDescription: function() {
@@ -1124,6 +1136,8 @@ let twoincDomHelper = {
             return 'kalium'
         } else if (jQuery('#flatsome-style-css').length > 0) {
             return 'flatsome'
+        } else if (jQuery('#shopkeeper-styles-css').length > 0) {
+            return 'shopkeeper'
         }
     },
 
@@ -1545,7 +1559,7 @@ class Twoinc {
             if (!Twoinc.getInstance().isReadyApprovalCheck()) return
 
             jQuery('.twoinc-pay-sub').hide()
-            jQuery('.twoinc-pay-sub.loader').show()
+            twoincDomHelper.showHideImportant('.twoinc-pay-sub.loader', 'show')
 
             // Create an order intent
             const approvalResponse = jQuery.ajax({
@@ -1618,6 +1632,7 @@ class Twoinc {
             let twoincSubtitleExistCheck = setInterval(function() {
                 if (jQuery('#payment .blockOverlay').length === 0) {
                     jQuery('.twoinc-pay-box, .twoinc-pay-sub').hide()
+                    twoincDomHelper.showHideImportant('.twoinc-pay-sub.loader', 'hide')
                     jQuery('.twoinc-pay-sub.explain-details').show()
                     jQuery('.twoinc-pay-box.declare-aggrement').show()
                     clearInterval(twoincSubtitleExistCheck)
@@ -1649,6 +1664,7 @@ class Twoinc {
                 let twoincSubtitleExistCheck = setInterval(function() {
                     if (jQuery('#payment .blockOverlay').length === 0) {
                         jQuery('.twoinc-pay-box, .twoinc-pay-sub').hide()
+                        twoincDomHelper.showHideImportant('.twoinc-pay-sub.loader', 'hide')
                         // woocommerce's update_checkout is not running
                         if (errMsg.startsWith('Minimum Payment using ')) {
                             jQuery('.twoinc-pay-box.err-amt-min').show()
@@ -1675,6 +1691,7 @@ class Twoinc {
                     if (jQuery('#payment .blockOverlay').length === 0) {
                         // woocommerce's update_checkout is not running
                         jQuery('.twoinc-pay-box, .twoinc-pay-sub').hide()
+                        twoincDomHelper.showHideImportant('.twoinc-pay-sub.loader', 'hide')
                         if (errMsg === 'REJECTED') {
                             jQuery('.twoinc-pay-box.err-payment-rejected').show()
                         } else {
