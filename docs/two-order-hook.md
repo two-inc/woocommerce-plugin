@@ -41,3 +41,20 @@ function add_two_setting_fields( $two_fields ) {
 }
 add_filter( "wc_two_form_fields", "add_two_setting_fields" );
 ```
+
+
+
+### Custom Two payment references based on order id
+
+**Generate a payment reference message with the order id as parameter**
+Append the following lines to your active theme's `functions.php`
+
+```
+function get_custom_reference_number( $order_id ) {
+    $order = wc_get_order($order_id);
+    return 'your custom ref';
+}
+add_filter( "two_payment_reference", "get_custom_reference_number" );
+add_filter( "two_payment_reference_ocr", function () { return 'your custom ref ocr'; } );
+add_filter( "two_payment_reference_message", function () { return 'your custom ref message'; } );
+```

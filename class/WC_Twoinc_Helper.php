@@ -352,9 +352,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * @return bool
          */
         public static function compose_twoinc_order(
-            $order, $order_reference,
-            $company_id, $department, $project, $purchase_order_number,
-            $payment_reference_message = '', $tracking_id = '')
+            $order, $order_reference, $company_id, $department, $project, $purchase_order_number,
+            $payment_reference_message = '', $payment_reference_ocr = '', $payment_reference = '', $payment_reference_type = '',
+            $tracking_id = '')
         {
 
             $billing_address = [
@@ -377,6 +377,17 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 $shipping_address = $billing_address;
             }
 
+            $invoice_details = [
+                'payment_reference_message' => $payment_reference_message,
+                'payment_reference_ocr' => $payment_reference_ocr
+            ];
+            if ($payment_reference) {
+                $invoice_details['payment_reference'] = $payment_reference;
+            }
+            if ($payment_reference_type) {
+                $invoice_details['payment_reference_type'] = $payment_reference_type;
+            }
+
             $req_body = [
                 'currency' => $order->get_currency(),
                 'gross_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total())),
@@ -385,10 +396,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 'discount_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total_discount())),
                 'discount_rate' => '0',
                 'invoice_type' => 'FUNDED_INVOICE',
-                'invoice_details' => [
-                    'payment_reference_message' => $payment_reference_message,
-                    'payment_reference_ocr' => ''
-                ],
+                'invoice_details' => $invoice_details,
                 'buyer' => [
                     'company' => [
                         'organization_number' => $company_id,
@@ -455,7 +463,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * @return bool
          */
         public static function compose_twoinc_edit_order(
-            $order, $department, $project, $purchase_order_number, $payment_reference_message = '')
+            $order, $department, $project, $purchase_order_number)
         {
 
             $billing_address = [
@@ -486,10 +494,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 'discount_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total_discount())),
                 'discount_rate' => '0',
                 'invoice_type' => 'FUNDED_INVOICE',
-                'invoice_details' => [
-                    'payment_reference_message' => $payment_reference_message,
-                    'payment_reference_ocr' => ''
-                ],
                 'buyer_department' => $department,
                 'buyer_project' => $project,
                 'order_note' => $order->get_customer_note(),
