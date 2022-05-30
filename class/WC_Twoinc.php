@@ -502,6 +502,9 @@ if (!class_exists('WC_Twoinc')) {
                 $twoinc_meta['project'],
                 $twoinc_meta['purchase_order_number'],
                 $twoinc_meta['payment_reference_message'],
+                $twoinc_meta['payment_reference_ocr'],
+                $twoinc_meta['payment_reference'],
+                $twoinc_meta['payment_reference_type'],
                 ''
             );
 
@@ -541,6 +544,9 @@ if (!class_exists('WC_Twoinc')) {
                 $twoinc_meta['project'],
                 $twoinc_meta['purchase_order_number'],
                 $twoinc_meta['payment_reference_message'],
+                $twoinc_meta['payment_reference_ocr'],
+                $twoinc_meta['payment_reference'],
+                $twoinc_meta['payment_reference_type'],
                 ''
             );
 
@@ -913,8 +919,24 @@ if (!class_exists('WC_Twoinc')) {
             }
 
             // Get payment details
-            $payment_reference_message = '';
-            update_post_meta($order_id, '_payment_reference_message', $payment_reference_message);
+            $payment_reference_message = '';// strval($order_id);
+            if(has_filter('two_payment_reference_message')) {
+                $payment_reference_message = apply_filters('two_payment_reference_message', $order_id);
+                update_post_meta($order_id, '_payment_reference_message', $payment_reference_message);
+            }
+            $payment_reference_ocr = '';
+            if(has_filter('two_payment_reference_ocr')) {
+                $payment_reference_ocr = apply_filters('two_payment_reference_ocr', $order_id);
+                update_post_meta($order_id, '_payment_reference_ocr', $payment_reference_ocr);
+            }
+            $payment_reference = '';
+            $payment_reference_type = '';
+            if(has_filter('two_payment_reference')) {
+                $payment_reference = apply_filters('two_payment_reference', $order_id);
+                update_post_meta($order_id, '_payment_reference', $payment_reference);
+                $payment_reference_type = 'assigned_by_merchant';
+                update_post_meta($order_id, '_payment_reference_type', $payment_reference_type);
+            }
 
             // Save to user meta
             $user_id = wp_get_current_user()->ID;
@@ -934,6 +956,9 @@ if (!class_exists('WC_Twoinc')) {
                 $project,
                 $purchase_order_number,
                 $payment_reference_message,
+                $payment_reference_ocr,
+                $payment_reference,
+                $payment_reference_type,
                 $tracking_id
             ));
 
@@ -1716,10 +1741,6 @@ if (!class_exists('WC_Twoinc')) {
                 update_post_meta($order->get_id(), '_tillit_merchant_id', $twoinc_merchant_id);
             }
 
-            $payment_reference_message = '';
-
-            $payment_reference_message = strval($order->get_id());
-
             $company_id = $order->get_meta('company_id');
             if ($company_id) {
                 $department = $order->get_meta('department');
@@ -1783,7 +1804,10 @@ if (!class_exists('WC_Twoinc')) {
                 'project' => $project,
                 'purchase_order_number' => $purchase_order_number,
                 'twoinc_order_id' => $twoinc_order_id,
-                'payment_reference_message' => $payment_reference_message
+                'payment_reference_message' => $order->get_meta('payment_reference_message'),
+                'payment_reference_ocr' => $order->get_meta('payment_reference_ocr'),
+                'payment_reference' => $order->get_meta('payment_reference'),
+                'payment_reference_type' => $order->get_meta('payment_reference_type')
             );
 
         }
@@ -1816,8 +1840,7 @@ if (!class_exists('WC_Twoinc')) {
                     $order,
                     $twoinc_meta['department'],
                     $twoinc_meta['project'],
-                    $twoinc_meta['purchase_order_number'],
-                    $twoinc_meta['payment_reference_message']
+                    $twoinc_meta['purchase_order_number']
                 ),
                 'PUT'
             );
