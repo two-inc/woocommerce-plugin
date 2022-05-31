@@ -225,9 +225,9 @@ if (!class_exists('WC_Twoinc')) {
          */
         private function get_abt_twoinc_html(){
             if ($this->get_option('show_abt_link') === 'yes') {
-                $abt_url = 'https://twoinc.notion.site/What-is-Two-4e12960d8e834e5aa20f879d59e0b32f';
+                $abt_url = 'https://www.two.inc/what-is-two';
                 if (WC_Twoinc_Helper::get_locale() === 'nb_NO') {
-                    $abt_url = 'https://twoinc.notion.site/Hva-er-Two-964ee21e4da84819afb1b035ee8fe98b';
+                    $abt_url = 'https://www.two.inc/no/what-is-two';
                 }
                 return '<div id="abt-twoinc-link"><a href="' . $abt_url . '" onclick="javascript:window.open(\'' . $abt_url . '\',\'WhatIsTwoinc\',\'toolbar=no, location=no, directories=no, status=no, menubar=no, scrollbars=yes, resizable=yes, width=1060, height=700\'); return false;">' . __('What is Two?', 'twoinc-payment-gateway') . '</a>&nbsp;</div>';
             }
