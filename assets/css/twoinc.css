@@ -114,6 +114,7 @@ form.checkout.woocommerce-checkout .woocommerce-account-type-fields__field-wrapp
     -ms-transform: translateY(-50%);
     transform: translateY(-50%);
     color: #dddddd;
+    white-space: nowrap;
 }
 
 #company_not_in_btn {

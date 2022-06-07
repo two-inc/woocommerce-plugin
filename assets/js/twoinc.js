@@ -11,7 +11,7 @@ let twoincUtilHelper = {
      * Check if selected country is supported by Twoinc
      */
     isCountrySupported: function() {
-        return ['NO', 'GB'].includes(jQuery('#billing_country').val())
+        return ['NO', 'GB', 'SE'].includes(jQuery('#billing_country').val())
     },
 
     /**
@@ -55,6 +55,9 @@ let twoincSelectWooHelper = {
             },
             "GB": {
                 "twoinc_search_host": window.twoinc.twoinc_search_host_gb,
+            },
+            "SE": {
+                "twoinc_search_host": window.twoinc.twoinc_search_host_se,
             }
         }
 
@@ -179,6 +182,54 @@ let twoincSelectWooHelper = {
         }
 
         return items
+
+    },
+
+    /**
+     * Wait until element appear and focus
+     */
+    waitToFocus: function(selectWooElemId, hitsRequired, intervalDuration, callbackFunc) {
+
+        if (isNaN(intervalDuration)) intervalDuration = 300
+        if (isNaN(hitsRequired)) hitsRequired = 2
+        let attemptsLeft = hitsRequired * 8
+
+        let focusInterval = setInterval(function(){
+
+            let inpElem = jQuery('input[aria-owns="select2-' + selectWooElemId + '-results"]').get(0)
+            if (inpElem) {
+                // Focus on the element if not already focused
+                if (inpElem != document.activeElement) inpElem.focus()
+                // Mark this as a hit attempt
+                hitsRequired--
+                // If reached number of required hits, do not attempt again
+                if (hitsRequired <= 0) attemptsLeft = 0
+            }
+
+            attemptsLeft--
+            if (attemptsLeft <= 0) {
+                clearInterval(focusInterval)
+                if (inpElem && callbackFunc) callbackFunc()
+            }
+
+        }, intervalDuration)
+
+    },
+
+    /**
+     * Wait until element appear and focus
+     */
+    addSelectWooFocusFixHandler: function(selectWooElemId) {
+
+        let billingCompanyDisplayResult = jQuery('#select2-' + selectWooElemId + '-results')
+        if (billingCompanyDisplayResult && !billingCompanyDisplayResult.attr('two-focused-handler')) {
+            billingCompanyDisplayResult.attr('two-focused-handler', true)
+            billingCompanyDisplayResult.on('DOMNodeInserted', function(event) {
+                if(event.target.parentNode.id == 'select2-' + selectWooElemId + '-results') {
+                    twoincSelectWooHelper.waitToFocus('billing_company_display', 80, 20)
+                }
+            })
+        }
 
     }
 
@@ -625,7 +676,7 @@ let twoincDomHelper = {
 
         // Display only the correct payment description
         jQuery('.twoinc-payment-desc').hide()
-        if (window.twoinc.product_type === 'FUNDED_INVOICE' && window.twoinc.shop_base_country === 'no') {
+        if (window.twoinc.is_direct_invoice && window.twoinc.shop_base_country === 'no') {
             jQuery('.twoinc-payment-desc.payment-desc-no-funded').show()
         } else {
             jQuery('.twoinc-payment-desc.payment-desc-global').show()
@@ -851,6 +902,18 @@ let twoincDomHelper = {
     },
 
     /**
+     * Toggle hide with !important
+     */
+    showHideImportant: function(selector, action) {
+        if (action == 'show') {
+            jQuery('.twoinc-pay-sub.loader').css('display', '')
+        } else if (action == 'hide') {
+            jQuery('.twoinc-pay-sub.loader').css('display', '')
+            jQuery('.twoinc-pay-sub.loader').attr('style', jQuery('.twoinc-pay-sub.loader').attr('style') + 'display: none!important;')
+        }
+    },
+
+    /**
      * Rearrange descriptions in Twoinc payment to make it cleaner
      */
     rearrangeDescription: function() {
@@ -965,6 +1028,12 @@ let twoincDomHelper = {
         if (!checkoutInputs) return
         checkoutInputs = JSON.parse(checkoutInputs)
         for (let inp of checkoutInputs) {
+            // Skip load company id/name if user logged in and has Two meta set
+            if (window.twoinc.user_meta_exists) {
+                let skipIds = ['company_id', 'billing_company', 'billing_company_display']
+                if (skipIds.includes(inp.id)) continue
+            }
+            // Load all other fields
             if (inp.htmlTag === 'INPUT') {
                 if (inp.val && ['text', 'tel', 'email', 'hidden'].indexOf(inp.type) >= 0) {
                     if (document.querySelector('#' + inp.id) && !(document.querySelector('#' + inp.id).value)) {
@@ -1017,9 +1086,10 @@ let twoincDomHelper = {
      * Load usermeta checkout inputs
      */
     loadUserMetaInputs: function() {
+        window.twoinc.user_meta_exists = window.twoinc.billing_company && window.twoinc.company_id
         if (document.querySelector('#billing_company_display')) {
             let selectElem = document.querySelector('#billing_company_display')
-            if (!selectElem.querySelector('option:not([value=""])') && window.twoinc.billing_company) {
+            if (!selectElem.querySelector('option:not([value=""])') && window.twoinc.user_meta_exists) {
                 // Append to selectWoo
                 if (!selectElem.querySelector('option[value="' + window.twoinc.billing_company + '"]')) {
                     selectElem.innerHTML = '<option value="' + window.twoinc.billing_company + '">' + window.twoinc.billing_company + '</option>' + selectElem.innerHTML
@@ -1027,23 +1097,23 @@ let twoincDomHelper = {
                 selectElem.value = window.twoinc.billing_company
 
                 // Append company id to company name select box
-                if (window.twoinc.company_id) {
+                if (window.twoinc.user_meta_exists) {
                     twoincDomHelper.insertFloatingCompany(window.twoinc.company_id, 2000)
                 }
             }
         }
-        if (document.querySelector('#department') && !(document.querySelector('#department').value) && window.twoinc.department) {
+        if (document.querySelector('#department') && window.twoinc.department) {
             document.querySelector('#department').value = window.twoinc.department
         }
-        if (document.querySelector('#project') && !(document.querySelector('#project').value) && window.twoinc.project) {
+        if (document.querySelector('#project') && window.twoinc.project) {
             document.querySelector('#project').value = window.twoinc.project
         }
 
         // Update the object values
-        if (document.querySelector('#billing_company') && !(document.querySelector('#billing_company').value) && window.twoinc.billing_company) {
+        if (document.querySelector('#billing_company') && window.twoinc.billing_company) {
             document.querySelector('#billing_company').value = window.twoinc.billing_company
         }
-        if (document.querySelector('#company_id') && !(document.querySelector('#company_id').value) && window.twoinc.company_id) {
+        if (document.querySelector('#company_id') && window.twoinc.company_id) {
             document.querySelector('#company_id').value = window.twoinc.company_id
         }
     },
@@ -1064,6 +1134,10 @@ let twoincDomHelper = {
             return 'divi'
         } else if (jQuery('#kalium-style-css-css').length > 0) {
             return 'kalium'
+        } else if (jQuery('#flatsome-style-css').length > 0) {
+            return 'flatsome'
+        } else if (jQuery('#shopkeeper-styles-css').length > 0) {
+            return 'shopkeeper'
         }
     },
 
@@ -1153,11 +1227,7 @@ class Twoinc {
 
             // Focus on search input on country open
             $billingCountry.on('select2:open', function(e){
-                setTimeout(function(){
-                    if (jQuery('input[aria-owns="select2-billing_country-results"]').get(0)) {
-                        jQuery('input[aria-owns="select2-billing_country-results"]').get(0).focus()
-                    }
-                }, 200)
+                twoincSelectWooHelper.waitToFocus('billing_country')
             })
 
             // Turn the select input into select2
@@ -1210,19 +1280,17 @@ class Twoinc {
                 Twoinc.getInstance().billingCompanySelect.on('select2:open', function(e){
                     let companyNotInBtn = twoincDomHelper.getCompanyNotInBtnNode()
                     jQuery('#select2-billing_company_display-results').parent().append(companyNotInBtn)
-                    setTimeout(function(){
-                        if (jQuery('input[aria-owns="select2-billing_company_display-results"]').get(0)) {
-                            jQuery('input[aria-owns="select2-billing_company_display-results"]').get(0).focus()
-                            jQuery('input[aria-owns="select2-billing_company_display-results"]').on('input', function(e){
-                                let selectWooParams = twoincSelectWooHelper.genSelectWooParams()
-                                if (jQuery(this).val() && jQuery(this).val().length >= selectWooParams.minimumInputLength) {
-                                    jQuery('#company_not_in_btn').show()
-                                } else {
-                                    jQuery('#company_not_in_btn').hide()
-                                }
-                            })
-                        }
-                    }, 200)
+                    twoincSelectWooHelper.waitToFocus('billing_company_display', null, null, function(){
+                        jQuery('input[aria-owns="select2-billing_company_display-results"]').on('input', function(e){
+                            let selectWooParams = twoincSelectWooHelper.genSelectWooParams()
+                            if (jQuery(this).val() && jQuery(this).val().length >= selectWooParams.minimumInputLength) {
+                                jQuery('#company_not_in_btn').show()
+                            } else {
+                                jQuery('#company_not_in_btn').hide()
+                            }
+                        })
+                    })
+                    twoincSelectWooHelper.addSelectWooFocusFixHandler('billing_company_display')
                 })
 
             }, 800)
@@ -1346,6 +1414,9 @@ class Twoinc {
                 } else if (selectedCountryData.iso2 === 'no') {
                     return '073 70143'
                 }
+                else if(selectedCountryData.iso2 === 'se') {
+                    return '765 195 285'
+                }
                 return selectedCountryPlaceholder.replace(/[0-9]/g, 'X')
             }
         })
@@ -1445,7 +1516,7 @@ class Twoinc {
             let jsonBody = JSON.stringify({
                 "merchant_short_name": window.twoinc.merchant_short_name,
                 "gross_amount": "" + gross_amount,
-                "invoice_type": window.twoinc.product_type,
+                "invoice_type": 'FUNDED_INVOICE',
                 "buyer": {
                     "company": Twoinc.getInstance().customerCompany
                 },
@@ -1488,7 +1559,7 @@ class Twoinc {
             if (!Twoinc.getInstance().isReadyApprovalCheck()) return
 
             jQuery('.twoinc-pay-sub').hide()
-            jQuery('.twoinc-pay-sub.loader').show()
+            twoincDomHelper.showHideImportant('.twoinc-pay-sub.loader', 'show')
 
             // Create an order intent
             const approvalResponse = jQuery.ajax({
@@ -1512,7 +1583,7 @@ class Twoinc {
                 twoincDomHelper.toggleMethod(Twoinc.getInstance().isTwoincMethodHidden)
 
                 // Display correct payment description
-                window.twoinc.product_type = response.invoice_type
+                window.twoinc.is_direct_invoice = (response.invoice_type && response.invoice_type === 'DIRECT_INVOICE')
                 twoincDomHelper.togglePaymentDesc()
 
                 // Select the default payment method
@@ -1561,6 +1632,7 @@ class Twoinc {
             let twoincSubtitleExistCheck = setInterval(function() {
                 if (jQuery('#payment .blockOverlay').length === 0) {
                     jQuery('.twoinc-pay-box, .twoinc-pay-sub').hide()
+                    twoincDomHelper.showHideImportant('.twoinc-pay-sub.loader', 'hide')
                     jQuery('.twoinc-pay-sub.explain-details').show()
                     jQuery('.twoinc-pay-box.declare-aggrement').show()
                     clearInterval(twoincSubtitleExistCheck)
@@ -1579,14 +1651,20 @@ class Twoinc {
             // Display error messages
             if (response.status >= 400) {
                 // @TODO: use code in checkout-api
-                let errMsg = (typeof response.responseJSON === 'string' || !('error_details' in response.responseJSON))
-                             ? response.responseJSON
-                             : response.responseJSON['error_details']
+                let errMsg = response.responseJSON
+                if (typeof response.responseJSON !== 'string') {
+                    if ('error_details' in response.responseJSON && response.responseJSON['error_details']) {
+                        errMsg = response.responseJSON['error_details']
+                    } else if ('error_code' in response.responseJSON && response.responseJSON['error_code']) {
+                        errMsg = response.responseJSON['error_code']
+                    }
+                }
 
                 // Update twoinc message
                 let twoincSubtitleExistCheck = setInterval(function() {
                     if (jQuery('#payment .blockOverlay').length === 0) {
                         jQuery('.twoinc-pay-box, .twoinc-pay-sub').hide()
+                        twoincDomHelper.showHideImportant('.twoinc-pay-sub.loader', 'hide')
                         // woocommerce's update_checkout is not running
                         if (errMsg.startsWith('Minimum Payment using ')) {
                             jQuery('.twoinc-pay-box.err-amt-min').show()
@@ -1595,18 +1673,30 @@ class Twoinc {
                         } else if (errMsg.includes('Invalid phone number')) {
                             jQuery('.twoinc-pay-box.err-phone').show()
                             twoincDomHelper.markFieldInvalid('billing_phone_field')
+                        } else if (errMsg === 'SAME_BUYER_SELLER_ERROR') {
+                            jQuery('.twoinc-pay-box.err-buyer-same-seller').show()
                         } else {
-                            jQuery('.twoinc-pay-box.payment-not-accepted').show()
+                            jQuery('.twoinc-pay-box.err-payment-default').show()
                         }
                         clearInterval(twoincSubtitleExistCheck)
                    }
                 }, 1000)
             } else {
+                let errMsg = null
+                if (response.approved === false) {
+                    errMsg = 'REJECTED'
+                }
+
                 let twoincSubtitleExistCheck = setInterval(function() {
                     if (jQuery('#payment .blockOverlay').length === 0) {
                         // woocommerce's update_checkout is not running
                         jQuery('.twoinc-pay-box, .twoinc-pay-sub').hide()
-                        jQuery('.twoinc-pay-box.payment-not-accepted').show()
+                        twoincDomHelper.showHideImportant('.twoinc-pay-sub.loader', 'hide')
+                        if (errMsg === 'REJECTED') {
+                            jQuery('.twoinc-pay-box.err-payment-rejected').show()
+                        } else {
+                            jQuery('.twoinc-pay-box.err-payment-default').show()
+                        }
                         clearInterval(twoincSubtitleExistCheck)
                    }
                 }, 1000)
@@ -1631,7 +1721,9 @@ class Twoinc {
 
         // Get country
         let country_prefix = Twoinc.getInstance().customerCompany.country_prefix
-        if (!country_prefix || !['GB'].includes(country_prefix)) country_prefix = 'NO'
+        if (!country_prefix || !['GB', 'SE'].includes(country_prefix)) country_prefix = 'NO'
+
+
         // Get company ID
         let company_id = jQuery('#company_id').val()
 

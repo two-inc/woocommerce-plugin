@@ -38,8 +38,9 @@ if (!class_exists('WC_Twoinc')) {
 
             // Twoinc api host
             $this->api_key = $this->get_option('api_key');
-            $this->twoinc_search_host_no = 'https://no.search.two.inc';
-            $this->twoinc_search_host_gb = 'https://gb.search.two.inc';
+            $this->twoinc_search_host_no = $this->get_twoinc_search_host('no');
+            $this->twoinc_search_host_gb = $this->get_twoinc_search_host('gb');
+            $this->twoinc_search_host_se = $this->get_twoinc_search_host('se');
             $this->twoinc_checkout_host = $this->get_twoinc_checkout_host();
 
             $this->plugin_version = get_plugin_version();
@@ -141,6 +142,16 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
+         * Get twoinc company seach host based on current settings
+         */
+        private function get_twoinc_search_host($countryCode){
+            if (WC_Twoinc_Helper::is_twoinc_development()) {
+                return "https://{$countryCode}.staging.search.two.inc";
+            }
+            return "https://{$countryCode}.search.two.inc";
+        }
+
+        /**
          * Get merchant's default due in day from DB, or from Twoinc DB
          */
         public function get_merchant_default_days_on_invoice(){
@@ -214,9 +225,9 @@ if (!class_exists('WC_Twoinc')) {
          */
         private function get_abt_twoinc_html(){
             if ($this->get_option('show_abt_link') === 'yes') {
-                $abt_url = 'https://twoinc.notion.site/What-is-Tillit-4e12960d8e834e5aa20f879d59e0b32f';
+                $abt_url = 'https://www.two.inc/what-is-two';
                 if (WC_Twoinc_Helper::get_locale() === 'nb_NO') {
-                    $abt_url = 'https://twoinc.notion.site/Hva-er-Two-964ee21e4da84819afb1b035ee8fe98b';
+                    $abt_url = 'https://www.two.inc/no/what-is-two';
                 }
                 return '<div id="abt-twoinc-link"><a href="' . $abt_url . '" onclick="javascript:window.open(\'' . $abt_url . '\',\'WhatIsTwoinc\',\'toolbar=no, location=no, directories=no, status=no, menubar=no, scrollbars=yes, resizable=yes, width=1060, height=700\'); return false;">' . __('What is Two?', 'twoinc-payment-gateway') . '</a>&nbsp;</div>';
             }
@@ -244,9 +255,11 @@ if (!class_exists('WC_Twoinc')) {
             return sprintf(
                 '<div>
                     <div class="twoinc-pay-box explain-details">%s</div>
-                    <div class="twoinc-pay-box err-country" style="display: none;">%s</div>
                     <div class="twoinc-pay-box declare-aggrement" style="display: none;">%s</div>
-                    <div class="twoinc-pay-box payment-not-accepted" style="display: none;">%s</div>
+                    <div class="twoinc-pay-box err-payment-default" style="display: none;">%s</div>
+                    <div class="twoinc-pay-box err-payment-rejected" style="display: none;">%s</div>
+                    <div class="twoinc-pay-box err-country" style="display: none;">%s</div>
+                    <div class="twoinc-pay-box err-buyer-same-seller" style="display: none;">%s</div>
                     <div class="twoinc-pay-box err-amt-max" style="display: none;">%s</div>
                     <div class="twoinc-pay-box err-amt-min" style="display: none;">%s</div>
                     <div class="twoinc-pay-box err-phone" style="display: none;">%s</div>
@@ -261,7 +274,6 @@ if (!class_exists('WC_Twoinc')) {
                     __('Pay on invoice with agreed terms', 'twoinc-payment-gateway'),
                     $this->get_payment_description_msg()
                 ),
-                __('Two is not available as a payment option in the selected region', 'twoinc-payment-gateway'),
                 sprintf(
                     '%s <span class="twoinc-buyer-name-placeholder">%s</span><span class="twoinc-buyer-name"></span>.',
                     __('By completing the purchase, you verify that you have the legal right to purchase on behalf of', 'twoinc-payment-gateway'),
@@ -269,6 +281,9 @@ if (!class_exists('WC_Twoinc')) {
                     $this->get_abt_twoinc_html()
                 ),
                 __('Invoice purchase is not available for this order', 'twoinc-payment-gateway'),
+                __('We\'ve checked your company\'s details and are unable to provide invoice credit for this order', 'twoinc-payment-gateway'),
+                __('Two is not available as a payment option in the selected region', 'twoinc-payment-gateway'),
+                __('Buyer and merchant may not be the same company', 'twoinc-payment-gateway'),
                 __('Order value exceeds maximum limit', 'twoinc-payment-gateway'),
                 __('Order value is below minimum limit', 'twoinc-payment-gateway'),
                 __('Phone number is invalid', 'twoinc-payment-gateway')
@@ -287,7 +302,7 @@ if (!class_exists('WC_Twoinc')) {
                         <div class="twoinc-subtitle">
                             <div class="twoinc-pay-sub require-inputs">%s</div>
                             <div class="twoinc-pay-sub explain-details" style="display: none;">%s</div>
-                            <img class="twoinc-pay-sub loader" style="display: none;" src="%s" />
+                            <img class="twoinc-pay-sub loader" style="display: none!important;" src="%s" />
                         </div> ',
                         sprintf(
                             __($this->get_option('title'), 'twoinc-payment-gateway'),
@@ -486,8 +501,10 @@ if (!class_exists('WC_Twoinc')) {
                 $twoinc_meta['department'],
                 $twoinc_meta['project'],
                 $twoinc_meta['purchase_order_number'],
-                $twoinc_meta['product_type'],
                 $twoinc_meta['payment_reference_message'],
+                $twoinc_meta['payment_reference_ocr'],
+                $twoinc_meta['payment_reference'],
+                $twoinc_meta['payment_reference_type'],
                 ''
             );
 
@@ -512,7 +529,7 @@ if (!class_exists('WC_Twoinc')) {
                 return;
             }
 
-            if (!$this->original_orders || !$this->original_orders[$order->get_id()]) return;
+            if (!property_exists($this, 'original_orders') || !$this->original_orders[$order->get_id()]) return;
 
             $twoinc_order_id = $this->get_twoinc_order_id($order);
 
@@ -526,8 +543,10 @@ if (!class_exists('WC_Twoinc')) {
                 $twoinc_meta['department'],
                 $twoinc_meta['project'],
                 $twoinc_meta['purchase_order_number'],
-                $twoinc_meta['product_type'],
                 $twoinc_meta['payment_reference_message'],
+                $twoinc_meta['payment_reference_ocr'],
+                $twoinc_meta['payment_reference'],
+                $twoinc_meta['payment_reference_type'],
                 ''
             );
 
@@ -900,20 +919,24 @@ if (!class_exists('WC_Twoinc')) {
             }
 
             // Get payment details
-            $product_type = $this->get_option('product_type');
-            $payment_reference_message = '';
-
-            // Backward compatible
-            if ($product_type === 'MERCHANT_INVOICE') {
-                $product_type = 'DIRECT_INVOICE';
+            $payment_reference_message = '';// strval($order_id);
+            if(has_filter('two_payment_reference_message')) {
+                $payment_reference_message = apply_filters('two_payment_reference_message', $order_id);
+                update_post_meta($order_id, '_payment_reference_message', $payment_reference_message);
             }
-
-            if ($product_type === 'DIRECT_INVOICE') {
-                $payment_reference_message = strval($order->get_id());
+            $payment_reference_ocr = '';
+            if(has_filter('two_payment_reference_ocr')) {
+                $payment_reference_ocr = apply_filters('two_payment_reference_ocr', $order_id);
+                update_post_meta($order_id, '_payment_reference_ocr', $payment_reference_ocr);
             }
-
-            update_post_meta($order_id, '_product_type', $product_type);
-            update_post_meta($order_id, '_payment_reference_message', $payment_reference_message);
+            $payment_reference = '';
+            $payment_reference_type = '';
+            if(has_filter('two_payment_reference')) {
+                $payment_reference = apply_filters('two_payment_reference', $order_id);
+                update_post_meta($order_id, '_payment_reference', $payment_reference);
+                $payment_reference_type = 'assigned_by_merchant';
+                update_post_meta($order_id, '_payment_reference_type', $payment_reference_type);
+            }
 
             // Save to user meta
             $user_id = wp_get_current_user()->ID;
@@ -932,8 +955,10 @@ if (!class_exists('WC_Twoinc')) {
                 $department,
                 $project,
                 $purchase_order_number,
-                $product_type,
                 $payment_reference_message,
+                $payment_reference_ocr,
+                $payment_reference,
+                $payment_reference_type,
                 $tracking_id
             ));
 
@@ -968,7 +993,7 @@ if (!class_exists('WC_Twoinc')) {
             $body = json_decode($response['body'], true);
 
             if ($body['status'] == 'REJECTED') {
-                WC_Twoinc_Helper::display_ajax_error(__('Invoice purchase is not available for this order', 'twoinc-payment-gateway'));
+                WC_Twoinc_Helper::display_ajax_error(__('We\'ve checked your company\'s details and are unable to provide invoice credit for this order', 'twoinc-payment-gateway'));
                 return;
             }
 
@@ -1368,7 +1393,6 @@ if (!class_exists('WC_Twoinc')) {
                     if (isset($body['checkout_personal'])) $wc_twoinc_instance->update_option('checkout_personal', $body['checkout_personal'] ? 'yes' : 'no');
                     if (isset($body['checkout_sole_trader'])) $wc_twoinc_instance->update_option('checkout_sole_trader', $body['checkout_sole_trader'] ? 'yes' : 'no');
                     if (isset($body['checkout_business'])) $wc_twoinc_instance->update_option('checkout_business', $body['checkout_business'] ? 'yes' : 'no');
-                    if (isset($body['product_type'])) $wc_twoinc_instance->update_option('product_type', $body['product_type']);
                     if (isset($body['enable_company_name'])) $wc_twoinc_instance->update_option('enable_company_name', $body['enable_company_name'] ? 'yes' : 'no');
                     if (isset($body['address_search'])) $wc_twoinc_instance->update_option('address_search', $body['address_search'] ? 'yes' : 'no');
                     if (isset($body['enable_order_intent'])) $wc_twoinc_instance->update_option('enable_order_intent', $body['enable_order_intent'] ? 'yes' : 'no');
@@ -1494,16 +1518,7 @@ if (!class_exists('WC_Twoinc')) {
                 ],
                 'section_invoice_settings' => [
                     'type'        => 'title',
-                    'title'       => __('Payment and Invoice settings', 'twoinc-payment-gateway')
-                ],
-                'product_type' => [
-                    'type'        => 'select',
-                    'title'       => __('Choose product', 'twoinc-payment-gateway'),
-                    'default'     => 'FUNDED_INVOICE',
-                    'options'     => array(
-                          'FUNDED_INVOICE' => 'Funded Invoice',
-                          'DIRECT_INVOICE' => 'Direct Invoice'
-                     )
+                    'title'       => __('Invoice settings', 'twoinc-payment-gateway')
                 ],
                 'merchant_logo' => [
                     'title'       => __('Add a logo to the invoice', 'twoinc-payment-gateway'),
@@ -1574,7 +1589,7 @@ if (!class_exists('WC_Twoinc')) {
                     'title'       => __('Show "What is Two" link in checkout', 'twoinc-payment-gateway'),
                     'label'       => ' ',
                     'type'        => 'checkbox',
-                    'default'     => 'no'
+                    'default'     => 'yes'
                 ],
                 'default_to_b2c' => [
                     'title'       => __('Default to B2C check-out', 'twoinc-payment-gateway'),
@@ -1583,6 +1598,8 @@ if (!class_exists('WC_Twoinc')) {
                 ],
                 'invoice_fee_to_buyer' => [
                     'title'       => __('Shift invoice fee to the buyers', 'twoinc-payment-gateway'),
+                    'description' => __('This feature only works for merchants set up with a fixed fee per order.', 'twoinc-payment-gateway'),
+                    'desc_tip'    => true,
                     'label'       => ' ',
                     'type'        => 'checkbox'
                 ],
@@ -1601,7 +1618,8 @@ if (!class_exists('WC_Twoinc')) {
                     'description' => __('Enables searching for company name in the national registry and automatically filling in name and national ID.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'label'       => ' ',
-                    'type'        => 'checkbox'
+                    'type'        => 'checkbox',
+                    'default'     => 'yes'
                 ],
                 'address_search' => [
                     'title'       => __('Address auto-complete', 'twoinc-payment-gateway'),
@@ -1723,16 +1741,6 @@ if (!class_exists('WC_Twoinc')) {
                 update_post_meta($order->get_id(), '_tillit_merchant_id', $twoinc_merchant_id);
             }
 
-            $product_type = $order->get_meta('_product_type');
-            $payment_reference_message = '';
-
-            if (!$product_type) {
-                $product_type = 'FUNDED_INVOICE'; // First product type as default for older orders
-                update_post_meta($order->get_id(), '_product_type', $product_type);
-            }
-
-            $payment_reference_message = strval($order->get_id());
-
             $company_id = $order->get_meta('company_id');
             if ($company_id) {
                 $department = $order->get_meta('department');
@@ -1796,8 +1804,10 @@ if (!class_exists('WC_Twoinc')) {
                 'project' => $project,
                 'purchase_order_number' => $purchase_order_number,
                 'twoinc_order_id' => $twoinc_order_id,
-                'product_type' => $product_type,
-                'payment_reference_message' => $payment_reference_message
+                'payment_reference_message' => $order->get_meta('payment_reference_message'),
+                'payment_reference_ocr' => $order->get_meta('payment_reference_ocr'),
+                'payment_reference' => $order->get_meta('payment_reference'),
+                'payment_reference_type' => $order->get_meta('payment_reference_type')
             );
 
         }
@@ -1830,9 +1840,7 @@ if (!class_exists('WC_Twoinc')) {
                     $order,
                     $twoinc_meta['department'],
                     $twoinc_meta['project'],
-                    $twoinc_meta['purchase_order_number'],
-                    $twoinc_meta['product_type'],
-                    $twoinc_meta['payment_reference_message']
+                    $twoinc_meta['purchase_order_number']
                 ),
                 'PUT'
             );
