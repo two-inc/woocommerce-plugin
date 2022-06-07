@@ -28,3 +28,6 @@ function get_kid_number( $order_id ) {
     return $prefix . $padded_order_id . strval($control);
 }
 add_filter( "two_payment_reference", "get_kid_number" );
+
+
+// Note: added via the plugin Snippets because functions.php is not editable: "Generate Norwegian KID number"
