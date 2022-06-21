@@ -329,7 +329,7 @@ msgstr "Gör det enkelt för företag att köpa online."
 #: class/WC_Twoinc.php:1747
 #, php-format
 msgid "Missing company ID, please check with Two admin for id %s"
-msgstr "saknas, vänligen kontrollera med Two-admin för ID %s"
+msgstr "Organisationsnummer saknas, vänligen kontrollera med Two-admin för ID %s"
 
 #: views/woocommerce_after_checkout_billing_form.php:11
 msgid "My company is not on the list"
