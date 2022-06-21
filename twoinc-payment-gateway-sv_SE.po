@@ -273,7 +273,7 @@ msgstr ""
 msgid ""
 "Failed to request refund order to Two, please check with Two admin for id %s"
 msgstr ""
-"Det gick inte att begära återbetalningsbeställning till Two, vänligen kontrollera med Two-admin för id% s"
+"Det gick inte att begära återbetalningsbeställning till Two, vänligen kontrollera med Two-admin för id %s"
 
 #: class/WC_Twoinc_Helper.php:127
 msgid "First name"
@@ -342,7 +342,7 @@ msgstr "Endast \"Slutförda \" beställningar kan återbetalas av Two"
 #: class/WC_Twoinc.php:1271
 #, php-format
 msgid "Order ID: %s has been placed with Two"
-msgstr "Order-ID: % s har blivit placerad med Two"
+msgstr "Order-ID: %s har blivit placerad med Two"
 
 #: class/WC_Twoinc.php:276
 msgid "Order value exceeds maximum limit"
@@ -359,7 +359,7 @@ msgstr "Organisationsnummer"
 #: class/WC_Twoinc.php:260 class/WC_Twoinc.php:306
 #, php-format
 msgid "Pay in %s days, at no extra cost"
-msgstr "Betala i % s dagar, utan extra kostnad"
+msgstr "Betala i %s dagar, utan extra kostnad"
 
 #: class/WC_Twoinc.php:263 class/WC_Twoinc.php:300 class/WC_Twoinc.php:309
 msgid "Pay on invoice with agreed terms"
@@ -585,7 +585,7 @@ msgstr "Vad er Two?"
 msgid ""
 "Wordpress admin privilege is required for Two payment One-click setup. %s"
 msgstr ""
-"Wordpress administratörsbehörighet krävs för Two betalningsinställningar med ett klick.% S"
+"Wordpress administratörsbehörighet krävs för Two betalningsinställningar med ett klick. %s"
 
 #: class/WC_Twoinc.php:269
 msgid "your company"
