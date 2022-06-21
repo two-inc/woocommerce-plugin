@@ -44,7 +44,7 @@ msgid ""
 "Adds a separate checkout for business customers. Two is only available in "
 "the business checkout."
 msgstr ""
-"Lägger till en separat kassa för företagskunder. Två är endast tillgängliga i "
+"Lägger till en separat kassa för företagskunder. Two är endast tillgängliga i "
 "kassan för företag."
 
 #: class/WC_Twoinc.php:1524
@@ -337,7 +337,7 @@ msgstr "Mitt företag finns inte med på listan"
 
 #: class/WC_Twoinc.php:1013
 msgid "Only \"Completed\" orders can be refunded by Two"
-msgstr "Endast \"Slutförda \" beställningar kan återbetalas av två"
+msgstr "Endast \"Slutförda \" beställningar kan återbetalas av Two"
 
 #: class/WC_Twoinc.php:1271
 #, php-format
@@ -500,7 +500,7 @@ msgstr "Two"
 
 #. Name of the plugin
 msgid "Two - BNPL for businesses"
-msgstr "Två - Köp nu betala senare, för företag"
+msgstr "Two - Köp nu betala senare, för företag"
 
 #: class/WC_Twoinc.php:1480
 msgid "Two API Key"
@@ -516,7 +516,7 @@ msgstr "Two tomt svar"
 
 #: class/WC_Twoinc.php:274
 msgid "Two is not available as a payment option in the selected region"
-msgstr "Två är inte tillgängligt som betalningsalternativ i den valda regionen"
+msgstr "Two är inte tillgängligt som betalningsalternativ i den valda regionen"
 
 #: class/WC_Twoinc.php:791
 msgid "Two pre-filled fields"
@@ -525,7 +525,7 @@ msgstr "Two förifyllda fält"
 #: class/WC_Twoinc_Helper.php:48
 #, php-format
 msgid "Two response code %d"
-msgstr "Två svarskod"
+msgstr "Two svarskod"
 
 #: class/WC_Twoinc.php:1453
 msgid "Two Test Server"
