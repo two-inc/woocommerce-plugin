@@ -75,6 +75,10 @@ if (!class_exists('WC_Twoinc_Checkout')) {
         public function add_account_buttons($fields)
         {
 
+            // Make sure this function is called only once per run
+            if (property_exists($this, 'twoinccall_add_account_buttons')) return;
+            $this->twoinccall_add_account_buttons = true;
+
             $home_url = get_home_url();
             printf(
                 '<div class="account-type-wrapper" style="display: none;">
@@ -275,6 +279,10 @@ if (!class_exists('WC_Twoinc_Checkout')) {
          */
         public function render_twoinc_fields()
         {
+            // Make sure this function is called only once per run
+            if (property_exists($this, 'twoinccall_render_twoinc_fields')) return;
+            $this->twoinccall_render_twoinc_fields = true;
+
             ob_start();
             require_once WC_TWOINC_PLUGIN_PATH . '/views/woocommerce_checkout.php';
             $content = ob_get_clean();
@@ -298,11 +306,13 @@ if (!class_exists('WC_Twoinc_Checkout')) {
          * Load custom 3rd-party js and css files
          */
         public function load_intl_js_css() {
+            // Make sure this function is called only once per run
+            if (property_exists($this, 'twoinccall_load_intl_js_css')) return;
+            $this->twoinccall_load_intl_js_css = true;
 
             // selectable phone country prefix
             printf('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.8/css/intlTelInput.css" />');
             printf('<script src="https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.8/js/intlTelInput.min.js"></script>');
-
         }
 
         /**
@@ -370,6 +380,10 @@ if (!class_exists('WC_Twoinc_Checkout')) {
          */
         public function inject_cart_details()
         {
+            // Make sure this function is called only once per run
+            if (property_exists($this, 'twoinccall_inject_cart_details')) return;
+            $this->twoinccall_inject_cart_details = true;
+
             if(!is_checkout()) return;
             $twoinc_obj = json_encode(WC_Twoinc_Helper::utf8ize($this->prepare_twoinc_object()), JSON_UNESCAPED_UNICODE);
             if ($twoinc_obj) printf('<script>window.twoinc = %s;</script>', $twoinc_obj);
