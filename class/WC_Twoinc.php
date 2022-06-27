@@ -1001,7 +1001,7 @@ if (!class_exists('WC_Twoinc')) {
             update_post_meta($order_id, 'twoinc_order_id', $body['id']);
 
             // Return the result
-            if ($this->get_option('tillit_merchant_id') === 'arkwrightx') {
+            if ($body['state'] == 'VERIFIED' && isset($body['merchant_urls']) && isset($body['merchant_urls']['merchant_confirmation_url'])) {
                 return [
                     'result'    => 'success',
                     'redirect'  => $body['merchant_urls']['merchant_confirmation_url']
