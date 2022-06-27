@@ -751,8 +751,10 @@ if (!class_exists('WC_Twoinc')) {
             }
 
             // Ibrahim
-            update_post_meta($order->get_id(), '_twoinc_order_state', $body['state']);
-            do_action('twoinc_order_completed', $order, $body);
+            if (isset($body['state'])) {
+                update_post_meta($order->get_id(), '_twoinc_order_state', $body['state']);
+                do_action('twoinc_order_completed', $order, $body);
+            }
 
         }
 
@@ -766,9 +768,11 @@ if (!class_exists('WC_Twoinc')) {
             // Ibrahim
             $state = get_post_meta($order_id, '_twoinc_order_state', true);
             if ($state == 'CANCELLED') {
-                return new WP_Error(
-                    'invalid_twoinc_cancel',
-                    __('Order ' . $order_id . ' already cancelled', 'twoinc-payment-gateway'));
+                // Harry: should not block cancel operation of merchants
+                // return new WP_Error(
+                //     'invalid_twoinc_cancel',
+                //     __('Order ' . $order_id . ' already cancelled', 'twoinc-payment-gateway'));
+                return;
             }
 
             // Get the order
@@ -1085,13 +1089,13 @@ if (!class_exists('WC_Twoinc')) {
             // }
 
             $order_refunds = $order->get_refunds();
-            // Ibrahim: commented out loop in refunds, and just got the last one
-            $order_refund = is_array($order_refunds) && count($order_refunds) > 0 ? end($order_refunds) : null;
-            // foreach($order_refunds as $refund){
-            //     if (!$order_refund || $refund->get_date_created() > $order_refund->get_date_created()) {
-            //         $order_refund = $refund;
-            //     }
-            // }
+            // Need to loop instead of getting the last element because the last element is not always the latest refund
+            $order_refund = null;
+            foreach($order_refunds as $refund){
+                if (!$order_refund || $refund->get_date_created() > $order_refund->get_date_created()) {
+                    $order_refund = $refund;
+                }
+            }
 
             if (!$order_refund || !$twoinc_order_id || !$amount) {
                 return new WP_Error('invalid_twoinc_refund',
