@@ -40,10 +40,6 @@
     margin-right: 4px;
 }
 
-/* .woocommerce-checkout #payment ul.payment_methods li.wc_payment_method.payment_method_woocommerce-gateway-tillit #payment_method_woocommerce-gateway-tillit {
-    display: unset!important;
-} */
-
 form.checkout.woocommerce-checkout .woocommerce-account-type-fields__field-wrapper, #account_type_field {
     display: none;
 }
