@@ -676,6 +676,18 @@ if (!class_exists('WC_Twoinc')) {
         public function on_order_completed($order_id)
         {
 
+            // Ibrahim
+            $state = get_post_meta($order_id, '_twoinc_order_state', true);
+            $skip = ["FULFILLED", "CANCELLED", "REFUNDED", "PARTIALLY_REFUNDED"];
+            if (in_array($state, $skip)) {
+                WC_Twoinc_Helper::send_twoinc_alert_email(
+                    "Order already fulfilled:"
+                        . "\r\n- Request: Fulfill order"
+                        . "\r\n- Merchant post ID: " . strval($order_id)
+                        . "\r\n- Site: " . get_site_url());
+                return;
+            }
+
             // Get the order
             $order = wc_get_order($order_id);
 
@@ -738,6 +750,12 @@ if (!class_exists('WC_Twoinc')) {
                 $order->add_order_note(__('Invoice has been sent from Two via email', 'twoinc-payment-gateway'));
             }
 
+            // Ibrahim
+            if (isset($body['state'])) {
+                update_post_meta($order->get_id(), '_twoinc_order_state', $body['state']);
+                do_action('twoinc_order_completed', $order, $body);
+            }
+
         }
 
         /**
@@ -747,6 +765,16 @@ if (!class_exists('WC_Twoinc')) {
          */
         public function on_order_cancelled($order_id)
         {
+            // Ibrahim
+            $state = get_post_meta($order_id, '_twoinc_order_state', true);
+            if ($state == 'CANCELLED') {
+                // Harry: should not block cancel operation of merchants
+                // return new WP_Error(
+                //     'invalid_twoinc_cancel',
+                //     __('Order ' . $order_id . ' already cancelled', 'twoinc-payment-gateway'));
+                return;
+            }
+
             // Get the order
             $order = wc_get_order($order_id);
 
@@ -795,6 +823,9 @@ if (!class_exists('WC_Twoinc')) {
                 return;
             }
 
+            // Ibrahim
+            update_post_meta($order->get_id(), '_twoinc_order_state', "CANCELLED");
+            do_action('twoinc_order_cancelled', $order, $response);
         }
 
         /**
@@ -1044,12 +1075,22 @@ if (!class_exists('WC_Twoinc')) {
             }
 
             // Get and check refund data
-            if ($order->get_status() !== 'completed') {
-                return new WP_Error('invalid_twoinc_refund',
-                    __('Only "Completed" orders can be refunded by Two', 'twoinc-payment-gateway'));
+            // Ibrahim - Commented out and used post meta instead of order status
+            $state = get_post_meta($order_id, '_twoinc_order_state', true);
+            if ($state === 'REFUNDED') {
+                return new WP_Error(
+                    'invalid_twoinc_refund',
+                    $order_id . ': ' . __('This order has already been fully refunded', 'twoinc-payment-gateway')
+                );
             }
+            // if ($order->get_status() !== 'completed') {
+            //     return new WP_Error('invalid_twoinc_refund',
+            //         __('Only "Completed" orders can be refunded by Two', 'twoinc-payment-gateway'));
+            // }
 
             $order_refunds = $order->get_refunds();
+            // Need to loop instead of getting the last element because the last element is not always the latest refund
+            $order_refund = null;
             foreach($order_refunds as $refund){
                 if (!$order_refund || $refund->get_date_created() > $order_refund->get_date_created()) {
                     $order_refund = $refund;
@@ -1115,12 +1156,18 @@ if (!class_exists('WC_Twoinc')) {
                     __('Failed to refund order with Two', 'twoinc-payment-gateway'));
             }
 
+            $state = "";
             $remaining_amt = $order->get_total() + (float) $body['amount'];
             if ($remaining_amt < 0.0001 && $remaining_amt > -0.0001) { // full refund, 0.0001 for float inaccuracy
                 $order->add_order_note(__('Invoice has been refunded and credit note has been sent by Two', 'twoinc-payment-gateway'));
+                $state = "REFUNDED";
             } else { // partial refund
                 $order->add_order_note(__('Invoice has been partially refunded and credit note has been sent by Two', 'twoinc-payment-gateway'));
+                $state = "PARTIALLY_REFUNDED";
             }
+            // Ibrahim
+            update_post_meta($order_id, '_twoinc_order_state', $state);
+            do_action('twoinc_order_refunded', $order, $body);
 
             return [
                 'result'    => 'success',
