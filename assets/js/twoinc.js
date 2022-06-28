@@ -670,6 +670,41 @@ let twoincDomHelper = {
     },
 
     /**
+     * Toggle payment text in subtitle and description
+     */
+    togglePaySubtitleDesc: function(action, errSelector) {
+
+        if (action === 'checking-intent') {
+
+            jQuery('.twoinc-pay-sub').hide()
+            twoincDomHelper.showHideImportant('.twoinc-pay-sub.loader', 'show')
+
+        } else if (action) {
+
+            // Hide all related elements
+            jQuery('.twoinc-pay-box, .twoinc-pay-sub').hide()
+            twoincDomHelper.showHideImportant('.twoinc-pay-sub.loader', 'hide')
+
+            if (action === 'intent-approved') {
+                jQuery('.twoinc-pay-sub.explain-phrase').show()
+                jQuery('.twoinc-pay-box.declare-aggrement').show()
+            } else if (action === 'errored') {
+                jQuery('.twoinc-pay-box' + errSelector).show()
+            }
+
+        }
+
+        // Default behavior for any action including null
+        if (!Twoinc.getInstance().customerCompany.organization_number) {
+            jQuery('.twoinc-pay-sub.require-inputs').show()
+        } else {
+            jQuery('.twoinc-pay-sub.require-inputs').hide()
+        }
+        twoincDomHelper.updateCompanyNameAgreement()
+
+    },
+
+    /**
      * Toggle payment description based on country and invoice type
      */
     togglePaymentDesc: function() {
@@ -796,12 +831,12 @@ let twoincDomHelper = {
 
         jQuery('#select2-billing_company_display-container').parent().find('.select2-selection__arrow').show()
         Twoinc.getInstance().customerCompany = {}
-        twoincDomHelper.updateCompanyNameAgreement()
+        twoincDomHelper.togglePaySubtitleDesc()
 
         // Update again after all elements are updated
         setTimeout(function(){
             Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData()
-            twoincDomHelper.updateCompanyNameAgreement()
+            twoincDomHelper.togglePaySubtitleDesc()
         }, 3000)
 
     },
@@ -811,6 +846,8 @@ let twoincDomHelper = {
      */
     insertFloatingCompany: function(companyId, delayInSecs)
     {
+
+        if (!companyId) return
 
         // Remove if exist
         jQuery(".floating-company").remove()
@@ -906,10 +943,10 @@ let twoincDomHelper = {
      */
     showHideImportant: function(selector, action) {
         if (action == 'show') {
-            jQuery('.twoinc-pay-sub.loader').css('display', '')
+            jQuery(selector).css('display', '')
         } else if (action == 'hide') {
-            jQuery('.twoinc-pay-sub.loader').css('display', '')
-            jQuery('.twoinc-pay-sub.loader').attr('style', jQuery('.twoinc-pay-sub.loader').attr('style') + 'display: none!important;')
+            jQuery(selector).css('display', '')
+            jQuery(selector).attr('style', jQuery(selector).attr('style') + 'display: none!important;')
         }
     },
 
@@ -1256,8 +1293,8 @@ class Twoinc {
                         twoincDomHelper.insertFloatingCompany(data.company_id, 0)
                     }, 0)
 
-                    // Update the company name in agreement sentence
-                    twoincDomHelper.updateCompanyNameAgreement()
+                    // Update the company name in agreement sentence and text in subtitle/description
+                    twoincDomHelper.togglePaySubtitleDesc()
 
                     // Get the company approval status
                     Twoinc.getInstance().getApproval()
@@ -1338,10 +1375,10 @@ class Twoinc {
         }, 1000)
 
         // Handle the company inputs change event
-        $body.on('change', '#select2-billing_company_display-container', twoincDomHelper.updateCompanyNameAgreement)
+        $body.on('change', '#select2-billing_company_display-container', twoincDomHelper.togglePaySubtitleDesc)
         $body.on('change', '#billing_company', function() {
             Twoinc.getInstance().customerCompany.company_name = twoincDomHelper.getCompanyName()
-            twoincDomHelper.updateCompanyNameAgreement()
+            twoincDomHelper.togglePaySubtitleDesc()
         })
 
         // Handle the country inputs change event
@@ -1381,6 +1418,7 @@ class Twoinc {
             twoincDomHelper.saveCheckoutInputs()
             Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData()
             Twoinc.getInstance().customerRepresentative = twoincDomHelper.getRepresentativeData()
+            twoincDomHelper.insertFloatingCompany(Twoinc.getInstance().customerCompany.organization_number, 0)
             Twoinc.getInstance().getApproval()
         }, 1000)
         this.updateElements()
@@ -1441,8 +1479,8 @@ class Twoinc {
         // Enable or disable the Twoinc method
         twoincDomHelper.toggleMethod(this.isTwoincMethodHidden)
 
-        // Enable or disable the Twoinc method
-        twoincDomHelper.updateCompanyNameAgreement()
+        // Update the text in subtitle and description
+        twoincDomHelper.togglePaySubtitleDesc()
 
         // Rearrange the DOMs in Twoinc payment
         twoincDomHelper.rearrangeDescription()
@@ -1466,15 +1504,9 @@ class Twoinc {
             return false
         }
 
-        // Temporarily disable the feature
-        // jQuery('.twoinc-pay-box, .twoinc-pay-sub').hide()
-        // if (!twoincUtilHelper.isCountrySupported()) {
-        //     jQuery('.twoinc-pay-box.err-country').show()
-        //     return false
-        // } else {
-        //     jQuery('.twoinc-pay-sub.explain-details').show()
-        //     jQuery('.twoinc-pay-box.declare-aggrement').show()
-        // }
+        if (!Twoinc.getInstance().customerCompany.organization_number) {
+            return false
+        }
 
         let can = true
         let values = [].concat(Object.values(this.customerCompany))
@@ -1558,8 +1590,7 @@ class Twoinc {
 
             if (!Twoinc.getInstance().isReadyApprovalCheck()) return
 
-            jQuery('.twoinc-pay-sub').hide()
-            twoincDomHelper.showHideImportant('.twoinc-pay-sub.loader', 'show')
+            twoincDomHelper.togglePaySubtitleDesc('checking-intent')
 
             // Create an order intent
             const approvalResponse = jQuery.ajax({
@@ -1631,10 +1662,7 @@ class Twoinc {
             // Update twoinc message
             let twoincSubtitleExistCheck = setInterval(function() {
                 if (jQuery('#payment .blockOverlay').length === 0) {
-                    jQuery('.twoinc-pay-box, .twoinc-pay-sub').hide()
-                    twoincDomHelper.showHideImportant('.twoinc-pay-sub.loader', 'hide')
-                    jQuery('.twoinc-pay-sub.explain-details').show()
-                    jQuery('.twoinc-pay-box.declare-aggrement').show()
+                    twoincDomHelper.togglePaySubtitleDesc('intent-approved')
                     clearInterval(twoincSubtitleExistCheck)
                 }
             }, 1000)
@@ -1663,20 +1691,18 @@ class Twoinc {
                 // Update twoinc message
                 let twoincSubtitleExistCheck = setInterval(function() {
                     if (jQuery('#payment .blockOverlay').length === 0) {
-                        jQuery('.twoinc-pay-box, .twoinc-pay-sub').hide()
-                        twoincDomHelper.showHideImportant('.twoinc-pay-sub.loader', 'hide')
                         // woocommerce's update_checkout is not running
                         if (errMsg.startsWith('Minimum Payment using ')) {
-                            jQuery('.twoinc-pay-box.err-amt-min').show()
+                            twoincDomHelper.togglePaySubtitleDesc('errored', '.err-amt-min')
                         } else if (errMsg.startsWith('Maximum Payment using ')) {
-                            jQuery('.twoinc-pay-box.err-amt-max').show()
+                            twoincDomHelper.togglePaySubtitleDesc('errored', '.err-amt-max')
                         } else if (errMsg.includes('Invalid phone number')) {
-                            jQuery('.twoinc-pay-box.err-phone').show()
+                            twoincDomHelper.togglePaySubtitleDesc('errored', '.err-phone')
                             twoincDomHelper.markFieldInvalid('billing_phone_field')
                         } else if (errMsg === 'SAME_BUYER_SELLER_ERROR') {
-                            jQuery('.twoinc-pay-box.err-buyer-same-seller').show()
+                            twoincDomHelper.togglePaySubtitleDesc('errored', '.buyer-same-seller')
                         } else {
-                            jQuery('.twoinc-pay-box.err-payment-default').show()
+                            twoincDomHelper.togglePaySubtitleDesc('errored', '.err-payment-default')
                         }
                         clearInterval(twoincSubtitleExistCheck)
                    }
@@ -1690,12 +1716,10 @@ class Twoinc {
                 let twoincSubtitleExistCheck = setInterval(function() {
                     if (jQuery('#payment .blockOverlay').length === 0) {
                         // woocommerce's update_checkout is not running
-                        jQuery('.twoinc-pay-box, .twoinc-pay-sub').hide()
-                        twoincDomHelper.showHideImportant('.twoinc-pay-sub.loader', 'hide')
                         if (errMsg === 'REJECTED') {
-                            jQuery('.twoinc-pay-box.err-payment-rejected').show()
+                            twoincDomHelper.togglePaySubtitleDesc('errored', '.err-payment-rejected')
                         } else {
-                            jQuery('.twoinc-pay-box.err-payment-default').show()
+                            twoincDomHelper.togglePaySubtitleDesc('errored', '.err-payment-default')
                         }
                         clearInterval(twoincSubtitleExistCheck)
                    }
