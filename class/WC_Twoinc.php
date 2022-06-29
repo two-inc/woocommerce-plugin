@@ -50,7 +50,8 @@ if (!class_exists('WC_Twoinc')) {
                 strval($this->get_merchant_default_days_on_invoice())
             );
             $this->description = sprintf(
-                '%s%s',
+                '%s%s%s',
+                $this->get_pay_subtitle(),
                 $this->get_pay_box_description(),
                 $this->get_abt_twoinc_html()
             );
@@ -258,22 +259,12 @@ if (!class_exists('WC_Twoinc')) {
                     <div class="twoinc-pay-box declare-aggrement" style="display: none;">%s</div>
                     <div class="twoinc-pay-box err-payment-default" style="display: none;">%s</div>
                     <div class="twoinc-pay-box err-payment-rejected" style="display: none;">%s</div>
-                    <div class="twoinc-pay-box err-country" style="display: none;">%s</div>
                     <div class="twoinc-pay-box err-buyer-same-seller" style="display: none;">%s</div>
                     <div class="twoinc-pay-box err-amt-max" style="display: none;">%s</div>
                     <div class="twoinc-pay-box err-amt-min" style="display: none;">%s</div>
                     <div class="twoinc-pay-box err-phone" style="display: none;">%s</div>
                 </div>',
-                sprintf(
-                    '- %s<br>- <span class="payment-term-number">%s</span><span class="payment-term-nonumber">%s</span><br>- %s',
-                    __('Express checkout', 'twoinc-payment-gateway'),
-                    sprintf(
-                        __('Pay in %s days, at no extra cost', 'twoinc-payment-gateway'),
-                        '<span class="due-in-days">' . strval($this->get_merchant_default_days_on_invoice()) . '</span>'
-                    ),
-                    __('Pay on invoice with agreed terms', 'twoinc-payment-gateway'),
-                    $this->get_payment_description_msg()
-                ),
+                __('The latest way to pay for your online business purchases. You will receive an invoice from Two when your order has been processed.', 'twoinc-payment-gateway'),
                 sprintf(
                     '%s <span class="twoinc-buyer-name-placeholder">%s</span><span class="twoinc-buyer-name"></span>.',
                     __('By completing the purchase, you verify that you have the legal right to purchase on behalf of', 'twoinc-payment-gateway'),
@@ -282,7 +273,6 @@ if (!class_exists('WC_Twoinc')) {
                 ),
                 __('Invoice purchase is not available for this order', 'twoinc-payment-gateway'),
                 __('We\'ve checked your company\'s details and are unable to provide invoice credit for this order', 'twoinc-payment-gateway'),
-                __('Two is not available as a payment option in the selected region', 'twoinc-payment-gateway'),
                 __('Buyer and merchant may not be the same company', 'twoinc-payment-gateway'),
                 __('Order value exceeds maximum limit', 'twoinc-payment-gateway'),
                 __('Order value is below minimum limit', 'twoinc-payment-gateway'),
@@ -292,36 +282,43 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
+         * Get payment subtitle
+         */
+        public function get_pay_subtitle(){
+            return sprintf(
+                '<div class="twoinc-subtitle">
+                    <div class="twoinc-pay-sub explain-phrase">
+                        %s <span class="twoinc-pay-sub require-inputs">%s</span>
+                    </div>
+                    <img class="twoinc-pay-sub loader" style="display: none!important;" src="%s" />
+                </div> ',
+                __('Two lets your business pay later for the goods you purchase online.', 'twoinc-payment-gateway'),
+                __('Enter your company name to get started.', 'twoinc-payment-gateway'),
+                WC_TWOINC_PLUGIN_URL . '/assets/images/loader.svg'
+            );
+        }
+
+        /**
+         * Get payment HTML title
+         */
+        public function get_pay_html_title(){
+            return sprintf(
+                '<span class="payment-term-number">%s</span><span class="payment-term-nonumber">%s</span>',
+                sprintf(
+                    __($this->get_option('title'), 'twoinc-payment-gateway'),
+                    '<span class="due-in-days">' . strval($this->get_merchant_default_days_on_invoice()) . '</span>'
+                ),
+                __('Pay on invoice with agreed terms', 'twoinc-payment-gateway')
+            );
+        }
+
+        /**
          * Add filter to gateway payment title
          */
         public function change_twoinc_payment_title(){
             add_filter('woocommerce_gateway_title', function ($title, $payment_id) {
                 if ($payment_id === 'woocommerce-gateway-tillit') {
-                    $title = sprintf(
-                        '<span class="payment-term-number">%s</span><span class="payment-term-nonumber">%s</span>
-                        <div class="twoinc-subtitle">
-                            <div class="twoinc-pay-sub require-inputs">%s</div>
-                            <div class="twoinc-pay-sub explain-details" style="display: none;">%s</div>
-                            <img class="twoinc-pay-sub loader" style="display: none!important;" src="%s" />
-                        </div> ',
-                        sprintf(
-                            __($this->get_option('title'), 'twoinc-payment-gateway'),
-                            '<span class="due-in-days">' . strval($this->get_merchant_default_days_on_invoice()) . '</span>'
-                        ),
-                        __('Pay on invoice with agreed terms', 'twoinc-payment-gateway'),
-                        __('Enter company name to pay on invoice', 'twoinc-payment-gateway'),
-                        sprintf(
-                            '- %s<br>- <span class="payment-term-number">%s</span><span class="payment-term-nonumber">%s</span><br>- %s',
-                            __('Express checkout', 'twoinc-payment-gateway'),
-                            sprintf(
-                                __('Pay in %s days, at no extra cost', 'twoinc-payment-gateway'),
-                                '<span class="due-in-days">' . strval($this->get_merchant_default_days_on_invoice()) . '</span>'
-                            ),
-                            __('Pay on invoice with agreed terms', 'twoinc-payment-gateway'),
-                            $this->get_payment_description_msg()
-                        ),
-                        WC_TWOINC_PLUGIN_URL . '/assets/images/loader.svg'
-                    );
+                    $title = $this->get_pay_html_title();
                 }
                 return $title;
             }, 10, 2);
