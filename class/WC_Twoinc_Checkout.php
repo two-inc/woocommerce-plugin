@@ -283,10 +283,9 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             if (property_exists($this, 'twoinccall_render_twoinc_fields')) return;
             $this->twoinccall_render_twoinc_fields = true;
 
-            ob_start();
-            require_once WC_TWOINC_PLUGIN_PATH . '/views/woocommerce_checkout.php';
-            $content = ob_get_clean();
-            echo $content;
+            // Use include() instead of ob_start(), require_once and ob_get_clean()
+            // because some site may have memory limit that prevent the execution
+            include(WC_TWOINC_PLUGIN_PATH . '/views/woocommerce_checkout.php');
         }
 
         /**
@@ -296,10 +295,11 @@ if (!class_exists('WC_Twoinc_Checkout')) {
          */
         public function render_twoinc_representative_fields()
         {
-            ob_start();
-            require_once WC_TWOINC_PLUGIN_PATH . '/views/woocommerce_after_checkout_billing_form.php';
-            $content = ob_get_clean();
-            echo $content;
+            // Make sure this function is called only once per run
+            if (property_exists($this, 'twoinccall_render_twoinc_representative_fields')) return;
+            $this->twoinccall_render_twoinc_representative_fields = true;
+
+            include(WC_TWOINC_PLUGIN_PATH . '/views/woocommerce_after_checkout_billing_form.php');
         }
 
         /**
@@ -319,10 +319,11 @@ if (!class_exists('WC_Twoinc_Checkout')) {
          * Customize for Order Pay page when merchant installed "Phone Orders for WooCommerce" plugin
          */
         public function order_pay_page_customize() {
-            ob_start();
-            require_once WC_TWOINC_PLUGIN_PATH . '/views/woocommerce_order_pay.php';
-            $content = ob_get_clean();
-            echo $content;
+            // Make sure this function is called only once per run
+            if (property_exists($this, 'twoinccall_order_pay_page_customize')) return;
+            $this->twoinccall_order_pay_page_customize = true;
+
+            include(WC_TWOINC_PLUGIN_PATH . '/views/woocommerce_order_pay.php');
         }
 
         /**
