@@ -8,10 +8,19 @@ let twoincUtilHelper = {
     },
 
     /**
-     * Check if selected country is supported by Twoinc
+     * Check if any element in the list is null or empty
      */
-    isCountrySupported: function() {
-        return ['NO', 'GB', 'SE'].includes(jQuery('#billing_country').val())
+    isAnyElementEmpty: function(values) {
+
+        for (let i = 0; i < values.length; i++) {
+            const v = values[i]
+            if (!v || v.length === 0) {
+                return true
+            }
+        }
+
+        return false
+
     },
 
     /**
@@ -514,7 +523,7 @@ let twoincDomHelper = {
         if (twoincDomHelper.isSelectedPaymentTwoinc()) {
             requiredBusinessTargets.push('#billing_phone_display_field')
         }
-        if (twoincUtilHelper.isCountrySupported()) {
+        if (twoincDomHelper.isCountrySupported()) {
             if (window.twoinc.company_name_search === 'yes') {
                 visibleBusinessTargets.push('#billing_company_display_field')
                 if (twoincDomHelper.isSelectedPaymentTwoinc()) {
@@ -881,6 +890,13 @@ let twoincDomHelper = {
         companyNotInBtn.removeClass('company_not_in_btn')
         return companyNotInBtn
 
+    },
+
+    /**
+     * Check if selected country is supported by Twoinc
+     */
+    isCountrySupported: function() {
+        return ['NO', 'GB', 'SE'].includes(jQuery('#billing_country').val())
     },
 
     /**
@@ -1508,18 +1524,9 @@ class Twoinc {
             return false
         }
 
-        let can = true
         let values = [].concat(Object.values(this.customerCompany))
 
-        for (let i = 0; i < values.length; i++) {
-            const value = values[i]
-            if (!value || value.length === 0) {
-                can = false
-                break
-            }
-        }
-
-        return can
+        return !twoincUtilHelper.isAnyElementEmpty(values)
 
     }
 
@@ -1544,14 +1551,18 @@ class Twoinc {
             if (!tax_amount) {
                 tax_amount = 0
             }
+            let buyer = {
+                "company": Twoinc.getInstance().customerCompany
+            }
+            if (!twoincUtilHelper.isAnyElementEmpty(Object.values(Twoinc.getInstance().customerRepresentative))) {
+                buyer["representative"] = Twoinc.getInstance().customerRepresentative
+            }
 
             let jsonBody = JSON.stringify({
                 "merchant_short_name": window.twoinc.merchant_short_name,
                 "gross_amount": "" + gross_amount,
                 "invoice_type": 'FUNDED_INVOICE',
-                "buyer": {
-                    "company": Twoinc.getInstance().customerCompany
-                },
+                "buyer": buyer,
                 "currency": window.twoinc.currency,
                 "line_items": [{
                     "name": "Cart",
