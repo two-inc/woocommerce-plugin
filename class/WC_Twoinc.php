@@ -1560,14 +1560,14 @@ if (!class_exists('WC_Twoinc')) {
                     'title'       => __('Two API Key', 'twoinc-payment-gateway'),
                     'type'        => 'password'
                 ],
-                'section_invoice_settings' => [
-                    'type'        => 'title',
-                    'title'       => __('Invoice settings', 'twoinc-payment-gateway')
-                ],
-                'merchant_logo' => [
-                    'title'       => __('Add a logo to the invoice', 'twoinc-payment-gateway'),
-                    'type'        => 'logo'
-                ],
+                // 'section_invoice_settings' => [
+                //     'type'        => 'title',
+                //     'title'       => __('Invoice settings', 'twoinc-payment-gateway')
+                // ],
+                // 'merchant_logo' => [
+                //     'title'       => __('Add a logo to the invoice', 'twoinc-payment-gateway'),
+                //     'type'        => 'logo'
+                // ],s
                 'section_checkout_options' => [
                     'type'        => 'title',
                     'title'       => __('Checkout options', 'twoinc-payment-gateway')
