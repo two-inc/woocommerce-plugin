@@ -1551,18 +1551,15 @@ class Twoinc {
             if (!tax_amount) {
                 tax_amount = 0
             }
-            let buyer = {
-                "company": Twoinc.getInstance().customerCompany
-            }
-            if (!twoincUtilHelper.isAnyElementEmpty(Object.values(Twoinc.getInstance().customerRepresentative))) {
-                buyer["representative"] = Twoinc.getInstance().customerRepresentative
-            }
 
             let jsonBody = JSON.stringify({
                 "merchant_short_name": window.twoinc.merchant_short_name,
                 "gross_amount": "" + gross_amount,
                 "invoice_type": 'FUNDED_INVOICE',
-                "buyer": buyer,
+                "buyer": {
+                    "company": Twoinc.getInstance().customerCompany,
+                    "representative": Twoinc.getInstance().customerRepresentative
+                },
                 "currency": window.twoinc.currency,
                 "line_items": [{
                     "name": "Cart",
