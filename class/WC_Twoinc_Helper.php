@@ -646,6 +646,41 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
+         * Get Order Unsecured Hash
+         *
+         * @param $obj
+         *
+         * @return string
+         */
+        public static function hash_order($order, $twoinc_meta) {
+            $twoinc_order = WC_Twoinc_Helper::compose_twoinc_order(
+                $order,
+                $twoinc_meta['order_reference'],
+                $twoinc_meta['company_id'],
+                $twoinc_meta['department'],
+                $twoinc_meta['project'],
+                $twoinc_meta['purchase_order_number'],
+                $twoinc_meta['payment_reference_message'],
+                $twoinc_meta['payment_reference_ocr'],
+                $twoinc_meta['payment_reference'],
+                $twoinc_meta['payment_reference_type'],
+                ''
+            );
+            return WC_Twoinc_Helper::hash_obj($twoinc_order);
+        }
+
+        /**
+         * Get Unsecured Hash
+         *
+         * @param $obj
+         *
+         * @return string
+         */
+        public static function hash_obj($obj) {
+            return md5(json_encode(WC_Twoinc_Helper::utf8ize($obj)));
+        }
+
+        /**
          * Recursively compare arrays
          *
          * @param $src_arr
