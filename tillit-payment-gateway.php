@@ -3,7 +3,7 @@
  * Plugin Name: Two - BNPL for businesses
  * Plugin URI: https://two.inc
  * Description: Integration between WooCommerce and Two
- * Version: 2.10.0
+ * Version: 2.11.0
  * Author: Two
  * Author URI: https://two.inc
  * Text Domain: twoinc-payment-gateway
@@ -11,8 +11,17 @@
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  */
 
+// Ibrahim
 // Make sure WooCommerce is active
-if (!in_array('woocommerce/woocommerce.php', apply_filters('active_plugins', get_option('active_plugins')))) return;
+// commented out because this will not work in multisites wordpress
+// if (!in_array('woocommerce/woocommerce.php', apply_filters('active_plugins', get_option('active_plugins')))) return;
+$activeplugins =  apply_filters('active_plugins', get_option('active_plugins'));
+$activesiteplugins = apply_filters('active_sitewide_plugins', get_site_option('active_sitewide_plugins'));
+if ($activesiteplugins) {
+    $activeplugins = array_merge($activeplugins, array_keys($activesiteplugins));
+}
+if (!in_array('woocommerce/woocommerce.php', $activeplugins)) return;
+
 
 // Define the plugin URL
 define('WC_TWOINC_PLUGIN_URL', plugin_dir_url(__FILE__));

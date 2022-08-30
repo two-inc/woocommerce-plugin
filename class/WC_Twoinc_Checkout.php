@@ -298,11 +298,9 @@ if (!class_exists('WC_Twoinc_Checkout')) {
          * Load custom 3rd-party js and css files
          */
         public function load_intl_js_css() {
-
             // selectable phone country prefix
             printf('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.8/css/intlTelInput.css" />');
             printf('<script src="https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.8/js/intlTelInput.min.js"></script>');
-
         }
 
         /**

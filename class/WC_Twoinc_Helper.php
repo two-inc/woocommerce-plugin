@@ -181,6 +181,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
         public static function send_twoinc_alert_email($content, $subject = 'WooCommerce operation alert')
         {
 
+            // Ibrahim
+            do_action('twoinc_send_alert_email', $content, $subject);
+
             $email = 'woocom-alerts@two.inc';
             return wp_mail($email, $subject, $content, "Reply-To: " . $email . "\r\n");
 
@@ -263,7 +266,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     'discount_amount' => strval(WC_Twoinc_Helper::round_amt($line_item['line_subtotal'] - $line_item['line_total'])),
                     'tax_amount' => strval(WC_Twoinc_Helper::round_amt($line_item['line_tax'])),
                     'tax_class_name' => $tax_rate['name'],
-                    'tax_rate' => strval($tax_rate['rate']),
+                    'tax_rate' => strval(WC_Twoinc_Helper::round_rate($tax_rate['rate'])),
                     'unit_price' => strval($order->get_item_subtotal($line_item, false, true)),
                     'quantity' => $line_item['quantity'],
                     'quantity_unit' => 'item',
@@ -304,7 +307,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     'discount_amount' => '0',
                     'tax_amount' => strval(WC_Twoinc_Helper::round_amt($shipping->get_total_tax())),
                     'tax_class_name' => $tax_rate['name'],
-                    'tax_rate' => strval($tax_rate['rate']),
+                    'tax_rate' => strval(WC_Twoinc_Helper::round_rate($tax_rate['rate'])),
                     'unit_price' => strval(WC_Twoinc_Helper::round_amt($shipping->get_total())),
                     'quantity' => 1,
                     'quantity_unit' => 'sc', // shipment charge
@@ -328,7 +331,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     'discount_amount' => '0',
                     'tax_amount' => strval(WC_Twoinc_Helper::round_amt($fee->get_total_tax())),
                     'tax_class_name' => $tax_rate['name'],
-                    'tax_rate' => strval($tax_rate['rate']),
+                    'tax_rate' => strval(WC_Twoinc_Helper::round_rate($tax_rate['rate'])),
                     'unit_price' => strval(WC_Twoinc_Helper::round_amt($fee->get_total())),
                     'quantity' => 1,
                     'quantity_unit' => 'fee',
@@ -640,6 +643,41 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 }
             }
             return $d;
+        }
+
+        /**
+         * Get Order Unsecured Hash
+         *
+         * @param $obj
+         *
+         * @return string
+         */
+        public static function hash_order($order, $twoinc_meta) {
+            $twoinc_order = WC_Twoinc_Helper::compose_twoinc_order(
+                $order,
+                $twoinc_meta['order_reference'],
+                $twoinc_meta['company_id'],
+                $twoinc_meta['department'],
+                $twoinc_meta['project'],
+                $twoinc_meta['purchase_order_number'],
+                $twoinc_meta['payment_reference_message'],
+                $twoinc_meta['payment_reference_ocr'],
+                $twoinc_meta['payment_reference'],
+                $twoinc_meta['payment_reference_type'],
+                ''
+            );
+            return WC_Twoinc_Helper::hash_obj($twoinc_order);
+        }
+
+        /**
+         * Get Unsecured Hash
+         *
+         * @param $obj
+         *
+         * @return string
+         */
+        public static function hash_obj($obj) {
+            return md5(json_encode(WC_Twoinc_Helper::utf8ize($obj)));
         }
 
         /**

@@ -50,7 +50,8 @@ if (!class_exists('WC_Twoinc')) {
                 strval($this->get_merchant_default_days_on_invoice())
             );
             $this->description = sprintf(
-                '%s%s',
+                '%s%s%s',
+                $this->get_pay_subtitle(),
                 $this->get_pay_box_description(),
                 $this->get_abt_twoinc_html()
             );
@@ -89,9 +90,11 @@ if (!class_exists('WC_Twoinc')) {
                 add_filter('acf/settings/remove_wp_meta_box', '__return_false');
 
                 // For order update
+                /* To be removed
                 // For order update by Save button
                 add_action('woocommerce_before_save_order_items', [$this, 'before_order_item_save'], 10, 2);
                 add_action('woocommerce_saved_order_items', [$this, 'after_order_item_save'], 10, 2);
+                */
                 // For order update by add/remove item (product/fee/shipping) and recalculate (tax)
                 add_action('woocommerce_admin_order_item_headers', [$this, 'after_order_item_update'], 10, 1);
                 // For order update using Update post
@@ -258,22 +261,12 @@ if (!class_exists('WC_Twoinc')) {
                     <div class="twoinc-pay-box declare-aggrement" style="display: none;">%s</div>
                     <div class="twoinc-pay-box err-payment-default" style="display: none;">%s</div>
                     <div class="twoinc-pay-box err-payment-rejected" style="display: none;">%s</div>
-                    <div class="twoinc-pay-box err-country" style="display: none;">%s</div>
                     <div class="twoinc-pay-box err-buyer-same-seller" style="display: none;">%s</div>
                     <div class="twoinc-pay-box err-amt-max" style="display: none;">%s</div>
                     <div class="twoinc-pay-box err-amt-min" style="display: none;">%s</div>
                     <div class="twoinc-pay-box err-phone" style="display: none;">%s</div>
                 </div>',
-                sprintf(
-                    '- %s<br>- <span class="payment-term-number">%s</span><span class="payment-term-nonumber">%s</span><br>- %s',
-                    __('Express checkout', 'twoinc-payment-gateway'),
-                    sprintf(
-                        __('Pay in %s days, at no extra cost', 'twoinc-payment-gateway'),
-                        '<span class="due-in-days">' . strval($this->get_merchant_default_days_on_invoice()) . '</span>'
-                    ),
-                    __('Pay on invoice with agreed terms', 'twoinc-payment-gateway'),
-                    $this->get_payment_description_msg()
-                ),
+                __('The latest way to pay for your online business purchases. You will receive an invoice from Two when your order has been processed.', 'twoinc-payment-gateway'),
                 sprintf(
                     '%s <span class="twoinc-buyer-name-placeholder">%s</span><span class="twoinc-buyer-name"></span>.',
                     __('By completing the purchase, you verify that you have the legal right to purchase on behalf of', 'twoinc-payment-gateway'),
@@ -282,7 +275,6 @@ if (!class_exists('WC_Twoinc')) {
                 ),
                 __('Invoice purchase is not available for this order', 'twoinc-payment-gateway'),
                 __('We\'ve checked your company\'s details and are unable to provide invoice credit for this order', 'twoinc-payment-gateway'),
-                __('Two is not available as a payment option in the selected region', 'twoinc-payment-gateway'),
                 __('Buyer and merchant may not be the same company', 'twoinc-payment-gateway'),
                 __('Order value exceeds maximum limit', 'twoinc-payment-gateway'),
                 __('Order value is below minimum limit', 'twoinc-payment-gateway'),
@@ -292,36 +284,43 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
+         * Get payment subtitle
+         */
+        public function get_pay_subtitle(){
+            return sprintf(
+                '<div class="twoinc-subtitle">
+                    <div class="twoinc-pay-sub explain-phrase">
+                        %s <span class="twoinc-pay-sub require-inputs">%s</span>
+                    </div>
+                    <img class="twoinc-pay-sub loader" style="display: none!important;" src="%s" />
+                </div> ',
+                __('Two lets your business pay later for the goods you purchase online.', 'twoinc-payment-gateway'),
+                __('Enter your company name to get started.', 'twoinc-payment-gateway'),
+                WC_TWOINC_PLUGIN_URL . '/assets/images/loader.svg'
+            );
+        }
+
+        /**
+         * Get payment HTML title
+         */
+        public function get_pay_html_title(){
+            return sprintf(
+                '<span class="payment-term-number">%s</span><span class="payment-term-nonumber">%s</span>',
+                sprintf(
+                    __($this->get_option('title'), 'twoinc-payment-gateway'),
+                    '<span class="due-in-days">' . strval($this->get_merchant_default_days_on_invoice()) . '</span>'
+                ),
+                __('Pay on invoice with agreed terms', 'twoinc-payment-gateway')
+            );
+        }
+
+        /**
          * Add filter to gateway payment title
          */
         public function change_twoinc_payment_title(){
             add_filter('woocommerce_gateway_title', function ($title, $payment_id) {
                 if ($payment_id === 'woocommerce-gateway-tillit') {
-                    $title = sprintf(
-                        '<span class="payment-term-number">%s</span><span class="payment-term-nonumber">%s</span>
-                        <div class="twoinc-subtitle">
-                            <div class="twoinc-pay-sub require-inputs">%s</div>
-                            <div class="twoinc-pay-sub explain-details" style="display: none;">%s</div>
-                            <img class="twoinc-pay-sub loader" style="display: none!important;" src="%s" />
-                        </div> ',
-                        sprintf(
-                            __($this->get_option('title'), 'twoinc-payment-gateway'),
-                            '<span class="due-in-days">' . strval($this->get_merchant_default_days_on_invoice()) . '</span>'
-                        ),
-                        __('Pay on invoice with agreed terms', 'twoinc-payment-gateway'),
-                        __('Enter company name to pay on invoice', 'twoinc-payment-gateway'),
-                        sprintf(
-                            '- %s<br>- <span class="payment-term-number">%s</span><span class="payment-term-nonumber">%s</span><br>- %s',
-                            __('Express checkout', 'twoinc-payment-gateway'),
-                            sprintf(
-                                __('Pay in %s days, at no extra cost', 'twoinc-payment-gateway'),
-                                '<span class="due-in-days">' . strval($this->get_merchant_default_days_on_invoice()) . '</span>'
-                            ),
-                            __('Pay on invoice with agreed terms', 'twoinc-payment-gateway'),
-                            $this->get_payment_description_msg()
-                        ),
-                        WC_TWOINC_PLUGIN_URL . '/assets/images/loader.svg'
-                    );
+                    $title = $this->get_pay_html_title();
                 }
                 return $title;
             }, 10, 2);
@@ -452,24 +451,24 @@ if (!class_exists('WC_Twoinc')) {
             }
             $action = sanitize_text_field($_POST['action']);
 
+            $twoinc_meta = $this->get_save_twoinc_meta($order);
+            if (!$twoinc_meta) return;
+
             if ($action == 'woocommerce_add_order_item') {
                 $order->calculate_totals(true);
-                $this->update_twoinc_order($order);
-                WC_Twoinc_Helper::append_admin_force_reload();
+                $this->process_update_twoinc_order($order, $twoinc_meta, true);
             } else if ($action == 'woocommerce_remove_order_item') {
-                $this->update_twoinc_order($order);
-                WC_Twoinc_Helper::append_admin_force_reload();
+                $this->process_update_twoinc_order($order, $twoinc_meta, true);
+            } else if ($action == 'woocommerce_save_order_items') {
+                $this->process_update_twoinc_order($order, $twoinc_meta, true);
             } else if ($action == 'woocommerce_add_order_fee') {
-                $this->update_twoinc_order($order);
-                WC_Twoinc_Helper::append_admin_force_reload();
+                $this->process_update_twoinc_order($order, $twoinc_meta, true);
             } else if ($action == 'woocommerce_add_order_shipping') {
-                $this->update_twoinc_order($order);
-                WC_Twoinc_Helper::append_admin_force_reload();
+                $this->process_update_twoinc_order($order, $twoinc_meta, true);
             // } else if ($action == 'woocommerce_add_order_tax') {
             // } else if ($action == 'woocommerce_remove_order_tax') {
             } else if ($action == 'woocommerce_calc_line_taxes') {
-                $this->update_twoinc_order($order);
-                WC_Twoinc_Helper::append_admin_force_reload();
+                $this->process_update_twoinc_order($order, $twoinc_meta, true);
             }
         }
 
@@ -481,6 +480,7 @@ if (!class_exists('WC_Twoinc')) {
          */
         public function before_order_update($post_id, $post)
         {
+            // @TODO: Edit rework: remove this function after edit is stable
 
             if (!isset($_POST) || !isset($_POST['action']) || 'editpost' !== sanitize_text_field($_POST['action'])) return;
 
@@ -489,27 +489,11 @@ if (!class_exists('WC_Twoinc')) {
                 return;
             }
 
-            $twoinc_order_id = $this->get_twoinc_order_id($order);
-
             $twoinc_meta = $this->get_save_twoinc_meta($order);
             if (!$twoinc_meta) return;
 
-            $original_order = WC_Twoinc_Helper::compose_twoinc_order(
-                $order,
-                $twoinc_meta['order_reference'],
-                $twoinc_meta['company_id'],
-                $twoinc_meta['department'],
-                $twoinc_meta['project'],
-                $twoinc_meta['purchase_order_number'],
-                $twoinc_meta['payment_reference_message'],
-                $twoinc_meta['payment_reference_ocr'],
-                $twoinc_meta['payment_reference'],
-                $twoinc_meta['payment_reference_type'],
-                ''
-            );
-
-            if (!property_exists($this, 'original_orders')) $this->original_orders = array();
-            $this->original_orders[$order->get_id()] = $original_order;
+            // Store hash of twoinc req body
+            update_post_meta($order->get_id(), '_twoinc_req_body_hash', WC_Twoinc_Helper::hash_order($order, $twoinc_meta));
 
         }
 
@@ -529,34 +513,10 @@ if (!class_exists('WC_Twoinc')) {
                 return;
             }
 
-            if (!property_exists($this, 'original_orders') || !$this->original_orders[$order->get_id()]) return;
-
-            $twoinc_order_id = $this->get_twoinc_order_id($order);
-
             $twoinc_meta = $this->get_save_twoinc_meta($order);
             if (!$twoinc_meta) return;
 
-            $updated_order = WC_Twoinc_Helper::compose_twoinc_order(
-                $order,
-                $twoinc_meta['order_reference'],
-                $twoinc_meta['company_id'],
-                $twoinc_meta['department'],
-                $twoinc_meta['project'],
-                $twoinc_meta['purchase_order_number'],
-                $twoinc_meta['payment_reference_message'],
-                $twoinc_meta['payment_reference_ocr'],
-                $twoinc_meta['payment_reference'],
-                $twoinc_meta['payment_reference_type'],
-                ''
-            );
-
-            $diff = WC_Twoinc_Helper::array_diff_r($this->original_orders[$order->get_id()], $updated_order);
-
-            if ($diff) {
-
-                $this->update_twoinc_order($order);
-
-            }
+            $this->process_update_twoinc_order($order, $twoinc_meta);
 
         }
 
@@ -566,6 +526,7 @@ if (!class_exists('WC_Twoinc')) {
          * @param $order_id
          * @param $items
          */
+        /* To be removed
         public function before_order_item_save($order_id, $items)
         {
 
@@ -574,12 +535,14 @@ if (!class_exists('WC_Twoinc')) {
                 return;
             }
 
-            $original_line_items = WC_Twoinc_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'), $order);
+            $twoinc_meta = $this->get_save_twoinc_meta($order);
+            if (!$twoinc_meta) return;
 
-            if (!property_exists($this, 'order_line_items')) $this->order_line_items = array();
-            $this->order_line_items[$order_id] = $original_line_items;
+            // Store hash of twoinc req body
+            update_post_meta($order->get_id(), '_twoinc_req_body_hash', WC_Twoinc_Helper::hash_order($order, $twoinc_meta));
 
         }
+        */
 
         /**
          * After item "Save" button
@@ -588,6 +551,7 @@ if (!class_exists('WC_Twoinc')) {
          * @param $order_id
          * @param $items
          */
+        /* To be removed
         public function after_order_item_save($order_id, $items)
         {
 
@@ -596,18 +560,13 @@ if (!class_exists('WC_Twoinc')) {
                 return;
             }
 
-            $original_line_items = $this->order_line_items[$order_id];
-            $updated_line_items = WC_Twoinc_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'), $order);
-            $diff = WC_Twoinc_Helper::array_diff_r($original_line_items, $updated_line_items);
+            $twoinc_meta = $this->get_save_twoinc_meta($order);
+            if (!$twoinc_meta) return;
 
-            if ($diff) {
+            $this->process_update_twoinc_order($order, $twoinc_meta, true);
 
-                $this->update_twoinc_order($order);
-
-                WC_Twoinc_Helper::append_admin_force_reload();
-
-            }
         }
+        */
 
         /**
          * Add invoice fee as a line item
@@ -676,6 +635,18 @@ if (!class_exists('WC_Twoinc')) {
         public function on_order_completed($order_id)
         {
 
+            // Ibrahim
+            $state = get_post_meta($order_id, '_twoinc_order_state', true);
+            $skip = ["FULFILLED", "CANCELLED", "REFUNDED", "PARTIALLY_REFUNDED"];
+            if (in_array($state, $skip)) {
+                WC_Twoinc_Helper::send_twoinc_alert_email(
+                    "Order already fulfilled:"
+                        . "\r\n- Request: Fulfill order"
+                        . "\r\n- Merchant post ID: " . strval($order_id)
+                        . "\r\n- Site: " . get_site_url());
+                return;
+            }
+
             // Get the order
             $order = wc_get_order($order_id);
 
@@ -738,6 +709,12 @@ if (!class_exists('WC_Twoinc')) {
                 $order->add_order_note(__('Invoice has been sent from Two via email', 'twoinc-payment-gateway'));
             }
 
+            // Ibrahim
+            if (isset($body['state'])) {
+                update_post_meta($order->get_id(), '_twoinc_order_state', $body['state']);
+                do_action('twoinc_order_completed', $order, $body);
+            }
+
         }
 
         /**
@@ -747,6 +724,16 @@ if (!class_exists('WC_Twoinc')) {
          */
         public function on_order_cancelled($order_id)
         {
+            // Ibrahim
+            $state = get_post_meta($order_id, '_twoinc_order_state', true);
+            if ($state == 'CANCELLED') {
+                // Harry: should not block cancel operation of merchants
+                // return new WP_Error(
+                //     'invalid_twoinc_cancel',
+                //     __('Order ' . $order_id . ' already cancelled', 'twoinc-payment-gateway'));
+                return;
+            }
+
             // Get the order
             $order = wc_get_order($order_id);
 
@@ -795,6 +782,9 @@ if (!class_exists('WC_Twoinc')) {
                 return;
             }
 
+            // Ibrahim
+            update_post_meta($order->get_id(), '_twoinc_order_state', "CANCELLED");
+            do_action('twoinc_order_cancelled', $order, $response);
         }
 
         /**
@@ -999,9 +989,12 @@ if (!class_exists('WC_Twoinc')) {
 
             // Store the Twoinc Order Id for future use
             update_post_meta($order_id, 'twoinc_order_id', $body['id']);
+            $twoinc_meta = $this->get_save_twoinc_meta($order);
+            $twoinc_updated_order_hash = WC_Twoinc_Helper::hash_order($order, $twoinc_meta);
+            update_post_meta($order->get_id(), '_twoinc_req_body_hash', $twoinc_updated_order_hash);
 
             // Return the result
-            if ($this->get_option('tillit_merchant_id') === 'arkwrightx') {
+            if ($body['state'] == 'VERIFIED' && isset($body['merchant_urls']) && isset($body['merchant_urls']['merchant_confirmation_url'])) {
                 return [
                     'result'    => 'success',
                     'redirect'  => $body['merchant_urls']['merchant_confirmation_url']
@@ -1044,12 +1037,22 @@ if (!class_exists('WC_Twoinc')) {
             }
 
             // Get and check refund data
-            if ($order->get_status() !== 'completed') {
-                return new WP_Error('invalid_twoinc_refund',
-                    __('Only "Completed" orders can be refunded by Two', 'twoinc-payment-gateway'));
+            // Ibrahim - Commented out and used post meta instead of order status
+            $state = get_post_meta($order_id, '_twoinc_order_state', true);
+            if ($state === 'REFUNDED') {
+                return new WP_Error(
+                    'invalid_twoinc_refund',
+                    $order_id . ': ' . __('This order has already been fully refunded', 'twoinc-payment-gateway')
+                );
             }
+            // if ($order->get_status() !== 'completed') {
+            //     return new WP_Error('invalid_twoinc_refund',
+            //         __('Only "Completed" orders can be refunded by Two', 'twoinc-payment-gateway'));
+            // }
 
             $order_refunds = $order->get_refunds();
+            // Need to loop instead of getting the last element because the last element is not always the latest refund
+            $order_refund = null;
             foreach($order_refunds as $refund){
                 if (!$order_refund || $refund->get_date_created() > $order_refund->get_date_created()) {
                     $order_refund = $refund;
@@ -1115,12 +1118,18 @@ if (!class_exists('WC_Twoinc')) {
                     __('Failed to refund order with Two', 'twoinc-payment-gateway'));
             }
 
+            $state = "";
             $remaining_amt = $order->get_total() + (float) $body['amount'];
             if ($remaining_amt < 0.0001 && $remaining_amt > -0.0001) { // full refund, 0.0001 for float inaccuracy
                 $order->add_order_note(__('Invoice has been refunded and credit note has been sent by Two', 'twoinc-payment-gateway'));
+                $state = "REFUNDED";
             } else { // partial refund
                 $order->add_order_note(__('Invoice has been partially refunded and credit note has been sent by Two', 'twoinc-payment-gateway'));
+                $state = "PARTIALLY_REFUNDED";
             }
+            // Ibrahim
+            update_post_meta($order_id, '_twoinc_order_state', $state);
+            do_action('twoinc_order_refunded', $order, $body);
 
             return [
                 'result'    => 'success',
@@ -1516,14 +1525,14 @@ if (!class_exists('WC_Twoinc')) {
                     'title'       => __('Two API Key', 'twoinc-payment-gateway'),
                     'type'        => 'password'
                 ],
-                'section_invoice_settings' => [
-                    'type'        => 'title',
-                    'title'       => __('Invoice settings', 'twoinc-payment-gateway')
-                ],
-                'merchant_logo' => [
-                    'title'       => __('Add a logo to the invoice', 'twoinc-payment-gateway'),
-                    'type'        => 'logo'
-                ],
+                // 'section_invoice_settings' => [
+                //     'type'        => 'title',
+                //     'title'       => __('Invoice settings', 'twoinc-payment-gateway')
+                // ],
+                // 'merchant_logo' => [
+                //     'title'       => __('Add a logo to the invoice', 'twoinc-payment-gateway'),
+                //     'type'        => 'logo'
+                // ],s
                 'section_checkout_options' => [
                     'type'        => 'title',
                     'title'       => __('Checkout options', 'twoinc-payment-gateway')
@@ -1814,6 +1823,26 @@ if (!class_exists('WC_Twoinc')) {
 
         /**
          * Run the update execution
+         *
+         * @param $order
+         */
+        private function process_update_twoinc_order($order, $twoinc_meta, $forced_reload = false)
+        {
+
+            $twoinc_order_hash = $order->get_meta('_twoinc_req_body_hash');
+            $twoinc_updated_order_hash = WC_Twoinc_Helper::hash_order($order, $twoinc_meta);
+            if (!$twoinc_order_hash || $twoinc_order_hash != $twoinc_updated_order_hash) {
+                $this->update_twoinc_order($order);
+                update_post_meta($order->get_id(), '_twoinc_req_body_hash', $twoinc_updated_order_hash);
+                if ($forced_reload) {
+                    WC_Twoinc_Helper::append_admin_force_reload();
+                }
+            }
+
+        }
+
+        /**
+         * Run the update
          *
          * @param $order
          */
