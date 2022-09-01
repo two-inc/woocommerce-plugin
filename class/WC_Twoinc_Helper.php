@@ -357,7 +357,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
         public static function compose_twoinc_order(
             $order, $order_reference, $company_id, $department, $project, $purchase_order_number,
             $payment_reference_message = '', $payment_reference_ocr = '', $payment_reference = '', $payment_reference_type = '',
-            $tracking_id = '')
+            $tracking_id = '', $skip_nonce = false)
         {
 
             $billing_address = [
@@ -423,10 +423,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 'merchant_reference' => '',
                 'merchant_urls' => [
                     // 'merchant_confirmation_url' => $order->get_checkout_order_received_url(),
-                    'merchant_confirmation_url' => sprintf('%s/twoinc-payment-gateway/confirm?twoinc_confirm_order=%s&nonce=%s',
-                                                            get_home_url(),
-                                                            $order_reference,
-                                                            wp_create_nonce('twoinc_confirm')),
                     'merchant_cancel_order_url' => wp_specialchars_decode($order->get_cancel_order_url()),
                     'merchant_edit_order_url' => wp_specialchars_decode($order->get_edit_order_url()),
                     'merchant_order_verification_failed_url' => wp_specialchars_decode($order->get_cancel_order_url()),
@@ -442,6 +438,11 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     'expected_delivery_date' => date('Y-m-d', strtotime('+ 7 days'))
                 ]
             ];
+            if (!$skip_nonce) {
+                $req_body['merchant_urls']['merchant_confirmation_url'] = sprintf(
+                    '%s/twoinc-payment-gateway/confirm?twoinc_confirm_order=%s&nonce=%s',
+                    get_home_url(), $order_reference, wp_create_nonce('twoinc_confirm'));
+            }
 
             if ($purchase_order_number) {
                 $req_body['buyer_purchase_order_number'] = $purchase_order_number;
@@ -664,7 +665,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 $twoinc_meta['payment_reference_ocr'],
                 $twoinc_meta['payment_reference'],
                 $twoinc_meta['payment_reference_type'],
-                ''
+                '',
+                true
             );
             return WC_Twoinc_Helper::hash_obj($twoinc_order);
         }

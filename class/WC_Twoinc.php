@@ -989,7 +989,7 @@ if (!class_exists('WC_Twoinc')) {
 
             // Store the Twoinc Order Id for future use
             update_post_meta($order_id, 'twoinc_order_id', $body['id']);
-            $twoinc_meta = $this->get_save_twoinc_meta($order);
+            $twoinc_meta = $this->get_save_twoinc_meta($order, $body['id']);
             $twoinc_updated_order_hash = WC_Twoinc_Helper::hash_order($order, $twoinc_meta);
             update_post_meta($order->get_id(), '_twoinc_req_body_hash', $twoinc_updated_order_hash);
 
@@ -1729,18 +1729,22 @@ if (!class_exists('WC_Twoinc')) {
          *
          * @param $order
          */
-        private function get_save_twoinc_meta($order)
+        private function get_save_twoinc_meta($order, $optional_order_id = null)
         {
 
             $twoinc_order_id = $this->get_twoinc_order_id($order);
             if (!$twoinc_order_id) {
-                $order->add_order_note(__('Unable to retrieve the order information', 'twoinc-payment-gateway'));
-                WC_Twoinc_Helper::send_twoinc_alert_email(
-                    "Could not find Twoinc order ID:"
-                    . "\r\n- Request: Get order: get_save_twoinc_meta"
-                    . "\r\n- Merchant post ID: " . strval($order->get_id())
-                    . "\r\n- Site: " . get_site_url());
-                return;
+                if ($optional_order_id) {
+                    $twoinc_order_id = $optional_order_id;
+                } else {
+                    $order->add_order_note(__('Unable to retrieve the order information', 'twoinc-payment-gateway'));
+                    WC_Twoinc_Helper::send_twoinc_alert_email(
+                        "Could not find Twoinc order ID:"
+                        . "\r\n- Request: Get order: get_save_twoinc_meta"
+                        . "\r\n- Merchant post ID: " . strval($order->get_id())
+                        . "\r\n- Site: " . get_site_url());
+                    return;
+                }
             }
 
             $order_reference = $order->get_meta('_tillit_order_reference');
