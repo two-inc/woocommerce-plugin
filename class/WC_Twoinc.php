@@ -1217,9 +1217,11 @@ if (!class_exists('WC_Twoinc')) {
         {
 
             if (isset($_REQUEST['twoinc_confirm_order']) && isset($_REQUEST['nonce'])) {
-                $confirm_path = '/twoinc-payment-gateway/confirm';
-                $req_path = strtok($_SERVER["REQUEST_URI"], '?');
-                return strlen($req_path) >= strlen($confirm_path) && substr($req_path, -strlen($confirm_path)) === $confirm_path;
+                return true;
+                // Temporarily commented out until we find a solution for redirect plugins
+                // $confirm_path = '/twoinc-payment-gateway/confirm';
+                // $req_path = strtok($_SERVER["REQUEST_URI"], '?');
+                // return strlen($req_path) >= strlen($confirm_path) && substr($req_path, -strlen($confirm_path)) === $confirm_path;
             }
             return false;
         }
