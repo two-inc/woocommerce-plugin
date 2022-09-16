@@ -268,6 +268,7 @@ if (!class_exists('WC_Twoinc')) {
                     <div class="twoinc-pay-box err-amt-max" style="display: none;">%s</div>
                     <div class="twoinc-pay-box err-amt-min" style="display: none;">%s</div>
                     <div class="twoinc-pay-box err-phone" style="display: none;">%s</div>
+                    <div class="twoinc-pay-box err-enk-not-supported" style="display: none;">%s</div>
                 </div>',
                 __('The latest way to pay for your online business purchases. You will receive an invoice from Two when your order has been processed.', 'twoinc-payment-gateway'),
                 sprintf(
@@ -281,7 +282,8 @@ if (!class_exists('WC_Twoinc')) {
                 __('Buyer and merchant may not be the same company', 'twoinc-payment-gateway'),
                 __('Order value exceeds maximum limit', 'twoinc-payment-gateway'),
                 __('Order value is below minimum limit', 'twoinc-payment-gateway'),
-                __('Phone number is invalid', 'twoinc-payment-gateway')
+                __('Phone number is invalid', 'twoinc-payment-gateway'),
+                __('Sorry, ENK companies are not supported by Two.', 'twoinc-payment-gateway')
             );
 
         }
