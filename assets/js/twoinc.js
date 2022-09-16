@@ -185,6 +185,7 @@ let twoincSelectWooHelper = {
                 text: item.name,
                 html: item.highlight + ' (' + item.id + ')',
                 company_id: item.id,
+                company_code: item.code,
                 approved: false
             })
 
@@ -1232,6 +1233,9 @@ class Twoinc {
             'country_prefix': null,
             'organization_number': null
         }
+        this.customerCompanyInfo = {
+            'company_code': null
+        }
         this.customerRepresentative = {
             'email': null,
             'first_name': null,
@@ -1297,6 +1301,9 @@ class Twoinc {
 
                     // Set the company ID
                     Twoinc.getInstance().customerCompany.organization_number = data.company_id
+
+                    // Set the company code
+                    Twoinc.getInstance().customerCompanyInfo.company_code = data.company_code
 
                     // Set the company ID to HTML DOM
                     $companyId.val(data.company_id)
@@ -1585,10 +1592,8 @@ class Twoinc {
 
             let hashedBody = twoincUtilHelper.getUnsecuredHash(jsonBody)
             if (Twoinc.getInstance().orderIntentLog[hashedBody]) {
-                Twoinc.getInstance().orderIntentLog[hashedBody] = Twoinc.getInstance().orderIntentLog[hashedBody] + 1
+                twoincDomHelper.togglePaySubtitleDesc(...Twoinc.getInstance().orderIntentLog[hashedBody].split('|'))
                 return
-            } else {
-                Twoinc.getInstance().orderIntentLog[hashedBody] = 1
             }
             Twoinc.getInstance().orderIntentCheck['lastCheckHash'] = hashedBody
 
@@ -1596,6 +1601,11 @@ class Twoinc {
             Twoinc.getInstance().orderIntentCheck.interval = null
             Twoinc.getInstance().orderIntentCheck.pendingCheck = false
 
+            if (Twoinc.getInstance().customerCompanyInfo.company_code === 'ENK') {
+                Twoinc.getInstance().orderIntentLog[hashedBody] = 'errored|.err-enk-not-supported'
+                twoincDomHelper.togglePaySubtitleDesc(...Twoinc.getInstance().orderIntentLog[hashedBody].split('|'))
+                return
+            }
             if (!Twoinc.getInstance().isReadyApprovalCheck()) return
 
             twoincDomHelper.togglePaySubtitleDesc('checking-intent')
@@ -1665,22 +1675,12 @@ class Twoinc {
      */
     processOrderIntentResponse(response)
     {
+        let displayMsgId = ''
+        let invalidFields = []
+
         if (response.approved) {
 
-            // Update twoinc message
-            let twoincSubtitleExistCheck = setInterval(function() {
-                if (jQuery('#payment .blockOverlay').length === 0) {
-                    twoincDomHelper.togglePaySubtitleDesc('intent-approved')
-                    clearInterval(twoincSubtitleExistCheck)
-                }
-            }, 1000)
-
-            // Update order intent log
-            if (!this.orderIntentCheck['lastCheckOk']) {
-                this.orderIntentCheck['lastCheckOk'] = true
-                this.orderIntentLog = {}
-                this.orderIntentLog[this.orderIntentCheck['lastCheckHash']] = 1
-            }
+            displayMsgId = 'intent-approved'
 
         } else {
 
@@ -1696,52 +1696,45 @@ class Twoinc {
                     }
                 }
 
-                // Update twoinc message
-                let twoincSubtitleExistCheck = setInterval(function() {
-                    if (jQuery('#payment .blockOverlay').length === 0) {
-                        // woocommerce's update_checkout is not running
-                        if (errMsg.startsWith('Minimum Payment using ')) {
-                            twoincDomHelper.togglePaySubtitleDesc('errored', '.err-amt-min')
-                        } else if (errMsg.startsWith('Maximum Payment using ')) {
-                            twoincDomHelper.togglePaySubtitleDesc('errored', '.err-amt-max')
-                        } else if (errMsg.includes('Invalid phone number')) {
-                            twoincDomHelper.togglePaySubtitleDesc('errored', '.err-phone')
-                            twoincDomHelper.markFieldInvalid('billing_phone_field')
-                        } else if (errMsg === 'SAME_BUYER_SELLER_ERROR') {
-                            twoincDomHelper.togglePaySubtitleDesc('errored', '.buyer-same-seller')
-                        } else {
-                            twoincDomHelper.togglePaySubtitleDesc('errored', '.err-payment-default')
-                        }
-                        clearInterval(twoincSubtitleExistCheck)
-                   }
-                }, 1000)
+                if (errMsg.startsWith('Minimum Payment using ')) {
+                    displayMsgId = 'errored|.err-amt-min'
+                } else if (errMsg.startsWith('Maximum Payment using ')) {
+                    displayMsgId = 'errored|.err-amt-max'
+                } else if (errMsg.includes('Invalid phone number')) {
+                    displayMsgId = 'errored|.err-phone'
+                    invalidFields.append('billing_phone_field')
+                } else if (errMsg === 'SAME_BUYER_SELLER_ERROR') {
+                    displayMsgId = 'errored|.buyer-same-seller'
+                } else {
+                    displayMsgId = 'errored|.err-payment-default'
+                }
             } else {
                 let errMsg = null
-                if (response.approved === false) {
-                    errMsg = 'REJECTED'
+                if (response.approved === false) { // rejected
+                    displayMsgId = 'errored|.err-payment-rejected'
+                } else {
+                    displayMsgId = 'errored|.err-payment-default'
                 }
-
-                let twoincSubtitleExistCheck = setInterval(function() {
-                    if (jQuery('#payment .blockOverlay').length === 0) {
-                        // woocommerce's update_checkout is not running
-                        if (errMsg === 'REJECTED') {
-                            twoincDomHelper.togglePaySubtitleDesc('errored', '.err-payment-rejected')
-                        } else {
-                            twoincDomHelper.togglePaySubtitleDesc('errored', '.err-payment-default')
-                        }
-                        clearInterval(twoincSubtitleExistCheck)
-                   }
-                }, 1000)
             }
 
             // Update order intent log
-            if (this.orderIntentCheck['lastCheckOk']) {
-                this.orderIntentCheck['lastCheckOk'] = false
-                this.orderIntentLog = {}
-                this.orderIntentLog[this.orderIntentCheck['lastCheckHash']] = 1
-            }
+            this.orderIntentCheck['lastCheckOk'] = response.approved
+            // this.orderIntentLog = {}
+            this.orderIntentLog[this.orderIntentCheck['lastCheckHash']] = displayMsgId
 
         }
+
+        // Update twoinc message
+        let twoincSubtitleExistCheck = setInterval(function() {
+            if (jQuery('#payment .blockOverlay').length === 0) {
+                // woocommerce's update_checkout is not running
+                twoincDomHelper.togglePaySubtitleDesc(...displayMsgId.split('|'))
+                for (let fld of invalidFields) {
+                    twoincDomHelper.markFieldInvalid(fld)
+                }
+                clearInterval(twoincSubtitleExistCheck)
+           }
+        }, 1000)
 
     }
 
