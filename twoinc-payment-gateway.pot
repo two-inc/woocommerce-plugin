@@ -16,19 +16,15 @@ msgstr ""
 "X-Loco-Version: 2.5.2; wp-5.7\n"
 "X-Domain: twoinc-payment-gateway"
 
-#: class/WC_Twoinc.php:1521
-msgid "Add a logo to the invoice"
-msgstr ""
-
-#: class/WC_Twoinc.php:1556
+#: class/WC_Twoinc.php:1589
 msgid "Add input field for \"Department\""
 msgstr ""
 
-#: class/WC_Twoinc.php:1564
+#: class/WC_Twoinc.php:1597
 msgid "Add input field for \"Project\""
 msgstr ""
 
-#: class/WC_Twoinc.php:1572
+#: class/WC_Twoinc.php:1605
 msgid "Add input field for \"Purchase order number\""
 msgstr ""
 
@@ -36,82 +32,82 @@ msgstr ""
 msgid "Address"
 msgstr ""
 
-#: class/WC_Twoinc.php:1622
+#: class/WC_Twoinc.php:1655
 msgid "Address auto-complete"
 msgstr ""
 
-#: class/WC_Twoinc.php:1538
+#: class/WC_Twoinc.php:1571
 msgid ""
 "Adds a separate checkout for business customers. Two is only available in "
 "the business checkout."
 msgstr ""
 
-#: class/WC_Twoinc.php:1557
+#: class/WC_Twoinc.php:1590
 msgid ""
 "Adds an input field where buyers can input their department, input is shown "
 "on invoice."
 msgstr ""
 
-#: class/WC_Twoinc.php:1565
+#: class/WC_Twoinc.php:1598
 msgid ""
 "Adds an input field where buyers can input their project in the company, "
 "input is shown on invoice."
 msgstr ""
 
-#: class/WC_Twoinc.php:1573
+#: class/WC_Twoinc.php:1606
 msgid ""
 "Adds an input field where buyers can input their purchase order number, "
 "input is shown on invoice."
 msgstr ""
 
-#: class/WC_Twoinc.php:1506
+#: class/WC_Twoinc.php:1539
 msgid "API credentials"
 msgstr ""
 
-#: class/WC_Twoinc.php:1530
+#: class/WC_Twoinc.php:1563
 msgid "Approve buyer when phone and company name is filled out."
 msgstr ""
 
-#: class/WC_Twoinc.php:1611
+#: class/WC_Twoinc.php:1644
 msgid "Auto-complete settings"
 msgstr ""
 
-#: class/WC_Twoinc.php:815
+#: class/WC_Twoinc.php:829
 msgid "Billing Company ID"
 msgstr ""
 
-#: class/WC_Twoinc.php:809
+#: class/WC_Twoinc.php:823
 msgid "Billing Company name"
 msgstr ""
 
-#: class/WC_Twoinc.php:1458
+#: class/WC_Twoinc.php:1491
 msgid "Business"
 msgstr ""
 
-#: class/WC_Twoinc_Checkout.php:95
+#: class/WC_Twoinc_Checkout.php:91
 msgid "Business Customer"
 msgstr ""
 
-#: class/WC_Twoinc.php:1482
+#: class/WC_Twoinc.php:1515
 #, php-format
 msgid "Business invoice %s days"
 msgstr ""
 
-#: class/WC_Twoinc.php:276 class/WC_Twoinc_Helper.php:97
+#: class/WC_Twoinc.php:282 class/WC_Twoinc_Helper.php:97
 msgid "Buyer and merchant may not be the same company"
 msgstr ""
 
-#: class/WC_Twoinc.php:270
+#: class/WC_Twoinc.php:276
 msgid ""
 "By completing the purchase, you verify that you have the legal right to "
 "purchase on behalf of"
 msgstr ""
 
-#: class/WC_Twoinc.php:1526
+#: class/WC_Twoinc.php:1559
 msgid "Checkout options"
 msgstr ""
 
-#: class/WC_Twoinc.php:1491
+#: class/WC_Twoinc.php:1524
 msgid "Choose your settings"
 msgstr ""
 
@@ -119,59 +115,59 @@ msgstr ""
 msgid "City"
 msgstr ""
 
-#: class/WC_Twoinc.php:1499
+#: class/WC_Twoinc.php:1532
 msgid "Clear settings on deactivation of plug-in"
 msgstr ""
 
-#: class/WC_Twoinc_Checkout.php:187
+#: class/WC_Twoinc_Checkout.php:183
 msgid "Company ID"
 msgstr ""
 
-#: class/WC_Twoinc_Checkout.php:169 class/WC_Twoinc_Helper.php:124
+#: class/WC_Twoinc_Checkout.php:165 class/WC_Twoinc_Helper.php:124
 #: views/woocommerce_order_pay.php:35
 msgid "Company name"
 msgstr ""
 
-#: class/WC_Twoinc.php:1822 class/WC_Twoinc.php:1846
+#: class/WC_Twoinc.php:1879 class/WC_Twoinc.php:1903
 msgid "Could not edit the Two order"
 msgstr ""
 
-#: class/WC_Twoinc.php:1858
+#: class/WC_Twoinc.php:1915
 msgid "Could not edit the Two order, please check with Two admin"
 msgstr ""
 
-#: class/WC_Twoinc.php:1040
+#: class/WC_Twoinc.php:1057
 msgid "Could not find Two order ID"
 msgstr ""
 
-#: class/WC_Twoinc.php:350 class/WC_Twoinc.php:360
+#: class/WC_Twoinc.php:357 class/WC_Twoinc.php:367
 msgid "Could not forward invoice image url to Two"
 msgstr ""
 
-#: class/WC_Twoinc.php:1058
+#: class/WC_Twoinc.php:1085
 msgid "Could not initiate refund by Two"
 msgstr ""
 
-#: class/WC_Twoinc.php:963
+#: class/WC_Twoinc.php:977
 msgid "Could not request to create Two order"
 msgstr ""
 
-#: class/WC_Twoinc.php:687 class/WC_Twoinc.php:700
+#: class/WC_Twoinc.php:669 class/WC_Twoinc.php:695
 msgid "Could not update status"
 msgstr ""
 
-#: class/WC_Twoinc.php:759 class/WC_Twoinc.php:772
+#: class/WC_Twoinc.php:760 class/WC_Twoinc.php:783
 msgid "Could not update status to \"Cancelled\""
 msgstr ""
 
-#: class/WC_Twoinc.php:784
+#: class/WC_Twoinc.php:795
 #, php-format
 msgid ""
 "Could not update status to \"Cancelled\", please check with Two admin for id "
 "%s"
 msgstr ""
 
-#: class/WC_Twoinc.php:712
+#: class/WC_Twoinc.php:707
 #, php-format
 msgid ""
 "Could not update status to \"Fulfilled\" with Two, please check with Two "
@@ -186,19 +182,19 @@ msgstr ""
 msgid "Country / Region"
 msgstr ""
 
-#: class/WC_Twoinc.php:1412
+#: class/WC_Twoinc.php:1445
 msgid "Dashboard"
 msgstr ""
 
-#: class/WC_Twoinc.php:1592
+#: class/WC_Twoinc.php:1625
 msgid "Default to B2C check-out"
 msgstr ""
 
-#: class/WC_Twoinc.php:821 class/WC_Twoinc_Checkout.php:196
+#: class/WC_Twoinc.php:835 class/WC_Twoinc_Checkout.php:192
 msgid "Department"
 msgstr ""
 
-#: class/WC_Twoinc.php:1604
+#: class/WC_Twoinc.php:1637
 msgid "Display input tooltips"
 msgstr ""
 
@@ -206,48 +202,48 @@ msgstr ""
 msgid "Email"
 msgstr ""
 
-#: class/WC_Twoinc.php:1614
+#: class/WC_Twoinc.php:1647
 msgid "Enable company name search and auto-complete"
 msgstr ""
 
-#: class/WC_Twoinc.php:1476
+#: class/WC_Twoinc.php:1509
 msgid "Enable Two Payments"
 msgstr ""
 
-#: class/WC_Twoinc.php:1623
+#: class/WC_Twoinc.php:1656
 msgid ""
 "Enables automatically filling in the registered address from the national "
 "registry."
 msgstr ""
 
-#: class/WC_Twoinc.php:1615
+#: class/WC_Twoinc.php:1648
 msgid ""
 "Enables searching for company name in the national registry and "
 "automatically filling in name and national ID."
 msgstr ""
 
-#: class/WC_Twoinc.php:296
+#: class/WC_Twoinc.php:303
 msgid "Enter your company name to get started."
 msgstr ""
 
-#: class/WC_Twoinc.php:974
+#: class/WC_Twoinc.php:988
 msgid "Failed to process payment"
 msgstr ""
 
-#: class/WC_Twoinc.php:1112
+#: class/WC_Twoinc.php:1139
 msgid "Failed to refund order with Two"
 msgstr ""
 
-#: class/WC_Twoinc.php:1103
+#: class/WC_Twoinc.php:1130
 #, php-format
 msgid "Failed to refund order with Two, please check with Two admin for id %s"
 msgstr ""
 
-#: class/WC_Twoinc.php:1033 class/WC_Twoinc.php:1074
+#: class/WC_Twoinc.php:1050 class/WC_Twoinc.php:1101
 msgid "Failed to request refund order to Two"
 msgstr ""
 
-#: class/WC_Twoinc.php:1086
+#: class/WC_Twoinc.php:1113
 #, php-format
 msgid ""
 "Failed to request refund order to Two, please check with Two admin for id %s"
@@ -266,36 +262,32 @@ msgstr ""
 msgid "Integration between WooCommerce and Two"
 msgstr ""
 
-#: class/WC_Twoinc.php:1119
+#: class/WC_Twoinc.php:1148
 msgid ""
 "Invoice has been partially refunded and credit note has been sent by Two"
 msgstr ""
 
-#: class/WC_Twoinc.php:1117
+#: class/WC_Twoinc.php:1145
 msgid "Invoice has been refunded and credit note has been sent by Two"
 msgstr ""
 
-#: class/WC_Twoinc.php:735
+#: class/WC_Twoinc.php:730
 msgid "Invoice has been sent from Two via email"
 msgstr ""
 
-#: class/WC_Twoinc.php:733
+#: class/WC_Twoinc.php:728
 msgid "Invoice has been sent from Two via email and EHF"
 msgstr ""
 
-#: class/WC_Twoinc.php:274 class/WC_Twoinc_Helper.php:72
+#: class/WC_Twoinc.php:280 class/WC_Twoinc_Helper.php:72
 msgid "Invoice purchase is not available for this order"
-msgstr ""
-
-#: class/WC_Twoinc.php:1518
-msgid "Invoice settings"
 msgstr ""
 
 #: class/WC_Twoinc_Helper.php:130
 msgid "Last name"
 msgstr ""
 
-#: class/WC_Twoinc.php:1333
+#: class/WC_Twoinc.php:1366
 msgid "Log in"
 msgstr ""
 
@@ -303,7 +295,7 @@ msgstr ""
 msgid "Making it easy for businesses to buy online."
 msgstr ""
 
-#: class/WC_Twoinc.php:1776
+#: class/WC_Twoinc.php:1813
 #, php-format
 msgid "Missing company ID, please check with Two admin for id %s"
 msgstr ""
@@ -312,20 +304,16 @@ msgstr ""
 msgid "My company is not on the list"
 msgstr ""
 
-#: class/WC_Twoinc.php:1046
-msgid "Only \"Completed\" orders can be refunded by Two"
-msgstr ""
-
-#: class/WC_Twoinc.php:1304
+#: class/WC_Twoinc.php:1337
 #, php-format
 msgid "Order ID: %s has been placed with Two"
 msgstr ""
 
-#: class/WC_Twoinc.php:277
+#: class/WC_Twoinc.php:283
 msgid "Order value exceeds maximum limit"
 msgstr ""
 
-#: class/WC_Twoinc.php:278
+#: class/WC_Twoinc.php:284
 msgid "Order value is below minimum limit"
 msgstr ""
 
@@ -333,15 +321,15 @@ msgstr ""
 msgid "Organization number"
 msgstr ""
 
-#: class/WC_Twoinc.php:311
+#: class/WC_Twoinc.php:318
 msgid "Pay on invoice with agreed terms"
 msgstr ""
 
-#: class/WC_Twoinc.php:1450
+#: class/WC_Twoinc.php:1483
 msgid "Personal"
 msgstr ""
 
-#: class/WC_Twoinc_Checkout.php:242 views/woocommerce_order_pay.php:4
+#: class/WC_Twoinc_Checkout.php:238 views/woocommerce_order_pay.php:4
 msgid "Phone"
 msgstr ""
 
@@ -349,7 +337,7 @@ msgstr ""
 msgid "Phone number"
 msgstr ""
 
-#: class/WC_Twoinc.php:279
+#: class/WC_Twoinc.php:285
 msgid "Phone number is invalid"
 msgstr ""
 
@@ -365,31 +353,31 @@ msgstr ""
 msgid "Postal code"
 msgstr ""
 
-#: class/WC_Twoinc.php:1529
+#: class/WC_Twoinc.php:1562
 msgid "Pre-approve buyer during checkout"
 msgstr ""
 
-#: class/WC_Twoinc_Checkout.php:87
+#: class/WC_Twoinc_Checkout.php:83
 msgid "Private Customer"
 msgstr ""
 
-#: class/WC_Twoinc.php:829 class/WC_Twoinc_Checkout.php:207
+#: class/WC_Twoinc.php:843 class/WC_Twoinc_Checkout.php:203
 msgid "Project"
 msgstr ""
 
-#: class/WC_Twoinc_Checkout.php:218
+#: class/WC_Twoinc_Checkout.php:214
 msgid "Purchase order number"
 msgstr ""
 
-#: class/WC_Twoinc.php:245
+#: class/WC_Twoinc.php:250
 msgid "Receive invoice and payment details via email"
 msgstr ""
 
-#: class/WC_Twoinc.php:246
+#: class/WC_Twoinc.php:251
 msgid "Receive invoice and payment details via email and EHF"
 msgstr ""
 
-#: class/WC_Twoinc.php:1095
+#: class/WC_Twoinc.php:1122
 msgid "Request refund order to Two has errors"
 msgstr ""
 
@@ -397,79 +385,87 @@ msgstr ""
 msgid "Search for company"
 msgstr ""
 
-#: class/WC_Twoinc_Checkout.php:126
+#: class/WC_Twoinc_Checkout.php:122
 msgid "Select account type"
 msgstr ""
 
-#: class/WC_Twoinc.php:1707
+#: class/WC_Twoinc.php:1740
 msgid "Select image"
 msgstr ""
 
-#: class/WC_Twoinc.php:1537
+#: class/WC_Twoinc.php:1570
 msgid "Separate checkout for business customers"
 msgstr ""
 
-#: class/WC_Twoinc.php:1545
+#: class/WC_Twoinc.php:1578
 msgid "Separate checkout for private customers"
 msgstr ""
 
-#: class/WC_Twoinc.php:1551
+#: class/WC_Twoinc.php:1584
 msgid "Separate checkout for private sole traders"
 msgstr ""
 
-#: class/WC_Twoinc.php:1597
+#: class/WC_Twoinc.php:1630
 msgid "Shift invoice fee to the buyers"
 msgstr ""
 
-#: class/WC_Twoinc.php:1586
+#: class/WC_Twoinc.php:1619
 msgid "Show \"What is Two\" link in checkout"
 msgstr ""
 
-#: class/WC_Twoinc.php:1454
+#: class/WC_Twoinc.php:1487
 msgid "Sole trader/other"
 msgstr ""
 
-#: class/WC_Twoinc_Checkout.php:91
+#: class/WC_Twoinc_Checkout.php:87
 msgid "Sole Trader/Other Customer"
 msgstr ""
 
-#: class/WC_Twoinc.php:267
+#: class/WC_Twoinc.php:286
+msgid "Sorry, sole traders are not supported by Two."
+msgstr ""
+
+#: class/WC_Twoinc.php:273
 msgid ""
 "The latest way to pay for your online business purchases. You will receive "
 "an invoice from Two when your order has been processed."
 msgstr ""
 
-#: class/WC_Twoinc.php:1882
+#: class/WC_Twoinc.php:1939
 msgid "The order has been edited in the Two order system"
 msgstr ""
 
-#: class/WC_Twoinc.php:1880
+#: class/WC_Twoinc.php:1937
 #, php-format
 msgid ""
 "The order has been edited in the Two order system. Order is now registered "
 "for %s Amount in Two"
 msgstr ""
 
-#: class/WC_Twoinc.php:1229
+#: class/WC_Twoinc.php:1262
 msgid "The security code is not valid."
 msgstr ""
 
-#: class/WC_Twoinc.php:1598
+#: class/WC_Twoinc.php:1631
 msgid ""
 "This feature only works for merchants set up with a fixed fee per order."
 msgstr ""
 
-#: class/WC_Twoinc.php:1480
+#: class/WC_Twoinc.php:1066
+msgid "This order has already been fully refunded"
+msgstr ""
+
+#: class/WC_Twoinc.php:1513
 msgid "Title"
 msgstr ""
 
-#: class/WC_Twoinc.php:1474
+#: class/WC_Twoinc.php:1507
 msgid "Turn on/off"
 msgstr ""
 
 #. Author of the plugin
-#: class/WC_Twoinc.php:30 class/WC_Twoinc.php:1377 class/WC_Twoinc.php:1422
-#: class/WC_Twoinc.php:1434
+#: class/WC_Twoinc.php:30 class/WC_Twoinc.php:1410 class/WC_Twoinc.php:1455
+#: class/WC_Twoinc.php:1467
 msgid "Two"
 msgstr ""
 
@@ -477,11 +473,11 @@ msgstr ""
 msgid "Two - BNPL for businesses"
 msgstr ""
 
-#: class/WC_Twoinc.php:1513
+#: class/WC_Twoinc.php:1546
 msgid "Two API Key"
 msgstr ""
 
-#: class/WC_Twoinc.php:1353
+#: class/WC_Twoinc.php:1386
 msgid "Two checkout host name is not correct"
 msgstr ""
 
@@ -489,15 +485,11 @@ msgstr ""
 msgid "Two empty response"
 msgstr ""
 
-#: class/WC_Twoinc.php:274
-msgid "Two is not available as a payment option in the selected region"
-msgstr ""
-
-#: class/WC_Twoinc.php:295
+#: class/WC_Twoinc.php:302
 msgid "Two lets your business pay later for the goods you purchase online."
 msgstr ""
 
-#: class/WC_Twoinc.php:805
+#: class/WC_Twoinc.php:819
 msgid "Two pre-filled fields"
 msgstr ""
 
@@ -506,61 +498,61 @@ msgstr ""
 msgid "Two response code %d"
 msgstr ""
 
-#: class/WC_Twoinc.php:1486
+#: class/WC_Twoinc.php:1519
 msgid "Two Test Server"
 msgstr ""
 
-#: class/WC_Twoinc.php:1509
+#: class/WC_Twoinc.php:1542
 msgid "Two username"
 msgstr ""
 
-#: class/WC_Twoinc.php:1288
+#: class/WC_Twoinc.php:1321
 msgid "Unable to confirm the order with Two"
 msgstr ""
 
-#: class/WC_Twoinc.php:1245
+#: class/WC_Twoinc.php:1278
 msgid "Unable to find the requested order"
 msgstr ""
 
-#: class/WC_Twoinc.php:1262 class/WC_Twoinc.php:1268 class/WC_Twoinc.php:1276
-#: class/WC_Twoinc.php:1283 class/WC_Twoinc.php:1725 class/WC_Twoinc.php:1751
+#: class/WC_Twoinc.php:1295 class/WC_Twoinc.php:1301 class/WC_Twoinc.php:1309
+#: class/WC_Twoinc.php:1316 class/WC_Twoinc.php:1761 class/WC_Twoinc.php:1788
 msgid "Unable to retrieve the order information"
 msgstr ""
 
-#: class/WC_Twoinc.php:1763
+#: class/WC_Twoinc.php:1800
 msgid "Unable to retrieve the order payment information"
 msgstr ""
 
-#: class/WC_Twoinc.php:1580
+#: class/WC_Twoinc.php:1613
 msgid "Use buttons instead of radios to select account type"
 msgstr ""
 
-#: class/WC_Twoinc_Checkout.php:340
+#: class/WC_Twoinc_Checkout.php:328
 msgid "We require your phone number so we can verify your purchase"
 msgstr ""
 
-#: class/WC_Twoinc_Checkout.php:341
+#: class/WC_Twoinc_Checkout.php:329
 msgid ""
 "We use your company name to automatically populate your address and register "
 "the company that made the purchase"
 msgstr ""
 
-#: class/WC_Twoinc.php:275 class/WC_Twoinc.php:993
+#: class/WC_Twoinc.php:281 class/WC_Twoinc.php:1007
 msgid ""
 "We've checked your company's details and are unable to provide invoice "
 "credit for this order"
 msgstr ""
 
-#: class/WC_Twoinc.php:233
+#: class/WC_Twoinc.php:238
 msgid "What is Two?"
 msgstr ""
 
-#: class/WC_Twoinc.php:1332
+#: class/WC_Twoinc.php:1365
 #, php-format
 msgid ""
 "Wordpress admin privilege is required for Two payment One-click setup. %s"
 msgstr ""
 
-#: class/WC_Twoinc.php:271
+#: class/WC_Twoinc.php:277
 msgid "your company"
 msgstr ""
