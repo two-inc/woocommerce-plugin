@@ -283,7 +283,7 @@ if (!class_exists('WC_Twoinc')) {
                 __('Order value exceeds maximum limit', 'twoinc-payment-gateway'),
                 __('Order value is below minimum limit', 'twoinc-payment-gateway'),
                 __('Phone number is invalid', 'twoinc-payment-gateway'),
-                __('Sorry, ENK companies are not supported by Two.', 'twoinc-payment-gateway')
+                __('Sorry, sole traders are not supported by Two.', 'twoinc-payment-gateway')
             );
 
         }
