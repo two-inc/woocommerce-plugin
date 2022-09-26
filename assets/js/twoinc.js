@@ -1558,6 +1558,7 @@ class Twoinc {
             if (!tax_amount) {
                 tax_amount = 0
             }
+            let net_amount = gross_amount - tax_amount
 
             let jsonBody = JSON.stringify({
                 "merchant_short_name": window.twoinc.merchant_short_name,
@@ -1572,12 +1573,12 @@ class Twoinc {
                     "name": "Cart",
                     "description": "",
                     "gross_amount": gross_amount.toFixed(2),
-                    "net_amount": (gross_amount - tax_amount).toFixed(2),
+                    "net_amount": net_amount.toFixed(2),
                     "discount_amount": "0",
                     "tax_amount": tax_amount.toFixed(2),
-                    "tax_class_name": "VAT " + (100.0 * tax_amount / gross_amount).toFixed(2) + "%",
-                    "tax_rate": "" + (1.0 * tax_amount / (gross_amount - tax_amount)).toFixed(6),
-                    "unit_price": (gross_amount - tax_amount).toFixed(2),
+                    "tax_class_name": "VAT " + (100.0 * tax_amount / net_amount).toFixed(2) + "%",
+                    "tax_rate": "" + (1.0 * tax_amount / net_amount).toFixed(6),
+                    "unit_price": net_amount.toFixed(2),
                     "quantity": 1,
                     "quantity_unit": "item",
                     "image_url": "",
