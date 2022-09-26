@@ -254,7 +254,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
 
                 $product_simple = WC_Twoinc_Helper::get_product($line_item);
 
-                $tax_rate = WC_Twoinc_Helper::get_item_tax_rate($line_item, $product_simple);
+                $tax_rate = WC_Twoinc_Helper::get_item_tax_rate($line_item, $order);
 
                 $image_url = get_the_post_thumbnail_url($product_simple->get_id());
 
@@ -298,7 +298,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
             // Shipping
             foreach($shippings as $shipping) {
                 if ($shipping->get_total() == 0) continue;
-                $tax_rate = WC_Twoinc_Helper::get_shipping_tax_rate($shipping, $order);
+                $tax_rate = WC_Twoinc_Helper::get_item_tax_rate($shipping, $order);
                 $shipping_line = [
                     'name' => 'Shipping - ' . $shipping->get_name(),
                     'description' => '',
@@ -322,7 +322,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
             // Fee
             foreach($fees as $fee) {
                 if ($fee->get_total() == 0) continue;
-                $tax_rate = WC_Twoinc_Helper::get_fee_tax_rate($fee, $order);
+                $tax_rate = WC_Twoinc_Helper::get_item_tax_rate($fee, $order);
                 $fee_line = [
                     'name' => 'Fee - ' . $fee->get_name(),
                     'description' => '',
@@ -371,8 +371,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
             /** @var WC_Order_Item_Product $line_item */
             foreach($line_items as $line_item) {
 
-                $product_simple = WC_Twoinc_Helper::get_product($line_item);
-                $tax_rate = WC_Twoinc_Helper::get_item_tax_rate($line_item, $product_simple);
+                $tax_rate = WC_Twoinc_Helper::get_item_tax_rate($line_item, $order);
                 $tax_single_line = [
                     'tax_amount' => $line_item['line_tax'],
                     'tax_rate' => $tax_rate['rate'],
@@ -389,7 +388,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
             // Shipping
             foreach($shippings as $shipping) {
                 if ($shipping->get_total() == 0) continue;
-                $tax_rate = WC_Twoinc_Helper::get_shipping_tax_rate($shipping, $order);
+                $tax_rate = WC_Twoinc_Helper::get_item_tax_rate($shipping, $order);
                 $tax_single_line = [
                     'tax_amount' => $shipping->get_total_tax(),
                     'tax_rate' => $tax_rate['rate'],
@@ -405,7 +404,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
             // Fee
             foreach($fees as $fee) {
                 if ($fee->get_total() == 0) continue;
-                $tax_rate = WC_Twoinc_Helper::get_fee_tax_rate($fee, $order);
+                $tax_rate = WC_Twoinc_Helper::get_item_tax_rate($fee, $order);
                 $tax_single_line = [
                     'tax_amount' => $fee->get_total_tax(),
                     'tax_rate' => $tax_rate['rate'],
@@ -848,81 +847,28 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * Get tax rate from a line item
          *
          * @param $line_item
-         * @param $product
+         * @param $order
          *
          * @return array
          */
-        private static function get_item_tax_rate($line_item, $product) {
+        private static function get_item_tax_rate($line_item, $order) {
             $item_tax_rate_list = [];
-            if ($product->is_taxable() && $line_item['line_subtotal_tax'] != 0) {
-                $tax_rates = WC_Tax::get_rates($product->get_tax_class());
-                foreach ($tax_rates as $rate_id => $tax_rate) {
-                    if (isset($tax_rate['rate'])) {
-                        $tax_name = isset($tax_rate['label']) ? $tax_rate['label'] : '';
-                        array_push($item_tax_rate_list, [
-                            'rate' => $tax_rate['rate'] / 100, // e.g. 0.125 for 12.5%
-                            'name' => $tax_name
-                        ]);
+            if ($line_item->get_taxes()['total']) {
+                foreach ($line_item->get_taxes()['total'] as $rate_id => $tax_amt) {
+                    if ($tax_amt) {
+                        foreach ($order->get_taxes() as $order_tax) {
+                            if ($rate_id == $order_tax->get_rate_id()) {
+                                $tax_name = isset($order_tax['label']) ? $order_tax['label'] : '';
+                                array_push($item_tax_rate_list, [
+                                    'rate' => $order_tax->get_rate_percent() / 100,
+                                    'name' => $tax_name
+                                ]);
+                            }
+                        }
                     }
                 }
             }
             return WC_Twoinc_Helper::get_tax_rate_from_tax_list($item_tax_rate_list);
-        }
-
-        /**
-         * Get tax rate from a shipping line
-         *
-         * @param $shipping
-         * @param $order
-         *
-         * @return array
-         */
-        private static function get_shipping_tax_rate($shipping, $order) {
-            $shipping_tax_rate_list = [];
-            if ($shipping->get_taxes()['total']) {
-                foreach ($shipping->get_taxes()['total'] as $rate_id => $tax_amt) {
-                    if ($tax_amt) {
-                        foreach ($order->get_taxes() as $order_tax) {
-                            if ($rate_id == $order_tax->get_rate_id()) {
-                                $tax_name = isset($order_tax['label']) ? $order_tax['label'] : '';
-                                array_push($shipping_tax_rate_list, [
-                                    'rate' => $order_tax->get_rate_percent() / 100,
-                                    'name' => $tax_name
-                                ]);
-                            }
-                        }
-                    }
-                }
-            }
-            return WC_Twoinc_Helper::get_tax_rate_from_tax_list($shipping_tax_rate_list);
-        }
-
-        /**
-         * Get tax rate from a fee line
-         *
-         * @param $fee
-         * @param $order
-         *
-         * @return array
-         */
-        private static function get_fee_tax_rate($fee, $order) {
-            $fee_tax_rate_list = [];
-            if ($fee->get_taxes()['total']) {
-                foreach ($fee->get_taxes()['total'] as $rate_id => $tax_amt) {
-                    if ($tax_amt) {
-                        foreach ($order->get_taxes() as $order_tax) {
-                            if ($rate_id == $order_tax->get_rate_id()) {
-                                $tax_name = isset($order_tax['label']) ? $order_tax['label'] : '';
-                                array_push($fee_tax_rate_list, [
-                                    'rate' => $order_tax->get_rate_percent() / 100,
-                                    'name' => $tax_name
-                                ]);
-                            }
-                        }
-                    }
-                }
-            }
-            return WC_Twoinc_Helper::get_tax_rate_from_tax_list($fee_tax_rate_list);
         }
 
         /**
