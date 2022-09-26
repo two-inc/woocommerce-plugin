@@ -1576,7 +1576,7 @@ class Twoinc {
                     "discount_amount": "0",
                     "tax_amount": tax_amount.toFixed(2),
                     "tax_class_name": "VAT " + (100.0 * tax_amount / gross_amount).toFixed(2) + "%",
-                    "tax_rate": "" + (1.0 * tax_amount / gross_amount).toFixed(6),
+                    "tax_rate": "" + (1.0 * tax_amount / (gross_amount - tax_amount)).toFixed(6),
                     "unit_price": (gross_amount - tax_amount).toFixed(2),
                     "quantity": 1,
                     "quantity_unit": "item",
