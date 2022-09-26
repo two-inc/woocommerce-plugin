@@ -1704,7 +1704,7 @@ class Twoinc {
                     displayMsgId = 'errored|.err-phone'
                     invalidFields.append('billing_phone_field')
                 } else if (errMsg === 'SAME_BUYER_SELLER_ERROR') {
-                    displayMsgId = 'errored|.buyer-same-seller'
+                    displayMsgId = 'errored|.err-buyer-same-seller'
                 } else {
                     displayMsgId = 'errored|.err-payment-default'
                 }
