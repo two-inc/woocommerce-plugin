@@ -1857,8 +1857,9 @@ if (!class_exists('WC_Twoinc')) {
             $twoinc_order_hash = $order->get_meta('_twoinc_req_body_hash');
             $twoinc_updated_order_hash = WC_Twoinc_Helper::hash_order($order, $twoinc_meta);
             if (!$twoinc_order_hash || $twoinc_order_hash != $twoinc_updated_order_hash) {
-                $this->update_twoinc_order($order);
-                update_post_meta($order->get_id(), '_twoinc_req_body_hash', $twoinc_updated_order_hash);
+                if ($this->update_twoinc_order($order)) {
+                    update_post_meta($order->get_id(), '_twoinc_req_body_hash', $twoinc_updated_order_hash);
+                }
                 if ($forced_reload) {
                     WC_Twoinc_Helper::append_admin_force_reload();
                 }
@@ -1870,6 +1871,8 @@ if (!class_exists('WC_Twoinc')) {
          * Run the update
          *
          * @param $order
+         *
+         * @return boolean
          */
         private function update_twoinc_order($order)
         {
@@ -1882,14 +1885,15 @@ if (!class_exists('WC_Twoinc')) {
                     . "\r\n- Request: Edit order"
                     . "\r\n- Merchant post ID: " . strval($order->get_id())
                     . "\r\n- Site: " . get_site_url());
-                return;
+                return false;
             }
 
             // 1. Get information from the current order
             $twoinc_meta = $this->get_save_twoinc_meta($order);
-            if (!$twoinc_meta) return;
+            if (!$twoinc_meta) return false;
 
             // 2. Edit the order
+            $order = wc_get_order($order->get_id());
             $response = $this->make_request("/v1/order/${twoinc_order_id}", WC_Twoinc_Helper::compose_twoinc_edit_order(
                     $order,
                     $twoinc_meta['department'],
@@ -1907,7 +1911,7 @@ if (!class_exists('WC_Twoinc')) {
                     . "\r\n- Twoinc order ID: " . $twoinc_order_id
                     . "\r\n- Merchant post ID: " . strval($order->get_id())
                     . "\r\n- Site: " . get_site_url());
-                return;
+                return false;
             }
 
             $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
@@ -1920,7 +1924,7 @@ if (!class_exists('WC_Twoinc')) {
                     . "\r\n- Twoinc order ID: " . $twoinc_order_id
                     . "\r\n- Merchant post ID: " . strval($order->get_id())
                     . "\r\n- Site: " . get_site_url());
-                return;
+                return false;
             }
 
             // Get returned gross amount
@@ -1939,6 +1943,7 @@ if (!class_exists('WC_Twoinc')) {
                 $order->add_order_note(__('The order has been edited in the Two order system', 'twoinc-payment-gateway'));
             }
 
+            return true;
         }
 
         /**
