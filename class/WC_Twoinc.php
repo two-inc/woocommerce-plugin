@@ -675,6 +675,11 @@ if (!class_exists('WC_Twoinc')) {
                 return;
             }
 
+            if ($this->executed_on_order_completed) {
+                return;
+            }
+            $this->executed_on_order_completed = true;
+
             // Ibrahim
             $state = get_post_meta($order_id, '_twoinc_order_state', true);
             $skip = ["FULFILLED", "CANCELLED", "REFUNDED", "PARTIALLY_REFUNDED"];
