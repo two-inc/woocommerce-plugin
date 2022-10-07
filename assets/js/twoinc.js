@@ -434,20 +434,23 @@ let twoincDomHelper = {
     positionFields: function() {
 
         setTimeout(function(){
-            // Get the account type
-            const accountType = twoincDomHelper.getAccountType()
+            // Only swap fields around if the account type is selectable
+            if (jQuery('input[name="account_type"]').length > 1) {
+                // Get the account type
+                const accountType = twoincDomHelper.getAccountType()
 
-            // If business account
-            if (twoincUtilHelper.isCompany(accountType)) {
-                twoincDomHelper.moveField('billing_first_name_field', 'fn')
-                twoincDomHelper.moveField('billing_last_name_field', 'ln')
-                twoincDomHelper.moveField('billing_phone_display_field', 'ph')
-                twoincDomHelper.moveField('billing_email_field', 'em')
-            } else {
-                twoincDomHelper.revertField('billing_first_name_field', 'fn')
-                twoincDomHelper.revertField('billing_last_name_field', 'ln')
-                twoincDomHelper.revertField('billing_phone_display_field', 'ph')
-                twoincDomHelper.revertField('billing_email_field', 'em')
+                // If business account
+                if (twoincUtilHelper.isCompany(accountType)) {
+                    twoincDomHelper.moveField('billing_first_name_field', 'fn')
+                    twoincDomHelper.moveField('billing_last_name_field', 'ln')
+                    twoincDomHelper.moveField('billing_phone_display_field', 'ph')
+                    twoincDomHelper.moveField('billing_email_field', 'em')
+                } else {
+                    twoincDomHelper.revertField('billing_first_name_field', 'fn')
+                    twoincDomHelper.revertField('billing_last_name_field', 'ln')
+                    twoincDomHelper.revertField('billing_phone_display_field', 'ph')
+                    twoincDomHelper.revertField('billing_email_field', 'em')
+                }
             }
 
             twoincDomHelper.toggleTooltip(
@@ -1362,7 +1365,7 @@ class Twoinc {
 
         $body.on('click', '#company_not_in_btn', function() {
             jQuery('#billing_company_display').val("")
-		    jQuery('#company_id').val("")
+            jQuery('#company_id').val("")
             Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData()
             window.twoinc.company_name_search = 'no'
 
@@ -1375,7 +1378,7 @@ class Twoinc {
 
         $body.on('click', '#search_company_btn', function() {
             jQuery('#billing_company').val("")
-		    jQuery('#company_id').val("")
+            jQuery('#company_id').val("")
             Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData()
 
             jQuery('#search_company_btn').hide()
@@ -1734,7 +1737,7 @@ class Twoinc {
                     twoincDomHelper.markFieldInvalid(fld)
                 }
                 clearInterval(twoincSubtitleExistCheck)
-           }
+            }
         }, 1000)
 
     }
