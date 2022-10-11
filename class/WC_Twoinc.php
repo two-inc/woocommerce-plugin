@@ -2024,16 +2024,15 @@ if (!class_exists('WC_Twoinc')) {
             global $pagenow;
             if ($pagenow !== 'options-general.php') {
                 echo '
-                <div id="twoinc-account-init-notice" class="notice notice-info is-dismissible" style="background-color: #e2e0ff;padding: 20px;display: flex;">
+                <div id="twoinc-account-init-notice" class="notice notice-info is-dismissible" style="background-image: url(\'' . WC_TWOINC_PLUGIN_URL . 'assets/images/banner.png\');background-size: cover;border-left-width: 0;background-color: #e2e0ff;padding: 20px;display: flex;">
                     <div style="width:60%;padding-right:40px;">
-                        <h1 style="color: #000000;font-weight:700;">Set up your Two account</h1>
-                        <p style="color: #000000;font-size: 1.3em;text-align: justify;">Happy to see you here! Before you can start selling with the Two buy now, pay later solution you need to complete our signup process. It\'s easy, fast and gives you immediate access to the <a target="_blank" href="https://portal.two.inc/auth/merchant/signup">Two Merchant Portal</a></p>
+                        <img style="width: 100px;" src="' . WC_TWOINC_PLUGIN_URL . 'assets/images/two-logo-w.svg">
+                        <p style="color: #ffffff;font-size: 1.3em;text-align: justify;font-weight:700;">' . __('Grow your b2b sales with Buy Now, Pay Later!', 'twoinc-payment-gateway') . '</p>
+                        <p style="color: #ffffff;font-size: 1.3em;text-align: justify;">' . __('Two credit approves 90% of business buyers, pays you upfront and minimise your risk. To offer Two in your checkout, you need to signup. It’s quick, easy and gives you immediate access to the Two Merchant Portal.', 'twoinc-payment-gateway') . '</p>
                     </div>
                     <div>
-                        <img style="position: absolute;top: 40px;right: 40px;width: 100px;" src="' . WC_TWOINC_PLUGIN_URL . 'assets/images/two-logo.svg">
-                        <div style="position: absolute;bottom: 20px;right:40px;">
-                            <a href="#" id="dismiss-twoinc-notice" class="button" style="margin-left: 20px;background: none;font-size: 1.1em;font-weight: 600;color: #3e16a2;padding: 7px 30px;border-color: #3e16a2;border-radius: 12px;">Not now, thanks</a>
-                            <a href="https://portal.two.inc/auth/merchant/signup" target="_blank" class="button" style="margin-left: 20px;background: #3e16a2;font-size: 1.1em;font-weight: 600;color: #ffffff;padding: 7px 30px;border-color: #3e16a2;border-radius: 12px;">Set up my account</a>
+                        <div style="position: absolute;top: 50%;transform: translateY(-50%);right: 40px;">
+                            <a href="https://portal.two.inc/auth/merchant/signup" target="_blank" class="button" style="margin-left: 20px;background: #edf3ff;font-size: 1.1em;font-weight: 600;color: #4848e6;padding: 7px 30px;border-color: #edf3ff;border-radius: 12px;">' . __('Set up my Two account', 'twoinc-payment-gateway') . '</a>
                         </div>
                     </div>
                 </div>
