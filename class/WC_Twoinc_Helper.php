@@ -171,6 +171,18 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
+         * Authenticate external REST requests
+         *
+         * @param $wc_twoinc
+         *
+         * @return bool
+         */
+        public static function auth_rest_request($wc_twoinc)
+        {
+            return $wc_twoinc->api_key === $_SERVER['HTTP_X_API_KEY'];
+        }
+
+        /**
          * Send alert email to twoinc tech support
          *
          * @param $subject
@@ -250,7 +262,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
             $items = [];
 
             /** @var WC_Order_Item_Product $line_item */
-            foreach($line_items as $line_item) {
+            foreach ($line_items as $line_item) {
 
                 $product_simple = WC_Twoinc_Helper::get_product($line_item);
 
@@ -287,7 +299,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
 
                 $product['details']['categories'] = [];
 
-                foreach($categories as $category) {
+                foreach ($categories as $category) {
                     $product['details']['categories'][] = $category->name;
                 }
 
@@ -296,7 +308,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
             }
 
             // Shipping
-            foreach($shippings as $shipping) {
+            foreach ($shippings as $shipping) {
                 if ($shipping->get_total() == 0) continue;
                 $tax_rate = WC_Twoinc_Helper::get_item_tax_rate($shipping, $order);
                 $shipping_line = [
@@ -320,7 +332,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
             }
 
             // Fee
-            foreach($fees as $fee) {
+            foreach ($fees as $fee) {
                 if ($fee->get_total() == 0) continue;
                 $tax_rate = WC_Twoinc_Helper::get_item_tax_rate($fee, $order);
                 $fee_line = [
@@ -369,7 +381,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
             $tax_subtotals = [];
 
             /** @var WC_Order_Item_Product $line_item */
-            foreach($line_items as $line_item) {
+            foreach ($line_items as $line_item) {
 
                 $tax_rate = WC_Twoinc_Helper::get_item_tax_rate($line_item, $order);
                 $tax_single_line = [
@@ -386,7 +398,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
             }
 
             // Shipping
-            foreach($shippings as $shipping) {
+            foreach ($shippings as $shipping) {
                 if ($shipping->get_total() == 0) continue;
                 $tax_rate = WC_Twoinc_Helper::get_item_tax_rate($shipping, $order);
                 $tax_single_line = [
@@ -402,7 +414,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
             }
 
             // Fee
-            foreach($fees as $fee) {
+            foreach ($fees as $fee) {
                 if ($fee->get_total() == 0) continue;
                 $tax_rate = WC_Twoinc_Helper::get_item_tax_rate($fee, $order);
                 $tax_single_line = [
@@ -418,13 +430,13 @@ if (!class_exists('WC_Twoinc_Helper')) {
             }
 
             // Aggregate the tax_subtotals
-            foreach($tax_subtotal_dict as $tax_single_line_list) {
+            foreach ($tax_subtotal_dict as $tax_single_line_list) {
                 $tax_subtotal = [
                     'tax_amount' => 0,
                     'tax_rate' => strval(WC_Twoinc_Helper::round_rate($tax_single_line_list[0]['tax_rate'])),
                     'taxable_amount' => 0
                 ];
-                foreach($tax_single_line_list as $tax_single_line) {
+                foreach ($tax_single_line_list as $tax_single_line) {
                     $tax_subtotal['tax_amount'] += $tax_single_line['tax_amount'];
                     $tax_subtotal['taxable_amount'] += $tax_single_line['net_amount'];
                 }
@@ -697,7 +709,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 $twoinc_prod_sites = array('shop', 'morgenlevering', 'arkwrightx', 'paguro');
                 $host_prefix = substr($hostname, 0, -8);
 
-                foreach($twoinc_prod_sites as $twoinc_prod_site) {
+                foreach ($twoinc_prod_sites as $twoinc_prod_site) {
                     if ($host_prefix === $twoinc_prod_site || $host_prefix === ('www.' . $twoinc_prod_site)) {
                         // Twoinc site but not for development
                         return false;
