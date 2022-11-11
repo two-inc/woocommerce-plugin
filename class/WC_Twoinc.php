@@ -963,21 +963,21 @@ if (!class_exists('WC_Twoinc')) {
             $wc_status = $order->get_status();
             if (!array_key_exists($wc_status, self::$status_to_states) || in_array($state, self::$status_to_states[$wc_status], true)) {
                 $messages[] = 'No action needed: status[' . $wc_status . '], state[' . $state . ']';
-                return new WP_Error('invalid_request', $messages, array('status' => 400));
-            }
-            $result = false;
-            if ($wc_status == 'completed') {
-                $result = $this->on_order_completed($order_id);
-                $messages[] = 'Fulfilled order ID [' . $order_id . ']';
-            } else if ($wc_status == 'cancelled') {
-                $result = $this->on_order_cancelled($order_id);
-                $messages[] = 'Cancelled order ID [' . $order_id . ']';
-            } else if ($wc_status == 'refunded') {
-                return new WP_Error('invalid_request', 'Refund update coming soon', array('status' => 400));
-                //$this->process_refund($order_id);
-            }
-            if (!$result) {
-                return new WP_Error('internal_server_error', 'Unable to sync: status[' . $wc_status . '], state[' . $state . ']', array('status' => 500));
+            } else {
+                $result = false;
+                if ($wc_status == 'completed') {
+                    $result = $this->on_order_completed($order_id);
+                    $messages[] = 'Fulfilled order ID [' . $order_id . ']';
+                } else if ($wc_status == 'cancelled') {
+                    $result = $this->on_order_cancelled($order_id);
+                    $messages[] = 'Cancelled order ID [' . $order_id . ']';
+                } else if ($wc_status == 'refunded') {
+                    return new WP_Error('not_implemented', 'Refund update coming soon', array('status' => 501));
+                    //$this->process_refund($order_id);
+                }
+                if (!$result) {
+                    return new WP_Error('internal_server_error', 'Unable to sync: status[' . $wc_status . '], state[' . $state . ']', array('status' => 500));
+                }
             }
             return [
                 'message' => $messages,
