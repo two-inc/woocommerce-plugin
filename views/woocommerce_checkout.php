@@ -10,7 +10,7 @@ $checkout = WC()->checkout(); ?>
         <?php
         $fields = $checkout->get_checkout_fields('account_type');
         if (is_array($fields)) {
-            foreach($fields as $key => $field){
+            foreach ($fields as $key => $field){
                 $value = isset($field['value']) ? $field['value'] : $checkout->get_value($key);
                 woocommerce_form_field($key, $field, $value);
             }
