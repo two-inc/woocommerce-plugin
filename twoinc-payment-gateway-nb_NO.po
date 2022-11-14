@@ -381,7 +381,7 @@ msgstr "Godkjenn kjøper under checkout"
 
 #: class/WC_Twoinc_Checkout.php:83
 msgid "Private Customer"
-msgstr "Privatperson"
+msgstr "Privatperson | Enkeltpersonsforetak"
 
 #: class/WC_Twoinc.php:848 class/WC_Twoinc_Checkout.php:203
 msgid "Project"
@@ -449,7 +449,7 @@ msgstr "Enkeltpersonforetak"
 
 #: class/WC_Twoinc.php:286
 msgid "Sorry, sole traders are not supported by Two."
-msgstr "Beklager, enkeltpersonforetak støttes ikke av Two."
+msgstr "MERK: ENKELTPERSONSFORETAK STØTTES IKKE AV TWO"
 
 #: class/WC_Twoinc.php:273
 msgid ""
