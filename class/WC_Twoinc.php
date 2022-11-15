@@ -2195,13 +2195,17 @@ if (!class_exists('WC_Twoinc')) {
         {
             $params['client'] = 'wp';
             $params['client_v'] = $this->plugin_version;
+            $headers = [
+               'Accept-Language' => WC_Twoinc_Helper::get_locale(),
+               'Content-Type' => 'application/json; charset=utf-8',
+               'X-API-Key' => $this->get_option('api_key')
+            ];
+            if (isset($_SERVER['HTTP_X_CLOUD_TRACE_CONTEXT'])) {
+                $headers['HTTP_X_CLOUD_TRACE_CONTEXT'] = $_SERVER['HTTP_X_CLOUD_TRACE_CONTEXT'];
+            }
             return wp_remote_request(sprintf('%s%s?%s', $this->twoinc_checkout_host, $endpoint, http_build_query($params)), [
                 'method' => $method,
-                'headers' => [
-                    'Accept-Language' => WC_Twoinc_Helper::get_locale(),
-                    'Content-Type' => 'application/json; charset=utf-8',
-                    'X-API-Key' => $this->get_option('api_key')
-                ],
+                'headers' => $headers,
                 'timeout' => 30,
                 'body' => empty($payload) ? '' : json_encode(WC_Twoinc_Helper::utf8ize($payload)),
                 'data_format' => 'body'
