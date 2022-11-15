@@ -895,6 +895,7 @@ if (!class_exists('WC_Twoinc')) {
          */
         public static function sync_order_state_wrapper(){
             $order_id = $_REQUEST['post_id'];
+            $persist = $_REQUEST['persist'] === 'true';
             if (!isset($order_id)) {
                 return new WP_Error('invalid_request', 'Missing post id', array('status' => 400));
             }
@@ -905,7 +906,7 @@ if (!class_exists('WC_Twoinc')) {
                 return new WP_Error('unauthorized', 'Unauthorized', array('status' => 401));
             }
 
-            return $wc_twoinc_instance->sync_order_state($order_id);
+            return $wc_twoinc_instance->sync_order_state($order_id, $persist);
         }
 
         /**
@@ -913,7 +914,7 @@ if (!class_exists('WC_Twoinc')) {
          *
          * @param $order_id
          */
-        public function sync_order_state($order_id){
+        public function sync_order_state($order_id, $persist){
             // Get the order object
             $order = new WC_Order($order_id);
 
@@ -937,7 +938,7 @@ if (!class_exists('WC_Twoinc')) {
             }
             $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
             if ($twoinc_err) {
-                return new WP_Error('internal_server_error', 'Got error response from Twoinc server', array('status' => 500));
+                return new WP_Error('internal_server_error', 'Got error response from Twoinc server: ' . $twoinc_err, array('status' => 500));
             }
 
             // Got the latest state from Two server
@@ -956,7 +957,9 @@ if (!class_exists('WC_Twoinc')) {
             $current_state_in_db = get_post_meta($order_id, '_twoinc_order_state', true);
             if (!isset($current_state_in_db) || $current_state_in_db != $state) {
                 $messages[] = 'Updated state from [' . $current_state_in_db . '] to [' . $state . '] for order ID [' . $order_id . ']';
-                update_post_meta($order_id, '_twoinc_order_state', $state);
+                if ($persist) {
+                    update_post_meta($order_id, '_twoinc_order_state', $state);
+                }
             }
 
             // Forward actions to Two when necessary
@@ -966,10 +969,14 @@ if (!class_exists('WC_Twoinc')) {
             } else {
                 $result = false;
                 if ($wc_status == 'completed') {
-                    $result = $this->on_order_completed($order_id);
+                    if ($persist) {
+                        $result = $this->on_order_completed($order_id);
+                    }
                     $messages[] = 'Fulfilled order ID [' . $order_id . ']';
                 } else if ($wc_status == 'cancelled') {
-                    $result = $this->on_order_cancelled($order_id);
+                    if ($persist) {
+                        $result = $this->on_order_cancelled($order_id);
+                    }
                     $messages[] = 'Cancelled order ID [' . $order_id . ']';
                 } else if ($wc_status == 'refunded') {
                     return new WP_Error('not_implemented', 'Refund update coming soon', array('status' => 501));
@@ -981,6 +988,7 @@ if (!class_exists('WC_Twoinc')) {
             }
             return [
                 'message' => $messages,
+                'persist' => $persist,
                 'data' => [
                     'status' => 200
                 ]
