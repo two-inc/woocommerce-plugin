@@ -997,6 +997,32 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
+         * Static function wrapper for getting configs
+         */
+        public static function get_plugin_configs_wrapper(){
+            $wc_twoinc_instance = WC_Twoinc::get_instance();
+
+            if (!WC_Twoinc_Helper::auth_rest_request($wc_twoinc_instance)) {
+                return new WP_Error('unauthorized', 'Unauthorized', array('status' => 401));
+            }
+
+            return $wc_twoinc_instance->get_plugin_configs();
+        }
+
+        /**
+         * Get config values
+         */
+        public function get_plugin_configs(){
+            return [
+                'config' => array_diff_key($this->settings, array_flip(['api_key'])),
+                'data' => [
+                    'status' => 200
+                ]
+            ];
+
+        }
+
+        /**
          * Display user meta fields on user edit admin page
          *
          * @param $user
