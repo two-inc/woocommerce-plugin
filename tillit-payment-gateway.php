@@ -60,6 +60,9 @@ function load_twoinc_classes()
     // JSON endpoint to get user configs of Two plugin
     add_action('rest_api_init', 'register_get_plugin_configs');
 
+    // JSON endpoint to get Two order info
+    add_action('rest_api_init', 'register_get_order_info');
+
     add_action('template_redirect', 'WC_Twoinc::one_click_setup');
     // Confirm order after returning from twoinc checkout-page, DO NOT CHANGE HOOKS
     add_action('template_redirect', 'WC_Twoinc::process_confirmation_header_redirect');
@@ -150,6 +153,22 @@ function register_get_plugin_configs()
         array(
             'methods' => 'GET',
             'callback' => [WC_Twoinc::class, 'get_plugin_configs_wrapper'],
+            'permission_callback' => '__return_true'
+        )
+    );
+}
+
+/**
+ * Get the order information
+ */
+function register_get_order_info()
+{
+    register_rest_route(
+        'twoinc-payment-gateway',
+        'twoinc_get_order_info',
+        array(
+            'methods' => 'GET',
+            'callback' => [WC_Twoinc::class, 'get_order_info_wrapper'],
             'permission_callback' => '__return_true'
         )
     );

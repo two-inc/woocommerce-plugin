@@ -637,11 +637,13 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Compose request body for twoinc create order
+         * Compose request body for twoinc refund order
          *
-         * @param $order
+         * @param $order_refund
+         * @param $amount
+         * @param $currency
          *
-         * @return bool
+         * @return array
          */
         public static function compose_twoinc_refund($order_refund, $amount, $currency)
         {
@@ -654,6 +656,32 @@ if (!class_exists('WC_Twoinc_Helper')) {
             ];
 
             return $req_body;
+        }
+
+        /**
+         * Compose request body for twoinc refund order
+         *
+         * @param $order_id
+         *
+         * @return array
+         */
+        public static function get_private_order_notes($order_id){
+            global $wpdb;
+
+            $results = $wpdb->get_results("" .
+                "SELECT * FROM $wpdb->comments" .
+                "  WHERE `comment_post_ID` = $order_id" .
+                "    AND `comment_type` LIKE 'order_note'");
+
+            foreach($results as $note){
+                $order_note[]  = array(
+                    'note_id'      => $note->comment_ID,
+                    'note_date'    => $note->comment_date,
+                    'note_author'  => $note->comment_author,
+                    'note_content' => $note->comment_content,
+                );
+            }
+            return $order_note;
         }
 
         /**
