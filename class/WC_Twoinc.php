@@ -1023,6 +1023,73 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
+         * Static function wrapper for getting order info
+         */
+        public static function get_order_info_wrapper(){
+            $order_id = $_REQUEST['post_id'];
+            if (!isset($order_id)) {
+                return new WP_Error('invalid_request', 'Missing post id', array('status' => 400));
+            }
+
+            $wc_twoinc_instance = WC_Twoinc::get_instance();
+
+            if (!WC_Twoinc_Helper::auth_rest_request($wc_twoinc_instance)) {
+                return new WP_Error('unauthorized', 'Unauthorized', array('status' => 401));
+            }
+
+            return $wc_twoinc_instance->get_order_info($order_id);
+        }
+
+        /**
+         * Get order info: state, current create request, notes
+         */
+        public function get_order_info($order_id){
+            // Get the order object
+            $order = new WC_Order($order_id);
+
+            // Check payment method
+            if (!WC_Twoinc_Helper::is_twoinc_order($order)) {
+                return new WP_Error('invalid_request', 'The order is not paid by Two', array('status' => 400));
+            }
+
+            // Get the Twoinc order ID from shop order ID
+            $twoinc_order_id = $this->get_twoinc_order_id_from_post_id($order_id);
+            if (!$twoinc_order_id) {
+                return new WP_Error('invalid_data', 'Could not find Twoinc order ID', array('status' => 422));
+            }
+
+            $twoinc_order_body = null;
+            // If the order is an old one without state, update it
+            $current_state_in_db = get_post_meta($order_id, '_twoinc_order_state', true);
+            $twoinc_meta = $this->get_save_twoinc_meta($order);
+            if ($twoinc_meta) {
+                $twoinc_order_body = WC_Twoinc_Helper::compose_twoinc_order(
+                    $order,
+                    $twoinc_meta['order_reference'],
+                    $twoinc_meta['company_id'],
+                    $twoinc_meta['department'],
+                    $twoinc_meta['project'],
+                    $twoinc_meta['purchase_order_number'],
+                    $twoinc_meta['payment_reference_message'],
+                    $twoinc_meta['payment_reference_ocr'],
+                    $twoinc_meta['payment_reference'],
+                    $twoinc_meta['payment_reference_type'],
+                    '',
+                    true
+                );
+            }
+
+            return [
+               'twoinc_state' => $current_state_in_db,
+               'order_note' => WC_Twoinc_Helper::get_private_order_notes($order_id),
+               'twoinc_order_body' => $twoinc_order_body,
+               'data' => [
+                   'status' => 200
+               ]
+           ];
+        }
+
+        /**
          * Display user meta fields on user edit admin page
          *
          * @param $user
