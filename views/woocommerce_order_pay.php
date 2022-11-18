@@ -19,7 +19,7 @@
                 <?php
                     $countries = WC()->countries->get_countries();
                     $base_country = WC()->countries->get_base_country();
-                    foreach($countries as $country_code => $country_name) {
+                    foreach ($countries as $country_code => $country_name) {
                         if ($base_country === $country_code) {
                             printf('<option value="%s" selected>%s</option>', $country_code, $country_name);
                         } else {

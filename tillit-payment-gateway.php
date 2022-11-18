@@ -3,7 +3,7 @@
  * Plugin Name: Two - BNPL for businesses
  * Plugin URI: https://two.inc
  * Description: Integration between WooCommerce and Two
- * Version: 2.12.0
+ * Version: 2.13.0
  * Author: Two
  * Author URI: https://two.inc
  * Text Domain: twoinc-payment-gateway
@@ -46,12 +46,22 @@ function load_twoinc_classes()
     init_twoinc_translation();
 
     // JSON endpoint to check plugin status
-    add_action('rest_api_init', 'plugin_status_checking');
+    add_action('rest_api_init', 'register_plugin_status_checking');
 
     // Load classes
     require_once __DIR__ . '/class/WC_Twoinc_Helper.php';
     require_once __DIR__ . '/class/WC_Twoinc_Checkout.php';
     require_once __DIR__ . '/class/WC_Twoinc.php';
+
+    // JSON endpoint to list and sync status of orders
+    add_action('rest_api_init', 'register_list_out_of_sync_order_ids');
+    add_action('rest_api_init', 'register_sync_order_state');
+
+    // JSON endpoint to get user configs of Two plugin
+    add_action('rest_api_init', 'register_get_plugin_configs');
+
+    // JSON endpoint to get Two order info
+    add_action('rest_api_init', 'register_get_order_info');
 
     add_action('template_redirect', 'WC_Twoinc::one_click_setup');
     // Confirm order after returning from twoinc checkout-page, DO NOT CHANGE HOOKS
@@ -66,6 +76,9 @@ function load_twoinc_classes()
     // Save user meta fields on profile update
     add_action('personal_options_update', 'WC_Twoinc::save_user_meta', 10, 1);
     add_action('edit_user_profile_update', 'WC_Twoinc::save_user_meta', 10, 1);
+
+    // A fallback hook in case hook woocommerce_order_status_xxx is not called
+    add_action('woocommerce_order_edit_status', 'WC_Twoinc::on_order_edit_status', 10, 2);
 }
 
 /**
@@ -80,7 +93,7 @@ function init_twoinc_translation()
 /**
  * Return the status of the plugin
  */
-function plugin_status_checking()
+function register_plugin_status_checking()
 {
     register_rest_route(
         'twoinc-payment-gateway',
@@ -92,6 +105,70 @@ function plugin_status_checking()
                     'version' => get_plugin_version()
                 ];
             },
+            'permission_callback' => '__return_true'
+        )
+    );
+}
+
+/**
+ * Return the id of orders with status out of sync with Two
+ */
+function register_list_out_of_sync_order_ids()
+{
+    register_rest_route(
+        'twoinc-payment-gateway',
+        'twoinc_list_out_of_sync_order_ids',
+        array(
+            'methods' => 'GET',
+            'callback' => [WC_Twoinc::class, 'list_out_of_sync_order_ids_wrapper'],
+            'permission_callback' => '__return_true'
+        )
+    );
+}
+
+/**
+ * Sync latest order state with Two
+ */
+function register_sync_order_state()
+{
+    register_rest_route(
+        'twoinc-payment-gateway',
+        'twoinc_sync_order_state',
+        array(
+            'methods' => 'POST',
+            'callback' => [WC_Twoinc::class, 'sync_order_state_wrapper'],
+            'permission_callback' => '__return_true'
+        )
+    );
+}
+
+/**
+ * Get the plugin configs except api key
+ */
+function register_get_plugin_configs()
+{
+    register_rest_route(
+        'twoinc-payment-gateway',
+        'twoinc_get_plugin_configs',
+        array(
+            'methods' => 'GET',
+            'callback' => [WC_Twoinc::class, 'get_plugin_configs_wrapper'],
+            'permission_callback' => '__return_true'
+        )
+    );
+}
+
+/**
+ * Get the order information
+ */
+function register_get_order_info()
+{
+    register_rest_route(
+        'twoinc-payment-gateway',
+        'twoinc_get_order_info',
+        array(
+            'methods' => 'GET',
+            'callback' => [WC_Twoinc::class, 'get_order_info_wrapper'],
             'permission_callback' => '__return_true'
         )
     );

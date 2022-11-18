@@ -18,6 +18,12 @@ if (!class_exists('WC_Twoinc')) {
 
         private static $instance;
 
+        private static $status_to_states = array(
+            'completed' => ['FULFILLED', 'PARTIALLY_REFUNDED'],
+            'cancelled' => ['CANCELLED'],
+            'refunded' => ['REFUNDED'],
+        );
+
         /**
          * WC_Twoinc constructor.
          */
@@ -114,9 +120,6 @@ if (!class_exists('WC_Twoinc')) {
             // On order status changed to cancelled
             add_action('woocommerce_order_status_cancelled', [$this, 'on_order_cancelled']);
             add_action('woocommerce_cancelled_order', [$this, 'on_order_cancelled']);
-
-            // A fallback hook in case hook woocommerce_order_status_xxx is not called
-            add_action('woocommerce_order_edit_status', [$this, 'on_order_edit_status'], 10, 2);
 
             // This class use singleton
             self::$instance = $this;
@@ -397,7 +400,7 @@ if (!class_exists('WC_Twoinc')) {
 
                 $order_refunds = $order->get_refunds();
                 $has_twoinc_refund = false;
-                foreach($order_refunds as $refund){
+                foreach ($order_refunds as $refund){
                     if ($refund->get_refunded_payment()) {
                         $has_twoinc_refund = true;
                         break;
@@ -638,12 +641,14 @@ if (!class_exists('WC_Twoinc')) {
          * @param $order_id
          * @param $to_status
          */
-        public function on_order_edit_status($order_id, $to_status){
+        public static function on_order_edit_status($order_id, $to_status){
+            $wc_twoinc_instance = WC_Twoinc::get_instance();
+
             $to_status = strtolower($to_status);
             if ($to_status == 'completed') {
-                $this->on_order_completed($order_id);
+                $wc_twoinc_instance->on_order_completed($order_id);
             } else if ($to_status == 'cancelled') {
-                $this->on_order_cancelled($order_id);
+                $wc_twoinc_instance->on_order_cancelled($order_id);
             }
         }
 
@@ -660,7 +665,7 @@ if (!class_exists('WC_Twoinc')) {
 
             // Check payment method
             if (!WC_Twoinc_Helper::is_twoinc_order($order)) {
-                return;
+                return false;
             }
 
             // Get the Twoinc order ID
@@ -672,8 +677,13 @@ if (!class_exists('WC_Twoinc')) {
                     . "\r\n- Request: Fulfill order"
                     . "\r\n- Merchant post ID: " . strval($order->get_id())
                     . "\r\n- Site: " . get_site_url());
-                return;
+                return false;
             }
+
+            if ($this->executed_on_order_completed) {
+                return false;
+            }
+            $this->executed_on_order_completed = true;
 
             // Ibrahim
             $state = get_post_meta($order_id, '_twoinc_order_state', true);
@@ -685,7 +695,7 @@ if (!class_exists('WC_Twoinc')) {
                         . "\r\n- Twoinc order ID: " . $twoinc_order_id
                         . "\r\n- Merchant post ID: " . strval($order_id)
                         . "\r\n- Site: " . get_site_url());
-                return;
+                return false;
             }
 
             // Change the order status
@@ -699,7 +709,7 @@ if (!class_exists('WC_Twoinc')) {
                     . "\r\n- Twoinc order ID: " . $twoinc_order_id
                     . "\r\n- Merchant post ID: " . strval($order->get_id())
                     . "\r\n- Site: " . get_site_url());
-                return;
+                return false;
             }
 
             $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
@@ -712,7 +722,7 @@ if (!class_exists('WC_Twoinc')) {
                     . "\r\n- Twoinc order ID: " . $twoinc_order_id
                     . "\r\n- Merchant post ID: " . strval($order->get_id())
                     . "\r\n- Site: " . get_site_url());
-                return;
+                return false;
             }
 
             // Decode the response
@@ -731,10 +741,13 @@ if (!class_exists('WC_Twoinc')) {
             }
 
             // Ibrahim
-            if (isset($body['state'])) {
-                update_post_meta($order->get_id(), '_twoinc_order_state', $body['state']);
-                do_action('twoinc_order_completed', $order, $body);
+            if (!isset($body['state'])) {
+                return false;
             }
+
+            update_post_meta($order->get_id(), '_twoinc_order_state', $body['state']);
+            do_action('twoinc_order_completed', $order, $body);
+            return true;
 
         }
 
@@ -750,7 +763,7 @@ if (!class_exists('WC_Twoinc')) {
 
             // Check payment method
             if (!WC_Twoinc_Helper::is_twoinc_order($order)) {
-                return;
+                return false;
             }
 
             // Get the Twoinc order ID
@@ -763,7 +776,7 @@ if (!class_exists('WC_Twoinc')) {
                     . "\r\n- Request: Cancel order"
                     . "\r\n- Merchant post ID: " . strval($order->get_id())
                     . "\r\n- Site: " . get_site_url());
-                return;
+                return false;
             }
 
             // Ibrahim
@@ -773,7 +786,7 @@ if (!class_exists('WC_Twoinc')) {
                 // return new WP_Error(
                 //     'invalid_twoinc_cancel',
                 //     __('Order ' . $order_id . ' already cancelled', 'twoinc-payment-gateway'));
-                return;
+                return false;
             }
 
             // Change the order status
@@ -787,7 +800,7 @@ if (!class_exists('WC_Twoinc')) {
                     . "\r\n- Twoinc order ID: " . $twoinc_order_id
                     . "\r\n- Merchant post ID: " . strval($order->get_id())
                     . "\r\n- Site: " . get_site_url());
-                return;
+                return false;
             }
 
             $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
@@ -800,16 +813,286 @@ if (!class_exists('WC_Twoinc')) {
                     . "\r\n- Twoinc order ID: " . $twoinc_order_id
                     . "\r\n- Merchant post ID: " . strval($order->get_id())
                     . "\r\n- Site: " . get_site_url());
-                return;
+                return false;
             }
 
             // Ibrahim
             update_post_meta($order->get_id(), '_twoinc_order_state', "CANCELLED");
             do_action('twoinc_order_cancelled', $order, $response);
+            return true;
+        }
+
+        /**
+         * Static function wrapper for List out-of-sync orders
+         *
+         * @param request
+         */
+        public static function list_out_of_sync_order_ids_wrapper($request){
+            $wc_twoinc_instance = WC_Twoinc::get_instance();
+
+            if (!WC_Twoinc_Helper::auth_rest_request($wc_twoinc_instance)) {
+                return new WP_Error('unauthorized', 'Unauthorized', array('status' => 401));
+            }
+
+            return $wc_twoinc_instance->list_out_of_sync_order_ids($request);
+        }
+
+        /**
+         * List all out-of-sync orders
+         *
+         * @param $request
+         */
+        public function list_out_of_sync_order_ids($request){
+            global $wpdb;
+            $ids = array();
+
+            // Get orders with Two and Woocommerce status not in sync
+            $pair_conditions = [];
+            $query_args = ['shop_order', '_twoinc_order_state'];
+            foreach (self::$status_to_states as $wc_status => $states) {
+                $pair_condition = ['post_status = %s'];
+                $query_args[] = 'wc-' . $wc_status;
+                foreach ($states as $state) {
+                    $pair_condition[] = 'meta_value != %s';
+                    $query_args[] = $state;
+                }
+                $pair_conditions[] = '(' . implode(' AND ', $pair_condition) . ')';
+            }
+            $select_out_of_sync_q_str = "" .
+                "SELECT post_id, meta_value, post_status" .
+                "  FROM $wpdb->posts LEFT JOIN $wpdb->postmeta ON $wpdb->posts.id = $wpdb->postmeta.post_id" .
+                "  WHERE post_type = %s AND meta_key = %s AND (" . implode(' OR ', $pair_conditions) . ")";
+            $select_out_of_sync = call_user_func_array(
+                [$wpdb, 'prepare'],
+                array_merge([$select_out_of_sync_q_str], $query_args));
+            $results = $wpdb->get_results($select_out_of_sync);
+            foreach ($results as $row) {
+                $ids[$row->post_id] = [
+                    'two_state' => $row->meta_value,
+                    'wp_status' => $row->post_status
+                ];
+            }
+            // Get Two orders without Two state meta
+            $select_no_two_state = $wpdb->prepare(
+                "SELECT id, post_status FROM $wpdb->posts" .
+                "  WHERE post_type = %s" .
+                "    AND id IN (SELECT post_id FROM $wpdb->postmeta WHERE meta_key = %s AND meta_value = %s)" .
+                "    AND id NOT IN (SELECT post_id FROM $wpdb->postmeta WHERE meta_key = %s)",
+                'shop_order', '_payment_method', 'woocommerce-gateway-tillit', '_twoinc_order_state');
+            $results = $wpdb->get_results($select_no_two_state);
+            foreach ($results as $row) {
+                $ids[$row->id] = [
+                    'two_state' => null,
+                    'wp_status' => $row->post_status
+                ];
+            }
+
+            return ['out_of_sync_orders' => $ids];
+        }
+
+        /**
+         * Static function wrapper for Sync orders
+         */
+        public static function sync_order_state_wrapper(){
+            $order_id = $_REQUEST['post_id'];
+            $persist = $_REQUEST['persist'] === 'true';
+            if (!isset($order_id)) {
+                return new WP_Error('invalid_request', 'Missing post id', array('status' => 400));
+            }
+
+            $wc_twoinc_instance = WC_Twoinc::get_instance();
+
+            if (!WC_Twoinc_Helper::auth_rest_request($wc_twoinc_instance)) {
+                return new WP_Error('unauthorized', 'Unauthorized', array('status' => 401));
+            }
+
+            return $wc_twoinc_instance->sync_order_state($order_id, $persist);
+        }
+
+        /**
+         * Sync orders
+         *
+         * @param $order_id
+         */
+        public function sync_order_state($order_id, $persist){
+            // Get the order object
+            $order = new WC_Order($order_id);
+
+            // Check payment method
+            if (!WC_Twoinc_Helper::is_twoinc_order($order)) {
+                return new WP_Error('invalid_request', 'The order is not paid by Two', array('status' => 400));
+            }
+
+            // Get the Twoinc order ID from shop order ID
+            $twoinc_order_id = $this->get_twoinc_order_id_from_post_id($order_id);
+            if (!$twoinc_order_id) {
+                return new WP_Error('invalid_data', 'Could not find Twoinc order ID', array('status' => 422));
+            }
+
+            // Get the Twoinc order details
+            $response = $this->make_request("/v1/order/${twoinc_order_id}", [], 'GET');
+
+            // Stop if request error or $response['response']['code'] < 400
+            if (is_wp_error($response)) {
+                return new WP_Error('internal_server_error', 'Could not send request to Twoinc server', array('status' => 500));
+            }
+            $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
+            if ($twoinc_err) {
+                return new WP_Error('internal_server_error', 'Got error response from Twoinc server: ' . $twoinc_err, array('status' => 500));
+            }
+
+            // Got the latest state from Two server
+            $messages = [];
+            $state = null;
+            if ($response && $response['body']) {
+                $body = json_decode($response['body'], true);
+                if (isset($body['state'])) {
+                    $state = strval($body['state']);
+                }
+            }
+            if (!isset($state)) {
+                return new WP_Error('internal_server_error', 'Could not get Two state from response body', array('status' => 500));
+            }
+            // If the order is an old one without state, update it
+            $current_state_in_db = get_post_meta($order_id, '_twoinc_order_state', true);
+            if (!isset($current_state_in_db) || $current_state_in_db != $state) {
+                $messages[] = 'Updated state from [' . $current_state_in_db . '] to [' . $state . '] for order ID [' . $order_id . ']';
+                if ($persist) {
+                    update_post_meta($order_id, '_twoinc_order_state', $state);
+                }
+            }
+
+            // Forward actions to Two when necessary
+            $wc_status = $order->get_status();
+            if (!array_key_exists($wc_status, self::$status_to_states) || in_array($state, self::$status_to_states[$wc_status], true)) {
+                $messages[] = 'No action needed: status[' . $wc_status . '], state[' . $state . ']';
+            } else {
+                $result = false;
+                if ($wc_status == 'completed') {
+                    if ($persist) {
+                        $result = $this->on_order_completed($order_id);
+                    }
+                    $messages[] = 'Fulfilled order ID [' . $order_id . ']';
+                } else if ($wc_status == 'cancelled') {
+                    if ($persist) {
+                        $result = $this->on_order_cancelled($order_id);
+                    }
+                    $messages[] = 'Cancelled order ID [' . $order_id . ']';
+                } else if ($wc_status == 'refunded') {
+                    return new WP_Error('not_implemented', 'Refund update coming soon', array('status' => 501));
+                    //$this->process_refund($order_id);
+                }
+                if (!$result) {
+                    return new WP_Error('internal_server_error', 'Unable to sync: status[' . $wc_status . '], state[' . $state . ']', array('status' => 500));
+                }
+            }
+            return [
+                'message' => $messages,
+                'persist' => $persist,
+                'data' => [
+                    'status' => 200
+                ]
+            ];
+
+        }
+
+        /**
+         * Static function wrapper for getting configs
+         */
+        public static function get_plugin_configs_wrapper(){
+            $wc_twoinc_instance = WC_Twoinc::get_instance();
+
+            if (!WC_Twoinc_Helper::auth_rest_request($wc_twoinc_instance)) {
+                return new WP_Error('unauthorized', 'Unauthorized', array('status' => 401));
+            }
+
+            return $wc_twoinc_instance->get_plugin_configs();
+        }
+
+        /**
+         * Get config values
+         */
+        public function get_plugin_configs(){
+            return [
+                'config' => array_diff_key($this->settings, array_flip(['api_key'])),
+                'data' => [
+                    'status' => 200
+                ]
+            ];
+
+        }
+
+        /**
+         * Static function wrapper for getting order info
+         */
+        public static function get_order_info_wrapper(){
+            $order_id = $_REQUEST['post_id'];
+            if (!isset($order_id)) {
+                return new WP_Error('invalid_request', 'Missing post id', array('status' => 400));
+            }
+
+            $wc_twoinc_instance = WC_Twoinc::get_instance();
+
+            if (!WC_Twoinc_Helper::auth_rest_request($wc_twoinc_instance)) {
+                return new WP_Error('unauthorized', 'Unauthorized', array('status' => 401));
+            }
+
+            return $wc_twoinc_instance->get_order_info($order_id);
+        }
+
+        /**
+         * Get order info: state, current create request, notes
+         */
+        public function get_order_info($order_id){
+            // Get the order object
+            $order = new WC_Order($order_id);
+
+            // Check payment method
+            if (!WC_Twoinc_Helper::is_twoinc_order($order)) {
+                return new WP_Error('invalid_request', 'The order is not paid by Two', array('status' => 400));
+            }
+
+            // Get the Twoinc order ID from shop order ID
+            $twoinc_order_id = $this->get_twoinc_order_id_from_post_id($order_id);
+            if (!$twoinc_order_id) {
+                return new WP_Error('invalid_data', 'Could not find Twoinc order ID', array('status' => 422));
+            }
+
+            $twoinc_order_body = null;
+            // If the order is an old one without state, update it
+            $current_state_in_db = get_post_meta($order_id, '_twoinc_order_state', true);
+            $twoinc_meta = $this->get_save_twoinc_meta($order);
+            if ($twoinc_meta) {
+                $twoinc_order_body = WC_Twoinc_Helper::compose_twoinc_order(
+                    $order,
+                    $twoinc_meta['order_reference'],
+                    $twoinc_meta['company_id'],
+                    $twoinc_meta['department'],
+                    $twoinc_meta['project'],
+                    $twoinc_meta['purchase_order_number'],
+                    $twoinc_meta['payment_reference_message'],
+                    $twoinc_meta['payment_reference_ocr'],
+                    $twoinc_meta['payment_reference'],
+                    $twoinc_meta['payment_reference_type'],
+                    '',
+                    true
+                );
+            }
+
+            return [
+               'twoinc_state' => $current_state_in_db,
+               'order_note' => WC_Twoinc_Helper::get_private_order_notes($order_id),
+               'twoinc_order_body' => $twoinc_order_body,
+               'data' => [
+                   'status' => 200
+               ]
+           ];
         }
 
         /**
          * Display user meta fields on user edit admin page
+         *
+         * @param $user
          *
          * @return void
          */
@@ -853,6 +1136,8 @@ if (!class_exists('WC_Twoinc')) {
 
         /**
          * Save user meta to DB on user edit
+         *
+         * @param $user_id
          *
          * @return void
          */
@@ -1014,6 +1299,10 @@ if (!class_exists('WC_Twoinc')) {
             $twoinc_updated_order_hash = WC_Twoinc_Helper::hash_order($order, $twoinc_meta);
             update_post_meta($order->get_id(), '_twoinc_req_body_hash', $twoinc_updated_order_hash);
 
+            if (isset($body['state'])) {
+                update_post_meta($order_id, '_twoinc_order_state', $body['state']);
+            }
+
             // Return the result
             if ($body['state'] == 'VERIFIED' && isset($body['merchant_urls']) && isset($body['merchant_urls']['merchant_confirmation_url'])) {
                 return [
@@ -1074,7 +1363,7 @@ if (!class_exists('WC_Twoinc')) {
             $order_refunds = $order->get_refunds();
             // Need to loop instead of getting the last element because the last element is not always the latest refund
             $order_refund = null;
-            foreach($order_refunds as $refund){
+            foreach ($order_refunds as $refund){
                 if (!$order_refund || $refund->get_date_created() > $order_refund->get_date_created()) {
                     $order_refund = $refund;
                 }
@@ -1219,9 +1508,11 @@ if (!class_exists('WC_Twoinc')) {
         {
 
             if (isset($_REQUEST['twoinc_confirm_order']) && isset($_REQUEST['nonce'])) {
-                $confirm_path = '/twoinc-payment-gateway/confirm';
-                $req_path = strtok($_SERVER["REQUEST_URI"], '?');
-                return strlen($req_path) >= strlen($confirm_path) && substr($req_path, -strlen($confirm_path)) === $confirm_path;
+                return true;
+                // Temporarily commented out until we find a solution for redirect plugins
+                // $confirm_path = '/twoinc-payment-gateway/confirm';
+                // $req_path = strtok($_SERVER["REQUEST_URI"], '?');
+                // return strlen($req_path) >= strlen($confirm_path) && substr($req_path, -strlen($confirm_path)) === $confirm_path;
             }
             return false;
         }
@@ -1857,8 +2148,9 @@ if (!class_exists('WC_Twoinc')) {
             $twoinc_order_hash = $order->get_meta('_twoinc_req_body_hash');
             $twoinc_updated_order_hash = WC_Twoinc_Helper::hash_order($order, $twoinc_meta);
             if (!$twoinc_order_hash || $twoinc_order_hash != $twoinc_updated_order_hash) {
-                $this->update_twoinc_order($order);
-                update_post_meta($order->get_id(), '_twoinc_req_body_hash', $twoinc_updated_order_hash);
+                if ($this->update_twoinc_order($order)) {
+                    update_post_meta($order->get_id(), '_twoinc_req_body_hash', $twoinc_updated_order_hash);
+                }
                 if ($forced_reload) {
                     WC_Twoinc_Helper::append_admin_force_reload();
                 }
@@ -1870,6 +2162,8 @@ if (!class_exists('WC_Twoinc')) {
          * Run the update
          *
          * @param $order
+         *
+         * @return boolean
          */
         private function update_twoinc_order($order)
         {
@@ -1882,14 +2176,15 @@ if (!class_exists('WC_Twoinc')) {
                     . "\r\n- Request: Edit order"
                     . "\r\n- Merchant post ID: " . strval($order->get_id())
                     . "\r\n- Site: " . get_site_url());
-                return;
+                return false;
             }
 
             // 1. Get information from the current order
             $twoinc_meta = $this->get_save_twoinc_meta($order);
-            if (!$twoinc_meta) return;
+            if (!$twoinc_meta) return false;
 
             // 2. Edit the order
+            $order = wc_get_order($order->get_id());
             $response = $this->make_request("/v1/order/${twoinc_order_id}", WC_Twoinc_Helper::compose_twoinc_edit_order(
                     $order,
                     $twoinc_meta['department'],
@@ -1907,7 +2202,7 @@ if (!class_exists('WC_Twoinc')) {
                     . "\r\n- Twoinc order ID: " . $twoinc_order_id
                     . "\r\n- Merchant post ID: " . strval($order->get_id())
                     . "\r\n- Site: " . get_site_url());
-                return;
+                return false;
             }
 
             $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
@@ -1920,7 +2215,7 @@ if (!class_exists('WC_Twoinc')) {
                     . "\r\n- Twoinc order ID: " . $twoinc_order_id
                     . "\r\n- Merchant post ID: " . strval($order->get_id())
                     . "\r\n- Site: " . get_site_url());
-                return;
+                return false;
             }
 
             // Get returned gross amount
@@ -1939,6 +2234,7 @@ if (!class_exists('WC_Twoinc')) {
                 $order->add_order_note(__('The order has been edited in the Two order system', 'twoinc-payment-gateway'));
             }
 
+            return true;
         }
 
         /**
@@ -1992,13 +2288,17 @@ if (!class_exists('WC_Twoinc')) {
         {
             $params['client'] = 'wp';
             $params['client_v'] = $this->plugin_version;
+            $headers = [
+               'Accept-Language' => WC_Twoinc_Helper::get_locale(),
+               'Content-Type' => 'application/json; charset=utf-8',
+               'X-API-Key' => $this->get_option('api_key')
+            ];
+            if (isset($_SERVER['HTTP_X_CLOUD_TRACE_CONTEXT'])) {
+                $headers['HTTP_X_CLOUD_TRACE_CONTEXT'] = $_SERVER['HTTP_X_CLOUD_TRACE_CONTEXT'];
+            }
             return wp_remote_request(sprintf('%s%s?%s', $this->twoinc_checkout_host, $endpoint, http_build_query($params)), [
                 'method' => $method,
-                'headers' => [
-                    'Accept-Language' => WC_Twoinc_Helper::get_locale(),
-                    'Content-Type' => 'application/json; charset=utf-8',
-                    'X-API-Key' => $this->get_option('api_key')
-                ],
+                'headers' => $headers,
                 'timeout' => 30,
                 'body' => empty($payload) ? '' : json_encode(WC_Twoinc_Helper::utf8ize($payload)),
                 'data_format' => 'body'
@@ -2014,16 +2314,15 @@ if (!class_exists('WC_Twoinc')) {
             global $pagenow;
             if ($pagenow !== 'options-general.php') {
                 echo '
-                <div id="twoinc-account-init-notice" class="notice notice-info is-dismissible" style="background-color: #e2e0ff;padding: 20px;display: flex;">
+                <div id="twoinc-account-init-notice" class="notice notice-info is-dismissible" style="background-image: url(\'' . WC_TWOINC_PLUGIN_URL . 'assets/images/banner.png\');background-size: cover;border-left-width: 0;background-color: #e2e0ff;padding: 20px;display: flex;">
                     <div style="width:60%;padding-right:40px;">
-                        <h1 style="color: #000000;font-weight:700;">Set up your Two account</h1>
-                        <p style="color: #000000;font-size: 1.3em;text-align: justify;">Happy to see you here! Before you can start selling with the Two buy now, pay later solution you need to complete our signup process. It\'s easy, fast and gives you immediate access to the <a target="_blank" href="https://portal.two.inc/auth/merchant/signup">Two Merchant Portal</a></p>
+                        <img style="width: 100px;" src="' . WC_TWOINC_PLUGIN_URL . 'assets/images/two-logo-w.svg">
+                        <p style="color: #ffffff;font-size: 1.3em;text-align: justify;font-weight:700;">' . __('Grow your b2b sales with Buy Now, Pay Later!', 'twoinc-payment-gateway') . '</p>
+                        <p style="color: #ffffff;font-size: 1.3em;text-align: justify;">' . __('Two credit approves 90% of business buyers, pays you upfront and minimise your risk. To offer Two in your checkout, you need to signup. It’s quick, easy and gives you immediate access to the Two Merchant Portal.', 'twoinc-payment-gateway') . '</p>
                     </div>
                     <div>
-                        <img style="position: absolute;top: 40px;right: 40px;width: 100px;" src="' . WC_TWOINC_PLUGIN_URL . 'assets/images/two-logo.svg">
-                        <div style="position: absolute;bottom: 20px;right:40px;">
-                            <a href="#" id="dismiss-twoinc-notice" class="button" style="margin-left: 20px;background: none;font-size: 1.1em;font-weight: 600;color: #3e16a2;padding: 7px 30px;border-color: #3e16a2;border-radius: 12px;">Not now, thanks</a>
-                            <a href="https://portal.two.inc/auth/merchant/signup" target="_blank" class="button" style="margin-left: 20px;background: #3e16a2;font-size: 1.1em;font-weight: 600;color: #ffffff;padding: 7px 30px;border-color: #3e16a2;border-radius: 12px;">Set up my account</a>
+                        <div style="position: absolute;top: 50%;transform: translateY(-50%);right: 40px;">
+                            <a href="https://portal.two.inc/auth/merchant/signup" target="_blank" class="button" style="margin-left: 20px;background: #edf3ff;font-size: 1.1em;font-weight: 600;color: #4848e6;padding: 7px 30px;border-color: #edf3ff;border-radius: 12px;">' . __('Set up my Two account', 'twoinc-payment-gateway') . '</a>
                         </div>
                     </div>
                 </div>

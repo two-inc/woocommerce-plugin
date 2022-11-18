@@ -82,7 +82,7 @@ function add_sorting_query($query) {
 function add_custom_columns($columns) {
 
     $new_columns = array();
-    foreach($columns as $column_name => $column_info) {
+    foreach ($columns as $column_name => $column_info) {
         $new_columns[$column_name] = $column_info;
         if ('order_status' === $column_name) {
             $new_columns['order_delivery_date'] = __('Delivery date', 'tillit-payment-gateway');
