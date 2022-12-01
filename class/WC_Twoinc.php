@@ -848,46 +848,54 @@ if (!class_exists('WC_Twoinc')) {
 
             // Get orders with Two and Woocommerce status not in sync
             $pair_conditions = [];
-            $query_args = ['shop_order', '_twoinc_order_state'];
+            $query_args = ['twoinc_order_id', 'tillit_order_id', '_twoinc_order_state', 'shop_order'];
             foreach (self::$status_to_states as $wc_status => $states) {
-                $pair_condition = ['post_status = %s'];
+                $pair_condition = ['p.post_status = %s'];
                 $query_args[] = 'wc-' . $wc_status;
                 foreach ($states as $state) {
-                    $pair_condition[] = 'meta_value != %s';
+                    $pair_condition[] = 'pm.meta_value != %s';
                     $query_args[] = $state;
                 }
                 $pair_conditions[] = '(' . implode(' AND ', $pair_condition) . ')';
             }
             $select_out_of_sync_q_str = "" .
-                "SELECT post_id, meta_value, post_status" .
-                "  FROM $wpdb->posts LEFT JOIN $wpdb->postmeta ON $wpdb->posts.id = $wpdb->postmeta.post_id" .
-                "  WHERE post_type = %s AND meta_key = %s AND (" . implode(' OR ', $pair_conditions) . ")";
+                "SELECT pm.post_id, p.post_status, pm.meta_value AS twoinc_oid, pm2.meta_value AS twoinc_state" .
+                "  FROM $wpdb->posts p" .
+                "  LEFT JOIN $wpdb->postmeta pm ON p.id = pm.post_id AND (pm.meta_key = %s OR pm.meta_key = %s)" .
+                "  LEFT JOIN $wpdb->postmeta pm2 ON p.id = pm2.post_id AND pm2.meta_key = %s" .
+                "  WHERE p.post_type = %s" .
+                "    AND (" . implode(' OR ', $pair_conditions) . ")";
             $select_out_of_sync = call_user_func_array(
                 [$wpdb, 'prepare'],
                 array_merge([$select_out_of_sync_q_str], $query_args));
             $results = $wpdb->get_results($select_out_of_sync);
             foreach ($results as $row) {
                 $ids[$row->post_id] = [
-                    'two_state' => $row->meta_value,
+                    'two_state' => $row->twoinc_state,
+                    'two_id' => $row->twoinc_oid,
                     'wp_status' => $row->post_status
                 ];
             }
             // Get Two orders without Two state meta
             $select_no_two_state = $wpdb->prepare(
-                "SELECT id, post_status FROM $wpdb->posts" .
-                "  WHERE post_type = %s" .
-                "    AND id IN (SELECT post_id FROM $wpdb->postmeta WHERE meta_key = %s AND meta_value = %s)" .
-                "    AND id NOT IN (SELECT post_id FROM $wpdb->postmeta WHERE meta_key = %s)",
-                'shop_order', '_payment_method', 'woocommerce-gateway-tillit', '_twoinc_order_state');
+                "SELECT p.id, p.post_status, pm.meta_value AS twoinc_oid" .
+                "  FROM $wpdb->posts p" .
+                "  LEFT JOIN $wpdb->postmeta pm ON p.id = pm.post_id AND (pm.meta_key = %s OR pm.meta_key = %s)" .
+                "  WHERE p.post_type = %s" .
+                "    AND p.id IN (SELECT post_id FROM $wpdb->postmeta WHERE meta_key = %s AND meta_value = %s)" .
+                "    AND p.id NOT IN (SELECT post_id FROM $wpdb->postmeta WHERE meta_key = %s)",
+                'tillit_order_id', '_twoinc_order_state', 'shop_order', '_payment_method',
+                'woocommerce-gateway-tillit', '_twoinc_order_state');
             $results = $wpdb->get_results($select_no_two_state);
             foreach ($results as $row) {
                 $ids[$row->id] = [
                     'two_state' => null,
+                    'two_id' => $row->twoinc_oid,
                     'wp_status' => $row->post_status
                 ];
             }
 
-            return ['out_of_sync_orders' => $ids];
+            return ['out_of_sync_orders' => $ids, 'plugin_version' => get_plugin_version()];
         }
 
         /**
@@ -1015,6 +1023,7 @@ if (!class_exists('WC_Twoinc')) {
         public function get_plugin_configs(){
             return [
                 'config' => array_diff_key($this->settings, array_flip(['api_key'])),
+                'plugin_version' => get_plugin_version(),
                 'data' => [
                     'status' => 200
                 ]
