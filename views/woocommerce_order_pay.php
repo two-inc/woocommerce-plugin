@@ -73,7 +73,7 @@
             initInpFields()
             jQuery('.account-type-button[account-type-name="business"]').click()
         }, 1000)
-        jQuery('.account-type-button[account-type-name="personal"], .account-type-button[account-type-name="sole_trader"]').on('click', function(){
+        jQuery('.account-type-button[account-type-name="personal_soletrader"]').on('click', function(){
             jQuery('.twoinc-inp-container').hide()
         })
         jQuery('.account-type-button[account-type-name="business"]').on('click', function(){

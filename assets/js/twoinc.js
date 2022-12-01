@@ -293,11 +293,11 @@ let twoincDomHelper = {
                 })
             } else if (jQuery('.woocommerce-account-type-fields').length > 0) {
                 // If Normal checkout page is displayed, and Twoinc's account type radios are present
-                jQuery('.account-type-button[account-type-name="personal"], .account-type-button[account-type-name="sole_trader"]').on('click', function() {
+                jQuery('.account-type-button[account-type-name="personal_soletrader"]').on('click', function() {
 
                     let hasNoPaymentExceptTwoincKco = jQuery('.wc_payment_method:not(.payment_method_woocommerce-gateway-tillit):not(.payment_method_kco)').length == 0
                     if (hasNoPaymentExceptTwoincKco) {
-                        // Kco is the only payment method in private/soletrader, so clear and click it to trigger
+                        // Kco is the only payment method in private (personal/soletrader), so clear and click it to trigger
                         jQuery('#payment_method_kco').prop('checked', false)
                     }
                     sessionStorage.setItem('twoincAccountType', twoincDomHelper.getAccountType())
@@ -2012,7 +2012,7 @@ class Twoinc {
     {
 
         let accountType = twoincDomHelper.getAccountType()
-        if (twoincUtilHelper.isCompany(accountType)) accountType = 'personal'
+        if (twoincUtilHelper.isCompany(accountType)) accountType = 'personal_soletrader'
         sessionStorage.setItem('twoincAccountType', accountType)
 
     }

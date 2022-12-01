@@ -76,15 +76,18 @@ if (!class_exists('WC_Twoinc_Checkout')) {
         {
 
             $home_url = get_home_url();
+            $personal_soletrader = [];
+            if ($this->wc_twoinc->get_option('checkout_personal') === 'yes') {
+                $personal_soletrader[] = __('Private Customer', 'twoinc-payment-gateway');
+            }
+            if ($this->wc_twoinc->get_option('checkout_sole_trader') === 'yes') {
+                $personal_soletrader[] = __('Sole Trader/Other Customer', 'twoinc-payment-gateway');
+            }
             printf(
                 '<div class="account-type-wrapper" style="display: none;">
-                    <div class="account-type-button" account-type-name="personal">
+                    <div class="account-type-button" account-type-name="personal_soletrader">
                         <img src = "' . WC_TWOINC_PLUGIN_URL . 'assets/images/personal.svg"/>
-                        <span>' . __('Private Customer', 'twoinc-payment-gateway') . '</span>
-                    </div>
-                    <div class="account-type-button" account-type-name="sole_trader">
-                        <img src = "' . WC_TWOINC_PLUGIN_URL . 'assets/images/personal.svg"/>
-                        <span>' . __('Sole Trader/Other Customer', 'twoinc-payment-gateway') . '</span>
+                        <span>' . implode('/', $personal_soletrader) . '</span>
                     </div>
                     <div class="account-type-button" account-type-name="business">
                         <img src = "' . WC_TWOINC_PLUGIN_URL . 'assets/images/business.svg"/>
@@ -106,7 +109,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
 
             // available_account_types size always > 0
             $available_account_types = $this->wc_twoinc->available_account_types();
-            // Default account type, if available, with priority: business - sole_trader - personal
+            // Default account type, if available, with priority: business - personal_soletrader
             end($available_account_types); // Move pointer to last
             $default_account_type = key($available_account_types); // Get current pointer
 

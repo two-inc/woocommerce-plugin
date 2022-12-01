@@ -1779,12 +1779,15 @@ if (!class_exists('WC_Twoinc')) {
 
             $available_types = [];
 
+            $personal_soletrader = [];
             if ($this->get_option('checkout_personal') === 'yes') {
-                $available_types['personal'] = __('Personal', 'twoinc-payment-gateway');
+                $personal_soletrader[] = __('Personal', 'twoinc-payment-gateway');
             }
-
             if ($this->get_option('checkout_sole_trader') === 'yes') {
-                $available_types['sole_trader'] = __('Sole trader/other', 'twoinc-payment-gateway');
+                $personal_soletrader[] = __('Sole trader/other', 'twoinc-payment-gateway');
+            }
+            if (sizeof($personal_soletrader) > 0) {
+                $available_types['personal_soletrader'] = implode('/', $personal_soletrader);
             }
 
             if ($this->get_option('checkout_business') === 'yes') {
