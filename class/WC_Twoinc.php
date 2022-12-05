@@ -19,7 +19,7 @@ if (!class_exists('WC_Twoinc')) {
         private static $instance;
 
         private static $status_to_states = array(
-            'completed' => ['FULFILLED', 'PARTIALLY_REFUNDED'],
+            'completed' => ['FULFILLED', 'REFUNDED'],
             'cancelled' => ['CANCELLED'],
             'refunded' => ['REFUNDED'],
         );
@@ -855,7 +855,7 @@ if (!class_exists('WC_Twoinc')) {
                 $pair_condition = ['p.post_status = %s'];
                 $query_args[] = 'wc-' . $wc_status;
                 foreach ($states as $state) {
-                    $pair_condition[] = 'pm.meta_value != %s';
+                    $pair_condition[] = 'twoinc_state != %s';
                     $query_args[] = $state;
                 }
                 $pair_conditions[] = '(' . implode(' AND ', $pair_condition) . ')';
