@@ -848,7 +848,9 @@ if (!class_exists('WC_Twoinc')) {
 
             // Get orders with Two and Woocommerce status not in sync
             $pair_conditions = [];
-            $query_args = ['twoinc_order_id', 'tillit_order_id', '_twoinc_order_state', 'shop_order'];
+            $query_args = [
+                'twoinc_order_id', 'tillit_order_id', '_twoinc_order_state', 'shop_order',
+                'wc-pending', 'wc-failed', 'trash'];
             foreach (self::$status_to_states as $wc_status => $states) {
                 $pair_condition = ['p.post_status = %s'];
                 $query_args[] = 'wc-' . $wc_status;
@@ -863,7 +865,7 @@ if (!class_exists('WC_Twoinc')) {
                 "  FROM $wpdb->posts p" .
                 "  LEFT JOIN $wpdb->postmeta pm ON p.id = pm.post_id AND (pm.meta_key = %s OR pm.meta_key = %s)" .
                 "  LEFT JOIN $wpdb->postmeta pm2 ON p.id = pm2.post_id AND pm2.meta_key = %s" .
-                "  WHERE p.post_type = %s" .
+                "  WHERE p.post_type = %s AND p.post_status NOT IN (%s, %s, %s)" .
                 "    AND (" . implode(' OR ', $pair_conditions) . ")";
             $select_out_of_sync = call_user_func_array(
                 [$wpdb, 'prepare'],
@@ -881,11 +883,11 @@ if (!class_exists('WC_Twoinc')) {
                 "SELECT p.id, p.post_status, pm.meta_value AS twoinc_oid" .
                 "  FROM $wpdb->posts p" .
                 "  LEFT JOIN $wpdb->postmeta pm ON p.id = pm.post_id AND (pm.meta_key = %s OR pm.meta_key = %s)" .
-                "  WHERE p.post_type = %s" .
+                "  WHERE p.post_type = %s AND p.post_status NOT IN (%s, %s, %s)" .
                 "    AND p.id IN (SELECT post_id FROM $wpdb->postmeta WHERE meta_key = %s AND meta_value = %s)" .
                 "    AND p.id NOT IN (SELECT post_id FROM $wpdb->postmeta WHERE meta_key = %s)",
-                'tillit_order_id', '_twoinc_order_state', 'shop_order', '_payment_method',
-                'woocommerce-gateway-tillit', '_twoinc_order_state');
+                'tillit_order_id', '_twoinc_order_state', 'shop_order', 'wc-pending', 'wc-failed', 'trash',
+                '_payment_method', 'woocommerce-gateway-tillit', '_twoinc_order_state');
             $results = $wpdb->get_results($select_no_two_state);
             foreach ($results as $row) {
                 $ids[$row->id] = [
@@ -895,7 +897,7 @@ if (!class_exists('WC_Twoinc')) {
                 ];
             }
 
-            return ['out_of_sync_orders' => $ids, 'plugin_version' => get_plugin_version()];
+            return ['out_of_sync_orders' => $ids, 'count' => sizeof($ids), 'plugin_version' => get_plugin_version()];
         }
 
         /**
