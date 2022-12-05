@@ -1076,6 +1076,7 @@ if (!class_exists('WC_Twoinc')) {
                     $order,
                     $twoinc_meta['order_reference'],
                     $twoinc_meta['company_id'],
+                    $twoinc_meta['company_code'],
                     $twoinc_meta['department'],
                     $twoinc_meta['project'],
                     $twoinc_meta['purchase_order_number'],
@@ -1194,6 +1195,7 @@ if (!class_exists('WC_Twoinc')) {
 
             // Get data
             $company_id = array_key_exists('company_id', $_POST) ? sanitize_text_field($_POST['company_id']) : '';
+            $company_code = array_key_exists('company_code', $_POST) ? sanitize_text_field($_POST['company_code']) : '';
             $department = array_key_exists('department', $_POST) ? sanitize_text_field($_POST['department']) : '';
             $project = array_key_exists('project', $_POST) ? sanitize_text_field($_POST['project']) : '';
             $purchase_order_number = array_key_exists('purchase_order_number', $_POST) ? sanitize_text_field($_POST['purchase_order_number']) : '';
@@ -1209,6 +1211,7 @@ if (!class_exists('WC_Twoinc')) {
             update_post_meta($order_id, '_tillit_order_reference', $order_reference);
             update_post_meta($order_id, '_tillit_merchant_id', $tillit_merchant_id);
             update_post_meta($order_id, 'company_id', $company_id);
+            update_post_meta($order_id, 'company_code', $company_code);
             update_post_meta($order_id, 'department', $department);
             update_post_meta($order_id, 'project', $project);
             update_post_meta($order_id, 'purchase_order_number', $purchase_order_number);
@@ -1257,6 +1260,7 @@ if (!class_exists('WC_Twoinc')) {
                 $order,
                 $order_reference,
                 $company_id,
+                $company_code,
                 $department,
                 $project,
                 $purchase_order_number,
@@ -2075,6 +2079,7 @@ if (!class_exists('WC_Twoinc')) {
                 update_post_meta($order->get_id(), '_tillit_merchant_id', $twoinc_merchant_id);
             }
 
+            $company_code = $order->get_meta('company_code');
             $company_id = $order->get_meta('company_id');
             if ($company_id) {
                 $department = $order->get_meta('department');
@@ -2134,6 +2139,7 @@ if (!class_exists('WC_Twoinc')) {
                 'order_reference' => $order_reference,
                 'tillit_merchant_id' => $twoinc_merchant_id,
                 'company_id' => $company_id,
+                'company_code' => $company_code,
                 'department' => $department,
                 'project' => $project,
                 'purchase_order_number' => $purchase_order_number,

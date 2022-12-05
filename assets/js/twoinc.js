@@ -1798,7 +1798,7 @@ class Twoinc {
         let jsonBody = JSON.stringify({
             "merchant_short_name": window.twoinc.merchant_short_name,
             "buyer_organization_number": Twoinc.getInstance().customerCompany.organization_number,
-            "code": ""
+            "code": Twoinc.getInstance().customerCompanyInfo.company_code
         })
 
         // Create a get due in days request

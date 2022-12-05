@@ -457,7 +457,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * @return bool
          */
         public static function compose_twoinc_order(
-            $order, $order_reference, $company_id, $department, $project, $purchase_order_number,
+            $order, $order_reference, $company_id, $company_code, $department, $project, $purchase_order_number,
             $payment_reference_message = '', $payment_reference_ocr = '', $payment_reference = '', $payment_reference_type = '',
             $tracking_id = '', $skip_nonce = false)
         {
@@ -517,6 +517,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 ],
                 'buyer_department' => $department,
                 'buyer_project' => $project,
+                'buyer_company_code' => $company_code,
                 'order_note' => $order->get_customer_note(),
                 'line_items' => WC_Twoinc_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'), $order),
                 'recurring' => false,
@@ -806,6 +807,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 $order,
                 $twoinc_meta['order_reference'],
                 $twoinc_meta['company_id'],
+                $twoinc_meta['company_code'],
                 $twoinc_meta['department'],
                 $twoinc_meta['project'],
                 $twoinc_meta['purchase_order_number'],
