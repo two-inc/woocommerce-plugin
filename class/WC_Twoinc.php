@@ -827,22 +827,35 @@ if (!class_exists('WC_Twoinc')) {
          *
          * @param request
          */
-        public static function list_out_of_sync_order_ids_wrapper($request){
+        public static function list_out_of_sync_order_ids_wrapper(){
+            $start_time = null;
+            if ($_REQUEST['start_time']) {
+                $start_time = strtotime($_REQUEST['start_time']);
+                if (!$start_time) {
+                    return new WP_Error('invalid_request', 'invalid start_time', array('status' => 400));
+                }
+            }
+            $end_time = null;
+            if ($_REQUEST['end_time']) {
+                $end_time = strtotime($_REQUEST['end_time']);
+                if (!$end_time) {
+                    return new WP_Error('invalid_request', 'invalid end_time', array('status' => 400));
+                }
+            }
+
             $wc_twoinc_instance = WC_Twoinc::get_instance();
 
             if (!WC_Twoinc_Helper::auth_rest_request($wc_twoinc_instance)) {
                 return new WP_Error('unauthorized', 'Unauthorized', array('status' => 401));
             }
 
-            return $wc_twoinc_instance->list_out_of_sync_order_ids($request);
+            return $wc_twoinc_instance->list_out_of_sync_order_ids($start_time, $end_time);
         }
 
         /**
          * List all out-of-sync orders
-         *
-         * @param $request
          */
-        public function list_out_of_sync_order_ids($request){
+        public function list_out_of_sync_order_ids($start_time, $end_time){
             global $wpdb;
             $ids = array();
 
@@ -860,12 +873,19 @@ if (!class_exists('WC_Twoinc')) {
                 }
                 $pair_conditions[] = '(' . implode(' AND ', $pair_condition) . ')';
             }
+            $time_conditions = '';
+            if ($start_time) {
+                $time_conditions .= ' AND p.post_modified >= "' . date('Y-m-d H:i:s', $start_time) . '"';
+            }
+            if ($end_time) {
+                $time_conditions .= ' AND p.post_modified <= "' . date('Y-m-d H:i:s', $end_time) . '"';
+            }
             $select_out_of_sync_q_str = "" .
-                "SELECT pm.post_id, p.post_status, pm.meta_value AS twoinc_oid, pm2.meta_value AS twoinc_state" .
+                "SELECT pm.post_id, p.post_status, p.post_modified, pm.meta_value AS twoinc_oid, pm2.meta_value AS twoinc_state" .
                 "  FROM $wpdb->posts p" .
                 "  LEFT JOIN $wpdb->postmeta pm ON p.id = pm.post_id AND (pm.meta_key = %s OR pm.meta_key = %s)" .
                 "  LEFT JOIN $wpdb->postmeta pm2 ON p.id = pm2.post_id AND pm2.meta_key = %s" .
-                "  WHERE p.post_type = %s AND p.post_status NOT IN (%s, %s, %s)" .
+                "  WHERE p.post_type = %s AND p.post_status NOT IN (%s, %s, %s)" . $time_conditions .
                 "    AND (" . implode(' OR ', $pair_conditions) . ")";
             $select_out_of_sync = call_user_func_array(
                 [$wpdb, 'prepare'],
@@ -875,15 +895,16 @@ if (!class_exists('WC_Twoinc')) {
                 $ids[$row->post_id] = [
                     'two_state' => $row->twoinc_state,
                     'two_id' => $row->twoinc_oid,
-                    'wp_status' => $row->post_status
+                    'wp_status' => $row->post_status,
+                    'modified_on' => $row->post_modified
                 ];
             }
             // Get Two orders without Two state meta
             $select_no_two_state = $wpdb->prepare(
-                "SELECT p.id, p.post_status, pm.meta_value AS twoinc_oid" .
+                "SELECT p.id, p.post_status, p.post_modified, pm.meta_value AS twoinc_oid" .
                 "  FROM $wpdb->posts p" .
                 "  LEFT JOIN $wpdb->postmeta pm ON p.id = pm.post_id AND (pm.meta_key = %s OR pm.meta_key = %s)" .
-                "  WHERE p.post_type = %s AND p.post_status NOT IN (%s, %s, %s)" .
+                "  WHERE p.post_type = %s AND p.post_status NOT IN (%s, %s, %s)" . $time_conditions .
                 "    AND p.id IN (SELECT post_id FROM $wpdb->postmeta WHERE meta_key = %s AND meta_value = %s)" .
                 "    AND p.id NOT IN (SELECT post_id FROM $wpdb->postmeta WHERE meta_key = %s)",
                 'tillit_order_id', '_twoinc_order_state', 'shop_order', 'wc-pending', 'wc-failed', 'trash',
@@ -893,7 +914,8 @@ if (!class_exists('WC_Twoinc')) {
                 $ids[$row->id] = [
                     'two_state' => null,
                     'two_id' => $row->twoinc_oid,
-                    'wp_status' => $row->post_status
+                    'wp_status' => $row->post_status,
+                    'modified_on' => $row->post_modified
                 ];
             }
 
