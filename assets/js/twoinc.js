@@ -1793,12 +1793,13 @@ class Twoinc {
     getDueInDays()
     {
 
-        if (!Twoinc.getInstance().customerCompany || !Twoinc.getInstance().customerCompany.organization_number) return
+        if (!Twoinc.getInstance().customerCompany || !Twoinc.getInstance().customerCompany.organization_number
+            || !Twoinc.getInstance().customerCompany.country_prefix) return
 
         let jsonBody = JSON.stringify({
             "merchant_short_name": window.twoinc.merchant_short_name,
             "buyer_organization_number": Twoinc.getInstance().customerCompany.organization_number,
-            "code": ""
+            "country_prefix": Twoinc.getInstance().customerCompany.country_prefix
         })
 
         // Create a get due in days request
