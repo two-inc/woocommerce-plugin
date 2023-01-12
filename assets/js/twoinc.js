@@ -185,7 +185,7 @@ let twoincSelectWooHelper = {
                 text: item.name,
                 html: item.highlight + ' (' + item.id + ')',
                 company_id: item.id,
-                company_code: item.code,
+                company_type: item.code,
                 approved: false
             })
 
@@ -518,8 +518,10 @@ let twoincDomHelper = {
     toggleBusinessFields: function(accountType) {
 
         // Get the targets
-        let allTargets = ['.woocommerce-company-fields', '.woocommerce-representative-fields', '#billing_phone_display_field', '#billing_phone_field',
-                          '#billing_company_display_field', '#billing_company_field', '#company_id_field', '#department_field', '#project_field', '#purchase_order_number_field']
+        let allTargets = [
+            '.woocommerce-company-fields', '.woocommerce-representative-fields', '#billing_phone_display_field', '#billing_phone_field',
+            '#billing_company_display_field', '#billing_company_field', '#company_id_field', '#company_type_field',
+            '#department_field', '#project_field', '#purchase_order_number_field']
         let visibleNonbusinessTargets = ['#billing_phone_field', '#billing_company_field']
         let visibleBusinessTargets = ['.woocommerce-company-fields', '.woocommerce-representative-fields', '#billing_phone_display_field']
         let requiredBusinessTargets = []
@@ -799,6 +801,7 @@ let twoincDomHelper = {
 
         return {
             'company_name': twoincDomHelper.getCompanyName(),
+            'company_type': jQuery('#company_type').val(),
             'country_prefix': jQuery('#billing_country').val(),
             'organization_number': jQuery('#company_id').val()
         }
@@ -833,6 +836,7 @@ let twoincDomHelper = {
         twoincDomHelper.toggleTooltip('#billing_company_display_field .select2-container', window.twoinc.text.tooltip_company)
         twoincSelectWooHelper.fixSelectWooPositionCompanyName()
         jQuery('#company_id').val('')
+        jQuery('#company_type').val('')
 
         // Clear the addresses, in case address get request fails
         if (window.twoinc.address_search === 'yes') {
@@ -1233,11 +1237,9 @@ class Twoinc {
         this.orderIntentLog = {}
         this.customerCompany = {
             'company_name': null,
+            'company_type': null,
             'country_prefix': null,
             'organization_number': null
-        }
-        this.customerCompanyInfo = {
-            'company_code': null
         }
         this.customerRepresentative = {
             'email': null,
@@ -1268,8 +1270,9 @@ class Twoinc {
         const $billingCompanyDisplay = $body.find('#billing_company_display')
         const $billingCompany = $body.find('#billing_company')
 
-        // Get the company ID field
+        // Get the company fields
         const $companyId = $body.find('#company_id')
+        const $companyType = $body.find('#company_type')
 
         // If we found the field
         if (jQuery('[name="account_type"]:checked').length > 0) {
@@ -1302,14 +1305,17 @@ class Twoinc {
                     // Set the company name
                     Twoinc.getInstance().customerCompany.company_name = data.id
 
+                    // Set the company type
+                    Twoinc.getInstance().customerCompany.company_type = data.company_type
+
                     // Set the company ID
                     Twoinc.getInstance().customerCompany.organization_number = data.company_id
 
-                    // Set the company code
-                    Twoinc.getInstance().customerCompanyInfo.company_code = data.company_code
-
                     // Set the company ID to HTML DOM
                     $companyId.val(data.company_id)
+
+                    // Set the company type to HTML DOM
+                    $companyType.val(data.company_type)
 
                     // Set the company name to HTML DOM
                     $billingCompany.val(data.id)
@@ -1366,6 +1372,7 @@ class Twoinc {
         $body.on('click', '#company_not_in_btn', function() {
             jQuery('#billing_company_display').val("")
             jQuery('#company_id').val("")
+            jQuery('#company_type').val("")
             Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData()
             window.twoinc.company_name_search = 'no'
 
@@ -1379,6 +1386,7 @@ class Twoinc {
         $body.on('click', '#search_company_btn', function() {
             jQuery('#billing_company').val("")
             jQuery('#company_id').val("")
+            jQuery('#company_type').val("")
             Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData()
 
             jQuery('#search_company_btn').hide()
@@ -1605,7 +1613,7 @@ class Twoinc {
             Twoinc.getInstance().orderIntentCheck.interval = null
             Twoinc.getInstance().orderIntentCheck.pendingCheck = false
 
-            // if (Twoinc.getInstance().customerCompanyInfo.company_code === 'ENK') {
+            // if (Twoinc.getInstance().customerCompany.company_type === 'ENK') {
             //     Twoinc.getInstance().orderIntentLog[hashedBody] = 'errored|.err-enk-not-supported'
             //     twoincDomHelper.togglePaySubtitleDesc(...Twoinc.getInstance().orderIntentLog[hashedBody].split('|'))
             //     return
@@ -1716,7 +1724,7 @@ class Twoinc {
                 let errMsg = null
                 if (response.approved === false) { // rejected
                     displayMsgId = 'errored|.err-payment-rejected'
-                    if (Twoinc.getInstance().customerCompanyInfo.company_code === 'ENK') {
+                    if (Twoinc.getInstance().customerCompany.company_type === 'ENK') {
                         displayMsgId = 'errored|.err-enk-not-supported'
                     }
                 } else {
@@ -1754,7 +1762,6 @@ class Twoinc {
         // Get country
         let country_prefix = Twoinc.getInstance().customerCompany.country_prefix
         if (!country_prefix || !['GB', 'SE'].includes(country_prefix)) country_prefix = 'NO'
-
 
         // Get company ID
         let company_id = jQuery('#company_id').val()
@@ -1802,6 +1809,7 @@ class Twoinc {
         let jsonBody = JSON.stringify({
             "merchant_short_name": window.twoinc.merchant_short_name,
             "buyer_organization_number": Twoinc.getInstance().customerCompany.organization_number,
+            "code": Twoinc.getInstance().customerCompany.company_type || "",
             "country_prefix": Twoinc.getInstance().customerCompany.country_prefix
         })
 

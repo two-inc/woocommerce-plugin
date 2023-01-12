@@ -186,13 +186,20 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 'priority' => $company_name_priority + 1
             ];
 
+            $fields['billing']['company_type'] = [
+                'label' => __('Company type', 'twoinc-payment-gateway'),
+                'class' => array('hidden'),
+                'required' => false,
+                'priority' => $company_name_priority + 2
+            ];
+
             if ($this->wc_twoinc->get_option('add_field_department') === 'yes') {
 
                 $fields['billing']['department'] = [
                     'label' => __('Department', 'twoinc-payment-gateway'),
                     'class' => array('hidden'),
                     'required' => false,
-                    'priority' => $company_name_priority + 2
+                    'priority' => $company_name_priority + 3
                 ];
 
             }
@@ -203,7 +210,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     'label' => __('Project', 'twoinc-payment-gateway'),
                     'class' => array('hidden'),
                     'required' => false,
-                    'priority' => $company_name_priority + 3
+                    'priority' => $company_name_priority + 4
                 ];
 
             }
@@ -214,7 +221,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     'label' => __('Purchase order number', 'twoinc-payment-gateway'),
                     'class' => array('hidden'),
                     'required' => false,
-                    'priority' => $company_name_priority + 4
+                    'priority' => $company_name_priority + 5
                 ];
 
             }
