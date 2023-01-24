@@ -2,7 +2,7 @@
   "enabled": "no",
   "title": "Business invoice %s days",
   "subtitle": "Receive the invoice via PDF and email",
-  "test_checkout_host": "https://staging.api.two.inc",
+  "test_checkout_host": "https://api.staging.two.inc",
   "clear_options_on_deactivation": "no",
   "section_api_credentials": "",
   "tillit_merchant_id": "tillitas",

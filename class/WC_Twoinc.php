@@ -155,7 +155,11 @@ if (!class_exists('WC_Twoinc')) {
          */
         private function get_twoinc_search_host($countryCode){
             if (WC_Twoinc_Helper::is_twoinc_development()) {
-                return "https://{$countryCode}.staging.search.two.inc";
+                if ($this->get_option('use_prod_company_search') === 'yes') {
+                    return "https://{$countryCode}.search.two.inc";
+                } else {
+                    return "https://{$countryCode}.search.staging.two.inc";
+                }
             }
             return "https://{$countryCode}.search.two.inc";
         }
@@ -1703,7 +1707,7 @@ if (!class_exists('WC_Twoinc')) {
 
             if ($site_type === 'WOOCOMMERCE') {
 
-                $allowed_twoinc_checkout_hosts = array('https://api.two.inc/', 'https://staging.api.two.inc/', 'https://sandbox.api.two.inc/', 'http://localhost:8080');
+                $allowed_twoinc_checkout_hosts = array('https://api.two.inc/', 'https://api.staging.two.inc/', 'https://sandbox.api.two.inc/', 'http://localhost:8080');
                 if (!in_array($twoinc_checkout_host, $allowed_twoinc_checkout_hosts)) {
                     $error = new WP_Error(
                         'init_failed',
@@ -1755,6 +1759,7 @@ if (!class_exists('WC_Twoinc')) {
                     if (isset($body['clear_options_on_deactivation'])) $wc_twoinc_instance->update_option('clear_options_on_deactivation', $body['clear_options_on_deactivation'] ? 'yes' : 'no');
                     if (WC_Twoinc_Helper::is_twoinc_development()) {
                         $wc_twoinc_instance->update_option('test_checkout_host', $twoinc_checkout_host);
+                        if (isset($body['use_prod_company_search'])) $wc_twoinc_instance->update_option('use_prod_company_search', $body['use_prod_company_search'] ? 'yes' : 'no');
                     } else if (strpos($twoinc_checkout_host, 'sandbox.api.two.inc') !== false) {
                         $wc_twoinc_instance->update_option('checkout_env', 'SANDBOX');
                     } else {
@@ -1841,7 +1846,13 @@ if (!class_exists('WC_Twoinc')) {
                 'test_checkout_host' => [
                     'type'        => 'text',
                     'title'       => __('Two Test Server', 'twoinc-payment-gateway'),
-                    'default'     => 'https://staging.api.two.inc'
+                    'default'     => 'https://api.staging.two.inc'
+                ],
+                'use_prod_company_search' => [
+                    'type'        => 'select',
+                    'title'       => __('Use production company search`', 'twoinc-payment-gateway'),
+                    'type'        => 'checkbox',
+                    'default'     => 'no'
                 ],
                 'checkout_env' => [
                     'type'        => 'select',
@@ -1989,6 +2000,7 @@ if (!class_exists('WC_Twoinc')) {
                 unset($twoinc_form_fields['checkout_env']);
             } else {
                 unset($twoinc_form_fields['test_checkout_host']);
+                unset($twoinc_form_fields['use_prod_company_search']);
             }
 
             $this->form_fields = apply_filters('wc_two_form_fields', $twoinc_form_fields);
