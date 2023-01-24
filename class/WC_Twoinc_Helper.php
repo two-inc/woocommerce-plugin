@@ -728,24 +728,18 @@ if (!class_exists('WC_Twoinc_Helper')) {
             $hostname = str_replace(array('http://', 'https://'), '', get_home_url());
 
             // Local or configured in env var
-            if (in_array($hostname, array('dev.tillitlocal.ai', 'localhost')) || substr($hostname, 0, 10) === 'localhost:') return true;
+            if (preg_match('/^localhost(?::[0-9]{1,5})?$/', $hostname) === 1) return true;
             $env_dev_hostnames = getenv('TWOINC_DEV_HOSTNAMES');
             if ($env_dev_hostnames && in_array($hostname, explode(',', $env_dev_hostnames))) return true;
 
-            // Production sites
-            if (strlen($hostname) > 8 && substr($hostname, -8) === '.two.inc') {
-                $twoinc_prod_sites = array('shop', 'morgenlevering', 'arkwrightx', 'paguro');
-                $host_prefix = substr($hostname, 0, -8);
-
-                foreach ($twoinc_prod_sites as $twoinc_prod_site) {
-                    if ($host_prefix === $twoinc_prod_site || $host_prefix === ('www.' . $twoinc_prod_site)) {
-                        // Twoinc site but not for development
-                        return false;
-                    }
+            if (str_ends_with($hostname, "two.inc")) {
+                // Production sites using two.inc subdomains
+                $twoinc_prod_sites = '/^(?:www\.)?(?:(?:.+\.)?(?:shop|demo)|tellit|iem|cubelighting|digg|morgenlevering|arkwrightx|kandidate|kandidate-internal)\.two\.inc$/';
+                if (preg_match($twoinc_prod_sites, $hostname) === 1){
+                    return false;
+                } else {
+                    return true;
                 }
-
-                // Twoinc development site
-                return true;
             }
 
             // Merchant's staging
@@ -753,7 +747,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
 
             // Neither local nor twoinc development site
             return false;
-
         }
 
         /**
