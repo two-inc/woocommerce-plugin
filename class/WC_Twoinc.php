@@ -1849,9 +1849,9 @@ if (!class_exists('WC_Twoinc')) {
                     'default'     => 'https://api.staging.two.inc'
                 ],
                 'use_prod_company_search' => [
-                    'type'        => 'select',
-                    'title'       => __('Use production company search`', 'twoinc-payment-gateway'),
+                    'title'       => __('Company search', 'twoinc-payment-gateway'),
                     'type'        => 'checkbox',
+                    'label'       => __('Use production search API', 'twoinc-payment-gateway'),
                     'default'     => 'no'
                 ],
                 'checkout_env' => [
