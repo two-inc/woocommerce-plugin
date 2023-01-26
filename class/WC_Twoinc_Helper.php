@@ -734,7 +734,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
 
             if (str_ends_with($hostname, "two.inc")) {
                 // Production sites using two.inc subdomains
-                $twoinc_prod_sites = '/^(?:www\.)?(?:(?:.+\.)?(?:shop|demo)|tellit|iem|cubelighting|digg|morgenlevering|arkwrightx|kandidate|kandidate-internal)\.two\.inc$/';
+                $twoinc_prod_sites = '/^(?:www\.)?(?:(?:.+\.)?shop|tellit|iem|cubelighting|digg|morgenlevering|arkwrightx|kandidate|kandidate-internal)\.two\.inc$/';
                 if (preg_match($twoinc_prod_sites, $hostname) === 1){
                     return false;
                 } else {
