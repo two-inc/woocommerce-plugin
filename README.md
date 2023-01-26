@@ -3,8 +3,8 @@
 ## Installation
 
 ```bash
-git clone git@github.com:tillit-dot-ai/tillit-woocommerce.git
-cd tillit-woocommerce
+git clone git@github.com:two-inc/woocommerce-plugin.git
+cd woocommerce-plugin
 docker-compose up
 ```
 

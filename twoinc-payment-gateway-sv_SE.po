@@ -17,7 +17,7 @@ msgstr ""
 
 #: class/WC_Twoinc.php:1594
 msgid "Add input field for \"Department\""
-msgstr "Lägg till inmatningsfält för \"Avdelning \""
+msgstr "Lägg till inmatningsfält för \"Avdelning\""
 
 #: class/WC_Twoinc.php:1602
 msgid "Add input field for \"Project\""
@@ -98,7 +98,7 @@ msgstr "Företagskund"
 #: class/WC_Twoinc.php:1520
 #, php-format
 msgid "Business invoice %s days"
-msgstr "%s dagar betalningsvillkor"
+msgstr "%s dagars betalningsvillkor"
 
 #: class/WC_Twoinc.php:282 class/WC_Twoinc_Helper.php:97
 msgid "Buyer and merchant may not be the same company"
@@ -109,8 +109,8 @@ msgid ""
 "By completing the purchase, you verify that you have the legal right to "
 "purchase on behalf of"
 msgstr ""
-"Genom att slutföra köpet intygar du att du har behörighet att ingå avtal "
-"atthandla på uppdrag av"
+"Genom att slutföra köpet intygas att du har behörighet att ingå avtal på "
+"uppdrag av"
 
 #: class/WC_Twoinc.php:1564
 msgid "Checkout options"
@@ -534,7 +534,7 @@ msgstr "Two: tomt svar"
 
 #: class/WC_Twoinc.php:302
 msgid "Two lets your business pay later for the goods you purchase online."
-msgstr "Two låter ditt företag betala senare för varorna du köper online."
+msgstr "Two låter ditt företag betala med faktura för varorna du köper online."
 
 #: class/WC_Twoinc.php:824
 msgid "Two pre-filled fields"

@@ -1605,11 +1605,11 @@ class Twoinc {
             Twoinc.getInstance().orderIntentCheck.interval = null
             Twoinc.getInstance().orderIntentCheck.pendingCheck = false
 
-            if (Twoinc.getInstance().customerCompanyInfo.company_code === 'ENK') {
-                Twoinc.getInstance().orderIntentLog[hashedBody] = 'errored|.err-enk-not-supported'
-                twoincDomHelper.togglePaySubtitleDesc(...Twoinc.getInstance().orderIntentLog[hashedBody].split('|'))
-                return
-            }
+            // if (Twoinc.getInstance().customerCompanyInfo.company_code === 'ENK') {
+            //     Twoinc.getInstance().orderIntentLog[hashedBody] = 'errored|.err-enk-not-supported'
+            //     twoincDomHelper.togglePaySubtitleDesc(...Twoinc.getInstance().orderIntentLog[hashedBody].split('|'))
+            //     return
+            // }
             if (!Twoinc.getInstance().isReadyApprovalCheck()) return
 
             twoincDomHelper.togglePaySubtitleDesc('checking-intent')
@@ -1716,6 +1716,9 @@ class Twoinc {
                 let errMsg = null
                 if (response.approved === false) { // rejected
                     displayMsgId = 'errored|.err-payment-rejected'
+                    if (Twoinc.getInstance().customerCompanyInfo.company_code === 'ENK') {
+                        displayMsgId = 'errored|.err-enk-not-supported'
+                    }
                 } else {
                     displayMsgId = 'errored|.err-payment-default'
                 }
@@ -1793,12 +1796,13 @@ class Twoinc {
     getDueInDays()
     {
 
-        if (!Twoinc.getInstance().customerCompany || !Twoinc.getInstance().customerCompany.organization_number) return
+        if (!Twoinc.getInstance().customerCompany || !Twoinc.getInstance().customerCompany.organization_number
+            || !Twoinc.getInstance().customerCompany.country_prefix) return
 
         let jsonBody = JSON.stringify({
             "merchant_short_name": window.twoinc.merchant_short_name,
             "buyer_organization_number": Twoinc.getInstance().customerCompany.organization_number,
-            "code": ""
+            "country_prefix": Twoinc.getInstance().customerCompany.country_prefix
         })
 
         // Create a get due in days request
