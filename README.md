@@ -14,7 +14,24 @@ docker-compose up
 npx cypress run --browser chrome --config baseUrl=http://localhost
 ```
 
-## Set up wordpress for local development
+## Releasing a new version
+
+Ensure that you have `bumpversion` installed. This can be done with Homebrew on MacOS:
+
+    $ brew install bumpversion
+
+To bump version:
+
+    $ bumpversion <major|minor|patch>
+
+To push the tag:
+
+    $ git push --tags
+
+Now, go to Github to create a new release which triggers publication of the new version to Wordpress plugin directory.
+
+## Set up Wordpress for local development
+
 For Mac users, follow this guide:
 https://skillcrush.com/blog/install-wordpress-mac/
 
