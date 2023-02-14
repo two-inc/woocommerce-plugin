@@ -872,7 +872,7 @@ if (!class_exists('WC_Twoinc')) {
                 $pair_condition = ['p.post_status = %s'];
                 $query_args[] = 'wc-' . $wc_status;
                 foreach ($states as $state) {
-                    $pair_condition[] = 'twoinc_state != %s';
+                    $pair_condition[] = 'pm2.meta_value != %s';  // twoinc_state
                     $query_args[] = $state;
                 }
                 $pair_conditions[] = '(' . implode(' AND ', $pair_condition) . ')';
@@ -911,7 +911,7 @@ if (!class_exists('WC_Twoinc')) {
                 "  WHERE p.post_type = %s AND p.post_status NOT IN (%s, %s, %s)" . $time_conditions .
                 "    AND p.id IN (SELECT post_id FROM $wpdb->postmeta WHERE meta_key = %s AND meta_value = %s)" .
                 "    AND p.id NOT IN (SELECT post_id FROM $wpdb->postmeta WHERE meta_key = %s)",
-                'tillit_order_id', '_twoinc_order_state', 'shop_order', 'wc-pending', 'wc-failed', 'trash',
+                'twoinc_order_id', 'tillit_order_id', 'shop_order', 'wc-pending', 'wc-failed', 'trash',
                 '_payment_method', 'woocommerce-gateway-tillit', '_twoinc_order_state');
             $results = $wpdb->get_results($select_no_two_state);
             foreach ($results as $row) {
@@ -1118,6 +1118,7 @@ if (!class_exists('WC_Twoinc')) {
 
             return [
                'twoinc_state' => $current_state_in_db,
+               'wp_status' => 'wc-' . $order->get_status(),
                'order_note' => WC_Twoinc_Helper::get_private_order_notes($order_id),
                'twoinc_order_body' => $twoinc_order_body,
                'data' => [
@@ -1661,8 +1662,9 @@ if (!class_exists('WC_Twoinc')) {
             }
             // After get_twoinc_error_msg, we can assume $response['response']['code'] < 400
 
-            // Add note
+            // Add note and update Two state
             $order->add_order_note(sprintf(__('Order ID: %s has been placed with Two', 'twoinc-payment-gateway'), $twoinc_order_id));
+            update_post_meta($order_id, '_twoinc_order_state', 'CONFIRMED');
 
             // Mark order as processing
             $order->payment_complete();
