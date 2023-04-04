@@ -1578,17 +1578,19 @@ if (!class_exists('WC_Twoinc')) {
             // Get the order reference
             $order_reference = sanitize_text_field($_REQUEST['twoinc_confirm_order']);
 
-            // Get the nonce
-            $nonce = $_REQUEST['nonce'];
+            if ($this->get_option('skip_confirm_auth') !== 'yes') {
+                // Get the nonce
+                $nonce = $_REQUEST['nonce'];
 
-            // Stop if the code is not valid
-            if (!wp_verify_nonce($nonce, 'twoinc_confirm')) {
-                WC_Twoinc_Helper::send_twoinc_alert_email(
-                    "Invalid nonce:"
-                    . "\r\n- Request: Confirm order"
-                    . "\r\n- Order reference: " . $order_reference
-                    . "\r\n- Site: " . get_site_url());
-                wp_die(__('The security code is not valid.', 'twoinc-payment-gateway'));
+                // Stop if the code is not valid
+                if (!wp_verify_nonce($nonce, 'twoinc_confirm')) {
+                    WC_Twoinc_Helper::send_twoinc_alert_email(
+                        "Invalid nonce:"
+                        . "\r\n- Request: Confirm order"
+                        . "\r\n- Order reference: " . $order_reference
+                        . "\r\n- Site: " . get_site_url());
+                    wp_die(__('The security code is not valid.', 'twoinc-payment-gateway'));
+                }
             }
 
             /** @var wpdb $wpdb */
@@ -1972,6 +1974,12 @@ if (!class_exists('WC_Twoinc')) {
                 ],
                 'display_tooltips' => [
                     'title'       => __('Display input tooltips', 'twoinc-payment-gateway'),
+                    'label'       => ' ',
+                    'type'        => 'checkbox',
+                    'default'     => 'no'
+                ],
+                'skip_confirm_auth' => [
+                    'title'       => __('Skip user validation at order confirmation', 'twoinc-payment-gateway'),
                     'label'       => ' ',
                     'type'        => 'checkbox',
                     'default'     => 'no'
