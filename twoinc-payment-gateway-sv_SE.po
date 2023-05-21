@@ -452,10 +452,6 @@ msgstr "Enskild näringsidkare/annan"
 msgid "Sole Trader/Other Customer"
 msgstr "Enskild näringsidkare"
 
-#: class/WC_Twoinc.php:286
-msgid "Sorry, sole traders are not supported by Two."
-msgstr "Tyvärr, enskild näringsidkare stöds inte av Two."
-
 #: class/WC_Twoinc.php:273
 msgid ""
 "The latest way to pay for your online business purchases. You will receive "
