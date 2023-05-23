@@ -1605,11 +1605,6 @@ class Twoinc {
             Twoinc.getInstance().orderIntentCheck.interval = null
             Twoinc.getInstance().orderIntentCheck.pendingCheck = false
 
-            // if (Twoinc.getInstance().customerCompanyInfo.company_code === 'ENK') {
-            //     Twoinc.getInstance().orderIntentLog[hashedBody] = 'errored|.err-enk-not-supported'
-            //     twoincDomHelper.togglePaySubtitleDesc(...Twoinc.getInstance().orderIntentLog[hashedBody].split('|'))
-            //     return
-            // }
             if (!Twoinc.getInstance().isReadyApprovalCheck()) return
 
             twoincDomHelper.togglePaySubtitleDesc('checking-intent')
@@ -1716,9 +1711,6 @@ class Twoinc {
                 let errMsg = null
                 if (response.approved === false) { // rejected
                     displayMsgId = 'errored|.err-payment-rejected'
-                    if (Twoinc.getInstance().customerCompanyInfo.company_code === 'ENK') {
-                        displayMsgId = 'errored|.err-enk-not-supported'
-                    }
                 } else {
                     displayMsgId = 'errored|.err-payment-default'
                 }
