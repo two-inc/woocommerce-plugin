@@ -701,7 +701,7 @@ if (!class_exists('WC_Twoinc')) {
             }
 
             // Change the order status
-            $response = $this->make_request("/v1/order/${twoinc_order_id}/fulfilled");
+            $response = $this->make_request("/v1/order/${twoinc_order_id}/fulfillments");
 
             if (is_wp_error($response)) {
                 $order->add_order_note(__('Could not update status', 'twoinc-payment-gateway'));
