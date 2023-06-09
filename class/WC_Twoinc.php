@@ -144,7 +144,7 @@ if (!class_exists('WC_Twoinc')) {
             if (WC_Twoinc_Helper::is_twoinc_development()) {
                 return $this->get_option('test_checkout_host');
             } else if ($this->get_option('checkout_env') === 'SANDBOX') {
-                return 'https://sandbox.api.two.inc';
+                return 'https://api.sandbox.two.inc';
             } else {
                 return 'https://api.two.inc';
             }
@@ -1709,7 +1709,7 @@ if (!class_exists('WC_Twoinc')) {
 
             if ($site_type === 'WOOCOMMERCE') {
 
-                $allowed_twoinc_checkout_hosts = array('https://api.two.inc/', 'https://api.staging.two.inc/', 'https://sandbox.api.two.inc/', 'http://localhost:8080');
+                $allowed_twoinc_checkout_hosts = array('https://api.two.inc/', 'https://api.staging.two.inc/', 'https://api.sandbox.two.inc/', 'http://localhost:8080');
                 if (!in_array($twoinc_checkout_host, $allowed_twoinc_checkout_hosts)) {
                     $error = new WP_Error(
                         'init_failed',
@@ -1762,7 +1762,7 @@ if (!class_exists('WC_Twoinc')) {
                     if (WC_Twoinc_Helper::is_twoinc_development()) {
                         $wc_twoinc_instance->update_option('test_checkout_host', $twoinc_checkout_host);
                         if (isset($body['use_prod_company_search'])) $wc_twoinc_instance->update_option('use_prod_company_search', $body['use_prod_company_search'] ? 'yes' : 'no');
-                    } else if (strpos($twoinc_checkout_host, 'sandbox.api.two.inc') !== false) {
+                    } else if (strpos($twoinc_checkout_host, 'api.sandbox.two.inc') !== false) {
                         $wc_twoinc_instance->update_option('checkout_env', 'SANDBOX');
                     } else {
                         $wc_twoinc_instance->update_option('checkout_env', 'PROD');
