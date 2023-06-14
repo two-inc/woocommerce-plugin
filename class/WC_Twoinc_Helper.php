@@ -179,7 +179,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
          */
         public static function auth_rest_request($wc_twoinc)
         {
-            return $wc_twoinc->api_key === $_SERVER['HTTP_X_API_KEY'];
+	    // TODO: Drop comparison against HTTP_X_API_KEY in a future release
+            return hash('sha256', $wc_twoinc->api_key) === $_SERVER['HTTP_X_API_KEY_HASH'] || $wc_twoinc->api_key === $_SERVER['HTTP_X_API_KEY'];
         }
 
         /**

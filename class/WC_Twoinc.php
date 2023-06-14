@@ -144,7 +144,7 @@ if (!class_exists('WC_Twoinc')) {
             if (WC_Twoinc_Helper::is_twoinc_development()) {
                 return $this->get_option('test_checkout_host');
             } else if ($this->get_option('checkout_env') === 'SANDBOX') {
-                return 'https://sandbox.api.two.inc';
+                return 'https://api.sandbox.two.inc';
             } else {
                 return 'https://api.two.inc';
             }
@@ -275,7 +275,6 @@ if (!class_exists('WC_Twoinc')) {
                     <div class="twoinc-pay-box err-amt-max" style="display: none;">%s</div>
                     <div class="twoinc-pay-box err-amt-min" style="display: none;">%s</div>
                     <div class="twoinc-pay-box err-phone" style="display: none;">%s</div>
-                    <div class="twoinc-pay-box err-enk-not-supported" style="display: none;">%s</div>
                 </div>',
                 __('The latest way to pay for your online business purchases. You will receive an invoice from Two when your order has been processed.', 'twoinc-payment-gateway'),
                 sprintf(
@@ -289,8 +288,7 @@ if (!class_exists('WC_Twoinc')) {
                 __('Buyer and merchant may not be the same company', 'twoinc-payment-gateway'),
                 __('Order value exceeds maximum limit', 'twoinc-payment-gateway'),
                 __('Order value is below minimum limit', 'twoinc-payment-gateway'),
-                __('Phone number is invalid', 'twoinc-payment-gateway'),
-                __('Sorry, sole traders are not supported by Two.', 'twoinc-payment-gateway')
+                __('Phone number is invalid', 'twoinc-payment-gateway')
             );
 
         }
@@ -703,7 +701,7 @@ if (!class_exists('WC_Twoinc')) {
             }
 
             // Change the order status
-            $response = $this->make_request("/v1/order/${twoinc_order_id}/fulfilled");
+            $response = $this->make_request("/v1/order/${twoinc_order_id}/fulfillments");
 
             if (is_wp_error($response)) {
                 $order->add_order_note(__('Could not update status', 'twoinc-payment-gateway'));
@@ -1578,17 +1576,19 @@ if (!class_exists('WC_Twoinc')) {
             // Get the order reference
             $order_reference = sanitize_text_field($_REQUEST['twoinc_confirm_order']);
 
-            // Get the nonce
-            $nonce = $_REQUEST['nonce'];
+            if ($this->get_option('skip_confirm_auth') !== 'yes') {
+                // Get the nonce
+                $nonce = $_REQUEST['nonce'];
 
-            // Stop if the code is not valid
-            if (!wp_verify_nonce($nonce, 'twoinc_confirm')) {
-                WC_Twoinc_Helper::send_twoinc_alert_email(
-                    "Invalid nonce:"
-                    . "\r\n- Request: Confirm order"
-                    . "\r\n- Order reference: " . $order_reference
-                    . "\r\n- Site: " . get_site_url());
-                wp_die(__('The security code is not valid.', 'twoinc-payment-gateway'));
+                // Stop if the code is not valid
+                if (!wp_verify_nonce($nonce, 'twoinc_confirm')) {
+                    WC_Twoinc_Helper::send_twoinc_alert_email(
+                        "Invalid nonce:"
+                        . "\r\n- Request: Confirm order"
+                        . "\r\n- Order reference: " . $order_reference
+                        . "\r\n- Site: " . get_site_url());
+                    wp_die(__('The security code is not valid.', 'twoinc-payment-gateway'));
+                }
             }
 
             /** @var wpdb $wpdb */
@@ -1709,7 +1709,7 @@ if (!class_exists('WC_Twoinc')) {
 
             if ($site_type === 'WOOCOMMERCE') {
 
-                $allowed_twoinc_checkout_hosts = array('https://api.two.inc/', 'https://api.staging.two.inc/', 'https://sandbox.api.two.inc/', 'http://localhost:8080');
+                $allowed_twoinc_checkout_hosts = array('https://api.two.inc/', 'https://api.staging.two.inc/', 'https://api.sandbox.two.inc/', 'http://localhost:8080');
                 if (!in_array($twoinc_checkout_host, $allowed_twoinc_checkout_hosts)) {
                     $error = new WP_Error(
                         'init_failed',
@@ -1762,7 +1762,7 @@ if (!class_exists('WC_Twoinc')) {
                     if (WC_Twoinc_Helper::is_twoinc_development()) {
                         $wc_twoinc_instance->update_option('test_checkout_host', $twoinc_checkout_host);
                         if (isset($body['use_prod_company_search'])) $wc_twoinc_instance->update_option('use_prod_company_search', $body['use_prod_company_search'] ? 'yes' : 'no');
-                    } else if (strpos($twoinc_checkout_host, 'sandbox.api.two.inc') !== false) {
+                    } else if (strpos($twoinc_checkout_host, 'api.sandbox.two.inc') !== false) {
                         $wc_twoinc_instance->update_option('checkout_env', 'SANDBOX');
                     } else {
                         $wc_twoinc_instance->update_option('checkout_env', 'PROD');
@@ -1972,6 +1972,12 @@ if (!class_exists('WC_Twoinc')) {
                 ],
                 'display_tooltips' => [
                     'title'       => __('Display input tooltips', 'twoinc-payment-gateway'),
+                    'label'       => ' ',
+                    'type'        => 'checkbox',
+                    'default'     => 'no'
+                ],
+                'skip_confirm_auth' => [
+                    'title'       => __('Skip user validation at order confirmation', 'twoinc-payment-gateway'),
                     'label'       => ' ',
                     'type'        => 'checkbox',
                     'default'     => 'no'
