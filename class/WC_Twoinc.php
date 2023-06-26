@@ -228,7 +228,7 @@ if (!class_exists('WC_Twoinc')) {
                 $this->update_option('days_on_invoice_last_checked_on', time());
             }
 
-            return apply_filters('twoinc_days_on_invoice', $days_on_invoice, $this);
+            return $days_on_invoice;
 
         }
 
