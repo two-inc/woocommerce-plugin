@@ -177,59 +177,58 @@ if (!class_exists('WC_Twoinc')) {
                 $days_on_invoice = 14;
             }
 
-            // Return val from DB if last checked is within 1 hour
-            if ($days_on_invoice_last_checked_on && ($days_on_invoice_last_checked_on + 3600) > time()) {
-                return $days_on_invoice;
-            }
+            // if last checked is not within 1 hour, ask Twoinc server
+            if (!$days_on_invoice_last_checked_on || ($days_on_invoice_last_checked_on + 3600) <= time()) {
 
-            $twoinc_merchant_id = $this->get_option('tillit_merchant_id');
+                $twoinc_merchant_id = $this->get_option('tillit_merchant_id');
 
-            if ($twoinc_merchant_id && $this->get_option('api_key')) {
+                if ($twoinc_merchant_id && $this->get_option('api_key')) {
 
-                // Get the latest due
-                $response = $this->make_request("/v1/merchant/${twoinc_merchant_id}", [], 'GET');
+                    // Get the latest due
+                    $response = $this->make_request("/v1/merchant/${twoinc_merchant_id}", [], 'GET');
 
-                if (is_wp_error($response)) {
-                    WC_Twoinc_Helper::send_twoinc_alert_email(
-                        "Could not send request to Twoinc server:"
-                        . "\r\n- Request: Get merchant default due in days"
-                        . "\r\n- Twoinc merchant ID/shortname: " . $twoinc_merchant_id
-                        . "\r\n- Site: " . get_site_url());
-                } else {
-
-                    $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
-                    if ($twoinc_err) {
-                        // Send alert, except when the api key is wrong
-                        if(!($response['response'] && $response['response']['code'] && $response['response']['code'] == 401)) {
-                            WC_Twoinc_Helper::send_twoinc_alert_email(
-                                "Got error response from Twoinc server:"
-                                . "\r\n- Request: Get merchant default due in days"
-                                . "\r\n- Response message: " . $twoinc_err
-                                . "\r\n- Twoinc merchant ID/shortname: " . $twoinc_merchant_id
-                                . "\r\n- Site: " . get_site_url());
-                        }
+                    if (is_wp_error($response)) {
+                        WC_Twoinc_Helper::send_twoinc_alert_email(
+                            "Could not send request to Twoinc server:"
+                            . "\r\n- Request: Get merchant default due in days"
+                            . "\r\n- Twoinc merchant ID/shortname: " . $twoinc_merchant_id
+                            . "\r\n- Site: " . get_site_url());
                     } else {
 
-                        if($response && $response['body']) {
-                            $body = json_decode($response['body'], true);
-                            if($body['due_in_days']) {
-                                $days_on_invoice = $body['due_in_days'];
-                            } else {
-                                // If Twoinc DB has null value, also default to 14 days
-                                $days_on_invoice = 14;
+                        $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
+                        if ($twoinc_err) {
+                            // Send alert, except when the api key is wrong
+                            if(!($response['response'] && $response['response']['code'] && $response['response']['code'] == 401)) {
+                                WC_Twoinc_Helper::send_twoinc_alert_email(
+                                    "Got error response from Twoinc server:"
+                                    . "\r\n- Request: Get merchant default due in days"
+                                    . "\r\n- Response message: " . $twoinc_err
+                                    . "\r\n- Twoinc merchant ID/shortname: " . $twoinc_merchant_id
+                                    . "\r\n- Site: " . get_site_url());
                             }
+                        } else {
+
+                            if($response && $response['body']) {
+                                $body = json_decode($response['body'], true);
+                                if($body['due_in_days']) {
+                                    $days_on_invoice = $body['due_in_days'];
+                                } else {
+                                    // If Twoinc DB has null value, also default to 14 days
+                                    $days_on_invoice = 14;
+                                }
+                            }
+
                         }
 
                     }
 
                 }
 
+                $this->update_option('days_on_invoice', $days_on_invoice);
+                $this->update_option('days_on_invoice_last_checked_on', time());
             }
 
-            $this->update_option('days_on_invoice', $days_on_invoice);
-            $this->update_option('days_on_invoice_last_checked_on', time());
-
-            return $days_on_invoice;
+            return apply_filters('twoinc_days_on_invoice', $days_on_invoice, $this);
 
         }
 
@@ -1890,7 +1889,7 @@ if (!class_exists('WC_Twoinc')) {
                 // 'merchant_logo' => [
                 //     'title'       => __('Add a logo to the invoice', 'twoinc-payment-gateway'),
                 //     'type'        => 'logo'
-                // ],s
+                // ],
                 'section_checkout_options' => [
                     'type'        => 'title',
                     'title'       => __('Checkout options', 'twoinc-payment-gateway')
