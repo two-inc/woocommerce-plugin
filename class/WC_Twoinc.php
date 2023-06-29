@@ -1337,6 +1337,7 @@ if (!class_exists('WC_Twoinc')) {
             if (isset($body['state'])) {
                 update_post_meta($order_id, '_twoinc_order_state', $body['state']);
             }
+            do_action('twoinc_order_created', $order, $body);
 
             // Return the result
             if ($body['state'] == 'VERIFIED' && isset($body['merchant_urls']) && isset($body['merchant_urls']['merchant_confirmation_url'])) {

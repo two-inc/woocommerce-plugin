@@ -2,7 +2,6 @@
 function add_two_order_fields($two_req) {
     $due_in_days = (string) get_post_meta($two_req['merchant_order_id'], '_billing_due_in_days', true);
     if ($due_in_days && ctype_digit($due_in_days)) {
-        $twoinc_obj = WC_Twoinc::get_instance();
         $two_req["invoice_details"]['due_in_days'] = (int) $due_in_days;
     }
     return $two_req;
@@ -66,3 +65,48 @@ document.addEventListener("DOMContentLoaded", function() {
 <?php
 }
 add_action('woocommerce_before_checkout_billing_form', 'add_demo_replace_due_in_days_script');
+
+
+function record_due_in_days_to_meta($order, $body) {
+    update_post_meta($order->get_id(), '_twoinc_due_in_days', $body['invoice_details']['due_in_days']);
+}
+
+add_action('twoinc_order_created', 'record_due_in_days_to_meta', 10, 2);
+
+
+function update_due_in_days_in_confirm_page() {
+    if (is_order_received_page()) {
+        global $wp, $post;
+        $order_id = absint($wp->query_vars['order-received']);
+        $twoinc_due_in_days = get_post_meta($order_id, '_twoinc_due_in_days', true);
+        $twoinc_obj = WC_Twoinc::get_instance();
+?>
+
+<script type='text/javascript'>
+function getNodesThatContain(text) {
+    var textNodes = jQuery(document).find(":not(iframe, script, style)").contents().filter(function() {
+        return this.nodeType == 3 && this.textContent.indexOf(text) > -1
+    })
+    return textNodes.parent()
+}
+
+function replaceDueInDays() {
+    let dueInDays = <?php echo $twoinc_due_in_days; ?>;
+    let defaultDueInDays = <?php echo $twoinc_obj->get_merchant_default_days_on_invoice(); ?>;
+    let twoincMethodText = "<?php echo $twoinc_obj->title; ?>";
+    getNodesThatContain(twoincMethodText).each(function (){
+        jQuery(this).html(jQuery(this).html().replace(twoincMethodText, twoincMethodText.replace(defaultDueInDays, dueInDays)))
+    })
+}
+
+document.getElementsByClassName('woocommerce-order')[0].style.visibility = 'hidden';
+document.addEventListener("DOMContentLoaded", function() {
+    replaceDueInDays()
+    document.getElementsByClassName('woocommerce-order')[0].style.visibility = '';
+})
+</script>
+
+<?php
+    }
+}
+add_action('wp_footer', 'update_due_in_days_in_confirm_page');
