@@ -722,7 +722,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
         /**
          * Check if current server is twoinc development
          *
-         * @return string
+         * @return bool
          */
         public static function is_twoinc_development()
         {
