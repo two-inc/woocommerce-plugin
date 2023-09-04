@@ -460,7 +460,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
         public static function compose_twoinc_order(
             $order, $order_reference, $company_id, $department, $project, $purchase_order_number,
             $payment_reference_message = '', $payment_reference_ocr = '', $payment_reference = '', $payment_reference_type = '',
-            $tracking_id = '', $skip_nonce = false)
+            $invoice_emails, $tracking_id = '', $skip_nonce = false)
         {
 
             $billing_address = [
@@ -492,6 +492,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
             }
             if ($payment_reference_type) {
                 $invoice_details['payment_reference_type'] = $payment_reference_type;
+            }
+            if ($invoice_emails && count($invoice_emails)) {
+                $invoice_details['invoice_emails'] = $invoice_emails;
             }
 
             $req_body = [
@@ -807,6 +810,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 $twoinc_meta['payment_reference_ocr'],
                 $twoinc_meta['payment_reference'],
                 $twoinc_meta['payment_reference_type'],
+                $twoinc_meta['invoice_emails'],
                 '',
                 true
             );

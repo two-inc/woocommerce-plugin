@@ -28,7 +28,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             add_filter('woocommerce_checkout_fields', [$this, 'add_tracking_fields'], 21);
             add_filter('woocommerce_checkout_fields', [$this, 'add_account_fields'], 22);
             add_filter('woocommerce_checkout_fields', [$this, 'update_company_fields'], 23);
-            add_filter('woocommerce_checkout_fields', [$this, 'update_phone_fields'], 24);
+            add_filter('woocommerce_checkout_fields', [$this, 'update_contact_fields'], 24);
             add_action('woocommerce_before_checkout_billing_form', [$this, 'add_account_buttons'], 20);
             add_action('woocommerce_pay_order_before_submit', [$this, 'add_account_buttons'], 20);
 
@@ -225,20 +225,29 @@ if (!class_exists('WC_Twoinc_Checkout')) {
         }
 
         /**
-         * Update the default phone field placeholder
+         * Update the default phone field placeholder and add invoice email
          *
          * @param $fields
          *
          * @return array
          */
-        public function update_phone_fields($fields)
+        public function update_contact_fields($fields)
         {
+
+            $fields['billing']['invoice_email'] = [
+                'label'    => __('Invoice email address', 'twoinc-payment-gateway'),
+                'class'    => array('form-row-wide'),
+                'type'     => 'email',
+                'validate' => array('email'),
+                'required' => false,
+                'priority' => $fields['billing']['billing_email']['priority'] + 1
+            ];
 
             $fields['billing']['billing_phone_display'] = [
                 'label' => __('Phone', 'twoinc-payment-gateway'),
                 'class' => array('hidden'),
                 'required' => false,
-                'priority' => $fields['billing']['billing_email']['priority'] + 1 // insert email field in-between, must not be directly under first name to avoid css error
+                'priority' => $fields['billing']['billing_email']['priority'] + 2 // insert email field in-between, must not be directly under first name to avoid css error
             ];
 
             // Return the fields list

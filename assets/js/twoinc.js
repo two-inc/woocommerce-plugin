@@ -519,7 +519,8 @@ let twoincDomHelper = {
 
         // Get the targets
         let allTargets = ['.woocommerce-company-fields', '.woocommerce-representative-fields', '#billing_phone_display_field', '#billing_phone_field',
-                          '#billing_company_display_field', '#billing_company_field', '#company_id_field', '#department_field', '#project_field', '#purchase_order_number_field']
+                          '#billing_company_display_field', '#billing_company_field', '#company_id_field', '#billing_invoice_email_field',
+                          '#department_field', '#project_field', '#purchase_order_number_field']
         let visibleNonbusinessTargets = ['#billing_phone_field', '#billing_company_field']
         let visibleBusinessTargets = ['.woocommerce-company-fields', '.woocommerce-representative-fields', '#billing_phone_display_field']
         let requiredBusinessTargets = []

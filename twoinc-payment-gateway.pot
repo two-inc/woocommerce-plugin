@@ -274,6 +274,10 @@ msgstr ""
 msgid "Integration between WooCommerce and Two"
 msgstr ""
 
+#: class/WC_Twoinc_Checkout.php:238
+msgid "Invoice email address"
+msgstr ""
+
 #: class/WC_Twoinc.php:1153
 msgid ""
 "Invoice has been partially refunded and credit note has been sent by Two"
