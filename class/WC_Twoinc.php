@@ -1108,6 +1108,7 @@ if (!class_exists('WC_Twoinc')) {
                     $twoinc_meta['payment_reference_ocr'],
                     $twoinc_meta['payment_reference'],
                     $twoinc_meta['payment_reference_type'],
+                    $twoinc_meta['invoice_emails'],
                     '',
                     true
                 );
@@ -1230,6 +1231,7 @@ if (!class_exists('WC_Twoinc')) {
             $billing_country = array_key_exists('billing_country', $_POST) ? sanitize_text_field($_POST['billing_country']) : '';
             $billing_company = array_key_exists('billing_company', $_POST) ? sanitize_text_field($_POST['billing_company']) : '';
             $billing_phone = array_key_exists('billing_phone', $_POST) ? sanitize_text_field($_POST['billing_phone']) : '';
+            $invoice_emails = array_key_exists('invoice_email', $_POST) ? [sanitize_text_field($_POST['invoice_email'])] : [];
 
             // Store the order meta
             update_post_meta($order_id, '_tillit_order_reference', $order_reference);
@@ -1268,6 +1270,7 @@ if (!class_exists('WC_Twoinc')) {
                 $payment_reference_type = 'assigned_by_merchant';
                 update_post_meta($order_id, '_payment_reference_type', $payment_reference_type);
             }
+            update_post_meta($order_id, '_invoice_emails', $invoice_emails);
 
             // Save to user meta
             $user_id = wp_get_current_user()->ID;
@@ -1290,6 +1293,7 @@ if (!class_exists('WC_Twoinc')) {
                 $payment_reference_ocr,
                 $payment_reference,
                 $payment_reference_type,
+                $invoice_emails,
                 $tracking_id
             ));
 
@@ -2124,6 +2128,8 @@ if (!class_exists('WC_Twoinc')) {
                 $department = $order->get_meta('department');
                 $project = $order->get_meta('project');
                 $purchase_order_number = $order->get_meta('purchase_order_number');
+                $purchase_order_number = $body['buyer_purchase_order_number'];
+                $invoice_emails = $order->get_meta('_invoice_emails', true);
             } else {
                 $response = $this->make_request("/v1/order/${twoinc_order_id}", [], 'GET');
 
@@ -2168,10 +2174,12 @@ if (!class_exists('WC_Twoinc')) {
                 $department = $body['buyer_department'];
                 $project = $body['buyer_project'];
                 $purchase_order_number = $body['buyer_purchase_order_number'];
+                $invoice_emails = $body['invoice_details']['invoice_emails'];
                 update_post_meta($order->get_id(), 'company_id', $company_id);
                 update_post_meta($order->get_id(), 'department', $department);
                 update_post_meta($order->get_id(), 'project', $project);
                 update_post_meta($order->get_id(), 'purchase_order_number', $purchase_order_number);
+                update_post_meta($order->get_id(), '_invoice_emails', $invoice_emails);
             }
 
             return array(
@@ -2185,7 +2193,8 @@ if (!class_exists('WC_Twoinc')) {
                 'payment_reference_message' => $order->get_meta('payment_reference_message'),
                 'payment_reference_ocr' => $order->get_meta('payment_reference_ocr'),
                 'payment_reference' => $order->get_meta('payment_reference'),
-                'payment_reference_type' => $order->get_meta('payment_reference_type')
+                'payment_reference_type' => $order->get_meta('payment_reference_type'),
+                'invoice_emails' => $invoice_emails
             );
 
         }
