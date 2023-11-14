@@ -16,17 +16,13 @@ npx cypress run --browser chrome --config baseUrl=http://localhost
 
 ## Releasing a new version
 
-Ensure that you have `bumpversion` installed. This can be done with Homebrew on MacOS:
+Ensure that you have `bumpver` installed.
 
-    $ brew install bumpversion
+    $ pip install bumpver
 
 To bump version:
 
-    $ bumpversion <major|minor|patch>
-
-To push the tag:
-
-    $ git push --tags
+    $ bumpver update --major | --minor | --patch
 
 Now, go to Github to create a new release which triggers publication of the new version to Wordpress plugin directory.
 

@@ -1,0 +1,16 @@
+[tool.bumpver]
+current_version = "2.16.2"
+version_pattern = "MAJOR.MINOR.PATCH[-TAGNUM]"
+commit_message = "chore: Bump version {old_version} -> {new_version}"
+commit = true
+fetch = false
+tag = false
+push = false
+
+[tool.bumpver.file_patterns]
+"readme.txt" = [
+    'Stable tag: {version}',
+]
+"tillit-payment-gateway.php" = [
+    'Version: {version}'
+]

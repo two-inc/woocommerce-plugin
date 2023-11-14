@@ -1,2 +1,18 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Folders to ignore
+.wordpress-org/ export-ignore
+.git/ export-ignore
+.github/ export-ignore
+cypress/ export-ignore
+docker/ export-ignore
+snippets/ export-ignore
+
+# Files to ignore
+.distignore export-ignore
+.gitignore export-ignore
+.gitattributes export-ignore
+bumpver.toml export-ignore
+docker-compose.yaml export-ignore
+README.md export-ignore
