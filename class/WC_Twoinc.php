@@ -1231,7 +1231,8 @@ if (!class_exists('WC_Twoinc')) {
             $billing_country = array_key_exists('billing_country', $_POST) ? sanitize_text_field($_POST['billing_country']) : '';
             $billing_company = array_key_exists('billing_company', $_POST) ? sanitize_text_field($_POST['billing_company']) : '';
             $billing_phone = array_key_exists('billing_phone', $_POST) ? sanitize_text_field($_POST['billing_phone']) : '';
-            $invoice_emails = array_key_exists('invoice_email', $_POST) ? [sanitize_text_field($_POST['invoice_email'])] : [];
+            $invoice_email = array_key_exists('invoice_email', $_POST) ? sanitize_text_field($_POST['invoice_email']) : '';
+            $invoice_emails = $invoice_email ? [$invoice_email] : [];
 
             // Store the order meta
             update_post_meta($order_id, '_tillit_order_reference', $order_reference);
