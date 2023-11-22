@@ -306,8 +306,8 @@ if (!class_exists('WC_Twoinc_Checkout')) {
         /**
          * Load custom 3rd-party js and css files
          */
-        public function intl_tel_input_asset(path) {
-            return WC_TWOINC_PLUGIN_URL . 'assets/intl-tel-input/17.0.8/' . path;
+        public function intl_tel_input_asset($path) {
+            return WC_TWOINC_PLUGIN_URL . 'assets/intl-tel-input/17.0.8/' . $path;
         }
 
         public function load_intl_tel_input() {
