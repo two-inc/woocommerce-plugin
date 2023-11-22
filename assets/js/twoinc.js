@@ -1470,7 +1470,7 @@ class Twoinc {
         if (!billingPhoneInputField) return
 
         this.billingPhoneInput = window.intlTelInput(billingPhoneInputField, {
-            utilsScript: "https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.8/js/utils.js",
+            utilsScript: window.twoinc.intl_tel_input_utils_js,
             preferredCountries: [window.twoinc.shop_base_country],
             separateDialCode: true,
             customPlaceholder: function(selectedCountryPlaceholder, selectedCountryData) {
