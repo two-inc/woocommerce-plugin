@@ -312,8 +312,8 @@ if (!class_exists('WC_Twoinc_Checkout')) {
 
         public function load_intl_tel_input() {
             // selectable phone country prefix
-            printf('<link rel="stylesheet" href="' . intl_tel_input_asset('css/intlTelInput.css') . '" />');
-            printf('<script src="' . intl_tel_input_asset('js/intlTelInput.min.js') . '"></script>');
+            printf('<link rel="stylesheet" href="' . $this->intl_tel_input_asset('css/intlTelInput.css') . '" />');
+            printf('<script src="' . $this->intl_tel_input_asset('js/intlTelInput.min.js') . '"></script>');
         }
 
         /**
@@ -360,7 +360,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 'twoinc_plugin_url' => WC_TWOINC_PLUGIN_URL,
                 'client_name' => 'wp',
                 'client_version' => get_plugin_version(),
-                'intl_tel_input_utils_js' => intl_tel_input_asset('js/utils.js'),
+                'intl_tel_input_utils_js' => $this->intl_tel_input_asset('js/utils.js'),
             ];
 
             $user_id = wp_get_current_user()->ID;
