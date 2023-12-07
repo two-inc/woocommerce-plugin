@@ -1,3 +1,4 @@
+<?php
 // Add due in days to order req body to Two
 function add_two_order_fields($two_req) {
     $due_in_days = (string) get_post_meta($two_req['merchant_order_id'], '_billing_due_in_days', true);

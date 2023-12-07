@@ -1,6 +1,8 @@
+<?php
 // Snippet: Fill hidden fields for auto complete in checkout
 
-add_action( 'wp_head', function () { ?>
+add_action( 'wp_head', function () {
+?>
 <script>
 
 function fillHiddenFields(form) {
@@ -20,4 +22,5 @@ jQuery(function(){
 })
 
 </script>
-<?php } );
+<?php
+});
