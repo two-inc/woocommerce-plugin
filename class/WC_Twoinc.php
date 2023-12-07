@@ -731,8 +731,8 @@ if (!class_exists('WC_Twoinc')) {
                     printf('<div id="message" class="notice notice-success is-dismissible"><p>' . $success_notice . '</p></div>', $success);
                 }
                 foreach ($failure_order_ids as $order_id) {
-                    $failure_notice = __('Two has failed to issue invoice for order %s.', 'twoinc-payment-gateway');
-                    printf('<div id="message" class="notice notice-error is-dismissible"><p>' . $failure_notice . '</p></div>', $order_id);
+                    $failure_notice = __('Two has failed to issue invoice for order <a href="%s">%s</a>.', 'twoinc-payment-gateway');
+                    printf('<div id="message" class="notice notice-error is-dismissible"><p>' . $failure_notice . '</p></div>', wc_get_order($order_id)->get_edit_order_url(), $order_id);
                 }
             } else if ($_REQUEST['bulk_action'] == "marked_cancelled") {
                 if ($success) {
@@ -740,8 +740,8 @@ if (!class_exists('WC_Twoinc')) {
                     printf('<div id="message" class="notice notice-success is-dismissible"><p>' . $success_notice . '</p></div>', $success);
                 }
                 foreach ($failure_order_ids as $order_id) {
-                    $failure_notice = __('Two has failed to cancel order %s.', 'twoinc-payment-gateway');
-                    printf('<div id="message" class="notice notice-error is-dismissible"><p>' . $failure_notice . '</p></div>', $order_id);
+                    $failure_notice = __('Two has failed to cancel order <a href="%s">%s</a>.', 'twoinc-payment-gateway');
+                    printf('<div id="message" class="notice notice-error is-dismissible"><p>' . $failure_notice . '</p></div>', wc_get_order($order_id)->get_edit_order_url(), $order_id);
                 }
             }
         }
