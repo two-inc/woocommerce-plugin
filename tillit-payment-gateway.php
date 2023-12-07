@@ -11,7 +11,6 @@
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  */
 
-// Ibrahim
 // Make sure WooCommerce is active
 // commented out because this will not work in multisites wordpress
 // if (!in_array('woocommerce/woocommerce.php', apply_filters('active_plugins', get_option('active_plugins')))) return;

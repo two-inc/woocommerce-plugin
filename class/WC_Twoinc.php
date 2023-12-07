@@ -662,32 +662,39 @@ if (!class_exists('WC_Twoinc')) {
          */
         public static function on_order_bulk_edit_action($redirect, $doaction, $object_ids){
             $wc_twoinc_instance = WC_Twoinc::get_instance();
-            $failed = [];
+            $success = [];
+            $failure = [];
             if('mark_completed' === $doaction) {
                 foreach ($object_ids as $order_id) {
-                    if (!$wc_twoinc_instance->on_order_completed($order_id)) {
-                        $failed[] = $order_id;
-                     }
+                    $result = $wc_twoinc_instance->on_order_completed($order_id);
+                    if ($result === true) {
+                        $success[] = $order_id;
+                    } else if ($result === false) {
+                        $failure[] = $order_id;
+                    }
                 }
                 $redirect = add_query_arg(
                     array(
                         'bulk_action' => 'marked_completed',
-                        'changed' => count($object_ids),
-                        'failed' => implode(",", $failed),
+                        'two_success' => implode(",", $success),
+                        'two_failure' => implode(",", $failure),
                     ),
                     $redirect
                 );
             } else if ('mark_cancelled' === $doaction){
                 foreach ($object_ids as $order_id) {
-                    if (!$wc_twoinc_instance->on_order_cancelled($order_id)) {
-                        $failed[] = $order_id;
+                    $result = $wc_twoinc_instance->on_order_cancelled($order_id);
+                    if ($result === true) {
+                        $success[] = $order_id;
+                    } else if ($result === false) {
+                        $failure[] = $order_id;
                     }
                 }
                 $redirect = add_query_arg(
                     array(
                         'bulk_action' => 'marked_cancelled',
-                        'changed' => count($object_ids),
-                        'failed' => implode(",", $failed),
+                        'two_success' => implode(",", $success),
+                        'two_failure' => implode(",", $failure),
                     ),
                     $redirect
                 );
@@ -700,36 +707,38 @@ if (!class_exists('WC_Twoinc')) {
          *
          */
         public function on_order_bulk_edit_notices() {
-            if (
-                isset( $_REQUEST['bulk_action'] )
-                && isset( $_REQUEST['changed'] )
-            ) {
-              $bulk_action = $_REQUEST['bulk_action'];
-              if (!in_array($bulk_action, ["marked_completed", "marked_cancelled"])) {
-                  return;
-              }
-              $failed_order_ids = [];
-              if (isset($_REQUEST['failed']) && $_REQUEST['failed']) {
-                  $failed_order_ids = explode(",", $_REQUEST['failed']);
-              }
-              $changed = (int)$_REQUEST['changed'];
-              $failed = count($failed);
-              $success = $changed - $failed;
-              if ($_REQUEST[ 'bulk_action' ] == "marked_completed") {
-                  $success_notice = _n('Two has successfully issued invoice for %d order.', 'Two has successfully issued invoices for %d orders.', $success, 'twoinc-payment-gateway');
-                  printf('<div id="message" class="notice is-dismissible"><p>' . $success_notice . '</p></div>', $success);
-                  foreach ($failed_order_ids as $order_id) {
-                      $failure_notice = __('Two failed to issue invoice for order %s.', 'twoinc-payment-gateway');
-                      printf('<div id="message" class="notice notice-error is-dismissible"><p>' . $failure_notice . '</p></div>', $order_id);
-                  }
-              } else if ($_REQUEST['bulk_action'] == "marked_cancelled") {
-                  $success_notice = _n('Two has successfully cancelled %d order.', 'Two has successfully cancelled %d orders.', $success, 'twoinc-payment-gateway');
-                  printf('<div id="message" class="notice is-dismissible"><p>' . $success_notice . '</p></div>', $success);
-                  foreach ($failed_order_ids as $order_id) {
-                      $failure_notice = __('Two failed to cancel order %s.', 'twoinc-payment-gateway');
-                      printf('<div id="message" class="notice notice-error is-dismissible"><p>' . $failure_notice . '</p></div>', $order_id);
-                  }
-              }
+            if (!isset($_REQUEST['bulk_action'])) return;
+
+            $bulk_action = $_REQUEST['bulk_action'];
+            if (!in_array($bulk_action, ["marked_completed", "marked_cancelled"])) return;
+
+            $failure_order_ids = [];
+            if (isset($_REQUEST['two_failure']) && $_REQUEST['two_failure']) {
+                $failure_order_ids = explode(",", $_REQUEST['two_failure']);
+            }
+            $success_order_ids = [];
+            if (isset($_REQUEST['two_success']) && $_REQUEST['two_success']) {
+                $success_order_ids = explode(",", $_REQUEST['two_success']);
+            }
+            $success = count($success_order_ids);
+            if ($_REQUEST[ 'bulk_action' ] == "marked_completed") {
+                if ($success) {
+                    $success_notice = _n('Two has successfully issued invoice for %d order.', 'Two has successfully issued invoices for %d orders.', $success, 'twoinc-payment-gateway');
+                    printf('<div id="message" class="notice notice-success is-dismissible"><p>' . $success_notice . '</p></div>', $success);
+                }
+                foreach ($failure_order_ids as $order_id) {
+                    $failure_notice = __('Two failed to issue invoice for order %s.', 'twoinc-payment-gateway');
+                    printf('<div id="message" class="notice notice-error is-dismissible"><p>' . $failure_notice . '</p></div>', $order_id);
+                }
+            } else if ($_REQUEST['bulk_action'] == "marked_cancelled") {
+                if ($success) {
+                    $success_notice = _n('Two has successfully cancelled %d order.', 'Two has successfully cancelled %d orders.', $success, 'twoinc-payment-gateway');
+                    printf('<div id="message" class="notice notice-success is-dismissible"><p>' . $success_notice . '</p></div>', $success);
+                }
+                foreach ($failure_order_ids as $order_id) {
+                    $failure_notice = __('Two failed to cancel order %s.', 'twoinc-payment-gateway');
+                    printf('<div id="message" class="notice notice-error is-dismissible"><p>' . $failure_notice . '</p></div>', $order_id);
+                }
             }
         }
 
@@ -746,15 +755,15 @@ if (!class_exists('WC_Twoinc')) {
 
             // Check payment method
             if (!WC_Twoinc_Helper::is_twoinc_order($order)) {
-                return false;
+                return;
             }
 
             // Get the Twoinc order ID
             $twoinc_order_id = $this->get_twoinc_order_id($order);
             if (!$twoinc_order_id) {
-                $order->add_order_note(__('Could not update status', 'twoinc-payment-gateway'));
+                $order->add_order_note(__('Could not update status to "Fulfilled" with Two because the order is missing Two order ID.', 'twoinc-payment-gateway'));
                 WC_Twoinc_Helper::send_twoinc_alert_email(
-                    "Could not find Twoinc order ID:"
+                    "Could not find Two order ID:"
                     . "\r\n- Request: Fulfill order"
                     . "\r\n- Merchant post ID: " . strval($order->get_id())
                     . "\r\n- Site: " . get_site_url());
@@ -766,24 +775,24 @@ if (!class_exists('WC_Twoinc')) {
             }
             $this->executed_on_order_completed = true;
 
-            // Ibrahim
             $state = get_post_meta($order_id, '_twoinc_order_state', true);
-            $skip = ["FULFILLED", "CANCELLED", "REFUNDED", "PARTIALLY_REFUNDED"];
+            $skip = ["FULFILLING", "FULFILLED", "DELIVERED", "CANCELLED", "REFUNDED", "PARTIALLY_REFUNDED"];
             if (in_array($state, $skip)) {
+                $order->add_order_note(sprintf(__('Order is already fulfilled with Two.', 'twoinc-payment-gateway'), $twoinc_order_id));
                 WC_Twoinc_Helper::send_twoinc_alert_email(
                     "Order already fulfilled:"
                         . "\r\n- Request: Fulfill order"
                         . "\r\n- Twoinc order ID: " . $twoinc_order_id
                         . "\r\n- Merchant post ID: " . strval($order_id)
                         . "\r\n- Site: " . get_site_url());
-                return false;
+                return;
             }
 
             // Change the order status
             $response = $this->make_request("/v1/order/{$twoinc_order_id}/fulfillments");
 
             if (is_wp_error($response)) {
-                $order->add_order_note(__('Could not update status', 'twoinc-payment-gateway'));
+                $order->add_order_note(sprintf(__('Could not update status to "Fulfilled" with Two, please check with Two admin for id %s.', 'twoinc-payment-gateway'), $twoinc_order_id));
                 WC_Twoinc_Helper::send_twoinc_alert_email(
                     "Could not send request to Twoinc server:"
                     . "\r\n- Request: Fulfill order"
@@ -795,7 +804,7 @@ if (!class_exists('WC_Twoinc')) {
 
             $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
             if ($twoinc_err) {
-                $order->add_order_note(sprintf(__('Could not update status to "Fulfilled" with Two, please check with Two admin for id %s', 'twoinc-payment-gateway'), $twoinc_order_id));
+                $order->add_order_note(sprintf(__('Could not update status to "Fulfilled" with Two, please check with Two admin for id %s. Response message: %s', 'twoinc-payment-gateway'), $twoinc_order_id, $twoinc_err));
                 WC_Twoinc_Helper::send_twoinc_alert_email(
                     "Got error response from Twoinc server:"
                     . "\r\n- Request: Fulfill order"
@@ -806,27 +815,12 @@ if (!class_exists('WC_Twoinc')) {
                 return false;
             }
 
+            // Add order note
+            $order->add_order_note(__('Two has acknowledged the request to fulfil the order. An invoice will be sent to the buyer when the fulfilment is complete.', 'twoinc-payment-gateway'));
+
             // Decode the response
             $body = json_decode($response['body'], true);
-
-            // Save invoice number
-            if ($body['invoice_details'] && $body['invoice_details']['invoice_number']) {
-                update_post_meta($order->get_id(), 'invoice_number', $body['invoice_details']['invoice_number']);
-            }
-
-            // Add order note
-            if (isset($body['invoice_type']) && $body['invoice_type'] == 'FUNDED_INVOICE' && strtolower(WC()->countries->get_base_country()) == 'no') {
-                $order->add_order_note(__('Invoice has been sent from Two via email and EHF', 'twoinc-payment-gateway'));
-            } else {
-                $order->add_order_note(__('Invoice has been sent from Two via email', 'twoinc-payment-gateway'));
-            }
-
-            // Ibrahim
-            if (!isset($body['state'])) {
-                return false;
-            }
-
-            update_post_meta($order->get_id(), '_twoinc_order_state', $body['state']);
+            update_post_meta($order->get_id(), '_twoinc_order_state', 'FULFILLING');
             do_action('twoinc_order_completed', $order, $body);
             return true;
 
@@ -844,14 +838,14 @@ if (!class_exists('WC_Twoinc')) {
 
             // Check payment method
             if (!WC_Twoinc_Helper::is_twoinc_order($order)) {
-                return false;
+                return;
             }
 
             // Get the Twoinc order ID
             $twoinc_order_id = $this->get_twoinc_order_id_from_post_id($order_id);
 
             if (!$twoinc_order_id) {
-                $order->add_order_note(__('Could not update status to "Cancelled"', 'twoinc-payment-gateway'));
+                $order->add_order_note(__('Could not update status to "Cancelled" with Two because the order is missing Two order ID.', 'twoinc-payment-gateway'));
                 WC_Twoinc_Helper::send_twoinc_alert_email(
                     "Could not find Twoinc order ID:"
                     . "\r\n- Request: Cancel order"
@@ -860,21 +854,17 @@ if (!class_exists('WC_Twoinc')) {
                 return false;
             }
 
-            // Ibrahim
             $state = get_post_meta($order->get_id(), '_twoinc_order_state', true);
             if ($state == 'CANCELLED') {
-                // Harry: should not block cancel operation of merchants
-                // return new WP_Error(
-                //     'invalid_twoinc_cancel',
-                //     __('Order ' . $order_id . ' already cancelled', 'twoinc-payment-gateway'));
-                return false;
+                $order->add_order_note(sprintf(__('Order is already cancelled with Two.', 'twoinc-payment-gateway'), $twoinc_order_id));
+                return;
             }
 
             // Change the order status
             $response = $this->make_request("/v1/order/{$twoinc_order_id}/cancel");
 
             if (is_wp_error($response)) {
-                $order->add_order_note(__('Could not update status to "Cancelled"', 'twoinc-payment-gateway'));
+                $order->add_order_note(sprintf(__('Could not update status to "Cancelled", please check with Two admin for id %s', 'twoinc-payment-gateway'), $twoinc_order_id));
                 WC_Twoinc_Helper::send_twoinc_alert_email(
                     "Could not send request to Twoinc server:"
                     . "\r\n- Request: Cancel order"
@@ -886,7 +876,7 @@ if (!class_exists('WC_Twoinc')) {
 
             $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
             if ($twoinc_err) {
-                $order->add_order_note(sprintf(__('Could not update status to "Cancelled", please check with Two admin for id %s', 'twoinc-payment-gateway'), $twoinc_order_id));
+                $order->add_order_note(sprintf(__('Could not update status to "Cancelled", please check with Two admin for id %s. Response message: %s', 'twoinc-payment-gateway'), $twoinc_order_id, $twoinc_err));
                 WC_Twoinc_Helper::send_twoinc_alert_email(
                     "Got error response from Twoinc server:"
                     . "\r\n- Request: Cancel order"
@@ -897,7 +887,6 @@ if (!class_exists('WC_Twoinc')) {
                 return false;
             }
 
-            // Ibrahim
             update_post_meta($order->get_id(), '_twoinc_order_state', "CANCELLED");
             do_action('twoinc_order_cancelled', $order, $response);
             return true;
@@ -1468,7 +1457,6 @@ if (!class_exists('WC_Twoinc')) {
             }
 
             // Get and check refund data
-            // Ibrahim - Commented out and used post meta instead of order status
             $state = get_post_meta($order_id, '_twoinc_order_state', true);
             if ($state === 'REFUNDED') {
                 return new WP_Error(
@@ -1558,7 +1546,7 @@ if (!class_exists('WC_Twoinc')) {
                 $order->add_order_note(__('Invoice has been partially refunded and credit note has been sent by Two', 'twoinc-payment-gateway'));
                 $state = "PARTIALLY_REFUNDED";
             }
-            // Ibrahim
+
             update_post_meta($order_id, '_twoinc_order_state', $state);
             do_action('twoinc_order_refunded', $order, $body);
 
