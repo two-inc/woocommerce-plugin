@@ -193,8 +193,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
          */
         public static function send_twoinc_alert_email($content, $subject = 'WooCommerce operation alert')
         {
-
-            // Ibrahim
             do_action('twoinc_send_alert_email', $content, $subject);
 
             $email = 'woocom-alerts@two.inc';
@@ -458,9 +456,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * @return bool
          */
         public static function compose_twoinc_order(
-            $order, $order_reference, $company_id, $department, $project, $purchase_order_number,
+            $order, $order_reference, $company_id, $department, $project, $purchase_order_number, $invoice_emails,
             $payment_reference_message = '', $payment_reference_ocr = '', $payment_reference = '', $payment_reference_type = '',
-            $invoice_emails, $tracking_id = '', $skip_nonce = false)
+            $tracking_id = '', $skip_nonce = false)
         {
 
             $billing_address = [
@@ -806,11 +804,11 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 $twoinc_meta['department'],
                 $twoinc_meta['project'],
                 $twoinc_meta['purchase_order_number'],
+                $twoinc_meta['invoice_emails'],
                 $twoinc_meta['payment_reference_message'],
                 $twoinc_meta['payment_reference_ocr'],
                 $twoinc_meta['payment_reference'],
                 $twoinc_meta['payment_reference_type'],
-                $twoinc_meta['invoice_emails'],
                 '',
                 true
             );
