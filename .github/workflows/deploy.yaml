@@ -9,7 +9,7 @@ jobs:
     env:
       slug: tillit-payment-gateway
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - name: WordPress Plugin Deploy
       id: deploy
       uses: 10up/action-wordpress-plugin-deploy@stable
