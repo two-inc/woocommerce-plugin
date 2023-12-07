@@ -79,6 +79,10 @@ function load_twoinc_classes()
 
     // A fallback hook in case hook woocommerce_order_status_xxx is not called
     add_action('woocommerce_order_edit_status', 'WC_Twoinc::on_order_edit_status', 10, 2);
+
+    // On order bulk action
+    add_action('handle_bulk_actions-edit-shop_order', 'WC_Twoinc::on_order_bulk_edit_action', 10, 3);
+    add_action('admin_notices', 'WC_Twoinc::on_order_bulk_edit_notices');
 }
 
 /**
