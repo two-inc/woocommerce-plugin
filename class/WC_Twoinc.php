@@ -706,7 +706,7 @@ if (!class_exists('WC_Twoinc')) {
          * Notice for when orders are bulk edited
          *
          */
-        public function on_order_bulk_edit_notices() {
+        public static function on_order_bulk_edit_notices() {
             if (!isset($_REQUEST['bulk_action'])) return;
 
             $bulk_action = $_REQUEST['bulk_action'];
