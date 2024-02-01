@@ -278,6 +278,10 @@ msgstr ""
 msgid "Invoice email address"
 msgstr ""
 
+#: class/WC_Twoinc_Checkout.php:241
+msgid "Only for invoices being sent by Two"
+msgstr ""
+
 #: class/WC_Twoinc.php:1153
 msgid ""
 "Invoice has been partially refunded and credit note has been sent by Two"

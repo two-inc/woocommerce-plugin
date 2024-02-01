@@ -287,6 +287,10 @@ msgstr "Integrasjon mellom WooCommerce og Two"
 msgid "Invoice email address"
 msgstr "E-postadresse for faktura"
 
+#: class/WC_Twoinc_Checkout.php:241
+msgid "Only for invoices being sent by Two"
+msgstr "For fakturaer som sendes av Two"
+
 #: class/WC_Twoinc.php:1153
 msgid ""
 "Invoice has been partially refunded and credit note has been sent by Two"
