@@ -274,6 +274,10 @@ msgstr ""
 msgid "First name"
 msgstr "Förnamn"
 
+#: class/WC_Twoinc_Checkout.php:241
+msgid "Only for invoices being sent by Two"
+msgstr "Endast för faktura som skickas från Two"
+
 #: class/WC_Twoinc.php:2030
 msgid "Grow your b2b sales with Buy Now, Pay Later!"
 msgstr "Öka din B2B-försäljning med företagsfaktura från Two!"
@@ -289,7 +293,7 @@ msgstr "Integration mellan WooCommerce och Two"
 
 #: class/WC_Twoinc_Checkout.php:238
 msgid "Invoice email address"
-msgstr "E-postadress för faktura"
+msgstr "Epostadress för fakturan"
 
 #: class/WC_Twoinc.php:1153
 msgid ""

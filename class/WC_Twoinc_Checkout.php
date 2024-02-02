@@ -234,14 +234,17 @@ if (!class_exists('WC_Twoinc_Checkout')) {
         public function update_contact_fields($fields)
         {
 
-            $fields['billing']['invoice_email'] = [
-                'label'    => __('Invoice email address', 'twoinc-payment-gateway'),
-                'class'    => array('form-row-wide'),
-                'type'     => 'email',
-                'validate' => array('email'),
-                'required' => false,
-                'priority' => $fields['billing']['billing_email']['priority'] + 1
-            ];
+            if (strtolower(WC()->countries->get_base_country()) !== 'no') {
+                $fields['billing']['invoice_email'] = [
+                    'label'       => __('Invoice email address', 'twoinc-payment-gateway'),
+                    'class'       => array('form-row-wide'),
+                    'type'        => 'email',
+                    'placeholder' => __('Only for invoices being sent by Two', 'twoinc-payment-gateway'),
+                    'validate'    => array('email'),
+                    'required'    => false,
+                    'priority'    => $fields['billing']['billing_email']['priority'] + 1
+                ];
+            }
 
             $fields['billing']['billing_phone_display'] = [
                 'label' => __('Phone', 'twoinc-payment-gateway'),
