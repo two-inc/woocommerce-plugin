@@ -17,3 +17,4 @@ bumpver.toml export-ignore
 docker-compose.yaml export-ignore
 README.md export-ignore
 Makefile export-ignore
+CODEOWNERS export-ignore
