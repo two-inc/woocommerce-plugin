@@ -1284,107 +1284,104 @@ class Twoinc {
         // Twoinc is hidden if selected account type is not company
         this.isTwoincMethodHidden = !twoincUtilHelper.isCompany(twoincDomHelper.getAccountType())
 
-        if (window.twoinc.company_name_search === 'yes') {
+        function enableCompanySearch() {
+            if (window.twoinc.company_name_search !== 'yes') return
+            Twoinc.getInstance().billingCompanySelect = $billingCompanyDisplay.selectWoo(twoincSelectWooHelper.genSelectWooParams())
+            twoincDomHelper.toggleTooltip('#billing_company_display_field .select2-container', window.twoinc.text.tooltip_company)
+            Twoinc.getInstance().billingCompanySelect.on('select2:select', function(e) {
+                // Get the option data
+                const data = e.params.data
 
-            // Focus on search input on country open
-            $billingCountry.on('select2:open', function(e){
-                twoincSelectWooHelper.waitToFocus('billing_country')
+                // Set the company name
+                Twoinc.getInstance().customerCompany.company_name = data.id
+
+                // Set the company ID
+                Twoinc.getInstance().customerCompany.organization_number = data.company_id
+
+                // Set the company code
+                Twoinc.getInstance().customerCompanyInfo.company_code = data.company_code
+
+                // Set the company ID to HTML DOM
+                $companyId.val(data.company_id)
+
+                // Set the company name to HTML DOM
+                $billingCompany.val(data.id)
+
+                // Display company ID on the right of selected company name
+                setTimeout(function(){
+                    twoincDomHelper.insertFloatingCompany(data.company_id, 0)
+                }, 0)
+
+                // Update the company name in agreement sentence and text in subtitle/description
+                twoincDomHelper.togglePaySubtitleDesc()
+
+                // Get the company approval status
+                Twoinc.getInstance().getApproval()
+
+                // Address search
+                if (window.twoinc.address_search === 'yes') {
+                    // Clear the addresses, in case address get request fails
+                    jQuery('#billing_address_1').val('')
+                    jQuery('#billing_city').val('')
+                    jQuery('#billing_postcode').val('')
+
+                    // Fetch the company data
+                    Twoinc.getInstance().getAddress()
+                }
             })
 
-            // Turn the select input into select2
-            setTimeout(function(){
-                Twoinc.getInstance().billingCompanySelect = $billingCompanyDisplay.selectWoo(twoincSelectWooHelper.genSelectWooParams())
-                twoincDomHelper.toggleTooltip('#billing_company_display_field .select2-container', window.twoinc.text.tooltip_company)
-                Twoinc.getInstance().billingCompanySelect.on('select2:select', function(e){
+            twoincSelectWooHelper.fixSelectWooPositionCompanyName()
 
-                    // Get the option data
-                    const data = e.params.data
-
-                    // Set the company name
-                    Twoinc.getInstance().customerCompany.company_name = data.id
-
-                    // Set the company ID
-                    Twoinc.getInstance().customerCompany.organization_number = data.company_id
-
-                    // Set the company code
-                    Twoinc.getInstance().customerCompanyInfo.company_code = data.company_code
-
-                    // Set the company ID to HTML DOM
-                    $companyId.val(data.company_id)
-
-                    // Set the company name to HTML DOM
-                    $billingCompany.val(data.id)
-
-                    // Display company ID on the right of selected company name
-                    setTimeout(function(){
-                        twoincDomHelper.insertFloatingCompany(data.company_id, 0)
-                    }, 0)
-
-                    // Update the company name in agreement sentence and text in subtitle/description
-                    twoincDomHelper.togglePaySubtitleDesc()
-
-                    // Get the company approval status
-                    Twoinc.getInstance().getApproval()
-
-                    // Address search
-                    if (window.twoinc.address_search === 'yes') {
-                        // Clear the addresses, in case address get request fails
-                        jQuery('#billing_address_1').val('')
-                        jQuery('#billing_city').val('')
-                        jQuery('#billing_postcode').val('')
-
-                        // Fetch the company data
-                        Twoinc.getInstance().getAddress()
-                    }
-
-                })
-
-                twoincSelectWooHelper.fixSelectWooPositionCompanyName()
-
-                Twoinc.getInstance().billingCompanySelect.on('select2:open', function(e){
-                    let companyNotInBtn = twoincDomHelper.getCompanyNotInBtnNode()
-                    jQuery('#select2-billing_company_display-results').parent().append(companyNotInBtn)
-                    twoincSelectWooHelper.waitToFocus('billing_company_display', null, null, function(){
-                        jQuery('input[aria-owns="select2-billing_company_display-results"]').on('input', function(e){
-                            let selectWooParams = twoincSelectWooHelper.genSelectWooParams()
-                            if (jQuery(this).val() && jQuery(this).val().length >= selectWooParams.minimumInputLength) {
-                                jQuery('#company_not_in_btn').show()
-                            } else {
-                                jQuery('#company_not_in_btn').hide()
-                            }
-                        })
+            Twoinc.getInstance().billingCompanySelect.on('select2:open', function(e){
+                let companyNotInBtn = twoincDomHelper.getCompanyNotInBtnNode()
+                jQuery('#select2-billing_company_display-results').parent().append(companyNotInBtn)
+                twoincSelectWooHelper.waitToFocus('billing_company_display', null, null, function(){
+                    jQuery('input[aria-owns="select2-billing_company_display-results"]').on('input', function(e){
+                        let selectWooParams = twoincSelectWooHelper.genSelectWooParams()
+                        if (jQuery(this).val() && jQuery(this).val().length >= selectWooParams.minimumInputLength) {
+                            jQuery('#company_not_in_btn').show()
+                        } else {
+                            jQuery('#company_not_in_btn').hide()
+                        }
                     })
-                    twoincSelectWooHelper.addSelectWooFocusFixHandler('billing_company_display')
                 })
-
-            }, 800)
-
+                twoincSelectWooHelper.addSelectWooFocusFixHandler('billing_company_display')
+            })
         }
+
+        // Focus on search input on country open
+        $billingCountry.on('select2:open', function(e){
+            twoincSelectWooHelper.waitToFocus('billing_country')
+        })
+
+        // Turn the select input into select2
+        setTimeout(enableCompanySearch, 800)
 
         // Disable or enable actions based on the account type
         $body.on('updated_checkout', Twoinc.getInstance().onUpdatedCheckout)
 
         $body.on('click', '#company_not_in_btn', function() {
+            window.twoinc.company_name_search = 'no'
+
             jQuery('#billing_company_display').val("")
             jQuery('#company_id').val("")
             Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData()
-            window.twoinc.company_name_search = 'no'
-
             jQuery('#company_not_in_btn').hide()
             jQuery('#search_company_btn').show()
-            Twoinc.getInstance().billingCompanySelect.select2('close')
+            Twoinc.getInstance().billingCompanySelect.select2('destroy')
 
             twoincDomHelper.toggleBusinessFields(twoincDomHelper.getAccountType())
         })
 
         $body.on('click', '#search_company_btn', function() {
+            window.twoinc.company_name_search = 'yes'
+
+            setTimeout(enableCompanySearch, 800)
             jQuery('#billing_company').val("")
             jQuery('#company_id').val("")
             Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData()
 
             jQuery('#search_company_btn').hide()
-            window.twoinc.company_name_search = 'yes'
-
             twoincDomHelper.toggleBusinessFields(twoincDomHelper.getAccountType())
         })
 

@@ -6,3 +6,4 @@ videos/
 node_modules/
 volumes/
 .DS_Store
+*.zip
