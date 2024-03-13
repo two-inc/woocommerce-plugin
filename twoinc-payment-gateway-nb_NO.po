@@ -3,7 +3,7 @@ msgstr ""
 "Project-Id-Version: Two - BNPL for businesses\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2021-04-07 07:50+0000\n"
-"PO-Revision-Date: 2022-02-14 11:46+0000\n"
+"PO-Revision-Date: 2024-03-20 15:35+0000\n"
 "Last-Translator: \n"
 "Language-Team: Norwegian (Bokmål)\n"
 "Language: nb_NO\n"
@@ -14,6 +14,10 @@ msgstr ""
 "X-Generator: Loco https://localise.biz/\n"
 "X-Loco-Version: 2.6.2; wp-6.0.2\n"
 "X-Domain: twoinc-payment-gateway"
+
+#| msgid "% days"
+msgid "%s days"
+msgstr "%s dager"
 
 #: class/WC_Twoinc.php:1594
 msgid "Add input field for \"Department\""
@@ -96,6 +100,7 @@ msgid "Business Customer"
 msgstr "Bedriftskunde"
 
 #: class/WC_Twoinc.php:1520
+#, php-format
 msgid "Business invoice %s days"
 msgstr "Bedriftsfaktura - %s dager"
 
@@ -195,6 +200,10 @@ msgstr "Land / Region"
 #: class/WC_Twoinc.php:1450
 msgid "Dashboard"
 msgstr "Dashbord"
+
+#: class/WC_Twoinc_Checkout.php:293
+msgid "Days you'll have to pay your invoice"
+msgstr "Dager du må betale fakturaen"
 
 #: class/WC_Twoinc.php:1630
 msgid "Default to B2C check-out"

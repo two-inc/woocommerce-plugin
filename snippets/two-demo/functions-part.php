@@ -1,20 +1,20 @@
 <?php
 // Add due in days to order req body to Two
-function add_two_order_fields($two_req) {
-    $due_in_days = (string) get_post_meta($two_req['merchant_order_id'], '_billing_due_in_days', true);
+function add_two_order_fields($req_body) {
+    $due_in_days = (string) get_post_meta($req_body['merchant_order_id'], '_billing_due_in_days', true);
     if ($due_in_days && ctype_digit($due_in_days)) {
-        $two_req["invoice_details"]['due_in_days'] = (int) $due_in_days;
+        $req_body["invoice_details"]['due_in_days'] = (int) $due_in_days;
     }
-    return $two_req;
+    return $req_body;
 }
 add_filter("two_order_create", "add_two_order_fields");
 
 
 // Add the new field due in days in checkout
-function add_two_due_days($fields) {
+function add_due_in_days_field($fields) {
 
-    $lang = WC_Twoinc_Helper::get_locale();
     $label_text = "Days you'll have to pay your invoice";
+    $lang = WC_Twoinc_Helper::get_locale();
     if ($lang === 'sv_SE') {
         $label_text = 'Dagar du kommer ha att betala din faktura';
     } else if ($lang === 'nb_NO') {
@@ -36,7 +36,7 @@ function add_two_due_days($fields) {
 
     return $fields;
 }
-add_filter("woocommerce_checkout_fields", "add_two_due_days");
+add_filter("woocommerce_checkout_fields", "add_due_in_days_field");
 
 
 // Add the javascript to replace due in days in UI
@@ -48,7 +48,7 @@ function replaceDueInDays() {
     if (jQuery('#twoinc-due-in-days').length == 0) {
         jQuery('label[for="payment_method_woocommerce-gateway-tillit"]').html(
             jQuery('label[for="payment_method_woocommerce-gateway-tillit"]').html()
-                .replace(twoinc.days_on_invoice, '<span id="twoinc-due-in-days"></span>')
+                .replace(twoinc.due_in_days, '<span id="twoinc-due-in-days"></span>')
         )
     }
     jQuery('#twoinc-due-in-days').text(jQuery('#billing_due_in_days').val())
@@ -93,7 +93,7 @@ function getNodesThatContain(text) {
 
 function replaceDueInDays() {
     let dueInDays = <?php echo $twoinc_due_in_days; ?>;
-    let defaultDueInDays = <?php echo $twoinc_obj->get_merchant_default_days_on_invoice(); ?>;
+    let defaultDueInDays = <?php echo $twoinc_obj->get_merchant_default_due_in_days(); ?>;
     let twoincMethodText = "<?php echo $twoinc_obj->title; ?>";
     getNodesThatContain(twoincMethodText).each(function (){
         jQuery(this).html(jQuery(this).html().replace(twoincMethodText, twoincMethodText.replace(defaultDueInDays, dueInDays)))

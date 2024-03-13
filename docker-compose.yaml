@@ -9,7 +9,7 @@ services:
     image: ${REPO}wordpress:latest
     restart: always
     ports:
-      - 5000:80
+      - 8888:80
     environment:
       WORDPRESS_DB_HOST: mariadb
       WORDPRESS_DB_USER: twocommerce
@@ -25,20 +25,20 @@ services:
     container_name: wpcli
     image: ${REPO}wordpress:cli
     user: "33:33"
-    entrypoint: /opt/tillit-payment-gateway/docker/entrypoint.sh
+    entrypoint: /opt/tillit-payment-gateway/entrypoint.sh
     restart: always
     environment:
       WORDPRESS_DB_HOST: mariadb
       WORDPRESS_DB_USER: twocommerce
       WORDPRESS_DB_PASSWORD: twocommerce
       WORDPRESS_DB_NAME: twocommerce
-      WORDPRESS_URL: "http://localhost:5000"
+      WORDPRESS_URL: "http://localhost:8888"
       WORDPRESS_TITLE: "Twocommerce Wordpress"
       WORDPRESS_ADMIN_USER: admin
       WORDPRESS_ADMIN_PASSWORD: twoinb2b
       WORDPRESS_ADMIN_EMAIL: admin@two.inc
-      WOOCOM_PLUGIN_CONFIG_JSON: ${WOOCOM_PLUGIN_CONFIG_JSON}
-      WOOCOM_CURRENCY: NOK
+      WOOCOM_CURRENCY: GBP
+      WOOCOM_CONFIG_JSON: ${WOOCOM_CONFIG_JSON}
     volumes:
       - ./volumes/wordpress:/var/www/html
       - .:/opt/tillit-payment-gateway
@@ -51,9 +51,9 @@ services:
     image: ${REPO}mariadb:10.2
     restart: always
     environment:
-      MYSQL_DATABASE: twocommerce
-      MYSQL_USER: twocommerce
-      MYSQL_PASSWORD: twocommerce
-      MYSQL_RANDOM_ROOT_PASSWORD: '1'
+      MARIADB_DATABASE: twocommerce
+      MARIADB_USER: twocommerce
+      MARIADB_PASSWORD: twocommerce
+      MARIADB_RANDOM_ROOT_PASSWORD: '1'
     volumes:
       - ./volumes/mariadb:/var/lib/mysql

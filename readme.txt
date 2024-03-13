@@ -1,7 +1,7 @@
 === Two - BNPL for businesses ===
 Tags: payment request, woocommerce
 Requires at least: 6.4
-Tested up to: 6.4.2
+Tested up to: 6.4.3
 Requires PHP: 7.4
 Stable tag: 2.18.2
 License: GPLv3
