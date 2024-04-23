@@ -1,0 +1,98 @@
+name: Style
+
+permissions: write-all
+
+on:
+    pull_request:
+        types:
+            - opened
+            - synchronize
+
+jobs:
+    pre-commit:
+        runs-on: self-hosted
+        timeout-minutes: 20
+        steps:
+            - uses: actions/checkout@v3
+              with:
+                  fetch-depth: 0
+            - uses: actions/setup-python@v4
+              with:
+                  python-version: '3.10'
+            - uses: webfactory/ssh-agent@v0.7.0
+              with:
+                  ssh-private-key: ${{ secrets.BOT_SSH_PRIVATE_KEY }}
+            - name: Setup dependencies
+              run: |
+                  pip install pre-commit
+                  pre-commit install
+            - name: Run pre-commit hook
+              run: |
+                  set +e -o pipefail
+                  pre-commit run --from-ref origin/${{ github.base_ref }} --to-ref HEAD --show-diff-on-failure | tee pre-commit-output
+                  exit_code=$?
+                  set -e +o pipefail
+                  cat << EOT >> $GITHUB_OUTPUT
+                  EXIT_CODE=$exit_code
+                  OUTPUT<<EOL
+                  $(cat pre-commit-output | sed 's/`/\\`/g')
+                  EOL
+                  EOT
+                  exit $exit_code
+              id: pre-commit
+              continue-on-error: true
+
+            - name: Delete Previous Comment
+              uses: brtknr/delete-comment@v1
+              with:
+                  github_token: '${{ secrets.GITHUB_TOKEN }}'
+                  delete_user_name: 'github-actions[bot]'
+                  body_regex: 'Pre-commit'
+                  issue_number: '${{ github.event.number }}'
+
+            - name: Notify Pull Request
+              uses: actions/github-script@v7
+              with:
+                  github-token: ${{ secrets.GITHUB_TOKEN }}
+                  script: |
+                      const hint = ${{ steps.pre-commit.outcome == 'success' }} ? '' : `
+                      Looks like the PR is missing pre-commit changes. Please run the following locally and commit changes to fix this issue:
+
+                      \`\`\`
+                      pre-commit install  # only if you do not have it installed already
+                      git fetch origin
+                      pre-commit run --from-ref origin/${{ github.base_ref }} --to-ref HEAD
+                      git commit -a
+                      git push
+                      \`\`\`
+                      `;
+
+                      const output = `
+                      # 🖌 Pre-commit ${{ steps.pre-commit.outcome }} ${{ steps.pre-commit.outcome == 'success' && '🏆' || '🚫' }}
+
+                      ${hint}
+
+                      <details><summary>Details</summary>
+
+                      \`\`\`
+                      ${{ steps.pre-commit.outputs.OUTPUT }}
+                      \`\`\`
+
+                      Exit code: ${{ steps.pre-commit.outputs.EXIT_CODE }}
+
+                      </details>
+
+                      Author ✍️@${{ github.actor }}`;
+
+                      github.rest.issues.createComment({
+                        issue_number: context.issue.number,
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        body: output
+                      })
+            - name: Pre-commit status
+              run: |
+                  cat << EOF
+                  ${{ steps.pre-commit.outputs.OUTPUT }}
+                  EOF
+                  exit ${{ steps.pre-commit.outputs.EXIT_CODE }}
