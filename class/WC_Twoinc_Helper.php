@@ -503,6 +503,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 'discount_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total_discount())),
                 'discount_rate' => '0',
                 'invoice_type' => 'FUNDED_INVOICE',
+                'vendor_name' => 'EXAMPLE_VENDOR_NAME',
                 'invoice_details' => $invoice_details,
                 'buyer' => [
                     'company' => [
@@ -606,6 +607,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 'discount_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total_discount())),
                 'discount_rate' => '0',
                 'invoice_type' => 'FUNDED_INVOICE',
+                'vendor_name' => 'EXAMPLE_VENDOR_NAME',
                 'buyer_department' => $department,
                 'buyer_project' => $project,
                 'order_note' => $order->get_customer_note(),
