@@ -44,6 +44,7 @@ if (!class_exists('WC_Twoinc')) {
 
             // Twoinc api host
             $this->api_key = $this->get_option('api_key');
+            $this->vendor_name = $this->get_option('vendor_name');
             $this->twoinc_search_host_no = $this->get_twoinc_search_host('no');
             $this->twoinc_search_host_gb = $this->get_twoinc_search_host('gb');
             $this->twoinc_search_host_se = $this->get_twoinc_search_host('se');
@@ -1176,6 +1177,7 @@ if (!class_exists('WC_Twoinc')) {
                     $twoinc_meta['payment_reference_ocr'],
                     $twoinc_meta['payment_reference'],
                     $twoinc_meta['payment_reference_type'],
+                    $twoinc_meta['vendor_name'],
                     '',
                     true
                 );
@@ -1340,6 +1342,9 @@ if (!class_exists('WC_Twoinc')) {
             }
             update_post_meta($order_id, '_invoice_emails', $invoice_emails);
 
+            $vendor_name = $this->get_option('vendor_name');
+            update_post_meta($order_id, 'vendor_name', $vendor_name);
+
             // Save to user meta
             $user_id = wp_get_current_user()->ID;
             if ($user_id) {
@@ -1362,6 +1367,7 @@ if (!class_exists('WC_Twoinc')) {
                 $payment_reference_ocr,
                 $payment_reference,
                 $payment_reference_type,
+                $vendor_name,
                 $tracking_id
             ));
 
@@ -1954,6 +1960,10 @@ if (!class_exists('WC_Twoinc')) {
                     'title'       => __('Two API Key', 'twoinc-payment-gateway'),
                     'type'        => 'password'
                 ],
+                'vendor_name' => [
+                    'title'       => __('Optional vendor name if there are multiple sites', 'twoinc-payment-gateway'),
+                    'type'        => 'text'
+                ],
                 // 'section_invoice_settings' => [
                 //     'type'        => 'title',
                 //     'title'       => __('Invoice settings', 'twoinc-payment-gateway')
@@ -2190,6 +2200,13 @@ if (!class_exists('WC_Twoinc')) {
                 update_post_meta($order->get_id(), '_tillit_merchant_id', $twoinc_merchant_id);
             }
 
+            // Extract vendor name
+            $vendor_name = $order->get_meta('vendor_name');
+            if (!$vendor_name) {
+                $vendor_name = $this->get_option('vendor_name');
+                update_post_meta($order->get_id(), 'vendor_name', $vendor_name);
+            }
+
             $company_id = $order->get_meta('company_id');
             if ($company_id) {
                 $department = $order->get_meta('department');
@@ -2261,6 +2278,7 @@ if (!class_exists('WC_Twoinc')) {
                 'payment_reference_ocr' => $order->get_meta('payment_reference_ocr'),
                 'payment_reference' => $order->get_meta('payment_reference'),
                 'payment_reference_type' => $order->get_meta('payment_reference_type'),
+                'vendor_name' => $vendor_name,
                 'invoice_emails' => $invoice_emails
             );
 
@@ -2318,7 +2336,8 @@ if (!class_exists('WC_Twoinc')) {
                     $order,
                     $twoinc_meta['department'],
                     $twoinc_meta['project'],
-                    $twoinc_meta['purchase_order_number']
+                    $twoinc_meta['purchase_order_number'],
+                    $twoinc_meta['vendor_name']
                 ),
                 'PUT'
             );
