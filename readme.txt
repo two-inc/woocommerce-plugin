@@ -3,7 +3,7 @@ Tags: payment request, woocommerce
 Requires at least: 6.4
 Tested up to: 6.4.2
 Requires PHP: 7.4
-Stable tag: 2.18.0
+Stable tag: 2.18.1
 License: GPLv3
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
