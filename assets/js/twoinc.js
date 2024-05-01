@@ -1470,6 +1470,11 @@ class Twoinc {
         // Handle the phone inputs change event
         $body.on('change', '#billing_phone_display', this.onPhoneInputChange)
         $body.on('keyup', '#billing_phone_display', this.onPhoneInputChange)
+
+        // Handle the phone inputs change event in reverse
+        $body.on('change', '#billing_phone', this.onPhoneInputChangeInverse)
+        $body.on('keyup', '#billing_phone', this.onPhoneInputChangeInverse)
+
         setTimeout(function () {
             jQuery('.iti__country-list').on('click', Twoinc.getInstance().onPhoneInputChange)
         }, 1000)
@@ -1545,9 +1550,29 @@ class Twoinc {
      * Sync phone number back to billing phone display
      */
     syncBillingPhone() {
-        const billingPhone = jQuery('#billing_phone')
-        if (billingPhone.length > 0) {
-            this.billingPhoneInput.setNumber(billingPhone.val())
+        let billingPhone = jQuery('#billing_phone')
+        let billingPhoneInput = Twoinc.getInstance().billingPhoneInput
+        if (billingPhone.length === 0 || billingPhoneInput === null) return
+        let currentVal = billingPhone.val()
+        let newVal = billingPhoneInput.getNumber()
+        if (currentVal !== newVal) {
+            billingPhone.val(newVal)
+            billingPhone.attr('value', newVal)
+            Twoinc.getInstance().customerRepresentative['phone_number'] = newVal
+        }
+    }
+
+    /**
+     * Sync phone number back to billing phone display
+     */
+    syncBillingPhoneInverse() {
+        let billingPhone = jQuery('#billing_phone')
+        let billingPhoneInput = Twoinc.getInstance().billingPhoneInput
+        if (billingPhone.length === 0 || billingPhoneInput === null) return
+        let currentVal = billingPhoneInput.getNumber()
+        let newVal = billingPhone.val()
+        if (currentVal !== newVal) {
+            billingPhoneInput.setNumber(newVal)
         }
     }
 
@@ -1573,7 +1598,7 @@ class Twoinc {
                 return selectedCountryPlaceholder.replace(/[0-9]/g, 'X')
             },
         })
-        this.syncBillingPhone()
+        this.syncBillingPhoneInverse()
     }
 
     /**
@@ -1979,9 +2004,6 @@ class Twoinc {
             jQuery('#payment_method_woocommerce-gateway-tillit').click()
         }
 
-        // Sync billing phone
-        Twoinc.getInstance().syncBillingPhone()
-
         // Toggle the business fields
         twoincDomHelper.toggleBusinessFields($input.val())
 
@@ -2037,16 +2059,17 @@ class Twoinc {
      */
 
     onPhoneInputChange(event) {
-        setTimeout(function () {
-            let currentVal = jQuery('#billing_phone').attr('value')
-            let newVal = Twoinc.getInstance().billingPhoneInput.getNumber()
-            if (newVal && currentVal !== newVal) {
-                jQuery('#billing_phone').val(newVal)
-                jQuery('#billing_phone').attr('value', newVal)
-                Twoinc.getInstance().customerRepresentative['phone_number'] = newVal
-                // Twoinc.getInstance().getApproval()
-            }
-        }, 200)
+        setTimeout(Twoinc.getInstance().syncBillingPhone, 200)
+    }
+
+    /**
+     * Handle the phone number input changes
+     *
+     * @param event
+     */
+
+    onPhoneInputChangeInverse(event) {
+        setTimeout(Twoinc.getInstance().syncBillingPhoneInverse, 200)
     }
 
     /**

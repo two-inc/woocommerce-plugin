@@ -249,7 +249,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             $fields['billing']['billing_phone_display'] = [
                 'label' => __('Phone', 'twoinc-payment-gateway'),
                 'class' => array('hidden'),
-                'required' => false,
+                'required' => $fields['billing']['billing_phone']['required'],
                 'priority' => $fields['billing']['billing_email']['priority'] + 2 // insert email field in-between, must not be directly under first name to avoid css error
             ];
 
