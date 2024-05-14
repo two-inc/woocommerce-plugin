@@ -1309,7 +1309,7 @@ class Twoinc {
     /**
      * Initialize Twoinc code
      */
-    initialize(loadSavedInputs) {
+    initialize() {
         if (this.isInitialized) {
             return
         }
@@ -1518,7 +1518,7 @@ class Twoinc {
         twoincDomHelper.insertCustomCss()
 
         twoincDomHelper.loadUserMetaInputs()
-        if (loadSavedInputs) twoincDomHelper.loadStorageInputs()
+        twoincDomHelper.loadStorageInputs()
         if (jQuery('.floating-company-id') && jQuery('.floating-company-id').text()) {
             // Trigger address search
             Twoinc.getInstance().getAddress()
@@ -1547,7 +1547,7 @@ class Twoinc {
     }
 
     /**
-     * Sync phone number back to billing phone display
+     * Sync phone number from billing_phone to billing_phone_display
      */
     syncBillingPhone() {
         let billingPhone = jQuery('#billing_phone')
@@ -1563,7 +1563,7 @@ class Twoinc {
     }
 
     /**
-     * Sync phone number back to billing phone display
+     * Sync phone number from billing_phone_display to billing_phone
      */
     syncBillingPhoneInverse() {
         let billingPhone = jQuery('#billing_phone')
@@ -2107,77 +2107,59 @@ let instance = null
 let isSelectedPaymentTwoinc = null
 jQuery(function () {
     if (window.twoinc) {
-        if (window.twoinc.enable_order_intent === 'yes') {
-            if (jQuery('#payment_method_woocommerce-gateway-tillit').length > 0) {
-                // Run Twoinc code if order intent is enabled
-                Twoinc.getInstance().initialize(true)
+        // Handle initialization every time order review (right panel) is updated
+        jQuery(document.body).on('updated_checkout', function () {
+            // If shop defaults payment method to Twoinc, run Twoinc code
+            if (twoincDomHelper.isSelectedPaymentTwoinc()) {
+                Twoinc.getInstance().initialize()
+                Twoinc.getInstance().onUpdatedCheckout()
+            } else {
+                twoincDomHelper.toggleMethod(Twoinc.getInstance().isTwoincMethodHidden)
             }
-        } else {
-            // Handle initialization every time order review (right panel) is updated
-            jQuery(document.body).on('updated_checkout', function () {
-                // If shop defaults payment method to Twoinc, run Twoinc code
-                if (twoincDomHelper.isSelectedPaymentTwoinc()) {
-                    Twoinc.getInstance().initialize(false)
-                    Twoinc.getInstance().onUpdatedCheckout()
-                } else {
-                    twoincDomHelper.toggleMethod(Twoinc.getInstance().isTwoincMethodHidden)
-                }
 
-                // Run Twoinc code if Twoinc payment is selected
-                jQuery('#payment_method_woocommerce-gateway-tillit').on('change', function () {
-                    Twoinc.getInstance().initialize(false)
-                    Twoinc.getInstance().onUpdatedCheckout()
-                })
-
-                // Run Twoinc code if Business is selected
-                if (twoincUtilHelper.isCompany(twoincDomHelper.getAccountType())) {
-                    Twoinc.getInstance().initialize(false)
-                    Twoinc.getInstance().onUpdatedCheckout()
-                }
-
-                // If invoice fee is charged to buyer, order price will change when payment method is changed from/to Twoinc
-                // Also, run Twoinc code if payment method selected is Twoinc
-                if (window.twoinc.invoice_fee_to_buyer === 'yes') {
-                    isSelectedPaymentTwoinc = twoincDomHelper.isSelectedPaymentTwoinc()
-                    if (isSelectedPaymentTwoinc) {
-                        Twoinc.getInstance().initialize(false)
-                        Twoinc.getInstance().onUpdatedCheckout()
-                    }
-
-                    // Update right sidebar order review when the payment method changes
-                    jQuery('.woocommerce-checkout [name="payment_method"]').on(
-                        'change',
-                        function () {
-                            let currentSelectedPaymentTwoinc =
-                                twoincDomHelper.isSelectedPaymentTwoinc()
-                            if (currentSelectedPaymentTwoinc || isSelectedPaymentTwoinc) {
-                                jQuery(document.body).trigger('update_checkout')
-                            }
-                            isSelectedPaymentTwoinc = currentSelectedPaymentTwoinc
-                            if (isSelectedPaymentTwoinc) {
-                                Twoinc.getInstance().initialize(false)
-                                Twoinc.getInstance().onUpdatedCheckout()
-                            }
-                        }
-                    )
-                }
+            // Run Twoinc code if Twoinc payment is selected
+            jQuery('#payment_method_woocommerce-gateway-tillit').on('change', function () {
+                Twoinc.getInstance().initialize()
+                Twoinc.getInstance().onUpdatedCheckout()
             })
 
-            // If last selected payment method is Twoinc, run Twoinc code anyway
-            let lastSelectedPayment = twoincDomHelper.getCheckoutInput(
-                'INPUT',
-                'radio',
-                'payment_method'
-            )
-            if (
-                lastSelectedPayment &&
-                lastSelectedPayment.id === 'payment_method_woocommerce-gateway-tillit'
-            ) {
-                Twoinc.getInstance().initialize(true)
+            // Run Twoinc code if Business is selected
+            if (twoincUtilHelper.isCompany(twoincDomHelper.getAccountType())) {
+                Twoinc.getInstance().initialize()
+                Twoinc.getInstance().onUpdatedCheckout()
             }
 
-            // Otherwise do not run Twoinc code
-        }
+            // If invoice fee is charged to buyer, order price will change when payment method is changed from/to Twoinc
+            // Also, run Twoinc code if payment method selected is Twoinc
+            if (window.twoinc.invoice_fee_to_buyer === 'yes') {
+                isSelectedPaymentTwoinc = twoincDomHelper.isSelectedPaymentTwoinc()
+                if (isSelectedPaymentTwoinc) {
+                    Twoinc.getInstance().initialize()
+                    Twoinc.getInstance().onUpdatedCheckout()
+                }
+
+                // Update right sidebar order review when the payment method changes
+                jQuery('.woocommerce-checkout [name="payment_method"]').on('change', function () {
+                    let currentSelectedPaymentTwoinc = twoincDomHelper.isSelectedPaymentTwoinc()
+                    if (currentSelectedPaymentTwoinc || isSelectedPaymentTwoinc) {
+                        jQuery(document.body).trigger('update_checkout')
+                    }
+                    isSelectedPaymentTwoinc = currentSelectedPaymentTwoinc
+                    if (isSelectedPaymentTwoinc) {
+                        Twoinc.getInstance().initialize()
+                        Twoinc.getInstance().onUpdatedCheckout()
+                    }
+                })
+            }
+        })
+
+        // If last selected payment method is Twoinc, run Twoinc code anyway
+        if (
+            jQuery('#payment_method_woocommerce-gateway-tillit').length > 0 ||
+            twoincDomHelper.getCheckoutInput('INPUT', 'radio', 'payment_method')?.id ===
+                'payment_method_woocommerce-gateway-tillit'
+        )
+            Twoinc.getInstance().initialize()
 
         // Show or hide Twoinc payment method on account type change
         jQuery('.woocommerce-checkout [name="account_type"]').on('change', function () {
