@@ -457,18 +457,18 @@ let twoincDomHelper = {
                 if (twoincUtilHelper.isCompany(accountType)) {
                     twoincDomHelper.moveField('billing_first_name_field', 'fn')
                     twoincDomHelper.moveField('billing_last_name_field', 'ln')
-                    twoincDomHelper.moveField('billing_phone_display_field', 'ph')
+                    twoincDomHelper.moveField('billing_phone_field', 'ph')
                     twoincDomHelper.moveField('billing_email_field', 'em')
                 } else {
                     twoincDomHelper.revertField('billing_first_name_field', 'fn')
                     twoincDomHelper.revertField('billing_last_name_field', 'ln')
-                    twoincDomHelper.revertField('billing_phone_display_field', 'ph')
+                    twoincDomHelper.revertField('billing_phone_field', 'ph')
                     twoincDomHelper.revertField('billing_email_field', 'em')
                 }
             }
 
             twoincDomHelper.toggleTooltip(
-                '#billing_phone_display, label[for="billing_phone_display"], #billing_phone, label[for="billing_phone"]',
+                '#billing_phone, label[for="billing_phone"]',
                 window.twoinc.text.tooltip_phone
             )
             twoincDomHelper.toggleTooltip(
@@ -531,7 +531,6 @@ let twoincDomHelper = {
         let allTargets = [
             '.woocommerce-company-fields',
             '.woocommerce-representative-fields',
-            '#billing_phone_display_field',
             '#billing_phone_field',
             '#billing_company_display_field',
             '#billing_company_field',
@@ -545,12 +544,15 @@ let twoincDomHelper = {
         let visibleBusinessTargets = [
             '.woocommerce-company-fields',
             '.woocommerce-representative-fields',
-            '#billing_phone_display_field',
+            '#billing_phone_field',
+            '#department_field',
+            '#project_field',
+            '#purchase_order_number_field',
         ]
         let requiredBusinessTargets = []
 
         if (twoincDomHelper.isSelectedPaymentTwoinc()) {
-            requiredBusinessTargets.push('#billing_phone_display_field')
+            requiredBusinessTargets.push('#billing_phone_field')
         }
         if (twoincDomHelper.isCountrySupported()) {
             if (window.twoinc.company_name_search === 'yes') {
@@ -568,11 +570,6 @@ let twoincDomHelper = {
             visibleBusinessTargets.push('#billing_company_field')
         }
 
-        visibleBusinessTargets.push(
-            '#department_field',
-            '#project_field',
-            '#purchase_order_number_field'
-        )
         allTargets = jQuery(allTargets.join(','))
         requiredBusinessTargets = jQuery(requiredBusinessTargets.join(','))
         visibleBusinessTargets = jQuery(visibleBusinessTargets.join(','))
@@ -1281,7 +1278,6 @@ class Twoinc {
         this.isInitialized = false
         this.isTwoincMethodHidden = true
         this.isTwoincApproved = null
-        this.billingPhoneInput = null
         this.orderIntentCheck = {
             interval: null,
             pendingCheck: false,
@@ -1467,18 +1463,6 @@ class Twoinc {
         // Handle the representative inputs blur event
         $body.on('blur', '#company_id, #billing_company_display', this.onCompanyManualInputBlur)
 
-        // Handle the phone inputs change event
-        $body.on('change', '#billing_phone_display', this.onPhoneInputChange)
-        $body.on('keyup', '#billing_phone_display', this.onPhoneInputChange)
-
-        // Handle the phone inputs change event in reverse
-        $body.on('change', '#billing_phone', this.onPhoneInputChangeInverse)
-        $body.on('keyup', '#billing_phone', this.onPhoneInputChangeInverse)
-
-        setTimeout(function () {
-            jQuery('.iti__country-list').on('click', Twoinc.getInstance().onPhoneInputChange)
-        }, 1000)
-
         // Handle the company inputs change event
         $body.on(
             'change',
@@ -1523,7 +1507,6 @@ class Twoinc {
             // Trigger address search
             Twoinc.getInstance().getAddress()
         }
-        this.initBillingPhoneDisplay()
         setTimeout(function () {
             twoincDomHelper.saveCheckoutInputs()
             Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData()
@@ -1544,61 +1527,6 @@ class Twoinc {
     static getInstance() {
         if (!instance) instance = new Twoinc()
         return instance
-    }
-
-    /**
-     * Sync phone number back to billing phone display
-     */
-    syncBillingPhone() {
-        let billingPhone = jQuery('#billing_phone')
-        let billingPhoneInput = Twoinc.getInstance().billingPhoneInput
-        if (billingPhone.length === 0 || billingPhoneInput === null) return
-        let currentVal = billingPhone.val()
-        let newVal = billingPhoneInput.getNumber()
-        if (currentVal !== newVal) {
-            billingPhone.val(newVal)
-            billingPhone.attr('value', newVal)
-            Twoinc.getInstance().customerRepresentative['phone_number'] = newVal
-        }
-    }
-
-    /**
-     * Sync phone number back to billing phone display
-     */
-    syncBillingPhoneInverse() {
-        let billingPhone = jQuery('#billing_phone')
-        let billingPhoneInput = Twoinc.getInstance().billingPhoneInput
-        if (billingPhone.length === 0 || billingPhoneInput === null) return
-        let currentVal = billingPhoneInput.getNumber()
-        let newVal = billingPhone.val()
-        if (currentVal !== newVal) {
-            billingPhoneInput.setNumber(newVal)
-        }
-    }
-
-    /**
-     * Initialize billing phone display
-     */
-    initBillingPhoneDisplay() {
-        let billingPhoneInputField = document.querySelector('#billing_phone_display')
-        if (!billingPhoneInputField) return
-
-        this.billingPhoneInput = window.intlTelInput(billingPhoneInputField, {
-            utilsScript: window.twoinc.intl_tel_input_utils_js,
-            preferredCountries: [window.twoinc.shop_base_country],
-            separateDialCode: true,
-            customPlaceholder: function (selectedCountryPlaceholder, selectedCountryData) {
-                if (selectedCountryData.iso2 === 'gb') {
-                    return '7700 900077'
-                } else if (selectedCountryData.iso2 === 'no') {
-                    return '073 70143'
-                } else if (selectedCountryData.iso2 === 'se') {
-                    return '765 195 285'
-                }
-                return selectedCountryPlaceholder.replace(/[0-9]/g, 'X')
-            },
-        })
-        this.syncBillingPhoneInverse()
     }
 
     /**
@@ -2050,26 +1978,6 @@ class Twoinc {
         Twoinc.getInstance().customerRepresentative[inputName] = $input.val()
 
         Twoinc.getInstance().getApproval()
-    }
-
-    /**
-     * Handle the phone number input changes
-     *
-     * @param event
-     */
-
-    onPhoneInputChange(event) {
-        setTimeout(Twoinc.getInstance().syncBillingPhone, 200)
-    }
-
-    /**
-     * Handle the phone number input changes
-     *
-     * @param event
-     */
-
-    onPhoneInputChangeInverse(event) {
-        setTimeout(Twoinc.getInstance().syncBillingPhoneInverse, 200)
     }
 
     /**

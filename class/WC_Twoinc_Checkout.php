@@ -41,11 +41,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             add_action('woocommerce_before_checkout_billing_form', [$this, 'inject_cart_details'], 23);
             add_action('woocommerce_pay_order_before_submit', [$this, 'inject_cart_details'], 22);
 
-            // Load addtional js/css
-            add_action('woocommerce_before_checkout_billing_form', [$this, 'load_intl_tel_input'], 24);
-            add_action('woocommerce_pay_order_before_submit', [$this, 'load_intl_tel_input'], 23);
-
-            //
+            // Order pay page customization
             add_action('woocommerce_pay_order_before_submit', [$this, 'order_pay_page_customize'], 24);
         }
 
@@ -246,13 +242,6 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 ];
             }
 
-            $fields['billing']['billing_phone_display'] = [
-                'label' => __('Phone', 'twoinc-payment-gateway'),
-                'class' => array('hidden'),
-                'required' => $fields['billing']['billing_phone']['required'],
-                'priority' => $fields['billing']['billing_email']['priority'] + 2 // insert email field in-between, must not be directly under first name to avoid css error
-            ];
-
             // Return the fields list
             return $fields;
 
@@ -307,19 +296,6 @@ if (!class_exists('WC_Twoinc_Checkout')) {
         }
 
         /**
-         * Load custom 3rd-party js and css files
-         */
-        public function intl_tel_input_asset($path) {
-            return WC_TWOINC_PLUGIN_URL . 'assets/intl-tel-input/17.0.8/' . $path;
-        }
-
-        public function load_intl_tel_input() {
-            // selectable phone country prefix
-            printf('<link rel="stylesheet" href="' . $this->intl_tel_input_asset('css/intlTelInput.css') . '" />');
-            printf('<script src="' . $this->intl_tel_input_asset('js/intlTelInput.min.js') . '"></script>');
-        }
-
-        /**
          * Customize for Order Pay page when merchant installed "Phone Orders for WooCommerce" plugin
          */
         public function order_pay_page_customize() {
@@ -363,7 +339,6 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 'twoinc_plugin_url' => WC_TWOINC_PLUGIN_URL,
                 'client_name' => 'wp',
                 'client_version' => get_plugin_version(),
-                'intl_tel_input_utils_js' => $this->intl_tel_input_asset('js/utils.js'),
             ];
 
             $user_id = wp_get_current_user()->ID;
