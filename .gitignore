@@ -3,6 +3,7 @@
 *.env.json
 .DS_Store
 package-lock.json
+config/
 screenshots/
 videos/
 node_modules/

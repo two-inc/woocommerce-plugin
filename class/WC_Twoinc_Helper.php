@@ -495,6 +495,12 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 $invoice_details['invoice_emails'] = $invoice_emails;
             }
 
+            // Add due in days to order req body to Two
+            $due_in_days = (string) get_post_meta($order->get_id(), '_billing_due_in_days', true);
+            if ($due_in_days && ctype_digit($due_in_days)) {
+                $invoice_details['due_in_days'] = (int) $due_in_days;
+            }
+
             $req_body = [
                 'currency' => $order->get_currency(),
                 'gross_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total())),

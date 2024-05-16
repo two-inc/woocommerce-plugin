@@ -54,7 +54,7 @@ if (!class_exists('WC_Twoinc')) {
 
             $this->title = sprintf(
                 __($this->get_option('title'), 'twoinc-payment-gateway'),
-                strval($this->get_merchant_default_days_on_invoice())
+                strval($this->get_merchant_default_due_in_days())
             );
             $this->description = sprintf(
                 '%s%s%s',
@@ -122,6 +122,9 @@ if (!class_exists('WC_Twoinc')) {
             add_action('woocommerce_order_status_cancelled', [$this, 'on_order_cancelled']);
             add_action('woocommerce_cancelled_order', [$this, 'on_order_cancelled']);
 
+            // Update due in days in confirm page
+            add_action('wp_footer', [$this, 'update_due_in_days_in_confirm_page']);
+
             // This class use singleton
             self::$instance = $this;
             new WC_Twoinc_Checkout($this);
@@ -156,9 +159,7 @@ if (!class_exists('WC_Twoinc')) {
          */
         private function get_twoinc_search_host($countryCode){
             if (WC_Twoinc_Helper::is_twoinc_development()) {
-                if ($this->get_option('use_prod_company_search') === 'yes') {
-                    return "https://{$countryCode}.search.two.inc";
-                } else {
+                if ($this->get_option('use_prod_company_search') !== 'yes') {
                     return "https://{$countryCode}.search.staging.two.inc";
                 }
             }
@@ -168,18 +169,18 @@ if (!class_exists('WC_Twoinc')) {
         /**
          * Get merchant's default due in day from DB, or from Twoinc DB
          */
-        public function get_merchant_default_days_on_invoice(){
+        public function get_merchant_default_due_in_days(){
 
-            $days_on_invoice = $this->get_option('days_on_invoice');
-            $days_on_invoice_last_checked_on = $this->get_option('days_on_invoice_last_checked_on');
+            $due_in_days = $this->get_option('due_in_days');
+            $due_in_days_last_checked_on = $this->get_option('due_in_days_last_checked_on');
 
             // Default to 14 days
-            if (!$days_on_invoice) {
-                $days_on_invoice = 14;
+            if (!$due_in_days) {
+                $due_in_days = 14;
             }
 
             // if last checked is not within 1 hour, ask Twoinc server
-            if (!$days_on_invoice_last_checked_on || ($days_on_invoice_last_checked_on + 3600) <= time()) {
+            if (!$due_in_days_last_checked_on || ($due_in_days_last_checked_on + 3600) <= time()) {
 
                 $twoinc_merchant_id = $this->get_option('tillit_merchant_id');
 
@@ -212,10 +213,10 @@ if (!class_exists('WC_Twoinc')) {
                             if($response && $response['body']) {
                                 $body = json_decode($response['body'], true);
                                 if($body['due_in_days']) {
-                                    $days_on_invoice = $body['due_in_days'];
+                                    $due_in_days = $body['due_in_days'];
                                 } else {
                                     // If Twoinc DB has null value, also default to 14 days
-                                    $days_on_invoice = 14;
+                                    $due_in_days = 14;
                                 }
                             }
 
@@ -225,11 +226,11 @@ if (!class_exists('WC_Twoinc')) {
 
                 }
 
-                $this->update_option('days_on_invoice', $days_on_invoice);
-                $this->update_option('days_on_invoice_last_checked_on', time());
+                $this->update_option('due_in_days', $due_in_days);
+                $this->update_option('due_in_days_last_checked_on', time());
             }
 
-            return $days_on_invoice;
+            return $due_in_days;
 
         }
 
@@ -318,7 +319,7 @@ if (!class_exists('WC_Twoinc')) {
                 '<span class="payment-term-number">%s</span><span class="payment-term-nonumber">%s</span>',
                 sprintf(
                     __($this->get_option('title'), 'twoinc-payment-gateway'),
-                    '<span class="due-in-days">' . strval($this->get_merchant_default_days_on_invoice()) . '</span>'
+                    '<span class="due-in-days">' . strval($this->get_merchant_default_due_in_days()) . '</span>'
                 ),
                 __('Pay on invoice with agreed terms', 'twoinc-payment-gateway')
             );
@@ -344,6 +345,7 @@ if (!class_exists('WC_Twoinc')) {
         public function update_checkout_options()
         {
 
+            return;
             if (!isset($_POST['woocommerce_woocommerce-gateway-tillit_merchant_logo']) && !isset($_POST['woocommerce_woocommerce-gateway-tillit_tillit_merchant_id'])) return;
 
             $image_id = sanitize_text_field($_POST['woocommerce_woocommerce-gateway-tillit_merchant_logo']);
@@ -824,6 +826,43 @@ if (!class_exists('WC_Twoinc')) {
             do_action('twoinc_order_completed', $order, $body);
             return true;
         }
+
+        public function update_due_in_days_in_confirm_page() {
+            if (is_order_received_page()) {
+                global $wp, $post;
+                $order_id = absint($wp->query_vars['order-received']);
+                $twoinc_due_in_days = get_post_meta($order_id, '_twoinc_due_in_days', true);
+                $twoinc_obj = WC_Twoinc::get_instance();
+?>
+
+<script type='text/javascript'>
+function getNodesThatContain(text) {
+    var textNodes = jQuery(document).find(":not(iframe, script, style)").contents().filter(function() {
+        return this.nodeType == 3 && this.textContent.indexOf(text) > -1
+    })
+    return textNodes.parent()
+}
+
+function replaceDueInDays() {
+    let dueInDays = <?php echo $twoinc_due_in_days; ?>;
+    let defaultDueInDays = <?php echo $twoinc_obj->get_merchant_default_due_in_days(); ?>;
+    let twoincMethodText = "<?php echo $twoinc_obj->title; ?>";
+    getNodesThatContain(twoincMethodText).each(function (){
+        jQuery(this).html(jQuery(this).html().replace(twoincMethodText, twoincMethodText.replace(defaultDueInDays, dueInDays)))
+    })
+}
+
+document.getElementsByClassName('woocommerce-order')[0].style.visibility = 'hidden';
+document.addEventListener("DOMContentLoaded", function() {
+    replaceDueInDays()
+    document.getElementsByClassName('woocommerce-order')[0].style.visibility = '';
+})
+</script>
+
+<?php
+            }
+        }
+
 
         /**
          * Notify Twoinc API when the order status is cancelled
@@ -1410,11 +1449,15 @@ if (!class_exists('WC_Twoinc')) {
             update_post_meta($order_id, 'twoinc_order_id', $body['id']);
             $twoinc_meta = $this->get_save_twoinc_meta($order, $body['id']);
             $twoinc_updated_order_hash = WC_Twoinc_Helper::hash_order($order, $twoinc_meta);
-            update_post_meta($order->get_id(), '_twoinc_req_body_hash', $twoinc_updated_order_hash);
+            update_post_meta($order_id, '_twoinc_req_body_hash', $twoinc_updated_order_hash);
 
             if (isset($body['state'])) {
                 update_post_meta($order_id, '_twoinc_order_state', $body['state']);
             }
+            if ($body['invoice_details']['due_in_days']) {
+                update_post_meta($order_id, '_twoinc_due_in_days', $body['invoice_details']['due_in_days']);
+            }
+
             do_action('twoinc_order_created', $order, $body);
 
             // Return the result
@@ -1786,7 +1829,7 @@ if (!class_exists('WC_Twoinc')) {
 
             if ($site_type === 'WOOCOMMERCE') {
 
-                $allowed_twoinc_checkout_hosts = array('https://api.two.inc/', 'https://api.staging.two.inc/', 'https://api.sandbox.two.inc/', 'http://localhost:8080');
+                $allowed_twoinc_checkout_hosts = array('https://api.two.inc/', 'https://api.staging.two.inc/', 'https://api.sandbox.two.inc/', 'http://localhost:8080/');
                 if (!in_array($twoinc_checkout_host, $allowed_twoinc_checkout_hosts)) {
                     $error = new WP_Error(
                         'init_failed',
@@ -1833,6 +1876,7 @@ if (!class_exists('WC_Twoinc')) {
                     if (isset($body['enable_company_name'])) $wc_twoinc_instance->update_option('enable_company_name', $body['enable_company_name'] ? 'yes' : 'no');
                     if (isset($body['address_search'])) $wc_twoinc_instance->update_option('address_search', $body['address_search'] ? 'yes' : 'no');
                     if (isset($body['enable_order_intent'])) $wc_twoinc_instance->update_option('enable_order_intent', $body['enable_order_intent'] ? 'yes' : 'no');
+                    if (isset($body['enable_due_in_days'])) $wc_twoinc_instance->update_option('enable_due_in_days', $body['enable_due_in_days'] ? 'yes' : 'no');
                     if (isset($body['default_to_b2c'])) $wc_twoinc_instance->update_option('default_to_b2c', $body['default_to_b2c'] ? 'yes' : 'no');
                     if (isset($body['invoice_fee_to_buyer'])) $wc_twoinc_instance->update_option('invoice_fee_to_buyer', $body['invoice_fee_to_buyer'] ? 'yes' : 'no');
                     if (isset($body['clear_options_on_deactivation'])) $wc_twoinc_instance->update_option('clear_options_on_deactivation', $body['clear_options_on_deactivation'] ? 'yes' : 'no');
@@ -1983,6 +2027,14 @@ if (!class_exists('WC_Twoinc')) {
                     'label'       => ' ',
                     'type'        => 'checkbox',
                     'default'     => 'yes'
+                ],
+                'enable_due_in_days' => [
+                    'title'       => __('Allow buyer to select invoice due date', 'twoinc-payment-gateway'),
+                    'description' => __('If enabled, buyer is given the option to select invoice due date at checkout.', 'twoinc-payment-gateway'),
+                    'desc_tip'    => true,
+                    'label'       => ' ',
+                    'type'        => 'checkbox',
+                    'default'     => 'no'
                 ],
                 'checkout_business' => [
                     'title'       => __('Separate checkout for business customers', 'twoinc-payment-gateway'),

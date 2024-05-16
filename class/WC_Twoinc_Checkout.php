@@ -25,6 +25,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             add_filter('woocommerce_checkout_fields', [$this, 'move_country_field'], 20);
 
             // Register the custom fields
+            add_filter("woocommerce_checkout_fields", [$this, 'add_due_in_days_fields'], 20);
             add_filter('woocommerce_checkout_fields', [$this, 'add_tracking_fields'], 21);
             add_filter('woocommerce_checkout_fields', [$this, 'add_account_fields'], 22);
             add_filter('woocommerce_checkout_fields', [$this, 'update_company_fields'], 23);
@@ -270,6 +271,36 @@ if (!class_exists('WC_Twoinc_Checkout')) {
         }
 
         /**
+         * Add the new field due in days in checkout
+         *
+         * @param $fields
+         *
+         * @return array
+         */
+        public function add_due_in_days_fields($fields)
+        {
+            if ($this->wc_twoinc->get_option('enable_due_in_days') === 'yes') {
+              $options = [];
+              $days = array('14', '30', '60', '90');
+              foreach($days as $k => $v) {
+                  $options[$v] = sprintf(__('%s days', 'twoinc-payment-gateway'), $v);
+              }
+              $fields['billing']['billing_due_in_days'] = [
+                  'label'    => __('Days you\'ll have to pay your invoice', 'twoinc-payment-gateway'),
+                  'type'     => 'select',
+                  'options'  => $options,
+                  'value' => $this->wc_twoinc->get_merchant_default_due_in_days(),
+                  'required' => true,
+                  'priority' => $fields['billing']['billing_company']['priority'] - 1
+              ];
+
+            }
+
+            return $fields;
+
+        }
+
+        /**
          * Render the Twoinc fields to the checkout page
          *
          * @return void
@@ -317,21 +348,25 @@ if (!class_exists('WC_Twoinc_Checkout')) {
 
             $properties = [
                 'text' => [
+                    'title' => __($this->wc_twoinc->get_option('title'), 'twoinc-payment-gateway'),
                     'tooltip_phone' => __('We require your phone number so we can verify your purchase', 'twoinc-payment-gateway'),
                     'tooltip_company' => __('We use your company name to automatically populate your address and register the company that made the purchase', 'twoinc-payment-gateway'),
                 ],
-                'twoinc_search_host_no' => $this->wc_twoinc->twoinc_search_host_no,
-                'twoinc_search_host_gb' => $this->wc_twoinc->twoinc_search_host_gb,
-                'twoinc_search_host_se' => $this->wc_twoinc->twoinc_search_host_se,
+                'twoinc_search_host' => [
+                   'NO' => $this->wc_twoinc->twoinc_search_host_no,
+                   'GB' => $this->wc_twoinc->twoinc_search_host_gb,
+                   'SE' => $this->wc_twoinc->twoinc_search_host_se,
+                ],
                 'twoinc_checkout_host' => $this->wc_twoinc->twoinc_checkout_host,
                 'company_name_search' => $this->wc_twoinc->get_option('enable_company_name'),
                 'address_search' => $this->wc_twoinc->get_option('address_search'),
                 'enable_order_intent' => $this->wc_twoinc->get_option('enable_order_intent'),
+                'enable_due_in_days' => $this->wc_twoinc->get_option('enable_due_in_days'),
                 'invoice_fee_to_buyer' => $this->wc_twoinc->get_option('invoice_fee_to_buyer'),
                 'use_account_type_buttons' => $this->wc_twoinc->get_option('use_account_type_buttons'),
                 'display_tooltips' => $this->wc_twoinc->get_option('display_tooltips'),
                 'merchant_short_name' => $this->wc_twoinc->get_option('tillit_merchant_id'),
-                'days_on_invoice' => $this->wc_twoinc->get_merchant_default_days_on_invoice(),
+                'default_due_in_days' => $this->wc_twoinc->get_merchant_default_due_in_days(),
                 'shop_base_country' => strtolower(WC()->countries->get_base_country()),
                 'currency' => $currency,
                 'price_decimal_separator' => wc_get_price_decimal_separator(),

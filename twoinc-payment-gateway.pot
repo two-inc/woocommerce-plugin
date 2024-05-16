@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Two - BNPL for businesses\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2022-02-09 08:30+0000\n"
+"POT-Creation-Date: 2024-03-20 11:51+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: \n"
@@ -93,8 +93,7 @@ msgstr ""
 msgid "Business invoice %s days"
 msgstr ""
 
-#: class/WC_Twoinc.php:282
-#: class/WC_Twoinc_Helper.php:97
+#: class/WC_Twoinc.php:282 class/WC_Twoinc_Helper.php:97
 msgid "Buyer and merchant may not be the same company"
 msgstr ""
 
@@ -124,14 +123,12 @@ msgstr ""
 msgid "Company ID"
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:124
-#: class/WC_Twoinc_Checkout.php:165
+#: class/WC_Twoinc_Helper.php:124 class/WC_Twoinc_Checkout.php:165
 #: views/woocommerce_order_pay.php:35
 msgid "Company name"
 msgstr ""
 
-#: class/WC_Twoinc.php:1887
-#: class/WC_Twoinc.php:1912
+#: class/WC_Twoinc.php:1887 class/WC_Twoinc.php:1912
 msgid "Could not edit the Two order"
 msgstr ""
 
@@ -143,8 +140,7 @@ msgstr ""
 msgid "Could not find Two order ID"
 msgstr ""
 
-#: class/WC_Twoinc.php:357
-#: class/WC_Twoinc.php:367
+#: class/WC_Twoinc.php:357 class/WC_Twoinc.php:367
 msgid "Could not forward invoice image url to Two"
 msgstr ""
 
@@ -156,13 +152,11 @@ msgstr ""
 msgid "Could not request to create Two order"
 msgstr ""
 
-#: class/WC_Twoinc.php:669
-#: class/WC_Twoinc.php:700
+#: class/WC_Twoinc.php:669 class/WC_Twoinc.php:700
 msgid "Could not update status"
 msgstr ""
 
-#: class/WC_Twoinc.php:765
-#: class/WC_Twoinc.php:788
+#: class/WC_Twoinc.php:765 class/WC_Twoinc.php:788
 msgid "Could not update status to \"Cancelled\""
 msgstr ""
 
@@ -196,8 +190,7 @@ msgstr ""
 msgid "Default to B2C check-out"
 msgstr ""
 
-#: class/WC_Twoinc.php:840
-#: class/WC_Twoinc_Checkout.php:192
+#: class/WC_Twoinc.php:840 class/WC_Twoinc_Checkout.php:192
 msgid "Department"
 msgstr ""
 
@@ -246,8 +239,7 @@ msgstr ""
 msgid "Failed to refund order with Two, please check with Two admin for id %s"
 msgstr ""
 
-#: class/WC_Twoinc.php:1055
-#: class/WC_Twoinc.php:1106
+#: class/WC_Twoinc.php:1055 class/WC_Twoinc.php:1106
 msgid "Failed to request refund order to Two"
 msgstr ""
 
@@ -299,8 +291,7 @@ msgstr ""
 msgid "Invoice has been sent from Two via email and EHF"
 msgstr ""
 
-#: class/WC_Twoinc.php:280
-#: class/WC_Twoinc_Helper.php:72
+#: class/WC_Twoinc.php:280 class/WC_Twoinc_Helper.php:72
 msgid "Invoice purchase is not available for this order"
 msgstr ""
 
@@ -350,8 +341,7 @@ msgstr ""
 msgid "Personal"
 msgstr ""
 
-#: class/WC_Twoinc_Checkout.php:238
-#: views/woocommerce_order_pay.php:4
+#: class/WC_Twoinc_Checkout.php:238 views/woocommerce_order_pay.php:4
 msgid "Phone"
 msgstr ""
 
@@ -383,8 +373,7 @@ msgstr ""
 msgid "Private Customer"
 msgstr ""
 
-#: class/WC_Twoinc.php:848
-#: class/WC_Twoinc_Checkout.php:203
+#: class/WC_Twoinc.php:848 class/WC_Twoinc_Checkout.php:203
 msgid "Project"
 msgstr ""
 
@@ -487,9 +476,7 @@ msgid "Turn on/off"
 msgstr ""
 
 #. Author of the plugin
-#: class/WC_Twoinc.php:30
-#: class/WC_Twoinc.php:1415
-#: class/WC_Twoinc.php:1460
+#: class/WC_Twoinc.php:30 class/WC_Twoinc.php:1415 class/WC_Twoinc.php:1460
 #: class/WC_Twoinc.php:1472
 msgid "Two"
 msgstr ""
@@ -547,12 +534,8 @@ msgstr ""
 msgid "Unable to find the requested order"
 msgstr ""
 
-#: class/WC_Twoinc.php:1300
-#: class/WC_Twoinc.php:1306
-#: class/WC_Twoinc.php:1314
-#: class/WC_Twoinc.php:1321
-#: class/WC_Twoinc.php:1766
-#: class/WC_Twoinc.php:1793
+#: class/WC_Twoinc.php:1300 class/WC_Twoinc.php:1306 class/WC_Twoinc.php:1314
+#: class/WC_Twoinc.php:1321 class/WC_Twoinc.php:1766 class/WC_Twoinc.php:1793
 msgid "Unable to retrieve the order information"
 msgstr ""
 
@@ -574,8 +557,7 @@ msgid ""
 "the company that made the purchase"
 msgstr ""
 
-#: class/WC_Twoinc.php:281
-#: class/WC_Twoinc.php:1012
+#: class/WC_Twoinc.php:281 class/WC_Twoinc.php:1012
 msgid ""
 "We've checked your company's details and are unable to provide invoice "
 "credit for this order"
@@ -593,4 +575,11 @@ msgstr ""
 
 #: class/WC_Twoinc.php:277
 msgid "your company"
+msgstr ""
+
+#: class/WC_Twoinc_Checkout.php:293
+msgid "Days you'll have to pay your invoice"
+msgstr ""
+
+msgid "%s days"
 msgstr ""

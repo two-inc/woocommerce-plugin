@@ -55,21 +55,11 @@ let twoincSelectWooHelper = {
      * Generate parameters for selectwoo
      */
     genSelectWooParams: function () {
-        let countryParams = {
-            NO: {
-                twoinc_search_host: window.twoinc.twoinc_search_host_no,
-            },
-            GB: {
-                twoinc_search_host: window.twoinc.twoinc_search_host_gb,
-            },
-            SE: {
-                twoinc_search_host: window.twoinc.twoinc_search_host_se,
-            },
-        }
+        let searchHosts = window.twoinc.twoinc_search_host
 
         let country = jQuery('#billing_country').val()
 
-        if (country in countryParams) {
+        if (country in searchHosts) {
             let twoincSearchLimit = 50
             return {
                 minimumInputLength: 3,
@@ -108,7 +98,7 @@ let twoincSelectWooHelper = {
                     url: function (params) {
                         params.page = params.page || 1
                         return (
-                            countryParams[country].twoinc_search_host +
+                            searchHosts[country] +
                             '/search?limit=' +
                             twoincSearchLimit +
                             '&offset=' +
@@ -1324,6 +1314,12 @@ class Twoinc {
         // Get the company ID field
         const $companyId = $body.find('#company_id')
 
+        // Convert to selectWoo
+        if (window.twoinc.enable_due_in_days == 'yes') {
+            const $billingDueInDays = $body.find('#billing_due_in_days')
+            $billingDueInDays.selectWoo()
+        }
+
         // If we found the field
         if (jQuery('[name="account_type"]:checked').length > 0) {
             // Toggle the business fields
@@ -1476,6 +1472,9 @@ class Twoinc {
 
         // Handle the country inputs change event
         $body.on('change', '#billing_country', this.onCountryInputChange)
+
+        // Handle due in days inputs change event
+        $body.on('change', '#billing_due_in_days', this.onDueInDaysInputChange)
 
         $body.on('click', '#place_order', function () {
             clearInterval(Twoinc.getInstance().orderIntentCheck.interval)
@@ -1996,6 +1995,27 @@ class Twoinc {
         twoincDomHelper.clearSelectedCompany()
 
         Twoinc.getInstance().getApproval()
+    }
+
+    /**
+     * Handle the due in days input changes
+     *
+     * @param event
+     */
+
+    onDueInDaysInputChange(event) {
+        const $input = jQuery(this)
+        Twoinc.getInstance().updateTitleDueInDays($input.val())
+    }
+
+    /**
+     * Replace due in days
+     *
+     * @param days
+     */
+    updateTitleDueInDays(days) {
+        const title = window.twoinc.text.title.replace('%s', days)
+        jQuery('label[for="payment_method_woocommerce-gateway-tillit"]').html(title)
     }
 
     /**
