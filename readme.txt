@@ -1,14 +1,14 @@
 === Two - BNPL for businesses ===
 Tags: payment request, woocommerce
 Requires at least: 6.4
-Tested up to: 6.4.2
+Tested up to: 6.5
 Requires PHP: 7.4
 Stable tag: 2.18.2
 License: GPLv3
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
+Requires WooCommerce version 6, 7 or 8. Support for version 9 is under development.
 
 == Description ==
-
 
 ### Overview
 
@@ -24,7 +24,7 @@ Simply put; Two is customer centric, less friction and higher conversion rates.
 
 ### Features
 
-**WHY the Two plugin?**
+**Why use the Two plugin?**
 
 -   70% of Business customers pay by invoice when given the option.
 -   Automated credit check and verification of customers
@@ -50,6 +50,6 @@ You can find the WordPress installation guide  [here](https://wordpress.org/supp
 
 **How to get your Two keys:**
 
-1.  Go to  [two.inc](https://two.inc/)  and sign up your company
+1.  Go to [two.inc](https://two.inc/) and sign up your company
 2.  You will receive an e-mail with your test keys and as soon as you are ready your production keys as well.
 3.  Once you have changed out your test keys with the production ones – you are ready to offer your B2B customers the Two solution.
