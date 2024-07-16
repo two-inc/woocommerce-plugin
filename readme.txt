@@ -1,30 +1,24 @@
 === Two - BNPL for businesses ===
 Tags: payment request, woocommerce
-Requires at least: 6.4
+Requires at least: 6
 Tested up to: 6.5
-Requires PHP: 7.4
+Requires PHP: 7
 Stable tag: 2.18.5
 License: GPLv3
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 Two - BNPL for businesses is a WooCommerce plugin that simplifies B2B shopping, allowing merchants to safely offer invoices as a payment method.
 
-== Description ==
-
-### Overview
-
 **Making it easy for businesses to sell & buy online.**
 
 Two - BNPL for businesses is a WooCommerce plugin that simplifies B2B shopping, allowing merchants to safely offer invoices as a payment method. This standalone add-on complements your checkout, catering to business customers' preferred payment methods, increasing conversion rates, and boosting sales.
 
-### Benefits for Merchants
+## Benefits for Merchants
 
 Two provides a seamless **Buy Now, Pay Later** option, enhancing the buyer journey and reducing manual tasks in B2B transactions. It offers instant payment terms without credit approval delays, reducing the risk of losing customers.
 
 Simply put, Two is customer-centric, with less friction and higher conversion rates.
 
-### Features
-
-**Why use the Two plugin?**
+## Why use the Two plugin?
 
 -   70% of business customers prefer to pay by invoice.
 -   Automated customer credit check and verification.
@@ -34,11 +28,11 @@ Simply put, Two is customer-centric, with less friction and higher conversion ra
 -   Integrated with PEPPOL e-invoicing network.
 -   Guaranteed payment regardless of when the buyer pays.
 
-### Benefits for Customers
+## Benefits for Customers
 
 **Two Buy Now, Pay Later** offers a frictionless invoice solution, sending invoices directly to accountants through electronic invoicing.
 
-### How to Install the Plugin
+## How to Install the Plugin
 
 Install the plugin via:
 
@@ -48,7 +42,7 @@ Install the plugin via:
 
 Find the WordPress installation guide [here](https://wordpress.org/support/article/managing-plugins/#installing-plugins).
 
-### How to Get Your Two Keys
+## How to Get Your Two Keys
 
 1.  Sign up at [two.inc](https://two.inc/).
 2.  Log in to your Two [merchant portal account](https://portal.two.inc/merchant/integration).
@@ -57,6 +51,6 @@ Find the WordPress installation guide [here](https://wordpress.org/support/artic
 
 Feel free to reach out to [integration@two.inc](mailto:integration@two.inc) for any assistance related to the plugin.
 
-### Compatibility with WooCommerce
+## Compatibility with WooCommerce
 
-The plugin is tested with WooCommerce versions 6, 7, and 8. Support for version 9 is on the roadmap.
+The plugin has been tested with WooCommerce versions 6, 7, and 8. Support for version 9 is on the roadmap.
