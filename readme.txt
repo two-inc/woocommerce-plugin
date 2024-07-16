@@ -6,7 +6,7 @@ Requires PHP: 7.4
 Stable tag: 2.18.3
 License: GPLv3
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
-Requires WooCommerce version 6, 7 or 8. Support for version 9 is under development.
+Two - BNPL for businesses is a WooCommerce plugin that simplifies B2B shopping, making it easy and safe for Merchants to offer invoices as a payment method.
 
 == Description ==
 
@@ -53,3 +53,7 @@ You can find the WordPress installation guide  [here](https://wordpress.org/supp
 1.  Go to [two.inc](https://two.inc/) and sign up your company
 2.  You will receive an e-mail with your test keys and as soon as you are ready your production keys as well.
 3.  Once you have changed out your test keys with the production ones – you are ready to offer your B2B customers the Two solution.
+
+**Compatibility with WooCommerce**
+
+The plugin has been tested against WooCommerce version 6, 7 or 8. Support for version 9 is on the roadmap.
