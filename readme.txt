@@ -3,10 +3,10 @@ Tags: payment request, woocommerce
 Requires at least: 6.4
 Tested up to: 6.5
 Requires PHP: 7.4
-Stable tag: 2.18.4
+Stable tag: 2.18.5
 License: GPLv3
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
-Two - BNPL for businesses is a WooCommerce plugin that simplifies B2B shopping, making it easy and safe for Merchants to offer invoices as a payment method.
+Two - BNPL for businesses is a WooCommerce plugin that simplifies B2B shopping, allowing merchants to safely offer invoices as a payment method.
 
 == Description ==
 
@@ -14,46 +14,49 @@ Two - BNPL for businesses is a WooCommerce plugin that simplifies B2B shopping, 
 
 **Making it easy for businesses to sell & buy online.**
 
-The Two Payment plugin for WooCommerce simplifies B2B shopping, making it easy and safe for Merchants to offer invoices as a payment method. It is a standalone add-on payment method that complements your checkout. It will allow you to cater to business customers with their preferred payment method online, increasing conversion rates in checkout and helping you sell more.
+Two - BNPL for businesses is a WooCommerce plugin that simplifies B2B shopping, allowing merchants to safely offer invoices as a payment method. This standalone add-on complements your checkout, catering to business customers' preferred payment methods, increasing conversion rates, and boosting sales.
 
 ### Benefits for Merchants
 
-Two allows you to offer a seamless  **Buy now, Pay later**  option for your business customers which will enhance the buyer journey and reduce the manual work related to doing business with other Businesses. The Two solution enables instant payment terms without having to wait for credit approvals and thereby risk loosing them altogether.
+Two provides a seamless **Buy Now, Pay Later** option, enhancing the buyer journey and reducing manual tasks in B2B transactions. It offers instant payment terms without credit approval delays, reducing the risk of losing customers.
 
-Simply put; Two is customer centric, less friction and higher conversion rates.
+Simply put, Two is customer-centric, with less friction and higher conversion rates.
 
 ### Features
 
 **Why use the Two plugin?**
 
--   70% of Business customers pay by invoice when given the option.
--   Automated credit check and verification of customers
--   Real time credit approval
--   You are in control – make adjustments to every aspect of the check-out
--   You set the payment terms for your business customers
--   Already integrated with PEPPOL e-invoicing network
--   You get paid independent of when the buyer pays the invoice
+-   70% of business customers prefer to pay by invoice.
+-   Automated customer credit check and verification.
+-   Real-time credit approval.
+-   Full control over checkout adjustments.
+-   Customizable payment terms for business customers.
+-   Integrated with PEPPOL e-invoicing network.
+-   Guaranteed payment regardless of when the buyer pays.
 
-### Benefit for customers
+### Benefits for Customers
 
-**Two Buy now, Pay later**  offers your business customers the option to pay with a frictionless invoice solution that will send the invoice directly to their accountant through electronic invoicing.
+**Two Buy Now, Pay Later** offers a frictionless invoice solution, sending invoices directly to accountants through electronic invoicing.
 
-**How to install the plugin:**
+### How to Install the Plugin
 
-The plugin can be installed three ways:
+Install the plugin via:
 
--   by using the  _WordPress built-in installer_
--   via WordPress Admin
--   manually with an upload using an SFTP
+-   WordPress built-in installer
+-   WordPress Admin
+-   Manual upload via SFTP
 
-You can find the WordPress installation guide  [here](https://wordpress.org/support/article/managing-plugins/#installing-plugins)  (`https://wordpress.org/support/article/managing-plugins/#installing-plugins`)
+Find the WordPress installation guide [here](https://wordpress.org/support/article/managing-plugins/#installing-plugins).
 
-**How to get your Two keys:**
+### How to Get Your Two Keys
 
-1.  Go to [two.inc](https://two.inc/) and sign up your company
-2.  You will receive an e-mail with your test keys and as soon as you are ready your production keys as well.
-3.  Once you have changed out your test keys with the production ones – you are ready to offer your B2B customers the Two solution.
+1.  Sign up at [two.inc](https://two.inc/).
+2.  Log in to your Two [merchant portal account](https://portal.two.inc/merchant/integration).
+3.  Click "Manage sandbox API keys" to obtain your test keys.
+4.  After successful testing, request your production keys to start offering Two to your B2B customers.
 
-**Compatibility with WooCommerce**
+Feel free to reach out to [integration@two.inc](mailto:integration@two.inc) for any assistance related to the plugin.
 
-The plugin has been tested against WooCommerce version 6, 7 or 8. Support for version 9 is on the roadmap.
+### Compatibility with WooCommerce
+
+The plugin is tested with WooCommerce versions 6, 7, and 8. Support for version 9 is on the roadmap.
