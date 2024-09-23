@@ -3,621 +3,510 @@ msgstr ""
 "Project-Id-Version: Two - BNPL for businesses\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2022-02-09 08:30+0000\n"
-"PO-Revision-Date: 2022-06-07 08:02+0000\n"
-"Last-Translator: \n"
-"Language-Team: Swedish\n"
-"Language: sv_SE\n"
-"Plural-Forms: nplurals=2; plural=n != 1;\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: \n"
+"Language: \n"
+"Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "X-Generator: Loco https://localise.biz/\n"
-"X-Loco-Version: 2.6.2; wp-6.0.2\n"
+"X-Loco-Version: 2.5.2; wp-5.7\n"
 "X-Domain: twoinc-payment-gateway"
 
 #: class/WC_Twoinc.php:1594
-#, fuzzy
 msgid "Add input field for \"Department\""
-msgstr "Lägg till inmatningsfält för \"Avdelning\""
+msgstr "Add input field for \"Department\""
 
 #: class/WC_Twoinc.php:1602
-#, fuzzy
 msgid "Add input field for \"Project\""
-msgstr "Lägg till inmatningsfält för \"Projekt\""
+msgstr "Add input field for \"Project\""
 
 #: class/WC_Twoinc.php:1610
-#, fuzzy
 msgid "Add input field for \"Purchase order number\""
-msgstr "Lägg till inmatningsfält för \"Inköpsordernummer\""
+msgstr "Add input field for \"Purchase order number\""
 
 #: class/WC_Twoinc_Helper.php:136
-#, fuzzy
 msgid "Address"
-msgstr "Adress"
+msgstr "Address"
 
 #: class/WC_Twoinc.php:1660
-#, fuzzy
 msgid "Address auto-complete"
-msgstr "Autofyll av adress"
+msgstr "Address auto-complete"
 
 #: class/WC_Twoinc.php:1576
-#, fuzzy
 msgid "Adds a separate checkout for business customers. Two is only available in the business checkout."
-msgstr "Lägger till en separat varukorg för företagskunder. Two är endast tillgänglig i varukorgen för företag."
+msgstr "Adds a separate checkout for business customers. Two is only available in the business checkout."
 
 #: class/WC_Twoinc.php:1595
-#, fuzzy
 msgid "Adds an input field where buyers can input their department, input is shown on invoice."
-msgstr "Lägger till ett inmatningsfält där köpare kan ange sin avdelning, input visas på fakturan."
+msgstr "Adds an input field where buyers can input their department, input is shown on invoice."
 
 #: class/WC_Twoinc.php:1603
-#, fuzzy
 msgid "Adds an input field where buyers can input their project in the company, input is shown on invoice."
-msgstr "Lägger till ett inmatningsfält där köpare kan ange sitt projekt i företaget, input visas på fakturan."
+msgstr "Adds an input field where buyers can input their project in the company, input is shown on invoice."
 
 #: class/WC_Twoinc.php:1611
 msgid "Adds an input field where buyers can input their purchase order number, input is shown on invoice."
-msgstr "Lägger till ett inmatningsfält där köpare kan ange sitt inköpsordernummer, inmatning visas på fakturan."
+msgstr "Adds an input field where buyers can input their purchase order number, input is shown on invoice."
 
 #: class/WC_Twoinc.php:1544
-#, fuzzy
 msgid "API credentials"
-msgstr "API-uppgifter"
+msgstr "API credentials"
 
 #: class/WC_Twoinc.php:1568
-#, fuzzy
 msgid "Approve buyer when phone and company name is filled out."
-msgstr "Godkänn köpare när telefon och företagsnamn är ifyllt"
+msgstr "Approve buyer when phone and company name is filled out."
 
 #: class/WC_Twoinc.php:1649
-#, fuzzy
 msgid "Auto-complete settings"
-msgstr "Inställningar för automatisk ifyllnad"
+msgstr "Auto-complete settings"
 
 #: class/WC_Twoinc.php:834
-#, fuzzy
 msgid "Billing Company ID"
-msgstr "Organisationsnummer"
+msgstr "Billing Company ID"
 
 #: class/WC_Twoinc.php:828
-#, fuzzy
 msgid "Billing Company name"
-msgstr "Företagsnamn"
+msgstr "Billing Company name"
 
 #: class/WC_Twoinc.php:1496
-#, fuzzy
 msgid "Business"
-msgstr "Företag"
+msgstr "Business"
 
 #: class/WC_Twoinc_Checkout.php:91
-#, fuzzy
 msgid "Business Customer"
-msgstr "Företagskund"
+msgstr "Business Customer"
 
 #: class/WC_Twoinc.php:1520
 msgid "Business invoice %s days"
-msgstr "Företagsfaktura - %s dagar"
+msgstr "Business invoice - %s days"
 
 #: class/WC_Twoinc.php:282
 #: class/WC_Twoinc_Helper.php:97
-#, fuzzy
 msgid "Buyer and merchant may not be the same company"
-msgstr "Köpare och handlare kan inte vara samma företag"
+msgstr "Buyer and merchant may not be the same company"
 
 #: class/WC_Twoinc.php:276
-#, fuzzy
 msgid "By completing the purchase, you verify that you have the legal right to purchase on behalf of"
-msgstr "Genom att slutföra köpet intygas att du har behörighet att ingå avtal på uppdrag av"
+msgstr "By completing the purchase, you verify that you have the legal right to purchase on behalf of"
 
 #: class/WC_Twoinc.php:1564
-#, fuzzy
 msgid "Checkout options"
-msgstr "Betalningsinställningar"
+msgstr "Checkout options"
 
 #: class/WC_Twoinc.php:1529
-#, fuzzy
 msgid "Choose your settings"
-msgstr "Välj dina inställningar"
+msgstr "Choose your settings"
 
 #: class/WC_Twoinc_Helper.php:139
-#, fuzzy
 msgid "City"
-msgstr "Stad"
+msgstr "City"
 
 #: class/WC_Twoinc.php:1537
-#, fuzzy
 msgid "Clear settings on deactivation of plug-in"
-msgstr "Rensa inställningar vid inaktivering av plugin"
+msgstr "Clear settings on deactivation of plug-in"
 
 #: class/WC_Twoinc_Checkout.php:183
-#, fuzzy
 msgid "Company ID"
-msgstr "Organisationsnummer"
+msgstr "Company ID"
 
 #: class/WC_Twoinc_Helper.php:124
 #: class/WC_Twoinc_Checkout.php:165
 #: views/woocommerce_order_pay.php:35
-#, fuzzy
 msgid "Company name"
-msgstr "Företagsnamn"
+msgstr "Company name"
 
 #: class/WC_Twoinc.php:1887
 #: class/WC_Twoinc.php:1912
-#, fuzzy
 msgid "Could not edit the Two order"
-msgstr "Det gick inte att redigera ordern via Two"
+msgstr "Could not edit the Two order"
 
 #: class/WC_Twoinc.php:1924
 msgid "Could not edit the Two order, please check with Two admin"
-msgstr "Det gick inte att redigera två-ordningen. Kontrollera med Two-administratören."
+msgstr "Could not edit the Two order. Please check with Two admin."
 
 #: class/WC_Twoinc.php:1062
-#, fuzzy
 msgid "Could not find Two order ID"
-msgstr "Kunde inte hitta order ID från Two"
+msgstr "Could not find Two order ID"
 
 #: class/WC_Twoinc.php:357
 #: class/WC_Twoinc.php:367
-#, fuzzy
 msgid "Could not forward invoice image url to Two"
-msgstr "Kunde inte vidarebefordra fakturabildens webbadress till Two"
+msgstr "Could not forward invoice image url to Two"
 
 #: class/WC_Twoinc.php:1090
-#, fuzzy
 msgid "Could not initiate refund by Two"
-msgstr "Kunde inte genomföra återbetalning med Two"
+msgstr "Could not initiate refund by Two"
 
 #: class/WC_Twoinc.php:982
-#, fuzzy
 msgid "Could not request to create Two order"
-msgstr "Kunde inte skapa ordern via Two"
+msgstr "Could not request to create Two order"
 
 #: class/WC_Twoinc.php:669
 #: class/WC_Twoinc.php:700
-#, fuzzy
 msgid "Could not update status"
-msgstr "Det gick inte att uppdatera status"
+msgstr "Could not update status"
 
 #: class/WC_Twoinc.php:765
 #: class/WC_Twoinc.php:788
-#, fuzzy
 msgid "Could not update status to \"Cancelled\""
-msgstr "Kunde inte uppdatera status till \"Cancelled\""
+msgstr "Could not update status to \"Cancelled\""
 
 #: class/WC_Twoinc.php:800
 msgid "Could not update status to \"Cancelled\", please check with Two admin for id %s"
-msgstr "Det gick inte att uppdatera statusen till \"Avbruten\", kontrollera med Two-administratören för beställnings-ID %s"
+msgstr "Could not update status to \"Cancelled\", please check with Two admin for Order ID %s"
 
 #: class/WC_Twoinc.php:712
 msgid "Could not update status to \"Fulfilled\" with Two, please check with Two admin for id %s"
-msgstr "Det gick inte att uppdatera statusen till \"Uppfylld\" med Two, vänligen kontrollera med Two-administratören för beställnings-ID: %s"
+msgstr "Could not update status to \"Fulfilled\" with Two, please check with Two admin for Order ID: %s"
 
 #: class/WC_Twoinc_Helper.php:142
-#, fuzzy
 msgid "Country"
-msgstr "Land"
+msgstr "Country"
 
 #: views/woocommerce_order_pay.php:16
-#, fuzzy
 msgid "Country / Region"
-msgstr "Land / Region"
+msgstr "Country / Region"
 
 #: class/WC_Twoinc.php:1450
-#, fuzzy
 msgid "Dashboard"
 msgstr "Dashboard"
 
 #: class/WC_Twoinc.php:1630
-#, fuzzy
 msgid "Default to B2C check-out"
-msgstr "Gör B2C-checkout till standard"
+msgstr "Default to B2C check-out"
 
 #: class/WC_Twoinc.php:840
 #: class/WC_Twoinc_Checkout.php:192
-#, fuzzy
 msgid "Department"
-msgstr "Avdelning"
+msgstr "Department"
 
 #: class/WC_Twoinc.php:1642
-#, fuzzy
 msgid "Display input tooltips"
-msgstr "Visa verktygstips för inmatning"
+msgstr "Display input tooltips"
 
 #: class/WC_Twoinc_Helper.php:133
-#, fuzzy
 msgid "Email"
-msgstr "E-post"
+msgstr "Email"
 
 #: class/WC_Twoinc.php:1652
-#, fuzzy
 msgid "Enable company name search and auto-complete"
-msgstr "Aktivera autofyll för företagsnamn"
+msgstr "Enable company name search and auto-complete"
 
 #: class/WC_Twoinc.php:1514
-#, fuzzy
 msgid "Enable Two Payments"
-msgstr "Aktivera Two"
+msgstr "Enable Two Payments"
 
 #: class/WC_Twoinc.php:1661
-#, fuzzy
 msgid "Enables automatically filling in the registered address from the national registry."
-msgstr "Möjliggör att automatiskt fylla i den registrerade adressen från officiella register"
+msgstr "Enables automatically filling in the registered address from the national registry."
 
 #: class/WC_Twoinc.php:1653
-#, fuzzy
 msgid "Enables searching for company name in the national registry and automatically filling in name and national ID."
-msgstr "Möjliggör sökning efter företagsnamn i officiella register och  autofyll namn och organisationsnummer."
+msgstr "Enables searching for company name in the national registry and automatically filling in name and national ID."
 
 #: class/WC_Twoinc.php:303
-#, fuzzy
 msgid "Enter your company name to get started."
-msgstr "Fyll i ditt företagsnamn för att komma igång"
+msgstr "Enter your company name to get started."
 
 #: class/WC_Twoinc.php:993
-#, fuzzy
 msgid "Failed to process payment"
-msgstr "Det gick inte att behandla betalningen"
+msgstr "Failed to process payment"
 
 #: class/WC_Twoinc.php:1144
-#, fuzzy
 msgid "Failed to refund order with Two"
-msgstr "Det gick inte att återbetala din order med Two"
+msgstr "Failed to refund order with Two"
 
 #: class/WC_Twoinc.php:1135
 msgid "Failed to refund order with Two, please check with Two admin for id %s"
-msgstr "Det gick inte att återbetala beställningen med Two. Kontrollera med Two-administratören för beställnings-ID: %s"
+msgstr "Failed to refund order with Two, please check with Two admin for order ID: %s"
 
 #: class/WC_Twoinc.php:1055
 #: class/WC_Twoinc.php:1106
-#, fuzzy
 msgid "Failed to request refund order to Two"
-msgstr "Det gick inte att återbetala din order med Two"
+msgstr "Failed to request refund order to Two"
 
 #: class/WC_Twoinc.php:1118
-#, fuzzy
 msgid "Failed to request refund order to Two, please check with Two admin for id %s"
-msgstr "Det gick inte att begära en återbetalning med Two, vänligen kontakta Two support med order id %s"
+msgstr "Failed to request refund order to Two, please check with Two admin for id %s"
 
 #: class/WC_Twoinc_Helper.php:127
-#, fuzzy
 msgid "First name"
-msgstr "Förnamn"
+msgstr "First name"
 
 #: class/WC_Twoinc.php:2030
-#, fuzzy
 msgid "Grow your b2b sales with Buy Now, Pay Later!"
-msgstr "Öka din B2B-försäljning med företagsfaktura från Two!"
+msgstr "Grow your B2B sales with Buy Now, Pay Later!"
 
 #. URI of the plugin
 #. Author URI of the plugin
-#, fuzzy
 msgid "https://two.inc"
-msgstr "https://two.inc/sv"
+msgstr "https://two.inc"
 
 #. Description of the plugin
-#, fuzzy
 msgid "Integration between WooCommerce and Two"
-msgstr "Integration mellan WooCommerce och Two"
+msgstr "Integration between WooCommerce and Two"
 
 #: class/WC_Twoinc_Checkout.php:238
-#, fuzzy
 msgid "Invoice email address"
-msgstr "Epostadress för fakturan"
+msgstr "Invoice email address"
 
 #: class/WC_Twoinc_Checkout.php:241
-#, fuzzy
 msgid "Only for invoices being sent by Two"
-msgstr "Endast för faktura som skickas från Two"
+msgstr "Only for invoices being sent by Two"
 
 #: class/WC_Twoinc.php:1153
-#, fuzzy
 msgid "Invoice has been partially refunded and credit note has been sent by Two"
-msgstr "Faktura har delvis återbetalats och en kreditnota har skickats från Two"
+msgstr "Invoice has been partially refunded and credit note has been sent by Two"
 
 #: class/WC_Twoinc.php:1150
-#, fuzzy
 msgid "Invoice has been refunded and credit note has been sent by Two"
-msgstr "Faktura har återbetalats och en kreditnota har skickats från Two"
+msgstr "Invoice has been refunded and credit note has been sent by Two"
 
 #: class/WC_Twoinc.php:735
-#, fuzzy
 msgid "Invoice has been sent from Two via email"
-msgstr "Faktura har skickats från Two via e-post"
+msgstr "Invoice has been sent from Two via email"
 
 #: class/WC_Twoinc.php:733
-#, fuzzy
 msgid "Invoice has been sent from Two via email and EHF"
-msgstr "Faktura har skickats från Two via mail och EHF"
+msgstr "Invoice has been sent from Two via email and EHF"
 
 #: class/WC_Twoinc.php:280
 #: class/WC_Twoinc_Helper.php:72
-#, fuzzy
 msgid "Invoice purchase is not available for this order"
-msgstr "Fakturaköp är inte tillgängligt för denna ordern"
+msgstr "Invoice purchase is not available for this order"
 
 #: class/WC_Twoinc_Helper.php:130
-#, fuzzy
 msgid "Last name"
-msgstr "Efternamn"
+msgstr "Last name"
 
 #: class/WC_Twoinc.php:1371
-#, fuzzy
 msgid "Log in"
-msgstr "Logga in"
+msgstr "Log in"
 
 #: class/WC_Twoinc.php:31
-#, fuzzy
 msgid "Making it easy for businesses to buy online."
-msgstr "Gör det enkelt för företag att köpa online."
+msgstr "Making it easy for businesses to buy online."
 
 #: class/WC_Twoinc.php:1818
 msgid "Missing company ID, please check with Two admin for id %s"
-msgstr "Företags-ID saknas. Kontrollera med Two admin för beställnings-ID %s ."
+msgstr "Missing company ID. Please check with Two admin for order ID %s."
 
 #: views/woocommerce_after_checkout_billing_form.php:11
-#, fuzzy
 msgid "My company is not on the list"
-msgstr "Mitt företag finns inte med i listan"
+msgstr "My company is not on the list"
 
 #: class/WC_Twoinc.php:1342
 msgid "Order ID: %s has been placed with Two"
-msgstr "Beställnings-ID: %s har placerats med Two"
+msgstr "Order ID: %s has been placed with Two"
 
 #: class/WC_Twoinc.php:283
-#, fuzzy
 msgid "Order value exceeds maximum limit"
-msgstr "Ordervärdet överskrider maxgränsen"
+msgstr "Order value exceeds maximum limit"
 
 #: class/WC_Twoinc.php:284
-#, fuzzy
 msgid "Order value is below minimum limit"
-msgstr "Ordervärdet är under minimigränsen"
+msgstr "Order value is below minimum limit"
 
 #: class/WC_Twoinc_Helper.php:121
-#, fuzzy
 msgid "Organization number"
-msgstr "Organisationsnummer"
+msgstr "Organization number"
 
 #: class/WC_Twoinc.php:318
-#, fuzzy
 msgid "Pay on invoice with agreed terms"
-msgstr "Betala med faktura enligt överenskomna villkor"
+msgstr "Pay on invoice with agreed terms"
 
 #: class/WC_Twoinc.php:1488
-#, fuzzy
 msgid "Personal"
-msgstr "Personlig"
+msgstr "Personal"
 
 #: class/WC_Twoinc_Checkout.php:238
 #: views/woocommerce_order_pay.php:4
-#, fuzzy
 msgid "Phone"
-msgstr "Telefon"
+msgstr "Phone"
 
 #: class/WC_Twoinc_Helper.php:118
-#, fuzzy
 msgid "Phone number"
-msgstr "Telefonnummer"
+msgstr "Phone number"
 
 #: class/WC_Twoinc.php:285
-#, fuzzy
 msgid "Phone number is invalid"
-msgstr "Telefonnumret är ogiltigt"
+msgstr "Phone number is invalid"
 
 #: class/WC_Twoinc.php:29
-#, fuzzy
 msgid "Place order"
-msgstr "Beställa"
+msgstr "Place order"
 
 #: class/WC_Twoinc_Helper.php:114
-#, fuzzy
 msgid "Please enter a valid %s to pay on invoice"
-msgstr "Ange giltigt %s för att betala med faktura"
+msgstr "Please enter a valid %s to pay on invoice"
 
 #: class/WC_Twoinc_Helper.php:145
-#, fuzzy
 msgid "Postal code"
-msgstr "Postnummer"
+msgstr "Postal code"
 
 #: class/WC_Twoinc.php:1567
-#, fuzzy
 msgid "Pre-approve buyer during checkout"
-msgstr "Förhandsgodkänna köparen i kassan"
+msgstr "Pre-approve buyer during checkout"
 
 #: class/WC_Twoinc_Checkout.php:83
-#, fuzzy
 msgid "Private Customer"
-msgstr "Privatkund"
+msgstr "Private Customer"
 
 #: class/WC_Twoinc.php:848
 #: class/WC_Twoinc_Checkout.php:203
-#, fuzzy
 msgid "Project"
-msgstr "Projekt"
+msgstr "Project"
 
 #: class/WC_Twoinc_Checkout.php:214
-#, fuzzy
 msgid "Purchase order number"
-msgstr "Inköpsordernummer"
+msgstr "Purchase order number"
 
 #: class/WC_Twoinc.php:250
-#, fuzzy
 msgid "Receive invoice and payment details via email"
-msgstr "Ta emot faktura och betalningsinformation via e-post"
+msgstr "Receive invoice and payment details via email"
 
 #: class/WC_Twoinc.php:251
-#, fuzzy
 msgid "Receive invoice and payment details via email and EHF"
-msgstr "Ta emot faktura och betalningsuppgifter via e-post och EHF"
+msgstr "Receive invoice and payment details via email and EHF"
 
 #: class/WC_Twoinc.php:1127
-#, fuzzy
 msgid "Request refund order to Two has errors"
-msgstr "Begärd återbetalning från Two misslyckades"
+msgstr "Request refund order to Two has errors"
 
 #: views/woocommerce_after_checkout_billing_form.php:15
-#, fuzzy
 msgid "Search for company"
-msgstr "Sök efter företag"
+msgstr "Search for company"
 
 #: class/WC_Twoinc_Checkout.php:122
-#, fuzzy
 msgid "Select account type"
-msgstr "Välj kontotyp"
+msgstr "Select account type"
 
 #: class/WC_Twoinc.php:1745
-#, fuzzy
 msgid "Select image"
-msgstr "Välj bild"
+msgstr "Select image"
 
 #: class/WC_Twoinc.php:1575
-#, fuzzy
 msgid "Separate checkout for business customers"
-msgstr "Separat kassa för företagskunder"
+msgstr "Separate checkout for business customers"
 
 #: class/WC_Twoinc.php:1583
-#, fuzzy
 msgid "Separate checkout for private customers"
-msgstr "Separat kassa för privatkunder"
+msgstr "Separate checkout for private customers"
 
 #: class/WC_Twoinc.php:1589
-#, fuzzy
 msgid "Separate checkout for private sole traders"
-msgstr "Separat kassa för enskild näringsidkare"
+msgstr "Separate checkout for private sole traders"
 
 #: class/WC_Twoinc.php:2035
-#, fuzzy
 msgid "Set up my Two account"
-msgstr "Ansök nu"
+msgstr "Set up my Two account"
 
 #: class/WC_Twoinc.php:1635
-#, fuzzy
 msgid "Shift invoice fee to the buyers"
-msgstr "Flytta fakturaavgift till köparna"
+msgstr "Shift invoice fee to the buyers"
 
 #: class/WC_Twoinc.php:1624
-#, fuzzy
 msgid "Show \"What is Two\" link in checkout"
-msgstr "Visa länken \"Vad är Two\" i kassan"
+msgstr "Show \"What is Two\" link in checkout"
 
 #: class/WC_Twoinc.php:1492
-#, fuzzy
 msgid "Sole trader/other"
-msgstr "Enskild näringsidkare/annan"
+msgstr "Sole trader/other"
 
 #: class/WC_Twoinc_Checkout.php:87
-#, fuzzy
 msgid "Sole Trader/Other Customer"
-msgstr "Enskild näringsidkare"
+msgstr "Sole Trader/Other Customer"
 
 #: class/WC_Twoinc.php:273
-#, fuzzy
 msgid "The latest way to pay for your online business purchases. You will receive an invoice from Two when your order has been processed."
-msgstr "Det nyaste sättet att betala för dina online-företagsköp. Du kommer att få en faktura från Two när din beställning har behandlats."
+msgstr "The latest way to pay for your online business purchases. You will receive an invoice from Two when your order has been processed."
 
 #: class/WC_Twoinc.php:1948
-#, fuzzy
 msgid "The order has been edited in the Two order system"
-msgstr "Ordern har redigerats i systemen hos Two"
+msgstr "The order has been edited in the Two order system"
 
 #: class/WC_Twoinc.php:1946
-#, fuzzy
 msgid "The order has been edited in the Two order system. Order is now registered for %s Amount in Two"
-msgstr "Beställningen har redigerats i ordersystemet hos Two. Beställningen är nu registrerad för %s belopp hos Two"
+msgstr "The order has been edited in the Two order system. Order is now registered for %s Amount in Two"
 
 #: class/WC_Twoinc.php:1267
-#, fuzzy
 msgid "The security code is not valid."
-msgstr "Säkerhetskoden är inte giltig."
+msgstr "The security code is not valid."
 
 #: class/WC_Twoinc.php:1636
-#, fuzzy
 msgid "This feature only works for merchants set up with a fixed fee per order."
-msgstr "Denna funktion fungerar bara för handlare som konfigurerats med en fast avgift per order."
+msgstr "This feature only works for merchants set up with a fixed fee per order."
 
 #: class/WC_Twoinc.php:1071
-#, fuzzy
 msgid "This order has already been fully refunded"
-msgstr "Denna beställning har redan blivit återbetald till fullo"
+msgstr "This order has already been fully refunded"
 
 #: class/WC_Twoinc.php:1518
-#, fuzzy
 msgid "Title"
-msgstr "Titel"
+msgstr "Title"
 
 #: class/WC_Twoinc.php:1512
-#, fuzzy
 msgid "Turn on/off"
-msgstr "Slå på / av"
+msgstr "Turn on/off"
 
 #. Author of the plugin
 #: class/WC_Twoinc.php:30
 #: class/WC_Twoinc.php:1415
 #: class/WC_Twoinc.php:1460
 #: class/WC_Twoinc.php:1472
-#, fuzzy
 msgid "Two"
 msgstr "Two"
 
 #. Name of the plugin
-#, fuzzy
 msgid "Two - BNPL for businesses"
-msgstr "Two - Köp nu betala sen, för företag"
+msgstr "Two - BNPL for businesses"
 
 #: class/WC_Twoinc.php:1551
-#, fuzzy
 msgid "Two API Key"
-msgstr "Two API-nyckel"
+msgstr "Two API Key"
 
 #: class/WC_Twoinc.php:1391
-#, fuzzy
 msgid "Two checkout host name is not correct"
-msgstr "Värdnamnet för Two är inte korrekt"
+msgstr "Two checkout host name is not correct"
 
 #: class/WC_Twoinc.php:2031
-#, fuzzy
 msgid "Two credit approves 90% of business buyers, pays you upfront and minimise your risk. To offer Two in your checkout, you need to signup. It’s quick, easy and gives you immediate access to the Two Merchant Portal."
-msgstr "Mer sälj. Mindre stress. Ge företagskunder möjligheten att köpa nu och betala senare med företagsfaktura från Two, utan extra kostnad."
+msgstr "Two credit approves 90% of business buyers, pays you upfront and minimise your risk. To offer Two in your checkout, you need to signup. It’s quick, easy and gives you immediate access to the Two Merchant Portal."
 
 #: class/WC_Twoinc_Helper.php:44
-#, fuzzy
 msgid "Two empty response"
-msgstr "Two: tomt svar"
+msgstr "Two empty response"
 
 #: class/WC_Twoinc.php:302
-#, fuzzy
 msgid "Two lets your business pay later for the goods you purchase online."
-msgstr "Two låter ditt företag betala med faktura för varorna du köper online."
+msgstr "Two lets your business pay later for the goods you purchase online."
 
 #: class/WC_Twoinc.php:824
-#, fuzzy
 msgid "Two pre-filled fields"
-msgstr "Two: Förifyllda fält"
+msgstr "Two pre-filled fields"
 
 #: class/WC_Twoinc_Helper.php:48
-#, fuzzy
 msgid "Two response code %d"
-msgstr "Two svarskod: %d"
+msgstr "Two response code %d"
 
 #: class/WC_Twoinc.php:1524
-#, fuzzy
 msgid "Two Test Server"
-msgstr "Two testserver"
+msgstr "Two Test Server"
 
 #: class/WC_Twoinc.php:1547
-#, fuzzy
 msgid "Two username"
-msgstr "Two användarnamn"
+msgstr "Two username"
 
 #: class/WC_Twoinc.php:1326
-#, fuzzy
 msgid "Unable to confirm the order with Two"
-msgstr "Det gick inte att slutföra ordern med Two"
+msgstr "Unable to confirm the order with Two"
 
 #: class/WC_Twoinc.php:1283
-#, fuzzy
 msgid "Unable to find the requested order"
-msgstr "Det gick inte att hitta ordern"
+msgstr "Unable to find the requested order"
 
 #: class/WC_Twoinc.php:1300
 #: class/WC_Twoinc.php:1306
@@ -625,47 +514,38 @@ msgstr "Det gick inte att hitta ordern"
 #: class/WC_Twoinc.php:1321
 #: class/WC_Twoinc.php:1766
 #: class/WC_Twoinc.php:1793
-#, fuzzy
 msgid "Unable to retrieve the order information"
-msgstr "Det gick inte att hämta orderinformationen"
+msgstr "Unable to retrieve the order information"
 
 #: class/WC_Twoinc.php:1805
-#, fuzzy
 msgid "Unable to retrieve the order payment information"
-msgstr "Det gick inte att hämta betalningsinformationen"
+msgstr "Unable to retrieve the order payment information"
 
 #: class/WC_Twoinc.php:1618
-#, fuzzy
 msgid "Use buttons instead of radios to select account type"
-msgstr "Använd buttons istället för radiobuttons för att välja kontotyp"
+msgstr "Use buttons instead of radios to select account type"
 
 #: class/WC_Twoinc_Checkout.php:328
-#, fuzzy
 msgid "We require your phone number so we can verify your purchase"
-msgstr "Vi behöver ditt telefonnummer som en del av vår verifisering"
+msgstr "We require your phone number so we can verify your purchase"
 
 #: class/WC_Twoinc_Checkout.php:329
-#, fuzzy
 msgid "We use your company name to automatically populate your address and register the company that made the purchase"
-msgstr "Vi använder företagsnamnet för att automatiskt fylla i er adress och registrera företaget som köpare"
+msgstr "We use your company name to automatically populate your address and register the company that made the purchase"
 
 #: class/WC_Twoinc.php:281
 #: class/WC_Twoinc.php:1012
-#, fuzzy
 msgid "We've checked your company's details and are unable to provide invoice credit for this order"
-msgstr "Företaget kvalificerar dessvärre inte för faktura för denna ordern just nu"
+msgstr "We've checked your company's details and are unable to provide invoice credit for this order"
 
 #: class/WC_Twoinc.php:238
-#, fuzzy
 msgid "What is Two?"
-msgstr "Vad är Two?"
+msgstr "What is Two?"
 
 #: class/WC_Twoinc.php:1370
-#, fuzzy
 msgid "Wordpress admin privilege is required for Two payment One-click setup. %s"
-msgstr "Wordpress administratörsbehörighet krävs för betalningsinställningen One-click setup med Two. %s"
+msgstr "Wordpress admin privilege is required for Two payment One-click setup. %s"
 
 #: class/WC_Twoinc.php:277
-#, fuzzy
 msgid "your company"
-msgstr "ditt företag"
+msgstr "your company"
