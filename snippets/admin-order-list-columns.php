@@ -85,8 +85,8 @@ function add_custom_columns($columns) {
     foreach ($columns as $column_name => $column_info) {
         $new_columns[$column_name] = $column_info;
         if ('order_status' === $column_name) {
-            $new_columns['order_delivery_date'] = __('Delivery date', 'tillit-payment-gateway');
-            $new_columns['order_customer_user'] = __('Customer', 'tillit-payment-gateway');
+            $new_columns['order_delivery_date'] = __('Delivery date', 'twoinc-payment-gateway');
+            $new_columns['order_customer_user'] = __('Customer', 'twoinc-payment-gateway');
         }
     }
 
