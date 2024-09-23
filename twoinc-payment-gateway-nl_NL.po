@@ -1,46 +1,41 @@
 msgid ""
 msgstr ""
-"Project-Id-Version: Two - BNPL for businesses\n"
-"Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2021-04-07 07:50+0000\n"
-"PO-Revision-Date: 2022-02-14 11:46+0000\n"
-"Last-Translator: \n"
-"Language-Team: Norwegian (Bokmål)\n"
-"Language: nb_NO\n"
-"Plural-Forms: nplurals=2; plural=n != 1;\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"X-Generator: Loco https://localise.biz/\n"
-"X-Loco-Version: 2.6.2; wp-6.0.2\n"
-"X-Domain: twoinc-payment-gateway"
+"X-Generator: lokalise.com\n"
+"Project-Id-Version: woocommerce-plugin\n"
+"PO-Revision-Date: 2024-09-23 14:51\n"
+"Last-Translator: lokalise.com\n"
+"Language-Team: lokalise.com\n\n"
+"Language: nl_NL\n"
 
 #: class/WC_Twoinc_Helper.php:136
 msgid "Address"
-msgstr "Adresse"
+msgstr "Adres"
 
 #: class/WC_Twoinc_Checkout.php:91
 msgid "Business Customer"
-msgstr "Bedriftskunde"
+msgstr "Zakelijke klant"
 
 #: class/WC_Twoinc.php:282
 #: class/WC_Twoinc_Helper.php:97
 msgid "Buyer and merchant may not be the same company"
-msgstr "Selger og kjøper kan ikke være samme selskap"
+msgstr "Koper en handelaar zijn mogelijk niet hetzelfde bedrijf"
 
 #: class/WC_Twoinc_Helper.php:139
 msgid "City"
-msgstr "By"
+msgstr "Stad"
 
 #: class/WC_Twoinc_Checkout.php:183
 msgid "Company ID"
-msgstr "Organisasjonsnummer"
+msgstr "Bedrijfs-ID"
 
 #: class/WC_Twoinc_Helper.php:124
 #: class/WC_Twoinc_Checkout.php:165
 #: views/woocommerce_order_pay.php:35
 msgid "Company name"
-msgstr "Selskapsnavn"
+msgstr "Bedrijfsnaam"
 
 #: class/WC_Twoinc_Helper.php:142
 msgid "Country"
@@ -48,80 +43,80 @@ msgstr "Land"
 
 #: views/woocommerce_order_pay.php:16
 msgid "Country / Region"
-msgstr "Land / Region"
+msgstr "Land / Regio"
 
 #: class/WC_Twoinc.php:840
 #: class/WC_Twoinc_Checkout.php:192
 msgid "Department"
-msgstr "Avdeling"
+msgstr "Afdeling"
 
 #: class/WC_Twoinc_Helper.php:133
 msgid "Email"
-msgstr "E-post"
+msgstr "E-mail"
 
 #: class/WC_Twoinc_Helper.php:127
 msgid "First name"
-msgstr "Fornavn"
+msgstr "Voornaam"
 
 #. URI of the plugin
 #. Author URI of the plugin
 msgid "https://two.inc"
-msgstr "https://two.inc/no"
+msgstr "https://two.inc"
 
 #. Description of the plugin
 msgid "Integration between WooCommerce and Two"
-msgstr "Integrasjon mellom WooCommerce og Two"
+msgstr "Integratie tussen WooCommerce en Two"
 
 #: class/WC_Twoinc_Checkout.php:238
 msgid "Invoice email address"
-msgstr "E-postadresse for faktura"
+msgstr "Factuur e-mailadres"
 
 #: class/WC_Twoinc_Checkout.php:241
 msgid "Only for invoices being sent by Two"
-msgstr "For fakturaer som sendes av Two"
+msgstr "Alleen voor facturen die door Two worden verzonden"
 
 #: class/WC_Twoinc.php:280
 #: class/WC_Twoinc_Helper.php:72
 msgid "Invoice purchase is not available for this order"
-msgstr "Faktura er ikke tilgjengelig for dette kjøpet"
+msgstr "Factuuraankoop is niet beschikbaar voor deze bestelling"
 
 #: class/WC_Twoinc_Helper.php:130
 msgid "Last name"
-msgstr "Etternavn"
+msgstr "Achternaam"
 
 #: views/woocommerce_after_checkout_billing_form.php:11
 msgid "My company is not on the list"
-msgstr "Selskapet mitt er ikke på listen"
+msgstr "Mijn bedrijf staat niet op de lijst"
 
 #: class/WC_Twoinc_Helper.php:121
 msgid "Organization number"
-msgstr "Organisasjonsnummer"
+msgstr "Organisatienummer"
 
 #: class/WC_Twoinc_Checkout.php:238
 #: views/woocommerce_order_pay.php:4
 msgid "Phone"
-msgstr "Telefon"
+msgstr "Telefoon"
 
 #: class/WC_Twoinc_Helper.php:118
 msgid "Phone number"
-msgstr "Telefonnummer"
+msgstr "Telefoonnummer"
 
 #: class/WC_Twoinc_Helper.php:114
 msgid "Please enter a valid %s to pay on invoice"
-msgstr "Vennligst skriv inn %s for å betale med faktura"
+msgstr "Voer een geldig %s in om op de factuur te betalen"
 
 #: class/WC_Twoinc_Helper.php:145
 msgid "Postal code"
-msgstr "Postkode"
+msgstr "Postcode"
 
 #: class/WC_Twoinc_Checkout.php:83
 msgid "Private Customer"
-msgstr "Privatperson"
+msgstr "Particuliere klant"
 
 #: class/WC_Twoinc.php:848
 #: class/WC_Twoinc_Checkout.php:203
 msgid "Project"
-msgstr "Prosjekt"
+msgstr "Project"
 
 #: class/WC_Twoinc_Checkout.php:214
 msgid "Purchase order number"
@@ -129,15 +124,15 @@ msgstr "PO-nummer"
 
 #: views/woocommerce_after_checkout_billing_form.php:15
 msgid "Search for company"
-msgstr "Søk etter selskap"
+msgstr "Zoek naar bedrijf"
 
 #: class/WC_Twoinc_Checkout.php:122
 msgid "Select account type"
-msgstr "Velg kontotype"
+msgstr "Selecteer accounttype"
 
 #: class/WC_Twoinc_Checkout.php:87
 msgid "Sole Trader/Other Customer"
-msgstr "Enkeltpersonforetak"
+msgstr "Eenmanszaak/Andere klant"
 
 #. Author of the plugin
 #: class/WC_Twoinc.php:30
@@ -149,20 +144,20 @@ msgstr "Two"
 
 #. Name of the plugin
 msgid "Two - BNPL for businesses"
-msgstr "Two - BNPL for businesses"
+msgstr "Twee - BNPL voor bedrijven"
 
 #: class/WC_Twoinc_Helper.php:44
 msgid "Two empty response"
-msgstr "Two tomt svar"
+msgstr "Twee lege antwoorden"
 
 #: class/WC_Twoinc_Helper.php:48
 msgid "Two response code %d"
-msgstr "Two responskode %d"
+msgstr "Twee responscode %d"
 
 #: class/WC_Twoinc_Checkout.php:328
 msgid "We require your phone number so we can verify your purchase"
-msgstr "Vi krever ditt telefonnummer for å verifisere ditt kjøp"
+msgstr "Wij hebben uw telefoonnummer nodig zodat wij uw aankoop kunnen verifiëren"
 
 #: class/WC_Twoinc_Checkout.php:329
 msgid "We use your company name to automatically populate your address and register the company that made the purchase"
-msgstr "Vi benytter ditt selskapsnavn til å automatisk fylle ut adresse og registrere selskapet som foretok kjøpet"
+msgstr "Wij gebruiken uw bedrijfsnaam om automatisch uw adres in te vullen en het bedrijf te registreren dat de aankoop heeft gedaan"
