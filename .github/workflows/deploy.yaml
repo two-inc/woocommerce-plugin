@@ -1,15 +1,29 @@
-name: Deploy to WordPress.org
+name: Deploy
 on:
   release:
     types: [published]
+  pull_request:
+    branches:
+      - main
 jobs:
-  tag:
-    name: New release
+  php-lint:
     runs-on: ${{ vars.RUNNER }}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: StephaneBour/actions-php-lint@8.2
+        with:
+          dir: '.'
+  release:
+    runs-on: ${{ vars.RUNNER }}
+    if: ${{ github.event_name == 'release' }}
+    needs: php-lint
     env:
       slug: tillit-payment-gateway
     steps:
       - uses: actions/checkout@v3
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y subversion rsync
+      - run: echo ${{ github.ref_name }}
       - name: WordPress Plugin Deploy
         id: deploy
         uses: 10up/action-wordpress-plugin-deploy@stable
