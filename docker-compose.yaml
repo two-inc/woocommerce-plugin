@@ -1,15 +1,14 @@
 version: '3.1'
 
 services:
-
   wordpress:
     container_name: wordpress
     extra_hosts:
-      - "portal.localhost:host-gateway"
+      - 'portal.localhost:host-gateway'
     image: ${REPO}wordpress:latest
     restart: always
     ports:
-      - 5000:80
+      - 8888:80
     environment:
       WORDPRESS_DB_HOST: mariadb
       WORDPRESS_DB_USER: twocommerce
@@ -24,7 +23,7 @@ services:
   wpcli:
     container_name: wpcli
     image: ${REPO}wordpress:cli
-    user: "33:33"
+    user: '33:33'
     entrypoint: /opt/tillit-payment-gateway/docker/entrypoint.sh
     restart: always
     environment:
@@ -32,8 +31,8 @@ services:
       WORDPRESS_DB_USER: twocommerce
       WORDPRESS_DB_PASSWORD: twocommerce
       WORDPRESS_DB_NAME: twocommerce
-      WORDPRESS_URL: "http://localhost:5000"
-      WORDPRESS_TITLE: "Twocommerce Wordpress"
+      WORDPRESS_URL: 'http://localhost:5000'
+      WORDPRESS_TITLE: 'Twocommerce Wordpress'
       WORDPRESS_ADMIN_USER: admin
       WORDPRESS_ADMIN_PASSWORD: twoinb2b
       WORDPRESS_ADMIN_EMAIL: admin@two.inc

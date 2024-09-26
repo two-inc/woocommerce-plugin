@@ -26,10 +26,10 @@ function enqueue_date_picker() {
 function add_delivery_date_field($checkout) {
 
     date_default_timezone_set('Europe/Oslo');
-    $dateoptions = array('' => __('Select Pickup Date', 'tillit-payment-gateway'));
+    $dateoptions = array('' => __('Select Pickup Date', 'twoinc-payment-gateway'));
 
     echo '<div id="delivery-date">';
-    echo '<h3>'.__('Delivery Date', 'tillit-payment-gateway').'</h3>';
+    echo '<h3>'.__('Delivery Date', 'twoinc-payment-gateway').'</h3>';
 
     echo '
     <script>
@@ -48,8 +48,8 @@ function add_delivery_date_field($checkout) {
             'class'         => array('form-row-wide'),
             'id'            => 'delivery-date-picker',
             'required'      => true,
-            'label'         => __('Delivery Date', 'tillit-payment-gateway'),
-            'placeholder'   => __('Select Date', 'tillit-payment-gateway'),
+            'label'         => __('Delivery Date', 'twoinc-payment-gateway'),
+            'placeholder'   => __('Select Date', 'twoinc-payment-gateway'),
             'options'       => $dateoptions
         ),
         $checkout->get_value('cylinder_collect_date')
@@ -68,12 +68,22 @@ function checkout_validate_delivery_date() {
 
     if (!$_POST['delivery_date']) {
         // the required field delivery_date was not sent
-        wc_add_notice('<strong>' . __('Delivery Date', 'tillit-payment-gateway') . '</strong> '
-                      . __('is a required field.', 'tillit-payment-gateway'), 'error');
+        wc_add_notice(
+          sprintf(
+            __('%s is a required field.', 'twoinc-payment-gateway'),
+            sprintf('<strong>%s</strong> ', __('Delivery Date', 'twoinc-payment-gateway'))
+          ),
+          'error'
+        );
     } else if (!validate_date($_POST['delivery_date'])) {
         // delivery_date is of incorrect format
-        wc_add_notice('<strong>' . __('Delivery Date', 'tillit-payment-gateway') . '</strong> '
-                      . __('cannot be parsed.', 'tillit-payment-gateway'), 'error');
+        wc_add_notice(
+          sprintf(
+            __('%s cannot be parsed.', 'twoinc-payment-gateway'),
+            sprintf('<strong>%s</strong> ', __('Delivery Date', 'twoinc-payment-gateway'))
+          ),
+          'error'
+        );
     }
 }
 

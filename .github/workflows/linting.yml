@@ -2,18 +2,15 @@ name: Lint PHP files
 on: push
 
 jobs:
-  php-74:
-    runs-on: ubuntu-latest
+  php-lint:
+    runs-on: ${{ vars.RUNNER }}
+    strategy:
+      matrix:
+        version:
+          - 7.4
+          - 8.3
     steps:
       - uses: actions/checkout@v3
-      - uses: StephaneBour/actions-php-lint@7.4
-        with:
-          dir: '.'
-
-  php-82:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: StephaneBour/actions-php-lint@8.2
+      - uses: StephaneBour/actions-php-lint@${{ matrix.version }}
         with:
           dir: '.'

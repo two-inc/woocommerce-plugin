@@ -235,7 +235,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     'label'       => __('Invoice email address', 'twoinc-payment-gateway'),
                     'class'       => array('form-row-wide'),
                     'type'        => 'email',
-                    'placeholder' => __('Only for invoices being sent by Two', 'twoinc-payment-gateway'),
+                    'placeholder' => sprintf(__('Only for invoices being sent by %s', 'twoinc-payment-gateway'), __('Two', 'twoinc-payment-gateway')),
                     'validate'    => array('email'),
                     'required'    => false,
                     'priority'    => $fields['billing']['billing_email']['priority'] + 1
@@ -317,8 +317,8 @@ if (!class_exists('WC_Twoinc_Checkout')) {
 
             $properties = [
                 'text' => [
-                    'tooltip_phone' => __('We require your phone number so we can verify your purchase', 'twoinc-payment-gateway'),
-                    'tooltip_company' => __('We use your company name to automatically populate your address and register the company that made the purchase', 'twoinc-payment-gateway'),
+                    'tooltip_phone' => __('We require your phone number so we can verify your purchase.', 'twoinc-payment-gateway'),
+                    'tooltip_company' => __('We use your company name to automatically populate your address and register the company that made the purchase.', 'twoinc-payment-gateway'),
                 ],
                 'twoinc_search_host_no' => $this->wc_twoinc->twoinc_search_host_no,
                 'twoinc_search_host_gb' => $this->wc_twoinc->twoinc_search_host_gb,

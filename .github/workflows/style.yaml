@@ -3,96 +3,100 @@ name: Style
 permissions: write-all
 
 on:
-    pull_request:
-        types:
-            - opened
-            - synchronize
+  pull_request:
+    types:
+      - opened
+      - synchronize
+
+concurrency:
+  group: style-workflow-${{ github.ref_name }}
+  cancel-in-progress: true
 
 jobs:
-    pre-commit:
-        runs-on: self-hosted
-        timeout-minutes: 20
-        steps:
-            - uses: actions/checkout@v3
-              with:
-                  fetch-depth: 0
-            - uses: actions/setup-python@v4
-              with:
-                  python-version: '3.10'
-            - uses: webfactory/ssh-agent@v0.7.0
-              with:
-                  ssh-private-key: ${{ secrets.BOT_SSH_PRIVATE_KEY }}
-            - name: Setup dependencies
-              run: |
-                  pip install pre-commit
-                  pre-commit install
-            - name: Run pre-commit hook
-              run: |
-                  set +e -o pipefail
-                  pre-commit run --from-ref origin/${{ github.base_ref }} --to-ref HEAD --show-diff-on-failure | tee pre-commit-output
-                  exit_code=$?
-                  set -e +o pipefail
-                  cat << EOT >> $GITHUB_OUTPUT
-                  EXIT_CODE=$exit_code
-                  OUTPUT<<EOL
-                  $(cat pre-commit-output | sed 's/`/\\`/g')
-                  EOL
-                  EOT
-                  exit $exit_code
-              id: pre-commit
-              continue-on-error: true
+  pre-commit:
+    runs-on: ${{ vars.RUNNER }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.BOT_SSH_PRIVATE_KEY }}
+      - name: Setup dependencies
+        run: |
+          mkdir -p ~/.ssh
+          echo github.com ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCj7ndNxQowgcQnjshcLrqPEiiphnt+VTTvDP6mHBL9j1aNUkY4Ue1gvwnGLVlOhGeYrnZaMgRK6+PKCUXaDbC7qtbW8gIkhL7aGCsOr/C56SJMy/BCZfxd1nWzAOxSDPgVsmerOBYfNqltV9/hWCqBywINIR+5dIg6JTJ72pcEpEjcYgXkE2YEFXV1JHnsKgbLWNlhScqb2UmyRkQyytRLtL+38TGxkxCflmO+5Z8CSSNY7GidjMIZ7Q4zMjA2n1nGrlTDkzwDCsw+wqFPGQA179cnfGWOWRVruj16z6XyvxvjJwbz0wQZ75XK5tKSb7FNyeIEs4TT4jk+S4dhPeAUC5y+bDYirYgM4GC7uEnztnZyaVWQ7B381AK4Qdrwt51ZqExKbQpTUNn+EjqoTwvqNj4kqx5QUCI0ThS/YkOxJCXmPUWZbhjpCg56i+2aB6CmK2JGhn57K5mj0MNdBXA4/WnwH6XoPWJzK5Nyu2zB3nAZp+S5hpQs+p1vN1/wsjk= >> ~/.ssh/known_hosts
+          pip install pre-commit
+          pre-commit install
+      - name: Run pre-commit hook
+        run: |
+          set +e -o pipefail
+          pre-commit run --from-ref origin/${{ github.base_ref }} --to-ref HEAD --show-diff-on-failure | tee pre-commit-output
+          exit_code=$?
+          set -e +o pipefail
+          cat << EOT >> $GITHUB_OUTPUT
+          EXIT_CODE=$exit_code
+          OUTPUT<<EOL
+          $(cat pre-commit-output | sed 's/`/\\`/g')
+          EOL
+          EOT
+          exit $exit_code
+        id: pre-commit
+        continue-on-error: true
+      - name: Delete Previous Comment
+        uses: brtknr/delete-comment@v1
+        with:
+          github_token: '${{ secrets.GITHUB_TOKEN }}'
+          delete_user_name: 'github-actions[bot]'
+          body_regex: 'Pre-commit'
+          issue_number: '${{ github.event.number }}'
+      - name: Notify Pull Request
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const hint = ${{ steps.pre-commit.outcome == 'success' }} ? '' : `
+            Looks like the PR is missing pre-commit changes. Please run the following locally and commit changes to fix this issue:
 
-            - name: Delete Previous Comment
-              uses: brtknr/delete-comment@v1
-              with:
-                  github_token: '${{ secrets.GITHUB_TOKEN }}'
-                  delete_user_name: 'github-actions[bot]'
-                  body_regex: 'Pre-commit'
-                  issue_number: '${{ github.event.number }}'
+            \`\`\`
+            pre-commit install  # only if you do not have it installed already
+            git fetch origin
+            pre-commit run --from-ref origin/${{ github.base_ref }} --to-ref HEAD
+            git commit -a
+            git push
+            \`\`\`
+            `;
 
-            - name: Notify Pull Request
-              uses: actions/github-script@v7
-              with:
-                  github-token: ${{ secrets.GITHUB_TOKEN }}
-                  script: |
-                      const hint = ${{ steps.pre-commit.outcome == 'success' }} ? '' : `
-                      Looks like the PR is missing pre-commit changes. Please run the following locally and commit changes to fix this issue:
+            const output = `
+            # 🖌 Pre-commit ${{ steps.pre-commit.outcome }} ${{ steps.pre-commit.outcome == 'success' && '🏆' || '🚫' }}
 
-                      \`\`\`
-                      pre-commit install  # only if you do not have it installed already
-                      git fetch origin
-                      pre-commit run --from-ref origin/${{ github.base_ref }} --to-ref HEAD
-                      git commit -a
-                      git push
-                      \`\`\`
-                      `;
+            ${hint}
 
-                      const output = `
-                      # 🖌 Pre-commit ${{ steps.pre-commit.outcome }} ${{ steps.pre-commit.outcome == 'success' && '🏆' || '🚫' }}
+            <details><summary>Details</summary>
 
-                      ${hint}
+            \`\`\`
+            ${{ steps.pre-commit.outputs.OUTPUT }}
+            \`\`\`
 
-                      <details><summary>Details</summary>
+            Exit code: ${{ steps.pre-commit.outputs.EXIT_CODE }}
 
-                      \`\`\`
-                      ${{ steps.pre-commit.outputs.OUTPUT }}
-                      \`\`\`
+            </details>
 
-                      Exit code: ${{ steps.pre-commit.outputs.EXIT_CODE }}
+            Author ✍️@${{ github.actor }}`;
 
-                      </details>
-
-                      Author ✍️@${{ github.actor }}`;
-
-                      github.rest.issues.createComment({
-                        issue_number: context.issue.number,
-                        owner: context.repo.owner,
-                        repo: context.repo.repo,
-                        body: output
-                      })
-            - name: Pre-commit status
-              run: |
-                  cat << EOF
-                  ${{ steps.pre-commit.outputs.OUTPUT }}
-                  EOF
-                  exit ${{ steps.pre-commit.outputs.EXIT_CODE }}
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            })
+      - name: Pre-commit status
+        run: |
+          cat << EOF
+          ${{ steps.pre-commit.outputs.OUTPUT }}
+          EOF
+          exit ${{ steps.pre-commit.outputs.EXIT_CODE }}

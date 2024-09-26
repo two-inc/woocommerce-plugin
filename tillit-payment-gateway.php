@@ -3,10 +3,11 @@
  * Plugin Name: Two - BNPL for businesses
  * Plugin URI: https://two.inc
  * Description: Integration between WooCommerce and Two
- * Version: 2.18.6
+ * Version: 2.19.0
  * Author: Two
  * Author URI: https://two.inc
  * Text Domain: twoinc-payment-gateway
+ * Domain Path: /languages/
  * License: GPLv2 or later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  */
@@ -89,7 +90,7 @@ function load_twoinc_classes()
  */
 function init_twoinc_translation()
 {
-    $plugin_rel_path = basename(dirname(__FILE__));
+    $plugin_rel_path = basename(dirname(__FILE__)) . '/languages/';
     load_plugin_textdomain('twoinc-payment-gateway', false, $plugin_rel_path);
 }
 

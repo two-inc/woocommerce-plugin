@@ -1,3 +1,6 @@
+# Environment
+.envrc
+.direnv/
 .idea
 .env
 *.env.json
