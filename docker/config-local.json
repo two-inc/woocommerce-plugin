@@ -23,7 +23,6 @@
   "show_abt_link": "yes",
   "default_to_b2c": "no",
   "invoice_fee_to_buyer": "no",
-  "initiate_payment_to_buyer_on_refund": "yes",
   "display_other_payments": "yes",
   "fallback_to_another_payment": "yes",
   "section_auto_complete_settings": "",
