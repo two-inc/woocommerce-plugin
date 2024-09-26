@@ -662,7 +662,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
             $req_body = [
                 'amount' => strval(WC_Twoinc_Helper::round_amt($amount)),
                 'currency' => $currency,
-                'initiate_payment_to_buyer' => true,
                 'line_items' => WC_Twoinc_Helper::get_line_items($order_refund->get_items(), $order_refund->get_items('shipping'), $order_refund->get_items('fee'), $order_refund)
             ];
 
