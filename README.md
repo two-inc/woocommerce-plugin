@@ -1,4 +1,4 @@
-# Tillit WooCommerce Plugin
+# Two WooCommerce Plugin
 
 ## Installation
 
