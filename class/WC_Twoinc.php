@@ -2523,7 +2523,7 @@ if (!class_exists('WC_Twoinc')) {
             global $pagenow;
             if ($pagenow !== 'options-general.php') {
                 $headline = sprintf(__('Grow your B2B sales with Buy Now, Pay Later using %s!', 'twoinc-payment-gateway'), __('Two', 'twoinc-payment-gateway'));
-                $benefits = sprintf(__('%s credit approves 90% of business buyers, pays you upfront and minimise your risk. To offer %s in your checkout, you need to signup. It’s quick, easy and gives you immediate access to the %s Merchant Portal.', 'twoinc-payment-gateway'), __('Two', 'twoinc-payment-gateway'), __('Two', 'twoinc-payment-gateway'), __('Two', 'twoinc-payment-gateway'));
+                $benefits = sprintf(__('%s credit approves 90%% of business buyers, pays you upfront and minimise your risk. To offer %s in your checkout, you need to signup. It’s quick, easy and gives you immediate access to the %s Merchant Portal.', 'twoinc-payment-gateway'), __('Two', 'twoinc-payment-gateway'), __('Two', 'twoinc-payment-gateway'), __('Two', 'twoinc-payment-gateway'));
                 $setup_account = sprintf(__('Set up my %s account', 'twoinc-payment-gateway'), __('Two', 'twoinc-payment-gateway'));
                 echo '
                 <div id="twoinc-account-init-notice" class="notice notice-info is-dismissible" style="background-image: url(\'' . WC_TWOINC_PLUGIN_URL . 'assets/images/banner.png\');background-size: cover;border-left-width: 0;background-color: #e2e0ff;padding: 20px;display: flex;">

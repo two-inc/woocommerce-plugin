@@ -347,8 +347,8 @@ msgid "%s Company Search"
 msgstr "%s Bedrijf zoeken"
 
 #: class/WC_Twoinc.php:2521
-msgid "%s credit approves 90% of business buyers, pays you upfront and minimise your risk. To offer %s in your checkout, you need to signup. It’s quick, easy and gives you immediate access to the %s Merchant Portal."
-msgstr "%s credit keurt 90% van de zakelijke kopers goed, betaalt u vooraf en minimaliseert uw risico. Om %s aan te bieden in uw checkout, moet u zich registreren. Het is snel, eenvoudig en geeft u direct toegang tot de %s Merchant Portal."
+msgid "%s credit approves 90%% of business buyers, pays you upfront and minimise your risk. To offer %s in your checkout, you need to signup. It’s quick, easy and gives you immediate access to the %s Merchant Portal."
+msgstr "%s credit keurt 90%% van de zakelijke kopers goed, betaalt u vooraf en minimaliseert uw risico. Om %s aan te bieden in uw checkout, moet u zich registreren. Het is snel, eenvoudig en geeft u direct toegang tot de %s Merchant Portal."
 
 #: class/WC_Twoinc.php:727
 msgid "%s has acknowledged request to fulfill %d order. An invoice will be sent to the buyer when the fulfilment is complete."

@@ -352,8 +352,8 @@ msgid "%s Company Search"
 msgstr "%s Bedriftssøk"
 
 #: class/WC_Twoinc.php:2521
-msgid "%s credit approves 90% of business buyers, pays you upfront and minimise your risk. To offer %s in your checkout, you need to signup. It’s quick, easy and gives you immediate access to the %s Merchant Portal."
-msgstr "%s kreditt godkjenner 90 % av forretningskjøpere, betaler deg på forhånd og minimerer risikoen. For å tilby %s i kassen må du registrere deg. Det er raskt, enkelt og gir deg umiddelbar tilgang til %s Merchant Portal."
+msgid "%s credit approves 90%% of business buyers, pays you upfront and minimise your risk. To offer %s in your checkout, you need to signup. It’s quick, easy and gives you immediate access to the %s Merchant Portal."
+msgstr "%s kreditt godkjenner 90%% av forretningskjøpere, betaler deg på forhånd og minimerer risikoen. For å tilby %s i kassen må du registrere deg. Det er raskt, enkelt og gir deg umiddelbar tilgang til %s Merchant Portal."
 
 #: class/WC_Twoinc.php:727
 msgid "%s has acknowledged request to fulfill %d order. An invoice will be sent to the buyer when the fulfilment is complete."

@@ -1,4 +1,6 @@
 # Environment
+config/
+.vscode/
 .envrc
 .direnv/
 .idea
@@ -12,3 +14,4 @@ node_modules/
 volumes/
 .DS_Store
 *.zip
+*.xlsx
