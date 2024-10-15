@@ -708,26 +708,26 @@ let twoincDomHelper = {
      */
     togglePaySubtitleDesc: function (action, errSelector) {
         if (action === 'checking-intent') {
-            jQuery('.twoinc-pay-sub').hide()
-            twoincDomHelper.showHideImportant('.twoinc-pay-sub.loader', 'show')
+            jQuery('.twoinc-pay-sub').addClass('hidden')
+            jQuery('.twoinc-pay-sub.loader').removeClass('hidden')
         } else if (action) {
             // Hide all related elements
-            jQuery('.twoinc-pay-box, .twoinc-pay-sub').hide()
-            twoincDomHelper.showHideImportant('.twoinc-pay-sub.loader', 'hide')
+            jQuery('.twoinc-pay-box, .twoinc-pay-sub').addClass('hidden')
+            jQuery('.twoinc-pay-sub.loader').addClass('hidden')
 
             if (action === 'intent-approved') {
-                jQuery('.twoinc-pay-sub.explain-phrase').show()
-                jQuery('.twoinc-pay-box.declare-agreement').show()
+                jQuery('.twoinc-pay-sub.explain-phrase').removeClass('hidden')
+                jQuery('.twoinc-pay-box.declare-agreement').removeClass('hidden')
             } else if (action === 'errored') {
-                jQuery('.twoinc-pay-box' + errSelector).show()
+                jQuery('.twoinc-pay-box' + errSelector).removeClass('hidden')
             }
         }
 
         // Default behavior for any action including null
         if (!Twoinc.getInstance().customerCompany.organization_number) {
-            jQuery('.twoinc-pay-sub.require-inputs').show()
+            jQuery('.twoinc-pay-sub.require-inputs').removeClass('hidden')
         } else {
-            jQuery('.twoinc-pay-sub.require-inputs').hide()
+            jQuery('.twoinc-pay-sub.require-inputs').addClass('hidden')
         }
         twoincDomHelper.updateCompanyNameAgreement()
     },
@@ -976,21 +976,6 @@ let twoincDomHelper = {
             document.querySelector('.' + priceName + ' .woocommerce-Price-amount bdi') ||
             document.querySelector('.' + priceName + ' .woocommerce-Price-amount')
         return twoincDomHelper.getPriceRecursively(node)
-    },
-
-    /**
-     * Toggle hide with !important
-     */
-    showHideImportant: function (selector, action) {
-        if (action == 'show') {
-            jQuery(selector).css('display', '')
-        } else if (action == 'hide') {
-            jQuery(selector).css('display', '')
-            jQuery(selector).attr(
-                'style',
-                jQuery(selector).attr('style') + 'display: none!important;'
-            )
-        }
     },
 
     /**

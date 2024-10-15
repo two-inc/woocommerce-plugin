@@ -268,13 +268,13 @@ if (!class_exists('WC_Twoinc')) {
             return sprintf(
                 '<div>
                     <div class="twoinc-pay-box explain-details">%s</div>
-                    <div class="twoinc-pay-box declare-agreement" style="display: none;">%s</div>
-                    <div class="twoinc-pay-box err-payment-default" style="display: none;">%s</div>
-                    <div class="twoinc-pay-box err-payment-rejected" style="display: none;">%s</div>
-                    <div class="twoinc-pay-box err-buyer-same-seller" style="display: none;">%s</div>
-                    <div class="twoinc-pay-box err-amt-max" style="display: none;">%s</div>
-                    <div class="twoinc-pay-box err-amt-min" style="display: none;">%s</div>
-                    <div class="twoinc-pay-box err-phone" style="display: none;">%s</div>
+                    <div class="twoinc-pay-box declare-agreement hidden">%s</div>
+                    <div class="twoinc-pay-box err-payment-default hidden">%s</div>
+                    <div class="twoinc-pay-box err-payment-rejected hidden">%s</div>
+                    <div class="twoinc-pay-box err-buyer-same-seller hidden">%s</div>
+                    <div class="twoinc-pay-box err-amt-max hidden">%s</div>
+                    <div class="twoinc-pay-box err-amt-min hidden">%s</div>
+                    <div class="twoinc-pay-box err-phone hidden">%s</div>
                 </div>',
                 sprintf(__('The latest way to pay for your online business purchases. You will receive an invoice from %s when your order has been processed.', 'twoinc-payment-gateway'), __('Two', 'twoinc-payment-gateway')),
                 sprintf(
@@ -302,7 +302,7 @@ if (!class_exists('WC_Twoinc')) {
                     <div class="twoinc-pay-sub explain-phrase">
                         %s <span class="twoinc-pay-sub require-inputs">%s</span>
                     </div>
-                    <img class="twoinc-pay-sub loader" style="display: none!important;" src="%s" />
+                    <img class="twoinc-pay-sub hidden loader" src="%s" />
                 </div> ',
                 sprintf(__('%s lets your business pay later for the goods you purchase online.', 'twoinc-payment-gateway'), __('Two', 'twoinc-payment-gateway')),
                 __('Enter your company name to get started.', 'twoinc-payment-gateway'),
