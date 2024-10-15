@@ -268,7 +268,7 @@ if (!class_exists('WC_Twoinc')) {
             return sprintf(
                 '<div>
                     <div class="twoinc-pay-box explain-details">%s</div>
-                    <div class="twoinc-pay-box declare-aggrement" style="display: none;">%s</div>
+                    <div class="twoinc-pay-box declare-agreement" style="display: none;">%s</div>
                     <div class="twoinc-pay-box err-payment-default" style="display: none;">%s</div>
                     <div class="twoinc-pay-box err-payment-rejected" style="display: none;">%s</div>
                     <div class="twoinc-pay-box err-buyer-same-seller" style="display: none;">%s</div>

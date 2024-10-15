@@ -717,7 +717,7 @@ let twoincDomHelper = {
 
             if (action === 'intent-approved') {
                 jQuery('.twoinc-pay-sub.explain-phrase').show()
-                jQuery('.twoinc-pay-box.declare-aggrement').show()
+                jQuery('.twoinc-pay-box.declare-agreement').show()
             } else if (action === 'errored') {
                 jQuery('.twoinc-pay-box' + errSelector).show()
             }
@@ -767,7 +767,7 @@ let twoincDomHelper = {
     },
 
     /**
-     * Update company name in payment method aggrement section
+     * Update company name in payment method agreement section
      */
     updateCompanyNameAgreement: function () {
         let companyName = Twoinc.getInstance().customerCompany.company_name
