@@ -224,17 +224,28 @@ let twoincSelectWooHelper = {
      * Wait until element appear and focus
      */
     addSelectWooFocusFixHandler: function (selectWooElemId) {
-        let billingCompanyDisplayResult = jQuery('#select2-' + selectWooElemId + '-results')
-        if (
-            billingCompanyDisplayResult &&
-            !billingCompanyDisplayResult.attr('two-focused-handler')
-        ) {
-            billingCompanyDisplayResult.attr('two-focused-handler', true)
-            billingCompanyDisplayResult.on('DOMNodeInserted', function (event) {
-                if (event.target.parentNode.id == 'select2-' + selectWooElemId + '-results') {
-                    twoincSelectWooHelper.waitToFocus('billing_company_display', 80, 20)
-                }
-            })
+        let billingCompanyDisplayResult = jQuery('#select2-' + selectWooElemId + '-results');
+    
+        // Ensure the element exists and the handler hasn't been added already
+        if (billingCompanyDisplayResult.length && !billingCompanyDisplayResult.attr('two-focused-handler')) {
+            billingCompanyDisplayResult.attr('two-focused-handler', true);
+    
+            // Create a new MutationObserver
+            let observer = new MutationObserver(function (mutations) {
+                mutations.forEach(function (mutation) {
+                    for (let addedNode of mutation.addedNodes) {
+                        // Ensure the node has a parent and check for the correct parentNode ID
+                        if (addedNode.parentNode && addedNode.parentNode.id === 'select2-' + selectWooElemId + '-results') {
+                            twoincSelectWooHelper.waitToFocus('billing_company_display', 80, 20);
+                        }
+                    }
+                });
+            });
+    
+            // Observe changes to the childList of the raw DOM element
+            observer.observe(billingCompanyDisplayResult[0], {
+                childList: true // Monitor when child nodes are added or removed
+            });
         }
     },
 }
