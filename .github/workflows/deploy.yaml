@@ -10,14 +10,14 @@ on:
       - main
 jobs:
   php-lint:
-    runs-on: ${{ vars.RUNNER }}
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v3
       - uses: StephaneBour/actions-php-lint@8.2
         with:
           dir: '.'
   release:
-    runs-on: ${{ vars.RUNNER }}
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
     if: ${{ github.event_name == 'release' }}
     needs: php-lint
     env:
