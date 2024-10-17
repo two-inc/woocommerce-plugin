@@ -2262,7 +2262,6 @@ if (!class_exists('WC_Twoinc')) {
                 $department = $order->get_meta('department');
                 $project = $order->get_meta('project');
                 $purchase_order_number = $order->get_meta('purchase_order_number');
-                $purchase_order_number = $body['buyer_purchase_order_number'];
                 $invoice_emails = $order->get_meta('_invoice_emails', true);
             } else {
                 $response = $this->make_request("/v1/order/{$twoinc_order_id}", [], 'GET');
