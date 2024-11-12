@@ -10,7 +10,6 @@
 if (!class_exists('WC_Twoinc_Helper')) {
     class WC_Twoinc_Helper
     {
-
         /**
          * Round the amount in woocommerce way
          *
@@ -44,17 +43,17 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 return sprintf(__('Empty response from %s.', 'twoinc-payment-gateway'), __('Two', 'twoinc-payment-gateway'));
             }
 
-            if($response['response'] && $response['response']['code'] && $response['response']['code'] >= 400) {
+            if ($response['response'] && $response['response']['code'] && $response['response']['code'] >= 400) {
                 return sprintf(__('Response code from %s: %d', 'twoinc-payment-gateway'), __('Two', 'twoinc-payment-gateway'), $response['response']['code']);
             }
 
-            if($response['body']) {
+            if ($response['body']) {
                 $body = json_decode($response['body'], true);
                 if (is_string($body)) {
                     return __($body, 'twoinc-payment-gateway');
-                } else if (isset($body['error_details']) && is_string($body['error_details'])) {
+                } elseif (isset($body['error_details']) && is_string($body['error_details'])) {
                     return __($body['error_details'], 'twoinc-payment-gateway');
-                } else if (isset($body['error_code']) && is_string($body['error_code'])) {
+                } elseif (isset($body['error_code']) && is_string($body['error_code'])) {
                     return __($body['error_code'], 'twoinc-payment-gateway');
                 }
             }
@@ -74,8 +73,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 return $err_msg;
             }
 
-            if($response['response'] && $response['response']['code'] && $response['response']['code'] >= 400) {
-                if($response['body']) {
+            if ($response['response'] && $response['response']['code'] && $response['response']['code'] >= 400) {
+                if ($response['body']) {
                     $body = json_decode($response['body'], true);
                     // Parameters validation errors
                     if (!is_string($body) && isset($body['error_json']) && is_array($body['error_json'])) {
@@ -157,7 +156,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
         {
             if (is_string($message)) {
                 wc_add_notice($message, 'error');
-            } else if (is_array($message)) {
+            } elseif (is_array($message)) {
                 foreach ($message as $msg) {
                     wc_add_notice($msg, 'error');
                 }
@@ -179,8 +178,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
          */
         public static function auth_rest_request($wc_twoinc)
         {
-	    // TODO: Drop comparison against HTTP_X_API_KEY in a future release
-            return hash('sha256', $wc_twoinc->api_key) === $_SERVER['HTTP_X_API_KEY_HASH'] || $wc_twoinc->api_key === $_SERVER['HTTP_X_API_KEY'];
+            // TODO: Drop comparison against HTTP_X_API_KEY in a future release
+            return hash('sha256', $wc_twoinc->get_option('api_key')) === $_SERVER['HTTP_X_API_KEY_HASH'] || $wc_twoinc->api_key === $_SERVER['HTTP_X_API_KEY'];
         }
 
         /**
@@ -308,7 +307,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
 
             // Shipping
             foreach ($shippings as $shipping) {
-                if ($shipping->get_total() == 0) continue;
+                if ($shipping->get_total() == 0) {
+                    continue;
+                }
                 $tax_rate = WC_Twoinc_Helper::get_item_tax_rate($shipping, $order);
                 $shipping_line = [
                     'name' => 'Shipping - ' . $shipping->get_name(),
@@ -332,7 +333,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
 
             // Fee
             foreach ($fees as $fee) {
-                if ($fee->get_total() == 0) continue;
+                if ($fee->get_total() == 0) {
+                    continue;
+                }
                 $tax_rate = WC_Twoinc_Helper::get_item_tax_rate($fee, $order);
                 $fee_line = [
                     'name' => 'Fee - ' . $fee->get_name(),
@@ -398,7 +401,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
 
             // Shipping
             foreach ($shippings as $shipping) {
-                if ($shipping->get_total() == 0) continue;
+                if ($shipping->get_total() == 0) {
+                    continue;
+                }
                 $tax_rate = WC_Twoinc_Helper::get_item_tax_rate($shipping, $order);
                 $tax_single_line = [
                     'tax_amount' => $shipping->get_total_tax(),
@@ -414,7 +419,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
 
             // Fee
             foreach ($fees as $fee) {
-                if ($fee->get_total() == 0) continue;
+                if ($fee->get_total() == 0) {
+                    continue;
+                }
                 $tax_rate = WC_Twoinc_Helper::get_item_tax_rate($fee, $order);
                 $tax_single_line = [
                     'tax_amount' => $fee->get_total_tax(),
@@ -456,10 +463,21 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * @return bool
          */
         public static function compose_twoinc_order(
-            $order, $order_reference, $company_id, $department, $project, $purchase_order_number, $invoice_emails,
-            $payment_reference_message = '', $payment_reference_ocr = '', $payment_reference = '', $payment_reference_type = '', $vendor_name = '',
-            $tracking_id = '', $skip_nonce = false)
-        {
+            $order,
+            $order_reference,
+            $company_id,
+            $department,
+            $project,
+            $purchase_order_number,
+            $invoice_emails,
+            $payment_reference_message = '',
+            $payment_reference_ocr = '',
+            $payment_reference = '',
+            $payment_reference_type = '',
+            $vendor_name = '',
+            $tracking_id = '',
+            $skip_nonce = false
+        ) {
 
             $billing_address = [
                 'organization_name' => $order->get_billing_company(),
@@ -550,7 +568,10 @@ if (!class_exists('WC_Twoinc_Helper')) {
             if (!$skip_nonce) {
                 $req_body['merchant_urls']['merchant_confirmation_url'] = sprintf(
                     '%s/twoinc-payment-gateway/confirm?twoinc_confirm_order=%s&nonce=%s',
-                    get_home_url(), $order_reference, wp_create_nonce('twoinc_confirm'));
+                    get_home_url(),
+                    $order_reference,
+                    wp_create_nonce('twoinc_confirm')
+                );
             }
 
             if ($purchase_order_number) {
@@ -565,7 +586,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 $req_body['tracking_id'] = $tracking_id;
             }
 
-            if(has_filter('two_order_create')) {
+            if (has_filter('two_order_create')) {
                 $req_body = apply_filters('two_order_create', $req_body);
             }
 
@@ -580,8 +601,12 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * @return bool
          */
         public static function compose_twoinc_edit_order(
-            $order, $department, $project, $purchase_order_number, $vendor_name)
-        {
+            $order,
+            $department,
+            $project,
+            $purchase_order_number,
+            $vendor_name
+        ) {
 
             $billing_address = [
                 'organization_name' => $order->get_billing_company(),
@@ -640,7 +665,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 $req_body['tax_subtotals'] = WC_Twoinc_Helper::get_tax_subtotals($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'), $order);
             }
 
-            if(has_filter('two_order_edit')) {
+            if (has_filter('two_order_edit')) {
                 $req_body = apply_filters('two_order_edit', $req_body);
             }
 
@@ -675,7 +700,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
          *
          * @return array
          */
-        public static function get_private_order_notes($order_id){
+        public static function get_private_order_notes($order_id)
+        {
             global $wpdb;
 
             $results = $wpdb->get_results("" .
@@ -683,7 +709,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 "  WHERE `comment_post_ID` = $order_id" .
                 "    AND `comment_type` LIKE 'order_note'");
 
-            foreach($results as $note){
+            foreach ($results as $note) {
                 $order_note[]  = array(
                     'note_id'      => $note->comment_ID,
                     'note_date'    => $note->comment_date,
@@ -701,7 +727,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
          */
         public static function append_admin_force_reload()
         {
-            add_action('woocommerce_admin_order_items_after_line_items', function(){
+            add_action('woocommerce_admin_order_items_after_line_items', function () {
                 print('<script>location.reload();</script>');
             });
         }
@@ -738,14 +764,18 @@ if (!class_exists('WC_Twoinc_Helper')) {
             $hostname = str_replace(array('http://', 'https://'), '', get_home_url());
 
             // Local or configured in env var
-            if (preg_match('/^localhost(?::[0-9]{1,5})?$/', $hostname) === 1) return true;
+            if (preg_match('/^localhost(?::[0-9]{1,5})?$/', $hostname) === 1) {
+                return true;
+            }
             $env_dev_hostnames = getenv('TWOINC_DEV_HOSTNAMES');
-            if ($env_dev_hostnames && in_array($hostname, explode(',', $env_dev_hostnames))) return true;
+            if ($env_dev_hostnames && in_array($hostname, explode(',', $env_dev_hostnames))) {
+                return true;
+            }
 
             if (str_ends_with($hostname, "two.inc")) {
                 // Production sites using two.inc subdomains
                 $twoinc_prod_sites = '/^(?:www\.)?(?:(?:.+\.)?shop|tellit|iem|cubelighting|digg|morgenlevering|arkwrightx|kandidate|kandidate-internal)\.two\.inc$/';
-                if (preg_match($twoinc_prod_sites, $hostname) === 1){
+                if (preg_match($twoinc_prod_sites, $hostname) === 1) {
                     return false;
                 } else {
                     return true;
@@ -753,7 +783,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
             }
 
             // Merchant's staging
-            if (in_array($hostname, array('staging.torn.no', 'proof-3.redflamingostudio.com', 'icecreamextreme.no', 'www.staging83.avshop.no'))) return true;
+            if (in_array($hostname, array('staging.torn.no', 'proof-3.redflamingostudio.com', 'icecreamextreme.no', 'www.staging83.avshop.no'))) {
+                return true;
+            }
 
             // Neither local nor twoinc development site
             return false;
@@ -778,16 +810,17 @@ if (!class_exists('WC_Twoinc_Helper')) {
          *
          * @return array
          */
-        public static function utf8ize($d) {
+        public static function utf8ize($d)
+        {
             if (is_array($d)) {
                 foreach ($d as $k => $v) {
                     $d[$k] = WC_Twoinc_Helper::utf8ize($v);
                 }
-            } else if(is_object($d)) {
+            } elseif (is_object($d)) {
                 foreach ($d as $k => $v) {
                     $d->$k = WC_Twoinc_Helper::utf8ize($v);
                 }
-            } else if (is_string($d)) {
+            } elseif (is_string($d)) {
                 if (mb_detect_encoding($d, ['UTF-8'], true)) { // already in UTF-8
                     return $d;
                 } else {
@@ -804,7 +837,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
          *
          * @return string
          */
-        public static function hash_order($order, $twoinc_meta) {
+        public static function hash_order($order, $twoinc_meta)
+        {
             $twoinc_order = WC_Twoinc_Helper::compose_twoinc_order(
                 $order,
                 $twoinc_meta['order_reference'],
@@ -831,7 +865,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
          *
          * @return string
          */
-        public static function hash_obj($obj) {
+        public static function hash_obj($obj)
+        {
             return md5(json_encode(WC_Twoinc_Helper::utf8ize($obj)));
         }
 
@@ -843,7 +878,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
          *
          * @return array
          */
-        public static function array_diff_r($src_arr, $dst_arr) {
+        public static function array_diff_r($src_arr, $dst_arr)
+        {
             $diff = array();
 
             foreach ($src_arr as $key => $val) {
@@ -872,9 +908,10 @@ if (!class_exists('WC_Twoinc_Helper')) {
          *
          * @return array
          */
-        public static function get_product($line_item) {
+        public static function get_product($line_item)
+        {
 
-            if(gettype($line_item) !== 'array' && get_class($line_item) === 'WC_Order_Item_Product') {
+            if (gettype($line_item) !== 'array' && get_class($line_item) === 'WC_Order_Item_Product') {
                 /** @var WC_Product_Variation */
                 //if ($line_item->get_product()->get_type() === 'variation') {
                 //    return new WC_Product_Variation($line_item->get_product()->get_variation_id());
@@ -896,7 +933,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
          *
          * @return array
          */
-        private static function get_item_tax_rate($line_item, $order) {
+        private static function get_item_tax_rate($line_item, $order)
+        {
             $item_tax_rate_list = [];
             if ($line_item->get_taxes()['total']) {
                 foreach ($line_item->get_taxes()['total'] as $rate_id => $tax_amt) {
@@ -923,7 +961,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
          *
          * @return array
          */
-        private static function get_tax_rate_from_tax_list($tax_rate_list) {
+        private static function get_tax_rate_from_tax_list($tax_rate_list)
+        {
             $no_zero_list = [];
             foreach ($tax_rate_list as $tax_rate) {
                 if ($tax_rate['rate']) {
@@ -935,7 +974,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     'rate' => 0,
                     'name' => 'NA'
                 ];
-            } else if (count($no_zero_list) == 1) {
+            } elseif (count($no_zero_list) == 1) {
                 // return the 1st element
                 return reset($no_zero_list);
             } else {
