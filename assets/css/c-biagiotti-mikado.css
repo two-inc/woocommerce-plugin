@@ -4,13 +4,13 @@
 #department_field,
 #project_field,
 #purchase_order_number_field {
-    width: 100%;
+  width: 100%;
 }
 
 .account-type-wrapper.actp-col-2 .account-type-button {
-    width: 40%;
+  width: 40%;
 }
 
 .floating-company {
-    margin-right: 20px;
+  margin-right: 20px;
 }

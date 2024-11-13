@@ -1,14 +1,14 @@
 .floating-company {
-    margin-right: 8px;
+  margin-right: 8px;
 }
 
 @media (min-width: 1200px) {
-    .account-type-wrapper.actp-col-2 {
-        width: 100%;
-    }
+  .account-type-wrapper.actp-col-2 {
+    width: 100%;
+  }
 
-    .account-type-wrapper.actp-col-3 {
-        width: 160%;
-        margin-left: -30%;
-    }
+  .account-type-wrapper.actp-col-3 {
+    width: 160%;
+    margin-left: -30%;
+  }
 }

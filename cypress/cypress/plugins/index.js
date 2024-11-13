@@ -1,10 +1,10 @@
 module.exports = (on, config) => {
-  on('task', {
+  on("task", {
     setOrderId(val) {
-      return (orderId = val)
+      return (orderId = val);
     },
     getOrderId() {
-      return orderId
-    },
-  })
-}
+      return orderId;
+    }
+  });
+};

@@ -1,13 +1,9 @@
-context('Actions', () => {
+context("Actions", () => {
+  beforeEach(() => {
+    cy.clearCookies({ domain: null });
+  });
 
-    beforeEach(() => {
-        cy.clearCookies({ domain: null })
-    })
-
-    it('Customer inputs with errors', () => {
-
-        // @TODO: implement this
-
-    });
-
-})
+  it("Customer inputs with errors", () => {
+    // @TODO: implement this
+  });
+});

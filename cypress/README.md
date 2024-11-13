@@ -1,11 +1,13 @@
 # E2e Test for woocom plugin
 
 To install dependencies, run
+
 ```
 npm install
 ```
 
 To run tests
+
 ```
 # On local
 export CYPRESS_TEST_API_USER="MERCHANT_API_ID"

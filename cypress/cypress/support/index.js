@@ -1,4 +1,4 @@
-import './customerCommands'
-import './adminCommands'
-import './checkoutapiCommands'
-import './commands'
+import "./customerCommands";
+import "./adminCommands";
+import "./checkoutapiCommands";
+import "./commands";

@@ -1,41 +1,35 @@
-context('Actions', () => {
+context("Actions", () => {
+  beforeEach(() => {
+    cy.clearCookies({ domain: null });
+  });
 
-    beforeEach(() => {
-        cy.clearCookies({ domain: null })
-    })
+  it("Customer creates an order", () => {
+    cy.customerCreateOrderFlow(2, 0, "1234");
 
-    it('Customer creates an order', () => {
+    // Get order id
+    cy.get(".woocommerce-order-overview__order strong").should("exist");
+    cy.get(".woocommerce-order-overview__order strong")
+      .invoke("text")
+      .then((createdOrderId) => {
+        cy.task("setOrderId", createdOrderId);
+      });
+  });
 
-        cy.customerCreateOrderFlow(2, 0, '1234')
+  it("Admin marks the order as completed", () => {
+    cy.task("getOrderId").then((orderId) => {
+      cy.loginAsAdmin();
 
-        // Get order id
-        cy.get('.woocommerce-order-overview__order strong').should('exist')
-        cy.get('.woocommerce-order-overview__order strong').invoke('text').then(createdOrderId => {
-            cy.task('setOrderId', createdOrderId)
-        })
+      cy.goToOrderList();
 
-    })
+      cy.goToOrder(orderId);
 
-    it('Admin marks the order as completed', () => {
+      cy.checkTillitOrderStatus("VERIFIED");
 
-        cy.task('getOrderId').then((orderId) => {
+      cy.updateOrderStatus("completed");
 
-            cy.loginAsAdmin()
+      cy.checkTillitOrderStatus("FULFILLED");
 
-            cy.goToOrderList()
-
-            cy.goToOrder(orderId)
-
-            cy.checkTillitOrderStatus('VERIFIED')
-
-            cy.updateOrderStatus('completed')
-
-            cy.checkTillitOrderStatus('FULFILLED')
-
-            cy.wait(1000)
-
-        })
-
+      cy.wait(1000);
     });
-
-})
+  });
+});

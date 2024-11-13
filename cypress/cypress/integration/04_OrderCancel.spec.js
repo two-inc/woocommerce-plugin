@@ -1,29 +1,23 @@
-context('Actions', () => {
+context("Actions", () => {
+  beforeEach(() => {
+    cy.clearCookies({ domain: null });
+  });
 
-    beforeEach(() => {
-        cy.clearCookies({ domain: null })
-    })
+  it("Admin cancels the order", () => {
+    cy.task("getOrderId").then((orderId) => {
+      cy.loginAsAdmin();
 
-    it('Admin cancels the order', () => {
+      cy.goToOrderList();
 
-        cy.task('getOrderId').then((orderId) => {
+      cy.goToOrder(orderId);
 
-            cy.loginAsAdmin()
+      cy.checkTillitOrderStatus("VERIFIED");
 
-            cy.goToOrderList()
+      cy.updateOrderStatus("cancelled");
 
-            cy.goToOrder(orderId)
+      cy.checkTillitOrderStatus("CANCELLED");
 
-            cy.checkTillitOrderStatus('VERIFIED')
-
-            cy.updateOrderStatus('cancelled')
-
-            cy.checkTillitOrderStatus('CANCELLED')
-
-            cy.wait(1000)
-
-        })
-
+      cy.wait(1000);
     });
-
-})
+  });
+});

@@ -14,7 +14,6 @@ function add_two_order_fields( $two_req ) {
 add_filter( "two_order_create", "add_two_order_fields" );
 ```
 
-
 **Option 2: Add a new parameter configurable from Two settings**
 
 Append the following lines to your active theme's `functions.php`
@@ -46,7 +45,6 @@ function add_two_setting_fields( $two_fields ) {
 add_filter( "wc_two_form_fields", "add_two_setting_fields" );
 ```
 
-
 **Option 3: Add a new parameter to Checkout**
 
 Append the following lines to your active theme's `functions.php`
@@ -75,8 +73,6 @@ function add_two_due_days( $fields ) {
 }
 add_filter( "woocommerce_checkout_fields", "add_two_due_days" );
 ```
-
-
 
 ### Custom Two payment references based on order id
 

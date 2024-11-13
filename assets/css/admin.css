@@ -1,15 +1,15 @@
 hr.setting-separator {
-    margin: 20px 0;
+  margin: 20px 0;
 }
 
 a.setting-dropdown {
-    font-size: 12px;
-    font-weight: normal;
-    text-decoration: none;
+  font-size: 12px;
+  font-weight: normal;
+  text-decoration: none;
 }
 
 .woocommerce-twoinc-image-container img {
-    margin-bottom: 24px;
-    height: 128px;
-    width: auto;
+  margin-bottom: 24px;
+  height: 128px;
+  width: auto;
 }

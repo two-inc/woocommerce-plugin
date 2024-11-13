@@ -1,41 +1,35 @@
-context('Actions', () => {
+context("Actions", () => {
+  beforeEach(() => {
+    cy.clearCookies({ domain: null });
+  });
 
-    beforeEach(() => {
-        cy.clearCookies({ domain: null })
-    })
+  it("Customer creates an order", () => {
+    cy.customerCreateOrderFlow(2, 0, "1234");
 
-    it('Customer creates an order', () => {
+    // Get order id
+    cy.get(".woocommerce-order-overview__order strong").should("exist");
+    cy.get(".woocommerce-order-overview__order strong")
+      .invoke("text")
+      .then((createdOrderId) => {
+        cy.task("setOrderId", createdOrderId);
+      });
+  });
 
-        cy.customerCreateOrderFlow(2, 0, '1234')
+  it("Admin edits the order", () => {
+    cy.task("getOrderId").then((orderId) => {
+      cy.loginAsAdmin();
 
-        // Get order id
-        cy.get('.woocommerce-order-overview__order strong').should('exist')
-        cy.get('.woocommerce-order-overview__order strong').invoke('text').then(createdOrderId => {
-            cy.task('setOrderId', createdOrderId)
-        })
+      cy.goToOrderList();
 
-    })
+      cy.goToOrder(orderId);
 
-    it('Admin edits the order', () => {
+      cy.checkTillitOrderStatus("VERIFIED");
 
-        cy.task('getOrderId').then((orderId) => {
+      //@TODO: cy.editOrder()
 
-            cy.loginAsAdmin()
+      //@TODO: cy.checkUpdated()
 
-            cy.goToOrderList()
-
-            cy.goToOrder(orderId)
-
-            cy.checkTillitOrderStatus('VERIFIED')
-
-            //@TODO: cy.editOrder()
-
-            //@TODO: cy.checkUpdated()
-
-            cy.wait(1000)
-
-        })
-
+      cy.wait(1000);
     });
-
-})
+  });
+});
