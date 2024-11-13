@@ -10,7 +10,6 @@
 if (!class_exists('WC_Twoinc_Checkout')) {
     class WC_Twoinc_Checkout
     {
-
         private $wc_twoinc;
 
         /**
@@ -86,7 +85,8 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                         <img src = "' . WC_TWOINC_PLUGIN_URL . 'assets/images/business.svg"/>
                         <span>' . __('Business Customer', 'twoinc-payment-gateway') . '</span>
                     </div>
-                </div>');
+                </div>'
+            );
 
         }
 
@@ -106,7 +106,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             end($available_account_types); // Move pointer to last
             $default_account_type = key($available_account_types); // Get current pointer
 
-            if(sizeof($this->wc_twoinc->available_account_types()) > 1) {
+            if (sizeof($this->wc_twoinc->available_account_types()) > 1) {
 
                 // Default to personal if admin settings is set
                 if ($this->wc_twoinc->get_option('default_to_b2c') === 'yes' && array_key_exists('personal', $available_account_types)) {
@@ -155,7 +155,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
 
             $company_name_priority = $fields['billing']['billing_company']['priority'];
 
-            if($this->wc_twoinc->get_option('enable_company_name') === 'yes') {
+            if ($this->wc_twoinc->get_option('enable_company_name') === 'yes') {
 
                 $fields['billing']['billing_company_display'] = [
                     'label' => __('Company name', 'twoinc-payment-gateway'),
@@ -298,7 +298,8 @@ if (!class_exists('WC_Twoinc_Checkout')) {
         /**
          * Customize for Order Pay page when merchant installed "Phone Orders for WooCommerce" plugin
          */
-        public function order_pay_page_customize() {
+        public function order_pay_page_customize()
+        {
             ob_start();
             require_once WC_TWOINC_PLUGIN_PATH . '/views/woocommerce_order_pay.php';
             $content = ob_get_clean();
@@ -320,9 +321,6 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     'tooltip_phone' => __('We require your phone number so we can verify your purchase.', 'twoinc-payment-gateway'),
                     'tooltip_company' => __('We use your company name to automatically populate your address and register the company that made the purchase.', 'twoinc-payment-gateway'),
                 ],
-                'twoinc_search_host_no' => $this->wc_twoinc->twoinc_search_host_no,
-                'twoinc_search_host_gb' => $this->wc_twoinc->twoinc_search_host_gb,
-                'twoinc_search_host_se' => $this->wc_twoinc->twoinc_search_host_se,
                 'twoinc_checkout_host' => $this->wc_twoinc->twoinc_checkout_host,
                 'company_name_search' => $this->wc_twoinc->get_option('enable_company_name'),
                 'address_search' => $this->wc_twoinc->get_option('address_search'),
@@ -360,9 +358,13 @@ if (!class_exists('WC_Twoinc_Checkout')) {
          */
         public function inject_cart_details()
         {
-            if(!is_checkout()) return;
+            if (!is_checkout()) {
+                return;
+            }
             $twoinc_obj = json_encode(WC_Twoinc_Helper::utf8ize($this->prepare_twoinc_object()), JSON_UNESCAPED_UNICODE);
-            if ($twoinc_obj) printf('<script>window.twoinc = %s;</script>', $twoinc_obj);
+            if ($twoinc_obj) {
+                printf('<script>window.twoinc = %s;</script>', $twoinc_obj);
+            }
         }
 
     }

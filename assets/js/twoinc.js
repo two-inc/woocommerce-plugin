@@ -23,7 +23,7 @@ let twoincUtilHelper = {
   /**
    * Construct url to Twoinc checkout api
    */
-  contructTwoincUrl: function (path, params) {
+  constructTwoincUrl: function (path, params) {
     if (!params) params = {};
     params["client"] = window.twoinc.client_name;
     params["client_v"] = window.twoinc.client_version;
@@ -53,93 +53,78 @@ let twoincSelectWooHelper = {
    * Generate parameters for selectwoo
    */
   genSelectWooParams: function () {
-    let countryParams = {
-      NO: {
-        twoinc_search_host: window.twoinc.twoinc_search_host_no
-      },
-      GB: {
-        twoinc_search_host: window.twoinc.twoinc_search_host_gb
-      },
-      SE: {
-        twoinc_search_host: window.twoinc.twoinc_search_host_se
-      }
-    };
-
     let country = jQuery("#billing_country").val();
 
-    if (country in countryParams) {
-      let twoincSearchLimit = 50;
-      return {
-        minimumInputLength: 3,
-        width: "100%",
-        escapeMarkup: function (markup) {
-          return markup;
+    let twoincSearchLimit = 50;
+    return {
+      minimumInputLength: 3,
+      width: "100%",
+      escapeMarkup: function (markup) {
+        return markup;
+      },
+      templateResult: function (data) {
+        return data.html;
+      },
+      templateSelection: function (data) {
+        return data.text;
+      },
+      language: {
+        errorLoading: function () {
+          // return wc_country_select_params.i18n_ajax_error
+          // Should not show ajax error if request is cancelled
+          return wc_country_select_params.i18n_searching;
         },
-        templateResult: function (data) {
-          return data.html;
+        inputTooShort: function (t) {
+          t = t.minimum - t.input.length;
+          return 1 == t
+            ? wc_country_select_params.i18n_input_too_short_1
+            : wc_country_select_params.i18n_input_too_short_n.replace("%qty%", t);
         },
-        templateSelection: function (data) {
-          return data.text;
+        noResults: function () {
+          return wc_country_select_params.i18n_no_matches;
         },
-        language: {
-          errorLoading: function () {
-            // return wc_country_select_params.i18n_ajax_error
-            // Should not show ajax error if request is cancelled
-            return wc_country_select_params.i18n_searching;
-          },
-          inputTooShort: function (t) {
-            t = t.minimum - t.input.length;
-            return 1 == t
-              ? wc_country_select_params.i18n_input_too_short_1
-              : wc_country_select_params.i18n_input_too_short_n.replace("%qty%", t);
-          },
-          noResults: function () {
-            return wc_country_select_params.i18n_no_matches;
-          },
-          searching: function () {
-            return wc_country_select_params.i18n_searching;
-          }
-        },
-        ajax: {
-          dataType: "json",
-          delay: 200,
-          url: function (params) {
-            params.page = params.page || 1;
-            return (
-              countryParams[country].twoinc_search_host +
-              "/search?limit=" +
-              twoincSearchLimit +
-              "&offset=" +
-              (params.page - 1) * twoincSearchLimit +
-              "&q=" +
-              encodeURIComponent(params.term)
-            );
-          },
-          data: function () {
-            return {};
-          },
-          processResults: function (response, params) {
-            return {
-              results: twoincSelectWooHelper.extractItems(response),
-              pagination: {
-                more: params.page * twoincSearchLimit < response.data.total
-              }
-            };
-          }
+        searching: function () {
+          return wc_country_select_params.i18n_searching;
         }
-      };
-    } else {
-      jQuery('input[aria-owns="select2-billing_company_display-results"]').css("display: none;");
-      return {
-        minimumInputLength: 10000,
-        width: "100%",
-        language: {
-          inputTooShort: function (t) {
-            return "Please select country Norway or United Kingdom (UK) to search";
+      },
+      ajax: {
+        dataType: "json",
+        delay: 200,
+        url: function (params) {
+          const searchParams = new URLSearchParams({
+            country: country,
+            limit: twoincSearchLimit,
+            offset: (params.page || 0) * twoincSearchLimit,
+            q: decodeURIComponent(params.term)
+          });
+          return twoincUtilHelper.constructTwoincUrl("/companies/v2/company", searchParams);
+        },
+        data: function () {
+          return {};
+        },
+        processResults: function (response, params) {
+          const items = [];
+          for (let i = 0; i < response.items.length; i++) {
+            const item = response.items[i];
+            items.push({
+              id: item.name,
+              text: item.name,
+              html: item.highlight + " (" + item.national_identifier.id + ")",
+              company_id: item.national_identifier.id,
+              lookup_id: item.lookup_id,
+              approved: false
+            });
           }
+
+          return {
+            results: items,
+            pagination: {
+              more: false
+            }
+          };
         }
-      };
-    }
+      }
+    };
   },
 
   /**
@@ -161,30 +146,6 @@ let twoincSelectWooHelper = {
         });
       }
     }
-  },
-
-  /**
-   * Extract and format the dropdown options
-   */
-  extractItems: function (results) {
-    if (results.status !== "success") return [];
-
-    const items = [];
-
-    for (let i = 0; i < results.data.items.length; i++) {
-      const item = results.data.items[i];
-
-      items.push({
-        id: item.name,
-        text: item.name,
-        html: item.highlight + " (" + item.id + ")",
-        company_id: item.id,
-        company_code: item.code,
-        approved: false
-      });
-    }
-
-    return items;
   },
 
   /**
@@ -841,10 +802,11 @@ let twoincDomHelper = {
 
     // Clear the addresses, in case address get request fails
     if (window.twoinc.address_search === "yes") {
-      jQuery("#billing_address_1").val("");
-      jQuery("#billing_address_2").val("");
-      jQuery("#billing_city").val("");
-      jQuery("#billing_postcode").val("");
+      Twoinc.getInstance().setAddress({
+        street_address: "",
+        city: "",
+        postal_code: ""
+      });
     }
 
     jQuery("#select2-billing_company_display-container")
@@ -909,7 +871,7 @@ let twoincDomHelper = {
    * Check if selected country is supported by Twoinc
    */
   isCountrySupported: function () {
-    return ["NO", "GB", "SE"].includes(jQuery("#billing_country").val());
+    return ["NO", "GB", "SE", "NL"].includes(jQuery("#billing_country").val());
   },
 
   /**
@@ -1251,9 +1213,6 @@ class Twoinc {
       country_prefix: null,
       organization_number: null
     };
-    this.customerCompanyInfo = {
-      company_code: null
-    };
     this.customerRepresentative = {
       email: null,
       first_name: null,
@@ -1261,6 +1220,86 @@ class Twoinc {
       phone_number: null
     };
     this.billingCompanySelect = null;
+  }
+
+  enableCompanySearch() {
+    const self = this;
+
+    const $body = jQuery(document.body);
+
+    // Get the billing company field
+    const $billingCompanyDisplay = $body.find("#billing_company_display");
+    const $billingCompany = $body.find("#billing_company");
+
+    // Get the company ID field
+    const $companyId = $body.find("#company_id");
+    if (window.twoinc.company_name_search !== "yes") return;
+    self.billingCompanySelect = $billingCompanyDisplay.selectWoo(
+      twoincSelectWooHelper.genSelectWooParams()
+    );
+    twoincDomHelper.toggleTooltip(
+      "#billing_company_display_field .select2-container",
+      window.twoinc.text.tooltip_company
+    );
+    self.billingCompanySelect.on("select2:select", function (e) {
+      const self = Twoinc.getInstance();
+
+      // Get the option data
+      const data = e.params.data;
+
+      // Set the company name
+      self.customerCompany.company_name = data.id;
+
+      // Set the company ID
+      self.customerCompany.organization_number = data.company_id;
+
+      // Set the company ID to HTML DOM
+      $companyId.val(data.company_id);
+
+      // Set the company name to HTML DOM
+      $billingCompany.val(data.id);
+
+      // Display company ID on the right of selected company name
+      setTimeout(function () {
+        twoincDomHelper.insertFloatingCompany(data.company_id, 0);
+      }, 0);
+
+      // Update the company name in agreement sentence and text in subtitle/description
+      twoincDomHelper.togglePaySubtitleDesc();
+
+      // Get the company approval status
+      self.getApproval();
+
+      // Address search
+      if (window.twoinc.address_search === "yes") {
+        // Fetch the company data
+        self.addressLookup(data);
+      }
+    });
+
+    twoincSelectWooHelper.fixSelectWooPositionCompanyName();
+
+    self.billingCompanySelect.on("select2:open", function (e) {
+      let companyNotInBtn = twoincDomHelper.getCompanyNotInBtnNode();
+      jQuery("#select2-billing_company_display-results").parent().append(companyNotInBtn);
+      twoincSelectWooHelper.waitToFocus("billing_company_display", null, null, function () {
+        jQuery('input[aria-owns="select2-billing_company_display-results"]').on(
+          "input",
+          function (e) {
+            let selectWooParams = twoincSelectWooHelper.genSelectWooParams();
+            if (
+              jQuery(this).val() &&
+              jQuery(this).val().length >= selectWooParams.minimumInputLength
+            ) {
+              jQuery("#company_not_in_btn").show();
+            } else {
+              jQuery("#company_not_in_btn").hide();
+            }
+          }
+        );
+      });
+      twoincSelectWooHelper.addSelectWooFocusFixHandler("billing_company_display");
+    });
   }
 
   /**
@@ -1275,16 +1314,6 @@ class Twoinc {
     // Stop if not the checkout page
     if (jQuery("#order_review").length === 0) return;
 
-    // Get the billing country field
-    const $billingCountry = $body.find("#billing_country");
-
-    // Get the billing company field
-    const $billingCompanyDisplay = $body.find("#billing_company_display");
-    const $billingCompany = $body.find("#billing_company");
-
-    // Get the company ID field
-    const $companyId = $body.find("#company_id");
-
     // If we found the field
     if (jQuery('[name="account_type"]:checked').length > 0) {
       // Toggle the business fields
@@ -1297,89 +1326,15 @@ class Twoinc {
     // Twoinc is hidden if selected account type is not company
     this.isTwoincMethodHidden = !twoincUtilHelper.isCompany(twoincDomHelper.getAccountType());
 
-    function enableCompanySearch() {
-      if (window.twoinc.company_name_search !== "yes") return;
-      Twoinc.getInstance().billingCompanySelect = $billingCompanyDisplay.selectWoo(
-        twoincSelectWooHelper.genSelectWooParams()
-      );
-      twoincDomHelper.toggleTooltip(
-        "#billing_company_display_field .select2-container",
-        window.twoinc.text.tooltip_company
-      );
-      Twoinc.getInstance().billingCompanySelect.on("select2:select", function (e) {
-        // Get the option data
-        const data = e.params.data;
-
-        // Set the company name
-        Twoinc.getInstance().customerCompany.company_name = data.id;
-
-        // Set the company ID
-        Twoinc.getInstance().customerCompany.organization_number = data.company_id;
-
-        // Set the company code
-        Twoinc.getInstance().customerCompanyInfo.company_code = data.company_code;
-
-        // Set the company ID to HTML DOM
-        $companyId.val(data.company_id);
-
-        // Set the company name to HTML DOM
-        $billingCompany.val(data.id);
-
-        // Display company ID on the right of selected company name
-        setTimeout(function () {
-          twoincDomHelper.insertFloatingCompany(data.company_id, 0);
-        }, 0);
-
-        // Update the company name in agreement sentence and text in subtitle/description
-        twoincDomHelper.togglePaySubtitleDesc();
-
-        // Get the company approval status
-        Twoinc.getInstance().getApproval();
-
-        // Address search
-        if (window.twoinc.address_search === "yes") {
-          // Clear the addresses, in case address get request fails
-          jQuery("#billing_address_1").val("");
-          jQuery("#billing_city").val("");
-          jQuery("#billing_postcode").val("");
-
-          // Fetch the company data
-          Twoinc.getInstance().getAddress();
-        }
-      });
-
-      twoincSelectWooHelper.fixSelectWooPositionCompanyName();
-
-      Twoinc.getInstance().billingCompanySelect.on("select2:open", function (e) {
-        let companyNotInBtn = twoincDomHelper.getCompanyNotInBtnNode();
-        jQuery("#select2-billing_company_display-results").parent().append(companyNotInBtn);
-        twoincSelectWooHelper.waitToFocus("billing_company_display", null, null, function () {
-          jQuery('input[aria-owns="select2-billing_company_display-results"]').on(
-            "input",
-            function (e) {
-              let selectWooParams = twoincSelectWooHelper.genSelectWooParams();
-              if (
-                jQuery(this).val() &&
-                jQuery(this).val().length >= selectWooParams.minimumInputLength
-              ) {
-                jQuery("#company_not_in_btn").show();
-              } else {
-                jQuery("#company_not_in_btn").hide();
-              }
-            }
-          );
-        });
-        twoincSelectWooHelper.addSelectWooFocusFixHandler("billing_company_display");
-      });
-    }
+    this.enableCompanySearch();
 
     // Focus on search input on country open
-    $billingCountry.on("select2:open", function (e) {
+    jQuery("#billing_country").on("select2:open", function (e) {
       twoincSelectWooHelper.waitToFocus("billing_country");
     });
 
     // Turn the select input into select2
-    setTimeout(enableCompanySearch, 800);
+    setTimeout(this.enableCompanySearch, 800);
 
     // Disable or enable actions based on the account type
     $body.on("updated_checkout", Twoinc.getInstance().onUpdatedCheckout);
@@ -1400,7 +1355,7 @@ class Twoinc {
     $body.on("click", "#search_company_btn", function () {
       window.twoinc.company_name_search = "yes";
 
-      setTimeout(enableCompanySearch, 800);
+      setTimeout(this.enableCompanySearch, 800);
       jQuery("#billing_company").val("");
       jQuery("#company_id").val("");
       Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData();
@@ -1458,10 +1413,6 @@ class Twoinc {
 
     twoincDomHelper.loadUserMetaInputs();
     if (loadSavedInputs) twoincDomHelper.loadStorageInputs();
-    if (jQuery(".floating-company-id") && jQuery(".floating-company-id").text()) {
-      // Trigger address search
-      Twoinc.getInstance().getAddress();
-    }
     setTimeout(function () {
       twoincDomHelper.saveCheckoutInputs();
       Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData();
@@ -1605,7 +1556,7 @@ class Twoinc {
 
       // Create an order intent
       const approvalResponse = jQuery.ajax({
-        url: twoincUtilHelper.contructTwoincUrl("/v1/order_intent"),
+        url: twoincUtilHelper.constructTwoincUrl("/v1/order_intent"),
         contentType: "application/json; charset=utf-8",
         dataType: "json",
         method: "POST",
@@ -1725,43 +1676,27 @@ class Twoinc {
     }, 1000);
   }
 
-  /**
-   * Get the address from address search
-   */
-  getAddress() {
-    // Get country
-    let country_prefix = Twoinc.getInstance().customerCompany.country_prefix;
-    if (!country_prefix || !["GB", "SE"].includes(country_prefix)) country_prefix = "NO";
-
-    // Get company ID
-    let company_id = jQuery("#company_id").val();
-
+  addressLookup(selectedCompany) {
+    const self = this;
     const addressResponse = jQuery.ajax({
       dataType: "json",
-      url: twoincUtilHelper.contructTwoincUrl(
-        "/v1/" + country_prefix + "/company/" + company_id + "/address"
-      )
+      url: twoincUtilHelper.constructTwoincUrl(`/companies/v2/company/${selectedCompany.lookup_id}`)
     });
-
     addressResponse.done(function (response) {
-      // If we have the company location
-      if (response.address) {
-        // Get the company location object
-        const companyLocation = response.address;
-
-        // Populate the street name and house number fields
-        jQuery("#billing_address_1").val(companyLocation.streetAddress);
-
-        // Populate the city
-        jQuery("#billing_city").val(companyLocation.city);
-
-        // Populate the postal code
-        jQuery("#billing_postcode").val(companyLocation.postalCode);
-
-        // Update order review in case there is a shipping change
-        jQuery(document.body).trigger("update_checkout");
+      // Use new address lookup by default
+      if (response.addresses) {
+        self.setAddress(response.addresses[0]);
       }
     });
+  }
+
+  setAddress(address) {
+    jQuery("#billing_address_1").val(address.street_address);
+    jQuery("#billing_address_2").val("");
+    jQuery("#billing_city").val(address.city);
+    jQuery("#billing_postcode").val(address.postal_code);
+    // Update order review in case there is a shipping change
+    jQuery(document.body).trigger("update_checkout");
   }
 
   /**
@@ -1783,7 +1718,7 @@ class Twoinc {
 
     // Create a get due in days request
     const dueInDaysResponse = jQuery.ajax({
-      url: twoincUtilHelper.contructTwoincUrl("/v1/payment_terms"),
+      url: twoincUtilHelper.constructTwoincUrl("/v1/payment_terms"),
       contentType: "application/json; charset=utf-8",
       dataType: "json",
       method: "POST",
