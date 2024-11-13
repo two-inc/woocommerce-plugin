@@ -38,7 +38,7 @@ services:
       WORDPRESS_ADMIN_PASSWORD: twoinb2b
       WORDPRESS_ADMIN_EMAIL: admin@two.inc
       WOOCOM_PLUGIN_CONFIG_JSON: ${WOOCOM_PLUGIN_CONFIG_JSON}
-      WOOCOM_CURRENCY: NOK
+      WOOCOM_CURRENCY: EUR
     volumes:
       - ./volumes/wordpress:/var/www/html
       - .:/opt/tillit-payment-gateway
