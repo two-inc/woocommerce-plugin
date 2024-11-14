@@ -20,7 +20,9 @@ $activesiteplugins = apply_filters('active_sitewide_plugins', get_site_option('a
 if ($activesiteplugins) {
     $activeplugins = array_merge($activeplugins, array_keys($activesiteplugins));
 }
-if (!in_array('woocommerce/woocommerce.php', $activeplugins)) return;
+if (!in_array('woocommerce/woocommerce.php', $activeplugins)) {
+    return;
+}
 
 
 // Define the plugin URL
@@ -63,7 +65,6 @@ function load_twoinc_classes()
     // JSON endpoint to get Two order info
     add_action('rest_api_init', 'register_get_order_info');
 
-    add_action('template_redirect', 'WC_Twoinc::one_click_setup');
     // Confirm order after returning from twoinc checkout-page, DO NOT CHANGE HOOKS
     add_action('template_redirect', 'WC_Twoinc::process_confirmation_header_redirect');
     // add_action('template_redirect', 'WC_Twoinc::before_process_confirmation');
@@ -104,7 +105,7 @@ function register_plugin_status_checking()
         'twoinc_plugin_status_checking',
         array(
             'methods' => 'GET',
-            'callback' => function($request) {
+            'callback' => function ($request) {
                 return [
                     'version' => get_plugin_version()
                 ];
@@ -218,7 +219,7 @@ function twoinc_settings_link($links)
  */
 function get_plugin_version()
 {
-    if(!function_exists('get_plugin_data')){
+    if (!function_exists('get_plugin_data')) {
         require_once(ABSPATH . 'wp-admin/includes/plugin.php');
     }
 
