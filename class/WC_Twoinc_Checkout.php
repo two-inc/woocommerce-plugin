@@ -235,7 +235,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     'label'       => __('Invoice email address', 'twoinc-payment-gateway'),
                     'class'       => array('form-row-wide'),
                     'type'        => 'email',
-                    'placeholder' => sprintf(__('Only for invoices being sent by %s', 'twoinc-payment-gateway'), __('Two', 'twoinc-payment-gateway')),
+                    'placeholder' => sprintf(__('Only for invoices being sent by %s', 'twoinc-payment-gateway'), WC_Twoinc::PRODUCT_NAME),
                     'validate'    => array('email'),
                     'required'    => false,
                     'priority'    => $fields['billing']['billing_email']['priority'] + 1
