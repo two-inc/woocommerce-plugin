@@ -19,7 +19,7 @@ repos:
         language: system
         types:
           - php
-  - repo: git@github.com:two-inc/git-hooks
+  - repo: https://github.com/two-inc/git-hooks
     rev: 24.07.26
     hooks:
       - id: commit-msg
