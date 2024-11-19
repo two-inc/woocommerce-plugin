@@ -16,6 +16,6 @@ until [ $counter -gt 15 ]; do
 done
 wp option update permalink_structure /%year%/%monthnum%/%day%/%postname%/
 # wp plugin install tillit-payment-gateway --activate
-wp option update woocommerce_woocommerce-gateway-tillit_settings --format=json </opt/tillit-payment-gateway/config/${WOOCOM_CONFIG_JSON:-local.json}
+wp option update woocommerce_woocommerce-gateway-tillit_settings --format=json </opt/tillit-payment-gateway/${WOOCOM_PLUGIN_CONFIG_JSON:-docker/config/local.json}
 wp option update woocommerce_currency $WOOCOM_CURRENCY
 sleep infinity
