@@ -321,7 +321,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     'tooltip_phone' => __('We require your phone number so we can verify your purchase.', 'twoinc-payment-gateway'),
                     'tooltip_company' => __('We use your company name to automatically populate your address and register the company that made the purchase.', 'twoinc-payment-gateway'),
                 ],
-                'twoinc_checkout_host' => $this->wc_twoinc->twoinc_checkout_host,
+                'twoinc_checkout_host' => $this->wc_twoinc->get_twoinc_checkout_host(),
                 'company_name_search' => $this->wc_twoinc->get_option('enable_company_name'),
                 'address_search' => $this->wc_twoinc->get_option('address_search'),
                 'enable_order_intent' => $this->wc_twoinc->get_option('enable_order_intent'),

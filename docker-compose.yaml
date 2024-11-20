@@ -5,7 +5,7 @@ services:
     container_name: wordpress
     extra_hosts:
       - "portal.localhost:host-gateway"
-    image: wordpress:latest
+    image: wordpress:6.7.0-php8.2-apache
     restart: always
     ports:
       - 8888:80
@@ -16,7 +16,7 @@ services:
       WORDPRESS_DB_NAME: twocommerce
       WORDPRESS_HOME: "http://localhost:8888"
       WORDPRESS_SITEURL: "http://localhost:8888"
-      WORDPRESS_DEBUG: ""
+      WORDPRESS_DEBUG: "true"
     volumes:
       - ./volumes/wordpress:/var/www/html
       - .:/var/www/html/wp-content/plugins/tillit-payment-gateway
@@ -26,7 +26,7 @@ services:
 
   wpcli:
     container_name: wpcli
-    image: wordpress:cli
+    image: wordpress:cli-2.11.0-php8.2
     user: "33:33"
     entrypoint: /opt/tillit-payment-gateway/docker/wpcli.sh
     restart: always

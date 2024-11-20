@@ -41,12 +41,6 @@ if (!class_exists('WC_Twoinc')) {
             $this->init_form_fields();
             $this->init_settings();
 
-            // Twoinc api host
-            $this->vendor_name = $this->get_option('vendor_name');
-            $this->twoinc_checkout_host = $this->get_twoinc_checkout_host();
-
-            $this->plugin_version = get_plugin_version();
-
             $this->title = sprintf(
                 __($this->get_option('title'), 'twoinc-payment-gateway'),
                 strval($this->get_merchant_default_days_on_invoice())
@@ -453,14 +447,14 @@ if (!class_exists('WC_Twoinc')) {
                 print('<div style="margin-top:20px;float:left;">');
 
                 if ($has_twoinc_refund) {
-                    print('<a href="' . $this->twoinc_checkout_host . "/v1/invoice/{$twoinc_order_id}/pdf?lang="
+                    print('<a href="' . $this->get_twoinc_checkout_host() . "/v1/invoice/{$twoinc_order_id}/pdf?lang="
                           . WC_Twoinc_Helper::get_locale()
                           . '"><button type="button" class="button">Download credit note</button></a><br><br>');
-                    print('<a href="' . $this->twoinc_checkout_host . "/v1/invoice/{$twoinc_order_id}/pdf?v=original&lang="
+                    print('<a href="' . $this->get_twoinc_checkout_host() . "/v1/invoice/{$twoinc_order_id}/pdf?v=original&lang="
                           . WC_Twoinc_Helper::get_locale()
                           . '"><button type="button" class="button">Download original invoice</button></a>');
                 } else {
-                    print('<a href="' . $this->twoinc_checkout_host . "/v1/invoice/{$twoinc_order_id}/pdf?v=original&lang="
+                    print('<a href="' . $this->get_twoinc_checkout_host() . "/v1/invoice/{$twoinc_order_id}/pdf?v=original&lang="
                           . WC_Twoinc_Helper::get_locale()
                           . '"><button type="button" class="button">Download invoice</button></a>');
                 }
@@ -2464,7 +2458,7 @@ if (!class_exists('WC_Twoinc')) {
         private function make_request($endpoint, $payload = [], $method = 'POST', $params = array())
         {
             $params['client'] = 'wp';
-            $params['client_v'] = $this->plugin_version;
+            $params['client_v'] = get_plugin_version();
             $headers = [
                'Accept-Language' => WC_Twoinc_Helper::get_locale(),
                'Content-Type' => 'application/json; charset=utf-8',
@@ -2473,7 +2467,7 @@ if (!class_exists('WC_Twoinc')) {
             if (isset($_SERVER['HTTP_X_CLOUD_TRACE_CONTEXT'])) {
                 $headers['HTTP_X_CLOUD_TRACE_CONTEXT'] = $_SERVER['HTTP_X_CLOUD_TRACE_CONTEXT'];
             }
-            return wp_remote_request(sprintf('%s%s?%s', $this->twoinc_checkout_host, $endpoint, http_build_query($params)), [
+            return wp_remote_request(sprintf('%s%s?%s', $this->get_twoinc_checkout_host(), $endpoint, http_build_query($params)), [
                 'method' => $method,
                 'headers' => $headers,
                 'timeout' => 30,
