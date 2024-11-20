@@ -40,11 +40,11 @@ if (!class_exists('WC_Twoinc_Helper')) {
         public static function get_twoinc_error_msg($response)
         {
             if (!$response) {
-                return sprintf(__('Empty response from %s.', 'twoinc-payment-gateway'), __('Two', 'twoinc-payment-gateway'));
+                return sprintf(__('Empty response from %s.', 'twoinc-payment-gateway'), WC_Twoinc::PRODUCT_NAME);
             }
 
             if ($response['response'] && $response['response']['code'] && $response['response']['code'] >= 400) {
-                return sprintf(__('Response code from %s: %d', 'twoinc-payment-gateway'), __('Two', 'twoinc-payment-gateway'), $response['response']['code']);
+                return sprintf(__('Response code from %s: %d', 'twoinc-payment-gateway'), WC_Twoinc::PRODUCT_NAME, $response['response']['code']);
             }
 
             if ($response['body']) {
@@ -194,8 +194,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
         {
             do_action('twoinc_send_alert_email', $content, $subject);
 
-            $email = 'woocom-alerts@two.inc';
-            return wp_mail($email, $subject, $content, "Reply-To: " . $email . "\r\n");
+            return wp_mail(WC_Twoinc::ALERT_EMAIL_ADDRESS, $subject, $content, "Reply-To: " . $email . "\r\n");
 
         }
 
@@ -767,19 +766,17 @@ if (!class_exists('WC_Twoinc_Helper')) {
             if (preg_match('/^localhost(?::[0-9]{1,5})?$/', $hostname) === 1) {
                 return true;
             }
+
+            // Configured dev sites via env var
             $env_dev_hostnames = getenv('TWOINC_DEV_HOSTNAMES');
             if ($env_dev_hostnames && in_array($hostname, explode(',', $env_dev_hostnames))) {
                 return true;
             }
 
-            if (str_ends_with($hostname, "two.inc")) {
-                // Production sites using two.inc subdomains
-                $twoinc_prod_sites = '/^(?:www\.)?(?:(?:.+\.)?shop|tellit|iem|cubelighting|digg|morgenlevering|arkwrightx|kandidate|kandidate-internal)\.two\.inc$/';
-                if (preg_match($twoinc_prod_sites, $hostname) === 1) {
-                    return false;
-                } else {
-                    return true;
-                }
+            // Dev subdomains
+            $twoinc_dev_sites = '/^.*\.(?:staging|release|experimental|perf|cyber|demo|sandbox)\.two\.inc$/';
+            if (preg_match($twoinc_dev_sites, $hostname) === 1) {
+                return true;
             }
 
             // Merchant's staging
