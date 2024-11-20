@@ -19,7 +19,7 @@
   "mark_tillit_fields_required": "yes",
   "add_field_department": "yes",
   "add_field_project": "yes",
-  "use_account_type_buttons": "no",
+  "use_account_type_buttons": "yes",
   "show_abt_link": "yes",
   "default_to_b2c": "no",
   "invoice_fee_to_buyer": "no",

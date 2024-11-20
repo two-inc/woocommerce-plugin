@@ -135,7 +135,7 @@ if (!class_exists('WC_Twoinc')) {
         /**
          * Get twoinc checkout host based on current settings
          */
-        private function get_twoinc_checkout_host()
+        public function get_twoinc_checkout_host()
         {
             if (WC_Twoinc_Helper::is_twoinc_development()) {
                 return $this->get_option('test_checkout_host');
