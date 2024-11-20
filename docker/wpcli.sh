@@ -16,8 +16,8 @@ until [ $counter -gt 4 ]; do
   counter=$(($counter + 1))
 done
 wp option update permalink_structure /%year%/%monthnum%/%day%/%postname%/
-#wp plugin activate tillit-payment-gateway
-wp option update woocommerce_woocommerce-gateway-tillit_settings --format=json </opt/tillit-payment-gateway/${WOOCOM_PLUGIN_CONFIG_JSON:-docker/config/local.json}
+#wp plugin activate abn-payment-gateway
+wp option update woocommerce_woocommerce-gateway-abn_settings --format=json </opt/abn-payment-gateway/${WOOCOM_PLUGIN_CONFIG_JSON:-docker/config/local.json}
 wp option update woocommerce_currency $WOOCOM_CURRENCY
 wp option update woocommerce_default_country $WOOCOM_DEFAULT_COUNTRY
 sleep infinity

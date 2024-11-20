@@ -1,50 +1,50 @@
 <div class="checkout woocommerce-checkout custom-checkout">
-    <div class="twoinc-inp-container">
+    <div class="abn-inp-container">
         <div id="billing_phone_display_field">
-            <label for="billing_phone_display"><?php esc_html_e('Phone', 'twoinc-payment-gateway'); ?> <abbr class="required" title="required">*</abbr></label>
+            <label for="billing_phone_display"><?php esc_html_e('Phone', 'abn-payment-gateway'); ?> <abbr class="required" title="required">*</abbr></label>
             <br>
             <input type="text" name="billing_phone_display" id="billing_phone_display">
         </div>
     </div>
-    <div class="twoinc-inp-container hidden">
+    <div class="abn-inp-container hidden">
         <div id="billing_phone_field">
             <input type="text" name="billing_phone" id="billing_phone">
         </div>
     </div>
-    <div class="twoinc-inp-container hidden">
+    <div class="abn-inp-container hidden">
         <div id="billing_country_field">
-            <label for="billing_country"><?php esc_html_e('Country / Region', 'twoinc-payment-gateway'); ?> <abbr class="required" title="required">*</abbr></label>
+            <label for="billing_country"><?php esc_html_e('Country / Region', 'abn-payment-gateway'); ?> <abbr class="required" title="required">*</abbr></label>
             <br>
             <select name="billing_country" id="billing_country">
                 <?php
                     $countries = WC()->countries->get_countries();
-                    $base_country = WC()->countries->get_base_country();
-                    foreach ($countries as $country_code => $country_name) {
-                        if ($base_country === $country_code) {
-                            printf('<option value="%s" selected>%s</option>', $country_code, $country_name);
-                        } else {
-                            printf('<option value="%s">%s</option>', $country_code, $country_name);
-                        }
-                    }
-                ?>
+            $base_country = WC()->countries->get_base_country();
+            foreach ($countries as $country_code => $country_name) {
+                if ($base_country === $country_code) {
+                    printf('<option value="%s" selected>%s</option>', $country_code, $country_name);
+                } else {
+                    printf('<option value="%s">%s</option>', $country_code, $country_name);
+                }
+            }
+            ?>
             </select>
         </div>
     </div>
-    <div class="twoinc-inp-container">
+    <div class="abn-inp-container">
         <div id="billing_company_display_field">
-            <label for="billing_company_display"><?php esc_html_e('Company name', 'twoinc-payment-gateway'); ?> <abbr class="required" title="required">*</abbr></label>
+            <label for="billing_company_display"><?php esc_html_e('Company name', 'abn-payment-gateway'); ?> <abbr class="required" title="required">*</abbr></label>
             <br>
             <select name="billing_company_display" class="billing_company_selectwoo" id="billing_company_display">
                 <option>&nbsp;</option>
             </select>
         </div>
     </div>
-    <div class="twoinc-inp-container hidden">
+    <div class="abn-inp-container hidden">
         <div id="billing_company_field">
             <input type="text" name="billing_company" id="billing_company">
         </div>
     </div>
-    <div class="twoinc-inp-container hidden">
+    <div class="abn-inp-container hidden">
         <div id="company_id_field">
             <input type="text" name="company_id" id="company_id">
         </div>
@@ -81,7 +81,7 @@
         margin-top: 20px;
         margin-bottom: 20px;
     }
-    .custom-checkout .twoinc-inp-container {
+    .custom-checkout .abn-inp-container {
         margin: auto;
     }
 </style>

@@ -1,15 +1,15 @@
-# Two WooCommerce Plugin
+# ABN WooCommerce Plugin
 
 ## Installation
 
-Up to date instructions on how to install the plugin via the GUI can be found on our [docs site](https://docs.two.inc/developer-portal/plugins/woocommerce).
+Up to date instructions on how to install the plugin via the GUI can be found on our [docs site](https://docs.achterafbetalen.co/developer-portal/plugins/woocommerce).
 
 The following instructions are for developers who wish to install the plugin manually.
 
 ### Using zip file
 
 ```bash
-git clone git@github.com:two-inc/woocommerce-plugin.git
+git clone git@github.com:two-inc/woocommerce-abn-plugin.git
 cd woocommerce-plugin
 make archive
 ```
@@ -17,7 +17,7 @@ make archive
 ### Using the CLI
 
 ```bash
-wp plugin install tillit-payment-gateway --activate
+wp plugin install abn-payment-gateway --activate
 ```
 
 This will produce a zip file which can be uploaded to your Wordpress site.
@@ -47,7 +47,7 @@ cat > docker/config/staging.json <<EOF
   "enabled": "yes",
   "title": "Business invoice %s days",
   "subtitle": "Receive the invoice via PDF and email",
-  "test_checkout_host": "https://api.staging.two.inc",
+  "test_checkout_host": "https://api.staging.achterafbetalen.abnamro.nl",
   "clear_options_on_deactivation": "no",
   "section_api_credentials": "",
   "api_key": "secret_test_xxx",
