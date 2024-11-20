@@ -9,4 +9,4 @@ push = true
 
 [tool.bumpver.file_patterns]
 "readme.txt" = ['Stable tag: {version}']
-"tillit-payment-gateway.php" = ['Version: {version}']
+"abn-payment-gateway.php" = ['Version: {version}']

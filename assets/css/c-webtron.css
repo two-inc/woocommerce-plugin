@@ -1,8 +1,8 @@
 .woocommerce-checkout
   #payment
   ul.payment_methods
-  li.wc_payment_method.payment_method_woocommerce-gateway-tillit
-  > label[for="payment_method_woocommerce-gateway-tillit"]
+  li.wc_payment_method.payment_method_woocommerce-gateway-abn
+  > label[for="payment_method_woocommerce-gateway-abn"]
   > img {
   height: 12px;
   margin: 0 0 8px 4px;
@@ -42,8 +42,8 @@
 .woocommerce-checkout
   #payment
   ul.payment_methods
-  li.wc_payment_method.payment_method_woocommerce-gateway-tillit
-  .twoinc-subtitle {
+  li.wc_payment_method.payment_method_woocommerce-gateway-abn
+  .abn-subtitle {
   margin-left: unset;
   color: #777;
 }
