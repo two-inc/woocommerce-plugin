@@ -8,6 +8,7 @@
 cypress/ export-ignore
 docker/ export-ignore
 snippets/ export-ignore
+scripts/ export-ignore
 
 # Files to ignore
 .distignore export-ignore

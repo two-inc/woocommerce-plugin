@@ -5,6 +5,7 @@
 cypress/
 docker/
 snippets/
+scripts/
 
 # Files to ignore
 .distignore

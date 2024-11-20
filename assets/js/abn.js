@@ -1,4 +1,4 @@
-let twoincUtilHelper = {
+let abnUtilHelper = {
   /**
    * Check if selected account type is business
    */
@@ -21,13 +21,13 @@ let twoincUtilHelper = {
   },
 
   /**
-   * Construct url to Twoinc checkout api
+   * Construct url to ABN checkout api
    */
-  constructTwoincUrl: function (path, params) {
+  constructABNUrl: function (path, params) {
     if (!params) params = {};
-    params["client"] = window.twoinc.client_name;
-    params["client_v"] = window.twoinc.client_version;
-    return window.twoinc.twoinc_checkout_host + path + "?" + new URLSearchParams(params).toString();
+    params["client"] = window.abn.client_name;
+    params["client_v"] = window.abn.client_version;
+    return window.abn.abn_checkout_host + path + "?" + new URLSearchParams(params).toString();
   },
 
   /**
@@ -48,14 +48,14 @@ let twoincUtilHelper = {
   }
 };
 
-let twoincSelectWooHelper = {
+let abnSelectWooHelper = {
   /**
    * Generate parameters for selectwoo
    */
   genSelectWooParams: function () {
     let country = jQuery("#billing_country").val();
 
-    let twoincSearchLimit = 50;
+    let abnSearchLimit = 50;
     return {
       minimumInputLength: 3,
       width: "100%",
@@ -93,11 +93,11 @@ let twoincSelectWooHelper = {
         url: function (params) {
           const searchParams = new URLSearchParams({
             country: country,
-            limit: twoincSearchLimit,
-            offset: (params.page || 0) * twoincSearchLimit,
+            limit: abnSearchLimit,
+            offset: (params.page || 0) * abnSearchLimit,
             q: decodeURIComponent(params.term)
           });
-          return twoincUtilHelper.constructTwoincUrl("/companies/v2/company", searchParams);
+          return abnUtilHelper.constructABNUrl("/companies/v2/company", searchParams);
         },
         data: function () {
           return {};
@@ -132,7 +132,7 @@ let twoincSelectWooHelper = {
    * https://github.com/select2/select2/issues/4614
    */
   fixSelectWooPositionCompanyName: function () {
-    if (window.twoinc.company_name_search === "yes") {
+    if (window.abn.company_name_search === "yes") {
       const billingCompanyDisplay = jQuery("#billing_company_display").data("select2");
 
       if (billingCompanyDisplay) {
@@ -197,7 +197,7 @@ let twoincSelectWooHelper = {
               addedNode.parentNode &&
               addedNode.parentNode.id === "select2-" + selectWooElemId + "-results"
             ) {
-              twoincSelectWooHelper.waitToFocus("billing_company_display", 80, 20);
+              abnSelectWooHelper.waitToFocus("billing_company_display", 80, 20);
             }
           }
         });
@@ -211,7 +211,7 @@ let twoincSelectWooHelper = {
   }
 };
 
-let twoincDomHelper = {
+let abnDomHelper = {
   /**
    * Initialize account type buttons
    */
@@ -223,7 +223,7 @@ let twoincDomHelper = {
         .parent()
         .prepend(jQuery("#woocommerce-account-type-container"));
       // Select the account type button based on radio val
-      let accountType = twoincDomHelper.getAccountType();
+      let accountType = abnDomHelper.getAccountType();
       if (accountType) {
         jQuery("form.checkout.woocommerce-checkout").prepend(jQuery(".account-type-wrapper"));
         jQuery('.account-type-button[account-type-name="' + accountType + '"]').addClass(
@@ -233,7 +233,7 @@ let twoincDomHelper = {
 
       // Show the radios or the buttons for account type if number of options > 1
       if (jQuery('input[name="account_type"]').length > 1) {
-        if (window.twoinc.use_account_type_buttons !== "yes") {
+        if (window.abn.use_account_type_buttons !== "yes") {
           // Show if shop configured to use buttons (and customer details form is visible, i.e. no custom payment page is displayed)
           if (jQuery("#customer_details:visible").length !== 0) {
             jQuery("#account_type_field").show();
@@ -249,49 +249,49 @@ let twoincDomHelper = {
         // If Kco checkout page is displayed
         // Switching to another payment method would make account type "business" after page is reloaded
         jQuery("#klarna-checkout-select-other").on("click", function () {
-          sessionStorage.setItem("twoincAccountType", "business");
+          sessionStorage.setItem("abnAccountType", "business");
         });
         // Clicking Business button
         jQuery('.account-type-button[account-type-name="business"]').on("click", function () {
           // Save the account type
-          sessionStorage.setItem("twoincAccountType", twoincDomHelper.getAccountType());
+          sessionStorage.setItem("abnAccountType", abnDomHelper.getAccountType());
 
           // After page is reloaded, clicking private button will route user back to Kco
           sessionStorage.setItem("privateClickToKco", "y");
           jQuery("#klarna-checkout-select-other").click();
         });
       } else if (jQuery(".woocommerce-account-type-fields").length > 0) {
-        // If Normal checkout page is displayed, and Twoinc's account type radios are present
+        // If Normal checkout page is displayed, and ABN's account type radios are present
         jQuery(
           '.account-type-button[account-type-name="personal"], .account-type-button[account-type-name="sole_trader"]'
         ).on("click", function () {
-          let hasNoPaymentExceptTwoincKco =
+          let hasNoPaymentExceptABNKco =
             jQuery(
-              ".wc_payment_method:not(.payment_method_woocommerce-gateway-tillit):not(.payment_method_kco)"
+              ".wc_payment_method:not(.payment_method_woocommerce-gateway-abn):not(.payment_method_kco)"
             ).length == 0;
-          if (hasNoPaymentExceptTwoincKco) {
+          if (hasNoPaymentExceptABNKco) {
             // Kco is the only payment method in private/soletrader, so clear and click it to trigger
             jQuery("#payment_method_kco").prop("checked", false);
           }
-          sessionStorage.setItem("twoincAccountType", twoincDomHelper.getAccountType());
+          sessionStorage.setItem("abnAccountType", abnDomHelper.getAccountType());
 
-          if (sessionStorage.getItem("privateClickToKco") === "y" || hasNoPaymentExceptTwoincKco) {
+          if (sessionStorage.getItem("privateClickToKco") === "y" || hasNoPaymentExceptABNKco) {
             sessionStorage.removeItem("privateClickToKco");
             // Clicking private button will route user back to Kco, only if user visited Kco before, or if Kco is the only payment left
             jQuery("#payment_method_kco").click();
           } else if (
-            sessionStorage.getItem("businessClickToTwoinc") === "y" &&
-            twoincDomHelper.isTwoincVisible()
+            sessionStorage.getItem("businessClickToABN") === "y" &&
+            abnDomHelper.isABNVisible()
           ) {
-            // Clicking business button will auto select Twoinc payment, if Twoinc was selected before account type is changed
-            jQuery("#payment_method_woocommerce-gateway-tillit").click();
+            // Clicking business button will auto select ABN payment, if ABN was selected before account type is changed
+            jQuery("#payment_method_woocommerce-gateway-abn").click();
           }
         });
       }
 
       // If account type button is clicked, account type is saved in case the page will be reloaded
       jQuery(".account-type-button").on("click", function () {
-        sessionStorage.setItem("twoincAccountType", twoincDomHelper.getAccountType());
+        sessionStorage.setItem("abnAccountType", abnDomHelper.getAccountType());
       });
 
       // Temporarily click the banner buttons if radio button is changed
@@ -301,22 +301,22 @@ let twoincDomHelper = {
         ).click();
       });
 
-      // If business account type is selected and the payment method selected was Twoinc, reselect it
+      // If business account type is selected and the payment method selected was ABN, reselect it
       jQuery('.account-type-button[account-type-name="business"]').on("click", function () {
-        if (sessionStorage.getItem("businessClickToTwoinc") === "y") {
-          // Clicking business button will auto select Twoinc payment, if Twoinc was selected before account type is changed
-          jQuery("#payment_method_woocommerce-gateway-tillit").click();
+        if (sessionStorage.getItem("businessClickToABN") === "y") {
+          // Clicking business button will auto select ABN payment, if ABN was selected before account type is changed
+          jQuery("#payment_method_woocommerce-gateway-abn").click();
         }
       });
 
       // If Kco button is clicked, account type must not be business
-      jQuery("#payment_method_kco").on("change", Twoinc.getInstance().onChangedToKco);
+      jQuery("#payment_method_kco").on("change", ABN.getInstance().onChangedToKco);
 
       // Init the hidden Company name field
-      jQuery("#billing_company").val(twoincDomHelper.getCompanyName().trim());
+      jQuery("#billing_company").val(abnDomHelper.getCompanyName().trim());
 
       // Select last saved account type in case of redirect from another payment method
-      accountType = sessionStorage.getItem("twoincAccountType");
+      accountType = sessionStorage.getItem("abnAccountType");
       if (accountType) {
         jQuery('.account-type-button[account-type-name="' + accountType + '"]').click();
       }
@@ -357,30 +357,30 @@ let twoincDomHelper = {
    */
   addPlaceholder: function ($el, name) {
     // Get an existing placeholder
-    let $placeholder = jQuery("#twoinc-" + name + "-source");
+    let $placeholder = jQuery("#abn-" + name + "-source");
 
     // Stop if we already have a placeholder
     if ($placeholder.length > 0) return;
 
     // Create a placeholder
-    $placeholder = jQuery('<div id="twoinc-' + name + '-source" class="twoinc-source"></div>');
+    $placeholder = jQuery('<div id="abn-' + name + '-source" class="abn-source"></div>');
 
     // Add placeholder after element
     $placeholder.insertAfter($el);
   },
 
   /**
-   * Move a field to Twoinc template location and leave a placeholder
+   * Move a field to ABN template location and leave a placeholder
    */
   moveField: function (selector, name) {
     // Get the element
     const $el = jQuery("#" + selector);
 
     // Add a placeholder
-    twoincDomHelper.addPlaceholder($el, name);
+    abnDomHelper.addPlaceholder($el, name);
 
     // Get the target
-    const $target = jQuery("#twoinc-" + name + "-target");
+    const $target = jQuery("#abn-" + name + "-target");
 
     // Move the input
     $el.insertAfter($target);
@@ -394,7 +394,7 @@ let twoincDomHelper = {
     const $el = jQuery("#" + selector);
 
     // Get the target
-    const $source = jQuery("#twoinc-" + name + "-source");
+    const $source = jQuery("#abn-" + name + "-source");
 
     // Move the input
     if ($source.length > 0) {
@@ -403,36 +403,36 @@ let twoincDomHelper = {
   },
 
   /**
-   * Move the fields to their original or Twoinc template location
+   * Move the fields to their original or ABN template location
    */
   positionFields: function () {
     setTimeout(function () {
       // Only swap fields around if the account type is selectable
       if (jQuery('input[name="account_type"]').length > 1) {
         // Get the account type
-        const accountType = twoincDomHelper.getAccountType();
+        const accountType = abnDomHelper.getAccountType();
 
         // If business account
-        if (twoincUtilHelper.isCompany(accountType)) {
-          twoincDomHelper.moveField("billing_first_name_field", "fn");
-          twoincDomHelper.moveField("billing_last_name_field", "ln");
-          twoincDomHelper.moveField("billing_phone_field", "ph");
-          twoincDomHelper.moveField("billing_email_field", "em");
+        if (abnUtilHelper.isCompany(accountType)) {
+          abnDomHelper.moveField("billing_first_name_field", "fn");
+          abnDomHelper.moveField("billing_last_name_field", "ln");
+          abnDomHelper.moveField("billing_phone_field", "ph");
+          abnDomHelper.moveField("billing_email_field", "em");
         } else {
-          twoincDomHelper.revertField("billing_first_name_field", "fn");
-          twoincDomHelper.revertField("billing_last_name_field", "ln");
-          twoincDomHelper.revertField("billing_phone_field", "ph");
-          twoincDomHelper.revertField("billing_email_field", "em");
+          abnDomHelper.revertField("billing_first_name_field", "fn");
+          abnDomHelper.revertField("billing_last_name_field", "ln");
+          abnDomHelper.revertField("billing_phone_field", "ph");
+          abnDomHelper.revertField("billing_email_field", "em");
         }
       }
 
-      twoincDomHelper.toggleTooltip(
+      abnDomHelper.toggleTooltip(
         '#billing_phone, label[for="billing_phone"]',
-        window.twoinc.text.tooltip_phone
+        window.abn.text.tooltip_phone
       );
-      twoincDomHelper.toggleTooltip(
+      abnDomHelper.toggleTooltip(
         '#billing_company_display_field .select2-container, label[for="billing_company_display"], #billing_company, label[for="billing_company"]',
-        window.twoinc.text.tooltip_company
+        window.abn.text.tooltip_company
       );
     }, 100);
   },
@@ -466,24 +466,33 @@ let twoincDomHelper = {
         $input.attr("required", true);
 
         // Add 'required' visual cue
-        if ($row.find("label .twoinc-required, label .required").length == 0) {
+        if ($row.find("label .abn-required, label .required").length == 0) {
           $row
             .find("label")
-            .append('<abbr class="required twoinc-required" title="required">*</abbr>');
+            .append('<abbr class="required abn-required" title="required">*</abbr>');
         }
         $row.find("label .optional").hide();
       } else {
         $input.attr("required", false);
 
         // Show the hidden optional visual cue
-        $row.find("label .twoinc-required").remove();
+        $row.find("label .abn-required").remove();
         $row.find("label .optional").show();
       }
     });
   },
 
+  toggleABNTermsVisibility: function (visible) {
+    field = jQuery("#abn_terms_field");
+    if (visible) {
+      field.removeClass("hidden");
+    } else {
+      field.addClass("hidden");
+    }
+  },
+
   /**
-   * Toggle the custom business fields for Twoinc
+   * Toggle the custom business fields for ABN
    */
   toggleBusinessFields: function (accountType) {
     // Get the targets
@@ -497,7 +506,8 @@ let twoincDomHelper = {
       "#billing_invoice_email_field",
       "#department_field",
       "#project_field",
-      "#purchase_order_number_field"
+      "#purchase_order_number_field",
+      "#invoice_email_field"
     ];
     let visibleNonbusinessTargets = ["#billing_phone_field", "#billing_company_field"];
     let visibleBusinessTargets = [
@@ -510,18 +520,19 @@ let twoincDomHelper = {
     ];
     let requiredBusinessTargets = [];
 
-    if (twoincDomHelper.isSelectedPaymentTwoinc()) {
+    if (abnDomHelper.isSelectedPaymentABN()) {
+      visibleBusinessTargets.push("#invoice_email_field");
       requiredBusinessTargets.push("#billing_phone_field");
     }
-    if (twoincDomHelper.isCountrySupported()) {
-      if (window.twoinc.company_name_search === "yes") {
+    if (abnDomHelper.isCountrySupported()) {
+      if (window.abn.company_name_search === "yes") {
         visibleBusinessTargets.push("#billing_company_display_field");
-        if (twoincDomHelper.isSelectedPaymentTwoinc()) {
+        if (abnDomHelper.isSelectedPaymentABN()) {
           requiredBusinessTargets.push("#billing_company_display_field");
         }
       } else {
         visibleBusinessTargets.push("#billing_company_field", "#company_id_field");
-        if (twoincDomHelper.isSelectedPaymentTwoinc()) {
+        if (abnDomHelper.isSelectedPaymentABN()) {
           requiredBusinessTargets.push("#billing_company_field", "#company_id_field");
         }
       }
@@ -535,18 +546,17 @@ let twoincDomHelper = {
     visibleNonbusinessTargets = jQuery(visibleNonbusinessTargets.join(","));
 
     // Toggle the targets based on the account type
-    const isTwoincAvailable =
-      twoincDomHelper.isTwoincVisible() && twoincUtilHelper.isCompany(accountType);
+    const isABNAvailable = abnDomHelper.isABNVisible() && abnUtilHelper.isCompany(accountType);
     allTargets.addClass("hidden");
-    if (isTwoincAvailable) {
+    if (isABNAvailable) {
       visibleBusinessTargets.removeClass("hidden");
     } else {
       visibleNonbusinessTargets.removeClass("hidden");
     }
 
     // Toggle the required fields based on the account type
-    twoincDomHelper.toggleRequiredCues(allTargets, false);
-    twoincDomHelper.toggleRequiredCues(requiredBusinessTargets, isTwoincAvailable);
+    abnDomHelper.toggleRequiredCues(allTargets, false);
+    abnDomHelper.toggleRequiredCues(requiredBusinessTargets, isABNAvailable);
   },
 
   /**
@@ -560,32 +570,31 @@ let twoincDomHelper = {
   },
 
   /**
-   * Hide or show the Twoinc payment method
+   * Hide or show the ABN payment method
    */
-  toggleMethod: function (isTwoincMethodHidden) {
-    // Get the Twoinc payment method section
-    const $twoincSection = jQuery(
-      "#payment .wc_payment_methods > li.payment_method_woocommerce-gateway-tillit"
+  toggleMethod: function (isABNMethodHidden) {
+    // Get the ABN payment method section
+    const $abnSection = jQuery(
+      "#payment .wc_payment_methods > li.payment_method_woocommerce-gateway-abn"
     );
 
-    // Get the Twoinc payment method input
-    const $twoincBox = jQuery(':input[value="woocommerce-gateway-tillit"]');
+    // Get the ABN payment method input
+    const $abnBox = jQuery(':input[value="woocommerce-gateway-abn"]');
 
-    // True if the Twoinc payment method is disabled
-    const isTwoincDisabled =
-      window.twoinc.enable_order_intent === "yes" && isTwoincMethodHidden === true;
+    // True if the ABN payment method is disabled
+    const isABNDisabled = window.abn.enable_order_intent === "yes" && isABNMethodHidden === true;
 
-    // Disable the Twoinc payment method for non-business orders
-    if (isTwoincDisabled) {
-      twoincDomHelper.deselectPaymentMethod($twoincBox);
+    // Disable the ABN payment method for non-business orders
+    if (isABNDisabled) {
+      abnDomHelper.deselectPaymentMethod($abnBox);
     }
 
-    if (twoincUtilHelper.isCompany(twoincDomHelper.getAccountType())) {
-      // Show Twoinc payment option
-      $twoincSection.show();
+    if (abnUtilHelper.isCompany(abnDomHelper.getAccountType())) {
+      // Show ABN payment option
+      $abnSection.show();
     } else {
-      // Hide Twoinc payment option
-      $twoincSection.hide();
+      // Hide ABN payment option
+      $abnSection.hide();
     }
   },
 
@@ -593,9 +602,9 @@ let twoincDomHelper = {
    * Toggle the tooltip for input fields
    */
   toggleTooltip: function (selectorStr, tooltip) {
-    if (window.twoinc.display_tooltips !== "yes") return;
+    if (window.abn.display_tooltips !== "yes") return;
 
-    let isCurrentlyCompany = twoincUtilHelper.isCompany(twoincDomHelper.getAccountType());
+    let isCurrentlyCompany = abnUtilHelper.isCompany(abnDomHelper.getAccountType());
 
     jQuery(selectorStr).each(function () {
       if (isCurrentlyCompany) {
@@ -613,23 +622,22 @@ let twoincDomHelper = {
   /**
    * Select the default payment method
    */
-  selectDefaultMethod: function (isTwoincMethodHidden) {
-    // Get the Twoinc payment method input
-    const $twoincPaymentMethod = jQuery(':input[value="woocommerce-gateway-tillit"]');
+  selectDefaultMethod: function (isABNMethodHidden) {
+    // Get the ABN payment method input
+    const $abnPaymentMethod = jQuery(':input[value="woocommerce-gateway-abn"]');
 
-    // Get the Twoinc payment block
-    const $twoincPmBlk = jQuery(".payment_method_woocommerce-gateway-tillit");
+    // Get the ABN payment block
+    const $abnPmBlk = jQuery(".payment_method_woocommerce-gateway-abn");
 
-    // True if the Twoinc payment method is disabled
-    const isTwoincDisabled =
-      window.twoinc.enable_order_intent === "yes" && isTwoincMethodHidden === true;
+    // True if the ABN payment method is disabled
+    const isABNDisabled = window.abn.enable_order_intent === "yes" && isABNMethodHidden === true;
 
-    // Disable the Twoinc payment method for non-business orders
-    if (isTwoincDisabled) {
-      twoincDomHelper.deselectPaymentMethod($twoincPaymentMethod);
+    // Disable the ABN payment method for non-business orders
+    if (isABNDisabled) {
+      abnDomHelper.deselectPaymentMethod($abnPaymentMethod);
     } else {
       // Select the payment method for business accounts
-      $twoincPaymentMethod.click();
+      $abnPaymentMethod.click();
     }
   },
 
@@ -637,16 +645,16 @@ let twoincDomHelper = {
    * Toggle payment text in subtitle and description
    */
   togglePaySubtitleDesc: function (action, errSelector) {
-    jQuery(".twoinc-pay-box").addClass("hidden");
-    jQuery(".twoinc-pay-box.twoinc-explainer").removeClass("hidden");
+    jQuery(".abn-pay-box").addClass("hidden");
+    jQuery(".abn-pay-box.abn-explainer").removeClass("hidden");
     if (["checking-intent", "intent-approved", "errored"].includes(action)) {
-      jQuery(".twoinc-pay-box.twoinc-explainer").addClass("hidden");
+      jQuery(".abn-pay-box.abn-explainer").addClass("hidden");
       if (action === "checking-intent") {
-        jQuery(".twoinc-pay-box.twoinc-loader").removeClass("hidden");
+        jQuery(".abn-pay-box.abn-loader").removeClass("hidden");
       } else if (action === "intent-approved") {
-        jQuery(".twoinc-pay-box.twoinc-intent-approved").removeClass("hidden");
+        jQuery(".abn-pay-box.abn-intent-approved").removeClass("hidden");
       } else if (action === "errored") {
-        jQuery(".twoinc-pay-box" + errSelector).removeClass("hidden");
+        jQuery(".abn-pay-box" + errSelector).removeClass("hidden");
       }
     }
   },
@@ -656,11 +664,11 @@ let twoincDomHelper = {
    */
   togglePaymentDesc: function () {
     // Display only the correct payment description
-    jQuery(".twoinc-payment-desc").hide();
-    if (window.twoinc.is_direct_invoice && window.twoinc.shop_base_country === "no") {
-      jQuery(".twoinc-payment-desc.payment-desc-no-funded").show();
+    jQuery(".abn-payment-desc").hide();
+    if (window.abn.is_direct_invoice && window.abn.shop_base_country === "no") {
+      jQuery(".abn-payment-desc.payment-desc-no-funded").show();
     } else {
-      jQuery(".twoinc-payment-desc.payment-desc-global").show();
+      jQuery(".abn-payment-desc.payment-desc-global").show();
     }
   },
 
@@ -669,7 +677,7 @@ let twoincDomHelper = {
    */
   toggleActions: function () {
     // Get the account type
-    const accountType = twoincDomHelper.getAccountType();
+    const accountType = abnDomHelper.getAccountType();
 
     // Get the payment method
     const paymentMethod = jQuery(':input[name="payment_method"]:checked').val();
@@ -677,10 +685,10 @@ let twoincDomHelper = {
     // Get the place order button
     const $placeOrder = jQuery("#place_order");
 
-    // Disable the place order button if order is non-business and payment method is Twoinc
+    // Disable the place order button if order is non-business and payment method is ABN
     $placeOrder.attr(
       "disabled",
-      !twoincUtilHelper.isCompany(accountType) && paymentMethod === "woocommerce-gateway-tillit"
+      !abnUtilHelper.isCompany(accountType) && paymentMethod === "woocommerce-gateway-abn"
     );
   },
 
@@ -688,8 +696,8 @@ let twoincDomHelper = {
    * Get company name string
    */
   getCompanyName: function () {
-    if (window.twoinc.company_name_search === "yes") {
-      let companyNameObj = twoincDomHelper.getCheckoutInput(
+    if (window.abn.company_name_search === "yes") {
+      let companyNameObj = abnDomHelper.getCheckoutInput(
         "SPAN",
         "select",
         "select2-billing_company_display-container"
@@ -709,7 +717,7 @@ let twoincDomHelper = {
    */
   getCompanyData: function () {
     return {
-      company_name: twoincDomHelper.getCompanyName(),
+      company_name: abnDomHelper.getCompanyName(),
       country_prefix: jQuery("#billing_country").val(),
       organization_number: jQuery("#company_id").val()
     };
@@ -736,17 +744,17 @@ let twoincDomHelper = {
     // Clear company inputs
     let billingCompanyDisplay = jQuery("#billing_company_display");
     billingCompanyDisplay.html("");
-    billingCompanyDisplay.selectWoo(twoincSelectWooHelper.genSelectWooParams());
-    twoincDomHelper.toggleTooltip(
+    billingCompanyDisplay.selectWoo(abnSelectWooHelper.genSelectWooParams());
+    abnDomHelper.toggleTooltip(
       "#billing_company_display_field .select2-container",
-      window.twoinc.text.tooltip_company
+      window.abn.text.tooltip_company
     );
-    twoincSelectWooHelper.fixSelectWooPositionCompanyName();
+    abnSelectWooHelper.fixSelectWooPositionCompanyName();
     jQuery("#company_id").val("");
 
     // Clear the addresses, in case address get request fails
-    if (window.twoinc.address_search === "yes") {
-      Twoinc.getInstance().setAddress({
+    if (window.abn.address_search === "yes") {
+      ABN.getInstance().setAddress({
         street_address: "",
         city: "",
         postal_code: ""
@@ -757,13 +765,13 @@ let twoincDomHelper = {
       .parent()
       .find(".select2-selection__arrow")
       .show();
-    Twoinc.getInstance().customerCompany = {};
-    twoincDomHelper.togglePaySubtitleDesc();
+    ABN.getInstance().customerCompany = {};
+    abnDomHelper.togglePaySubtitleDesc();
 
     // Update again after all elements are updated
     setTimeout(function () {
-      Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData();
-      twoincDomHelper.togglePaySubtitleDesc();
+      ABN.getInstance().customerCompany = abnDomHelper.getCompanyData();
+      abnDomHelper.togglePaySubtitleDesc();
     }, 3000);
   },
 
@@ -778,13 +786,13 @@ let twoincDomHelper = {
 
     let floatingCompany = jQuery(
       '<span class="floating-company">' +
-        '  <span class="floating-company-id">' +
-        companyId +
-        "</span>" +
-        '  <img src="' +
-        window.twoinc.twoinc_plugin_url +
-        'assets/images/x-button.svg" onclick="twoincDomHelper.clearSelectedCompany()"></img>' +
-        "</span>"
+      '  <span class="floating-company-id">' +
+      companyId +
+      "</span>" +
+      '  <img src="' +
+      window.abn.abn_plugin_url +
+      'assets/images/x-button.svg" onclick="abnDomHelper.clearSelectedCompany()"></img>' +
+      "</span>"
     );
     floatingCompany.hide();
     floatingCompany.insertBefore("#billing_company_display");
@@ -812,28 +820,28 @@ let twoincDomHelper = {
   },
 
   /**
-   * Check if selected country is supported by Twoinc
+   * Check if selected country is supported by ABN
    */
   isCountrySupported: function () {
     return ["NO", "GB", "SE", "NL"].includes(jQuery("#billing_country").val());
   },
 
   /**
-   * Check if twoinc payment is currently selected
+   * Check if abn payment is currently selected
    */
-  isSelectedPaymentTwoinc: function () {
-    return jQuery('input[name="payment_method"]:checked').val() === "woocommerce-gateway-tillit";
+  isSelectedPaymentABN: function () {
+    return jQuery('input[name="payment_method"]:checked').val() === "woocommerce-gateway-abn";
   },
 
   /**
-   * Check if twoinc payment is currently visible
+   * Check if abn payment is currently visible
    */
-  isTwoincVisible: function () {
+  isABNVisible: function () {
     return (
-      jQuery("li.wc_payment_method.payment_method_woocommerce-gateway-tillit").css("display") !==
+      jQuery("li.wc_payment_method.payment_method_woocommerce-gateway-abn").css("display") !==
       "none"
     );
-    //return jQuery('#payment_method_woocommerce-gateway-tillit:visible').length !== 0
+    //return jQuery('#payment_method_woocommerce-gateway-abn:visible').length !== 0
   },
 
   /**
@@ -851,7 +859,7 @@ let twoincDomHelper = {
     if (node.classList && node.classList.contains("woocommerce-Price-currencySymbol")) return;
     if (node.childNodes) {
       for (let n of node.childNodes) {
-        let val = twoincDomHelper.getPriceRecursively(n);
+        let val = abnDomHelper.getPriceRecursively(n);
         if (val) {
           return val;
         }
@@ -859,8 +867,8 @@ let twoincDomHelper = {
     }
     if (node.nodeName === "#text") {
       let val = node.textContent
-        .replaceAll(window.twoinc.price_thousand_separator, "")
-        .replaceAll(window.twoinc.price_decimal_separator, ".");
+        .replaceAll(window.abn.price_thousand_separator, "")
+        .replaceAll(window.abn.price_decimal_separator, ".");
       if (!isNaN(val) && !isNaN(parseFloat(val))) {
         return parseFloat(val);
       }
@@ -874,16 +882,16 @@ let twoincDomHelper = {
     let node =
       document.querySelector("." + priceName + " .woocommerce-Price-amount bdi") ||
       document.querySelector("." + priceName + " .woocommerce-Price-amount");
-    return twoincDomHelper.getPriceRecursively(node);
+    return abnDomHelper.getPriceRecursively(node);
   },
 
   /**
-   * Rearrange descriptions in Twoinc payment to make it cleaner
+   * Rearrange descriptions in ABN payment to make it cleaner
    */
   rearrangeDescription: function () {
-    let twoincPaymentBox = jQuery(".payment_box.payment_method_woocommerce-gateway-tillit");
-    if (twoincPaymentBox.length > 0) {
-      twoincPaymentBox.after(jQuery(".abt-twoinc"));
+    let abnPaymentBox = jQuery(".payment_box.payment_method_woocommerce-gateway-abn");
+    if (abnPaymentBox.length > 0) {
+      abnPaymentBox.after(jQuery(".abt-abn"));
     }
   },
 
@@ -982,8 +990,8 @@ let twoincDomHelper = {
     if (!checkoutInputs) return;
     checkoutInputs = JSON.parse(checkoutInputs);
     for (let inp of checkoutInputs) {
-      // Skip load company id/name if user logged in and has Two meta set
-      if (window.twoinc.user_meta_exists) {
+      // Skip load company id/name if user logged in and has ABN meta set
+      if (window.abn.user_meta_exists) {
         let skipIds = ["company_id", "billing_company", "billing_company_display"];
         if (skipIds.includes(inp.id)) continue;
       }
@@ -1044,41 +1052,41 @@ let twoincDomHelper = {
    * Load usermeta checkout inputs
    */
   loadUserMetaInputs: function () {
-    window.twoinc.user_meta_exists = window.twoinc.billing_company && window.twoinc.company_id;
+    window.abn.user_meta_exists = window.abn.billing_company && window.abn.company_id;
     if (document.querySelector("#billing_company_display")) {
       let selectElem = document.querySelector("#billing_company_display");
-      if (!selectElem.querySelector('option:not([value=""])') && window.twoinc.user_meta_exists) {
+      if (!selectElem.querySelector('option:not([value=""])') && window.abn.user_meta_exists) {
         // Append to selectWoo
-        if (!selectElem.querySelector('option[value="' + window.twoinc.billing_company + '"]')) {
+        if (!selectElem.querySelector('option[value="' + window.abn.billing_company + '"]')) {
           selectElem.innerHTML =
             '<option value="' +
-            window.twoinc.billing_company +
+            window.abn.billing_company +
             '">' +
-            window.twoinc.billing_company +
+            window.abn.billing_company +
             "</option>" +
             selectElem.innerHTML;
         }
-        selectElem.value = window.twoinc.billing_company;
+        selectElem.value = window.abn.billing_company;
 
         // Append company id to company name select box
-        if (window.twoinc.user_meta_exists) {
-          twoincDomHelper.insertFloatingCompany(window.twoinc.company_id, 2000);
+        if (window.abn.user_meta_exists) {
+          abnDomHelper.insertFloatingCompany(window.abn.company_id, 2000);
         }
       }
     }
-    if (document.querySelector("#department") && window.twoinc.department) {
-      document.querySelector("#department").value = window.twoinc.department;
+    if (document.querySelector("#department") && window.abn.department) {
+      document.querySelector("#department").value = window.abn.department;
     }
-    if (document.querySelector("#project") && window.twoinc.project) {
-      document.querySelector("#project").value = window.twoinc.project;
+    if (document.querySelector("#project") && window.abn.project) {
+      document.querySelector("#project").value = window.abn.project;
     }
 
     // Update the object values
-    if (document.querySelector("#billing_company") && window.twoinc.billing_company) {
-      document.querySelector("#billing_company").value = window.twoinc.billing_company;
+    if (document.querySelector("#billing_company") && window.abn.billing_company) {
+      document.querySelector("#billing_company").value = window.abn.billing_company;
     }
-    if (document.querySelector("#company_id") && window.twoinc.company_id) {
-      document.querySelector("#company_id").value = window.twoinc.company_id;
+    if (document.querySelector("#company_id") && window.abn.company_id) {
+      document.querySelector("#company_id").value = window.abn.company_id;
     }
   },
 
@@ -1109,29 +1117,29 @@ let twoincDomHelper = {
    * Get id of current or parent theme, return null if not found
    */
   insertCustomCss: function () {
-    let themeBase = twoincDomHelper.getThemeBase();
+    let themeBase = abnDomHelper.getThemeBase();
     if (themeBase) {
       jQuery("head").append(
         '<link href="' +
-          window.twoinc.twoinc_plugin_url +
-          "assets/css/c-" +
-          themeBase +
-          '.css" type="text/css" rel="stylesheet" />'
+        window.abn.abn_plugin_url +
+        "assets/css/c-" +
+        themeBase +
+        '.css" type="text/css" rel="stylesheet" />'
       );
     }
   }
 };
 
-class Twoinc {
+class ABN {
   constructor() {
     if (instance) {
-      throw "Twoinc is a singleton";
+      throw "ABN is a singleton";
     }
     instance = this;
 
     this.isInitialized = false;
-    this.isTwoincMethodHidden = true;
-    this.isTwoincApproved = null;
+    this.isABNMethodHidden = true;
+    this.isABNApproved = null;
     this.orderIntentCheck = {
       interval: null,
       pendingCheck: false,
@@ -1151,6 +1159,7 @@ class Twoinc {
       phone_number: null
     };
     this.billingCompanySelect = null;
+    this.BVCompanyRegex = /(?:^|\s)B(?:\.)?V(?:\.)?$/i;
   }
 
   enableCompanySearch() {
@@ -1164,16 +1173,16 @@ class Twoinc {
 
     // Get the company ID field
     const $companyId = $body.find("#company_id");
-    if (window.twoinc.company_name_search !== "yes") return;
+    if (window.abn.company_name_search !== "yes") return;
     self.billingCompanySelect = $billingCompanyDisplay.selectWoo(
-      twoincSelectWooHelper.genSelectWooParams()
+      abnSelectWooHelper.genSelectWooParams()
     );
-    twoincDomHelper.toggleTooltip(
+    abnDomHelper.toggleTooltip(
       "#billing_company_display_field .select2-container",
-      window.twoinc.text.tooltip_company
+      window.abn.text.tooltip_company
     );
     self.billingCompanySelect.on("select2:select", function (e) {
-      const self = Twoinc.getInstance();
+      const self = ABN.getInstance();
 
       // Get the option data
       const data = e.params.data;
@@ -1192,32 +1201,32 @@ class Twoinc {
 
       // Display company ID on the right of selected company name
       setTimeout(function () {
-        twoincDomHelper.insertFloatingCompany(data.company_id, 0);
+        abnDomHelper.insertFloatingCompany(data.company_id, 0);
       }, 0);
 
       // Update the company name in agreement sentence and text in subtitle/description
-      twoincDomHelper.togglePaySubtitleDesc();
+      abnDomHelper.togglePaySubtitleDesc();
 
       // Get the company approval status
       self.getApproval();
 
       // Address search
-      if (window.twoinc.address_search === "yes") {
+      if (window.abn.address_search === "yes") {
         // Fetch the company data
         self.addressLookup(data);
       }
     });
 
-    twoincSelectWooHelper.fixSelectWooPositionCompanyName();
+    abnSelectWooHelper.fixSelectWooPositionCompanyName();
 
     self.billingCompanySelect.on("select2:open", function (e) {
-      let companyNotInBtn = twoincDomHelper.getCompanyNotInBtnNode();
+      let companyNotInBtn = abnDomHelper.getCompanyNotInBtnNode();
       jQuery("#select2-billing_company_display-results").parent().append(companyNotInBtn);
-      twoincSelectWooHelper.waitToFocus("billing_company_display", null, null, function () {
+      abnSelectWooHelper.waitToFocus("billing_company_display", null, null, function () {
         jQuery('input[aria-owns="select2-billing_company_display-results"]').on(
           "input",
           function (e) {
-            let selectWooParams = twoincSelectWooHelper.genSelectWooParams();
+            let selectWooParams = abnSelectWooHelper.genSelectWooParams();
             if (
               jQuery(this).val() &&
               jQuery(this).val().length >= selectWooParams.minimumInputLength
@@ -1229,12 +1238,12 @@ class Twoinc {
           }
         );
       });
-      twoincSelectWooHelper.addSelectWooFocusFixHandler("billing_company_display");
+      abnSelectWooHelper.addSelectWooFocusFixHandler("billing_company_display");
     });
   }
 
   /**
-   * Initialize Twoinc code
+   * Initialize ABN code
    */
   initialize(loadSavedInputs) {
     if (this.isInitialized) {
@@ -1248,51 +1257,51 @@ class Twoinc {
     // If we found the field
     if (jQuery('[name="account_type"]:checked').length > 0) {
       // Toggle the business fields
-      twoincDomHelper.toggleBusinessFields(twoincDomHelper.getAccountType());
+      abnDomHelper.toggleBusinessFields(abnDomHelper.getAccountType());
 
       // Move the fields to correct positions
-      twoincDomHelper.positionFields();
+      abnDomHelper.positionFields();
     }
 
-    // Twoinc is hidden if selected account type is not company
-    this.isTwoincMethodHidden = !twoincUtilHelper.isCompany(twoincDomHelper.getAccountType());
+    // ABN is hidden if selected account type is not company
+    this.isABNMethodHidden = !abnUtilHelper.isCompany(abnDomHelper.getAccountType());
 
     this.enableCompanySearch();
 
     // Focus on search input on country open
     jQuery("#billing_country").on("select2:open", function (e) {
-      twoincSelectWooHelper.waitToFocus("billing_country");
+      abnSelectWooHelper.waitToFocus("billing_country");
     });
 
     // Turn the select input into select2
     setTimeout(this.enableCompanySearch, 800);
 
     // Disable or enable actions based on the account type
-    $body.on("updated_checkout", Twoinc.getInstance().onUpdatedCheckout);
+    $body.on("updated_checkout", ABN.getInstance().onUpdatedCheckout);
 
     $body.on("click", "#company_not_in_btn", function () {
-      window.twoinc.company_name_search = "no";
+      window.abn.company_name_search = "no";
 
       jQuery("#billing_company_display").val("");
       jQuery("#company_id").val("");
-      Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData();
+      ABN.getInstance().customerCompany = abnDomHelper.getCompanyData();
       jQuery("#company_not_in_btn").hide();
       jQuery("#search_company_btn").show();
-      Twoinc.getInstance().billingCompanySelect.select2("destroy");
+      ABN.getInstance().billingCompanySelect.select2("destroy");
 
-      twoincDomHelper.toggleBusinessFields(twoincDomHelper.getAccountType());
+      abnDomHelper.toggleBusinessFields(abnDomHelper.getAccountType());
     });
 
     $body.on("click", "#search_company_btn", function () {
-      window.twoinc.company_name_search = "yes";
+      window.abn.company_name_search = "yes";
 
       setTimeout(this.enableCompanySearch, 800);
       jQuery("#billing_company").val("");
       jQuery("#company_id").val("");
-      Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData();
+      ABN.getInstance().customerCompany = abnDomHelper.getCompanyData();
 
       jQuery("#search_company_btn").hide();
-      twoincDomHelper.toggleBusinessFields(twoincDomHelper.getAccountType());
+      abnDomHelper.toggleBusinessFields(abnDomHelper.getAccountType());
     });
 
     // Handle the representative inputs blur event
@@ -1309,50 +1318,47 @@ class Twoinc {
     $body.on(
       "change",
       "#select2-billing_company_display-container",
-      twoincDomHelper.togglePaySubtitleDesc
+      abnDomHelper.togglePaySubtitleDesc
     );
     $body.on("change", "#billing_company", function () {
-      Twoinc.getInstance().customerCompany.company_name = twoincDomHelper.getCompanyName();
-      twoincDomHelper.togglePaySubtitleDesc();
+      ABN.getInstance().customerCompany.company_name = abnDomHelper.getCompanyName();
+      abnDomHelper.togglePaySubtitleDesc();
     });
 
     // Handle the country inputs change event
     $body.on("change", "#billing_country", this.onCountryInputChange);
 
     $body.on("click", "#place_order", function () {
-      clearInterval(Twoinc.getInstance().orderIntentCheck.interval);
-      Twoinc.getInstance().orderIntentCheck.interval = null;
-      Twoinc.getInstance().orderIntentCheck.pendingCheck = false;
+      clearInterval(ABN.getInstance().orderIntentCheck.interval);
+      ABN.getInstance().orderIntentCheck.interval = null;
+      ABN.getInstance().orderIntentCheck.pendingCheck = false;
     });
 
     $body.on("checkout_error", function () {
-      clearInterval(Twoinc.getInstance().orderIntentCheck.interval);
-      Twoinc.getInstance().orderIntentCheck.interval = null;
-      Twoinc.getInstance().orderIntentCheck.pendingCheck = false;
+      clearInterval(ABN.getInstance().orderIntentCheck.interval);
+      ABN.getInstance().orderIntentCheck.interval = null;
+      ABN.getInstance().orderIntentCheck.pendingCheck = false;
     });
 
     // Handle account type change
     $body.on("change", '[name="account_type"]', this.onChangeAccountType);
 
     setInterval(function () {
-      if (Twoinc.getInstance().orderIntentCheck.pendingCheck) Twoinc.getInstance().getApproval();
-      twoincDomHelper.saveCheckoutInputs();
+      if (ABN.getInstance().orderIntentCheck.pendingCheck) ABN.getInstance().getApproval();
+      abnDomHelper.saveCheckoutInputs();
     }, 3000);
 
     // Add customization for current theme if any
-    twoincDomHelper.insertCustomCss();
+    abnDomHelper.insertCustomCss();
 
-    twoincDomHelper.loadUserMetaInputs();
-    if (loadSavedInputs) twoincDomHelper.loadStorageInputs();
+    abnDomHelper.loadUserMetaInputs();
+    if (loadSavedInputs) abnDomHelper.loadStorageInputs();
     setTimeout(function () {
-      twoincDomHelper.saveCheckoutInputs();
-      Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData();
-      Twoinc.getInstance().customerRepresentative = twoincDomHelper.getRepresentativeData();
-      twoincDomHelper.insertFloatingCompany(
-        Twoinc.getInstance().customerCompany.organization_number,
-        0
-      );
-      Twoinc.getInstance().getApproval();
+      abnDomHelper.saveCheckoutInputs();
+      ABN.getInstance().customerCompany = abnDomHelper.getCompanyData();
+      ABN.getInstance().customerRepresentative = abnDomHelper.getRepresentativeData();
+      abnDomHelper.insertFloatingCompany(ABN.getInstance().customerCompany.organization_number, 0);
+      ABN.getInstance().getApproval();
     }, 1000);
     this.updateElements();
     this.isInitialized = true;
@@ -1362,7 +1368,7 @@ class Twoinc {
    * Get singleton instance
    */
   static getInstance() {
-    if (!instance) instance = new Twoinc();
+    if (!instance) instance = new ABN();
     return instance;
   }
 
@@ -1376,19 +1382,22 @@ class Twoinc {
     this.getApproval();
 
     // Toggle the action buttons
-    twoincDomHelper.toggleActions();
+    abnDomHelper.toggleActions();
 
-    // Enable or disable the Twoinc method
-    twoincDomHelper.toggleMethod(this.isTwoincMethodHidden);
+    // Enable or disable the ABN method
+    abnDomHelper.toggleMethod(this.isABNMethodHidden);
 
     // Update the text in subtitle and description
-    twoincDomHelper.togglePaySubtitleDesc();
+    abnDomHelper.togglePaySubtitleDesc();
 
-    // Rearrange the DOMs in Twoinc payment
-    twoincDomHelper.rearrangeDescription();
+    // Rearrange the DOMs in ABN payment
+    abnDomHelper.rearrangeDescription();
 
     // Display correct payment description
-    twoincDomHelper.togglePaymentDesc();
+    abnDomHelper.togglePaymentDesc();
+
+    // Show or hide the ABN terms
+    abnDomHelper.toggleABNTermsVisibility(abnDomHelper.isSelectedPaymentABN());
 
     this.toggleDueInDays();
     this.getDueInDays();
@@ -1400,17 +1409,17 @@ class Twoinc {
    * @returns {boolean}
    */
   isReadyApprovalCheck() {
-    if (window.twoinc.enable_order_intent !== "yes") {
+    if (window.abn.enable_order_intent !== "yes") {
       return false;
     }
 
-    if (!Twoinc.getInstance().customerCompany.organization_number) {
+    if (!ABN.getInstance().customerCompany.organization_number) {
       return false;
     }
 
     let values = [].concat(Object.values(this.customerCompany));
 
-    return !twoincUtilHelper.isAnyElementEmpty(values);
+    return !abnUtilHelper.isAnyElementEmpty(values);
   }
 
   /**
@@ -1419,14 +1428,23 @@ class Twoinc {
   getApproval() {
     if (!this.isReadyApprovalCheck()) return;
 
+    // Do not fire order intent for BV companies in NL
+    if (this.customerCompany.country_prefix.toLowerCase() == "nl") {
+      let isBVCompany = this.BVCompanyRegex.test(this.customerCompany.company_name);
+      if (!isBVCompany) {
+        abnDomHelper.togglePaySubtitleDesc();
+        return;
+      }
+    }
+
     if (this.orderIntentCheck.interval) {
       this.orderIntentCheck.pendingCheck = true;
       return;
     }
 
     this.orderIntentCheck.interval = setInterval(function () {
-      let gross_amount = twoincDomHelper.getPrice("order-total");
-      let tax_amount = twoincDomHelper.getPrice("tax-rate");
+      let gross_amount = abnDomHelper.getPrice("order-total");
+      let tax_amount = abnDomHelper.getPrice("tax-rate");
       if (!gross_amount) {
         return;
       }
@@ -1436,15 +1454,15 @@ class Twoinc {
       let net_amount = gross_amount - tax_amount;
 
       let jsonBody = JSON.stringify({
-        merchant_id: window.twoinc.merchant?.id,
-        merchant_short_name: window.twoinc.merchant?.short_name,
+        merchant_id: window.abn.merchant?.id,
+        merchant_short_name: window.abn.merchant?.short_name,
         gross_amount: "" + gross_amount,
         invoice_type: "FUNDED_INVOICE",
         buyer: {
-          company: Twoinc.getInstance().customerCompany,
-          representative: Twoinc.getInstance().customerRepresentative
+          company: ABN.getInstance().customerCompany,
+          representative: ABN.getInstance().customerRepresentative
         },
-        currency: window.twoinc.currency,
+        currency: window.abn.currency,
         line_items: [
           {
             name: "Cart",
@@ -1469,26 +1487,26 @@ class Twoinc {
         ]
       });
 
-      let hashedBody = twoincUtilHelper.getUnsecuredHash(jsonBody);
-      if (Twoinc.getInstance().orderIntentLog[hashedBody]) {
-        twoincDomHelper.togglePaySubtitleDesc(
-          ...Twoinc.getInstance().orderIntentLog[hashedBody].split("|")
+      let hashedBody = abnUtilHelper.getUnsecuredHash(jsonBody);
+      if (ABN.getInstance().orderIntentLog[hashedBody]) {
+        abnDomHelper.togglePaySubtitleDesc(
+          ...ABN.getInstance().orderIntentLog[hashedBody].split("|")
         );
         return;
       }
-      Twoinc.getInstance().orderIntentCheck["lastCheckHash"] = hashedBody;
+      ABN.getInstance().orderIntentCheck["lastCheckHash"] = hashedBody;
 
-      clearInterval(Twoinc.getInstance().orderIntentCheck.interval);
-      Twoinc.getInstance().orderIntentCheck.interval = null;
-      Twoinc.getInstance().orderIntentCheck.pendingCheck = false;
+      clearInterval(ABN.getInstance().orderIntentCheck.interval);
+      ABN.getInstance().orderIntentCheck.interval = null;
+      ABN.getInstance().orderIntentCheck.pendingCheck = false;
 
-      if (!Twoinc.getInstance().isReadyApprovalCheck()) return;
+      if (!ABN.getInstance().isReadyApprovalCheck()) return;
 
-      twoincDomHelper.togglePaySubtitleDesc("checking-intent");
+      abnDomHelper.togglePaySubtitleDesc("checking-intent");
 
       // Create an order intent
       const approvalResponse = jQuery.ajax({
-        url: twoincUtilHelper.constructTwoincUrl("/v1/order_intent"),
+        url: abnUtilHelper.constructABNUrl("/v1/order_intent"),
         contentType: "application/json; charset=utf-8",
         dataType: "json",
         method: "POST",
@@ -1498,24 +1516,23 @@ class Twoinc {
 
       approvalResponse.done(function (response) {
         // Store the approved state
-        Twoinc.getInstance().isTwoincApproved = response.approved;
+        ABN.getInstance().isABNApproved = response.approved;
 
-        // Toggle the Twoinc payment method
-        Twoinc.getInstance().isTwoincMethodHidden = !(
-          Twoinc.getInstance().isTwoincApproved &&
-          twoincUtilHelper.isCompany(twoincDomHelper.getAccountType())
+        // Toggle the ABN payment method
+        ABN.getInstance().isABNMethodHidden = !(
+          ABN.getInstance().isABNApproved && abnUtilHelper.isCompany(abnDomHelper.getAccountType())
         );
 
-        // Show or hide the Twoinc payment method
-        twoincDomHelper.toggleMethod(Twoinc.getInstance().isTwoincMethodHidden);
+        // Show or hide the ABN payment method
+        abnDomHelper.toggleMethod(ABN.getInstance().isABNMethodHidden);
 
         // Display correct payment description
-        window.twoinc.is_direct_invoice =
+        window.abn.is_direct_invoice =
           response.invoice_type && response.invoice_type === "DIRECT_INVOICE";
-        twoincDomHelper.togglePaymentDesc();
+        abnDomHelper.togglePaymentDesc();
 
         // Select the default payment method
-        twoincDomHelper.selectDefaultMethod(Twoinc.getInstance().isTwoincMethodHidden);
+        // abnDomHelper.selectDefaultMethod(ABN.getInstance().isABNMethodHidden);
 
         // Update tracking number
         if (response.tracking_id && document.querySelector("#tracking_id")) {
@@ -1523,24 +1540,24 @@ class Twoinc {
         }
 
         // Display messages and update order intent logs
-        Twoinc.getInstance().processOrderIntentResponse(response);
+        ABN.getInstance().processOrderIntentResponse(response);
       });
 
       approvalResponse.fail(function (response) {
         // Store the approved state
-        Twoinc.getInstance().isTwoincApproved = false;
+        ABN.getInstance().isABNApproved = false;
 
-        // Toggle the Twoinc payment method
-        Twoinc.getInstance().isTwoincMethodHidden = true;
+        // Toggle the ABN payment method
+        ABN.getInstance().isABNMethodHidden = true;
 
-        // Show or hide the Twoinc payment method
-        twoincDomHelper.toggleMethod(Twoinc.getInstance().isTwoincMethodHidden);
+        // Show or hide the ABN payment method
+        abnDomHelper.toggleMethod(ABN.getInstance().isABNMethodHidden);
 
         // Select the default payment method
-        twoincDomHelper.selectDefaultMethod(Twoinc.getInstance().isTwoincMethodHidden);
+        abnDomHelper.selectDefaultMethod(ABN.getInstance().isABNMethodHidden);
 
         // Display messages and update order intent logs
-        Twoinc.getInstance().processOrderIntentResponse(response);
+        ABN.getInstance().processOrderIntentResponse(response);
       });
     }, 1000);
   }
@@ -1556,7 +1573,7 @@ class Twoinc {
       displayMsgId = "intent-approved";
     } else {
       // Display error messages
-      displayMsgId = "errored|.twoinc-err-payment-default";
+      displayMsgId = "errored|.abn-err-payment-default";
       if (response.status >= 400) {
         // @TODO: use code in checkout-api
         let errMsg = response.responseJSON;
@@ -1569,7 +1586,7 @@ class Twoinc {
         }
 
         if (errMsg.includes("Invalid phone number")) {
-          displayMsgId = "errored|.twoinc-err-phone-number";
+          displayMsgId = "errored|.abn-err-phone-number";
           invalidFields.append("billing_phone_field");
         }
       }
@@ -1580,15 +1597,15 @@ class Twoinc {
       this.orderIntentLog[this.orderIntentCheck["lastCheckHash"]] = displayMsgId;
     }
 
-    // Update twoinc message
-    let twoincSubtitleExistCheck = setInterval(function () {
+    // Update abn message
+    let abnSubtitleExistCheck = setInterval(function () {
       if (jQuery("#payment .blockOverlay").length === 0) {
         // woocommerce's update_checkout is not running
-        twoincDomHelper.togglePaySubtitleDesc(...displayMsgId.split("|"));
+        abnDomHelper.togglePaySubtitleDesc(...displayMsgId.split("|"));
         for (let fld of invalidFields) {
-          twoincDomHelper.markFieldInvalid(fld);
+          abnDomHelper.markFieldInvalid(fld);
         }
-        clearInterval(twoincSubtitleExistCheck);
+        clearInterval(abnSubtitleExistCheck);
       }
     }, 1000);
   }
@@ -1597,7 +1614,7 @@ class Twoinc {
     const self = this;
     const addressResponse = jQuery.ajax({
       dataType: "json",
-      url: twoincUtilHelper.constructTwoincUrl(`/companies/v2/company/${selectedCompany.lookup_id}`)
+      url: abnUtilHelper.constructABNUrl(`/companies/v2/company/${selectedCompany.lookup_id}`)
     });
     addressResponse.done(function (response) {
       // Use new address lookup by default
@@ -1621,34 +1638,34 @@ class Twoinc {
    */
   getDueInDays() {
     if (
-      !Twoinc.getInstance().customerCompany ||
-      !Twoinc.getInstance().customerCompany.organization_number ||
-      !Twoinc.getInstance().customerCompany.country_prefix
+      !ABN.getInstance().customerCompany ||
+      !ABN.getInstance().customerCompany.organization_number ||
+      !ABN.getInstance().customerCompany.country_prefix
     )
       return;
 
     let params = {
-      merchant_id: window.twoinc.merchant?.id,
-      merchant_short_name: window.twoinc.merchant?.short_name,
-      buyer_organization_number: Twoinc.getInstance().customerCompany.organization_number,
-      country_prefix: Twoinc.getInstance().customerCompany.country_prefix
+      merchant_id: window.abn.merchant_id,
+      merchant_short_name: window.abn.merchant?.short_name,
+      buyer_organization_number: ABN.getInstance().customerCompany.organization_number,
+      country_prefix: ABN.getInstance().customerCompany.country_prefix
     };
 
     // Create a get due in days request
     const dueInDaysResponse = jQuery.ajax({
-      url: twoincUtilHelper.constructTwoincUrl("/v1/payment_terms", params),
+      url: abnUtilHelper.constructABNUrl("/v1/payment_terms", params),
       dataType: "json",
       method: "GET"
     });
 
     dueInDaysResponse.done(function (response) {
-      window.twoinc.custom_due_in_days = typeof response.due_in_days !== "undefined";
+      window.abn.custom_due_in_days = typeof response.due_in_days !== "undefined";
 
-      Twoinc.getInstance().toggleDueInDays();
+      ABN.getInstance().toggleDueInDays();
     });
 
     dueInDaysResponse.fail(function (response) {
-      Twoinc.getInstance().toggleDueInDays();
+      ABN.getInstance().toggleDueInDays();
     });
   }
 
@@ -1656,7 +1673,7 @@ class Twoinc {
    * Display due in days only if the buyer does not have custom payment term
    */
   toggleDueInDays() {
-    if (window.twoinc.custom_due_in_days) {
+    if (window.abn.custom_due_in_days) {
       jQuery(".payment-term-number").hide();
       jQuery(".payment-term-nonumber").show();
     } else {
@@ -1669,42 +1686,43 @@ class Twoinc {
    * Handle the woocommerce updated checkout event
    */
   onUpdatedCheckout() {
-    Twoinc.getInstance().updateElements();
+    ABN.getInstance().updateElements();
 
-    jQuery("#payment_method_kco").on("change", Twoinc.getInstance().onChangedToKco);
+    jQuery("#payment_method_kco").on("change", ABN.getInstance().onChangedToKco);
 
-    jQuery("#payment_method_woocommerce-gateway-tillit").on("change", function () {
-      // If current selected payment is Twoinc, clicking "business" will select Twoinc payment again
-      if (twoincDomHelper.isSelectedPaymentTwoinc()) {
-        sessionStorage.setItem("businessClickToTwoinc", "y");
+    jQuery("#payment_method_woocommerce-gateway-abn").on("change", function () {
+      // If current selected payment is ABN, clicking "business" will select ABN payment again
+      if (abnDomHelper.isSelectedPaymentABN()) {
+        sessionStorage.setItem("businessClickToABN", "y");
       }
     });
 
     jQuery('input[name="payment_method"]').on("change", function () {
-      twoincDomHelper.toggleBusinessFields(twoincDomHelper.getAccountType());
+      abnDomHelper.toggleBusinessFields(abnDomHelper.getAccountType());
+      abnDomHelper.toggleABNTermsVisibility(abnDomHelper.isSelectedPaymentABN());
     });
 
-    if (twoincDomHelper.isSelectedPaymentTwoinc()) {
-      sessionStorage.setItem("businessClickToTwoinc", "y");
+    if (abnDomHelper.isSelectedPaymentABN()) {
+      sessionStorage.setItem("businessClickToABN", "y");
     }
 
     // Hide and clear unnecessary payment methods
-    twoincDomHelper.toggleMethod(Twoinc.getInstance().isTwoincMethodHidden);
+    abnDomHelper.toggleMethod(ABN.getInstance().isABNMethodHidden);
     jQuery("#payment .wc_payment_methods input.input-radio").each(function () {
       setTimeout(function () {
         if (jQuery(this).is(":hidden")) {
-          twoincDomHelper.deselectPaymentMethod(jQuery(this));
+          abnDomHelper.deselectPaymentMethod(jQuery(this));
         }
       }, 1000);
     });
-    twoincDomHelper.rearrangeDescription();
+    abnDomHelper.rearrangeDescription();
 
-    // Disable click to return to Twoinc/Kco if some other payment method is selected
+    // Disable click to return to ABN/Kco if some other payment method is selected
     jQuery(
-      ".wc_payment_method:not(.payment_method_woocommerce-gateway-tillit):not(.payment_method_kco)"
+      ".wc_payment_method:not(.payment_method_woocommerce-gateway-abn):not(.payment_method_kco)"
     ).on("click", function () {
       sessionStorage.removeItem("privateClickToKco");
-      sessionStorage.removeItem("businessClickToTwoinc");
+      sessionStorage.removeItem("businessClickToABN");
     });
   }
 
@@ -1716,27 +1734,30 @@ class Twoinc {
     const $input = jQuery(this);
 
     // Get the account type
-    const accountType = twoincDomHelper.getAccountType();
+    const accountType = abnDomHelper.getAccountType();
 
     // Hide the method for non-business accounts
-    if (!twoincUtilHelper.isCompany(accountType)) {
-      Twoinc.getInstance().isTwoincMethodHidden = true;
+    if (!abnUtilHelper.isCompany(accountType)) {
+      ABN.getInstance().isABNMethodHidden = true;
       // Clear method tick
-      twoincDomHelper.deselectPaymentMethod(jQuery("#payment_method_woocommerce-gateway-tillit"));
-    } else if (Twoinc.getInstance().isTwoincApproved) {
-      Twoinc.getInstance().isTwoincMethodHidden = false;
-      // Force select twoinc payment
-      jQuery("#payment_method_woocommerce-gateway-tillit").click();
+      abnDomHelper.deselectPaymentMethod(jQuery("#payment_method_woocommerce-gateway-abn"));
+    } else if (ABN.getInstance().isABNApproved) {
+      ABN.getInstance().isABNMethodHidden = false;
+      // Force select abn payment
+      jQuery("#payment_method_woocommerce-gateway-abn").click();
     }
 
     // Toggle the business fields
-    twoincDomHelper.toggleBusinessFields($input.val());
+    abnDomHelper.toggleBusinessFields($input.val());
+
+    // Show terms field
+    abnDomHelper.toggleABNTermsVisibility(abnDomHelper.isSelectedPaymentABN());
 
     // Move the fields to correct positions
-    twoincDomHelper.positionFields();
+    abnDomHelper.positionFields();
 
     // Show or hide the payment method
-    // twoincDomHelper.toggleMethod(Twoinc.getInstance().isTwoincMethodHidden)
+    // abnDomHelper.toggleMethod(ABN.getInstance().isABNMethodHidden)
   }
 
   /**
@@ -1751,12 +1772,12 @@ class Twoinc {
     let inputName = $input.attr("name");
 
     if (inputName === "company_id") {
-      Twoinc.getInstance().customerCompany.organization_number = $input.val();
+      ABN.getInstance().customerCompany.organization_number = $input.val();
     } else if (inputName === "billing_company_display") {
-      Twoinc.getInstance().customerCompany.company_name = $input.val();
+      ABN.getInstance().customerCompany.company_name = $input.val();
     }
 
-    Twoinc.getInstance().getApproval();
+    ABN.getInstance().getApproval();
   }
 
   /**
@@ -1772,9 +1793,9 @@ class Twoinc {
 
     if (inputName === "phone") inputName += "_number";
 
-    Twoinc.getInstance().customerRepresentative[inputName] = $input.val();
+    ABN.getInstance().customerRepresentative[inputName] = $input.val();
 
-    Twoinc.getInstance().getApproval();
+    ABN.getInstance().getApproval();
   }
 
   /**
@@ -1786,13 +1807,13 @@ class Twoinc {
   onCountryInputChange(event) {
     const $input = jQuery(this);
 
-    Twoinc.getInstance().customerCompany.country_prefix = $input.val();
+    ABN.getInstance().customerCompany.country_prefix = $input.val();
 
-    twoincDomHelper.toggleBusinessFields(twoincDomHelper.getAccountType());
+    abnDomHelper.toggleBusinessFields(abnDomHelper.getAccountType());
 
-    twoincDomHelper.clearSelectedCompany();
+    abnDomHelper.clearSelectedCompany();
 
-    Twoinc.getInstance().getApproval();
+    ABN.getInstance().getApproval();
   }
 
   /**
@@ -1802,87 +1823,83 @@ class Twoinc {
    */
 
   onChangedToKco(event) {
-    let accountType = twoincDomHelper.getAccountType();
-    if (twoincUtilHelper.isCompany(accountType)) accountType = "personal";
-    sessionStorage.setItem("twoincAccountType", accountType);
+    let accountType = abnDomHelper.getAccountType();
+    if (abnUtilHelper.isCompany(accountType)) accountType = "personal";
+    sessionStorage.setItem("abnAccountType", accountType);
   }
 }
 
 let instance = null;
-let isSelectedPaymentTwoinc = null;
+let isSelectedPaymentABN = null;
 jQuery(function () {
-  if (window.twoinc) {
-    if (window.twoinc.enable_order_intent === "yes") {
-      if (jQuery("#payment_method_woocommerce-gateway-tillit").length > 0) {
-        // Run Twoinc code if order intent is enabled
-        Twoinc.getInstance().initialize(true);
+  if (window.abn) {
+    if (window.abn.enable_order_intent === "yes") {
+      if (jQuery("#payment_method_woocommerce-gateway-abn").length > 0) {
+        // Run ABN code if order intent is enabled
+        ABN.getInstance().initialize(true);
       }
     } else {
       // Handle initialization every time order review (right panel) is updated
       jQuery(document.body).on("updated_checkout", function () {
-        // If shop defaults payment method to Twoinc, run Twoinc code
-        if (twoincDomHelper.isSelectedPaymentTwoinc()) {
-          Twoinc.getInstance().initialize(false);
-          Twoinc.getInstance().onUpdatedCheckout();
+        // If shop defaults payment method to ABN, run ABN code
+        if (abnDomHelper.isSelectedPaymentABN()) {
+          ABN.getInstance().initialize(false);
+          ABN.getInstance().onUpdatedCheckout();
         } else {
-          twoincDomHelper.toggleMethod(Twoinc.getInstance().isTwoincMethodHidden);
+          abnDomHelper.toggleMethod(ABN.getInstance().isABNMethodHidden);
         }
 
-        // Run Twoinc code if Twoinc payment is selected
-        jQuery("#payment_method_woocommerce-gateway-tillit").on("change", function () {
-          Twoinc.getInstance().initialize(false);
-          Twoinc.getInstance().onUpdatedCheckout();
+        // Run ABN code if ABN payment is selected
+        jQuery("#payment_method_woocommerce-gateway-abn").on("change", function () {
+          ABN.getInstance().initialize(false);
+          ABN.getInstance().onUpdatedCheckout();
         });
 
-        // Run Twoinc code if Business is selected
-        if (twoincUtilHelper.isCompany(twoincDomHelper.getAccountType())) {
-          Twoinc.getInstance().initialize(false);
-          Twoinc.getInstance().onUpdatedCheckout();
+        // Run ABN code if Business is selected
+        if (abnUtilHelper.isCompany(abnDomHelper.getAccountType())) {
+          ABN.getInstance().initialize(false);
+          ABN.getInstance().onUpdatedCheckout();
         }
 
-        // If invoice fee is charged to buyer, order price will change when payment method is changed from/to Twoinc
-        // Also, run Twoinc code if payment method selected is Twoinc
-        if (window.twoinc.invoice_fee_to_buyer === "yes") {
-          isSelectedPaymentTwoinc = twoincDomHelper.isSelectedPaymentTwoinc();
-          if (isSelectedPaymentTwoinc) {
-            Twoinc.getInstance().initialize(false);
-            Twoinc.getInstance().onUpdatedCheckout();
+        // If invoice fee is charged to buyer, order price will change when payment method is changed from/to ABN
+        // Also, run ABN code if payment method selected is ABN
+        if (window.abn.invoice_fee_to_buyer === "yes") {
+          isSelectedPaymentABN = abnDomHelper.isSelectedPaymentABN();
+          if (isSelectedPaymentABN) {
+            ABN.getInstance().initialize(false);
+            ABN.getInstance().onUpdatedCheckout();
           }
-
-          // Update right sidebar order review when the payment method changes
-          jQuery('.woocommerce-checkout [name="payment_method"]').on("change", function () {
-            let currentSelectedPaymentTwoinc = twoincDomHelper.isSelectedPaymentTwoinc();
-            if (currentSelectedPaymentTwoinc || isSelectedPaymentTwoinc) {
-              jQuery(document.body).trigger("update_checkout");
-            }
-            isSelectedPaymentTwoinc = currentSelectedPaymentTwoinc;
-            if (isSelectedPaymentTwoinc) {
-              Twoinc.getInstance().initialize(false);
-              Twoinc.getInstance().onUpdatedCheckout();
-            }
-          });
         }
+
+        // Update right sidebar order review when the payment method changes
+        jQuery('.woocommerce-checkout [name="payment_method"]').on("change", function () {
+          let currentSelectedPaymentABN = abnDomHelper.isSelectedPaymentABN();
+          if (currentSelectedPaymentABN || isSelectedPaymentABN) {
+            jQuery(document.body).trigger("update_checkout");
+          }
+          isSelectedPaymentABN = currentSelectedPaymentABN;
+          if (isSelectedPaymentABN) {
+            ABN.getInstance().initialize(false);
+            ABN.getInstance().onUpdatedCheckout();
+          }
+        });
       });
 
-      // If last selected payment method is Twoinc, run Twoinc code anyway
-      let lastSelectedPayment = twoincDomHelper.getCheckoutInput(
-        "INPUT",
-        "radio",
-        "payment_method"
-      );
+      // If last selected payment method is ABN, run ABN code anyway
+      let lastSelectedPayment = abnDomHelper.getCheckoutInput("INPUT", "radio", "payment_method");
       if (
         lastSelectedPayment &&
-        lastSelectedPayment.id === "payment_method_woocommerce-gateway-tillit"
+        lastSelectedPayment.id === "payment_method_woocommerce-gateway-abn"
       ) {
-        Twoinc.getInstance().initialize(true);
+        ABN.getInstance().initialize(true);
       }
 
-      // Otherwise do not run Twoinc code
+      // Otherwise do not run ABN code
     }
 
-    // Show or hide Twoinc payment method on account type change
+    // Show or hide ABN payment method on account type change
     jQuery('.woocommerce-checkout [name="account_type"]').on("change", function () {
-      twoincDomHelper.toggleMethod(Twoinc.getInstance().isTwoincMethodHidden);
+      abnDomHelper.toggleMethod(ABN.getInstance().isABNMethodHidden);
     });
 
     // I can not find my company button
@@ -1891,6 +1908,6 @@ jQuery(function () {
     jQuery("#search_company_btn").hide();
 
     // Intitialization of DOMs
-    twoincDomHelper.initAccountTypeButtons();
+    abnDomHelper.initAccountTypeButtons();
   }
 });

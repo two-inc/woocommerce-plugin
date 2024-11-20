@@ -1,14 +1,14 @@
 <?php
 
 /**
- * Twoinc Helper utilities
+ * ABN Helper utilities
  *
- * @class WC_Twoinc_Helper
- * @author Two
+ * @class WC_ABN_Helper
+ * @author ABN
  */
 
-if (!class_exists('WC_Twoinc_Helper')) {
-    class WC_Twoinc_Helper
+if (!class_exists('WC_ABN_Helper')) {
+    class WC_ABN_Helper
     {
         /**
          * Round the amount in woocommerce way
@@ -31,44 +31,45 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Get error message from twoinc response
+         * Get error message from abn response
          *
          * @param $response
          *
          * @return string|void
          */
-        public static function get_twoinc_error_msg($response)
+        public static function get_abn_error_msg($response)
         {
             if (!$response) {
-                return sprintf(__('Empty response from %s.', 'twoinc-payment-gateway'), WC_Twoinc::PRODUCT_NAME);
+                return sprintf(__('Empty response from %s.', 'abn-payment-gateway'), WC_ABN::PRODUCT_NAME);
             }
 
             if ($response['response'] && $response['response']['code'] && $response['response']['code'] >= 400) {
-                return sprintf(__('Response code from %s: %d', 'twoinc-payment-gateway'), WC_Twoinc::PRODUCT_NAME, $response['response']['code']);
+                return sprintf(__('Response code from %s: %d', 'abn-payment-gateway'), WC_ABN::PRODUCT_NAME, $response['response']['code']);
             }
 
             if ($response['body']) {
                 $body = json_decode($response['body'], true);
                 if (is_string($body)) {
-                    return __($body, 'twoinc-payment-gateway');
+                    return __($body, 'abn-payment-gateway');
                 } elseif (isset($body['error_details']) && is_string($body['error_details'])) {
-                    return __($body['error_details'], 'twoinc-payment-gateway');
+                    return __($body['error_details'], 'abn-payment-gateway');
                 } elseif (isset($body['error_code']) && is_string($body['error_code'])) {
-                    return __($body['error_code'], 'twoinc-payment-gateway');
+                    return __($body['error_code'], 'abn-payment-gateway');
                 }
             }
         }
 
         /**
-         * Get validation message from twoinc response
+         * Get validation message from abn response
          *
          * @param $response
          *
          * @return string|void
          */
-        public static function get_twoinc_validation_msg($response)
+        public static function get_abn_validation_msg($response)
         {
-            $err_msg = sprintf(__('Invoice purchase with %s is not available for this order.', 'twoinc-payment-gateway'), WC_Twoinc::PRODUCT_NAME);
+            $err_msg = sprintf(__('Invoice purchase with %s is not available for this order.', 'abn-payment-gateway'), WC_ABN::PRODUCT_NAME);
+
             if (!$response) {
                 return $err_msg;
             }
@@ -81,7 +82,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                         $errs = array();
                         foreach ($body['error_json'] as $er) {
                             if ($er && $er['loc']) {
-                                $display_msg = WC_Twoinc_Helper::get_msg_from_loc(json_encode(WC_Twoinc_Helper::utf8ize($er['loc'])));
+                                $display_msg = WC_ABN_Helper::get_msg_from_loc(json_encode(WC_ABN_Helper::utf8ize($er['loc'])));
                                 if ($display_msg) {
                                     array_push($errs, $display_msg);
                                 }
@@ -93,7 +94,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     }
                     // Custom errors
                     if (isset($body['error_code']) && $body['error_code'] == 'SAME_BUYER_SELLER_ERROR') {
-                        return __('Buyer and merchant may not be the same company', 'twoinc-payment-gateway');
+                        return __('Buyer and merchant may not be the same company', 'abn-payment-gateway');
                     }
                 }
 
@@ -110,38 +111,38 @@ if (!class_exists('WC_Twoinc_Helper')) {
          */
         public static function get_msg_from_loc($loc_str)
         {
-            $generic_err_template = __('Please enter a valid %s to pay on invoice', 'twoinc-payment-gateway');
+            $generic_err_template = __('Please enter a valid %s to pay on invoice', 'abn-payment-gateway');
             $loc_str = preg_replace('/\s+/', '', $loc_str);
 
             if ($loc_str === '["buyer","representative","phone_number"]') {
-                return sprintf($generic_err_template, __('Phone number', 'twoinc-payment-gateway'));
+                return sprintf($generic_err_template, __('Phone number', 'abn-payment-gateway'));
             }
             if ($loc_str === '["buyer","company","organization_number"]') {
-                return sprintf($generic_err_template, __('Organization number', 'twoinc-payment-gateway'));
+                return sprintf($generic_err_template, __('Organization number', 'abn-payment-gateway'));
             }
             if ($loc_str === '["buyer","company","company_name"]') {
-                return sprintf($generic_err_template, __('Company name', 'twoinc-payment-gateway'));
+                return sprintf($generic_err_template, __('Company name', 'abn-payment-gateway'));
             }
             if ($loc_str === '["buyer","representative","first_name"]') {
-                return sprintf($generic_err_template, __('First name', 'twoinc-payment-gateway'));
+                return sprintf($generic_err_template, __('First name', 'abn-payment-gateway'));
             }
             if ($loc_str === '["buyer","representative","last_name"]') {
-                return sprintf($generic_err_template, __('Last name', 'twoinc-payment-gateway'));
+                return sprintf($generic_err_template, __('Last name', 'abn-payment-gateway'));
             }
             if ($loc_str === '["buyer","representative","email"]') {
-                return sprintf($generic_err_template, __('Email', 'twoinc-payment-gateway'));
+                return sprintf($generic_err_template, __('Email', 'abn-payment-gateway'));
             }
             if ($loc_str === '["billing_address","street_address"]') {
-                return sprintf($generic_err_template, __('Address', 'twoinc-payment-gateway'));
+                return sprintf($generic_err_template, __('Address', 'abn-payment-gateway'));
             }
             if ($loc_str === '["billing_address","city"]') {
-                return sprintf($generic_err_template, __('City', 'twoinc-payment-gateway'));
+                return sprintf($generic_err_template, __('City', 'abn-payment-gateway'));
             }
             if ($loc_str === '["billing_address","country"]') {
-                return sprintf($generic_err_template, __('Country', 'twoinc-payment-gateway'));
+                return sprintf($generic_err_template, __('Country', 'abn-payment-gateway'));
             }
             if ($loc_str === '["billing_address","postal_code"]') {
-                return sprintf($generic_err_template, __('Postal code', 'twoinc-payment-gateway'));
+                return sprintf($generic_err_template, __('Postal code', 'abn-payment-gateway'));
             }
         }
 
@@ -172,62 +173,61 @@ if (!class_exists('WC_Twoinc_Helper')) {
         /**
          * Authenticate external REST requests
          *
-         * @param $wc_twoinc
+         * @param $wc_abn
          *
          * @return bool
          */
-        public static function auth_rest_request($wc_twoinc)
+        public static function auth_rest_request($wc_abn)
         {
             // TODO: Drop comparison against HTTP_X_API_KEY in a future release
-            return hash('sha256', $wc_twoinc->get_option('api_key')) === $_SERVER['HTTP_X_API_KEY_HASH'] || $wc_twoinc->api_key === $_SERVER['HTTP_X_API_KEY'];
+            return hash('sha256', $wc_abn->get_option('api_key')) === $_SERVER['HTTP_X_API_KEY_HASH'] || $wc_abn->api_key === $_SERVER['HTTP_X_API_KEY'];
         }
 
         /**
-         * Send alert email to twoinc tech support
+         * Send alert email to abn tech support
          *
          * @param $subject
          * @param $content
          *
          * @return bool
          */
-        public static function send_twoinc_alert_email($content, $subject = 'WooCommerce operation alert')
+        public static function send_abn_alert_email($content, $subject = 'WooCommerce operation alert')
         {
-            do_action('twoinc_send_alert_email', $content, $subject);
-            $email = WC_Twoinc::ALERT_EMAIL_ADDRESS;
+            do_action('abn_send_alert_email', $content, $subject);
+            $email = WC_ABN::ALERT_EMAIL_ADDRESS;
             return wp_mail($email, $subject, $content, "Reply-To: " . $email . "\r\n");
-
         }
 
         /**
-         * Check if order is paid by twoinc
+         * Check if order is paid by abn
          *
          * @param $order
          *
          * @return bool
          */
-        public static function is_twoinc_order($order)
+        public static function is_abn_order($order)
         {
-            return $order && $order->get_payment_method() && $order->get_payment_method() === 'woocommerce-gateway-tillit';
+            return $order && $order->get_payment_method() && $order->get_payment_method() === 'woocommerce-gateway-abn';
         }
 
         /**
-         * Check if address json to send to Twoinc is empty
+         * Check if address json to send to ABN is empty
          *
-         * @param $twoinc_address
+         * @param $abn_address
          *
          * @return bool
          */
-        public static function is_twoinc_address_empty($twoinc_address)
+        public static function is_abn_address_empty($abn_address)
         {
 
             $is_empty = true;
 
-            if ($twoinc_address) {
-                $is_empty = WC_Twoinc_Helper::is_str_no_word($twoinc_address['city'])
-                            && WC_Twoinc_Helper::is_str_no_word($twoinc_address['region'])
-                            && WC_Twoinc_Helper::is_str_no_word($twoinc_address['country'])
-                            && WC_Twoinc_Helper::is_str_no_word($twoinc_address['postal_code'])
-                            && WC_Twoinc_Helper::is_str_no_word($twoinc_address['street_address']);
+            if ($abn_address) {
+                $is_empty = WC_ABN_Helper::is_str_no_word($abn_address['city'])
+                            && WC_ABN_Helper::is_str_no_word($abn_address['region'])
+                            && WC_ABN_Helper::is_str_no_word($abn_address['country'])
+                            && WC_ABN_Helper::is_str_no_word($abn_address['postal_code'])
+                            && WC_ABN_Helper::is_str_no_word($abn_address['street_address']);
             }
 
             return $is_empty;
@@ -237,7 +237,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
         /**
          * Check if string has no content except special characters
          *
-         * @param $twoinc_address
+         * @param $abn_address
          *
          * @return bool
          */
@@ -261,21 +261,21 @@ if (!class_exists('WC_Twoinc_Helper')) {
             /** @var WC_Order_Item_Product $line_item */
             foreach ($line_items as $line_item) {
 
-                $product_simple = WC_Twoinc_Helper::get_product($line_item);
+                $product_simple = WC_ABN_Helper::get_product($line_item);
 
-                $tax_rate = WC_Twoinc_Helper::get_item_tax_rate($line_item, $order);
+                $tax_rate = WC_ABN_Helper::get_item_tax_rate($line_item, $order);
 
                 $image_url = get_the_post_thumbnail_url($product_simple->get_id());
 
                 $product = [
                     'name' => $product_simple->get_name(),
                     'description' => substr($product_simple->get_description(), 0, 255),
-                    'gross_amount' => strval(WC_Twoinc_Helper::round_amt($line_item['line_total'] + $line_item['line_tax'])),
-                    'net_amount' => strval(WC_Twoinc_Helper::round_amt($line_item['line_total'])),
-                    'discount_amount' => strval(WC_Twoinc_Helper::round_amt($line_item['line_subtotal'] - $line_item['line_total'])),
-                    'tax_amount' => strval(WC_Twoinc_Helper::round_amt($line_item['line_tax'])),
+                    'gross_amount' => strval(WC_ABN_Helper::round_amt($line_item['line_total'] + $line_item['line_tax'])),
+                    'net_amount' => strval(WC_ABN_Helper::round_amt($line_item['line_total'])),
+                    'discount_amount' => strval(WC_ABN_Helper::round_amt($line_item['line_subtotal'] - $line_item['line_total'])),
+                    'tax_amount' => strval(WC_ABN_Helper::round_amt($line_item['line_tax'])),
                     'tax_class_name' => $tax_rate['name'],
-                    'tax_rate' => strval(WC_Twoinc_Helper::round_rate($tax_rate['rate'])),
+                    'tax_rate' => strval(WC_ABN_Helper::round_rate($tax_rate['rate'])),
                     'unit_price' => strval($order->get_item_subtotal($line_item, false, true)),
                     'quantity' => $line_item['quantity'],
                     'quantity_unit' => 'item',
@@ -309,17 +309,17 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 if ($shipping->get_total() == 0) {
                     continue;
                 }
-                $tax_rate = WC_Twoinc_Helper::get_item_tax_rate($shipping, $order);
+                $tax_rate = WC_ABN_Helper::get_item_tax_rate($shipping, $order);
                 $shipping_line = [
                     'name' => 'Shipping - ' . $shipping->get_name(),
                     'description' => '',
-                    'gross_amount' => strval(WC_Twoinc_Helper::round_amt($shipping->get_total() + $shipping->get_total_tax())),
-                    'net_amount' => strval(WC_Twoinc_Helper::round_amt($shipping->get_total())),
+                    'gross_amount' => strval(WC_ABN_Helper::round_amt($shipping->get_total() + $shipping->get_total_tax())),
+                    'net_amount' => strval(WC_ABN_Helper::round_amt($shipping->get_total())),
                     'discount_amount' => '0',
-                    'tax_amount' => strval(WC_Twoinc_Helper::round_amt($shipping->get_total_tax())),
+                    'tax_amount' => strval(WC_ABN_Helper::round_amt($shipping->get_total_tax())),
                     'tax_class_name' => $tax_rate['name'],
-                    'tax_rate' => strval(WC_Twoinc_Helper::round_rate($tax_rate['rate'])),
-                    'unit_price' => strval(WC_Twoinc_Helper::round_amt($shipping->get_total())),
+                    'tax_rate' => strval(WC_ABN_Helper::round_rate($tax_rate['rate'])),
+                    'unit_price' => strval(WC_ABN_Helper::round_amt($shipping->get_total())),
                     'quantity' => 1,
                     'quantity_unit' => 'sc', // shipment charge
                     'image_url' => '',
@@ -335,17 +335,17 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 if ($fee->get_total() == 0) {
                     continue;
                 }
-                $tax_rate = WC_Twoinc_Helper::get_item_tax_rate($fee, $order);
+                $tax_rate = WC_ABN_Helper::get_item_tax_rate($fee, $order);
                 $fee_line = [
                     'name' => 'Fee - ' . $fee->get_name(),
                     'description' => '',
-                    'gross_amount' => strval(WC_Twoinc_Helper::round_amt($fee->get_total() + $fee->get_total_tax())),
-                    'net_amount' => strval(WC_Twoinc_Helper::round_amt($fee->get_total())),
+                    'gross_amount' => strval(WC_ABN_Helper::round_amt($fee->get_total() + $fee->get_total_tax())),
+                    'net_amount' => strval(WC_ABN_Helper::round_amt($fee->get_total())),
                     'discount_amount' => '0',
-                    'tax_amount' => strval(WC_Twoinc_Helper::round_amt($fee->get_total_tax())),
+                    'tax_amount' => strval(WC_ABN_Helper::round_amt($fee->get_total_tax())),
                     'tax_class_name' => $tax_rate['name'],
-                    'tax_rate' => strval(WC_Twoinc_Helper::round_rate($tax_rate['rate'])),
-                    'unit_price' => strval(WC_Twoinc_Helper::round_amt($fee->get_total())),
+                    'tax_rate' => strval(WC_ABN_Helper::round_rate($tax_rate['rate'])),
+                    'unit_price' => strval(WC_ABN_Helper::round_amt($fee->get_total())),
                     'quantity' => 1,
                     'quantity_unit' => 'fee',
                     'image_url' => '',
@@ -361,13 +361,13 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Get internally convened tax key for twoinc computation
+         * Get internally convened tax key for abn computation
          *
          * @return array
          */
         private static function get_internal_tax_key($tax_rate)
         {
-            return strval(WC_Twoinc_Helper::round_rate($tax_rate['rate'])) . '|' . $tax_rate['name'];
+            return strval(WC_ABN_Helper::round_rate($tax_rate['rate'])) . '|' . $tax_rate['name'];
         }
 
         /**
@@ -384,13 +384,13 @@ if (!class_exists('WC_Twoinc_Helper')) {
             /** @var WC_Order_Item_Product $line_item */
             foreach ($line_items as $line_item) {
 
-                $tax_rate = WC_Twoinc_Helper::get_item_tax_rate($line_item, $order);
+                $tax_rate = WC_ABN_Helper::get_item_tax_rate($line_item, $order);
                 $tax_single_line = [
                     'tax_amount' => $line_item['line_tax'],
                     'tax_rate' => $tax_rate['rate'],
                     'net_amount' => $line_item['line_total']
                 ];
-                $tax_key = WC_Twoinc_Helper::get_internal_tax_key($tax_rate);
+                $tax_key = WC_ABN_Helper::get_internal_tax_key($tax_rate);
                 if (!array_key_exists($tax_key, $tax_subtotal_dict)) {
                     $tax_subtotal_dict[$tax_key] = [];
                 }
@@ -403,13 +403,13 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 if ($shipping->get_total() == 0) {
                     continue;
                 }
-                $tax_rate = WC_Twoinc_Helper::get_item_tax_rate($shipping, $order);
+                $tax_rate = WC_ABN_Helper::get_item_tax_rate($shipping, $order);
                 $tax_single_line = [
                     'tax_amount' => $shipping->get_total_tax(),
                     'tax_rate' => $tax_rate['rate'],
                     'net_amount' => $shipping->get_total()
                 ];
-                $tax_key = WC_Twoinc_Helper::get_internal_tax_key($tax_rate);
+                $tax_key = WC_ABN_Helper::get_internal_tax_key($tax_rate);
                 if (!array_key_exists($tax_key, $tax_subtotal_dict)) {
                     $tax_subtotal_dict[$tax_key] = [];
                 }
@@ -421,13 +421,13 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 if ($fee->get_total() == 0) {
                     continue;
                 }
-                $tax_rate = WC_Twoinc_Helper::get_item_tax_rate($fee, $order);
+                $tax_rate = WC_ABN_Helper::get_item_tax_rate($fee, $order);
                 $tax_single_line = [
                     'tax_amount' => $fee->get_total_tax(),
                     'tax_rate' => $tax_rate['rate'],
                     'net_amount' => $fee->get_total()
                 ];
-                $tax_key = WC_Twoinc_Helper::get_internal_tax_key($tax_rate);
+                $tax_key = WC_ABN_Helper::get_internal_tax_key($tax_rate);
                 if (!array_key_exists($tax_key, $tax_subtotal_dict)) {
                     $tax_subtotal_dict[$tax_key] = [];
                 }
@@ -438,15 +438,15 @@ if (!class_exists('WC_Twoinc_Helper')) {
             foreach ($tax_subtotal_dict as $tax_single_line_list) {
                 $tax_subtotal = [
                     'tax_amount' => 0,
-                    'tax_rate' => strval(WC_Twoinc_Helper::round_rate($tax_single_line_list[0]['tax_rate'])),
+                    'tax_rate' => strval(WC_ABN_Helper::round_rate($tax_single_line_list[0]['tax_rate'])),
                     'taxable_amount' => 0
                 ];
                 foreach ($tax_single_line_list as $tax_single_line) {
                     $tax_subtotal['tax_amount'] += $tax_single_line['tax_amount'];
                     $tax_subtotal['taxable_amount'] += $tax_single_line['net_amount'];
                 }
-                $tax_subtotal['tax_amount'] = strval(WC_Twoinc_Helper::round_amt($tax_subtotal['tax_amount']));
-                $tax_subtotal['taxable_amount'] = strval(WC_Twoinc_Helper::round_amt($tax_subtotal['taxable_amount']));
+                $tax_subtotal['tax_amount'] = strval(WC_ABN_Helper::round_amt($tax_subtotal['tax_amount']));
+                $tax_subtotal['taxable_amount'] = strval(WC_ABN_Helper::round_amt($tax_subtotal['taxable_amount']));
                 $tax_subtotals[] = $tax_subtotal;
             }
 
@@ -455,13 +455,13 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Compose request body for twoinc create order
+         * Compose request body for abn create order
          *
          * @param $order
          *
          * @return bool
          */
-        public static function compose_twoinc_order(
+        public static function compose_abn_order(
             $order,
             $order_reference,
             $company_id,
@@ -494,7 +494,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 'region' => $order->get_shipping_state(),
                 'country' => $order->get_shipping_country()
             ];
-            if (WC_Twoinc_Helper::is_twoinc_address_empty($shipping_address)) {
+            if (WC_ABN_Helper::is_abn_address_empty($shipping_address)) {
                 $shipping_address = $billing_address;
             }
 
@@ -514,10 +514,10 @@ if (!class_exists('WC_Twoinc_Helper')) {
 
             $req_body = [
                 'currency' => $order->get_currency(),
-                'gross_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total())),
-                'net_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total() - $order->get_total_tax())),
-                'tax_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total_tax())),
-                'discount_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total_discount())),
+                'gross_amount' => strval(WC_ABN_Helper::round_amt($order->get_total())),
+                'net_amount' => strval(WC_ABN_Helper::round_amt($order->get_total() - $order->get_total_tax())),
+                'tax_amount' => strval(WC_ABN_Helper::round_amt($order->get_total_tax())),
+                'discount_amount' => strval(WC_ABN_Helper::round_amt($order->get_total_discount())),
                 'discount_rate' => '0',
                 'invoice_type' => 'FUNDED_INVOICE',
                 'invoice_details' => $invoice_details,
@@ -537,7 +537,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 'buyer_department' => $department,
                 'buyer_project' => $project,
                 'order_note' => $order->get_customer_note(),
-                'line_items' => WC_Twoinc_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'), $order),
+                'line_items' => WC_ABN_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'), $order),
                 'recurring' => false,
                 'merchant_additional_info' => '',
                 'merchant_order_id' => strval($order->get_id()),
@@ -566,11 +566,11 @@ if (!class_exists('WC_Twoinc_Helper')) {
 
             if (!$skip_nonce) {
                 $req_body['merchant_urls']['merchant_confirmation_url'] = sprintf(
-                    '%s/twoinc-payment-gateway/confirm?order_id=%s&twoinc_order_reference=%s&twoinc_nonce=%s',
+                    '%s/abn-payment-gateway/confirm?order_id=%s&abn_order_reference=%s&abn_nonce=%s',
                     get_home_url(),
                     $order->get_id(),
                     $order_reference,
-                    wp_create_nonce('twoinc_confirm_' . $order->get_id())
+                    wp_create_nonce('abn_confirm_' . $order->get_id())
                 );
             }
 
@@ -578,8 +578,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 $req_body['buyer_purchase_order_number'] = $purchase_order_number;
             }
 
-            if (WC_Twoinc_Helper::is_tax_subtotals_required_by_twoinc()) {
-                $req_body['tax_subtotals'] = WC_Twoinc_Helper::get_tax_subtotals($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'), $order);
+            if (WC_ABN_Helper::is_tax_subtotals_required_by_abn()) {
+                $req_body['tax_subtotals'] = WC_ABN_Helper::get_tax_subtotals($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'), $order);
             }
 
             if ($tracking_id) {
@@ -594,13 +594,13 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Compose request body for twoinc edit order
+         * Compose request body for abn edit order
          *
          * @param $order
          *
          * @return bool
          */
-        public static function compose_twoinc_edit_order(
+        public static function compose_abn_edit_order(
             $order,
             $department,
             $project,
@@ -624,22 +624,22 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 'region' => $order->get_shipping_state(),
                 'country' => $order->get_shipping_country()
             ];
-            if (WC_Twoinc_Helper::is_twoinc_address_empty($shipping_address)) {
+            if (WC_ABN_Helper::is_abn_address_empty($shipping_address)) {
                 $shipping_address = $billing_address;
             }
 
             $req_body = [
                 'currency' => $order->get_currency(),
-                'gross_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total())),
-                'net_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total() - $order->get_total_tax())),
-                'tax_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total_tax())),
-                'discount_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total_discount())),
+                'gross_amount' => strval(WC_ABN_Helper::round_amt($order->get_total())),
+                'net_amount' => strval(WC_ABN_Helper::round_amt($order->get_total() - $order->get_total_tax())),
+                'tax_amount' => strval(WC_ABN_Helper::round_amt($order->get_total_tax())),
+                'discount_amount' => strval(WC_ABN_Helper::round_amt($order->get_total_discount())),
                 'discount_rate' => '0',
                 'invoice_type' => 'FUNDED_INVOICE',
                 'buyer_department' => $department,
                 'buyer_project' => $project,
                 'order_note' => $order->get_customer_note(),
-                'line_items' => WC_Twoinc_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'), $order),
+                'line_items' => WC_ABN_Helper::get_line_items($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'), $order),
                 'recurring' => false,
                 'merchant_additional_info' => '',
                 'merchant_reference' => '',
@@ -661,8 +661,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 $req_body['buyer_purchase_order_number'] = $purchase_order_number;
             }
 
-            if (WC_Twoinc_Helper::is_tax_subtotals_required_by_twoinc()) {
-                $req_body['tax_subtotals'] = WC_Twoinc_Helper::get_tax_subtotals($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'), $order);
+            if (WC_ABN_Helper::is_tax_subtotals_required_by_abn()) {
+                $req_body['tax_subtotals'] = WC_ABN_Helper::get_tax_subtotals($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'), $order);
             }
 
             if (has_filter('two_order_edit')) {
@@ -673,7 +673,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Compose request body for twoinc refund order
+         * Compose request body for abn refund order
          *
          * @param $order_refund
          * @param $amount
@@ -681,20 +681,20 @@ if (!class_exists('WC_Twoinc_Helper')) {
          *
          * @return array
          */
-        public static function compose_twoinc_refund($order_refund, $amount, $currency)
+        public static function compose_abn_refund($order_refund, $amount, $currency)
         {
 
             $req_body = [
-                'amount' => strval(WC_Twoinc_Helper::round_amt($amount)),
+                'amount' => strval(WC_ABN_Helper::round_amt($amount)),
                 'currency' => $currency,
-                'line_items' => WC_Twoinc_Helper::get_line_items($order_refund->get_items(), $order_refund->get_items('shipping'), $order_refund->get_items('fee'), $order_refund)
+                'line_items' => WC_ABN_Helper::get_line_items($order_refund->get_items(), $order_refund->get_items('shipping'), $order_refund->get_items('fee'), $order_refund)
             ];
 
             return $req_body;
         }
 
         /**
-         * Compose request body for twoinc refund order
+         * Compose request body for abn refund order
          *
          * @param $order_id
          *
@@ -733,7 +733,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Check if country is supported by twoinc
+         * Check if country is supported by abn
          *
          * @param $country
          *
@@ -745,21 +745,21 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Check if tax subtotals is required in twoinc order request body
+         * Check if tax subtotals is required in abn order request body
          *
          * @return bool
          */
-        public static function is_tax_subtotals_required_by_twoinc()
+        public static function is_tax_subtotals_required_by_abn()
         {
             return strtolower(WC()->countries->get_base_country()) == 'se';
         }
 
         /**
-         * Check if current server is twoinc development
+         * Check if current server is abn development
          *
          * @return bool
          */
-        public static function is_twoinc_development()
+        public static function is_abn_development()
         {
             $hostname = str_replace(array('http://', 'https://'), '', get_home_url());
 
@@ -769,14 +769,14 @@ if (!class_exists('WC_Twoinc_Helper')) {
             }
 
             // Configured dev sites via env var
-            $env_dev_hostnames = getenv('TWOINC_DEV_HOSTNAMES');
+            $env_dev_hostnames = getenv('ABN_DEV_HOSTNAMES');
             if ($env_dev_hostnames && in_array($hostname, explode(',', $env_dev_hostnames))) {
                 return true;
             }
 
             // Dev subdomains
-            $twoinc_dev_sites = '/^.*\.(?:staging|release|experimental|perf|cyber|demo|sandbox)\.two\.inc$/';
-            if (preg_match($twoinc_dev_sites, $hostname) === 1) {
+            $abn_dev_sites = '/^.*\.(?:staging|release|experimental|perf|cyber|demo|sandbox)\.two\.inc$/';
+            if (preg_match($abn_dev_sites, $hostname) === 1) {
                 return true;
             }
 
@@ -785,7 +785,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 return true;
             }
 
-            // Neither local nor twoinc development site
+            // Neither local nor abn development site
             return false;
         }
 
@@ -812,11 +812,11 @@ if (!class_exists('WC_Twoinc_Helper')) {
         {
             if (is_array($d)) {
                 foreach ($d as $k => $v) {
-                    $d[$k] = WC_Twoinc_Helper::utf8ize($v);
+                    $d[$k] = WC_ABN_Helper::utf8ize($v);
                 }
             } elseif (is_object($d)) {
                 foreach ($d as $k => $v) {
-                    $d->$k = WC_Twoinc_Helper::utf8ize($v);
+                    $d->$k = WC_ABN_Helper::utf8ize($v);
                 }
             } elseif (is_string($d)) {
                 if (mb_detect_encoding($d, ['UTF-8'], true)) { // already in UTF-8
@@ -835,25 +835,25 @@ if (!class_exists('WC_Twoinc_Helper')) {
          *
          * @return string
          */
-        public static function hash_order($order, $twoinc_meta)
+        public static function hash_order($order, $abn_meta)
         {
-            $twoinc_order = WC_Twoinc_Helper::compose_twoinc_order(
+            $abn_order = WC_ABN_Helper::compose_abn_order(
                 $order,
-                $twoinc_meta['order_reference'],
-                $twoinc_meta['company_id'],
-                $twoinc_meta['department'],
-                $twoinc_meta['project'],
-                $twoinc_meta['purchase_order_number'],
-                $twoinc_meta['invoice_emails'],
-                $twoinc_meta['payment_reference_message'],
-                $twoinc_meta['payment_reference_ocr'],
-                $twoinc_meta['payment_reference'],
-                $twoinc_meta['payment_reference_type'],
-                $twoinc_meta['vendor_name'],
+                $abn_meta['order_reference'],
+                $abn_meta['company_id'],
+                $abn_meta['department'],
+                $abn_meta['project'],
+                $abn_meta['purchase_order_number'],
+                $abn_meta['invoice_emails'],
+                $abn_meta['payment_reference_message'],
+                $abn_meta['payment_reference_ocr'],
+                $abn_meta['payment_reference'],
+                $abn_meta['payment_reference_type'],
+                $abn_meta['vendor_name'],
                 '',
                 true
             );
-            return WC_Twoinc_Helper::hash_obj($twoinc_order);
+            return WC_ABN_Helper::hash_obj($abn_order);
         }
 
         /**
@@ -865,7 +865,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
          */
         public static function hash_obj($obj)
         {
-            return md5(json_encode(WC_Twoinc_Helper::utf8ize($obj)));
+            return md5(json_encode(WC_ABN_Helper::utf8ize($obj)));
         }
 
         /**
@@ -883,7 +883,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
             foreach ($src_arr as $key => $val) {
                 if (array_key_exists($key, $dst_arr)) {
                     if (is_array($val)) {
-                        $sub_diff = WC_Twoinc_Helper::array_diff_r($val, $dst_arr[$key]);
+                        $sub_diff = WC_ABN_Helper::array_diff_r($val, $dst_arr[$key]);
                         if (count($sub_diff)) {
                             $diff[$key] = $sub_diff;
                         }
@@ -949,7 +949,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     }
                 }
             }
-            return WC_Twoinc_Helper::get_tax_rate_from_tax_list($item_tax_rate_list);
+            return WC_ABN_Helper::get_tax_rate_from_tax_list($item_tax_rate_list);
         }
 
         /**

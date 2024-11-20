@@ -11,37 +11,45 @@
 .woocommerce-checkout
   #payment
   ul.payment_methods
-  li.wc_payment_method.payment_method_woocommerce-gateway-tillit {
+  li.wc_payment_method.payment_method_woocommerce-gateway-abn {
   margin-bottom: 1em;
 }
 
 .woocommerce-checkout
   #payment
   ul.payment_methods
-  li.wc_payment_method.payment_method_woocommerce-gateway-tillit
-  .twoinc-subtitle {
+  li.wc_payment_method.payment_method_woocommerce-gateway-abn
+  .abn-subtitle {
   color: #777777;
   margin-left: 31px;
-  font-size: 0.8em;
+  font-size: 1em;
 }
 
 .woocommerce-checkout
   #payment
   ul.payment_methods
-  li.wc_payment_method.payment_method_woocommerce-gateway-tillit
+  li.wc_payment_method.payment_method_woocommerce-gateway-abn
   .explain-details {
-  font-size: 0.8em;
+  font-size: 1em;
 }
 
 .woocommerce-checkout
   #payment
   ul.payment_methods
-  li.wc_payment_method.payment_method_woocommerce-gateway-tillit
+  li.wc_payment_method.payment_method_woocommerce-gateway-abn
+  .abn-buyer-name {
+  font-weight: bold;
+}
+
+.woocommerce-checkout
+  #payment
+  ul.payment_methods
+  li.wc_payment_method.payment_method_woocommerce-gateway-abn
   img {
   max-height: 32px;
 }
 
-.twoinc-loader::before {
+.abn-loader::before {
   width: 1em;
   height: 1em;
   display: block;
@@ -100,8 +108,8 @@ form.checkout.woocommerce-checkout
   width: unset;
 }
 
-.twoinc-source,
-.twoinc-target {
+.abn-source,
+.abn-target {
   display: none;
 }
 
@@ -115,17 +123,7 @@ form.checkout.woocommerce-checkout
   height: unset;
 }
 
-#abt-twoinc-link {
-  width: 100%;
-  padding-left: 31px;
-}
-
-#abt-twoinc-link a {
-  float: right;
-  font-size: 0.8em;
-}
-
-.abt-twoinc {
+.abt-abn {
   position: relative;
   text-align: right;
   cursor: pointer;
@@ -134,13 +132,19 @@ form.checkout.woocommerce-checkout
   /* Indicate the icon is interactive */
 }
 
-.abt-twoinc-text {
+.abn-terms-text {
+  margin: 0.2em;
+  font-weight: 100;
+  font-size: 0.83em;
+}
+
+.abt-abn-text {
   visibility: hidden;
-  width: 190px;
+  width: 220px;
   height: auto;
   background-color: rgb(34, 34, 34);
   color: #fff !important;
-  text-align: center;
+  text-align: left;
   padding: 10px;
   border-radius: 5px;
   /* Position the tooltip text */
@@ -157,7 +161,7 @@ form.checkout.woocommerce-checkout
   line-height: 1.5;
 }
 
-.abt-twoinc-text a {
+.abt-abn-text a {
   text-decoration: none;
   text-align: right;
   cursor: pointer;
@@ -169,7 +173,7 @@ form.checkout.woocommerce-checkout
   background-color: blue;
 }
 
-.abt-twoinc:hover .abt-twoinc-text {
+.abt-abn:hover .abt-abn-text {
   visibility: visible;
   opacity: 1;
 }
@@ -280,7 +284,7 @@ form.checkout.woocommerce-checkout
   filter: brightness(0);
 }
 
-.twoinc-payment-desc.payment-desc-no-funded {
+.abn-payment-desc.payment-desc-no-funded {
   display: none;
 }
 
