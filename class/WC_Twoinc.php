@@ -338,7 +338,7 @@ if (!class_exists('WC_Twoinc')) {
             if ($pagenow != 'admin.php' || $current_section != 'woocommerce-gateway-tillit') {
                 return;
             }
-            if (!$this->get_option('api_key') || !$this->get_option('tillit_merchant_id') || !$this->twoinc_checkout_host) {
+            if (!$this->get_option('api_key') || !$this->get_twoinc_checkout_host()) {
                 return;
             }
             $response = $this->make_request("/v1/merchant/verify_api_key", [], 'GET');
