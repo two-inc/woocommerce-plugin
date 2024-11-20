@@ -69,8 +69,38 @@ if (!class_exists('WC_Twoinc')) {
                     add_action('admin_notices', [$this, 'twoinc_account_init_notice']);
                     add_action('network_admin_notices', [$this, 'twoinc_account_init_notice']);
                 }
-                // Verify api key
-                add_action('woocommerce_settings_saved', [$this, 'verifyAPIKey']);
+
+                // Verify API key on save with success/failure message
+                add_action(
+                    'woocommerce_settings_saved',
+                    function () {
+                        global $pagenow, $current_section;
+                        if ($pagenow != 'admin.php' || $current_section != 'woocommerce-gateway-tillit') {
+                            return;
+                        }
+
+                        $result = $this->verifyAPIKey();
+
+                        $general_error_message = sprintf(__('Failed to verify API key.', 'tillit-payment-gateway'), self::PRODUCT_NAME);
+                        if (isset($result['body']) && isset($result['code'])) {
+                            if ($result['code'] == 200 && $result['body']['short_name']) {
+                                WC_Admin_Settings::add_message(sprintf(__('%s API key verified.', 'tillit-payment-gateway'), self::PRODUCT_NAME));
+                            } else {
+                                if ($result['code'] == 401) {
+                                    //WC_Admin_Settings::add_error($general_error_message);
+                                    WC_Admin_Settings::add_error(sprintf('%s %s', $general_error_message, $result['body']));
+                                } else {
+                                    WC_Admin_Settings::add_error(sprintf('%s %s', $general_error_message, $result['body']));
+                                }
+                            }
+                        } else {
+                            WC_Admin_Settings::add_error($general_error_message);
+                        }
+                    }
+                );
+
+                // Verify API key quietly
+                add_action('admin_enqueue_scripts', [$this, 'verifyAPIKey']);
 
                 // On plugin deactivated
                 add_action('deactivate_' . plugin_basename(__FILE__), [$this, 'on_deactivate_plugin']);
@@ -330,41 +360,22 @@ if (!class_exists('WC_Twoinc')) {
         }
 
 
-        /**
-         * Action to verify API key when settings are saved
-         *
-         * @return void
-         */
         public function verifyAPIKey()
         {
-            global $pagenow, $current_section;
-            if ($pagenow != 'admin.php' || $current_section != 'woocommerce-gateway-tillit') {
-                return;
-            }
             if (!$this->get_option('api_key') || !$this->get_twoinc_checkout_host()) {
                 return;
             }
             $response = $this->make_request("/v1/merchant/verify_api_key", [], 'GET');
-            $general_error_message = sprintf(__('Failed to verify API key.', 'twoinc-payment-gateway'), self::PRODUCT_NAME);
             if (!$response || is_wp_error($response)) {
-                WC_Admin_Settings::add_error($general_error_message);
                 return;
             }
             if (isset($response['body'])) {
                 $body = json_decode($response['body'], true);
-                if ($response['response']['code'] != 200) {
-                    if ($response['response']['code'] == 401) {
-                        $error_message = sprintf($general_error_message);
-                    } else {
-                        $error_message = sprintf('%s %s', $general_error_message, $response['body']);
-                    }
-                    WC_Admin_Settings::add_error($error_message);
-                    return;
-                }
-                if ($body['short_name']) {
-                    WC_Admin_Settings::add_message(sprintf(__('%s API key verified.', 'twoinc-payment-gateway'), self::PRODUCT_NAME));
+                $code = $response['response']['code'];
+                if ($code == 200 && $body['short_name']) {
                     $this->update_option('tillit_merchant_id', $body['short_name']);
                 }
+                return ['body' => $body, 'code' => $code];
             }
         }
 
