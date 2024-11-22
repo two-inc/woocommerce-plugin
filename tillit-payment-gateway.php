@@ -48,7 +48,7 @@ function load_twoinc_classes()
     init_twoinc_translation();
 
     // JSON endpoint to check plugin status
-    add_action('rest_api_init', 'register_plugin_status_checking');
+    add_action('rest_api_init', 'register_twoinc_plugin_status_checking');
 
     // Load classes
     require_once __DIR__ . '/class/WC_Twoinc_Helper.php';
@@ -56,14 +56,14 @@ function load_twoinc_classes()
     require_once __DIR__ . '/class/WC_Twoinc.php';
 
     // JSON endpoint to list and sync status of orders
-    add_action('rest_api_init', 'register_list_out_of_sync_order_ids');
-    add_action('rest_api_init', 'register_sync_order_state');
+    add_action('rest_api_init', 'register_twoinc_list_out_of_sync_order_ids');
+    add_action('rest_api_init', 'register_twoinc_sync_order_state');
 
     // JSON endpoint to get user configs of Two plugin
-    add_action('rest_api_init', 'register_get_plugin_configs');
+    add_action('rest_api_init', 'register_twoinc_get_plugin_configs');
 
     // JSON endpoint to get Two order info
-    add_action('rest_api_init', 'register_get_order_info');
+    add_action('rest_api_init', 'register_twoinc_get_order_info');
 
     // Confirm order after returning from twoinc checkout-page, DO NOT CHANGE HOOKS
     add_action('template_redirect', 'WC_Twoinc::process_confirmation_header_redirect');
@@ -98,7 +98,7 @@ function init_twoinc_translation()
 /**
  * Return the status of the plugin
  */
-function register_plugin_status_checking()
+function register_twoinc_plugin_status_checking()
 {
     register_rest_route(
         'twoinc-payment-gateway',
@@ -107,7 +107,7 @@ function register_plugin_status_checking()
             'methods' => 'GET',
             'callback' => function ($request) {
                 return [
-                    'version' => get_plugin_version()
+                    'version' => get_twoinc_plugin_version()
                 ];
             },
             'permission_callback' => '__return_true'
@@ -118,7 +118,7 @@ function register_plugin_status_checking()
 /**
  * Return the id of orders with status out of sync with Two
  */
-function register_list_out_of_sync_order_ids()
+function register_twoinc_list_out_of_sync_order_ids()
 {
     register_rest_route(
         'twoinc-payment-gateway',
@@ -134,7 +134,7 @@ function register_list_out_of_sync_order_ids()
 /**
  * Sync latest order state with Two
  */
-function register_sync_order_state()
+function register_twoinc_sync_order_state()
 {
     register_rest_route(
         'twoinc-payment-gateway',
@@ -150,7 +150,7 @@ function register_sync_order_state()
 /**
  * Get the plugin configs except api key
  */
-function register_get_plugin_configs()
+function register_twoinc__get_plugin_configs()
 {
     register_rest_route(
         'twoinc-payment-gateway',
@@ -166,7 +166,7 @@ function register_get_plugin_configs()
 /**
  * Get the order information
  */
-function register_get_order_info()
+function register_twoinc_get_order_info()
 {
     register_rest_route(
         'twoinc-payment-gateway',
@@ -193,7 +193,7 @@ function wc_twoinc_add_to_gateways($gateways)
  */
 function wc_twoinc_enqueue_styles()
 {
-    wp_enqueue_style('twoinc-payment-gateway-css', WC_TWOINC_PLUGIN_URL . '/assets/css/twoinc.css', false, get_plugin_version());
+    wp_enqueue_style('twoinc-payment-gateway-css', WC_TWOINC_PLUGIN_URL . '/assets/css/twoinc.css', false, get_twoinc_plugin_version());
 }
 
 /**
@@ -201,7 +201,7 @@ function wc_twoinc_enqueue_styles()
  */
 function wc_twoinc_enqueue_scripts()
 {
-    wp_enqueue_script('twoinc-payment-gateway-js', WC_TWOINC_PLUGIN_URL . '/assets/js/twoinc.js', ['jquery'], get_plugin_version());
+    wp_enqueue_script('twoinc-payment-gateway-js', WC_TWOINC_PLUGIN_URL . '/assets/js/twoinc.js', ['jquery'], get_twoinc_plugin_version());
 }
 
 /**
@@ -217,7 +217,7 @@ function twoinc_settings_link($links)
 /**
  * Get the version of this Twoinc plugin
  */
-function get_plugin_version()
+function get_twoinc_plugin_version()
 {
     if (!function_exists('get_plugin_data')) {
         require_once(ABSPATH . 'wp-admin/includes/plugin.php');

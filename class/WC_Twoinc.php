@@ -1103,7 +1103,7 @@ if (!class_exists('WC_Twoinc')) {
                 ];
             }
 
-            return ['out_of_sync_orders' => $ids, 'count' => sizeof($ids), 'plugin_version' => get_plugin_version()];
+            return ['out_of_sync_orders' => $ids, 'count' => sizeof($ids), 'plugin_version' => get_twoinc_plugin_version()];
         }
 
         /**
@@ -1235,7 +1235,7 @@ if (!class_exists('WC_Twoinc')) {
         {
             return [
                 'config' => array_diff_key($this->settings, array_flip(['api_key'])),
-                'plugin_version' => get_plugin_version(),
+                'plugin_version' => get_twoinc_plugin_version(),
                 'data' => [
                     'status' => 200
                 ]
@@ -2472,7 +2472,7 @@ if (!class_exists('WC_Twoinc')) {
         private function make_request($endpoint, $payload = [], $method = 'POST', $params = array())
         {
             $params['client'] = 'wp';
-            $params['client_v'] = get_plugin_version();
+            $params['client_v'] = get_twoinc_plugin_version();
             $headers = [
                'Accept-Language' => WC_Twoinc_Helper::get_locale(),
                'Content-Type' => 'application/json; charset=utf-8',

@@ -336,7 +336,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 'price_thousand_separator' => wc_get_price_thousand_separator(),
                 'twoinc_plugin_url' => WC_TWOINC_PLUGIN_URL,
                 'client_name' => 'wp',
-                'client_version' => get_plugin_version(),
+                'client_version' => get_twoinc_plugin_version(),
             ];
 
             $user_id = wp_get_current_user()->ID;
