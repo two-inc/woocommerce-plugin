@@ -346,7 +346,7 @@ if (!class_exists('WC_ABN')) {
                     <div class="abn-pay-box abn-err-payment-default hidden">%s</div>
                     <div class="abn-pay-box abn-err-phone-number hidden">%s</div>
                 </div>',
-                __('Order on invoice and pay within 30 days after delivery. Enabled by ABN AMRO.', 'abn-payment-gateway'),
+                __('Pay within 30 days of delivery. There are no additional costs for you.', 'abn-payment-gateway'),
                 sprintf(__('Your invoice purchase with %s is likely to be accepted subject to additional checks.', 'abn-payment-gateway'), self::PRODUCT_NAME),
                 sprintf(__('Invoice purchase with %s is not available for this order.', 'abn-payment-gateway'), self::PRODUCT_NAME),
                 __('Phone number is invalid.', 'abn-payment-gateway')
