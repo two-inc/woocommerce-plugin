@@ -68,7 +68,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
          */
         public static function get_twoinc_validation_msg($response)
         {
-            $err_msg = __('Invoice purchase is not available for this order', 'twoinc-payment-gateway');
+            $err_msg = sprintf(__('Invoice purchase with %s is not available for this order.', 'twoinc-payment-gateway'), WC_Twoinc::PRODUCT_NAME);
             if (!$response) {
                 return $err_msg;
             }

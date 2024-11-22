@@ -3,7 +3,7 @@ msgstr ""
 "Project-Id-Version: Two - BNPL for businesses\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2022-02-09 08:30+0000\n"
-"PO-Revision-Date: 2022-06-07 08:02+0000\n"
+"PO-Revision-Date: 2024-11-22 15:57+0000\n"
 "Last-Translator: \n"
 "Language-Team: Swedish\n"
 "Language: sv_SE\n"
@@ -15,34 +15,260 @@ msgstr ""
 "X-Loco-Version: 2.6.2; wp-6.0.2\n"
 "X-Domain: twoinc-payment-gateway"
 
-#: class/WC_Twoinc_Helper.php:136
+#: class/WC_Twoinc.php:1974
+#, php-format
+msgid "%s API Key"
+msgstr "%s API-nyckel"
+
+#: snippets/delivery-date-checkout.php:82
+#, php-format
+msgid "%s cannot be parsed."
+msgstr "%s kan inte tolkas."
+
+#: class/WC_Twoinc.php:2495
+#, php-format
+msgid ""
+"%s credit approves 90%% of business buyers, pays you upfront and minimise "
+"your risk. To offer %s in your checkout, you need to signup. It’s quick, "
+"easy and gives you immediate access to the %s Merchant Portal."
+msgstr ""
+"%s kredit godkänner 90%% av företagsköparna, betalar dig i förskott och "
+"minimerar din risk. För att erbjuda %s i kassan måste du registrera dig. Det "
+"är snabbt, enkelt och ger dig omedelbar tillgång till %s Merchant Portal."
+
+#: class/WC_Twoinc.php:789
+#, php-format
+msgid ""
+"%s has acknowledged request to fulfill %d order. An invoice will be sent to "
+"the buyer when the fulfilment is complete."
+msgid_plural ""
+"%s has acknowledged request to fulfill %d orders. Invoices will be sent to "
+"the buyers when the fulfilments are complete."
+msgstr[0] ""
+"%s har bekräftat begäran om att utföra %d beställning. En faktura skickas "
+"till köparen när fullgörandet är klart."
+msgstr[1] ""
+"%s har bekräftat begäran om att utföra %d beställningar. Fakturor kommer att "
+"skickas till köparna när fullgörandena är klara."
+
+#: class/WC_Twoinc.php:903
+#, php-format
+msgid ""
+"%s has acknowledged the request to fulfil the order. An invoice will be sent "
+"to the buyer when the fulfilment is complete."
+msgstr ""
+"%s har bekräftat begäran om att fullgöra beställningen. En faktura skickas "
+"till köparen när fullgörandet är klart."
+
+#: class/WC_Twoinc.php:804
+#, php-format
+msgid "%s has cancelled %d order."
+msgid_plural "%s has cancelled %d orders."
+msgstr[0] "%s har avbrutit %d beställning."
+msgstr[1] "%s har avbrutit %d beställningar."
+
+#: class/WC_Twoinc.php:808
+#, php-format
+msgid "%s has failed to cancel order %s."
+msgstr "%s har misslyckats med att avbryta beställning %s ."
+
+#: class/WC_Twoinc.php:798
+#, php-format
+msgid "%s has failed to issue invoice for order %s."
+msgstr "%s har misslyckats med att utfärda faktura för order %s ."
+
+#: snippets/delivery-date-checkout.php:73
+#, php-format
+msgid "%s is a required field."
+msgstr "%s är ett obligatoriskt fält."
+
+#: class/WC_Twoinc.php:320
+#, php-format
+msgid "%s lets your business pay later for the goods you purchase online."
+msgstr "%s låter ditt företag betala senare för de varor du köper online."
+
+#: class/WC_Twoinc.php:1320
+#, php-format
+msgid "%s pre-filled fields"
+msgstr "%s förifyllda fält"
+
+#: class/WC_Twoinc.php:1951
+#, php-format
+msgid "%s Test Server"
+msgstr "%s testserver"
+
+#: class/WC_Twoinc.php:1978
+#, php-format
+msgid "%s username"
+msgstr "%s användarnamn"
+
+#: class/WC_Twoinc.php:2019
+msgid "Add input field for \"Department\""
+msgstr "Lägg till inmatningsfält för \"Avdelning\""
+
+#: class/WC_Twoinc.php:2027
+msgid "Add input field for \"Project\""
+msgstr "Lägg till inmatningsfält för \"Projekt\""
+
+#: class/WC_Twoinc.php:2035
+msgid "Add input field for \"Purchase order number\""
+msgstr "Lägg till inmatningsfält för \"Inköpsordernummer\""
+
+#: class/WC_Twoinc_Helper.php:135
 msgid "Address"
 msgstr "Adress"
 
-#: class/WC_Twoinc_Checkout.php:91
+#: class/WC_Twoinc.php:2091
+msgid "Address auto-complete"
+msgstr "Autofyll av adress"
+
+#: class/WC_Twoinc.php:1999
+#, php-format
+msgid ""
+"Adds a separate checkout for business customers. %s payment is only "
+"available for business customers."
+msgstr ""
+"Lägger till en separat kassa för företagskunder. %s betalning är endast "
+"tillgänglig för företagskunder."
+
+#: class/WC_Twoinc.php:2007
+#, php-format
+msgid ""
+"Adds a separate checkout for private customers. %s payment is not available "
+"for private customers."
+msgstr ""
+"Lägger till en separat kassa för privatkunder. %s betalning är inte "
+"tillgänglig för privatkunder."
+
+#: class/WC_Twoinc.php:2020
+msgid ""
+"Adds an input field where buyers can input their department to display on "
+"the invoice."
+msgstr ""
+"Lägger till ett inmatningsfält där köpare kan ange sin avdelning att visa på "
+"fakturan."
+
+#: class/WC_Twoinc.php:2028
+msgid ""
+"Adds an input field where buyers can input their project in the company to "
+"display on the invoice."
+msgstr ""
+"Lägger till ett inmatningsfält där köpare kan mata in sitt projekt i "
+"företaget att visa på fakturan."
+
+#: class/WC_Twoinc.php:2036
+msgid ""
+"Adds an input field where buyers can input their purchase order number to "
+"display on the invoice."
+msgstr ""
+"Lägger till ett inmatningsfält där köpare kan ange sitt inköpsordernummer "
+"för att visas på fakturan."
+
+#: class/WC_Twoinc.php:1971
+msgid "API credentials"
+msgstr "API-uppgifter"
+
+#: class/WC_Twoinc.php:1991
+msgid "Approve buyer when phone and company name is filled out."
+msgstr "Godkänn köpare när telefon och företagsnamn är ifyllt"
+
+#: class/WC_Twoinc.php:2080
+msgid "Auto-complete settings"
+msgstr "Inställningar för automatisk ifyllnad"
+
+#: class/WC_Twoinc.php:1330
+msgid "Billing Company ID"
+msgstr "Organisationsnummer"
+
+#: class/WC_Twoinc.php:1324
+msgid "Billing Company name"
+msgstr "Företagsnamn"
+
+#: class/WC_Twoinc.php:1923
+msgid "Business"
+msgstr "Företag"
+
+#: class/WC_Twoinc_Checkout.php:86
 msgid "Business Customer"
 msgstr "Företagskund"
 
-#: class/WC_Twoinc.php:282
-#: class/WC_Twoinc_Helper.php:97
+#: class/WC_Twoinc.php:1947
+#, php-format
+msgid "Business invoice - %s days"
+msgstr "Företagsfaktura - %s dagar"
+
+#: class/WC_Twoinc_Helper.php:96
 msgid "Buyer and merchant may not be the same company"
 msgstr "Köpare och handlare kan inte vara samma företag"
 
-#: class/WC_Twoinc_Helper.php:139
+#: class/WC_Twoinc.php:298
+msgid ""
+"By completing the purchase, you verify that you have the legal right to "
+"purchase on behalf of"
+msgstr ""
+"Genom att slutföra köpet intygas att du har behörighet att ingå avtal på "
+"uppdrag av"
+
+#: class/WC_Twoinc.php:1987
+msgid "Checkout options"
+msgstr "Betalningsinställningar"
+
+#: class/WC_Twoinc.php:1956
+msgid "Choose your settings"
+msgstr "Välj dina inställningar"
+
+#: class/WC_Twoinc_Helper.php:138
 msgid "City"
 msgstr "Stad"
 
-#: class/WC_Twoinc_Checkout.php:183
+#: class/WC_Twoinc.php:1964
+msgid "Clear settings on deactivation of plug-in"
+msgstr "Rensa inställningar vid inaktivering av plugin"
+
+#: class/WC_Twoinc_Checkout.php:179
 msgid "Company ID"
 msgstr "Organisationsnummer"
 
-#: class/WC_Twoinc_Helper.php:124
-#: class/WC_Twoinc_Checkout.php:165
+#: class/WC_Twoinc_Helper.php:123 class/WC_Twoinc_Checkout.php:161
 #: views/woocommerce_order_pay.php:35
 msgid "Company name"
 msgstr "Företagsnamn"
 
-#: class/WC_Twoinc_Helper.php:142
+#: class/WC_Twoinc.php:2336 class/WC_Twoinc.php:2369 class/WC_Twoinc.php:2383
+#, php-format
+msgid "Could not edit the order with %s."
+msgstr "Kunde inte redigera beställningen med %s ."
+
+#: class/WC_Twoinc.php:1584
+#, php-format
+msgid "Could not find %s order ID"
+msgstr "Kunde inte hitta %s order-ID"
+
+#: class/WC_Twoinc.php:400 class/WC_Twoinc.php:411
+#, php-format
+msgid "Could not forward invoice image URL to %s"
+msgstr "Kunde inte vidarebefordra webbadressen till fakturabilden till %s"
+
+#: class/WC_Twoinc.php:1608 class/WC_Twoinc.php:1653 class/WC_Twoinc.php:1675
+#, php-format
+msgid "Could not initiate refund with %s."
+msgstr "Kunde inte initiera återbetalning med %s ."
+
+#: class/WC_Twoinc.php:865 class/WC_Twoinc.php:884
+#, php-format
+msgid "Could not update order status to \"Fulfilled\" with %s."
+msgstr "Kunde inte uppdatera orderstatus till \"Uppfylld\" med %s ."
+
+#: class/WC_Twoinc.php:932 class/WC_Twoinc.php:955 class/WC_Twoinc.php:970
+msgid "Could not update status to \"Cancelled\"."
+msgstr "Kunde inte uppdatera status till \"Avbruten\"."
+
+#: class/WC_Twoinc.php:834
+#, php-format
+msgid "Could not update status to \"Fulfilled\" with %s."
+msgstr "Kunde inte uppdatera status till \"Uppfylld\" med %s ."
+
+#: class/WC_Twoinc_Helper.php:141
 msgid "Country"
 msgstr "Land"
 
@@ -50,18 +276,92 @@ msgstr "Land"
 msgid "Country / Region"
 msgstr "Land / Region"
 
-#: class/WC_Twoinc.php:840
-#: class/WC_Twoinc_Checkout.php:192
+#: snippets/admin-order-list-columns.php:92
+msgid "Customer"
+msgstr "Kund"
+
+#: class/WC_Twoinc.php:2055
+msgid "Default to B2C check-out"
+msgstr "Gör B2C-checkout till standard"
+
+#: snippets/delivery-date-checkout.php:32
+#: snippets/delivery-date-checkout.php:51
+#: snippets/delivery-date-checkout.php:74
+#: snippets/delivery-date-checkout.php:83
+#: snippets/admin-order-list-columns.php:91
+msgid "Delivery Date"
+msgstr "Leveransdatum"
+
+#: class/WC_Twoinc.php:1336 class/WC_Twoinc_Checkout.php:188
 msgid "Department"
 msgstr "Avdelning"
 
-#: class/WC_Twoinc_Helper.php:133
+#: class/WC_Twoinc.php:2067
+msgid "Display input tooltips"
+msgstr "Visa verktygstips för inmatning"
+
+#: class/WC_Twoinc_Helper.php:132
 msgid "Email"
 msgstr "E-post"
 
-#: class/WC_Twoinc_Helper.php:127
+#: class/WC_Twoinc_Helper.php:43
+#, php-format
+msgid "Empty response from %s."
+msgstr "Tomt svar från %s ."
+
+#: class/WC_Twoinc.php:1941
+#, php-format
+msgid "Enable %s Payments"
+msgstr "Aktivera %s betalningar"
+
+#: class/WC_Twoinc.php:2083
+msgid "Enable company name search and auto-complete"
+msgstr "Aktivera autofyll för företagsnamn"
+
+#: class/WC_Twoinc.php:2092
+msgid ""
+"Enables automatically filling in the registered address from the national "
+"registry."
+msgstr ""
+"Möjliggör att automatiskt fylla i den registrerade adressen från officiella "
+"register"
+
+#: class/WC_Twoinc.php:2084
+msgid ""
+"Enables searching for company name in the national registry and "
+"automatically filling in name and national ID."
+msgstr ""
+"Möjliggör sökning efter företagsnamn i officiella register och  autofyll "
+"namn och organisationsnummer."
+
+#: class/WC_Twoinc.php:321
+msgid "Enter your company name to get started."
+msgstr "Fyll i ditt företagsnamn för att komma igång"
+
+#: class/WC_Twoinc.php:1503
+#, php-format
+msgid "Failed to process payment with %s"
+msgstr "Det gick inte att behandla betalningen med %s"
+
+#: class/WC_Twoinc.php:1490
+#, php-format
+msgid "Failed to request order creation with %s."
+msgstr "Det gick inte att begära att beställningen skapades med %s ."
+
+#: class/WC_Twoinc.php:1573 class/WC_Twoinc.php:1625 class/WC_Twoinc.php:1639
+#: class/WC_Twoinc.php:1662
+#, php-format
+msgid "Failed to request order refund with %s."
+msgstr "Det gick inte att begära återbetalning av beställningen med %s ."
+
+#: class/WC_Twoinc_Helper.php:126
 msgid "First name"
 msgstr "Förnamn"
+
+#: class/WC_Twoinc.php:2494
+#, php-format
+msgid "Grow your B2B sales with Buy Now, Pay Later using %s!"
+msgstr "Öka din B2B-försäljning med Köp nu, betala senare med %s !"
 
 #. URI of the plugin
 #. Author URI of the plugin
@@ -72,74 +372,250 @@ msgstr "https://two.inc/sv"
 msgid "Integration between WooCommerce and Two"
 msgstr "Integration mellan WooCommerce och Two"
 
-#: class/WC_Twoinc_Checkout.php:238
+#: class/WC_Twoinc_Checkout.php:235
 msgid "Invoice email address"
 msgstr "Epostadress för fakturan"
 
-#: class/WC_Twoinc.php:280
-#: class/WC_Twoinc_Helper.php:72
-msgid "Invoice purchase is not available for this order"
-msgstr "Fakturaköp är inte tillgängligt för denna ordern"
+#: class/WC_Twoinc.php:1685
+#, php-format
+msgid ""
+"Invoice has been partially refunded and credit note has been sent by %s."
+msgstr "Fakturan har delvis återbetalats och kreditnota har skickats av %s ."
 
-#: class/WC_Twoinc_Helper.php:130
+#: class/WC_Twoinc.php:1682
+#, php-format
+msgid "Invoice has been refunded and credit note has been sent by %s."
+msgstr "Faktura har återbetalats och kreditnota har skickats av %s ."
+
+#: class/WC_Twoinc_Helper.php:71 class/WC_Twoinc.php:302
+#, php-format
+#| msgid "Invoice purchase is not available for this order"
+msgid "Invoice purchase with %s is not available for this order."
+msgstr "Fakturaköp med %s är inte tillgängligt för denna beställning."
+
+#: class/WC_Twoinc_Helper.php:129
 msgid "Last name"
 msgstr "Efternamn"
+
+#: class/WC_Twoinc.php:42
+msgid "Making it easy for businesses to buy online."
+msgstr "Gör det enkelt för företag att köpa online."
+
+#: class/WC_Twoinc.php:2260
+msgid "Missing company ID."
+msgstr "Företags-ID saknas."
 
 #: views/woocommerce_after_checkout_billing_form.php:11
 msgid "My company is not on the list"
 msgstr "Mitt företag finns inte med i listan"
 
-#: class/WC_Twoinc_Helper.php:121
+#: class/WC_Twoinc_Checkout.php:238
+#, php-format
+msgid "Only for invoices being sent by %s"
+msgstr "Endast för fakturor som skickas av %s"
+
+#: class/WC_Twoinc.php:1982
+msgid "Optional vendor name if there are multiple sites"
+msgstr "Valfritt leverantörsnamn om det finns flera webbplatser"
+
+#: class/WC_Twoinc.php:1593
+#, php-format
+msgid "Order has already been fully refunded with %s."
+msgstr "Beställningen har redan återbetalats i sin helhet med %s ."
+
+#: class/WC_Twoinc.php:1894
+#, php-format
+msgid "Order ID %s has been placed with %s."
+msgstr "Order-ID %s har placerats med %s ."
+
+#: class/WC_Twoinc.php:946
+#, php-format
+msgid "Order is already cancelled with %s."
+msgstr "Beställningen är redan annullerad med %s ."
+
+#: class/WC_Twoinc.php:2410
+#, php-format
+msgid "Order value is now %s."
+msgstr "Ordervärdet är nu %s ."
+
+#: class/WC_Twoinc_Helper.php:120
 msgid "Organization number"
 msgstr "Organisationsnummer"
 
-#: class/WC_Twoinc_Checkout.php:238
+#: class/WC_Twoinc.php:337
+msgid "Pay on invoice with agreed terms"
+msgstr "Betala med faktura enligt överenskomna villkor"
+
+#: class/WC_Twoinc.php:1915
+msgid "Personal"
+msgstr "Personlig"
+
 #: views/woocommerce_order_pay.php:4
 msgid "Phone"
 msgstr "Telefon"
 
-#: class/WC_Twoinc_Helper.php:118
+#: class/WC_Twoinc_Helper.php:117
 msgid "Phone number"
 msgstr "Telefonnummer"
 
-#: class/WC_Twoinc_Helper.php:114
+#: class/WC_Twoinc.php:303
+#| msgid "Phone number is invalid"
+msgid "Phone number is invalid."
+msgstr "Telefonnumret är ogiltigt"
+
+#: class/WC_Twoinc.php:40
+msgid "Place order"
+msgstr "Beställa"
+
+#: class/WC_Twoinc.php:869 class/WC_Twoinc.php:888 class/WC_Twoinc.php:956
+#: class/WC_Twoinc.php:971 class/WC_Twoinc.php:1640 class/WC_Twoinc.php:1663
+#: class/WC_Twoinc.php:2261 class/WC_Twoinc.php:2384
+#, php-format
+msgid "Please contact %s support with order ID: %s"
+msgstr "Vänligen kontakta %s support med order-ID: %s"
+
+#: class/WC_Twoinc_Helper.php:113
+#, php-format
 msgid "Please enter a valid %s to pay on invoice"
 msgstr "Ange giltigt %s för att betala med faktura"
 
-#: class/WC_Twoinc_Helper.php:145
+#: class/WC_Twoinc_Helper.php:144
 msgid "Postal code"
 msgstr "Postnummer"
 
-#: class/WC_Twoinc_Checkout.php:83
+#: class/WC_Twoinc.php:1990
+msgid "Pre-approve buyer during checkout"
+msgstr "Förhandsgodkänna köparen i kassan"
+
+#: class/WC_Twoinc_Checkout.php:78
 msgid "Private Customer"
 msgstr "Privatkund"
 
-#: class/WC_Twoinc.php:848
-#: class/WC_Twoinc_Checkout.php:203
+#: class/WC_Twoinc.php:1344 class/WC_Twoinc_Checkout.php:199
 msgid "Project"
 msgstr "Projekt"
 
-#: class/WC_Twoinc_Checkout.php:214
+#: class/WC_Twoinc_Checkout.php:210
 msgid "Purchase order number"
 msgstr "PO-nummer"
+
+#: class/WC_Twoinc.php:835 class/WC_Twoinc.php:933 class/WC_Twoinc.php:1574
+#: class/WC_Twoinc.php:2337
+#, php-format
+msgid "Reason: Could not find %s order ID."
+msgstr "Orsak: Kunde inte hitta %s order-ID."
+
+#: class/WC_Twoinc.php:276
+msgid "Receive invoice and payment details via email"
+msgstr "Ta emot faktura och betalningsinformation via e-post"
+
+#: class/WC_Twoinc.php:277
+msgid "Receive invoice and payment details via email and EHF"
+msgstr "Ta emot faktura och betalningsuppgifter via e-post och EHF"
+
+#: class/WC_Twoinc_Helper.php:47
+#, php-format
+msgid "Response code from %s: %d"
+msgstr "Svarskod från %s : %d"
+
+#: class/WC_Twoinc.php:889 class/WC_Twoinc.php:972 class/WC_Twoinc.php:1641
+#: class/WC_Twoinc.php:2385
+#, php-format
+msgid "Response: %s"
+msgstr "Svar: %s"
 
 #: views/woocommerce_after_checkout_billing_form.php:15
 msgid "Search for company"
 msgstr "Sök efter företag"
 
-#: class/WC_Twoinc_Checkout.php:122
+#: class/WC_Twoinc_Checkout.php:118
 msgid "Select account type"
 msgstr "Välj kontotyp"
 
-#: class/WC_Twoinc_Checkout.php:87
+#: snippets/delivery-date-checkout.php:52
+msgid "Select Date"
+msgstr "Välj Datum"
+
+#: class/WC_Twoinc.php:2176
+msgid "Select image"
+msgstr "Välj bild"
+
+#: snippets/delivery-date-checkout.php:29
+msgid "Select Pickup Date"
+msgstr "Välj Upphämtningsdatum"
+
+#: class/WC_Twoinc.php:1998
+msgid "Separate checkout for business customers"
+msgstr "Separat kassa för företagskunder"
+
+#: class/WC_Twoinc.php:2006
+msgid "Separate checkout for private customers"
+msgstr "Separat kassa för privatkunder"
+
+#: class/WC_Twoinc.php:2014
+msgid "Separate checkout for private sole traders"
+msgstr "Separat kassa för enskild näringsidkare"
+
+#: class/WC_Twoinc.php:2496
+#, php-format
+msgid "Set up my %s account"
+msgstr "Konfigurera mitt %s -konto"
+
+#: class/WC_Twoinc.php:2060
+msgid "Shift invoice fee to the buyers"
+msgstr "Flytta fakturaavgift till köparna"
+
+#: class/WC_Twoinc.php:2049
+#, php-format
+msgid "Show \"What is %s\" link in checkout"
+msgstr "Visa länken \"Vad är %s \" i kassan"
+
+#: class/WC_Twoinc.php:2073
+msgid "Skip user validation at order confirmation"
+msgstr "Hoppa över användarvalidering vid orderbekräftelse"
+
+#: class/WC_Twoinc.php:1919
+msgid "Sole Trader"
+msgstr "Enskild näringsidkare"
+
+#: class/WC_Twoinc_Checkout.php:82
 msgid "Sole Trader/Other Customer"
 msgstr "Enskild näringsidkare"
 
+#: class/WC_Twoinc.php:295
+#, php-format
+msgid ""
+"The latest way to pay for your online business purchases. You will receive "
+"an invoice from %s when your order has been processed."
+msgstr ""
+"Det senaste sättet att betala för dina onlineföretagsköp. Du kommer att få "
+"en faktura från %s när din beställning har behandlats."
+
+#: class/WC_Twoinc.php:2408
+#, php-format
+msgid "The order edit request has been accepted by %s."
+msgstr "Beställningsredigeringsbegäran har accepterats av %s ."
+
+#: class/WC_Twoinc.php:1810
+msgid "The security code is not valid."
+msgstr "Säkerhetskoden är inte giltig."
+
+#: class/WC_Twoinc.php:2061
+msgid ""
+"This feature only works for merchants set up with a fixed fee per order."
+msgstr ""
+"Denna funktion fungerar bara för handlare som konfigurerats med en fast "
+"avgift per order."
+
+#: class/WC_Twoinc.php:1945
+msgid "Title"
+msgstr "Titel"
+
+#: class/WC_Twoinc.php:1939
+msgid "Turn on/off"
+msgstr "Slå på / av"
+
 #. Author of the plugin
-#: class/WC_Twoinc.php:30
-#: class/WC_Twoinc.php:1415
-#: class/WC_Twoinc.php:1460
-#: class/WC_Twoinc.php:1472
 msgid "Two"
 msgstr "Two"
 
@@ -147,438 +623,58 @@ msgstr "Two"
 msgid "Two - BNPL for businesses"
 msgstr "Two - Köp nu betala sen, för företag"
 
-#: class/WC_Twoinc.php:2007
-msgid "Add input field for \"Department\""
-msgstr "Lägg till inmatningsfält för \"Avdelning\""
-
-#: class/WC_Twoinc.php:2015
-msgid "Add input field for \"Project\""
-msgstr "Lägg till inmatningsfält för \"Projekt\""
-
-#: class/WC_Twoinc.php:2023
-msgid "Add input field for \"Purchase order number\""
-msgstr "Lägg till inmatningsfält för \"Inköpsordernummer\""
-
-#: class/WC_Twoinc.php:2079
-msgid "Address auto-complete"
-msgstr "Autofyll av adress"
-
-#: class/WC_Twoinc.php:1953
-msgid "API credentials"
-msgstr "API-uppgifter"
-
-#: class/WC_Twoinc.php:1981
-msgid "Approve buyer when phone and company name is filled out."
-msgstr "Godkänn köpare när telefon och företagsnamn är ifyllt"
-
-#: class/WC_Twoinc.php:2068
-msgid "Auto-complete settings"
-msgstr "Inställningar för automatisk ifyllnad"
-
-#: class/WC_Twoinc.php:1217
-msgid "Billing Company ID"
-msgstr "Organisationsnummer"
-
-#: class/WC_Twoinc.php:1211
-msgid "Billing Company name"
-msgstr "Företagsnamn"
-
-#: class/WC_Twoinc.php:1899
-msgid "Business"
-msgstr "Företag"
-
-#: class/WC_Twoinc.php:282
-msgid "By completing the purchase, you verify that you have the legal right to purchase on behalf of"
-msgstr "Genom att slutföra köpet intygas att du har behörighet att ingå avtal på uppdrag av"
-
-#: class/WC_Twoinc.php:1977
-msgid "Checkout options"
-msgstr "Betalningsinställningar"
-
-#: class/WC_Twoinc.php:1938
-msgid "Choose your settings"
-msgstr "Välj dina inställningar"
-
-#: class/WC_Twoinc.php:1946
-msgid "Clear settings on deactivation of plug-in"
-msgstr "Rensa inställningar vid inaktivering av plugin"
-
-#: class/WC_Twoinc.php:1853
-msgid "Dashboard"
-msgstr "Dashboard"
-
-#: class/WC_Twoinc.php:2043
-msgid "Default to B2C check-out"
-msgstr "Gör B2C-checkout till standard"
-
-#: class/WC_Twoinc.php:2055
-msgid "Display input tooltips"
-msgstr "Visa verktygstips för inmatning"
-
-#: class/WC_Twoinc.php:2071
-msgid "Enable company name search and auto-complete"
-msgstr "Aktivera autofyll för företagsnamn"
-
-#: class/WC_Twoinc.php:2080
-msgid "Enables automatically filling in the registered address from the national registry."
-msgstr "Möjliggör att automatiskt fylla i den registrerade adressen från officiella register"
-
-#: class/WC_Twoinc.php:2072
-msgid "Enables searching for company name in the national registry and automatically filling in name and national ID."
-msgstr "Möjliggör sökning efter företagsnamn i officiella register och  autofyll namn och organisationsnummer."
-
-#: class/WC_Twoinc.php:308
-msgid "Enter your company name to get started."
-msgstr "Fyll i ditt företagsnamn för att komma igång"
-
-#: class/WC_Twoinc.php:1773
-msgid "Log in"
-msgstr "Logga in"
-
-#: class/WC_Twoinc.php:37
-msgid "Making it easy for businesses to buy online."
-msgstr "Gör det enkelt för företag att köpa online."
-
-#: class/WC_Twoinc.php:1964
-msgid "Optional vendor name if there are multiple sites"
-msgstr "Valfritt leverantörsnamn om det finns flera webbplatser"
-
-#: class/WC_Twoinc.php:289
-msgid "Order value exceeds maximum limit"
-msgstr "Ordervärdet överskrider maxgränsen"
-
-#: class/WC_Twoinc.php:290
-msgid "Order value is below minimum limit"
-msgstr "Ordervärdet är under minimigränsen"
-
-#: class/WC_Twoinc.php:323
-msgid "Pay on invoice with agreed terms"
-msgstr "Betala med faktura enligt överenskomna villkor"
-
-#: class/WC_Twoinc.php:1891
-msgid "Personal"
-msgstr "Personlig"
-
-#: class/WC_Twoinc.php:291
-msgid "Phone number is invalid"
-msgstr "Telefonnumret är ogiltigt"
-
-#: class/WC_Twoinc.php:35
-msgid "Place order"
-msgstr "Beställa"
-
-#: class/WC_Twoinc.php:1980
-msgid "Pre-approve buyer during checkout"
-msgstr "Förhandsgodkänna köparen i kassan"
-
-#: class/WC_Twoinc.php:257
-msgid "Receive invoice and payment details via email"
-msgstr "Ta emot faktura och betalningsinformation via e-post"
-
-#: class/WC_Twoinc.php:258
-msgid "Receive invoice and payment details via email and EHF"
-msgstr "Ta emot faktura och betalningsuppgifter via e-post och EHF"
-
-#: class/WC_Twoinc.php:2165
-msgid "Select image"
-msgstr "Välj bild"
-
-#: class/WC_Twoinc.php:1988
-msgid "Separate checkout for business customers"
-msgstr "Separat kassa för företagskunder"
-
-#: class/WC_Twoinc.php:1996
-msgid "Separate checkout for private customers"
-msgstr "Separat kassa för privatkunder"
-
-#: class/WC_Twoinc.php:2002
-msgid "Separate checkout for private sole traders"
-msgstr "Separat kassa för enskild näringsidkare"
-
-#: class/WC_Twoinc.php:2048
-msgid "Shift invoice fee to the buyers"
-msgstr "Flytta fakturaavgift till köparna"
-
-#: class/WC_Twoinc.php:2061
-msgid "Skip user validation at order confirmation"
-msgstr "Hoppa över användarvalidering vid orderbekräftelse"
-
-#: class/WC_Twoinc.php:1667
-msgid "The security code is not valid."
-msgstr "Säkerhetskoden är inte giltig."
-
-#: class/WC_Twoinc.php:2049
-msgid "This feature only works for merchants set up with a fixed fee per order."
-msgstr "Denna funktion fungerar bara för handlare som konfigurerats med en fast avgift per order."
-
-#: class/WC_Twoinc.php:1921
-msgid "Title"
-msgstr "Titel"
-
-#: class/WC_Twoinc.php:1915
-msgid "Turn on/off"
-msgstr "Slå på / av"
-
-#: class/WC_Twoinc.php:2234
-msgid "Unable to retrieve the order payment information"
-msgstr "Det gick inte att hämta betalningsinformationen"
-
-#: class/WC_Twoinc.php:2031
-msgid "Use buttons instead of radios to select account type"
-msgstr "Använd buttons istället för radiobuttons för att välja kontotyp"
-
-#: class/WC_Twoinc.php:287 class/WC_Twoinc.php:1405
-msgid "We've checked your company's details and are unable to provide invoice credit for this order"
-msgstr "Företaget kvalificerar dessvärre inte för faktura för denna ordern just nu"
-
-#: class/WC_Twoinc.php:283
-msgid "your company"
-msgstr "ditt företag"
-
-#: class/WC_Twoinc.php:1933
-msgid "Use production search API"
-msgstr "Använd produktionssök-API"
-
-#: class/WC_Twoinc.php:2011
-msgid "%s API Key"
-msgstr "%s API-nyckel"
-
-#: class/WC_Twoinc.php:1831
-msgid "%s checkout host name is not correct."
-msgstr "%s kassavärdnamn är inte korrekt."
-
-#: class/WC_Twoinc.php:1982
-msgid "%s Company Search"
-msgstr "%s Företagssökning"
-
-#: class/WC_Twoinc.php:2521
-msgid "%s credit approves 90%% of business buyers, pays you upfront and minimise your risk. To offer %s in your checkout, you need to signup. It’s quick, easy and gives you immediate access to the %s Merchant Portal."
-msgstr "%s kredit godkänner 90%% av företagsköparna, betalar dig i förskott och minimerar din risk. För att erbjuda %s i kassan måste du registrera dig. Det är snabbt, enkelt och ger dig omedelbar tillgång till %s Merchant Portal."
-
-#: class/WC_Twoinc.php:727
-msgid "%s has acknowledged request to fulfill %d order. An invoice will be sent to the buyer when the fulfilment is complete."
-msgid_plural "%s has acknowledged request to fulfill %d orders. Invoices will be sent to the buyers when the fulfilments are complete."
-msgstr[0] "%s har bekräftat begäran om att utföra %d beställning. En faktura skickas till köparen när fullgörandet är klart."
-msgstr[1] "%s har bekräftat begäran om att utföra %d beställningar. Fakturor kommer att skickas till köparna när fullgörandena är klara."
-
-#: class/WC_Twoinc.php:836
-msgid "%s has acknowledged the request to fulfil the order. An invoice will be sent to the buyer when the fulfilment is complete."
-msgstr "%s har bekräftat begäran om att fullgöra beställningen. En faktura skickas till köparen när fullgörandet är klart."
-
-#: class/WC_Twoinc.php:740
-msgid "%s has cancelled %d order."
-msgid_plural "%s has cancelled %d orders."
-msgstr[0] "%s har avbrutit %d beställning."
-msgstr[1] "%s har avbrutit %d beställningar."
-
-#: class/WC_Twoinc.php:307
-msgid "%s lets your business pay later for the goods you purchase online."
-msgstr "%s låter ditt företag betala senare för de varor du köper online."
-
-#: class/WC_Twoinc.php:1809 class/WC_Twoinc.php:1833 class/WC_Twoinc.php:1863
-msgid "%s payment setup failure"
-msgstr "%s betalningskonfiguration misslyckades"
-
-#: class/WC_Twoinc.php:1978
-msgid "%s Test Server"
-msgstr "%s testserver"
-
-#: class/WC_Twoinc.php:2007
-msgid "%s username"
-msgstr "%s användarnamn"
-
-#: class/WC_Twoinc.php:2032
-msgid "Adds a separate checkout for business customers. %s payment is only available for business customers."
-msgstr "Lägger till en separat kassa för företagskunder. %s betalning är endast tillgänglig för företagskunder."
-
-#: class/WC_Twoinc.php:2040
-msgid "Adds a separate checkout for private customers. %s payment is not available for private customers."
-msgstr "Lägger till en separat kassa för privatkunder. %s betalning är inte tillgänglig för privatkunder."
-
-#: class/WC_Twoinc.php:2052
-msgid "Adds an input field where buyers can input their department to display on the invoice."
-msgstr "Lägger till ett inmatningsfält där köpare kan ange sin avdelning att visa på fakturan."
-
-#: class/WC_Twoinc.php:2060
-msgid "Adds an input field where buyers can input their project in the company to display on the invoice."
-msgstr "Lägger till ett inmatningsfält där köpare kan mata in sitt projekt i företaget att visa på fakturan."
-
-#: class/WC_Twoinc.php:2068
-msgid "Adds an input field where buyers can input their purchase order number to display on the invoice."
-msgstr "Lägger till ett inmatningsfält där köpare kan ange sitt inköpsordernummer för att visas på fakturan."
-
-#: class/WC_Twoinc.php:1974
-msgid "Business invoice - %s days"
-msgstr "Företagsfaktura - %s dagar"
-
-#: class/WC_Twoinc.php:2370 class/WC_Twoinc.php:2398 class/WC_Twoinc.php:2411
-msgid "Could not edit the order with %s."
-msgstr "Kunde inte redigera beställningen med %s ."
-
-#: class/WC_Twoinc.php:1483
-msgid "Could not find %s order ID"
-msgstr "Kunde inte hitta %s order-ID"
-
-#: class/WC_Twoinc.php:362 class/WC_Twoinc.php:372
-msgid "Could not forward invoice image URL to %s"
-msgstr "Kunde inte vidarebefordra webbadressen till fakturabilden till %s"
-
-#: class/WC_Twoinc.php:1505 class/WC_Twoinc.php:1546 class/WC_Twoinc.php:1565
-msgid "Could not initiate refund with %s."
-msgstr "Kunde inte initiera återbetalning med %s ."
-
-#: class/WC_Twoinc.php:798 class/WC_Twoinc.php:817
-msgid "Could not update order status to \"Fulfilled\" with %s."
-msgstr "Kunde inte uppdatera orderstatus till \"Uppfylld\" med %s ."
-
-#: class/WC_Twoinc.php:886 class/WC_Twoinc.php:900
-msgid "Could not update status to \"Cancelled\"."
-msgstr "Kunde inte uppdatera status till \"Avbruten\"."
-
-#: class/WC_Twoinc_Helper.php:44
-msgid "Empty response from %s."
-msgstr "Tomt svar från %s ."
-
-#: class/WC_Twoinc.php:1968
-msgid "Enable %s Payments"
-msgstr "Aktivera %s betalningar"
-
-#: class/WC_Twoinc.php:1406
-msgid "Failed to process payment with %s"
-msgstr "Det gick inte att behandla betalningen med %s"
-
-#: class/WC_Twoinc.php:1394
-msgid "Failed to request order creation with %s."
-msgstr "Det gick inte att begära att beställningen skapades med %s ."
-
-#: class/WC_Twoinc.php:1474 class/WC_Twoinc.php:1521 class/WC_Twoinc.php:1534
-#: class/WC_Twoinc.php:1554
-msgid "Failed to request order refund with %s."
-msgstr "Det gick inte att begära återbetalning av beställningen med %s ."
-
-#: class/WC_Twoinc.php:2520
-msgid "Grow your B2B sales with Buy Now, Pay Later using %s!"
-msgstr "Öka din B2B-försäljning med Köp nu, betala senare med %s !"
-
-#: class/WC_Twoinc.php:1574
-msgid "Invoice has been partially refunded and credit note has been sent by %s."
-msgstr "Fakturan har delvis återbetalats och kreditnota har skickats av %s ."
-
-#: class/WC_Twoinc.php:1571
-msgid "Invoice has been refunded and credit note has been sent by %s."
-msgstr "Faktura har återbetalats och kreditnota har skickats av %s ."
-
-#: class/WC_Twoinc.php:2294
-msgid "Missing company ID."
-msgstr "Företags-ID saknas."
-
-#: class/WC_Twoinc_Checkout.php:238
-msgid "Only for invoices being sent by %s"
-msgstr "Endast för fakturor som skickas av %s"
-
-#: class/WC_Twoinc.php:1491
-msgid "Order has already been fully refunded with %s."
-msgstr "Beställningen har redan återbetalats i sin helhet med %s ."
-
-#: class/WC_Twoinc.php:1775
-msgid "Order ID %s has been placed with %s."
-msgstr "Order-ID %s har placerats med %s ."
-
-#: class/WC_Twoinc.php:877
-msgid "Order is already cancelled with %s."
-msgstr "Beställningen är redan annullerad med %s ."
-
-#: class/WC_Twoinc.php:2437
-msgid "Order value is now %s."
-msgstr "Ordervärdet är nu %s ."
-
-#: class/WC_Twoinc.php:802 class/WC_Twoinc.php:821 class/WC_Twoinc.php:887
-#: class/WC_Twoinc.php:901 class/WC_Twoinc.php:1535 class/WC_Twoinc.php:1555
-#: class/WC_Twoinc.php:2295 class/WC_Twoinc.php:2412
-msgid "Please contact %s support with order ID: %s"
-msgstr "Vänligen kontakta %s support med order-ID: %s"
-
-#: class/WC_Twoinc.php:1475 class/WC_Twoinc.php:2371
-msgid "Reason: Could not find %s order ID."
-msgstr "Orsak: Kunde inte hitta %s order-ID."
-
-#: class/WC_Twoinc_Helper.php:48
-msgid "Response code from %s: %d"
-msgstr "Svarskod från %s : %d"
-
-#: class/WC_Twoinc.php:822 class/WC_Twoinc.php:902 class/WC_Twoinc.php:1536
-#: class/WC_Twoinc.php:2413
-msgid "Response: %s"
-msgstr "Svar: %s"
-
-#: class/WC_Twoinc.php:2522
-msgid "Set up my %s account"
-msgstr "Konfigurera mitt %s -konto"
-
-#: class/WC_Twoinc.php:2081
-msgid "Show \"What is %s\" link in checkout"
-msgstr "Visa länken \"Vad är %s \" i kassan"
-
-#: class/WC_Twoinc.php:1946
-msgid "Sole Trader"
-msgstr "Enskild näringsidkare"
-
-#: class/WC_Twoinc.php:279
-msgid "The latest way to pay for your online business purchases. You will receive an invoice from %s when your order has been processed."
-msgstr "Det senaste sättet att betala för dina onlineföretagsköp. Du kommer att få en faktura från %s när din beställning har behandlats."
-
-#: class/WC_Twoinc.php:2435
-msgid "The order edit request has been accepted by %s."
-msgstr "Beställningsredigeringsbegäran har accepterats av %s ."
-
-#: class/WC_Twoinc.php:1757
+#: class/WC_Twoinc.php:1876
+#, php-format
 msgid "Unable to confirm the order with %s."
 msgstr "Det gick inte att bekräfta beställningen med %s ."
 
-#: class/WC_Twoinc.php:1709
+#: class/WC_Twoinc.php:1828
+#, php-format
 msgid "Unable to find the requested %s order."
 msgstr "Det gick inte att hitta den begärda %s beställningen."
 
-#: class/WC_Twoinc.php:1727 class/WC_Twoinc.php:1743
+#: class/WC_Twoinc.php:1846 class/WC_Twoinc.php:1862
+#, php-format
 msgid "Unable to retrieve %s order information."
 msgstr "Det gick inte att hämta %s orderinformation."
 
-#: class/WC_Twoinc.php:2230 class/WC_Twoinc.php:2267
+#: class/WC_Twoinc.php:2197 class/WC_Twoinc.php:2233
 msgid "Unable to retrieve the order information."
 msgstr "Det gick inte att hämta beställningsinformationen."
 
-#: class/WC_Twoinc_Checkout.php:320
+#: class/WC_Twoinc.php:2246
+msgid "Unable to retrieve the order payment information"
+msgstr "Det gick inte att hämta betalningsinformationen"
+
+#: class/WC_Twoinc.php:2043
+msgid "Use buttons instead of radios to select account type"
+msgstr "Använd buttons istället för radiobuttons för att välja kontotyp"
+
+#: class/WC_Twoinc_Checkout.php:321
 msgid "We require your phone number so we can verify your purchase."
 msgstr "Vi behöver ditt telefonnummer så att vi kan verifiera ditt köp."
 
-#: class/WC_Twoinc_Checkout.php:321
-msgid "We use your company name to automatically populate your address and register the company that made the purchase."
-msgstr "Vi använder ditt företagsnamn för att automatiskt fylla i din adress och registrera företaget som gjorde köpet."
+#: class/WC_Twoinc_Checkout.php:322
+msgid ""
+"We use your company name to automatically populate your address and register "
+"the company that made the purchase."
+msgstr ""
+"Vi använder ditt företagsnamn för att automatiskt fylla i din adress och "
+"registrera företaget som gjorde köpet."
 
-#: class/WC_Twoinc.php:1426
-msgid "We've checked your company's details and are unable to provide invoice credit for this order."
-msgstr "Vi har kontrollerat ditt företags uppgifter och kan inte ge fakturakredit för denna beställning."
+#: class/WC_Twoinc.php:1524
+msgid ""
+"We've checked your company's details and are unable to provide invoice "
+"credit for this order."
+msgstr ""
+"Vi har kontrollerat ditt företags uppgifter och kan inte ge fakturakredit "
+"för denna beställning."
 
-#: class/WC_Twoinc.php:245
+#: class/WC_Twoinc.php:263
+#, php-format
 msgid "What is %s?"
 msgstr "Vad är %s ?"
 
-#: class/WC_Twoinc.php:1805
-msgid "Wordpress admin privilege is required for %s payment One-click setup."
-msgstr "Wordpress administratörsbehörighet krävs för %s betalningskonfiguration med ett klick."
-
-#: class/WC_Twoinc.php:745
-msgid "%s has failed to cancel order %s."
-msgstr "%s har misslyckats med att avbryta beställning %s ."
-
-#: class/WC_Twoinc.php:735
-msgid "%s has failed to issue invoice for order %s."
-msgstr "%s har misslyckats med att utfärda faktura för order %s ."
-
-#: class/WC_Twoinc.php:1236
-msgid "%s pre-filled fields"
-msgstr "%s förifyllda fält"
-
-#: class/WC_Twoinc.php:771
-msgid "Could not update status to \"Fulfilled\" with %s."
-msgstr "Kunde inte uppdatera status till \"Uppfylld\" med %s ."
+#: class/WC_Twoinc.php:299
+msgid "your company"
+msgstr "ditt företag"

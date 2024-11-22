@@ -16,3 +16,5 @@ volumes/
 *.zip
 *.xlsx
 .php-cs-fixer.cache
+*.po~
+*.pot~

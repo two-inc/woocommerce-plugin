@@ -13,7 +13,8 @@ add_action('pre_get_posts', 'add_sorting_query');
  *
  * @return void
  */
-function add_filtering_query($query){
+function add_filtering_query($query)
+{
     global $pagenow;
 
     if (
@@ -26,7 +27,7 @@ function add_filtering_query($query){
 
         $orderby = $query->get('orderby');
 
-        if(true || 'order_delivery_date' == $orderby) {
+        if (true || 'order_delivery_date' == $orderby) {
             $meta_query = array(
                 array(
                     'key' => 'delivery_date',
@@ -49,14 +50,15 @@ function add_filtering_query($query){
  *
  * @return array
  */
-function add_sorting_query($query) {
-    if(!is_admin()) {
+function add_sorting_query($query)
+{
+    if (!is_admin()) {
         return;
     }
 
     $orderby = $query->get('orderby');
 
-    if('order_delivery_date' == $orderby) {
+    if ('order_delivery_date' == $orderby) {
         $meta_query = array(
             'relation' => 'OR',
             array(
@@ -79,13 +81,14 @@ function add_sorting_query($query) {
  *
  * @return array
  */
-function add_custom_columns($columns) {
+function add_custom_columns($columns)
+{
 
     $new_columns = array();
     foreach ($columns as $column_name => $column_info) {
         $new_columns[$column_name] = $column_info;
         if ('order_status' === $column_name) {
-            $new_columns['order_delivery_date'] = __('Delivery date', 'twoinc-payment-gateway');
+            $new_columns['order_delivery_date'] = __('Delivery Date', 'twoinc-payment-gateway');
             $new_columns['order_customer_user'] = __('Customer', 'twoinc-payment-gateway');
         }
     }
@@ -100,7 +103,8 @@ function add_custom_columns($columns) {
  *
  * @return array
  */
-function add_custom_sortable_columns($columns) {
+function add_custom_sortable_columns($columns)
+{
 
     $columns['order_delivery_date'] = 'order_delivery_date';
 
@@ -114,7 +118,8 @@ function add_custom_sortable_columns($columns) {
  *
  * @return void
  */
-function add_custom_columns_content($column) {
+function add_custom_columns_content($column)
+{
 
     global $post;
     if ('order_customer_user' === $column) {
@@ -123,7 +128,7 @@ function add_custom_columns_content($column) {
             print('<a href="' . get_edit_user_link($order->get_customer_id()) . '">'
                   . get_userdata($order->get_customer_id())->display_name . '</a>');
         }
-    } else if ('order_delivery_date' === $column) {
+    } elseif ('order_delivery_date' === $column) {
         $order = wc_get_order($post->ID);
         if ($order->get_meta('delivery_date')) {
             $d = DateTime::createFromFormat('Y-m-d', $order->get_meta('delivery_date'));
@@ -141,7 +146,8 @@ function add_custom_columns_content($column) {
  *
  * @return void
  */
-function add_delivery_date_filter_form_inputs(){
+function add_delivery_date_filter_form_inputs()
+{
 
     $from = (isset($_GET['delivery_date_from']) && $_GET['delivery_date_from']) ? $_GET['delivery_date_from'] : '';
     $to = (isset($_GET['delivery_date_to']) && $_GET['delivery_date_to']) ? $_GET['delivery_date_to'] : '';

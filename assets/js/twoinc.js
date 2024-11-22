@@ -1624,6 +1624,7 @@ class Twoinc {
       displayMsgId = "intent-approved";
     } else {
       // Display error messages
+      displayMsgId = "errored|.err-payment-default";
       if (response.status >= 400) {
         // @TODO: use code in checkout-api
         let errMsg = response.responseJSON;
@@ -1635,25 +1636,9 @@ class Twoinc {
           }
         }
 
-        if (errMsg.startsWith("Minimum Payment using ")) {
-          displayMsgId = "errored|.err-amt-min";
-        } else if (errMsg.startsWith("Maximum Payment using ")) {
-          displayMsgId = "errored|.err-amt-max";
-        } else if (errMsg.includes("Invalid phone number")) {
+        if (errMsg.includes("Invalid phone number")) {
           displayMsgId = "errored|.err-phone";
           invalidFields.append("billing_phone_field");
-        } else if (errMsg === "SAME_BUYER_SELLER_ERROR") {
-          displayMsgId = "errored|.err-buyer-same-seller";
-        } else {
-          displayMsgId = "errored|.err-payment-default";
-        }
-      } else {
-        let errMsg = null;
-        if (response.approved === false) {
-          // rejected
-          displayMsgId = "errored|.err-payment-rejected";
-        } else {
-          displayMsgId = "errored|.err-payment-default";
         }
       }
 

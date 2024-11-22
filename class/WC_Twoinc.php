@@ -290,10 +290,6 @@ if (!class_exists('WC_Twoinc')) {
                     <div class="twoinc-pay-box explain-details">%s</div>
                     <div class="twoinc-pay-box declare-agreement hidden">%s</div>
                     <div class="twoinc-pay-box err-payment-default hidden">%s</div>
-                    <div class="twoinc-pay-box err-payment-rejected hidden">%s</div>
-                    <div class="twoinc-pay-box err-buyer-same-seller hidden">%s</div>
-                    <div class="twoinc-pay-box err-amt-max hidden">%s</div>
-                    <div class="twoinc-pay-box err-amt-min hidden">%s</div>
                     <div class="twoinc-pay-box err-phone hidden">%s</div>
                 </div>',
                 sprintf(__('The latest way to pay for your online business purchases. You will receive an invoice from %s when your order has been processed.', 'twoinc-payment-gateway'), self::PRODUCT_NAME),
@@ -303,12 +299,8 @@ if (!class_exists('WC_Twoinc')) {
                     __('your company', 'twoinc-payment-gateway'),
                     $this->get_abt_twoinc_html()
                 ),
-                __('Invoice purchase is not available for this order', 'twoinc-payment-gateway'),
-                __('We\'ve checked your company\'s details and are unable to provide invoice credit for this order', 'twoinc-payment-gateway'),
-                __('Buyer and merchant may not be the same company', 'twoinc-payment-gateway'),
-                __('Order value exceeds maximum limit', 'twoinc-payment-gateway'),
-                __('Order value is below minimum limit', 'twoinc-payment-gateway'),
-                __('Phone number is invalid', 'twoinc-payment-gateway')
+                sprintf(__('Invoice purchase with %s is not available for this order.', 'twoinc-payment-gateway'), self::PRODUCT_NAME),
+                __('Phone number is invalid.', 'twoinc-payment-gateway')
             );
 
         }
