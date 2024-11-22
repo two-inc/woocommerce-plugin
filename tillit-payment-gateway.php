@@ -150,7 +150,7 @@ function register_twoinc_sync_order_state()
 /**
  * Get the plugin configs except api key
  */
-function register_twoinc__get_plugin_configs()
+function register_twoinc_get_plugin_configs()
 {
     register_rest_route(
         'twoinc-payment-gateway',
