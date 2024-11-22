@@ -1,37 +1,25 @@
 #, fuzzy
 msgid ""
 msgstr ""
-"Project-Id-Version: Two - BNPL for businesses\n"
+"Project-Id-Version: Achteraf betalen van ABN AMRO\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2025-07-01 09:27+0000\n"
-"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
-"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
-"Language-Team: \n"
 "Language: \n"
 "Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
-"MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=UTF-8\n"
-"Content-Transfer-Encoding: 8bit\n"
-"X-Generator: Loco https://localise.biz/\n"
-"X-Loco-Version: 2.5.2; wp-5.7\n"
-"X-Domain: twoinc-payment-gateway"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"POT-Creation-Date: 2025-07-01 10:02+0000\n"
+"X-Generator: Loco https://localise.biz/"
 
-#: class/WC_Twoinc.php:1651
+#: class/WC_ABN.php:1711
 #, php-format
 msgid "%s API Key"
 msgstr ""
 
-#: class/WC_Twoinc.php:2277
+#: class/WC_ABN.php:2330
 #, php-format
 msgid "%s API key verified."
 msgstr ""
 
-#: snippets/delivery-date-checkout.php:89
-#, php-format
-msgid "%s cannot be parsed."
-msgstr ""
-
-#: class/WC_Twoinc.php:2225
+#: class/WC_ABN.php:2278
 #, php-format
 msgid ""
 "%s credit approves 90%% of business buyers, pays you upfront and minimise "
@@ -39,7 +27,7 @@ msgid ""
 "easy and gives you immediate access to the %s Merchant Portal."
 msgstr ""
 
-#: class/WC_Twoinc.php:582
+#: class/WC_ABN.php:627
 #, php-format
 msgid ""
 "%s has acknowledged request to fulfill %d order. An invoice will be sent to "
@@ -50,199 +38,179 @@ msgid_plural ""
 msgstr[0] ""
 msgstr[1] ""
 
-#: class/WC_Twoinc.php:668
+#: class/WC_ABN.php:720
 #, php-format
 msgid ""
 "%s has acknowledged the request to fulfil the order. An invoice will be sent "
 "to the buyer when the fulfilment is complete."
 msgstr ""
 
-#: class/WC_Twoinc.php:597
+#: class/WC_ABN.php:642
 #, php-format
 msgid "%s has cancelled %d order."
 msgid_plural "%s has cancelled %d orders."
 msgstr[0] ""
 msgstr[1] ""
 
-#: class/WC_Twoinc.php:601
+#: class/WC_ABN.php:646
 #, php-format
 msgid "%s has failed to cancel order %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:591
+#: class/WC_ABN.php:636
 #, php-format
 msgid "%s has failed to issue invoice for order %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:228
-#, php-format
-msgid ""
-"%s is a payment solution for B2B purchases online, allowing you to buy from "
-"your favourite merchants and suppliers on trade credit. Using %s, you can "
-"access flexible trade credit instantly to make purchasing simple."
-msgstr ""
-
-#: snippets/delivery-date-checkout.php:80
-#, php-format
-msgid "%s is a required field."
-msgstr ""
-
-#: class/WC_Twoinc.php:251
-#, php-format
-msgid "%s lets your business pay later for the goods you purchase online."
-msgstr ""
-
-#: class/WC_Twoinc.php:1091
+#: class/WC_ABN.php:1143
 #, php-format
 msgid "%s pre-filled fields"
 msgstr ""
 
-#: class/WC_Twoinc.php:1628
+#: class/WC_ABN.php:1688
 #, php-format
 msgid "%s Test Server"
 msgstr ""
 
-#: class/WC_Twoinc.php:1672
+#. Author of the plugin
+msgid "ABN AMRO"
+msgstr ""
+
+#: class/WC_ABN.php:1684
+msgid "Achteraf betalen - Bestel op factuur"
+msgstr ""
+
+#. Name of the plugin
+msgid "Achteraf betalen van ABN AMRO"
+msgstr ""
+
+#: class/WC_ABN.php:1732
 msgid "Add input field for \"Department\""
 msgstr ""
 
-#: class/WC_Twoinc.php:1696
+#: class/WC_ABN.php:1756
 msgid "Add input field for \"Invoice email address\""
 msgstr ""
 
-#: class/WC_Twoinc.php:1680
+#: class/WC_ABN.php:1740
 msgid "Add input field for \"Project\""
 msgstr ""
 
-#: class/WC_Twoinc.php:1688
+#: class/WC_ABN.php:1748
 msgid "Add input field for \"Purchase order number\""
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:145
+#: class/WC_ABN_Helper.php:146
 msgid "Address"
 msgstr ""
 
-#: class/WC_Twoinc.php:1742
+#: class/WC_ABN.php:1802
 msgid "Address auto-complete"
 msgstr ""
 
-#: class/WC_Twoinc.php:1697
+#: class/WC_ABN.php:1757
 msgid ""
 "Adds an input field where buyers can input optional additional email address "
 "to receive invoice."
 msgstr ""
 
-#: class/WC_Twoinc.php:1673
+#: class/WC_ABN.php:1733
 msgid ""
 "Adds an input field where buyers can input their department to display on "
 "the invoice."
 msgstr ""
 
-#: class/WC_Twoinc.php:1681
+#: class/WC_ABN.php:1741
 msgid ""
 "Adds an input field where buyers can input their project in the company to "
 "display on the invoice."
 msgstr ""
 
-#: class/WC_Twoinc.php:1689
+#: class/WC_ABN.php:1749
 msgid ""
 "Adds an input field where buyers can input their purchase order number to "
 "display on the invoice."
 msgstr ""
 
-#: class/WC_Twoinc.php:1648
+#: class/WC_ABN.php:1708
 msgid "API credentials"
 msgstr ""
 
-#: class/WC_Twoinc.php:1665
+#: class/WC_ABN.php:1725
 msgid "Approve buyer when phone and company name is filled out."
 msgstr ""
 
-#: class/WC_Twoinc.php:1723
+#: class/WC_ABN.php:1783
 msgid "Auto-complete settings"
 msgstr ""
 
-#: class/WC_Twoinc.php:1101
+#: class/WC_ABN.php:1153
 msgid "Billing Company ID"
 msgstr ""
 
-#: class/WC_Twoinc.php:1095
+#: class/WC_ABN.php:1147
 msgid "Billing Company name"
 msgstr ""
 
-#: class/WC_Twoinc.php:1624
-#, php-format
-msgid "Business invoice - %s days"
-msgstr ""
-
-#: class/WC_Twoinc.php:229
-msgid "Buy now, receive your goods, pay your invoice later."
-msgstr ""
-
-#: class/WC_Twoinc_Helper.php:96
+#: class/WC_ABN_Helper.php:97
 msgid "Buyer and merchant may not be the same company"
 msgstr ""
 
-#: class/WC_Twoinc.php:1661
+#: class/WC_ABN.php:1721
 msgid "Checkout options"
 msgstr ""
 
-#: class/WC_Twoinc.php:1633
+#: class/WC_ABN.php:1693
 msgid "Choose your settings"
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:148
+#: class/WC_ABN_Helper.php:149
 msgid "City"
 msgstr ""
 
-#: class/WC_Twoinc.php:1641
+#: class/WC_ABN.php:1701
 msgid "Clear settings on deactivation of plug-in"
 msgstr ""
 
-#: class/WC_Twoinc_Checkout.php:92
+#: class/WC_ABN_Checkout.php:94
 msgid "Company ID"
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:133 class/WC_Twoinc_Checkout.php:74
+#: class/WC_ABN_Checkout.php:76 class/WC_ABN_Helper.php:134
 #: views/woocommerce_order_pay.php:35
 msgid "Company name"
 msgstr ""
 
-#: class/WC_Twoinc.php:2049 class/WC_Twoinc.php:2076 class/WC_Twoinc.php:2083
+#: class/WC_ABN.php:2109 class/WC_ABN.php:2136 class/WC_ABN.php:2143
 #, php-format
 msgid "Could not edit the order with %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:1343
+#: class/WC_ABN.php:1403
 #, php-format
 msgid "Could not find %s order ID"
 msgstr ""
 
-#: class/WC_Twoinc.php:1377
-#, php-format
-msgid "Could not initiate refund with %s"
-msgstr ""
-
-#: class/WC_Twoinc.php:1407 class/WC_Twoinc.php:1421
+#: class/WC_ABN.php:1437 class/WC_ABN.php:1467 class/WC_ABN.php:1481
 #, php-format
 msgid "Could not initiate refund with %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:645 class/WC_Twoinc.php:657
+#: class/WC_ABN.php:697 class/WC_ABN.php:709
 #, php-format
 msgid "Could not update order status to \"Fulfilled\" with %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:698 class/WC_Twoinc.php:715 class/WC_Twoinc.php:723
+#: class/WC_ABN.php:750 class/WC_ABN.php:767 class/WC_ABN.php:775
 msgid "Could not update status to \"Cancelled\"."
 msgstr ""
 
-#: class/WC_Twoinc.php:627
+#: class/WC_ABN.php:672
 #, php-format
 msgid "Could not update status to \"Fulfilled\" with %s."
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:151
+#: class/WC_ABN_Helper.php:152
 msgid "Country"
 msgstr ""
 
@@ -250,114 +218,113 @@ msgstr ""
 msgid "Country / Region"
 msgstr ""
 
-#: snippets/admin-order-list-columns.php:92
-msgid "Customer"
-msgstr ""
-
-#: class/WC_Twoinc.php:1751
+#: class/WC_ABN.php:1811
 msgid "Debug Options"
 msgstr ""
 
-#: snippets/delivery-date-checkout.php:36
-#: snippets/delivery-date-checkout.php:57
-#: snippets/delivery-date-checkout.php:81
-#: snippets/delivery-date-checkout.php:90
-#: snippets/admin-order-list-columns.php:91
-msgid "Delivery Date"
-msgstr ""
-
-#: class/WC_Twoinc.php:1107 class/WC_Twoinc_Checkout.php:101
+#: class/WC_ABN_Checkout.php:103 class/WC_ABN.php:1159
 msgid "Department"
 msgstr ""
 
-#: class/WC_Twoinc.php:1710
+#: class/WC_ABN.php:1770
 msgid "Display input tooltips"
 msgstr ""
 
-#: class/WC_Twoinc.php:1824
+#: class/WC_ABN.php:1884
 #, php-format
 msgid "Don't have an API key? Get one by signing up <a href='%s'>here</a>."
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:142
+#: class/WC_ABN_Helper.php:143
 msgid "Email"
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:43
+#: class/WC_ABN_Helper.php:43
 #, php-format
 msgid "Empty response from %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:1618
+#: class/WC_ABN.php:1678
 #, php-format
 msgid "Enable %s Payments"
 msgstr ""
 
-#: class/WC_Twoinc.php:1754
+#: class/WC_ABN.php:1814
 msgid "Enable API Logging"
 msgstr ""
 
-#: class/WC_Twoinc.php:1726
+#: class/WC_ABN.php:1786
 msgid "Enable company name search and auto-complete"
 msgstr ""
 
-#: class/WC_Twoinc.php:1734
+#: class/WC_ABN.php:1794
 msgid "Enable company name search for other payment options"
 msgstr ""
 
-#: class/WC_Twoinc.php:1743
+#: class/WC_ABN.php:1803
 msgid ""
 "Enables automatically filling in the registered address from the national "
 "registry."
 msgstr ""
 
-#: class/WC_Twoinc.php:1735
+#: class/WC_ABN.php:1795
 msgid ""
 "Enables searching for company name even when other payment options are "
 "selected. Requires the option above to be checked."
 msgstr ""
 
-#: class/WC_Twoinc.php:1727
+#: class/WC_ABN.php:1787
 msgid ""
 "Enables searching for company name in the national registry and "
 "automatically filling in name and national ID."
 msgstr ""
 
-#: class/WC_Twoinc.php:1272
+#: class/WC_ABN.php:1331
 #, php-format
 msgid "Failed to process payment with %s"
 msgstr ""
 
-#: class/WC_Twoinc.php:1265
+#: class/WC_ABN.php:1324
 #, php-format
 msgid "Failed to request order creation with %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:1338 class/WC_Twoinc.php:1394 class/WC_Twoinc.php:1401
-#: class/WC_Twoinc.php:1416
+#: class/WC_ABN.php:1398 class/WC_ABN.php:1454 class/WC_ABN.php:1461
+#: class/WC_ABN.php:1476
 #, php-format
 msgid "Failed to request order refund with %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:2281
+#: class/WC_ABN.php:2334
 msgid "Failed to verify API key."
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:136
+#: class/WC_ABN_Helper.php:137
 msgid "First name"
 msgstr ""
 
-#: class/WC_Twoinc.php:2224
+#: class/WC_ABN.php:2277
 #, php-format
 msgid "Grow your B2B sales with Buy Now, Pay Later using %s!"
 msgstr ""
 
 #. URI of the plugin
 #. Author URI of the plugin
-msgid "https://two.inc"
+msgid "https://docs.achterafbetalen.co/developer-portal/plugins/woocommerce"
 msgstr ""
 
-#: class/WC_Twoinc.php:1758
+#: class/WC_ABN_Checkout.php:180
+#, php-format
+msgid "I agree to the %s."
+msgstr ""
+
+#: class/WC_ABN_Checkout.php:175
+msgid ""
+"I have filled in all the details truthfully and accept to pay the invoice in "
+"30 days."
+msgstr ""
+
+#: class/WC_ABN.php:1818
 #, php-format
 msgid ""
 "If enabled, all API interactions will be logged. This can be useful for "
@@ -365,47 +332,46 @@ msgid ""
 msgstr ""
 
 #. Description of the plugin
-msgid "Integration between WooCommerce and Two"
+msgid "Integration between WooCommerce and Achteraf betalen van ABN AMRO"
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:158 class/WC_Twoinc_Checkout.php:133
+#: class/WC_ABN_Checkout.php:135 class/WC_ABN_Helper.php:159
 msgid "Invoice email address"
 msgstr ""
 
-#: class/WC_Twoinc.php:1431
+#: class/WC_ABN.php:1491
 #, php-format
 msgid ""
 "Invoice has been partially refunded and credit note has been sent by %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:1428
+#: class/WC_ABN.php:1488
 #, php-format
 msgid "Invoice has been refunded and credit note has been sent by %s."
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:71 class/WC_Twoinc.php:253
-#: class/WC_Twoinc.php:1287
+#: class/WC_ABN.php:294 class/WC_ABN.php:1346 class/WC_ABN_Helper.php:71
 #, php-format
 msgid "Invoice purchase with %s is not available for this order."
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:139
+#: class/WC_ABN_Helper.php:140
 msgid "Last name"
 msgstr ""
 
-#: class/WC_Twoinc.php:1755
+#: class/WC_ABN.php:1815
 msgid "Log API requests and responses"
 msgstr ""
 
-#: class/WC_Twoinc.php:44
+#: class/WC_ABN.php:45
 msgid "Making it easy for businesses to buy online."
 msgstr ""
 
-#: class/WC_Twoinc.php:1820
+#: class/WC_ABN.php:1880
 msgid "Merchant ID:"
 msgstr ""
 
-#: class/WC_Twoinc.php:1981
+#: class/WC_ABN.php:2041
 msgid "Missing company ID."
 msgstr ""
 
@@ -413,100 +379,109 @@ msgstr ""
 msgid "My company is not on the list"
 msgstr ""
 
-#: class/WC_Twoinc_Checkout.php:136
+#: class/WC_ABN_Checkout.php:138
 #, php-format
 msgid "Only for invoices being sent by %s"
 msgstr ""
 
-#: class/WC_Twoinc.php:1656
+#: class/WC_ABN.php:1716
 msgid "Optional vendor name if there are multiple sites"
 msgstr ""
 
-#: class/WC_Twoinc.php:1352
+#: class/WC_ABN.php:1412
 #, php-format
 msgid "Order has already been fully refunded with %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:1595
+#: class/WC_ABN.php:1655
 #, php-format
 msgid "Order ID %s has been placed with %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:706
+#: class/WC_ABN.php:758
 #, php-format
 msgid "Order is already cancelled with %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:2102
+#: class/WC_ABN.php:252
+msgid ""
+"Order on invoice and pay within 30 days after delivery. Enabled by ABN AMRO."
+msgstr ""
+
+#: class/WC_ABN.php:2162
 #, php-format
 msgid "Order value is now %s."
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:130
+#: class/WC_ABN_Helper.php:131
 msgid "Organization number"
 msgstr ""
 
-#: class/WC_Twoinc.php:280
+#: class/WC_ABN.php:325
 msgid "Pay on invoice with agreed terms"
+msgstr ""
+
+#: class/WC_ABN.php:292
+msgid "Pay within 30 days of delivery. There are no additional costs for you."
 msgstr ""
 
 #: views/woocommerce_order_pay.php:4
 msgid "Phone"
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:124 class/WC_Twoinc_Helper.php:127
+#: class/WC_ABN_Helper.php:125 class/WC_ABN_Helper.php:128
 msgid "Phone number"
 msgstr ""
 
-#: class/WC_Twoinc.php:254
+#: class/WC_ABN.php:295
 msgid "Phone number is invalid."
 msgstr ""
 
-#: class/WC_Twoinc.php:42
+#: class/WC_ABN.php:43
 msgid "Place order"
 msgstr ""
 
-#: class/WC_Twoinc.php:649 class/WC_Twoinc.php:661 class/WC_Twoinc.php:716
-#: class/WC_Twoinc.php:724 class/WC_Twoinc.php:1402 class/WC_Twoinc.php:1417
-#: class/WC_Twoinc.php:1982 class/WC_Twoinc.php:2084
+#: class/WC_ABN.php:701 class/WC_ABN.php:713 class/WC_ABN.php:768
+#: class/WC_ABN.php:776 class/WC_ABN.php:1462 class/WC_ABN.php:1477
+#: class/WC_ABN.php:2042 class/WC_ABN.php:2144
 #, php-format
 msgid "Please contact %s support with order ID: %s"
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:120
+#: class/WC_ABN_Helper.php:121
 #, php-format
 msgid "Please enter a valid %s to pay on invoice"
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:154
+#: class/WC_ABN_Helper.php:155
 msgid "Postal code"
 msgstr ""
 
-#: class/WC_Twoinc.php:1664
+#: class/WC_ABN.php:1724
 msgid "Pre-approve buyer during checkout"
 msgstr ""
 
-#: class/WC_Twoinc.php:1115 class/WC_Twoinc_Checkout.php:112
+#: class/WC_ABN_Checkout.php:114 class/WC_ABN.php:1167
 msgid "Project"
 msgstr ""
 
-#: class/WC_Twoinc_Checkout.php:123
+#: class/WC_ABN_Checkout.php:125
 msgid "Purchase order number"
 msgstr ""
 
-#: class/WC_Twoinc.php:628 class/WC_Twoinc.php:699 class/WC_Twoinc.php:1339
-#: class/WC_Twoinc.php:2050
+#: class/WC_ABN.php:673 class/WC_ABN.php:751 class/WC_ABN.php:1399
+#: class/WC_ABN.php:2110
 #, php-format
 msgid "Reason: Could not find %s order ID."
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:47
+#: class/WC_ABN_Helper.php:47
 #, php-format
 msgid "Response code from %s: %d"
 msgstr ""
 
-#: class/WC_Twoinc.php:662 class/WC_Twoinc.php:725 class/WC_Twoinc.php:1403
-#: class/WC_Twoinc.php:2085
+#: class/WC_ABN.php:714 class/WC_ABN.php:777 class/WC_ABN.php:1463
+#: class/WC_ABN.php:2145
 #, php-format
 msgid "Response: %s"
 msgstr ""
@@ -515,92 +490,113 @@ msgstr ""
 msgid "Search for company"
 msgstr ""
 
-#: snippets/delivery-date-checkout.php:58
-msgid "Select Date"
-msgstr ""
-
-#: class/WC_Twoinc.php:1916
+#: class/WC_ABN.php:1976
 msgid "Select image"
 msgstr ""
 
-#: snippets/delivery-date-checkout.php:33
-msgid "Select Pickup Date"
-msgstr ""
-
-#: class/WC_Twoinc.php:2226
+#: class/WC_ABN.php:2279
 msgid "Set up my account"
 msgstr ""
 
-#: class/WC_Twoinc.php:1704
+#: class/WC_ABN.php:1764
 #, php-format
 msgid "Show \"What is %s\" link in checkout"
 msgstr ""
 
-#: class/WC_Twoinc.php:1716
+#: class/WC_ABN.php:1776
 msgid "Skip user validation at order confirmation"
 msgstr ""
 
-#: class/WC_Twoinc.php:2100
+#: class/WC_ABN_Checkout.php:171
+#, php-format
+msgid "terms and conditions of %s"
+msgstr ""
+
+#: class/WC_ABN.php:2160
 #, php-format
 msgid "The order edit request has been accepted by %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:1553 class/WC_Twoinc.php:1562
+#: class/WC_ABN.php:1613 class/WC_ABN.php:1622
 msgid "The security code is not valid."
 msgstr ""
 
-#: class/WC_Twoinc.php:1622
+#: class/WC_ABN.php:1682
 msgid "Title"
 msgstr ""
 
-#: class/WC_Twoinc.php:1616
+#: class/WC_ABN.php:1676
 msgid "Turn on/off"
 msgstr ""
 
-#. Author of the plugin
-msgid "Two"
-msgstr ""
-
-#. Name of the plugin
-msgid "Two - BNPL for businesses"
-msgstr ""
-
-#: class/WC_Twoinc.php:1586
+#: class/WC_ABN.php:1646
 #, php-format
 msgid "Unable to confirm the order with %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:1569 class/WC_Twoinc.php:1579
+#: class/WC_ABN.php:1629 class/WC_ABN.php:1639
 #, php-format
 msgid "Unable to retrieve %s order information."
 msgstr ""
 
-#: class/WC_Twoinc.php:1937 class/WC_Twoinc.php:1969
+#: class/WC_ABN.php:1997 class/WC_ABN.php:2029
 msgid "Unable to retrieve the order information."
 msgstr ""
 
-#: class/WC_Twoinc.php:1975
+#: class/WC_ABN.php:2035
 msgid "Unable to retrieve the order payment information"
 msgstr ""
 
-#: class/WC_Twoinc_Checkout.php:223
+#: class/WC_ABN_Checkout.php:279
 msgid "We require your phone number so we can verify your purchase."
 msgstr ""
 
-#: class/WC_Twoinc_Checkout.php:224
+#: class/WC_ABN_Checkout.php:280
 msgid ""
 "We use your company name to automatically populate your address and register "
 "the company that made the purchase."
 msgstr ""
 
-#: class/WC_Twoinc.php:225
+#: class/WC_ABN.php:249
 #, php-format
 msgid "What is %s?"
 msgstr ""
 
-#: class/WC_Twoinc.php:252
+#: class/WC_ABN_Checkout.php:195
+#, php-format
+msgid "You can withdraw this permission by sending an e-mail to %s."
+msgstr ""
+
+#: class/WC_ABN.php:256
+msgid "You don't need to be an ABN AMRO customer."
+msgstr ""
+
+#: class/WC_ABN_Checkout.php:187
+#, php-format
+msgid ""
+"You hereby give permission to %s to decide on the basis of automated "
+"processing of (personal) data whether you can use %s."
+msgstr ""
+
+#: class/WC_ABN.php:1223
+msgid "You must first accept the payment terms."
+msgstr ""
+
+#: class/WC_ABN.php:293
 #, php-format
 msgid ""
 "Your invoice purchase with %s is likely to be accepted subject to additional "
 "checks."
+msgstr ""
+
+#: class/WC_ABN.php:255
+msgid "• No extra costs"
+msgstr ""
+
+#: class/WC_ABN.php:253
+msgid "• Order on invoice"
+msgstr ""
+
+#: class/WC_ABN.php:254
+msgid "• Pay within 30 days"
 msgstr ""
