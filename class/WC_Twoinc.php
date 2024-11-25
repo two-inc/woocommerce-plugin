@@ -2039,6 +2039,14 @@ if (!class_exists('WC_Twoinc')) {
                     'type'        => 'checkbox',
                     'default'     => 'yes'
                 ],
+                'add_field_invoice_email' => [
+                    'title'       => __('Add input field for "Invoice email address"', 'twoinc-payment-gateway'),
+                    'description' => __('Adds an input field where buyers can input optional additional email address to receive invoice.', 'twoinc-payment-gateway'),
+                    'desc_tip'    => true,
+                    'label'       => ' ',
+                    'type'        => 'checkbox',
+                    'default'     => 'yes'
+                ],
                 'use_account_type_buttons' => [
                     'title'       => __('Use buttons instead of radios to select account type', 'twoinc-payment-gateway'),
                     'label'       => ' ',

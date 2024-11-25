@@ -229,8 +229,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
          */
         public function update_contact_fields($fields)
         {
-
-            if (strtolower(WC()->countries->get_base_country()) !== 'no') {
+            if ($this->wc_twoinc->get_option('add_field_invoice_email') == 'yes') {
                 $fields['billing']['invoice_email'] = [
                     'label'       => __('Invoice email address', 'twoinc-payment-gateway'),
                     'class'       => array('form-row-wide'),
