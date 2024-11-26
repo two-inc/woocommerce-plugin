@@ -293,7 +293,7 @@ if (!class_exists('WC_Twoinc')) {
                     <div class="twoinc-pay-box err err-phone-number hidden">%s</div>
                 </div>',
                 sprintf(__('The latest way to pay for your online business purchases. You will receive an invoice from %s when your order has been processed.', 'twoinc-payment-gateway'), self::PRODUCT_NAME),
-                sprintf(__('Your invoice purchase with %s is likely to be accepted subject to additional checks.'), self::PRODUCT_NAME),
+                sprintf(__('Your invoice purchase with %s is likely to be accepted subject to additional checks.', 'twoinc-payment-gateway'), self::PRODUCT_NAME),
                 sprintf(__('Invoice purchase with %s is not available for this order.', 'twoinc-payment-gateway'), self::PRODUCT_NAME),
                 __('Phone number is invalid.', 'twoinc-payment-gateway')
             );
