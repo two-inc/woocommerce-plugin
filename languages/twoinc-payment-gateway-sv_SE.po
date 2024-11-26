@@ -3,7 +3,7 @@ msgstr ""
 "Project-Id-Version: Two - BNPL for businesses\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2022-02-09 08:30+0000\n"
-"PO-Revision-Date: 2024-11-26 15:26+0000\n"
+"PO-Revision-Date: 2024-11-26 16:42+0000\n"
 "Last-Translator: \n"
 "Language-Team: Swedish\n"
 "Language: sv_SE\n"
@@ -77,15 +77,21 @@ msgstr "%s har misslyckats med att avbryta beställning %s ."
 msgid "%s has failed to issue invoice for order %s."
 msgstr "%s har misslyckats med att utfärda faktura för order %s ."
 
+#: class/WC_Twoinc.php:265
+#, php-format
+msgid ""
+"%s is a payment solution for B2B purchases online, allowing you to buy from "
+"your favourite merchants and suppliers on trade credit. Using %s, you can "
+"access flexible trade credit instantly to make purchasing simple."
+msgstr ""
+"%s är en betalningslösning för B2B-köp online, som låter dig köpa från dina "
+"favorithandlare och leverantörer på handelskredit. Genom att använda %s kan "
+"du få tillgång till flexibel handelskredit direkt för att göra inköp enkelt."
+
 #: snippets/delivery-date-checkout.php:73
 #, php-format
 msgid "%s is a required field."
 msgstr "%s är ett obligatoriskt fält."
-
-#: class/WC_Twoinc.php:315
-#, php-format
-msgid "%s lets your business pay later for the goods you purchase online."
-msgstr "%s låter ditt företag betala senare för de varor du köper online."
 
 #: class/WC_Twoinc.php:1315
 #, php-format
@@ -208,6 +214,10 @@ msgstr "Företagskund"
 #, php-format
 msgid "Business invoice - %s days"
 msgstr "Företagsfaktura - %s dagar"
+
+#: class/WC_Twoinc.php:266
+msgid "Buy now, receive your goods, pay your invoice later."
+msgstr "Köp nu, ta emot dina varor, betala din faktura senare."
 
 #: class/WC_Twoinc_Helper.php:96
 msgid "Buyer and merchant may not be the same company"
@@ -338,10 +348,6 @@ msgstr ""
 "Möjliggör sökning efter företagsnamn i officiella register och  autofyll "
 "namn och organisationsnummer."
 
-#: class/WC_Twoinc.php:316
-msgid "Enter your company name to get started."
-msgstr "Fyll i ditt företagsnamn för att komma igång"
-
 #: class/WC_Twoinc.php:1498
 #, php-format
 msgid "Failed to process payment with %s"
@@ -391,7 +397,7 @@ msgstr "Fakturan har delvis återbetalats och kreditnota har skickats av %s ."
 msgid "Invoice has been refunded and credit note has been sent by %s."
 msgstr "Faktura har återbetalats och kreditnota har skickats av %s ."
 
-#: class/WC_Twoinc_Helper.php:71 class/WC_Twoinc.php:297
+#: class/WC_Twoinc_Helper.php:71 class/WC_Twoinc.php:300
 #: class/WC_Twoinc.php:1519
 #, php-format
 #| msgid "Invoice purchase is not available for this order"
@@ -463,7 +469,7 @@ msgstr "Telefon"
 msgid "Phone number"
 msgstr "Telefonnummer"
 
-#: class/WC_Twoinc.php:298
+#: class/WC_Twoinc.php:301
 #| msgid "Phone number is invalid"
 msgid "Phone number is invalid."
 msgstr "Telefonnumret är ogiltigt"
@@ -510,11 +516,11 @@ msgstr "PO-nummer"
 msgid "Reason: Could not find %s order ID."
 msgstr "Orsak: Kunde inte hitta %s order-ID."
 
-#: class/WC_Twoinc.php:276
+#: class/WC_Twoinc.php:281
 msgid "Receive invoice and payment details via email"
 msgstr "Ta emot faktura och betalningsinformation via e-post"
 
-#: class/WC_Twoinc.php:277
+#: class/WC_Twoinc.php:282
 msgid "Receive invoice and payment details via email and EHF"
 msgstr "Ta emot faktura och betalningsuppgifter via e-post och EHF"
 
@@ -587,15 +593,6 @@ msgstr "Enskild näringsidkare"
 msgid "Sole Trader/Other Customer"
 msgstr "Enskild näringsidkare"
 
-#: class/WC_Twoinc.php:295
-#, php-format
-msgid ""
-"The latest way to pay for your online business purchases. You will receive "
-"an invoice from %s when your order has been processed."
-msgstr ""
-"Det senaste sättet att betala för dina onlineföretagsköp. Du kommer att få "
-"en faktura från %s när din beställning har behandlats."
-
 #: class/WC_Twoinc.php:2411
 #, php-format
 msgid "The order edit request has been accepted by %s."
@@ -667,12 +664,12 @@ msgstr ""
 "Vi använder ditt företagsnamn för att automatiskt fylla i din adress och "
 "registrera företaget som gjorde köpet."
 
-#: class/WC_Twoinc.php:263
+#: class/WC_Twoinc.php:262
 #, php-format
 msgid "What is %s?"
 msgstr "Vad är %s ?"
 
-#: class/WC_Twoinc.php:296
+#: class/WC_Twoinc.php:299
 #, php-format
 msgid ""
 "Your invoice purchase with %s is likely to be accepted subject to additional "

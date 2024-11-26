@@ -5,7 +5,7 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "X-Generator: Loco https://localise.biz/\n"
 "Project-Id-Version: woocommerce-plugin\n"
-"PO-Revision-Date: 2024-11-26 15:25+0000\n"
+"PO-Revision-Date: 2024-11-26 16:41+0000\n"
 "Last-Translator: lokalise.com\n"
 "Language-Team: Dutch\n"
 "Language: nl_NL\n"
@@ -74,16 +74,22 @@ msgstr "%s kon bestelling %s niet annuleren."
 msgid "%s has failed to issue invoice for order %s."
 msgstr "%s kon geen factuur uitgeven voor bestelling %s ."
 
+#: class/WC_Twoinc.php:265
+#, php-format
+msgid ""
+"%s is a payment solution for B2B purchases online, allowing you to buy from "
+"your favourite merchants and suppliers on trade credit. Using %s, you can "
+"access flexible trade credit instantly to make purchasing simple."
+msgstr ""
+"%s is een betaaloplossing voor B2B-aankopen online, waarmee u bij uw "
+"favoriete handelaren en leveranciers op handelskrediet kunt kopen. Met %s "
+"krijgt u direct toegang tot flexibel handelskrediet om aankopen eenvoudig te "
+"maken."
+
 #: snippets/delivery-date-checkout.php:73
 #, php-format
 msgid "%s is a required field."
 msgstr "%s is een verplicht veld."
-
-#: class/WC_Twoinc.php:315
-#, php-format
-msgid "%s lets your business pay later for the goods you purchase online."
-msgstr ""
-"%s kunt u uw bedrijf later laten betalen voor de goederen die u online koopt."
 
 #: class/WC_Twoinc.php:1315
 #, php-format
@@ -208,6 +214,10 @@ msgstr "Zakelijke klant"
 #, php-format
 msgid "Business invoice - %s days"
 msgstr "Zakelijke factuur - %s dagen"
+
+#: class/WC_Twoinc.php:266
+msgid "Buy now, receive your goods, pay your invoice later."
+msgstr "Koop nu, ontvang uw goederen, betaal uw factuur later."
 
 #: class/WC_Twoinc_Helper.php:96
 msgid "Buyer and merchant may not be the same company"
@@ -338,10 +348,6 @@ msgstr ""
 "Hiermee kunt u zoeken naar de bedrijfsnaam in het nationale register en "
 "worden de naam en het nationale identificatienummer automatisch ingevuld."
 
-#: class/WC_Twoinc.php:316
-msgid "Enter your company name to get started."
-msgstr "Voer uw bedrijfsnaam in om te beginnen."
-
 #: class/WC_Twoinc.php:1498
 #, php-format
 msgid "Failed to process payment with %s"
@@ -392,7 +398,7 @@ msgstr ""
 msgid "Invoice has been refunded and credit note has been sent by %s."
 msgstr "Factuur is terugbetaald en creditnota is verzonden door %s ."
 
-#: class/WC_Twoinc_Helper.php:71 class/WC_Twoinc.php:297
+#: class/WC_Twoinc_Helper.php:71 class/WC_Twoinc.php:300
 #: class/WC_Twoinc.php:1519
 #, php-format
 msgid "Invoice purchase with %s is not available for this order."
@@ -463,7 +469,7 @@ msgstr "Telefoon"
 msgid "Phone number"
 msgstr "Telefoonnummer"
 
-#: class/WC_Twoinc.php:298
+#: class/WC_Twoinc.php:301
 msgid "Phone number is invalid."
 msgstr "Telefoonnummer is ongeldig."
 
@@ -509,11 +515,11 @@ msgstr "PO-nummer"
 msgid "Reason: Could not find %s order ID."
 msgstr "Reden: Kon %s order-ID niet vinden."
 
-#: class/WC_Twoinc.php:276
+#: class/WC_Twoinc.php:281
 msgid "Receive invoice and payment details via email"
 msgstr "Ontvang factuur- en betalingsgegevens via e-mail"
 
-#: class/WC_Twoinc.php:277
+#: class/WC_Twoinc.php:282
 msgid "Receive invoice and payment details via email and EHF"
 msgstr "Ontvang factuur- en betalingsgegevens via e-mail en EHF"
 
@@ -585,15 +591,6 @@ msgstr "Eenmanszaak"
 #: class/WC_Twoinc_Checkout.php:82
 msgid "Sole Trader/Other Customer"
 msgstr "Eenmanszaak/Andere klant"
-
-#: class/WC_Twoinc.php:295
-#, php-format
-msgid ""
-"The latest way to pay for your online business purchases. You will receive "
-"an invoice from %s when your order has been processed."
-msgstr ""
-"De nieuwste manier om uw online zakelijke aankopen te betalen. U ontvangt "
-"een factuur van %s wanneer uw bestelling is verwerkt."
 
 #: class/WC_Twoinc.php:2411
 #, php-format
@@ -669,12 +666,12 @@ msgstr ""
 "Wij gebruiken uw bedrijfsnaam om automatisch uw adres in te vullen en het "
 "bedrijf te registreren dat de aankoop heeft gedaan."
 
-#: class/WC_Twoinc.php:263
+#: class/WC_Twoinc.php:262
 #, php-format
 msgid "What is %s?"
 msgstr "Wat is %s ?"
 
-#: class/WC_Twoinc.php:296
+#: class/WC_Twoinc.php:299
 #, php-format
 msgid ""
 "Your invoice purchase with %s is likely to be accepted subject to additional "

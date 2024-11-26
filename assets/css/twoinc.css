@@ -51,8 +51,10 @@
   width: 2em;
   animation: spin 1s ease-in-out infinite;
   opacity: 0.4;
+  margin-top: 0.5em;
   margin-left: 0;
   margin-right: 4px;
+  float: left;
 }
 
 @keyframes spin {
@@ -120,6 +122,53 @@ form.checkout.woocommerce-checkout
 #abt-twoinc-link a {
   float: right;
   font-size: 0.8em;
+}
+
+.abt-twoinc {
+  position: relative;
+  float: right;
+  display: inline-block;
+  cursor: pointer;
+  /* Indicate the icon is interactive */
+}
+
+.abt-twoinc-text {
+  visibility: hidden;
+  width: 190px;
+  height: auto;
+  background-color: rgb(34, 34, 34);
+  color: #fff !important;
+  text-align: center;
+  padding: 10px;
+  border-radius: 5px;
+  /* Position the tooltip text */
+  position: absolute;
+  z-index: 1;
+  bottom: 120%;
+  /* Adjust this to move the tooltip above the question mark */
+  left: 50%;
+  transform: translateX(-50%);
+  opacity: 0;
+  transition: opacity 0.3s;
+  font-size: 12px;
+  white-space: normal;
+  line-height: 1.5;
+}
+
+.abt-twoinc-text a {
+  text-decoration: none;
+  cursor: pointer;
+  padding: 5px 10px;
+  margin: 20px 20px;
+  border-radius: 5px;
+  border: 1px solid gray;
+  color: white;
+  background-color: blue;
+}
+
+.abt-twoinc:hover .abt-twoinc-text {
+  visibility: visible;
+  opacity: 1;
 }
 
 #billing_company_display_field {

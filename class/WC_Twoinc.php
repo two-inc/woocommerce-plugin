@@ -52,10 +52,9 @@ if (!class_exists('WC_Twoinc')) {
                 strval($this->get_merchant_default_days_on_invoice())
             );
             $this->description = sprintf(
-                '%s%s%s',
+                '%s%s',
                 $this->get_pay_subtitle(),
                 $this->get_pay_box_description(),
-                $this->get_abt_twoinc_html()
             );
 
             // Skip hooks if another instance has already been created
@@ -260,7 +259,14 @@ if (!class_exists('WC_Twoinc')) {
         {
             if ($this->get_option('show_abt_link') === 'yes') {
                 $abt_url = __('https://www.two.inc/what-is-two');
-                return '<div id="abt-twoinc-link"><a href="' . $abt_url . '" onclick="javascript:window.open(\'' . $abt_url . '\',\'WhatIsTwoinc\',\'toolbar=no, location=no, directories=no, status=no, menubar=no, scrollbars=yes, resizable=yes, width=1060, height=700\'); return false;">' . sprintf(__('What is %s?', 'twoinc-payment-gateway'), self::PRODUCT_NAME) . '</a>&nbsp;</div>';
+                $link = '<a href="' . $abt_url . '" target="_blank">' . sprintf(__('What is %s?', 'twoinc-payment-gateway'), self::PRODUCT_NAME) . '</a>';
+                $text = sprintf(
+                    '<p>%s</p><p><b>%s</b></p>',
+                    sprintf(__('%s is a payment solution for B2B purchases online, allowing you to buy from your favourite merchants and suppliers on trade credit. Using %s, you can access flexible trade credit instantly to make purchasing simple.', 'twoinc-payment-gateway'), self::PRODUCT_NAME, self::PRODUCT_NAME),
+                    __('Buy now, receive your goods, pay your invoice later.', 'twoinc-payment-gateway'),
+                    $abt_url,
+                );
+                return sprintf('<div class="abt-twoinc-text">%s</div><div class="abt-twoinc-link">%s</div>', $text, $link);
             }
             return '';
         }
@@ -270,7 +276,6 @@ if (!class_exists('WC_Twoinc')) {
          */
         private function get_payment_description_msg()
         {
-
             return sprintf(
                 '<span class="twoinc-payment-desc payment-desc-global">%s</span><span class="twoinc-payment-desc payment-desc-no-funded">%s</span>',
                 __('Receive invoice and payment details via email', 'twoinc-payment-gateway'),
@@ -287,12 +292,10 @@ if (!class_exists('WC_Twoinc')) {
 
             return sprintf(
                 '<div>
-                    <div class="twoinc-pay-box explain-details">%s</div>
                     <div class="twoinc-pay-box msg msg-intent-approved hidden">%s</div>
                     <div class="twoinc-pay-box err err-payment-default hidden">%s</div>
                     <div class="twoinc-pay-box err err-phone-number hidden">%s</div>
                 </div>',
-                sprintf(__('The latest way to pay for your online business purchases. You will receive an invoice from %s when your order has been processed.', 'twoinc-payment-gateway'), self::PRODUCT_NAME),
                 sprintf(__('Your invoice purchase with %s is likely to be accepted subject to additional checks.', 'twoinc-payment-gateway'), self::PRODUCT_NAME),
                 sprintf(__('Invoice purchase with %s is not available for this order.', 'twoinc-payment-gateway'), self::PRODUCT_NAME),
                 __('Phone number is invalid.', 'twoinc-payment-gateway')
@@ -307,13 +310,10 @@ if (!class_exists('WC_Twoinc')) {
         {
             return sprintf(
                 '<div class="twoinc-subtitle">
-                    <div class="twoinc-pay-sub explain-phrase">
-                        %s <span class="twoinc-pay-sub require-inputs">%s</span>
-                    </div>
+                    <div class="abt-twoinc">%s</div>
                     <img class="twoinc-pay-sub hidden loader" src="%s" />
                 </div> ',
-                sprintf(__('%s lets your business pay later for the goods you purchase online.', 'twoinc-payment-gateway'), self::PRODUCT_NAME),
-                __('Enter your company name to get started.', 'twoinc-payment-gateway'),
+                $this->get_abt_twoinc_html(),
                 WC_TWOINC_PLUGIN_URL . '/assets/images/loader.svg'
             );
         }

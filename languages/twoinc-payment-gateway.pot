@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Two - BNPL for businesses\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2024-11-26 15:24+0000\n"
+"POT-Creation-Date: 2024-11-26 16:40+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: \n"
@@ -69,14 +69,17 @@ msgstr ""
 msgid "%s has failed to issue invoice for order %s."
 msgstr ""
 
+#: class/WC_Twoinc.php:265
+#, php-format
+msgid ""
+"%s is a payment solution for B2B purchases online, allowing you to buy from "
+"your favourite merchants and suppliers on trade credit. Using %s, you can "
+"access flexible trade credit instantly to make purchasing simple."
+msgstr ""
+
 #: snippets/delivery-date-checkout.php:73
 #, php-format
 msgid "%s is a required field."
-msgstr ""
-
-#: class/WC_Twoinc.php:315
-#, php-format
-msgid "%s lets your business pay later for the goods you purchase online."
 msgstr ""
 
 #: class/WC_Twoinc.php:1315
@@ -187,6 +190,10 @@ msgstr ""
 #: class/WC_Twoinc.php:1942
 #, php-format
 msgid "Business invoice - %s days"
+msgstr ""
+
+#: class/WC_Twoinc.php:266
+msgid "Buy now, receive your goods, pay your invoice later."
 msgstr ""
 
 #: class/WC_Twoinc_Helper.php:96
@@ -314,10 +321,6 @@ msgid ""
 "automatically filling in name and national ID."
 msgstr ""
 
-#: class/WC_Twoinc.php:316
-msgid "Enter your company name to get started."
-msgstr ""
-
 #: class/WC_Twoinc.php:1498
 #, php-format
 msgid "Failed to process payment with %s"
@@ -367,7 +370,7 @@ msgstr ""
 msgid "Invoice has been refunded and credit note has been sent by %s."
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:71 class/WC_Twoinc.php:297
+#: class/WC_Twoinc_Helper.php:71 class/WC_Twoinc.php:300
 #: class/WC_Twoinc.php:1519
 #, php-format
 msgid "Invoice purchase with %s is not available for this order."
@@ -438,7 +441,7 @@ msgstr ""
 msgid "Phone number"
 msgstr ""
 
-#: class/WC_Twoinc.php:298
+#: class/WC_Twoinc.php:301
 msgid "Phone number is invalid."
 msgstr ""
 
@@ -484,11 +487,11 @@ msgstr ""
 msgid "Reason: Could not find %s order ID."
 msgstr ""
 
-#: class/WC_Twoinc.php:276
+#: class/WC_Twoinc.php:281
 msgid "Receive invoice and payment details via email"
 msgstr ""
 
-#: class/WC_Twoinc.php:277
+#: class/WC_Twoinc.php:282
 msgid "Receive invoice and payment details via email and EHF"
 msgstr ""
 
@@ -561,13 +564,6 @@ msgstr ""
 msgid "Sole Trader/Other Customer"
 msgstr ""
 
-#: class/WC_Twoinc.php:295
-#, php-format
-msgid ""
-"The latest way to pay for your online business purchases. You will receive "
-"an invoice from %s when your order has been processed."
-msgstr ""
-
 #: class/WC_Twoinc.php:2411
 #, php-format
 msgid "The order edit request has been accepted by %s."
@@ -635,12 +631,12 @@ msgid ""
 "the company that made the purchase."
 msgstr ""
 
-#: class/WC_Twoinc.php:263
+#: class/WC_Twoinc.php:262
 #, php-format
 msgid "What is %s?"
 msgstr ""
 
-#: class/WC_Twoinc.php:296
+#: class/WC_Twoinc.php:299
 #, php-format
 msgid ""
 "Your invoice purchase with %s is likely to be accepted subject to additional "
