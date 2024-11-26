@@ -288,17 +288,12 @@ if (!class_exists('WC_Twoinc')) {
             return sprintf(
                 '<div>
                     <div class="twoinc-pay-box explain-details">%s</div>
-                    <div class="twoinc-pay-box declare-agreement hidden">%s</div>
-                    <div class="twoinc-pay-box err-payment-default hidden">%s</div>
-                    <div class="twoinc-pay-box err-phone hidden">%s</div>
+                    <div class="twoinc-pay-box msg msg-intent-approved hidden">%s</div>
+                    <div class="twoinc-pay-box err err-payment-default hidden">%s</div>
+                    <div class="twoinc-pay-box err err-phone-number hidden">%s</div>
                 </div>',
                 sprintf(__('The latest way to pay for your online business purchases. You will receive an invoice from %s when your order has been processed.', 'twoinc-payment-gateway'), self::PRODUCT_NAME),
-                sprintf(
-                    '%s <span class="twoinc-buyer-name-placeholder">%s</span><span class="twoinc-buyer-name"></span>.',
-                    __('By completing the purchase, you verify that you have the legal right to purchase on behalf of', 'twoinc-payment-gateway'),
-                    __('your company', 'twoinc-payment-gateway'),
-                    $this->get_abt_twoinc_html()
-                ),
+                sprintf(__('Your invoice purchase with %s is likely to be accepted subject to additional checks.'), self::PRODUCT_NAME),
                 sprintf(__('Invoice purchase with %s is not available for this order.', 'twoinc-payment-gateway'), self::PRODUCT_NAME),
                 __('Phone number is invalid.', 'twoinc-payment-gateway')
             );
@@ -1521,7 +1516,7 @@ if (!class_exists('WC_Twoinc')) {
             $body = json_decode($response['body'], true);
 
             if ($body['status'] == 'REJECTED') {
-                WC_Twoinc_Helper::display_ajax_error(__('We\'ve checked your company\'s details and are unable to provide invoice credit for this order.', 'twoinc-payment-gateway'));
+                WC_Twoinc_Helper::display_ajax_error(sprintf(__('Invoice purchase with %s is not available for this order.', 'twoinc-payment-gateway'), self::PRODUCT_NAME));
                 return;
             }
 
@@ -2045,7 +2040,7 @@ if (!class_exists('WC_Twoinc')) {
                     'desc_tip'    => true,
                     'label'       => ' ',
                     'type'        => 'checkbox',
-                    'default'     => 'yes'
+                    'default'     => 'no'
                 ],
                 'use_account_type_buttons' => [
                     'title'       => __('Use buttons instead of radios to select account type', 'twoinc-payment-gateway'),

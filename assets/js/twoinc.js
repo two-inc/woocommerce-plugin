@@ -663,17 +663,13 @@ let twoincDomHelper = {
    * Toggle payment text in subtitle and description
    */
   togglePaySubtitleDesc: function (action, errSelector) {
+    jQuery(".twoinc-pay-box.msg, .twoinc-pay-box.err").addClass("hidden");
     if (action === "checking-intent") {
-      jQuery(".twoinc-pay-sub").addClass("hidden");
       jQuery(".twoinc-pay-sub.loader").removeClass("hidden");
     } else if (action) {
-      // Hide all related elements
-      jQuery(".twoinc-pay-box, .twoinc-pay-sub").addClass("hidden");
       jQuery(".twoinc-pay-sub.loader").addClass("hidden");
-
       if (action === "intent-approved") {
-        jQuery(".twoinc-pay-sub.explain-phrase").removeClass("hidden");
-        jQuery(".twoinc-pay-box.declare-agreement").removeClass("hidden");
+        jQuery(".twoinc-pay-box.msg-intent-approved").removeClass("hidden");
       } else if (action === "errored") {
         jQuery(".twoinc-pay-box" + errSelector).removeClass("hidden");
       }
