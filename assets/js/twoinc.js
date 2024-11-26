@@ -663,11 +663,10 @@ let twoincDomHelper = {
    * Toggle payment text in subtitle and description
    */
   togglePaySubtitleDesc: function (action, errSelector) {
-    jQuery(".twoinc-pay-box.msg, .twoinc-pay-box.err").addClass("hidden");
+    jQuery(".twoinc-pay-box").addClass("hidden");
     if (action === "checking-intent") {
-      jQuery(".twoinc-pay-sub.loader").removeClass("hidden");
+      jQuery(".twoinc-pay-box.loader").removeClass("hidden");
     } else if (action) {
-      jQuery(".twoinc-pay-sub.loader").addClass("hidden");
       if (action === "intent-approved") {
         jQuery(".twoinc-pay-box.msg-intent-approved").removeClass("hidden");
       } else if (action === "errored") {
@@ -907,29 +906,6 @@ let twoincDomHelper = {
       document.querySelector("." + priceName + " .woocommerce-Price-amount bdi") ||
       document.querySelector("." + priceName + " .woocommerce-Price-amount");
     return twoincDomHelper.getPriceRecursively(node);
-  },
-
-  /**
-   * Rearrange descriptions in Twoinc payment to make it cleaner
-   */
-  rearrangeDescription: function () {
-    let twoincPaymentLine = jQuery('label[for="payment_method_woocommerce-gateway-tillit"]');
-
-    if (twoincPaymentLine.length > 0) {
-      twoincPaymentLine.after(
-        jQuery(".payment_method_woocommerce-gateway-tillit .twoinc-subtitle")
-      );
-    }
-
-    let twoincPaymentBox = jQuery(".payment_box.payment_method_woocommerce-gateway-tillit");
-
-    if (twoincPaymentBox.length > 0) {
-      twoincPaymentBox.after(jQuery("#abt-twoinc-link"));
-
-      if (twoincPaymentBox.parent().innerWidth() > 600) {
-        jQuery("#abt-twoinc-link a").css("float", "left");
-      }
-    }
   },
 
   /**
@@ -1429,9 +1405,6 @@ class Twoinc {
     // Update the text in subtitle and description
     twoincDomHelper.togglePaySubtitleDesc();
 
-    // Rearrange the DOMs in Twoinc payment
-    twoincDomHelper.rearrangeDescription();
-
     // Display correct payment description
     twoincDomHelper.togglePaymentDesc();
 
@@ -1742,7 +1715,6 @@ class Twoinc {
         }
       }, 1000);
     });
-    twoincDomHelper.rearrangeDescription();
 
     // Disable click to return to Twoinc/Kco if some other payment method is selected
     jQuery(

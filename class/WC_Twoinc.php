@@ -51,11 +51,7 @@ if (!class_exists('WC_Twoinc')) {
                 __($this->get_option('title'), 'twoinc-payment-gateway'),
                 strval($this->get_merchant_default_days_on_invoice())
             );
-            $this->description = sprintf(
-                '%s%s',
-                $this->get_pay_subtitle(),
-                $this->get_pay_box_description(),
-            );
+            $this->description = $this->get_pay_box_description();
 
             // Skip hooks if another instance has already been created
             if (null !== self::$instance) {
@@ -154,6 +150,20 @@ if (!class_exists('WC_Twoinc')) {
             self::$instance = $this;
             new WC_Twoinc_Checkout($this);
 
+        }
+
+        /**
+         * Get gateway icon.
+         *
+         * @return string
+         */
+        public function get_icon()
+        {
+            $icon_html = '<img src="' . esc_attr($this->icon) . '" alt="' . $this->title. '" />';
+            $icon_html .= '<br/>';
+            $icon_html .= $this->get_pay_subtitle();
+
+            return apply_filters('woocommerce_gateway_icon', $icon_html, $this->id);
         }
 
         /**
@@ -292,10 +302,12 @@ if (!class_exists('WC_Twoinc')) {
 
             return sprintf(
                 '<div>
+                    <img class="twoinc-pay-box loader hidden" src="%s" />
                     <div class="twoinc-pay-box msg msg-intent-approved hidden">%s</div>
                     <div class="twoinc-pay-box err err-payment-default hidden">%s</div>
                     <div class="twoinc-pay-box err err-phone-number hidden">%s</div>
                 </div>',
+                WC_TWOINC_PLUGIN_URL . '/assets/images/loader.svg',
                 sprintf(__('Your invoice purchase with %s is likely to be accepted subject to additional checks.', 'twoinc-payment-gateway'), self::PRODUCT_NAME),
                 sprintf(__('Invoice purchase with %s is not available for this order.', 'twoinc-payment-gateway'), self::PRODUCT_NAME),
                 __('Phone number is invalid.', 'twoinc-payment-gateway')
@@ -309,12 +321,8 @@ if (!class_exists('WC_Twoinc')) {
         public function get_pay_subtitle()
         {
             return sprintf(
-                '<div class="twoinc-subtitle">
-                    <div class="abt-twoinc">%s</div>
-                    <img class="twoinc-pay-sub hidden loader" src="%s" />
-                </div> ',
+                '<div class="abt-twoinc">%s</div>',
                 $this->get_abt_twoinc_html(),
-                WC_TWOINC_PLUGIN_URL . '/assets/images/loader.svg'
             );
         }
 

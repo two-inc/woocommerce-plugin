@@ -38,8 +38,8 @@
   ul.payment_methods
   li.wc_payment_method.payment_method_woocommerce-gateway-tillit
   img {
-  margin-left: 20px;
   max-height: 32px;
+  float: right;
 }
 
 .woocommerce-checkout
@@ -47,14 +47,13 @@
   ul.payment_methods
   li.wc_payment_method.payment_method_woocommerce-gateway-tillit
   img.loader {
-  height: 2em;
-  width: 2em;
+  height: 1.5em;
+  width: 1.5em;
   animation: spin 1s ease-in-out infinite;
   opacity: 0.4;
-  margin-top: 0.5em;
-  margin-left: 0;
-  margin-right: 4px;
-  float: left;
+  margin: 1em auto;
+  display: block;
+  float: unset;
 }
 
 @keyframes spin {
@@ -126,9 +125,10 @@ form.checkout.woocommerce-checkout
 
 .abt-twoinc {
   position: relative;
-  float: right;
-  display: inline-block;
+  text-align: right;
   cursor: pointer;
+  font-size: 0.83em;
+
   /* Indicate the icon is interactive */
 }
 
@@ -157,6 +157,7 @@ form.checkout.woocommerce-checkout
 
 .abt-twoinc-text a {
   text-decoration: none;
+  text-align: right;
   cursor: pointer;
   padding: 5px 10px;
   margin: 20px 20px;
