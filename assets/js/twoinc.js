@@ -681,7 +681,6 @@ let twoincDomHelper = {
     } else {
       jQuery(".twoinc-pay-sub.require-inputs").addClass("hidden");
     }
-    twoincDomHelper.updateCompanyNameAgreement();
   },
 
   /**
@@ -715,25 +714,6 @@ let twoincDomHelper = {
       "disabled",
       !twoincUtilHelper.isCompany(accountType) && paymentMethod === "woocommerce-gateway-tillit"
     );
-  },
-
-  /**
-   * Update company name in payment method agreement section
-   */
-  updateCompanyNameAgreement: function () {
-    let companyName = Twoinc.getInstance().customerCompany.company_name;
-    if (companyName) {
-      companyName = companyName.trim();
-    }
-    if (companyName) {
-      jQuery(".twoinc-buyer-name").text(companyName);
-      jQuery(".twoinc-buyer-name").show();
-      jQuery(".twoinc-buyer-name-placeholder").hide();
-    } else {
-      jQuery(".twoinc-buyer-name").text("");
-      jQuery(".twoinc-buyer-name").hide();
-      jQuery(".twoinc-buyer-name-placeholder").show();
-    }
   },
 
   /**

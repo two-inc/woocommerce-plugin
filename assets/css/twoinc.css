@@ -37,14 +37,6 @@
   #payment
   ul.payment_methods
   li.wc_payment_method.payment_method_woocommerce-gateway-tillit
-  .twoinc-buyer-name {
-  font-weight: bold;
-}
-
-.woocommerce-checkout
-  #payment
-  ul.payment_methods
-  li.wc_payment_method.payment_method_woocommerce-gateway-tillit
   img {
   margin-left: 20px;
   max-height: 32px;
