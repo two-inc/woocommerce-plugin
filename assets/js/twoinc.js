@@ -664,21 +664,16 @@ let twoincDomHelper = {
    */
   togglePaySubtitleDesc: function (action, errSelector) {
     jQuery(".twoinc-pay-box").addClass("hidden");
-    if (action === "checking-intent") {
-      jQuery(".twoinc-pay-box.loader").removeClass("hidden");
-    } else if (action) {
-      if (action === "intent-approved") {
+    jQuery(".twoinc-pay-box.explainer").removeClass("hidden");
+    if (action) {
+      jQuery(".twoinc-pay-box.explainer").addClass("hidden");
+      if (action === "checking-intent") {
+        jQuery(".twoinc-pay-box.loader").removeClass("hidden");
+      } else if (action === "intent-approved") {
         jQuery(".twoinc-pay-box.msg-intent-approved").removeClass("hidden");
       } else if (action === "errored") {
         jQuery(".twoinc-pay-box" + errSelector).removeClass("hidden");
       }
-    }
-
-    // Default behavior for any action including null
-    if (!Twoinc.getInstance().customerCompany.organization_number) {
-      jQuery(".twoinc-pay-sub.require-inputs").removeClass("hidden");
-    } else {
-      jQuery(".twoinc-pay-sub.require-inputs").addClass("hidden");
     }
   },
 
