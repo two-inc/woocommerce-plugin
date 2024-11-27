@@ -289,7 +289,7 @@ if (!class_exists('WC_Twoinc')) {
             return sprintf(
                 '<div>
                     <div class="twoinc-pay-box explainer">%s</div>
-                    <img class="twoinc-pay-box loader hidden" src="%s" />
+                    <div class="twoinc-pay-box loader hidden"><img src="%s" /></div>
                     <div class="twoinc-pay-box msg msg-intent-approved hidden">%s</div>
                     <div class="twoinc-pay-box err err-payment-default hidden">%s</div>
                     <div class="twoinc-pay-box err err-phone-number hidden">%s</div>

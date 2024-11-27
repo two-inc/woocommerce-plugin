@@ -45,13 +45,23 @@
   #payment
   ul.payment_methods
   li.wc_payment_method.payment_method_woocommerce-gateway-tillit
-  img.loader {
+  .loader {
+  display: flex;
+}
+
+.woocommerce-checkout
+  #payment
+  ul.payment_methods
+  li.wc_payment_method.payment_method_woocommerce-gateway-tillit
+  .loader
+  img {
   height: 1.5em;
   width: 1.5em;
   animation: spin 1s ease-in-out infinite;
   opacity: 0.4;
   margin: 1em auto;
   display: block;
+  position: relative;
 }
 
 @keyframes spin {
