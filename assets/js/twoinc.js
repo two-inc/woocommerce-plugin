@@ -600,8 +600,6 @@ let twoincDomHelper = {
 
     // Disable the Twoinc payment method for non-business orders
     if (isTwoincDisabled) {
-      // twoincDomHelper.deselectPaymentMethod($twoincBox)
-      // $twoincBox.attr('disabled', isTwoincDisabled)
       twoincDomHelper.deselectPaymentMethod($twoincBox);
     }
 
@@ -651,7 +649,6 @@ let twoincDomHelper = {
 
     // Disable the Twoinc payment method for non-business orders
     if (isTwoincDisabled) {
-      // $twoincPaymentMethod.attr('disabled', isTwoincDisabled)
       twoincDomHelper.deselectPaymentMethod($twoincPaymentMethod);
     } else {
       // Select the payment method for business accounts
@@ -1547,9 +1544,6 @@ class Twoinc {
 
         // Show or hide the Twoinc payment method
         twoincDomHelper.toggleMethod(Twoinc.getInstance().isTwoincMethodHidden);
-
-        // Select the default payment method
-        twoincDomHelper.selectDefaultMethod(Twoinc.getInstance().isTwoincMethodHidden);
 
         // Display messages and update order intent logs
         Twoinc.getInstance().processOrderIntentResponse(response);
