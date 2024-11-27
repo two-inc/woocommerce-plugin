@@ -553,32 +553,9 @@ let twoincDomHelper = {
    * Deselect payment method and select the first available one
    */
   deselectPaymentMethod: function (paymentMethodRadioObj) {
-    // Do nothing if not selected
-    if (!paymentMethodRadioObj.prop("checked")) {
-      return;
-    }
-
     // Deselect the current payment method
     if (paymentMethodRadioObj) {
       paymentMethodRadioObj.prop("checked", false);
-    }
-
-    // Select the first visible payment method
-    let otherPaymentMethods = jQuery("#payment .wc_payment_methods input.input-radio:visible");
-    if (otherPaymentMethods.length > 0) {
-      if (paymentMethodRadioObj && paymentMethodRadioObj.attr("id")) {
-        let radios = jQuery(
-          "#payment .wc_payment_methods input.input-radio:visible:not(#" +
-            paymentMethodRadioObj.attr("id") +
-            ")"
-        );
-        if (sessionStorage.getItem("twoincAccountType") === "business") {
-          radios = radios.filter(":not(#payment_method_kco)");
-        }
-        radios.first().click();
-      } else {
-        jQuery("#payment .wc_payment_methods input.input-radio:visible").first().click();
-      }
     }
   },
 
@@ -1544,6 +1521,9 @@ class Twoinc {
 
         // Show or hide the Twoinc payment method
         twoincDomHelper.toggleMethod(Twoinc.getInstance().isTwoincMethodHidden);
+
+        // Select the default payment method
+        twoincDomHelper.selectDefaultMethod(Twoinc.getInstance().isTwoincMethodHidden);
 
         // Display messages and update order intent logs
         Twoinc.getInstance().processOrderIntentResponse(response);
