@@ -288,14 +288,13 @@ if (!class_exists('WC_Twoinc')) {
 
             return sprintf(
                 '<div>
-                    <div class="twoinc-pay-box explainer">%s</div>
-                    <div class="twoinc-pay-box loader hidden"><img src="%s" /></div>
-                    <div class="twoinc-pay-box msg msg-intent-approved hidden">%s</div>
-                    <div class="twoinc-pay-box err err-payment-default hidden">%s</div>
-                    <div class="twoinc-pay-box err err-phone-number hidden">%s</div>
+                    <div class="twoinc-pay-box twoinc-explainer">%s</div>
+                    <div class="twoinc-pay-box twoinc-loader hidden"></div>
+                    <div class="twoinc-pay-box twoinc-intent-approved hidden">%s</div>
+                    <div class="twoinc-pay-box twoinc-err-payment-default hidden">%s</div>
+                    <div class="twoinc-pay-box twoinc-err-phone-number hidden">%s</div>
                 </div>',
                 sprintf(__('%s lets your business pay later for the goods you purchase online.', 'twoinc-payment-gateway'), self::PRODUCT_NAME),
-                esc_attr(WC_TWOINC_PLUGIN_URL . '/assets/images/loader.svg'),
                 sprintf(__('Your invoice purchase with %s is likely to be accepted subject to additional checks.', 'twoinc-payment-gateway'), self::PRODUCT_NAME),
                 sprintf(__('Invoice purchase with %s is not available for this order.', 'twoinc-payment-gateway'), self::PRODUCT_NAME),
                 __('Phone number is invalid.', 'twoinc-payment-gateway')

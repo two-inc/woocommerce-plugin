@@ -638,13 +638,13 @@ let twoincDomHelper = {
    */
   togglePaySubtitleDesc: function (action, errSelector) {
     jQuery(".twoinc-pay-box").addClass("hidden");
-    jQuery(".twoinc-pay-box.explainer").removeClass("hidden");
+    jQuery(".twoinc-pay-box.twoinc-explainer").removeClass("hidden");
     if (action) {
-      jQuery(".twoinc-pay-box.explainer").addClass("hidden");
+      jQuery(".twoinc-pay-box.twoinc-explainer").addClass("hidden");
       if (action === "checking-intent") {
-        jQuery(".twoinc-pay-box.loader").removeClass("hidden");
+        jQuery(".twoinc-pay-box.twoinc-loader").removeClass("hidden");
       } else if (action === "intent-approved") {
-        jQuery(".twoinc-pay-box.msg-intent-approved").removeClass("hidden");
+        jQuery(".twoinc-pay-box.twoinc-intent-approved").removeClass("hidden");
       } else if (action === "errored") {
         jQuery(".twoinc-pay-box" + errSelector).removeClass("hidden");
       }
@@ -1555,7 +1555,7 @@ class Twoinc {
       displayMsgId = "intent-approved";
     } else {
       // Display error messages
-      displayMsgId = "errored|.err-payment-default";
+      displayMsgId = "errored|.twoinc-err-payment-default";
       if (response.status >= 400) {
         // @TODO: use code in checkout-api
         let errMsg = response.responseJSON;
@@ -1568,7 +1568,7 @@ class Twoinc {
         }
 
         if (errMsg.includes("Invalid phone number")) {
-          displayMsgId = "errored|.err-phone";
+          displayMsgId = "errored|.twoinc-err-phone-number";
           invalidFields.append("billing_phone_field");
         }
       }
