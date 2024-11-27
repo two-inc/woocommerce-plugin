@@ -878,6 +878,16 @@ let twoincDomHelper = {
   },
 
   /**
+   * Rearrange descriptions in Twoinc payment to make it cleaner
+   */
+  rearrangeDescription: function () {
+    let twoincPaymentBox = jQuery(".payment_box.payment_method_woocommerce-gateway-tillit");
+    if (twoincPaymentBox.length > 0) {
+      twoincPaymentBox.after(jQuery(".abt-twoinc"));
+    }
+  },
+
+  /**
    * Save checkout inputs
    */
   saveCheckoutInputs: function () {
@@ -1374,6 +1384,9 @@ class Twoinc {
     // Update the text in subtitle and description
     twoincDomHelper.togglePaySubtitleDesc();
 
+    // Rearrange the DOMs in Twoinc payment
+    twoincDomHelper.rearrangeDescription();
+
     // Display correct payment description
     twoincDomHelper.togglePaymentDesc();
 
@@ -1684,6 +1697,7 @@ class Twoinc {
         }
       }, 1000);
     });
+    twoincDomHelper.rearrangeDescription();
 
     // Disable click to return to Twoinc/Kco if some other payment method is selected
     jQuery(

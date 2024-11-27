@@ -51,7 +51,7 @@ if (!class_exists('WC_Twoinc')) {
                 __($this->get_option('title'), 'twoinc-payment-gateway'),
                 strval($this->get_merchant_default_days_on_invoice())
             );
-            $this->description = $this->get_pay_box_description();
+            $this->description = $this->get_pay_box_description() . $this->get_pay_subtitle();
 
             // Skip hooks if another instance has already been created
             if (null !== self::$instance) {
@@ -150,20 +150,6 @@ if (!class_exists('WC_Twoinc')) {
             self::$instance = $this;
             new WC_Twoinc_Checkout($this);
 
-        }
-
-        /**
-         * Get gateway icon.
-         *
-         * @return string
-         */
-        public function get_icon()
-        {
-            $icon_html = '<img src="' . esc_attr($this->icon) . '" alt="' . $this->title. '" />';
-            $icon_html .= '<br/>';
-            $icon_html .= $this->get_pay_subtitle();
-
-            return apply_filters('woocommerce_gateway_icon', $icon_html, $this->id);
         }
 
         /**
