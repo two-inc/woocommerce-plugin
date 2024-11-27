@@ -39,7 +39,6 @@
   li.wc_payment_method.payment_method_woocommerce-gateway-tillit
   img {
   max-height: 32px;
-  float: right;
 }
 
 .woocommerce-checkout
@@ -53,7 +52,6 @@
   opacity: 0.4;
   margin: 1em auto;
   display: block;
-  float: unset;
 }
 
 @keyframes spin {
