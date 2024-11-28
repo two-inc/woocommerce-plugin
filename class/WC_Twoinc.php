@@ -29,6 +29,8 @@ if (!class_exists('WC_Twoinc')) {
         public const MERCHANT_SIGNUP_URL = 'https://portal.two.inc/auth/merchant/signup';
         public const ALERT_EMAIL_ADDRESS = 'woocom-alerts@two.inc';
 
+        private bool $twoinc_process_confirmation_called = false;
+
         /**
          * WC_Twoinc constructor.
          */
@@ -144,7 +146,12 @@ if (!class_exists('WC_Twoinc')) {
 
             // On order status changed to cancelled
             add_action('woocommerce_order_status_cancelled', [$this, 'on_order_cancelled']);
+
             add_action('woocommerce_cancelled_order', [$this, 'on_order_cancelled']);
+
+            // On order status changed to refunded
+            add_action('woocommerce_order_status_refunded', [$this, 'on_order_refunded']);
+
 
             // This class use singleton
             self::$instance = $this;
@@ -431,28 +438,20 @@ if (!class_exists('WC_Twoinc')) {
 
             if ($twoinc_order_id) {
 
-                $order_refunds = $order->get_refunds();
-                $has_twoinc_refund = false;
-                foreach ($order_refunds as $refund) {
-                    if ($refund->get_refunded_payment()) {
-                        $has_twoinc_refund = true;
-                        break;
-                    }
-                }
-
                 print('<div style="margin-top:20px;float:left;">');
 
-                if ($has_twoinc_refund) {
-                    print('<a href="' . $this->get_twoinc_checkout_host() . "/v1/invoice/{$twoinc_order_id}/pdf?lang="
+                print('<p><a href="' . $this->get_twoinc_checkout_host() . "/v1/invoice/{$twoinc_order_id}/pdf?v=original&lang="
+                      . WC_Twoinc_Helper::get_locale()
+                      . '"><button type="button" class="button">'
+                      . sprintf(__('Download %s invoice'), self::PRODUCT_NAME)
+                      . '</button></a></p>');
+                $state = get_post_meta($post->ID, '_twoinc_order_state', true);
+                if ($state == 'REFUNDED') {
+                    print('<p><a href="' . $this->get_twoinc_checkout_host() . "/v1/invoice/{$twoinc_order_id}/pdf?lang="
                           . WC_Twoinc_Helper::get_locale()
-                          . '"><button type="button" class="button">Download credit note</button></a><br><br>');
-                    print('<a href="' . $this->get_twoinc_checkout_host() . "/v1/invoice/{$twoinc_order_id}/pdf?v=original&lang="
-                          . WC_Twoinc_Helper::get_locale()
-                          . '"><button type="button" class="button">Download original invoice</button></a>');
-                } else {
-                    print('<a href="' . $this->get_twoinc_checkout_host() . "/v1/invoice/{$twoinc_order_id}/pdf?v=original&lang="
-                          . WC_Twoinc_Helper::get_locale()
-                          . '"><button type="button" class="button">Download invoice</button></a>');
+                          . '"><button type="button" class="button">'
+                          . sprintf(__('Download %s credit note'), self::PRODUCT_NAME)
+                          .'</button></a><p>');
                 }
 
                 print('</div>');
@@ -697,6 +696,8 @@ if (!class_exists('WC_Twoinc')) {
                 $wc_twoinc_instance->on_order_completed($order_id);
             } elseif ($to_status == 'cancelled') {
                 $wc_twoinc_instance->on_order_cancelled($order_id);
+            } elseif ($to_status == 'refunded') {
+                $wc_twoinc_instance->on_order_refunded($order_id);
             }
         }
 
@@ -975,6 +976,26 @@ if (!class_exists('WC_Twoinc')) {
             update_post_meta($order->get_id(), '_twoinc_order_state', "CANCELLED");
             do_action('twoinc_order_cancelled', $order, $response);
             return true;
+        }
+
+        /**
+         * Notify Twoinc API when the order status is refunded
+         *
+         * @param $order_id
+         */
+        public function on_order_refunded($order_id)
+        {
+            // Get the order
+            $order = wc_get_order($order_id);
+            $state = get_post_meta($order_id, '_twoinc_order_state', true);
+            if ($state == 'REFUNDED') {
+                return;
+            }
+            $result = $this->process_refund($order_id);
+            if (is_wp_error($result)) {
+                $order->add_order_note($result->get_error_message());
+            }
+            return;
         }
 
         /**
@@ -1549,7 +1570,6 @@ if (!class_exists('WC_Twoinc')) {
 
         public function process_refund($order_id, $amount = null, $reason = '')
         {
-
             $order = wc_get_order($order_id);
 
             // Check payment method
@@ -1587,15 +1607,27 @@ if (!class_exists('WC_Twoinc')) {
             // Need to loop instead of getting the last element because the last element is not always the latest refund
             $order_refund = null;
             foreach ($order_refunds as $refund) {
-                if (!$order_refund || $refund->get_date_created() > $order_refund->get_date_created()) {
-                    $order_refund = $refund;
+                if (!$refund->get_refunded_payment()) {
+                    if (!$order_refund || $refund->get_date_created() > $order_refund->get_date_created()) {
+                        $order_refund = $refund;
+                    }
                 }
             }
 
-            if (!$order_refund || !$twoinc_order_id || !$amount) {
+            if (!$order_refund || !$twoinc_order_id) {
                 return new WP_Error(
                     'invalid_twoinc_refund',
-                    sprintf(__('Could not initiate refund with %s.', 'twoinc-payment-gateway'), self::PRODUCT_NAME)
+                    sprintf(__('Could not initiate refund with %s', 'twoinc-payment-gateway'), self::PRODUCT_NAME)
+                );
+            }
+
+            $refund_amount = $order_refund->get_amount();
+            if ($amount == null) {
+                $amount = $refund_amount;
+            } elseif ($amount != $refund_amount) {
+                return new WP_Error(
+                    'invalid_twoinc_refund',
+                    sprintf(__('Could not initiate refund with %s', 'twoinc-payment-gateway'), self::PRODUCT_NAME)
                 );
             }
 
@@ -1772,7 +1804,7 @@ if (!class_exists('WC_Twoinc')) {
             }
 
             // Make sure this function is called only once per run
-            if (property_exists($this, 'twoinc_process_confirmation_called')) {
+            if ($this->twoinc_process_confirmation_called) {
                 return;
             }
 
