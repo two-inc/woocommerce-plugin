@@ -1,7 +1,9 @@
 <?php
 // Add due in days to order req body to Two
-function add_two_order_fields($two_req) {
-    $due_in_days = (string) get_post_meta($two_req['merchant_order_id'], '_billing_due_in_days', true);
+function add_two_order_fields($two_req)
+{
+    $order = wc_get_order($two_req['merchant_order_id']);
+    $due_in_days = (string) $order->get_meta('_billing_due_in_days', true);
     if ($due_in_days && ctype_digit($due_in_days)) {
         $two_req["invoice_details"]['due_in_days'] = (int) $due_in_days;
     }
@@ -11,13 +13,14 @@ add_filter("two_order_create", "add_two_order_fields");
 
 
 // Add the new field due in days in checkout
-function add_two_due_days($fields) {
+function add_two_due_days($fields)
+{
 
     $lang = WC_Twoinc_Helper::get_locale();
     $label_text = "Days you'll have to pay your invoice";
     if ($lang === 'sv_SE') {
         $label_text = 'Dagar du kommer ha att betala din faktura';
-    } else if ($lang === 'nb_NO') {
+    } elseif ($lang === 'nb_NO') {
         $label_text = 'Dager du må betale fakturaen';
     }
 
@@ -40,8 +43,9 @@ add_filter("woocommerce_checkout_fields", "add_two_due_days");
 
 
 // Add the javascript to replace due in days in UI
-function add_demo_replace_due_in_days_script() {
-?>
+function add_demo_replace_due_in_days_script()
+{
+    ?>
 
 <script type='text/javascript'>
 function replaceDueInDays() {
@@ -68,20 +72,24 @@ document.addEventListener("DOMContentLoaded", function() {
 add_action('woocommerce_before_checkout_billing_form', 'add_demo_replace_due_in_days_script');
 
 
-function record_due_in_days_to_meta($order, $body) {
-    update_post_meta($order->get_id(), '_twoinc_due_in_days', $body['invoice_details']['due_in_days']);
+function record_due_in_days_to_meta($order, $body)
+{
+    $order->update_meta_data('_twoinc_due_in_days', $body['invoice_details']['due_in_days']);
+    $order->save();
 }
 
 add_action('twoinc_order_created', 'record_due_in_days_to_meta', 10, 2);
 
 
-function update_due_in_days_in_confirm_page() {
+function update_due_in_days_in_confirm_page()
+{
     if (is_order_received_page()) {
         global $wp, $post;
         $order_id = absint($wp->query_vars['order-received']);
-        $twoinc_due_in_days = get_post_meta($order_id, '_twoinc_due_in_days', true);
+        $order = wc_get_order($order_id);
+        $twoinc_due_in_days = $order->get_meta('_twoinc_due_in_days', true);
         $twoinc_obj = WC_Twoinc::get_instance();
-?>
+        ?>
 
 <script type='text/javascript'>
 function getNodesThatContain(text) {
