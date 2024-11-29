@@ -1608,9 +1608,10 @@ if (!class_exists('WC_Twoinc')) {
                     sprintf(__('Order has already been fully refunded with %s.', 'twoinc-payment-gateway'), self::PRODUCT_NAME)
                 );
             }
+
             $order_refunds = $order->get_refunds();
-            // Need to loop instead of getting the last element because the last element is not always the latest refund
             $order_refund = null;
+            // Need to loop instead of getting the last element because the last element is not always the latest refund
             foreach ($order_refunds as $refund) {
                 if (!$refund->get_refunded_payment()) {
                     if (!$order_refund || $refund->get_date_created() > $order_refund->get_date_created()) {
@@ -1619,11 +1620,8 @@ if (!class_exists('WC_Twoinc')) {
                 }
             }
 
-            if (!$order_refund || !$twoinc_order_id) {
-                return new WP_Error(
-                    'invalid_twoinc_refund',
-                    sprintf(__('Could not initiate refund with %s', 'twoinc-payment-gateway'), self::PRODUCT_NAME)
-                );
+            if (!$order_refund) {
+                return false;
             }
 
             $refund_amount = $order_refund->get_amount();
@@ -1641,7 +1639,7 @@ if (!class_exists('WC_Twoinc')) {
                 "/v1/order/{$twoinc_order_id}/refund",
                 WC_Twoinc_Helper::compose_twoinc_refund(
                     $order_refund,
-                    -$amount,
+                    $amount,
                     $order->get_currency()
                 ),
                 'POST'
