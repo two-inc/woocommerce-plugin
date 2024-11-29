@@ -43,7 +43,9 @@ services:
       WOOCOM_PLUGIN_CONFIG_JSON: ${WOOCOM_PLUGIN_CONFIG_JSON}
       WOOCOM_CURRENCY: EUR
       WOOCOM_DEFAULT_COUNTRY: NL
-      WOOCOM_VERSION: 8.9.3
+      # WOOCOM_VERSION: 9.4.2
+      # WOOCOM_VERSION: 8.9.3
+      WOOCOM_VERSION: 7.9.1
     volumes:
       - ./volumes/wordpress:/var/www/html
       - .:/opt/tillit-payment-gateway

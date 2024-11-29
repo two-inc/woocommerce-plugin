@@ -1422,7 +1422,7 @@ if (!class_exists('WC_Twoinc')) {
             $invoice_emails = $invoice_email ? [$invoice_email] : [];
 
             // Store the order meta
-            $order->update_meta_data('_tillit_order_reference', $order_reference);
+            $order->update_meta_data('_twoinc_order_reference', $order_reference);
             $order->update_meta_data('_tillit_merchant_id', $tillit_merchant_id);
             $order->update_meta_data('company_id', $company_id);
             $order->update_meta_data('department', $department);
@@ -1787,7 +1787,7 @@ if (!class_exists('WC_Twoinc')) {
         private function is_confirmation_page()
         {
 
-            if (isset($_REQUEST['twoinc_confirm_order']) && isset($_REQUEST['nonce'])) {
+            if (isset($_REQUEST['order_id']) && isset($_REQUEST['twoinc_order_reference']) && isset($_REQUEST['twoinc_nonce'])) {
                 return true;
                 // Temporarily commented out until we find a solution for redirect plugins
                 // $confirm_path = '/twoinc-payment-gateway/confirm';
@@ -1821,52 +1821,44 @@ if (!class_exists('WC_Twoinc')) {
             // Add status header to avoid being mistaken as 404 by other plugins
             status_header(200);
 
-            // Get the order reference
-            $order_reference = sanitize_text_field($_REQUEST['twoinc_confirm_order']);
+            $order_id = sanitize_text_field($_REQUEST['order_id']);
 
-            if ($this->get_option('skip_confirm_auth') !== 'yes') {
-                // Get the nonce
-                $nonce = $_REQUEST['nonce'];
-
-                // Stop if the code is not valid
-                if (!wp_verify_nonce($nonce, 'twoinc_confirm')) {
-                    WC_Twoinc_Helper::send_twoinc_alert_email(
-                        "Invalid nonce:"
-                        . "\r\n- Request: Confirm order"
-                        . "\r\n- Order reference: " . $order_reference
-                        . "\r\n- Site: " . get_site_url()
-                    );
-                    wp_die(__('The security code is not valid.', 'twoinc-payment-gateway'));
-                }
-            }
-
-            /** @var wpdb $wpdb */
-            global $wpdb;
-
-            $sql = $wpdb->prepare("SELECT post_id FROM $wpdb->postmeta WHERE meta_key = %s AND meta_value = %s", '_tillit_order_reference', $order_reference);
-            $row = $wpdb->get_row($sql, ARRAY_A);
-
-            // Stop if no order found
-            if (!isset($row['post_id'])) {
-                WC_Twoinc_Helper::send_twoinc_alert_email(
-                    "Could not find order:"
-                    . "\r\n- Request: Confirm order"
-                    . "\r\n- Order reference: " . $order_reference
-                    . "\r\n- Site: " . get_site_url()
-                );
-                $error_message = sprintf(__('Unable to find the requested %s order.', 'twoinc-payment-gateway'), self::PRODUCT_NAME);
-                wp_die($error_message);
-            }
-
-            // Get the order ID
-            $order_id = $row['post_id'];
-
-            // Get the order object
             $order = wc_get_order($order_id);
 
             // Check payment method
             if (!WC_Twoinc_Helper::is_twoinc_order($order)) {
                 return;
+            }
+
+            // Get the order reference
+            $order_reference = sanitize_text_field($_REQUEST['twoinc_order_reference']);
+
+            // Verify order reference
+            if (!$order_reference || $order_reference !== $order->get_meta('_twoinc_order_reference', true)) {
+                WC_Twoinc_Helper::send_twoinc_alert_email(
+                    "Invalid order reference:"
+                    . "\r\n- Request: Confirm order"
+                    . "\r\n- Order reference: " . $order_reference
+                    . "\r\n- Site: " . get_site_url()
+                );
+                wp_die(__('The security code is not valid.', 'twoinc-payment-gateway'));
+            }
+
+            if ($this->get_option('skip_confirm_auth') !== 'yes') {
+                // Get the nonce
+                $nonce = sanitize_text_field($_REQUEST['twoinc_nonce']);
+
+                // Stop if the code is not valid
+                if (!wp_verify_nonce($nonce, 'twoinc_confirm_' . $order_id)) {
+                    WC_Twoinc_Helper::send_twoinc_alert_email(
+                        "Invalid nonce:"
+                        . "\r\n- Request: Confirm order"
+                        . "\r\n- Merchant order ID: " . strval($order->get_id())
+                        . "\r\n- Order reference: " . $order_reference
+                        . "\r\n- Site: " . get_site_url()
+                    );
+                    wp_die(__('The security code is not valid.', 'twoinc-payment-gateway'));
+                }
             }
 
             // Get the Two order ID from shop order ID
@@ -1877,7 +1869,7 @@ if (!class_exists('WC_Twoinc')) {
                 WC_Twoinc_Helper::send_twoinc_alert_email(
                     "Could not find Two order ID:"
                     . "\r\n- Request: Confirm order"
-                    . "\r\n- Merchant post ID: " . strval($order->get_id())
+                    . "\r\n- Merchant order ID: " . strval($order->get_id())
                     . "\r\n- Site: " . get_site_url()
                 );
                 wp_die($error_message);
@@ -1894,7 +1886,7 @@ if (!class_exists('WC_Twoinc')) {
                     "Could not send request to Two server:"
                     . "\r\n- Request: Confirm order"
                     . "\r\n- Two order ID: " . $twoinc_order_id
-                    . "\r\n- Merchant post ID: " . strval($order->get_id())
+                    . "\r\n- Merchant order ID: " . strval($order->get_id())
                     . "\r\n- Site: " . get_site_url()
                 );
                 wp_die($error_message);
@@ -2243,7 +2235,7 @@ if (!class_exists('WC_Twoinc')) {
                 }
             }
 
-            $order_reference = $order->get_meta('_tillit_order_reference');
+            $order_reference = $order->get_meta('_twoinc_order_reference');
             $twoinc_merchant_id = $order->get_meta('_tillit_merchant_id');
             if (!$twoinc_merchant_id) {
                 $twoinc_merchant_id = $this->get_option('tillit_merchant_id');
