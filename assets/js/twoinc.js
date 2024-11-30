@@ -1436,7 +1436,7 @@ class Twoinc {
       let net_amount = gross_amount - tax_amount;
 
       let jsonBody = JSON.stringify({
-        merchant_short_name: window.twoinc.merchant_short_name,
+        merchant_id: window.twoinc.merchant_id,
         gross_amount: "" + gross_amount,
         invoice_type: "FUNDED_INVOICE",
         buyer: {
@@ -1626,19 +1626,17 @@ class Twoinc {
     )
       return;
 
-    let jsonBody = JSON.stringify({
-      merchant_short_name: window.twoinc.merchant_short_name,
+    let params = new URLSearchParams({
+      merchant_id: window.twoinc.merchant_id,
       buyer_organization_number: Twoinc.getInstance().customerCompany.organization_number,
       country_prefix: Twoinc.getInstance().customerCompany.country_prefix
     });
 
     // Create a get due in days request
     const dueInDaysResponse = jQuery.ajax({
-      url: twoincUtilHelper.constructTwoincUrl("/v1/payment_terms"),
-      contentType: "application/json; charset=utf-8",
+      url: twoincUtilHelper.constructTwoincUrl("/v1/payment_terms?", params),
       dataType: "json",
-      method: "POST",
-      data: jsonBody
+      method: "GET"
     });
 
     dueInDaysResponse.done(function (response) {

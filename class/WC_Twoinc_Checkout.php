@@ -327,7 +327,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 'invoice_fee_to_buyer' => $this->wc_twoinc->get_option('invoice_fee_to_buyer'),
                 'use_account_type_buttons' => $this->wc_twoinc->get_option('use_account_type_buttons'),
                 'display_tooltips' => $this->wc_twoinc->get_option('display_tooltips'),
-                'merchant_short_name' => $this->wc_twoinc->get_option('tillit_merchant_id'),
+                'merchant_id' => $this->wc_twoinc->get_merchant_id(),
                 'days_on_invoice' => $this->wc_twoinc->get_merchant_default_days_on_invoice(),
                 'shop_base_country' => strtolower(WC()->countries->get_base_country()),
                 'currency' => $currency,
