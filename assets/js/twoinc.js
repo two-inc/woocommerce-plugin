@@ -1626,15 +1626,15 @@ class Twoinc {
     )
       return;
 
-    let params = new URLSearchParams({
+    let params = {
       merchant_id: window.twoinc.merchant_id,
       buyer_organization_number: Twoinc.getInstance().customerCompany.organization_number,
       country_prefix: Twoinc.getInstance().customerCompany.country_prefix
-    });
+    };
 
     // Create a get due in days request
     const dueInDaysResponse = jQuery.ajax({
-      url: twoincUtilHelper.constructTwoincUrl("/v1/payment_terms?", params),
+      url: twoincUtilHelper.constructTwoincUrl("/v1/payment_terms", params),
       dataType: "json",
       method: "GET"
     });
