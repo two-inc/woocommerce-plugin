@@ -312,7 +312,6 @@ if (!class_exists('WC_Twoinc_Checkout')) {
          */
         private function prepare_twoinc_object()
         {
-
             $currency = get_woocommerce_currency();
 
             $properties = [
@@ -360,6 +359,13 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             if (!is_checkout()) {
                 return;
             }
+
+            // Ensure that the API key valid
+            $result = $this->wc_twoinc->verifyAPIKey();
+            if (isset($result['code']) && $result['code'] !== 200) {
+                return;
+            }
+
             $twoinc_obj = json_encode(WC_Twoinc_Helper::utf8ize($this->prepare_twoinc_object()), JSON_UNESCAPED_UNICODE);
             if ($twoinc_obj) {
                 printf('<script>window.twoinc = %s;</script>', $twoinc_obj);
