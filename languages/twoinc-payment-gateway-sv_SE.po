@@ -113,11 +113,6 @@ msgstr "%s förifyllda fält"
 msgid "%s Test Server"
 msgstr "%s testserver"
 
-#: class/WC_Twoinc.php:2009
-#, php-format
-msgid "%s username"
-msgstr "%s användarnamn"
-
 #: class/WC_Twoinc.php:2050
 msgid "Add input field for \"Department\""
 msgstr "Lägg till inmatningsfält för \"Avdelning\""

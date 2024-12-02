@@ -113,11 +113,6 @@ msgstr "%s vooraf ingevulde velden"
 msgid "%s Test Server"
 msgstr "%s Testserver"
 
-#: class/WC_Twoinc.php:2009
-#, php-format
-msgid "%s username"
-msgstr "%s gebruikersnaam"
-
 #: class/WC_Twoinc.php:2050
 msgid "Add input field for \"Department\""
 msgstr "Voeg invoerveld toe voor \"Afdeling\""

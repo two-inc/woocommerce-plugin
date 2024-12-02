@@ -102,11 +102,6 @@ msgstr ""
 msgid "%s Test Server"
 msgstr ""
 
-#: class/WC_Twoinc.php:2009
-#, php-format
-msgid "%s username"
-msgstr ""
-
 #: class/WC_Twoinc.php:2050
 msgid "Add input field for \"Department\""
 msgstr ""

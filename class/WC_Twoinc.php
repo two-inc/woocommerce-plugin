@@ -2005,10 +2005,6 @@ if (!class_exists('WC_Twoinc')) {
                     'title'       => sprintf(__('%s API Key', 'twoinc-payment-gateway'), self::PRODUCT_NAME),
                     'type'        => 'password',
                 ],
-                'merchant_id' => [
-                    'title'       => sprintf(__('%s username', 'twoinc-payment-gateway'), self::PRODUCT_NAME),
-                    'type'        => 'text'
-                ],
                 'vendor_name' => [
                     'title'       => __('Optional vendor name if there are multiple sites', 'twoinc-payment-gateway'),
                     'type'        => 'text'
