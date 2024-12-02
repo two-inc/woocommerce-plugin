@@ -5,7 +5,6 @@
   "test_checkout_host": "http://portal.localhost/api",
   "clear_options_on_deactivation": "no",
   "section_api_credentials": "",
-  "tillit_merchant_id": "tillit",
   "api_key": "secret_test_ePLc4yzRw2w-sUzJTtUABPMvTfnI0WrazJ1aotjX2Bw",
   "section_invoice_settings": "",
   "days_on_invoice": "14",

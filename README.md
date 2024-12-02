@@ -50,7 +50,6 @@ cat > docker/config/staging.json <<EOF
   "test_checkout_host": "https://api.staging.two.inc",
   "clear_options_on_deactivation": "no",
   "section_api_credentials": "",
-  "merchant_id": "tillittestuk",
   "api_key": "secret_test_xxx",
   "section_invoice_settings": "",
   "days_on_invoice": "14",
