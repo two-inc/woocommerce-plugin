@@ -312,7 +312,6 @@ if (!class_exists('WC_Twoinc_Checkout')) {
          */
         private function prepare_twoinc_object()
         {
-
             $currency = get_woocommerce_currency();
 
             $properties = [
@@ -327,7 +326,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 'invoice_fee_to_buyer' => $this->wc_twoinc->get_option('invoice_fee_to_buyer'),
                 'use_account_type_buttons' => $this->wc_twoinc->get_option('use_account_type_buttons'),
                 'display_tooltips' => $this->wc_twoinc->get_option('display_tooltips'),
-                'merchant_short_name' => $this->wc_twoinc->get_option('tillit_merchant_id'),
+                'merchant_id' => $this->wc_twoinc->get_merchant_id(),
                 'days_on_invoice' => $this->wc_twoinc->get_merchant_default_days_on_invoice(),
                 'shop_base_country' => strtolower(WC()->countries->get_base_country()),
                 'currency' => $currency,
@@ -360,6 +359,13 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             if (!is_checkout()) {
                 return;
             }
+
+            // Ensure that the API key valid
+            $result = $this->wc_twoinc->verifyAPIKey();
+            if (isset($result['code']) && $result['code'] !== 200) {
+                return;
+            }
+
             $twoinc_obj = json_encode(WC_Twoinc_Helper::utf8ize($this->prepare_twoinc_object()), JSON_UNESCAPED_UNICODE);
             if ($twoinc_obj) {
                 printf('<script>window.twoinc = %s;</script>', $twoinc_obj);

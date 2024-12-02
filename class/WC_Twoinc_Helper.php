@@ -193,8 +193,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
         public static function send_twoinc_alert_email($content, $subject = 'WooCommerce operation alert')
         {
             do_action('twoinc_send_alert_email', $content, $subject);
-
-            return wp_mail(WC_Twoinc::ALERT_EMAIL_ADDRESS, $subject, $content, "Reply-To: " . $email . "\r\n");
+            $email = WC_Twoinc::ALERT_EMAIL_ADDRESS;
+            return wp_mail($email, $subject, $content, "Reply-To: " . $email . "\r\n");
 
         }
 
@@ -566,10 +566,11 @@ if (!class_exists('WC_Twoinc_Helper')) {
 
             if (!$skip_nonce) {
                 $req_body['merchant_urls']['merchant_confirmation_url'] = sprintf(
-                    '%s/twoinc-payment-gateway/confirm?twoinc_confirm_order=%s&nonce=%s',
+                    '%s/twoinc-payment-gateway/confirm?order_id=%s&twoinc_order_reference=%s&twoinc_nonce=%s',
                     get_home_url(),
+                    $order->get_id(),
                     $order_reference,
-                    wp_create_nonce('twoinc_confirm')
+                    wp_create_nonce('twoinc_confirm_' . $order->get_id())
                 );
             }
 

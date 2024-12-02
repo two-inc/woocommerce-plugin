@@ -11,9 +11,12 @@ add_action('wp_insert_post', 'prepend_to_order_note', 10, 3);
  *
  * @return void
  */
-function enqueue_date_picker() {
+function enqueue_date_picker()
+{
     // Only on front-end and checkout page
-    if(is_admin() || !is_checkout()) return;
+    if (is_admin() || !is_checkout()) {
+        return;
+    }
     wp_enqueue_script('jquery-ui-datepicker');
 }
 
@@ -23,7 +26,8 @@ function enqueue_date_picker() {
  *
  * @return void
  */
-function add_delivery_date_field($checkout) {
+function add_delivery_date_field($checkout)
+{
 
     date_default_timezone_set('Europe/Oslo');
     $dateoptions = array('' => __('Select Pickup Date', 'twoinc-payment-gateway'));
@@ -43,15 +47,17 @@ function add_delivery_date_field($checkout) {
         }
     </style>';
 
-   woocommerce_form_field('delivery_date', array(
-            'type'          => 'text',
-            'class'         => array('form-row-wide'),
-            'id'            => 'delivery-date-picker',
-            'required'      => true,
-            'label'         => __('Delivery Date', 'twoinc-payment-gateway'),
-            'placeholder'   => __('Select Date', 'twoinc-payment-gateway'),
-            'options'       => $dateoptions
-        ),
+    woocommerce_form_field(
+        'delivery_date',
+        array(
+             'type'          => 'text',
+             'class'         => array('form-row-wide'),
+             'id'            => 'delivery-date-picker',
+             'required'      => true,
+             'label'         => __('Delivery Date', 'twoinc-payment-gateway'),
+             'placeholder'   => __('Select Date', 'twoinc-payment-gateway'),
+             'options'       => $dateoptions
+         ),
         $checkout->get_value('cylinder_collect_date')
     );
 
@@ -64,25 +70,26 @@ function add_delivery_date_field($checkout) {
  *
  * @return void
  */
-function checkout_validate_delivery_date() {
+function checkout_validate_delivery_date()
+{
 
     if (!$_POST['delivery_date']) {
         // the required field delivery_date was not sent
         wc_add_notice(
-          sprintf(
-            __('%s is a required field.', 'twoinc-payment-gateway'),
-            sprintf('<strong>%s</strong> ', __('Delivery Date', 'twoinc-payment-gateway'))
-          ),
-          'error'
+            sprintf(
+                __('%s is a required field.', 'twoinc-payment-gateway'),
+                sprintf('<strong>%s</strong> ', __('Delivery Date', 'twoinc-payment-gateway'))
+            ),
+            'error'
         );
-    } else if (!validate_date($_POST['delivery_date'])) {
+    } elseif (!validate_date($_POST['delivery_date'])) {
         // delivery_date is of incorrect format
         wc_add_notice(
-          sprintf(
-            __('%s cannot be parsed.', 'twoinc-payment-gateway'),
-            sprintf('<strong>%s</strong> ', __('Delivery Date', 'twoinc-payment-gateway'))
-          ),
-          'error'
+            sprintf(
+                __('%s cannot be parsed.', 'twoinc-payment-gateway'),
+                sprintf('<strong>%s</strong> ', __('Delivery Date', 'twoinc-payment-gateway'))
+            ),
+            'error'
         );
     }
 }
@@ -93,9 +100,11 @@ function checkout_validate_delivery_date() {
  *
  * @return void
  */
-function add_delivery_date_to_order_meta($order_id) {
+function add_delivery_date_to_order_meta($order_id)
+{
     if (!empty($_POST['delivery_date'])) {
-        update_post_meta($order_id, 'delivery_date', sanitize_text_field($_POST['delivery_date']));
+        $order->update_meta_data('delivery_date', sanitize_text_field($_POST['delivery_date']));
+        $order->save();
     }
 }
 
@@ -105,7 +114,8 @@ function add_delivery_date_to_order_meta($order_id) {
  *
  * @return bool
  */
-function validate_date($date_str, $format = 'Y-m-d') {
+function validate_date($date_str, $format = 'Y-m-d')
+{
     $d = DateTime::createFromFormat($format, $date_str);
     return $d && $d->format($format) === $date_str;
 }
@@ -116,10 +126,11 @@ function validate_date($date_str, $format = 'Y-m-d') {
  *
  * @return void
  */
-function prepend_to_order_note($post_id, $post, $update) {
+function prepend_to_order_note($post_id, $post, $update)
+{
 
     // Skip if $post_id doesn't exist OR post is not order OR this is update
-    if ( ! $post_id || get_post_type( $post_id ) != 'shop_order' || $update == 1 ) {
+    if (! $post_id || get_post_type($post_id) != 'shop_order' || $update == 1) {
         return;
     }
 
