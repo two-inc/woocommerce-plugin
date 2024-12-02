@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Two - BNPL for businesses\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2024-11-27 10:41+0000\n"
+"POT-Creation-Date: 2024-12-02 09:51+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: \n"
@@ -16,17 +16,22 @@ msgstr ""
 "X-Loco-Version: 2.5.2; wp-5.7\n"
 "X-Domain: twoinc-payment-gateway"
 
-#: class/WC_Twoinc.php:1979
+#: class/WC_Twoinc.php:2005
 #, php-format
 msgid "%s API Key"
 msgstr ""
 
-#: snippets/delivery-date-checkout.php:82
+#: class/WC_Twoinc.php:84
+#, php-format
+msgid "%s API key verified."
+msgstr ""
+
+#: snippets/delivery-date-checkout.php:89
 #, php-format
 msgid "%s cannot be parsed."
 msgstr ""
 
-#: class/WC_Twoinc.php:2508
+#: class/WC_Twoinc.php:2518
 #, php-format
 msgid ""
 "%s credit approves 90%% of business buyers, pays you upfront and minimise "
@@ -34,7 +39,7 @@ msgid ""
 "easy and gives you immediate access to the %s Merchant Portal."
 msgstr ""
 
-#: class/WC_Twoinc.php:794
+#: class/WC_Twoinc.php:788
 #, php-format
 msgid ""
 "%s has acknowledged request to fulfill %d order. An invoice will be sent to "
@@ -45,31 +50,31 @@ msgid_plural ""
 msgstr[0] ""
 msgstr[1] ""
 
-#: class/WC_Twoinc.php:908
+#: class/WC_Twoinc.php:902
 #, php-format
 msgid ""
 "%s has acknowledged the request to fulfil the order. An invoice will be sent "
 "to the buyer when the fulfilment is complete."
 msgstr ""
 
-#: class/WC_Twoinc.php:809
+#: class/WC_Twoinc.php:803
 #, php-format
 msgid "%s has cancelled %d order."
 msgid_plural "%s has cancelled %d orders."
 msgstr[0] ""
 msgstr[1] ""
 
-#: class/WC_Twoinc.php:813
+#: class/WC_Twoinc.php:807
 #, php-format
 msgid "%s has failed to cancel order %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:803
+#: class/WC_Twoinc.php:797
 #, php-format
 msgid "%s has failed to issue invoice for order %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:275
+#: class/WC_Twoinc.php:278
 #, php-format
 msgid ""
 "%s is a payment solution for B2B purchases online, allowing you to buy from "
@@ -77,44 +82,44 @@ msgid ""
 "access flexible trade credit instantly to make purchasing simple."
 msgstr ""
 
-#: snippets/delivery-date-checkout.php:73
+#: snippets/delivery-date-checkout.php:80
 #, php-format
 msgid "%s is a required field."
 msgstr ""
 
-#: class/WC_Twoinc.php:311
+#: class/WC_Twoinc.php:314
 #, php-format
 msgid "%s lets your business pay later for the goods you purchase online."
 msgstr ""
 
-#: class/WC_Twoinc.php:1325
+#: class/WC_Twoinc.php:1342
 #, php-format
 msgid "%s pre-filled fields"
 msgstr ""
 
-#: class/WC_Twoinc.php:1956
+#: class/WC_Twoinc.php:1982
 #, php-format
 msgid "%s Test Server"
 msgstr ""
 
-#: class/WC_Twoinc.php:1983
+#: class/WC_Twoinc.php:2009
 #, php-format
 msgid "%s username"
 msgstr ""
 
-#: class/WC_Twoinc.php:2024
+#: class/WC_Twoinc.php:2050
 msgid "Add input field for \"Department\""
 msgstr ""
 
-#: class/WC_Twoinc.php:2048
+#: class/WC_Twoinc.php:2074
 msgid "Add input field for \"Invoice email address\""
 msgstr ""
 
-#: class/WC_Twoinc.php:2032
+#: class/WC_Twoinc.php:2058
 msgid "Add input field for \"Project\""
 msgstr ""
 
-#: class/WC_Twoinc.php:2040
+#: class/WC_Twoinc.php:2066
 msgid "Add input field for \"Purchase order number\""
 msgstr ""
 
@@ -122,69 +127,69 @@ msgstr ""
 msgid "Address"
 msgstr ""
 
-#: class/WC_Twoinc.php:2104
+#: class/WC_Twoinc.php:2130
 msgid "Address auto-complete"
 msgstr ""
 
-#: class/WC_Twoinc.php:2004
+#: class/WC_Twoinc.php:2030
 #, php-format
 msgid ""
 "Adds a separate checkout for business customers. %s payment is only "
 "available for business customers."
 msgstr ""
 
-#: class/WC_Twoinc.php:2012
+#: class/WC_Twoinc.php:2038
 #, php-format
 msgid ""
 "Adds a separate checkout for private customers. %s payment is not available "
 "for private customers."
 msgstr ""
 
-#: class/WC_Twoinc.php:2049
+#: class/WC_Twoinc.php:2075
 msgid ""
 "Adds an input field where buyers can input optional additional email address "
 "to receive invoice."
 msgstr ""
 
-#: class/WC_Twoinc.php:2025
+#: class/WC_Twoinc.php:2051
 msgid ""
 "Adds an input field where buyers can input their department to display on "
 "the invoice."
 msgstr ""
 
-#: class/WC_Twoinc.php:2033
+#: class/WC_Twoinc.php:2059
 msgid ""
 "Adds an input field where buyers can input their project in the company to "
 "display on the invoice."
 msgstr ""
 
-#: class/WC_Twoinc.php:2041
+#: class/WC_Twoinc.php:2067
 msgid ""
 "Adds an input field where buyers can input their purchase order number to "
 "display on the invoice."
 msgstr ""
 
-#: class/WC_Twoinc.php:1976
+#: class/WC_Twoinc.php:2002
 msgid "API credentials"
 msgstr ""
 
-#: class/WC_Twoinc.php:1996
+#: class/WC_Twoinc.php:2022
 msgid "Approve buyer when phone and company name is filled out."
 msgstr ""
 
-#: class/WC_Twoinc.php:2093
+#: class/WC_Twoinc.php:2119
 msgid "Auto-complete settings"
 msgstr ""
 
-#: class/WC_Twoinc.php:1335
+#: class/WC_Twoinc.php:1352
 msgid "Billing Company ID"
 msgstr ""
 
-#: class/WC_Twoinc.php:1329
+#: class/WC_Twoinc.php:1346
 msgid "Billing Company name"
 msgstr ""
 
-#: class/WC_Twoinc.php:1928
+#: class/WC_Twoinc.php:1954
 msgid "Business"
 msgstr ""
 
@@ -192,12 +197,12 @@ msgstr ""
 msgid "Business Customer"
 msgstr ""
 
-#: class/WC_Twoinc.php:1952
+#: class/WC_Twoinc.php:1978
 #, php-format
 msgid "Business invoice - %s days"
 msgstr ""
 
-#: class/WC_Twoinc.php:276
+#: class/WC_Twoinc.php:279
 msgid "Buy now, receive your goods, pay your invoice later."
 msgstr ""
 
@@ -205,11 +210,11 @@ msgstr ""
 msgid "Buyer and merchant may not be the same company"
 msgstr ""
 
-#: class/WC_Twoinc.php:1992
+#: class/WC_Twoinc.php:2018
 msgid "Checkout options"
 msgstr ""
 
-#: class/WC_Twoinc.php:1961
+#: class/WC_Twoinc.php:1987
 msgid "Choose your settings"
 msgstr ""
 
@@ -217,7 +222,7 @@ msgstr ""
 msgid "City"
 msgstr ""
 
-#: class/WC_Twoinc.php:1969
+#: class/WC_Twoinc.php:1995
 msgid "Clear settings on deactivation of plug-in"
 msgstr ""
 
@@ -230,36 +235,41 @@ msgstr ""
 msgid "Company name"
 msgstr ""
 
-#: class/WC_Twoinc.php:2349 class/WC_Twoinc.php:2382 class/WC_Twoinc.php:2396
+#: class/WC_Twoinc.php:2379 class/WC_Twoinc.php:2412 class/WC_Twoinc.php:2426
 #, php-format
 msgid "Could not edit the order with %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:1589
+#: class/WC_Twoinc.php:1610
 #, php-format
 msgid "Could not find %s order ID"
 msgstr ""
 
-#: class/WC_Twoinc.php:405 class/WC_Twoinc.php:416
+#: class/WC_Twoinc.php:407 class/WC_Twoinc.php:418
 #, php-format
 msgid "Could not forward invoice image URL to %s"
 msgstr ""
 
-#: class/WC_Twoinc.php:1613 class/WC_Twoinc.php:1658 class/WC_Twoinc.php:1680
+#: class/WC_Twoinc.php:1644
+#, php-format
+msgid "Could not initiate refund with %s"
+msgstr ""
+
+#: class/WC_Twoinc.php:1689 class/WC_Twoinc.php:1711
 #, php-format
 msgid "Could not initiate refund with %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:870 class/WC_Twoinc.php:889
+#: class/WC_Twoinc.php:864 class/WC_Twoinc.php:883
 #, php-format
 msgid "Could not update order status to \"Fulfilled\" with %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:937 class/WC_Twoinc.php:960 class/WC_Twoinc.php:975
+#: class/WC_Twoinc.php:932 class/WC_Twoinc.php:955 class/WC_Twoinc.php:970
 msgid "Could not update status to \"Cancelled\"."
 msgstr ""
 
-#: class/WC_Twoinc.php:839
+#: class/WC_Twoinc.php:833
 #, php-format
 msgid "Could not update status to \"Fulfilled\" with %s."
 msgstr ""
@@ -276,23 +286,23 @@ msgstr ""
 msgid "Customer"
 msgstr ""
 
-#: class/WC_Twoinc.php:2068
+#: class/WC_Twoinc.php:2094
 msgid "Default to B2C check-out"
 msgstr ""
 
-#: snippets/delivery-date-checkout.php:32
-#: snippets/delivery-date-checkout.php:51
-#: snippets/delivery-date-checkout.php:74
-#: snippets/delivery-date-checkout.php:83
+#: snippets/delivery-date-checkout.php:36
+#: snippets/delivery-date-checkout.php:57
+#: snippets/delivery-date-checkout.php:81
+#: snippets/delivery-date-checkout.php:90
 #: snippets/admin-order-list-columns.php:91
 msgid "Delivery Date"
 msgstr ""
 
-#: class/WC_Twoinc.php:1341 class/WC_Twoinc_Checkout.php:188
+#: class/WC_Twoinc.php:1358 class/WC_Twoinc_Checkout.php:188
 msgid "Department"
 msgstr ""
 
-#: class/WC_Twoinc.php:2080
+#: class/WC_Twoinc.php:2106
 msgid "Display input tooltips"
 msgstr ""
 
@@ -305,48 +315,52 @@ msgstr ""
 msgid "Empty response from %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:1946
+#: class/WC_Twoinc.php:1972
 #, php-format
 msgid "Enable %s Payments"
 msgstr ""
 
-#: class/WC_Twoinc.php:2096
+#: class/WC_Twoinc.php:2122
 msgid "Enable company name search and auto-complete"
 msgstr ""
 
-#: class/WC_Twoinc.php:2105
+#: class/WC_Twoinc.php:2131
 msgid ""
 "Enables automatically filling in the registered address from the national "
 "registry."
 msgstr ""
 
-#: class/WC_Twoinc.php:2097
+#: class/WC_Twoinc.php:2123
 msgid ""
 "Enables searching for company name in the national registry and "
 "automatically filling in name and national ID."
 msgstr ""
 
-#: class/WC_Twoinc.php:1508
+#: class/WC_Twoinc.php:1528
 #, php-format
 msgid "Failed to process payment with %s"
 msgstr ""
 
-#: class/WC_Twoinc.php:1495
+#: class/WC_Twoinc.php:1515
 #, php-format
 msgid "Failed to request order creation with %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:1578 class/WC_Twoinc.php:1630 class/WC_Twoinc.php:1644
-#: class/WC_Twoinc.php:1667
+#: class/WC_Twoinc.php:1599 class/WC_Twoinc.php:1661 class/WC_Twoinc.php:1675
+#: class/WC_Twoinc.php:1698
 #, php-format
 msgid "Failed to request order refund with %s."
+msgstr ""
+
+#: class/WC_Twoinc.php:81
+msgid "Failed to verify API key."
 msgstr ""
 
 #: class/WC_Twoinc_Helper.php:126
 msgid "First name"
 msgstr ""
 
-#: class/WC_Twoinc.php:2507
+#: class/WC_Twoinc.php:2517
 #, php-format
 msgid "Grow your B2B sales with Buy Now, Pay Later using %s!"
 msgstr ""
@@ -364,19 +378,19 @@ msgstr ""
 msgid "Invoice email address"
 msgstr ""
 
-#: class/WC_Twoinc.php:1690
+#: class/WC_Twoinc.php:1721
 #, php-format
 msgid ""
 "Invoice has been partially refunded and credit note has been sent by %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:1687
+#: class/WC_Twoinc.php:1718
 #, php-format
 msgid "Invoice has been refunded and credit note has been sent by %s."
 msgstr ""
 
-#: class/WC_Twoinc_Helper.php:71 class/WC_Twoinc.php:314
-#: class/WC_Twoinc.php:1529
+#: class/WC_Twoinc_Helper.php:71 class/WC_Twoinc.php:316
+#: class/WC_Twoinc.php:1549
 #, php-format
 msgid "Invoice purchase with %s is not available for this order."
 msgstr ""
@@ -385,11 +399,11 @@ msgstr ""
 msgid "Last name"
 msgstr ""
 
-#: class/WC_Twoinc.php:42
+#: class/WC_Twoinc.php:44
 msgid "Making it easy for businesses to buy online."
 msgstr ""
 
-#: class/WC_Twoinc.php:2273
+#: class/WC_Twoinc.php:2301
 msgid "Missing company ID."
 msgstr ""
 
@@ -402,26 +416,26 @@ msgstr ""
 msgid "Only for invoices being sent by %s"
 msgstr ""
 
-#: class/WC_Twoinc.php:1987
+#: class/WC_Twoinc.php:2013
 msgid "Optional vendor name if there are multiple sites"
 msgstr ""
 
-#: class/WC_Twoinc.php:1598
+#: class/WC_Twoinc.php:1619
 #, php-format
 msgid "Order has already been fully refunded with %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:1899
+#: class/WC_Twoinc.php:1924
 #, php-format
 msgid "Order ID %s has been placed with %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:951
+#: class/WC_Twoinc.php:946
 #, php-format
 msgid "Order is already cancelled with %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:2423
+#: class/WC_Twoinc.php:2453
 #, php-format
 msgid "Order value is now %s."
 msgstr ""
@@ -430,11 +444,11 @@ msgstr ""
 msgid "Organization number"
 msgstr ""
 
-#: class/WC_Twoinc.php:342
+#: class/WC_Twoinc.php:344
 msgid "Pay on invoice with agreed terms"
 msgstr ""
 
-#: class/WC_Twoinc.php:1920
+#: class/WC_Twoinc.php:1946
 msgid "Personal"
 msgstr ""
 
@@ -446,17 +460,17 @@ msgstr ""
 msgid "Phone number"
 msgstr ""
 
-#: class/WC_Twoinc.php:315
+#: class/WC_Twoinc.php:317
 msgid "Phone number is invalid."
 msgstr ""
 
-#: class/WC_Twoinc.php:40
+#: class/WC_Twoinc.php:42
 msgid "Place order"
 msgstr ""
 
-#: class/WC_Twoinc.php:874 class/WC_Twoinc.php:893 class/WC_Twoinc.php:961
-#: class/WC_Twoinc.php:976 class/WC_Twoinc.php:1645 class/WC_Twoinc.php:1668
-#: class/WC_Twoinc.php:2274 class/WC_Twoinc.php:2397
+#: class/WC_Twoinc.php:868 class/WC_Twoinc.php:887 class/WC_Twoinc.php:956
+#: class/WC_Twoinc.php:971 class/WC_Twoinc.php:1676 class/WC_Twoinc.php:1699
+#: class/WC_Twoinc.php:2302 class/WC_Twoinc.php:2427
 #, php-format
 msgid "Please contact %s support with order ID: %s"
 msgstr ""
@@ -470,7 +484,7 @@ msgstr ""
 msgid "Postal code"
 msgstr ""
 
-#: class/WC_Twoinc.php:1995
+#: class/WC_Twoinc.php:2021
 msgid "Pre-approve buyer during checkout"
 msgstr ""
 
@@ -478,7 +492,7 @@ msgstr ""
 msgid "Private Customer"
 msgstr ""
 
-#: class/WC_Twoinc.php:1349 class/WC_Twoinc_Checkout.php:199
+#: class/WC_Twoinc.php:1366 class/WC_Twoinc_Checkout.php:199
 msgid "Project"
 msgstr ""
 
@@ -486,17 +500,17 @@ msgstr ""
 msgid "Purchase order number"
 msgstr ""
 
-#: class/WC_Twoinc.php:840 class/WC_Twoinc.php:938 class/WC_Twoinc.php:1579
-#: class/WC_Twoinc.php:2350
+#: class/WC_Twoinc.php:834 class/WC_Twoinc.php:933 class/WC_Twoinc.php:1600
+#: class/WC_Twoinc.php:2380
 #, php-format
 msgid "Reason: Could not find %s order ID."
 msgstr ""
 
-#: class/WC_Twoinc.php:291
+#: class/WC_Twoinc.php:294
 msgid "Receive invoice and payment details via email"
 msgstr ""
 
-#: class/WC_Twoinc.php:292
+#: class/WC_Twoinc.php:295
 msgid "Receive invoice and payment details via email and EHF"
 msgstr ""
 
@@ -505,8 +519,8 @@ msgstr ""
 msgid "Response code from %s: %d"
 msgstr ""
 
-#: class/WC_Twoinc.php:894 class/WC_Twoinc.php:977 class/WC_Twoinc.php:1646
-#: class/WC_Twoinc.php:2398
+#: class/WC_Twoinc.php:888 class/WC_Twoinc.php:972 class/WC_Twoinc.php:1677
+#: class/WC_Twoinc.php:2428
 #, php-format
 msgid "Response: %s"
 msgstr ""
@@ -519,49 +533,49 @@ msgstr ""
 msgid "Select account type"
 msgstr ""
 
-#: snippets/delivery-date-checkout.php:52
+#: snippets/delivery-date-checkout.php:58
 msgid "Select Date"
 msgstr ""
 
-#: class/WC_Twoinc.php:2189
+#: class/WC_Twoinc.php:2215
 msgid "Select image"
 msgstr ""
 
-#: snippets/delivery-date-checkout.php:29
+#: snippets/delivery-date-checkout.php:33
 msgid "Select Pickup Date"
 msgstr ""
 
-#: class/WC_Twoinc.php:2003
+#: class/WC_Twoinc.php:2029
 msgid "Separate checkout for business customers"
 msgstr ""
 
-#: class/WC_Twoinc.php:2011
+#: class/WC_Twoinc.php:2037
 msgid "Separate checkout for private customers"
 msgstr ""
 
-#: class/WC_Twoinc.php:2019
+#: class/WC_Twoinc.php:2045
 msgid "Separate checkout for private sole traders"
 msgstr ""
 
-#: class/WC_Twoinc.php:2509
+#: class/WC_Twoinc.php:2519
 #, php-format
 msgid "Set up my %s account"
 msgstr ""
 
-#: class/WC_Twoinc.php:2073
+#: class/WC_Twoinc.php:2099
 msgid "Shift invoice fee to the buyers"
 msgstr ""
 
-#: class/WC_Twoinc.php:2062
+#: class/WC_Twoinc.php:2088
 #, php-format
 msgid "Show \"What is %s\" link in checkout"
 msgstr ""
 
-#: class/WC_Twoinc.php:2086
+#: class/WC_Twoinc.php:2112
 msgid "Skip user validation at order confirmation"
 msgstr ""
 
-#: class/WC_Twoinc.php:1924
+#: class/WC_Twoinc.php:1950
 msgid "Sole Trader"
 msgstr ""
 
@@ -569,25 +583,25 @@ msgstr ""
 msgid "Sole Trader/Other Customer"
 msgstr ""
 
-#: class/WC_Twoinc.php:2421
+#: class/WC_Twoinc.php:2451
 #, php-format
 msgid "The order edit request has been accepted by %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:1815
+#: class/WC_Twoinc.php:1853 class/WC_Twoinc.php:1869
 msgid "The security code is not valid."
 msgstr ""
 
-#: class/WC_Twoinc.php:2074
+#: class/WC_Twoinc.php:2100
 msgid ""
 "This feature only works for merchants set up with a fixed fee per order."
 msgstr ""
 
-#: class/WC_Twoinc.php:1950
+#: class/WC_Twoinc.php:1976
 msgid "Title"
 msgstr ""
 
-#: class/WC_Twoinc.php:1944
+#: class/WC_Twoinc.php:1970
 msgid "Turn on/off"
 msgstr ""
 
@@ -599,30 +613,25 @@ msgstr ""
 msgid "Two - BNPL for businesses"
 msgstr ""
 
-#: class/WC_Twoinc.php:1881
+#: class/WC_Twoinc.php:1906
 #, php-format
 msgid "Unable to confirm the order with %s."
 msgstr ""
 
-#: class/WC_Twoinc.php:1833
-#, php-format
-msgid "Unable to find the requested %s order."
-msgstr ""
-
-#: class/WC_Twoinc.php:1851 class/WC_Twoinc.php:1867
+#: class/WC_Twoinc.php:1876 class/WC_Twoinc.php:1892
 #, php-format
 msgid "Unable to retrieve %s order information."
 msgstr ""
 
-#: class/WC_Twoinc.php:2210 class/WC_Twoinc.php:2246
+#: class/WC_Twoinc.php:2236 class/WC_Twoinc.php:2274
 msgid "Unable to retrieve the order information."
 msgstr ""
 
-#: class/WC_Twoinc.php:2259
+#: class/WC_Twoinc.php:2287
 msgid "Unable to retrieve the order payment information"
 msgstr ""
 
-#: class/WC_Twoinc.php:2056
+#: class/WC_Twoinc.php:2082
 msgid "Use buttons instead of radios to select account type"
 msgstr ""
 
@@ -636,12 +645,12 @@ msgid ""
 "the company that made the purchase."
 msgstr ""
 
-#: class/WC_Twoinc.php:272
+#: class/WC_Twoinc.php:275
 #, php-format
 msgid "What is %s?"
 msgstr ""
 
-#: class/WC_Twoinc.php:313
+#: class/WC_Twoinc.php:315
 #, php-format
 msgid ""
 "Your invoice purchase with %s is likely to be accepted subject to additional "
