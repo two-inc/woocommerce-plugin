@@ -308,9 +308,11 @@ if (!class_exists('WC_Twoinc_Checkout')) {
         /**
          * Passing config to javascript
          *
+         * @param $merchant array
+         *
          * @return array
          */
-        private function prepare_twoinc_object()
+        private function prepare_twoinc_object($merchant): array
         {
             $currency = get_woocommerce_currency();
 
@@ -326,7 +328,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 'invoice_fee_to_buyer' => $this->wc_twoinc->get_option('invoice_fee_to_buyer'),
                 'use_account_type_buttons' => $this->wc_twoinc->get_option('use_account_type_buttons'),
                 'display_tooltips' => $this->wc_twoinc->get_option('display_tooltips'),
-                'merchant_id' => $this->wc_twoinc->get_merchant_id(),
+                'merchant' => $merchant,
                 'days_on_invoice' => $this->wc_twoinc->get_merchant_default_days_on_invoice(),
                 'shop_base_country' => strtolower(WC()->countries->get_base_country()),
                 'currency' => $currency,
@@ -366,7 +368,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 return;
             }
 
-            $twoinc_obj = json_encode(WC_Twoinc_Helper::utf8ize($this->prepare_twoinc_object()), JSON_UNESCAPED_UNICODE);
+            $twoinc_obj = json_encode(WC_Twoinc_Helper::utf8ize($this->prepare_twoinc_object($result['body'])), JSON_UNESCAPED_UNICODE);
             if ($twoinc_obj) {
                 printf('<script>window.twoinc = %s;</script>', $twoinc_obj);
             }

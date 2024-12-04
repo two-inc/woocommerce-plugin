@@ -1436,7 +1436,8 @@ class Twoinc {
       let net_amount = gross_amount - tax_amount;
 
       let jsonBody = JSON.stringify({
-        merchant_id: window.twoinc.merchant_id,
+        merchant_id: window.twoinc.merchant?.id,
+        merchant_short_name: window.twoinc.merchant?.short_name,
         gross_amount: "" + gross_amount,
         invoice_type: "FUNDED_INVOICE",
         buyer: {
@@ -1627,7 +1628,8 @@ class Twoinc {
       return;
 
     let params = {
-      merchant_id: window.twoinc.merchant_id,
+      merchant_id: window.twoinc.merchant?.id,
+      merchant_short_name: window.twoinc.merchant?.short_name,
       buyer_organization_number: Twoinc.getInstance().customerCompany.organization_number,
       country_prefix: Twoinc.getInstance().customerCompany.country_prefix
     };
