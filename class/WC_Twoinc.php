@@ -80,7 +80,7 @@ if (!class_exists('WC_Twoinc')) {
 
                         $general_error_message = sprintf(__('Failed to verify API key.', 'twoinc-payment-gateway'), self::PRODUCT_NAME);
                         if (isset($result['body']) && isset($result['code'])) {
-                            if ($result['code'] == 200 && $result['body']['id']) {
+                            if ($result['code'] == 200) {
                                 WC_Admin_Settings::add_message(sprintf(__('%s API key verified.', 'twoinc-payment-gateway'), self::PRODUCT_NAME));
                             } else {
                                 if ($result['code'] == 401) {
@@ -2243,9 +2243,9 @@ if (!class_exists('WC_Twoinc')) {
             }
 
             $order_reference = $order->get_meta('_twoinc_order_reference') ?? $order->get_meta('_tillit_order_reference');
-            $merchant_id = $order->get_meta('_twoinc_merchant_id') ?? $order->get_meta('_tillit_merchant_id');
+            $merchant_id = $order->get_meta('_twoinc_merchant_id');
             if (!$merchant_id) {
-                $merchant_id = $this->get_merchant_id();
+                $merchant_id = $order->get_meta('_tillit_merchant_id') ?? $this->get_merchant_id();
                 $order->update_meta_data('_twoinc_merchant_id', $merchant_id);
                 $order->save();
             }
