@@ -452,8 +452,9 @@ if (!class_exists('WC_Twoinc')) {
                       . '"><button type="button" class="button">'
                       . sprintf(__('Download %s invoice'), self::PRODUCT_NAME)
                       . '</button></a></p>');
-                $state = $order->get_meta('_twoinc_order_state', true);
-                if ($state == 'REFUNDED') {
+
+                $refunded_payments = array_filter($order->get_refunds(), fn ($refund) => $refund->get_refunded_payment());
+                if (count($refunded_payments) > 0) {
                     print('<p><a href="' . $this->get_twoinc_checkout_host() . "/v1/invoice/{$twoinc_order_id}/pdf?lang="
                           . WC_Twoinc_Helper::get_locale()
                           . '"><button type="button" class="button">'
