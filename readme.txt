@@ -53,4 +53,12 @@ Feel free to reach out to [integration@two.inc](mailto:integration@two.inc) for 
 
 ## Compatibility with WooCommerce
 
-The plugin has been tested with WooCommerce versions 6, 7, and 8. Support for version 9 is on the roadmap.
+The plugin has been tested for compatibility with WooCommerce version 9 with
+[HPOS](https://woocommerce.com/document/high-performance-order-storage/) enabled. However, support
+for the new [block-based checkout](https://woocommerce.com/checkout-blocks/) which is the default
+since WooCommerce 8 is on the roadmap. You will need to use the classic checkout to use this
+plugin in the meantime which has wide ranging compatibility. To revert to classic checkout:
+
+– Edit the Checkout page (in Admin > Pages)
+– Remove the Checkout block
+– Add a Shortcode block, and enter `[woocommerce_checkout]` in the text field
