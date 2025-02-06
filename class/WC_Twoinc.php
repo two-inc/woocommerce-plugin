@@ -1428,7 +1428,9 @@ if (!class_exists('WC_Twoinc')) {
             $order_reference = wp_generate_password(64, false, false);
             // For requests from order pay page
             $billing_country = array_key_exists('billing_country', $_POST) ? sanitize_text_field($_POST['billing_country']) : '';
-            $billing_company = array_key_exists('billing_company', $_POST) ? sanitize_text_field($_POST['billing_company']) : '';
+            // Sometimes, billing_company_display is sent to the backend instead of billing_company
+            $billing_company_display = array_key_exists('billing_company_display', $_POST) ? sanitize_text_field($_POST['billing_company_display']) : '';
+            $billing_company = array_key_exists('billing_company', $_POST) ? sanitize_text_field($_POST['billing_company']) : billing_company_display;
             $billing_phone = array_key_exists('billing_phone', $_POST) ? sanitize_text_field($_POST['billing_phone']) : '';
             $invoice_email = array_key_exists('invoice_email', $_POST) ? sanitize_text_field($_POST['invoice_email']) : '';
             $invoice_emails = $invoice_email ? [$invoice_email] : [];
