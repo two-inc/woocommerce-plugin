@@ -1945,8 +1945,6 @@ if (!class_exists('WC_Twoinc')) {
         public function available_account_types()
         {
 
-            $available_types = [];
-
             if ($this->get_option('checkout_personal') === 'yes') {
                 $available_types['personal'] = __('Personal', 'twoinc-payment-gateway');
             }
@@ -1955,9 +1953,7 @@ if (!class_exists('WC_Twoinc')) {
                 $available_types['sole_trader'] = __('Sole Trader', 'twoinc-payment-gateway');
             }
 
-            if ($this->get_option('checkout_business') === 'yes') {
-                $available_types['business'] = __('Business', 'twoinc-payment-gateway');
-            }
+            $available_types['business'] = __('Business', 'twoinc-payment-gateway');
 
             return $available_types;
 
@@ -2021,14 +2017,6 @@ if (!class_exists('WC_Twoinc')) {
                 'enable_order_intent' => [
                     'title'       => __('Pre-approve buyer during checkout', 'twoinc-payment-gateway'),
                     'description' => __('Approve buyer when phone and company name is filled out.', 'twoinc-payment-gateway'),
-                    'desc_tip'    => true,
-                    'label'       => ' ',
-                    'type'        => 'checkbox',
-                    'default'     => 'yes'
-                ],
-                'checkout_business' => [
-                    'title'       => __('Separate checkout for business customers', 'twoinc-payment-gateway'),
-                    'description' => sprintf(__('Adds a separate checkout for business customers. %s payment is only available for business customers.', 'twoinc-payment-gateway'), self::PRODUCT_NAME),
                     'desc_tip'    => true,
                     'label'       => ' ',
                     'type'        => 'checkbox',
