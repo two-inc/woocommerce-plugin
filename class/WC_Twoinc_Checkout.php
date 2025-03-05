@@ -27,7 +27,6 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             add_filter('woocommerce_checkout_fields', [$this, 'add_tracking_fields'], 21);
             add_filter('woocommerce_checkout_fields', [$this, 'add_account_fields'], 22);
             add_filter('woocommerce_checkout_fields', [$this, 'update_company_fields'], 23);
-            add_filter('woocommerce_checkout_fields', [$this, 'update_contact_fields'], 24);
             add_action('woocommerce_before_checkout_billing_form', [$this, 'add_account_buttons'], 20);
             add_action('woocommerce_pay_order_before_submit', [$this, 'add_account_buttons'], 20);
 
@@ -70,7 +69,6 @@ if (!class_exists('WC_Twoinc_Checkout')) {
         public function add_account_buttons($fields)
         {
 
-            $home_url = get_home_url();
             printf(
                 '<div class="account-type-wrapper" style="display: none;">
                     <div class="account-type-button" account-type-name="personal">
@@ -215,20 +213,6 @@ if (!class_exists('WC_Twoinc_Checkout')) {
 
             }
 
-            // Return the fields
-            return $fields;
-
-        }
-
-        /**
-         * Update the default phone field placeholder and add invoice email
-         *
-         * @param $fields
-         *
-         * @return array
-         */
-        public function update_contact_fields($fields)
-        {
             if ($this->wc_twoinc->get_option('add_field_invoice_email') == 'yes') {
                 $fields['billing']['invoice_email'] = [
                     'label'       => __('Invoice email address', 'twoinc-payment-gateway'),
@@ -237,11 +221,11 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     'placeholder' => sprintf(__('Only for invoices being sent by %s', 'twoinc-payment-gateway'), WC_Twoinc::PRODUCT_NAME),
                     'validate'    => array('email'),
                     'required'    => false,
-                    'priority'    => $fields['billing']['billing_email']['priority'] + 1
+                    'priority'    => $company_name_priority + 5
                 ];
             }
 
-            // Return the fields list
+            // Return the fields
             return $fields;
 
         }

@@ -494,36 +494,33 @@ let twoincDomHelper = {
       "#billing_company_display_field",
       "#billing_company_field",
       "#company_id_field",
-      "#billing_invoice_email_field",
       "#department_field",
       "#project_field",
-      "#purchase_order_number_field"
+      "#purchase_order_number_field",
+      "#invoice_email_field"
     ];
     let visibleNonbusinessTargets = ["#billing_phone_field", "#billing_company_field"];
     let visibleBusinessTargets = [
       ".woocommerce-company-fields",
       ".woocommerce-representative-fields",
-      "#billing_phone_field",
-      "#department_field",
-      "#project_field",
-      "#purchase_order_number_field"
+      "#billing_phone_field"
     ];
     let requiredBusinessTargets = [];
 
     if (twoincDomHelper.isSelectedPaymentTwoinc()) {
+      visibleBusinessTargets.push(
+        "#department_field",
+        "#project_field",
+        "#purchase_order_number_field",
+        "#invoice_email_field"
+      );
       requiredBusinessTargets.push("#billing_phone_field");
-    }
-    if (twoincDomHelper.isCountrySupported()) {
-      if (window.twoinc.company_name_search === "yes") {
+      if (twoincDomHelper.isCountrySupported() && window.twoinc.company_name_search === "yes") {
         visibleBusinessTargets.push("#billing_company_display_field");
-        if (twoincDomHelper.isSelectedPaymentTwoinc()) {
-          requiredBusinessTargets.push("#billing_company_display_field");
-        }
+        requiredBusinessTargets.push("#billing_company_display_field");
       } else {
         visibleBusinessTargets.push("#billing_company_field", "#company_id_field");
-        if (twoincDomHelper.isSelectedPaymentTwoinc()) {
-          requiredBusinessTargets.push("#billing_company_field", "#company_id_field");
-        }
+        requiredBusinessTargets.push("#billing_company_field", "#company_id_field");
       }
     } else {
       visibleBusinessTargets.push("#billing_company_field");
@@ -815,7 +812,7 @@ let twoincDomHelper = {
    * Check if selected country is supported by Twoinc
    */
   isCountrySupported: function () {
-    return ["NO", "GB", "SE", "NL"].includes(jQuery("#billing_country").val());
+    return ["NO", "GB", "SE", "NL", "FI", "DK"].includes(jQuery("#billing_country").val());
   },
 
   /**
