@@ -4,11 +4,19 @@
 .github/
 cypress/
 docker/
+docs/
 snippets/
 
 # Files to ignore
 .distignore
 .gitignore
 .gitattributes
+.pre-commit-config.yaml
+.prettierrc
+.rgignore
+bumpver.toml
+dev-requirements.txt
 docker-compose.yaml
 README.md
+Makefile
+CODEOWNERS
