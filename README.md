@@ -58,7 +58,6 @@ cat > docker/config/staging.json <<EOF
   "enable_order_intent": "yes",
   "checkout_personal": "yes",
   "checkout_sole_trader": "no",
-  "checkout_business": "yes",
   "finalize_purchase": "no",
   "mark_tillit_fields_required": "yes",
   "add_field_department": "yes",
