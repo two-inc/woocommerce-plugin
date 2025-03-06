@@ -1940,26 +1940,6 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * Get customer types enabled in admin settings
-         */
-        public function available_account_types()
-        {
-
-            if ($this->get_option('checkout_personal') === 'yes') {
-                $available_types['personal'] = __('Personal', 'twoinc-payment-gateway');
-            }
-
-            if ($this->get_option('checkout_sole_trader') === 'yes') {
-                $available_types['sole_trader'] = __('Sole Trader', 'twoinc-payment-gateway');
-            }
-
-            $available_types['business'] = __('Business', 'twoinc-payment-gateway');
-
-            return $available_types;
-
-        }
-
-        /**
          * Register Admin form fields
          *
          * @return void
@@ -2022,19 +2002,6 @@ if (!class_exists('WC_Twoinc')) {
                     'type'        => 'checkbox',
                     'default'     => 'yes'
                 ],
-                'checkout_personal' => [
-                    'title'       => __('Separate checkout for private customers', 'twoinc-payment-gateway'),
-                    'description' => sprintf(__('Adds a separate checkout for private customers. %s payment is not available for private customers.', 'twoinc-payment-gateway'), self::PRODUCT_NAME),
-                    'desc_tip'    => true,
-                    'label'       => ' ',
-                    'type'        => 'checkbox',
-                    'default'     => 'yes'
-                ],
-                'checkout_sole_trader' => [
-                    'title'       => __('Separate checkout for private sole traders', 'twoinc-payment-gateway'),
-                    'label'       => ' ',
-                    'type'        => 'checkbox'
-                ],
                 'add_field_department' => [
                     'title'       => __('Add input field for "Department"', 'twoinc-payment-gateway'),
                     'description' => __('Adds an input field where buyers can input their department to display on the invoice.', 'twoinc-payment-gateway'),
@@ -2067,22 +2034,11 @@ if (!class_exists('WC_Twoinc')) {
                     'type'        => 'checkbox',
                     'default'     => 'no'
                 ],
-                'use_account_type_buttons' => [
-                    'title'       => __('Use buttons instead of radios to select account type', 'twoinc-payment-gateway'),
-                    'label'       => ' ',
-                    'type'        => 'checkbox',
-                    'default'     => 'no'
-                ],
                 'show_abt_link' => [
                     'title'       => sprintf(__('Show "What is %s" link in checkout', 'twoinc-payment-gateway'), self::PRODUCT_NAME),
                     'label'       => ' ',
                     'type'        => 'checkbox',
                     'default'     => 'yes'
-                ],
-                'default_to_b2c' => [
-                    'title'       => __('Default to B2C check-out', 'twoinc-payment-gateway'),
-                    'label'       => ' ',
-                    'type'        => 'checkbox'
                 ],
                 'invoice_fee_to_buyer' => [
                     'title'       => __('Shift invoice fee to the buyers', 'twoinc-payment-gateway'),
