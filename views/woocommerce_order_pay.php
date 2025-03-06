@@ -67,20 +67,8 @@
         }
 
         jQuery('#order_review #payment').prepend(jQuery('.custom-checkout'))
-        jQuery('#order_review #payment').prepend(jQuery('.account-type-wrapper'))
         jQuery("#billing_country").selectWoo()
-        setTimeout(function(){
-            initInpFields()
-            jQuery('.account-type-button[account-type-name="business"]').click()
-        }, 1000)
-        jQuery('.account-type-button[account-type-name="personal"], .account-type-button[account-type-name="sole_trader"]').on('click', function(){
-            jQuery('.twoinc-inp-container').hide()
-        })
-        jQuery('.account-type-button[account-type-name="business"]').on('click', function(){
-            jQuery('.twoinc-inp-container:not(.hidden)').show()
-            initInpFields()
-            jQuery('#payment_method_woocommerce-gateway-tillit:visible').click()
-        })
+        setTimeout(initInpFields, 1000)
         jQuery('#billing_country').on('select2:select', function(e){
             initInpFields()
         })
@@ -95,8 +83,5 @@
     }
     .custom-checkout .twoinc-inp-container {
         margin: auto;
-    }
-    .account-type-wrapper, #account_type_field {
-        display: none!important;
     }
 </style>
