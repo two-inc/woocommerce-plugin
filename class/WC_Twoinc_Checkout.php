@@ -25,10 +25,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
 
             // Register the custom fields
             add_filter('woocommerce_checkout_fields', [$this, 'add_tracking_fields'], 21);
-            add_filter('woocommerce_checkout_fields', [$this, 'add_account_fields'], 22);
             add_filter('woocommerce_checkout_fields', [$this, 'update_company_fields'], 23);
-            add_action('woocommerce_before_checkout_billing_form', [$this, 'add_account_buttons'], 20);
-            add_action('woocommerce_pay_order_before_submit', [$this, 'add_account_buttons'], 20);
 
             // Render the fields on checkout page
             add_action('woocommerce_before_checkout_billing_form', [$this, 'render_twoinc_fields'], 21);
@@ -55,88 +52,6 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             $fields['billing']['billing_country']['priority'] = $fields['billing']['billing_company']['priority'] - 1;
 
             // Return the fields list
-            return $fields;
-
-        }
-
-        /**
-         * Add the account type buttons to the checkout page
-         *
-         * @param $fields
-         *
-         * @return mixed
-         */
-        public function add_account_buttons($fields)
-        {
-
-            printf(
-                '<div class="account-type-wrapper" style="display: none;">
-                    <div class="account-type-button" account-type-name="personal">
-                        <img src = "' . WC_TWOINC_PLUGIN_URL . 'assets/images/personal.svg"/>
-                        <span>' . __('Private Customer', 'twoinc-payment-gateway') . '</span>
-                    </div>
-                    <div class="account-type-button" account-type-name="sole_trader">
-                        <img src = "' . WC_TWOINC_PLUGIN_URL . 'assets/images/personal.svg"/>
-                        <span>' . __('Sole Trader/Other Customer', 'twoinc-payment-gateway') . '</span>
-                    </div>
-                    <div class="account-type-button" account-type-name="business">
-                        <img src = "' . WC_TWOINC_PLUGIN_URL . 'assets/images/business.svg"/>
-                        <span>' . __('Business Customer', 'twoinc-payment-gateway') . '</span>
-                    </div>
-                </div>'
-            );
-
-        }
-
-        /**
-         * Add the account type fields to the checkout page
-         *
-         * @param $fields
-         *
-         * @return mixed
-         */
-        public function add_account_fields($fields)
-        {
-
-            // available_account_types size always > 0
-            $available_account_types = $this->wc_twoinc->available_account_types();
-            // Default account type, if available, with priority: business - sole_trader - personal
-            end($available_account_types); // Move pointer to last
-            $default_account_type = key($available_account_types); // Get current pointer
-
-            if (sizeof($this->wc_twoinc->available_account_types()) > 1) {
-
-                // Default to personal if admin settings is set
-                if ($this->wc_twoinc->get_option('default_to_b2c') === 'yes' && array_key_exists('personal', $available_account_types)) {
-                    $default_account_type = 'personal';
-                }
-
-                $fields['account_type'] = [
-                    'account_type' => [
-                        'label' => __('Select account type', 'twoinc-payment-gateway'),
-                        'required' => false,
-                        'type' => 'radio',
-                        'priority' => 30,
-                        'value' => $default_account_type,
-                        'options' => $available_account_types
-                    ]
-                ];
-
-            } else {
-
-                $fields['account_type'] = [
-                    'account_type' => [
-                        'required' => false,
-                        'type' => 'radio',
-                        'priority' => 30,
-                        'value' => $default_account_type,
-                        'options' => $available_account_types
-                    ]
-                ];
-
-            }
-
-            // Return the fields
             return $fields;
 
         }
@@ -310,7 +225,6 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 'address_search' => $this->wc_twoinc->get_option('address_search'),
                 'enable_order_intent' => $this->wc_twoinc->get_option('enable_order_intent'),
                 'invoice_fee_to_buyer' => $this->wc_twoinc->get_option('invoice_fee_to_buyer'),
-                'use_account_type_buttons' => $this->wc_twoinc->get_option('use_account_type_buttons'),
                 'display_tooltips' => $this->wc_twoinc->get_option('display_tooltips'),
                 'merchant' => $merchant,
                 'days_on_invoice' => $this->wc_twoinc->get_merchant_default_days_on_invoice(),

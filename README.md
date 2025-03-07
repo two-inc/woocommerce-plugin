@@ -56,21 +56,15 @@ cat > docker/config/staging.json <<EOF
   "merchant_logo": "",
   "section_checkout_options": "",
   "enable_order_intent": "yes",
-  "checkout_personal": "yes",
-  "checkout_sole_trader": "no",
   "finalize_purchase": "no",
   "mark_tillit_fields_required": "yes",
   "add_field_department": "yes",
   "add_field_project": "yes",
-  "use_account_type_buttons": "no",
   "show_abt_link": "yes",
-  "default_to_b2c": "no",
   "invoice_fee_to_buyer": "no",
-  "display_other_payments": "yes",
-  "fallback_to_another_payment": "yes",
   "section_auto_complete_settings": "",
   "enable_company_name": "yes",
-  "enable_company_id": "yes"
+  "address_search": "yes"
 }
 EOF
 ```
