@@ -1178,7 +1178,9 @@ class Twoinc {
       let jsonBody = JSON.stringify({
         merchant_id: window.twoinc.merchant?.id,
         merchant_short_name: window.twoinc.merchant?.short_name,
-        gross_amount: "" + gross_amount,
+        gross_amount: gross_amount.toFixed(2),
+        net_amount: net_amount.toFixed(2),
+        tax_amount: tax_amount.toFixed(2),
         invoice_type: "FUNDED_INVOICE",
         buyer: {
           company: Twoinc.getInstance().customerCompany,
