@@ -5,13 +5,13 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "X-Generator: Loco https://localise.biz/\n"
 "Project-Id-Version: woocommerce-plugin\n"
-"PO-Revision-Date: 2025-03-10 13:52+0000\n"
+"PO-Revision-Date: 2025-03-10 21:54+0000\n"
 "Last-Translator: lokalise.com\n"
 "Language-Team: Dutch\n"
 "Language: nl_NL\n"
 "Plural-Forms: nplurals=2; plural=n != 1;"
 
-#: class/WC_Twoinc.php:1996
+#: class/WC_Twoinc.php:1817
 #, php-format
 msgid "%s API Key"
 msgstr "%s API-sleutel"
@@ -26,7 +26,7 @@ msgstr "%s API-sleutel geverifieerd."
 msgid "%s cannot be parsed."
 msgstr "%s kan niet worden geparseerd."
 
-#: class/WC_Twoinc.php:2481
+#: class/WC_Twoinc.php:2295
 #, php-format
 msgid ""
 "%s credit approves 90%% of business buyers, pays you upfront and minimise "
@@ -38,7 +38,7 @@ msgstr ""
 "registreren. Het is snel, eenvoudig en geeft u direct toegang tot de %s "
 "Merchant Portal."
 
-#: class/WC_Twoinc.php:799
+#: class/WC_Twoinc.php:620
 #, php-format
 msgid ""
 "%s has acknowledged request to fulfill %d order. An invoice will be sent to "
@@ -53,7 +53,7 @@ msgstr[1] ""
 "%s heeft verzoeken bevestigd om %d bestellingen uit te voeren. Facturen "
 "worden naar de kopers verzonden wanneer de uitvoeringen zijn voltooid."
 
-#: class/WC_Twoinc.php:913
+#: class/WC_Twoinc.php:734
 #, php-format
 msgid ""
 "%s has acknowledged the request to fulfil the order. An invoice will be sent "
@@ -62,24 +62,24 @@ msgstr ""
 "%s heeft het verzoek om de bestelling uit te voeren bevestigd. Er wordt een "
 "factuur naar de koper gestuurd wanneer de uitvoering is voltooid."
 
-#: class/WC_Twoinc.php:814
+#: class/WC_Twoinc.php:635
 #, php-format
 msgid "%s has cancelled %d order."
 msgid_plural "%s has cancelled %d orders."
 msgstr[0] "%s heeft %d bestelling geannuleerd."
 msgstr[1] "%s heeft %d bestellingen geannuleerd."
 
-#: class/WC_Twoinc.php:818
+#: class/WC_Twoinc.php:639
 #, php-format
 msgid "%s has failed to cancel order %s."
 msgstr "%s kon bestelling %s niet annuleren."
 
-#: class/WC_Twoinc.php:808
+#: class/WC_Twoinc.php:629
 #, php-format
 msgid "%s has failed to issue invoice for order %s."
 msgstr "%s kon geen factuur uitgeven voor bestelling %s ."
 
-#: class/WC_Twoinc.php:288
+#: class/WC_Twoinc.php:284
 #, php-format
 msgid ""
 "%s is a payment solution for B2B purchases online, allowing you to buy from "
@@ -96,36 +96,36 @@ msgstr ""
 msgid "%s is a required field."
 msgstr "%s is een verplicht veld."
 
-#: class/WC_Twoinc.php:324
+#: class/WC_Twoinc.php:307
 #, php-format
 msgid "%s lets your business pay later for the goods you purchase online."
 msgstr ""
 "Met %s kunt u uw bedrijf later laten betalen voor de goederen die u online "
 "koopt."
 
-#: class/WC_Twoinc.php:1353
+#: class/WC_Twoinc.php:1174
 #, php-format
 msgid "%s pre-filled fields"
 msgstr "%s vooraf ingevulde velden"
 
-#: class/WC_Twoinc.php:1973
+#: class/WC_Twoinc.php:1794
 #, php-format
 msgid "%s Test Server"
 msgstr "%s Testserver"
 
-#: class/WC_Twoinc.php:2016
+#: class/WC_Twoinc.php:1837
 msgid "Add input field for \"Department\""
 msgstr "Voeg invoerveld toe voor \"Afdeling\""
 
-#: class/WC_Twoinc.php:2040
+#: class/WC_Twoinc.php:1861
 msgid "Add input field for \"Invoice email address\""
 msgstr "Voeg invoerveld toe voor \"Factuur-e-mailadres\""
 
-#: class/WC_Twoinc.php:2024
+#: class/WC_Twoinc.php:1845
 msgid "Add input field for \"Project\""
 msgstr "Voeg invoerveld toe voor \"Project\""
 
-#: class/WC_Twoinc.php:2032
+#: class/WC_Twoinc.php:1853
 msgid "Add input field for \"Purchase order number\""
 msgstr "Voeg invoerveld toe voor \"Inkoopordernummer\""
 
@@ -133,11 +133,11 @@ msgstr "Voeg invoerveld toe voor \"Inkoopordernummer\""
 msgid "Address"
 msgstr "Adres"
 
-#: class/WC_Twoinc.php:2093
+#: class/WC_Twoinc.php:1907
 msgid "Address auto-complete"
 msgstr "Adres automatisch aanvullen"
 
-#: class/WC_Twoinc.php:2041
+#: class/WC_Twoinc.php:1862
 msgid ""
 "Adds an input field where buyers can input optional additional email address "
 "to receive invoice."
@@ -145,7 +145,7 @@ msgstr ""
 "Voegt een invoerveld toe waarin kopers optioneel een extra e-mailadres "
 "kunnen invoeren om de factuur te ontvangen."
 
-#: class/WC_Twoinc.php:2017
+#: class/WC_Twoinc.php:1838
 msgid ""
 "Adds an input field where buyers can input their department to display on "
 "the invoice."
@@ -153,7 +153,7 @@ msgstr ""
 "Voegt een invoerveld toe waarin kopers hun afdeling kunnen opgeven die op de "
 "factuur moet worden weergegeven."
 
-#: class/WC_Twoinc.php:2025
+#: class/WC_Twoinc.php:1846
 msgid ""
 "Adds an input field where buyers can input their project in the company to "
 "display on the invoice."
@@ -161,7 +161,7 @@ msgstr ""
 "Voegt een invoerveld toe waarin kopers hun project in het bedrijf kunnen "
 "invoeren, zodat dit op de factuur wordt weergegeven."
 
-#: class/WC_Twoinc.php:2033
+#: class/WC_Twoinc.php:1854
 msgid ""
 "Adds an input field where buyers can input their purchase order number to "
 "display on the invoice."
@@ -169,34 +169,34 @@ msgstr ""
 "Voegt een invoerveld toe waarin kopers hun inkoopordernummer kunnen invoeren "
 "dat op de factuur moet worden weergegeven."
 
-#: class/WC_Twoinc.php:1993
+#: class/WC_Twoinc.php:1814
 msgid "API credentials"
 msgstr "API-referenties"
 
-#: class/WC_Twoinc.php:2009
+#: class/WC_Twoinc.php:1830
 msgid "Approve buyer when phone and company name is filled out."
 msgstr ""
 "Keur de koper goed wanneer het telefoonnummer en de bedrijfsnaam zijn "
 "ingevuld."
 
-#: class/WC_Twoinc.php:2074
+#: class/WC_Twoinc.php:1888
 msgid "Auto-complete settings"
 msgstr "Instellingen voor automatisch aanvullen"
 
-#: class/WC_Twoinc.php:1363
+#: class/WC_Twoinc.php:1184
 msgid "Billing Company ID"
 msgstr "Factureringsbedrijf-ID"
 
-#: class/WC_Twoinc.php:1357
+#: class/WC_Twoinc.php:1178
 msgid "Billing Company name"
 msgstr "Naam van het factureringsbedrijf"
 
-#: class/WC_Twoinc.php:1969
+#: class/WC_Twoinc.php:1790
 #, php-format
 msgid "Business invoice - %s days"
 msgstr "Zakelijke factuur - %s dagen"
 
-#: class/WC_Twoinc.php:289
+#: class/WC_Twoinc.php:285
 msgid "Buy now, receive your goods, pay your invoice later."
 msgstr "Koop nu, ontvang uw goederen, betaal uw factuur later."
 
@@ -204,11 +204,11 @@ msgstr "Koop nu, ontvang uw goederen, betaal uw factuur later."
 msgid "Buyer and merchant may not be the same company"
 msgstr "Koper en handelaar zijn mogelijk niet hetzelfde bedrijf"
 
-#: class/WC_Twoinc.php:2005
+#: class/WC_Twoinc.php:1826
 msgid "Checkout options"
 msgstr "Afrekenopties"
 
-#: class/WC_Twoinc.php:1978
+#: class/WC_Twoinc.php:1799
 msgid "Choose your settings"
 msgstr "Kies uw instellingen"
 
@@ -216,7 +216,7 @@ msgstr "Kies uw instellingen"
 msgid "City"
 msgstr "Stad"
 
-#: class/WC_Twoinc.php:1986
+#: class/WC_Twoinc.php:1807
 msgid "Clear settings on deactivation of plug-in"
 msgstr "Instellingen wissen bij het deactiveren van de plug-in"
 
@@ -229,41 +229,36 @@ msgstr "Bedrijfs-ID"
 msgid "Company name"
 msgstr "Bedrijfsnaam"
 
-#: class/WC_Twoinc.php:2342 class/WC_Twoinc.php:2375 class/WC_Twoinc.php:2389
+#: class/WC_Twoinc.php:2156 class/WC_Twoinc.php:2189 class/WC_Twoinc.php:2203
 #, php-format
 msgid "Could not edit the order with %s."
 msgstr "Kon de bestelling met %s niet bewerken."
 
-#: class/WC_Twoinc.php:1625
+#: class/WC_Twoinc.php:1446
 #, php-format
 msgid "Could not find %s order ID"
 msgstr "Kon %s order-ID niet vinden"
 
-#: class/WC_Twoinc.php:417 class/WC_Twoinc.php:428
-#, php-format
-msgid "Could not forward invoice image URL to %s"
-msgstr "Kon factuur-afbeeldings-URL niet doorsturen naar %s"
-
-#: class/WC_Twoinc.php:1659
+#: class/WC_Twoinc.php:1480
 #, php-format
 msgid "Could not initiate refund with %s"
 msgstr "Kon geen restitutie starten met %s"
 
-#: class/WC_Twoinc.php:1704 class/WC_Twoinc.php:1726
+#: class/WC_Twoinc.php:1525 class/WC_Twoinc.php:1547
 #, php-format
 msgid "Could not initiate refund with %s."
 msgstr "Kon geen restitutie starten met %s ."
 
-#: class/WC_Twoinc.php:875 class/WC_Twoinc.php:894
+#: class/WC_Twoinc.php:696 class/WC_Twoinc.php:715
 #, php-format
 msgid "Could not update order status to \"Fulfilled\" with %s."
 msgstr "De orderstatus kon niet worden bijgewerkt naar \"Vervuld\" met %s ."
 
-#: class/WC_Twoinc.php:943 class/WC_Twoinc.php:966 class/WC_Twoinc.php:981
+#: class/WC_Twoinc.php:764 class/WC_Twoinc.php:787 class/WC_Twoinc.php:802
 msgid "Could not update status to \"Cancelled\"."
 msgstr "De status kon niet worden bijgewerkt naar \"Geannuleerd\"."
 
-#: class/WC_Twoinc.php:844
+#: class/WC_Twoinc.php:665
 #, php-format
 msgid "Could not update status to \"Fulfilled\" with %s."
 msgstr "Kan status niet bijwerken naar \"Vervuld\" met %s ."
@@ -288,11 +283,11 @@ msgstr "Klant"
 msgid "Delivery Date"
 msgstr "Leverdatum"
 
-#: class/WC_Twoinc.php:1369 class/WC_Twoinc_Checkout.php:101
+#: class/WC_Twoinc.php:1190 class/WC_Twoinc_Checkout.php:101
 msgid "Department"
 msgstr "Afdeling"
 
-#: class/WC_Twoinc.php:2061
+#: class/WC_Twoinc.php:1875
 msgid "Display input tooltips"
 msgstr "Weergave van invoertooltips"
 
@@ -305,20 +300,20 @@ msgstr "E-mail"
 msgid "Empty response from %s."
 msgstr "Lege respons van %s ."
 
-#: class/WC_Twoinc.php:1963
+#: class/WC_Twoinc.php:1784
 #, php-format
 msgid "Enable %s Payments"
 msgstr "%s Betalingen inschakelen"
 
-#: class/WC_Twoinc.php:2077
+#: class/WC_Twoinc.php:1891
 msgid "Enable company name search and auto-complete"
 msgstr "Schakel zoeken op bedrijfsnaam en automatisch aanvullen in"
 
-#: class/WC_Twoinc.php:2085
+#: class/WC_Twoinc.php:1899
 msgid "Enable company name search for other payment options"
 msgstr "Schakel zoeken op bedrijfsnaam in voor andere betalingsopties"
 
-#: class/WC_Twoinc.php:2094
+#: class/WC_Twoinc.php:1908
 msgid ""
 "Enables automatically filling in the registered address from the national "
 "registry."
@@ -326,7 +321,7 @@ msgstr ""
 "Hiermee wordt het geregistreerde adres automatisch ingevuld vanuit het "
 "rijksregister."
 
-#: class/WC_Twoinc.php:2086
+#: class/WC_Twoinc.php:1900
 msgid ""
 "Enables searching for company name even when other payment options are "
 "selected. Requires the option above to be checked."
@@ -335,7 +330,7 @@ msgstr ""
 "betalingsopties zijn geselecteerd. Vereist dat de bovenstaande optie is "
 "aangevinkt."
 
-#: class/WC_Twoinc.php:2078
+#: class/WC_Twoinc.php:1892
 msgid ""
 "Enables searching for company name in the national registry and "
 "automatically filling in name and national ID."
@@ -343,18 +338,18 @@ msgstr ""
 "Hiermee kunt u zoeken naar de bedrijfsnaam in het nationale register en "
 "worden de naam en het nationale identificatienummer automatisch ingevuld."
 
-#: class/WC_Twoinc.php:1541
+#: class/WC_Twoinc.php:1362
 #, php-format
 msgid "Failed to process payment with %s"
 msgstr "Betaling met %s kon niet worden verwerkt"
 
-#: class/WC_Twoinc.php:1528
+#: class/WC_Twoinc.php:1349
 #, php-format
 msgid "Failed to request order creation with %s."
 msgstr "Het is niet gelukt om een bestelling aan te maken met %s ."
 
-#: class/WC_Twoinc.php:1614 class/WC_Twoinc.php:1676 class/WC_Twoinc.php:1690
-#: class/WC_Twoinc.php:1713
+#: class/WC_Twoinc.php:1435 class/WC_Twoinc.php:1497 class/WC_Twoinc.php:1511
+#: class/WC_Twoinc.php:1534
 #, php-format
 msgid "Failed to request order refund with %s."
 msgstr "Het aanvragen van restitutie van de bestelling met %s is mislukt."
@@ -367,7 +362,7 @@ msgstr "Het verifiëren van de API-sleutel is mislukt."
 msgid "First name"
 msgstr "Voornaam"
 
-#: class/WC_Twoinc.php:2480
+#: class/WC_Twoinc.php:2294
 #, php-format
 msgid "Grow your B2B sales with Buy Now, Pay Later using %s!"
 msgstr "Vergroot uw B2B-omzet met Koop nu, betaal later met %s !"
@@ -385,20 +380,20 @@ msgstr "Integratie tussen WooCommerce en Two"
 msgid "Invoice email address"
 msgstr "Factuur e-mailadres"
 
-#: class/WC_Twoinc.php:1736
+#: class/WC_Twoinc.php:1557
 #, php-format
 msgid ""
 "Invoice has been partially refunded and credit note has been sent by %s."
 msgstr ""
 "Factuur is gedeeltelijk terugbetaald en creditnota is verzonden door %s ."
 
-#: class/WC_Twoinc.php:1733
+#: class/WC_Twoinc.php:1554
 #, php-format
 msgid "Invoice has been refunded and credit note has been sent by %s."
 msgstr "Factuur is terugbetaald en creditnota is verzonden door %s ."
 
-#: class/WC_Twoinc_Helper.php:71 class/WC_Twoinc.php:326
-#: class/WC_Twoinc.php:1562
+#: class/WC_Twoinc_Helper.php:71 class/WC_Twoinc.php:309
+#: class/WC_Twoinc.php:1383
 #, php-format
 msgid "Invoice purchase with %s is not available for this order."
 msgstr "Aankoop op factuur met %s is niet beschikbaar voor deze bestelling."
@@ -411,7 +406,7 @@ msgstr "Achternaam"
 msgid "Making it easy for businesses to buy online."
 msgstr "Maak het voor bedrijven gemakkelijk om online te kopen."
 
-#: class/WC_Twoinc.php:2264
+#: class/WC_Twoinc.php:2078
 msgid "Missing company ID."
 msgstr "Bedrijfs-ID ontbreekt."
 
@@ -424,26 +419,26 @@ msgstr "Mijn bedrijf staat niet op de lijst"
 msgid "Only for invoices being sent by %s"
 msgstr "Alleen voor facturen die door %s worden verzonden"
 
-#: class/WC_Twoinc.php:2000
+#: class/WC_Twoinc.php:1821
 msgid "Optional vendor name if there are multiple sites"
 msgstr "Optionele leveranciersnaam als er meerdere sites zijn"
 
-#: class/WC_Twoinc.php:1634
+#: class/WC_Twoinc.php:1455
 #, php-format
 msgid "Order has already been fully refunded with %s."
 msgstr "De bestelling is al volledig terugbetaald met %s ."
 
-#: class/WC_Twoinc.php:1939
+#: class/WC_Twoinc.php:1760
 #, php-format
 msgid "Order ID %s has been placed with %s."
 msgstr "Order-ID %s is geplaatst bij %s ."
 
-#: class/WC_Twoinc.php:957
+#: class/WC_Twoinc.php:778
 #, php-format
 msgid "Order is already cancelled with %s."
 msgstr "Bestelling is al geannuleerd met %s ."
 
-#: class/WC_Twoinc.php:2416
+#: class/WC_Twoinc.php:2230
 #, php-format
 msgid "Order value is now %s."
 msgstr "De orderwaarde is nu %s ."
@@ -452,7 +447,7 @@ msgstr "De orderwaarde is nu %s ."
 msgid "Organization number"
 msgstr "Organisatienummer"
 
-#: class/WC_Twoinc.php:354
+#: class/WC_Twoinc.php:337
 msgid "Pay on invoice with agreed terms"
 msgstr "Betalen op factuur met overeengekomen voorwaarden"
 
@@ -464,7 +459,7 @@ msgstr "Telefoon"
 msgid "Phone number"
 msgstr "Telefoonnummer"
 
-#: class/WC_Twoinc.php:327
+#: class/WC_Twoinc.php:310
 msgid "Phone number is invalid."
 msgstr "Telefoonnummer is ongeldig."
 
@@ -472,9 +467,9 @@ msgstr "Telefoonnummer is ongeldig."
 msgid "Place order"
 msgstr "Bestelling plaatsen"
 
-#: class/WC_Twoinc.php:879 class/WC_Twoinc.php:898 class/WC_Twoinc.php:967
-#: class/WC_Twoinc.php:982 class/WC_Twoinc.php:1691 class/WC_Twoinc.php:1714
-#: class/WC_Twoinc.php:2265 class/WC_Twoinc.php:2390
+#: class/WC_Twoinc.php:700 class/WC_Twoinc.php:719 class/WC_Twoinc.php:788
+#: class/WC_Twoinc.php:803 class/WC_Twoinc.php:1512 class/WC_Twoinc.php:1535
+#: class/WC_Twoinc.php:2079 class/WC_Twoinc.php:2204
 #, php-format
 msgid "Please contact %s support with order ID: %s"
 msgstr "Neem contact op met %s support met order-ID: %s"
@@ -488,11 +483,11 @@ msgstr "Voer een geldig %s in om op de factuur te betalen"
 msgid "Postal code"
 msgstr "Postcode"
 
-#: class/WC_Twoinc.php:2008
+#: class/WC_Twoinc.php:1829
 msgid "Pre-approve buyer during checkout"
 msgstr "Koper vooraf goedkeuren tijdens het afrekenen"
 
-#: class/WC_Twoinc.php:1377 class/WC_Twoinc_Checkout.php:112
+#: class/WC_Twoinc.php:1198 class/WC_Twoinc_Checkout.php:112
 msgid "Project"
 msgstr "Project"
 
@@ -500,27 +495,19 @@ msgstr "Project"
 msgid "Purchase order number"
 msgstr "PO-nummer"
 
-#: class/WC_Twoinc.php:845 class/WC_Twoinc.php:944 class/WC_Twoinc.php:1615
-#: class/WC_Twoinc.php:2343
+#: class/WC_Twoinc.php:666 class/WC_Twoinc.php:765 class/WC_Twoinc.php:1436
+#: class/WC_Twoinc.php:2157
 #, php-format
 msgid "Reason: Could not find %s order ID."
 msgstr "Reden: Kon %s order-ID niet vinden."
-
-#: class/WC_Twoinc.php:304
-msgid "Receive invoice and payment details via email"
-msgstr "Ontvang factuur- en betalingsgegevens via e-mail"
-
-#: class/WC_Twoinc.php:305
-msgid "Receive invoice and payment details via email and EHF"
-msgstr "Ontvang factuur- en betalingsgegevens via e-mail en EHF"
 
 #: class/WC_Twoinc_Helper.php:47
 #, php-format
 msgid "Response code from %s: %d"
 msgstr "Antwoordcode van %s : %d"
 
-#: class/WC_Twoinc.php:899 class/WC_Twoinc.php:983 class/WC_Twoinc.php:1692
-#: class/WC_Twoinc.php:2391
+#: class/WC_Twoinc.php:720 class/WC_Twoinc.php:804 class/WC_Twoinc.php:1513
+#: class/WC_Twoinc.php:2205
 #, php-format
 msgid "Response: %s"
 msgstr "Antwoord: %s"
@@ -533,7 +520,7 @@ msgstr "Zoek naar bedrijf"
 msgid "Select Date"
 msgstr "Selecteer datum"
 
-#: class/WC_Twoinc.php:2178
+#: class/WC_Twoinc.php:1992
 msgid "Select image"
 msgstr "Selecteer afbeelding"
 
@@ -541,46 +528,35 @@ msgstr "Selecteer afbeelding"
 msgid "Select Pickup Date"
 msgstr "Selecteer ophaaldatum"
 
-#: class/WC_Twoinc.php:2482
+#: class/WC_Twoinc.php:2296
 #, php-format
 msgid "Set up my %s account"
 msgstr "Mijn %s -account instellen"
 
-#: class/WC_Twoinc.php:2054
-msgid "Shift invoice fee to the buyers"
-msgstr "Factuurkosten doorberekenen aan de kopers"
-
-#: class/WC_Twoinc.php:2048
+#: class/WC_Twoinc.php:1869
 #, php-format
 msgid "Show \"What is %s\" link in checkout"
 msgstr "Toon de link \"Wat is %s \" bij het afrekenen"
 
-#: class/WC_Twoinc.php:2067
+#: class/WC_Twoinc.php:1881
 msgid "Skip user validation at order confirmation"
 msgstr "Gebruikersvalidatie overslaan bij orderbevestiging"
 
-#: class/WC_Twoinc.php:2414
+#: class/WC_Twoinc.php:2228
 #, php-format
 msgid "The order edit request has been accepted by %s."
 msgstr ""
 "Het verzoek tot het bewerken van de bestelling is geaccepteerd door %s ."
 
-#: class/WC_Twoinc.php:1868 class/WC_Twoinc.php:1884
+#: class/WC_Twoinc.php:1689 class/WC_Twoinc.php:1705
 msgid "The security code is not valid."
 msgstr "De beveiligingscode is ongeldig."
 
-#: class/WC_Twoinc.php:2055
-msgid ""
-"This feature only works for merchants set up with a fixed fee per order."
-msgstr ""
-"Deze functie werkt alleen voor handelaren die een vast bedrag per bestelling "
-"hanteren."
-
-#: class/WC_Twoinc.php:1967
+#: class/WC_Twoinc.php:1788
 msgid "Title"
 msgstr "Titel"
 
-#: class/WC_Twoinc.php:1961
+#: class/WC_Twoinc.php:1782
 msgid "Turn on/off"
 msgstr "Aan/uitzetten"
 
@@ -592,21 +568,21 @@ msgstr "Two"
 msgid "Two - BNPL for businesses"
 msgstr "Two - BNPL voor bedrijven"
 
-#: class/WC_Twoinc.php:1921
+#: class/WC_Twoinc.php:1742
 #, php-format
 msgid "Unable to confirm the order with %s."
 msgstr "Kan de bestelling met %s niet bevestigen."
 
-#: class/WC_Twoinc.php:1891 class/WC_Twoinc.php:1907
+#: class/WC_Twoinc.php:1712 class/WC_Twoinc.php:1728
 #, php-format
 msgid "Unable to retrieve %s order information."
 msgstr "Kan %s bestelinformatie niet ophalen."
 
-#: class/WC_Twoinc.php:2199 class/WC_Twoinc.php:2237
+#: class/WC_Twoinc.php:2013 class/WC_Twoinc.php:2051
 msgid "Unable to retrieve the order information."
 msgstr "De bestelgegevens kunnen niet worden opgehaald."
 
-#: class/WC_Twoinc.php:2250
+#: class/WC_Twoinc.php:2064
 msgid "Unable to retrieve the order payment information"
 msgstr "Kan de betalingsinformatie van de bestelling niet ophalen"
 
@@ -623,12 +599,12 @@ msgstr ""
 "Wij gebruiken uw bedrijfsnaam om automatisch uw adres in te vullen en het "
 "bedrijf te registreren dat de aankoop heeft gedaan."
 
-#: class/WC_Twoinc.php:285
+#: class/WC_Twoinc.php:281
 #, php-format
 msgid "What is %s?"
 msgstr "Wat is %s ?"
 
-#: class/WC_Twoinc.php:325
+#: class/WC_Twoinc.php:308
 #, php-format
 msgid ""
 "Your invoice purchase with %s is likely to be accepted subject to additional "

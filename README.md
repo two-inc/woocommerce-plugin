@@ -58,7 +58,6 @@ cat > docker/config/staging.json <<EOF
   "add_field_purchase_order_number": "yes",
   "add_field_invoice_email": "yes",
   "show_abt_link": "yes",
-  "invoice_fee_to_buyer": "no",
   "section_auto_complete_settings": "",
   "enable_company_search": "yes",
   "enable_company_search_for_others": "yes",

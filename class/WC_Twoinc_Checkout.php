@@ -228,7 +228,6 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 'enable_company_search_for_others' => $this->wc_twoinc->get_option('enable_company_search_for_others'),
                 'enable_address_lookup' => $this->wc_twoinc->get_option('enable_address_lookup'),
                 'enable_order_intent' => $this->wc_twoinc->get_option('enable_order_intent'),
-                'invoice_fee_to_buyer' => $this->wc_twoinc->get_option('invoice_fee_to_buyer'),
                 'display_tooltips' => $this->wc_twoinc->get_option('display_tooltips'),
                 'supported_buyer_countries' => $supported_buyer_countries,
                 'merchant' => $merchant,

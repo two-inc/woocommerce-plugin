@@ -133,9 +133,6 @@ if (!class_exists('WC_Twoinc')) {
                 add_action('save_post_shop_order', [$this, 'before_order_update'], 10, 2);
                 add_action('wp_after_insert_post', [$this, 'after_order_update'], 10, 4);
             } else {
-                // Calculate fees in order review panel on the right of shop checkout page
-                add_action('woocommerce_cart_calculate_fees', [$this, 'add_invoice_fees']);
-
                 // Change the text in Twoinc payment method in shop checkout page to reflect correct validation status
                 add_action('woocommerce_checkout_update_order_review', [$this, 'change_twoinc_payment_title']);
             }
@@ -521,118 +518,6 @@ if (!class_exists('WC_Twoinc')) {
             }
 
             $this->process_update_twoinc_order($order, $twoinc_meta);
-
-        }
-
-        /**
-         * Before item "Save" button
-         *
-         * @param $order_id
-         * @param $items
-         */
-        /* To be removed
-        public function before_order_item_save($order_id, $items)
-        {
-
-            $order = wc_get_order($order_id);
-            if (!WC_Twoinc_Helper::is_twoinc_order($order)) {
-                return;
-            }
-
-            $twoinc_meta = $this->get_save_twoinc_meta($order);
-            if (!$twoinc_meta) return;
-
-            // Store hash of twoinc req body
-            $order->update_meta_data('_twoinc_req_body_hash', WC_Twoinc_Helper::hash_order($order, $twoinc_meta));
-
-        }
-        */
-
-        /**
-         * After item "Save" button
-         * Notify Twoinc API after the order is updated
-         *
-         * @param $order_id
-         * @param $items
-         */
-        /* To be removed
-        public function after_order_item_save($order_id, $items)
-        {
-
-            $order = wc_get_order($order_id);
-            if (!WC_Twoinc_Helper::is_twoinc_order($order)) {
-                return;
-            }
-
-            $twoinc_meta = $this->get_save_twoinc_meta($order);
-            if (!$twoinc_meta) return;
-
-            $this->process_update_twoinc_order($order, $twoinc_meta, true);
-
-        }
-        */
-
-        /**
-         * Add invoice fee as a line item
-         *
-         * @param $order_id
-         */
-        public function add_invoice_fees()
-        {
-
-            if ($this->get_option('invoice_fee_to_buyer') === 'yes' && 'woocommerce-gateway-tillit' === WC()->session->get('chosen_payment_method')) {
-                global $woocommerce;
-
-                if (is_admin() && !defined('DOING_AJAX')) {
-                    return;
-                }
-
-                $merchant_id = $this->get_merchant_id();
-
-                if (!$merchant_id) {
-                    WC()->session->set('chosen_payment_method', 'cod');
-                    WC_Twoinc_Helper::send_twoinc_alert_email(
-                        "Could not find Twoinc merchant ID:"
-                        . "\r\n- Request: Get invoice fee"
-                        . "\r\n- Site: " . get_site_url()
-                    );
-                    return;
-                }
-
-                // Get invoice fixed fee
-                $response = $this->make_request("/v1/merchant/{$merchant_id}", [], 'GET');
-
-                if (is_wp_error($response)) {
-                    WC()->session->set('chosen_payment_method', 'cod');
-                    WC_Twoinc_Helper::send_twoinc_alert_email(
-                        "Could not send request to Two server:"
-                        . "\r\n- Request: Get invoice fee"
-                        . "\r\n- Twoinc merchant ID: " . $merchant_id
-                        . "\r\n- Site: " . get_site_url()
-                    );
-                    return;
-                }
-
-                $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
-                if ($twoinc_err) {
-                    WC()->session->set('chosen_payment_method', 'cod');
-                    WC_Twoinc_Helper::send_twoinc_alert_email(
-                        "Got error response from Two server:"
-                        . "\r\n- Request: Get invoice fee"
-                        . "\r\n- Response message: " . $twoinc_err
-                        . "\r\n- Twoinc merchant ID: " . $merchant_id
-                        . "\r\n- Site: " . get_site_url()
-                    );
-                    return;
-                }
-
-                $body = json_decode($response['body'], true);
-
-                $invoice_fixed_fee = $body['fixed_fee_per_order'];
-
-                //$invoice_percentage_fee = ($woocommerce->cart->cart_contents_total + $woocommerce->cart->tax_total + $woocommerce->cart->shipping_total + $woocommerce->cart->shipping_tax_total) * $percentage;
-                $woocommerce->cart->add_fee('Invoice fee', $invoice_fixed_fee, false, '');
-            }
 
         }
 
@@ -1985,13 +1870,6 @@ if (!class_exists('WC_Twoinc')) {
                     'label'       => ' ',
                     'type'        => 'checkbox',
                     'default'     => 'yes'
-                ],
-                'invoice_fee_to_buyer' => [
-                    'title'       => __('Shift invoice fee to the buyers', 'twoinc-payment-gateway'),
-                    'description' => __('This feature only works for merchants set up with a fixed fee per order.', 'twoinc-payment-gateway'),
-                    'desc_tip'    => true,
-                    'label'       => ' ',
-                    'type'        => 'checkbox'
                 ],
                 'display_tooltips' => [
                     'title'       => __('Display input tooltips', 'twoinc-payment-gateway'),

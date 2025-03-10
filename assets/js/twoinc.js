@@ -1478,29 +1478,6 @@ jQuery(function () {
           Twoinc.getInstance().initialize(false);
           Twoinc.getInstance().onUpdatedCheckout();
         });
-
-        // If invoice fee is charged to buyer, order price will change when payment method is changed from/to Twoinc
-        // Also, run Twoinc code if payment method selected is Twoinc
-        if (window.twoinc.invoice_fee_to_buyer === "yes") {
-          isTwoincSelected = twoincDomHelper.isTwoincSelected();
-          if (isTwoincSelected) {
-            Twoinc.getInstance().initialize(false);
-            Twoinc.getInstance().onUpdatedCheckout();
-          }
-
-          // Update right sidebar order review when the payment method changes
-          jQuery('.woocommerce-checkout [name="payment_method"]').on("change", function () {
-            let currentSelectedPaymentTwoinc = twoincDomHelper.isTwoincSelected();
-            if (currentSelectedPaymentTwoinc || isTwoincSelected) {
-              jQuery(document.body).trigger("update_checkout");
-            }
-            isTwoincSelected = currentSelectedPaymentTwoinc;
-            if (isTwoincSelected) {
-              Twoinc.getInstance().initialize(false);
-              Twoinc.getInstance().onUpdatedCheckout();
-            }
-          });
-        }
       });
 
       // If last selected payment method is Twoinc, run Twoinc code anyway
