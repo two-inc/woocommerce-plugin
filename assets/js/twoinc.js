@@ -446,19 +446,6 @@ let twoincDomHelper = {
   },
 
   /**
-   * Toggle payment description based on country and invoice type
-   */
-  togglePaymentDesc: function () {
-    // Display only the correct payment description
-    jQuery(".twoinc-payment-desc").hide();
-    if (window.twoinc.is_direct_invoice && window.twoinc.shop_base_country === "no") {
-      jQuery(".twoinc-payment-desc.payment-desc-no-funded").show();
-    } else {
-      jQuery(".twoinc-payment-desc.payment-desc-global").show();
-    }
-  },
-
-  /**
    * Get company name string
    */
   getCompanyName: function () {
@@ -1143,9 +1130,6 @@ class Twoinc {
     // Rearrange the DOMs in Twoinc payment
     twoincDomHelper.rearrangeDescription();
 
-    // Display correct payment description
-    twoincDomHelper.togglePaymentDesc();
-
     this.toggleDueInDays();
     this.getDueInDays();
   }
@@ -1259,11 +1243,6 @@ class Twoinc {
         if (!response.approved) {
           twoincDomHelper.deselectPaymentMethod();
         }
-
-        // Display correct payment description
-        window.twoinc.is_direct_invoice =
-          response.invoice_type && response.invoice_type === "DIRECT_INVOICE";
-        twoincDomHelper.togglePaymentDesc();
 
         // Update tracking number
         if (response.tracking_id && document.querySelector("#tracking_id")) {
