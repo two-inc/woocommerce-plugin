@@ -1,12 +1,5 @@
 let twoincUtilHelper = {
   /**
-   * Check if selected account type is business
-   */
-  isCompany: function (accountType) {
-    return accountType === "business";
-  },
-
-  /**
    * Check if any element in the list is null or empty
    */
   isAnyElementEmpty: function (values) {
@@ -132,7 +125,7 @@ let twoincSelectWooHelper = {
    * https://github.com/select2/select2/issues/4614
    */
   fixSelectWooPositionCompanyName: function () {
-    if (window.twoinc.company_name_search === "yes") {
+    if (window.twoinc.enable_company_search === "yes") {
       const billingCompanyDisplay = jQuery("#billing_company_display").data("select2");
 
       if (billingCompanyDisplay) {
@@ -213,146 +206,6 @@ let twoincSelectWooHelper = {
 
 let twoincDomHelper = {
   /**
-   * Initialize account type buttons
-   */
-  initAccountTypeButtons: function ($el, name) {
-    setTimeout(function () {
-      // Move the account type DOM to before Billing
-      jQuery("#woocommerce-account-type-container")
-        .parent()
-        .parent()
-        .prepend(jQuery("#woocommerce-account-type-container"));
-      // Select the account type button based on radio val
-      let accountType = twoincDomHelper.getAccountType();
-      if (accountType) {
-        jQuery("form.checkout.woocommerce-checkout").prepend(jQuery(".account-type-wrapper"));
-        jQuery('.account-type-button[account-type-name="' + accountType + '"]').addClass(
-          "selected"
-        );
-      }
-
-      // Show the radios or the buttons for account type if number of options > 1
-      if (jQuery('input[name="account_type"]').length > 1) {
-        if (window.twoinc.use_account_type_buttons !== "yes") {
-          // Show if shop configured to use buttons (and customer details form is visible, i.e. no custom payment page is displayed)
-          if (jQuery("#customer_details:visible").length !== 0) {
-            jQuery("#account_type_field").show();
-            jQuery(".woocommerce-account-type-fields__field-wrapper").show();
-          }
-        } else {
-          // Show if shop configured to use banners
-          jQuery(".account-type-wrapper").show();
-        }
-      }
-
-      if (jQuery("#klarna-checkout-select-other").length > 0) {
-        // If Kco checkout page is displayed
-        // Switching to another payment method would make account type "business" after page is reloaded
-        jQuery("#klarna-checkout-select-other").on("click", function () {
-          sessionStorage.setItem("twoincAccountType", "business");
-        });
-        // Clicking Business button
-        jQuery('.account-type-button[account-type-name="business"]').on("click", function () {
-          // Save the account type
-          sessionStorage.setItem("twoincAccountType", twoincDomHelper.getAccountType());
-
-          // After page is reloaded, clicking private button will route user back to Kco
-          sessionStorage.setItem("privateClickToKco", "y");
-          jQuery("#klarna-checkout-select-other").click();
-        });
-      } else if (jQuery(".woocommerce-account-type-fields").length > 0) {
-        // If Normal checkout page is displayed, and Twoinc's account type radios are present
-        jQuery(
-          '.account-type-button[account-type-name="personal"], .account-type-button[account-type-name="sole_trader"]'
-        ).on("click", function () {
-          let hasNoPaymentExceptTwoincKco =
-            jQuery(
-              ".wc_payment_method:not(.payment_method_woocommerce-gateway-tillit):not(.payment_method_kco)"
-            ).length == 0;
-          if (hasNoPaymentExceptTwoincKco) {
-            // Kco is the only payment method in private/soletrader, so clear and click it to trigger
-            jQuery("#payment_method_kco").prop("checked", false);
-          }
-          sessionStorage.setItem("twoincAccountType", twoincDomHelper.getAccountType());
-
-          if (sessionStorage.getItem("privateClickToKco") === "y" || hasNoPaymentExceptTwoincKco) {
-            sessionStorage.removeItem("privateClickToKco");
-            // Clicking private button will route user back to Kco, only if user visited Kco before, or if Kco is the only payment left
-            jQuery("#payment_method_kco").click();
-          } else if (
-            sessionStorage.getItem("businessClickToTwoinc") === "y" &&
-            twoincDomHelper.isTwoincVisible()
-          ) {
-            // Clicking business button will auto select Twoinc payment, if Twoinc was selected before account type is changed
-            jQuery("#payment_method_woocommerce-gateway-tillit").click();
-          }
-        });
-      }
-
-      // If account type button is clicked, account type is saved in case the page will be reloaded
-      jQuery(".account-type-button").on("click", function () {
-        sessionStorage.setItem("twoincAccountType", twoincDomHelper.getAccountType());
-      });
-
-      // Temporarily click the banner buttons if radio button is changed
-      jQuery('[name="account_type"]').on("change", function () {
-        jQuery(
-          '.account-type-button[account-type-name="' + jQuery(this).attr("value") + '"]'
-        ).click();
-      });
-
-      // If business account type is selected and the payment method selected was Twoinc, reselect it
-      jQuery('.account-type-button[account-type-name="business"]').on("click", function () {
-        if (sessionStorage.getItem("businessClickToTwoinc") === "y") {
-          // Clicking business button will auto select Twoinc payment, if Twoinc was selected before account type is changed
-          jQuery("#payment_method_woocommerce-gateway-tillit").click();
-        }
-      });
-
-      // If Kco button is clicked, account type must not be business
-      jQuery("#payment_method_kco").on("change", Twoinc.getInstance().onChangedToKco);
-
-      // Init the hidden Company name field
-      jQuery("#billing_company").val(twoincDomHelper.getCompanyName().trim());
-
-      // Select last saved account type in case of redirect from another payment method
-      accountType = sessionStorage.getItem("twoincAccountType");
-      if (accountType) {
-        jQuery('.account-type-button[account-type-name="' + accountType + '"]').click();
-      }
-    }, 1000);
-
-    // Remove buttons without corresponding account type radios
-    jQuery(".account-type-button").each(function () {
-      let accountType = jQuery(this).attr("account-type-name");
-      if (jQuery("#account_type_" + accountType).length == 0) {
-        jQuery(this).remove();
-      }
-    });
-
-    // Styling
-    if (jQuery('input[name="account_type"]').length > 1) {
-      jQuery(".account-type-button")
-        .eq(jQuery('input[name="account_type"]').length - 1)
-        .addClass("last");
-      jQuery(".account-type-wrapper").addClass(
-        "actp-col-" + jQuery('input[name="account_type"]').length
-      );
-    } else {
-      jQuery(".woocommerce-account-type-fields__field-wrapper").hide();
-      jQuery(".account-type-wrapper").hide();
-    }
-
-    // On click the buttons, update the radio vals
-    jQuery(".account-type-button").on("click", function () {
-      let accountType = jQuery(this).attr("account-type-name");
-      jQuery("#account_type_" + accountType).click();
-      jQuery(".account-type-button").removeClass("selected");
-      jQuery('.account-type-button[account-type-name="' + accountType + '"]').addClass("selected");
-    });
-  },
-
-  /**
    * Add a placeholder after an input, used for moving the fields in HTML DOM
    */
   addPlaceholder: function ($el, name) {
@@ -407,23 +260,17 @@ let twoincDomHelper = {
    */
   positionFields: function () {
     setTimeout(function () {
-      // Only swap fields around if the account type is selectable
-      if (jQuery('input[name="account_type"]').length > 1) {
-        // Get the account type
-        const accountType = twoincDomHelper.getAccountType();
-
-        // If business account
-        if (twoincUtilHelper.isCompany(accountType)) {
-          twoincDomHelper.moveField("billing_first_name_field", "fn");
-          twoincDomHelper.moveField("billing_last_name_field", "ln");
-          twoincDomHelper.moveField("billing_phone_field", "ph");
-          twoincDomHelper.moveField("billing_email_field", "em");
-        } else {
-          twoincDomHelper.revertField("billing_first_name_field", "fn");
-          twoincDomHelper.revertField("billing_last_name_field", "ln");
-          twoincDomHelper.revertField("billing_phone_field", "ph");
-          twoincDomHelper.revertField("billing_email_field", "em");
-        }
+      // If business account
+      if (twoincDomHelper.isTwoincSelected()) {
+        twoincDomHelper.moveField("billing_first_name_field", "fn");
+        twoincDomHelper.moveField("billing_last_name_field", "ln");
+        twoincDomHelper.moveField("billing_phone_field", "ph");
+        twoincDomHelper.moveField("billing_email_field", "em");
+      } else {
+        twoincDomHelper.revertField("billing_first_name_field", "fn");
+        twoincDomHelper.revertField("billing_last_name_field", "ln");
+        twoincDomHelper.revertField("billing_phone_field", "ph");
+        twoincDomHelper.revertField("billing_email_field", "em");
       }
 
       twoincDomHelper.toggleTooltip(
@@ -485,7 +332,7 @@ let twoincDomHelper = {
   /**
    * Toggle the custom business fields for Twoinc
    */
-  toggleBusinessFields: function (accountType) {
+  toggleBusinessFields: function () {
     // Get the targets
     let allTargets = [
       ".woocommerce-company-fields",
@@ -499,90 +346,65 @@ let twoincDomHelper = {
       "#purchase_order_number_field",
       "#invoice_email_field"
     ];
-    let visibleNonbusinessTargets = ["#billing_phone_field", "#billing_company_field"];
-    let visibleBusinessTargets = [
+    let requiredBusinessTargets = [];
+    let visibleTargets = [
       ".woocommerce-company-fields",
       ".woocommerce-representative-fields",
       "#billing_phone_field"
     ];
-    let requiredBusinessTargets = [];
+    let requiredTargets = [];
 
-    if (twoincDomHelper.isSelectedPaymentTwoinc()) {
-      visibleBusinessTargets.push(
+    // Toggle the targets based on the account type
+    const isTwoincSelected =
+      twoincDomHelper.isTwoincVisible() && twoincDomHelper.isTwoincSelected();
+
+    if (isTwoincSelected) {
+      visibleTargets.push(
         "#department_field",
         "#project_field",
         "#purchase_order_number_field",
         "#invoice_email_field"
       );
-      requiredBusinessTargets.push("#billing_phone_field");
-      if (twoincDomHelper.isCountrySupported() && window.twoinc.company_name_search === "yes") {
-        visibleBusinessTargets.push("#billing_company_display_field");
-        requiredBusinessTargets.push("#billing_company_display_field");
+      requiredTargets.push("#billing_phone_field");
+      if (twoincDomHelper.isCountrySupported() && window.twoinc.enable_company_search === "yes") {
+        visibleTargets.push("#billing_company_display_field");
+        requiredTargets.push("#billing_company_display_field");
       } else {
-        visibleBusinessTargets.push("#billing_company_field", "#company_id_field");
-        requiredBusinessTargets.push("#billing_company_field", "#company_id_field");
+        visibleTargets.push("#billing_company_field", "#company_id_field");
+        requiredTargets.push("#billing_company_field", "#company_id_field");
       }
     } else {
-      visibleBusinessTargets.push("#billing_company_field");
+      if (
+        twoincDomHelper.isCountrySupported() &&
+        window.twoinc.enable_company_search === "yes" &&
+        window.twoinc.enable_company_search_for_others === "yes"
+      ) {
+        visibleTargets.push("#billing_company_display_field");
+      } else {
+        visibleTargets.push("#billing_company_field");
+      }
     }
 
     allTargets = jQuery(allTargets.join(","));
-    requiredBusinessTargets = jQuery(requiredBusinessTargets.join(","));
-    visibleBusinessTargets = jQuery(visibleBusinessTargets.join(","));
-    visibleNonbusinessTargets = jQuery(visibleNonbusinessTargets.join(","));
+    requiredTargets = jQuery(requiredTargets.join(","));
+    visibleTargets = jQuery(visibleTargets.join(","));
 
-    // Toggle the targets based on the account type
-    const isTwoincAvailable =
-      twoincDomHelper.isTwoincVisible() && twoincUtilHelper.isCompany(accountType);
     allTargets.addClass("hidden");
-    if (isTwoincAvailable) {
-      visibleBusinessTargets.removeClass("hidden");
-    } else {
-      visibleNonbusinessTargets.removeClass("hidden");
-    }
+    visibleTargets.removeClass("hidden");
 
     // Toggle the required fields based on the account type
     twoincDomHelper.toggleRequiredCues(allTargets, false);
-    twoincDomHelper.toggleRequiredCues(requiredBusinessTargets, isTwoincAvailable);
+    twoincDomHelper.toggleRequiredCues(requiredTargets, isTwoincSelected);
   },
 
   /**
    * Deselect payment method and select the first available one
    */
-  deselectPaymentMethod: function (paymentMethodRadioObj) {
+  deselectPaymentMethod: function () {
+    const paymentMethodRadioObj = jQuery(':input[value="woocommerce-gateway-tillit"]');
     // Deselect the current payment method
     if (paymentMethodRadioObj) {
       paymentMethodRadioObj.prop("checked", false);
-    }
-  },
-
-  /**
-   * Hide or show the Twoinc payment method
-   */
-  toggleMethod: function (isTwoincMethodHidden) {
-    // Get the Twoinc payment method section
-    const $twoincSection = jQuery(
-      "#payment .wc_payment_methods > li.payment_method_woocommerce-gateway-tillit"
-    );
-
-    // Get the Twoinc payment method input
-    const $twoincBox = jQuery(':input[value="woocommerce-gateway-tillit"]');
-
-    // True if the Twoinc payment method is disabled
-    const isTwoincDisabled =
-      window.twoinc.enable_order_intent === "yes" && isTwoincMethodHidden === true;
-
-    // Disable the Twoinc payment method for non-business orders
-    if (isTwoincDisabled) {
-      twoincDomHelper.deselectPaymentMethod($twoincBox);
-    }
-
-    if (twoincUtilHelper.isCompany(twoincDomHelper.getAccountType())) {
-      // Show Twoinc payment option
-      $twoincSection.show();
-    } else {
-      // Hide Twoinc payment option
-      $twoincSection.hide();
     }
   },
 
@@ -592,10 +414,8 @@ let twoincDomHelper = {
   toggleTooltip: function (selectorStr, tooltip) {
     if (window.twoinc.display_tooltips !== "yes") return;
 
-    let isCurrentlyCompany = twoincUtilHelper.isCompany(twoincDomHelper.getAccountType());
-
     jQuery(selectorStr).each(function () {
-      if (isCurrentlyCompany) {
+      if (twoincDomHelper.isTwoincSelected()) {
         if (!jQuery(this).attr("original-title") && tooltip !== jQuery(this).attr("title")) {
           jQuery(this).attr("original-title", jQuery(this).attr("title"));
         }
@@ -605,29 +425,6 @@ let twoincDomHelper = {
         jQuery(this).attr("original-title", "");
       }
     });
-  },
-
-  /**
-   * Select the default payment method
-   */
-  selectDefaultMethod: function (isTwoincMethodHidden) {
-    // Get the Twoinc payment method input
-    const $twoincPaymentMethod = jQuery(':input[value="woocommerce-gateway-tillit"]');
-
-    // Get the Twoinc payment block
-    const $twoincPmBlk = jQuery(".payment_method_woocommerce-gateway-tillit");
-
-    // True if the Twoinc payment method is disabled
-    const isTwoincDisabled =
-      window.twoinc.enable_order_intent === "yes" && isTwoincMethodHidden === true;
-
-    // Disable the Twoinc payment method for non-business orders
-    if (isTwoincDisabled) {
-      twoincDomHelper.deselectPaymentMethod($twoincPaymentMethod);
-    } else {
-      // Select the payment method for business accounts
-      $twoincPaymentMethod.click();
-    }
   },
 
   /**
@@ -662,30 +459,10 @@ let twoincDomHelper = {
   },
 
   /**
-   * Toggle Place order button
-   */
-  toggleActions: function () {
-    // Get the account type
-    const accountType = twoincDomHelper.getAccountType();
-
-    // Get the payment method
-    const paymentMethod = jQuery(':input[name="payment_method"]:checked').val();
-
-    // Get the place order button
-    const $placeOrder = jQuery("#place_order");
-
-    // Disable the place order button if order is non-business and payment method is Twoinc
-    $placeOrder.attr(
-      "disabled",
-      !twoincUtilHelper.isCompany(accountType) && paymentMethod === "woocommerce-gateway-tillit"
-    );
-  },
-
-  /**
    * Get company name string
    */
   getCompanyName: function () {
-    if (window.twoinc.company_name_search === "yes") {
+    if (window.twoinc.enable_company_search === "yes") {
       let companyNameObj = twoincDomHelper.getCheckoutInput(
         "SPAN",
         "select",
@@ -742,7 +519,7 @@ let twoincDomHelper = {
     jQuery("#company_id").val("");
 
     // Clear the addresses, in case address get request fails
-    if (window.twoinc.address_search === "yes") {
+    if (window.twoinc.enable_address_lookup === "yes") {
       Twoinc.getInstance().setAddress({
         street_address: "",
         city: "",
@@ -812,13 +589,13 @@ let twoincDomHelper = {
    * Check if selected country is supported by Twoinc
    */
   isCountrySupported: function () {
-    return ["NO", "GB", "SE", "NL", "FI", "DK"].includes(jQuery("#billing_country").val());
+    return window.twoinc.supported_buyer_countries.includes(jQuery("#billing_country").val());
   },
 
   /**
    * Check if twoinc payment is currently selected
    */
-  isSelectedPaymentTwoinc: function () {
+  isTwoincSelected: function () {
     return jQuery('input[name="payment_method"]:checked').val() === "woocommerce-gateway-tillit";
   },
 
@@ -831,13 +608,6 @@ let twoincDomHelper = {
       "none"
     );
     //return jQuery('#payment_method_woocommerce-gateway-tillit:visible').length !== 0
-  },
-
-  /**
-   * Get selected account type
-   */
-  getAccountType: function () {
-    return jQuery(':input[name="account_type"]:checked').val();
   },
 
   /**
@@ -1127,7 +897,6 @@ class Twoinc {
     instance = this;
 
     this.isInitialized = false;
-    this.isTwoincMethodHidden = true;
     this.isTwoincApproved = null;
     this.orderIntentCheck = {
       interval: null,
@@ -1161,7 +930,7 @@ class Twoinc {
 
     // Get the company ID field
     const $companyId = $body.find("#company_id");
-    if (window.twoinc.company_name_search !== "yes") return;
+    if (window.twoinc.enable_company_search !== "yes") return;
     self.billingCompanySelect = $billingCompanyDisplay.selectWoo(
       twoincSelectWooHelper.genSelectWooParams()
     );
@@ -1199,7 +968,7 @@ class Twoinc {
       self.getApproval();
 
       // Address search
-      if (window.twoinc.address_search === "yes") {
+      if (window.twoinc.enable_address_lookup === "yes") {
         // Fetch the company data
         self.addressLookup(data);
       }
@@ -1234,6 +1003,8 @@ class Twoinc {
    * Initialize Twoinc code
    */
   initialize(loadSavedInputs) {
+    const self = this;
+
     if (this.isInitialized) {
       return;
     }
@@ -1243,32 +1014,28 @@ class Twoinc {
     if (jQuery("#order_review").length === 0) return;
 
     // If we found the field
-    if (jQuery('[name="account_type"]:checked').length > 0) {
+    if (twoincDomHelper.isTwoincVisible()) {
       // Toggle the business fields
-      twoincDomHelper.toggleBusinessFields(twoincDomHelper.getAccountType());
+      twoincDomHelper.toggleBusinessFields();
 
       // Move the fields to correct positions
       twoincDomHelper.positionFields();
     }
-
-    // Twoinc is hidden if selected account type is not company
-    this.isTwoincMethodHidden = !twoincUtilHelper.isCompany(twoincDomHelper.getAccountType());
-
-    this.enableCompanySearch();
 
     // Focus on search input on country open
     jQuery("#billing_country").on("select2:open", function (e) {
       twoincSelectWooHelper.waitToFocus("billing_country");
     });
 
-    // Turn the select input into select2
+    // Enable company search
+    this.enableCompanySearch();
     setTimeout(this.enableCompanySearch, 800);
 
     // Disable or enable actions based on the account type
     $body.on("updated_checkout", Twoinc.getInstance().onUpdatedCheckout);
 
     $body.on("click", "#company_not_in_btn", function () {
-      window.twoinc.company_name_search = "no";
+      window.twoinc.enable_company_search = "no";
 
       jQuery("#billing_company_display").val("");
       jQuery("#company_id").val("");
@@ -1277,30 +1044,31 @@ class Twoinc {
       jQuery("#search_company_btn").show();
       Twoinc.getInstance().billingCompanySelect.select2("destroy");
 
-      twoincDomHelper.toggleBusinessFields(twoincDomHelper.getAccountType());
+      twoincDomHelper.toggleBusinessFields();
     });
 
     $body.on("click", "#search_company_btn", function () {
-      window.twoinc.company_name_search = "yes";
+      window.twoinc.enable_company_search = "yes";
 
-      setTimeout(this.enableCompanySearch, 800);
+      self.enableCompanySearch();
+
       jQuery("#billing_company").val("");
       jQuery("#company_id").val("");
       Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData();
 
       jQuery("#search_company_btn").hide();
-      twoincDomHelper.toggleBusinessFields(twoincDomHelper.getAccountType());
+      twoincDomHelper.toggleBusinessFields();
     });
 
     // Handle the representative inputs blur event
     $body.on(
       "blur",
       "#billing_first_name, #billing_last_name, #billing_email, #billing_phone",
-      this.onRepresentativeInputBlur
+      self.onRepresentativeInputBlur
     );
 
     // Handle the representative inputs blur event
-    $body.on("blur", "#company_id, #billing_company_display", this.onCompanyManualInputBlur);
+    $body.on("blur", "#company_id, #billing_company_display", self.onCompanyManualInputBlur);
 
     // Handle the company inputs change event
     $body.on(
@@ -1314,7 +1082,7 @@ class Twoinc {
     });
 
     // Handle the country inputs change event
-    $body.on("change", "#billing_country", this.onCountryInputChange);
+    $body.on("change", "#billing_country", self.onCountryInputChange);
 
     $body.on("click", "#place_order", function () {
       clearInterval(Twoinc.getInstance().orderIntentCheck.interval);
@@ -1327,9 +1095,6 @@ class Twoinc {
       Twoinc.getInstance().orderIntentCheck.interval = null;
       Twoinc.getInstance().orderIntentCheck.pendingCheck = false;
     });
-
-    // Handle account type change
-    $body.on("change", '[name="account_type"]', this.onChangeAccountType);
 
     setInterval(function () {
       if (Twoinc.getInstance().orderIntentCheck.pendingCheck) Twoinc.getInstance().getApproval();
@@ -1371,12 +1136,6 @@ class Twoinc {
   updateElements() {
     // Check approval again
     this.getApproval();
-
-    // Toggle the action buttons
-    twoincDomHelper.toggleActions();
-
-    // Enable or disable the Twoinc method
-    twoincDomHelper.toggleMethod(this.isTwoincMethodHidden);
 
     // Update the text in subtitle and description
     twoincDomHelper.togglePaySubtitleDesc();
@@ -1497,22 +1256,14 @@ class Twoinc {
         // Store the approved state
         Twoinc.getInstance().isTwoincApproved = response.approved;
 
-        // Toggle the Twoinc payment method
-        Twoinc.getInstance().isTwoincMethodHidden = !(
-          Twoinc.getInstance().isTwoincApproved &&
-          twoincUtilHelper.isCompany(twoincDomHelper.getAccountType())
-        );
-
-        // Show or hide the Twoinc payment method
-        twoincDomHelper.toggleMethod(Twoinc.getInstance().isTwoincMethodHidden);
+        if (!response.approved) {
+          twoincDomHelper.deselectPaymentMethod();
+        }
 
         // Display correct payment description
         window.twoinc.is_direct_invoice =
           response.invoice_type && response.invoice_type === "DIRECT_INVOICE";
         twoincDomHelper.togglePaymentDesc();
-
-        // Select the default payment method
-        twoincDomHelper.selectDefaultMethod(Twoinc.getInstance().isTwoincMethodHidden);
 
         // Update tracking number
         if (response.tracking_id && document.querySelector("#tracking_id")) {
@@ -1527,14 +1278,7 @@ class Twoinc {
         // Store the approved state
         Twoinc.getInstance().isTwoincApproved = false;
 
-        // Toggle the Twoinc payment method
-        Twoinc.getInstance().isTwoincMethodHidden = true;
-
-        // Show or hide the Twoinc payment method
-        twoincDomHelper.toggleMethod(Twoinc.getInstance().isTwoincMethodHidden);
-
-        // Select the default payment method
-        twoincDomHelper.selectDefaultMethod(Twoinc.getInstance().isTwoincMethodHidden);
+        twoincDomHelper.deselectPaymentMethod();
 
         // Display messages and update order intent logs
         Twoinc.getInstance().processOrderIntentResponse(response);
@@ -1668,72 +1412,11 @@ class Twoinc {
   onUpdatedCheckout() {
     Twoinc.getInstance().updateElements();
 
-    jQuery("#payment_method_kco").on("change", Twoinc.getInstance().onChangedToKco);
-
-    jQuery("#payment_method_woocommerce-gateway-tillit").on("change", function () {
-      // If current selected payment is Twoinc, clicking "business" will select Twoinc payment again
-      if (twoincDomHelper.isSelectedPaymentTwoinc()) {
-        sessionStorage.setItem("businessClickToTwoinc", "y");
-      }
-    });
-
     jQuery('input[name="payment_method"]').on("change", function () {
-      twoincDomHelper.toggleBusinessFields(twoincDomHelper.getAccountType());
+      twoincDomHelper.toggleBusinessFields();
     });
 
-    if (twoincDomHelper.isSelectedPaymentTwoinc()) {
-      sessionStorage.setItem("businessClickToTwoinc", "y");
-    }
-
-    // Hide and clear unnecessary payment methods
-    twoincDomHelper.toggleMethod(Twoinc.getInstance().isTwoincMethodHidden);
-    jQuery("#payment .wc_payment_methods input.input-radio").each(function () {
-      setTimeout(function () {
-        if (jQuery(this).is(":hidden")) {
-          twoincDomHelper.deselectPaymentMethod(jQuery(this));
-        }
-      }, 1000);
-    });
     twoincDomHelper.rearrangeDescription();
-
-    // Disable click to return to Twoinc/Kco if some other payment method is selected
-    jQuery(
-      ".wc_payment_method:not(.payment_method_woocommerce-gateway-tillit):not(.payment_method_kco)"
-    ).on("click", function () {
-      sessionStorage.removeItem("privateClickToKco");
-      sessionStorage.removeItem("businessClickToTwoinc");
-    });
-  }
-
-  /**
-   * Handle the account type change
-   */
-  onChangeAccountType() {
-    // Get the input
-    const $input = jQuery(this);
-
-    // Get the account type
-    const accountType = twoincDomHelper.getAccountType();
-
-    // Hide the method for non-business accounts
-    if (!twoincUtilHelper.isCompany(accountType)) {
-      Twoinc.getInstance().isTwoincMethodHidden = true;
-      // Clear method tick
-      twoincDomHelper.deselectPaymentMethod(jQuery("#payment_method_woocommerce-gateway-tillit"));
-    } else if (Twoinc.getInstance().isTwoincApproved) {
-      Twoinc.getInstance().isTwoincMethodHidden = false;
-      // Force select twoinc payment
-      jQuery("#payment_method_woocommerce-gateway-tillit").click();
-    }
-
-    // Toggle the business fields
-    twoincDomHelper.toggleBusinessFields($input.val());
-
-    // Move the fields to correct positions
-    twoincDomHelper.positionFields();
-
-    // Show or hide the payment method
-    // twoincDomHelper.toggleMethod(Twoinc.getInstance().isTwoincMethodHidden)
   }
 
   /**
@@ -1785,28 +1468,16 @@ class Twoinc {
 
     Twoinc.getInstance().customerCompany.country_prefix = $input.val();
 
-    twoincDomHelper.toggleBusinessFields(twoincDomHelper.getAccountType());
+    twoincDomHelper.toggleBusinessFields();
 
     twoincDomHelper.clearSelectedCompany();
 
     Twoinc.getInstance().getApproval();
   }
-
-  /**
-   * Handle when Kco payment is selected
-   *
-   * @param event
-   */
-
-  onChangedToKco(event) {
-    let accountType = twoincDomHelper.getAccountType();
-    if (twoincUtilHelper.isCompany(accountType)) accountType = "personal";
-    sessionStorage.setItem("twoincAccountType", accountType);
-  }
 }
 
 let instance = null;
-let isSelectedPaymentTwoinc = null;
+let isTwoincSelected = null;
 jQuery(function () {
   if (window.twoinc) {
     if (window.twoinc.enable_order_intent === "yes") {
@@ -1818,11 +1489,9 @@ jQuery(function () {
       // Handle initialization every time order review (right panel) is updated
       jQuery(document.body).on("updated_checkout", function () {
         // If shop defaults payment method to Twoinc, run Twoinc code
-        if (twoincDomHelper.isSelectedPaymentTwoinc()) {
+        if (twoincDomHelper.isTwoincSelected()) {
           Twoinc.getInstance().initialize(false);
           Twoinc.getInstance().onUpdatedCheckout();
-        } else {
-          twoincDomHelper.toggleMethod(Twoinc.getInstance().isTwoincMethodHidden);
         }
 
         // Run Twoinc code if Twoinc payment is selected
@@ -1831,29 +1500,23 @@ jQuery(function () {
           Twoinc.getInstance().onUpdatedCheckout();
         });
 
-        // Run Twoinc code if Business is selected
-        if (twoincUtilHelper.isCompany(twoincDomHelper.getAccountType())) {
-          Twoinc.getInstance().initialize(false);
-          Twoinc.getInstance().onUpdatedCheckout();
-        }
-
         // If invoice fee is charged to buyer, order price will change when payment method is changed from/to Twoinc
         // Also, run Twoinc code if payment method selected is Twoinc
         if (window.twoinc.invoice_fee_to_buyer === "yes") {
-          isSelectedPaymentTwoinc = twoincDomHelper.isSelectedPaymentTwoinc();
-          if (isSelectedPaymentTwoinc) {
+          isTwoincSelected = twoincDomHelper.isTwoincSelected();
+          if (isTwoincSelected) {
             Twoinc.getInstance().initialize(false);
             Twoinc.getInstance().onUpdatedCheckout();
           }
 
           // Update right sidebar order review when the payment method changes
           jQuery('.woocommerce-checkout [name="payment_method"]').on("change", function () {
-            let currentSelectedPaymentTwoinc = twoincDomHelper.isSelectedPaymentTwoinc();
-            if (currentSelectedPaymentTwoinc || isSelectedPaymentTwoinc) {
+            let currentSelectedPaymentTwoinc = twoincDomHelper.isTwoincSelected();
+            if (currentSelectedPaymentTwoinc || isTwoincSelected) {
               jQuery(document.body).trigger("update_checkout");
             }
-            isSelectedPaymentTwoinc = currentSelectedPaymentTwoinc;
-            if (isSelectedPaymentTwoinc) {
+            isTwoincSelected = currentSelectedPaymentTwoinc;
+            if (isTwoincSelected) {
               Twoinc.getInstance().initialize(false);
               Twoinc.getInstance().onUpdatedCheckout();
             }
@@ -1877,17 +1540,17 @@ jQuery(function () {
       // Otherwise do not run Twoinc code
     }
 
-    // Show or hide Twoinc payment method on account type change
-    jQuery('.woocommerce-checkout [name="account_type"]').on("change", function () {
-      twoincDomHelper.toggleMethod(Twoinc.getInstance().isTwoincMethodHidden);
-    });
-
     // I can not find my company button
     jQuery("#billing_company_field").append(jQuery("#search_company_btn"));
     jQuery("#company_not_in_btn").hide();
     jQuery("#search_company_btn").hide();
 
-    // Intitialization of DOMs
-    twoincDomHelper.initAccountTypeButtons();
+    setTimeout(function () {
+      // Init the hidden Company name field
+      const companyName = twoincDomHelper.getCompanyName().trim();
+      if (companyName) {
+        jQuery("#billing_company").val(companyName);
+      }
+    }, 1000);
   }
 });

@@ -4,6 +4,7 @@ jQuery(function ($) {
       childrenRadios.prop("checked", false);
       childrenRadios.attr("disabled", true);
     } else {
+      childrenRadios.prop("checked", true);
       childrenRadios.attr("disabled", false);
     }
   }
@@ -38,9 +39,16 @@ jQuery(function ($) {
 
   $("body").on(
     "change",
-    "#woocommerce_woocommerce-gateway-tillit_enable_company_name",
+    "#woocommerce_woocommerce-gateway-tillit_enable_company_search",
     function (e) {
-      toggleChildrenFields($(this), $("#woocommerce_woocommerce-gateway-tillit_address_search"));
+      toggleChildrenFields(
+        $(this),
+        $("#woocommerce_woocommerce-gateway-tillit_enable_company_search_for_others")
+      );
+      toggleChildrenFields(
+        $(this),
+        $("#woocommerce_woocommerce-gateway-tillit_enable_address_lookup")
+      );
     }
   );
 
@@ -65,7 +73,11 @@ jQuery(function ($) {
   jQuery("h3.wc-settings-sub-title").next().hide();
 
   toggleChildrenFields(
-    $("#woocommerce_woocommerce-gateway-tillit_enable_company_name"),
-    $("#woocommerce_woocommerce-gateway-tillit_address_search")
+    $("#woocommerce_woocommerce-gateway-tillit_enable_company_search"),
+    $("#woocommerce_woocommerce-gateway-tillit_enable_company_search_for_others")
+  );
+  toggleChildrenFields(
+    $("#woocommerce_woocommerce-gateway-tillit_enable_company_search"),
+    $("#woocommerce_woocommerce-gateway-tillit_enable_address_lookup")
   );
 });
