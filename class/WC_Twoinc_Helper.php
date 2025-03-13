@@ -192,10 +192,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
          */
         public static function send_twoinc_alert_email($content, $subject = 'WooCommerce operation alert')
         {
-            do_action('twoinc_send_alert_email', $content, $subject);
-            $email = WC_Twoinc::ALERT_EMAIL_ADDRESS;
-            return wp_mail($email, $subject, $content, "Reply-To: " . $email . "\r\n");
-
+            // TODO: remove all calls to this function
         }
 
         /**
