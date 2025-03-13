@@ -8,6 +8,7 @@ docker/config/
 *.env.json
 .DS_Store
 package-lock.json
+languages/*.php
 screenshots/
 videos/
 node_modules/
