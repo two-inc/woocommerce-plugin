@@ -185,17 +185,40 @@ if (!class_exists('WC_Twoinc_Helper')) {
         /**
          * Send alert email to twoinc tech support
          *
-         * @param $subject
-         * @param $content
-         *
+         * @param string $subject Subject line for the alert email
+         * @param array $fields Array of key-value pairs for the alert content
          * @return bool
          */
-        public static function send_twoinc_alert_email($content, $subject = 'WooCommerce operation alert')
+        public static function send_twoinc_alert_email($subject, $fields)
         {
-            do_action('twoinc_send_alert_email', $content, $subject);
-            $email = WC_Twoinc::ALERT_EMAIL_ADDRESS;
-            return wp_mail($email, $subject, $content, "Reply-To: " . $email . "\r\n");
+            // Validate input format
+            if (!is_array($fields)) {
+                return false;
+            }
 
+            // Add standard fields
+            $fields['Site URL'] = get_site_url();
+            $fields['Plugin Version'] = get_twoinc_plugin_version();
+
+            // Build email body from fields
+            $body = [];
+            foreach ($fields as $key => $value) {
+                $body[] = "{$key}: {$value}";
+            }
+
+            // Convert body array to string
+            $emailContent = implode("\r\n", $body);
+
+            // Allow other plugins to modify or handle the alert
+            do_action('twoinc_send_alert_email', $emailContent, $subject);
+
+            // Send email
+            return wp_mail(
+                WC_Twoinc::ALERT_EMAIL_ADDRESS,
+                $subject,
+                $emailContent,
+                "Reply-To: " . WC_Twoinc::ALERT_EMAIL_ADDRESS . "\r\n"
+            );
         }
 
         /**
@@ -987,5 +1010,38 @@ if (!class_exists('WC_Twoinc_Helper')) {
             }
         }
 
+        public static function get_merchant_default_days_on_invoice()
+        {
+            // ...existing code...
+
+            if (!$days_on_invoice_last_checked_on || ($days_on_invoice_last_checked_on + 3600) <= time()) {
+                if ($merchant_id && $this->get_option('api_key')) {
+                    $response = $this->make_request("/v1/merchant/{$merchant_id}", [], 'GET');
+
+                    if (is_wp_error($response)) {
+                        self::send_twoinc_alert_email(
+                            'Failed to fetch merchant details',
+                            [
+                                'Request' => 'Get merchant default due in days',
+                                'Merchant ID' => $merchant_id
+                            ]
+                        );
+                    } else {
+                        $twoinc_err = self::get_twoinc_error_msg($response);
+                        if ($twoinc_err && !($response['response'] && $response['response']['code'] && $response['response']['code'] == 401)) {
+                            self::send_twoinc_alert_email(
+                                'Error fetching merchant details',
+                                [
+                                    'Request' => 'Get merchant default due in days',
+                                    'Response message' => $twoinc_err,
+                                    'Merchant ID' => $merchant_id
+                                ]
+                            );
+                        }
+                        // ...rest of the function...
+                    }
+                }
+            }
+        }
     }
 }
