@@ -31,6 +31,7 @@ define('WC_TWOINC_PLUGIN_PATH', plugin_dir_path(__FILE__));
 
 add_filter('woocommerce_payment_gateways', 'wc_twoinc_add_to_gateways');
 add_action('plugins_loaded', 'load_twoinc_classes');
+add_action('woocommerce_blocks_loaded', 'twoinc_woocommerce_blocks_support');
 
 if (is_admin() && !defined('DOING_AJAX')) {
     add_filter("plugin_action_links_" . plugin_basename(__FILE__), 'twoinc_settings_link');
@@ -54,6 +55,9 @@ function load_twoinc_classes()
     require_once __DIR__ . '/class/WC_Twoinc_Helper.php';
     require_once __DIR__ . '/class/WC_Twoinc_Checkout.php';
     require_once __DIR__ . '/class/WC_Twoinc.php';
+    if (class_exists('Automattic\WooCommerce\Blocks\Payments\PaymentMethodRegistry')) {
+        require_once __DIR__ . '/class/WC_Twoinc_Blocks.php';
+    }
 
     // JSON endpoint to list and sync status of orders
     add_action('rest_api_init', 'register_twoinc_list_out_of_sync_order_ids');
@@ -202,6 +206,27 @@ function wc_twoinc_enqueue_styles()
 function wc_twoinc_enqueue_scripts()
 {
     wp_enqueue_script('twoinc-payment-gateway-js', WC_TWOINC_PLUGIN_URL . '/assets/js/twoinc.js', ['jquery'], get_twoinc_plugin_version());
+}
+
+/**
+ * Register payment method for WooCommerce block based checkout.
+ */
+function twoinc_woocommerce_blocks_support()
+{
+    if (!class_exists('Automattic\WooCommerce\Blocks\Payments\PaymentMethodRegistry')) {
+        return;
+    }
+
+    if (!class_exists('WC_Twoinc_Blocks')) {
+        require_once __DIR__ . '/class/WC_Twoinc_Blocks.php';
+    }
+
+    add_action(
+        'woocommerce_blocks_payment_method_type_registration',
+        function (Automattic\WooCommerce\Blocks\Payments\PaymentMethodRegistry $payment_method_registry) {
+            $payment_method_registry->register_payment_method(new WC_Twoinc_Blocks());
+        }
+    );
 }
 
 /**
