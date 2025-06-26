@@ -210,6 +210,9 @@ function wc_twoinc_enqueue_scripts()
 
 /**
  * Register payment method for WooCommerce block based checkout.
+ *
+ * Implementation follows WooCommerce's official guidance:
+ * @link https://developer.woocommerce.com/docs/block-development/cart-and-checkout-blocks/checkout-payment-methods/payment-method-integration/
  */
 function twoinc_woocommerce_blocks_support()
 {
