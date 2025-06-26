@@ -29,8 +29,26 @@ if (!in_array('woocommerce/woocommerce.php', $activeplugins)) {
 define('WC_TWOINC_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('WC_TWOINC_PLUGIN_PATH', plugin_dir_path(__FILE__));
 
+use Automattic\WooCommerce\Utilities\FeaturesUtil;
+
 add_filter('woocommerce_payment_gateways', 'wc_twoinc_add_to_gateways');
 add_action('plugins_loaded', 'load_twoinc_classes');
+add_action('woocommerce_blocks_loaded', 'twoinc_woocommerce_blocks_support');
+
+// Declare compatibility with WooCommerce block based checkout to remove
+// the "does not yet support this block" warning in the editor.
+add_action(
+    'before_woocommerce_init',
+    function () {
+        if (class_exists(FeaturesUtil::class)) {
+            FeaturesUtil::declare_compatibility(
+                'cart_checkout_blocks',
+                __FILE__,
+                true
+            );
+        }
+    }
+);
 
 if (is_admin() && !defined('DOING_AJAX')) {
     add_filter("plugin_action_links_" . plugin_basename(__FILE__), 'twoinc_settings_link');
@@ -54,6 +72,9 @@ function load_twoinc_classes()
     require_once __DIR__ . '/class/WC_Twoinc_Helper.php';
     require_once __DIR__ . '/class/WC_Twoinc_Checkout.php';
     require_once __DIR__ . '/class/WC_Twoinc.php';
+    if (class_exists('Automattic\WooCommerce\Blocks\Payments\PaymentMethodRegistry')) {
+        require_once __DIR__ . '/class/WC_Twoinc_Blocks.php';
+    }
 
     // JSON endpoint to list and sync status of orders
     add_action('rest_api_init', 'register_twoinc_list_out_of_sync_order_ids');
@@ -202,6 +223,32 @@ function wc_twoinc_enqueue_styles()
 function wc_twoinc_enqueue_scripts()
 {
     wp_enqueue_script('twoinc-payment-gateway-js', WC_TWOINC_PLUGIN_URL . '/assets/js/twoinc.js', ['jquery'], get_twoinc_plugin_version());
+}
+
+/**
+ * Register payment method for WooCommerce block based checkout.
+ *
+ * Implementation follows WooCommerce's official guidance:
+ * @link https://developer.woocommerce.com/docs/block-development/cart-and-checkout-blocks/checkout-payment-methods/payment-method-integration/
+ */
+function twoinc_woocommerce_blocks_support()
+{
+    if (!class_exists('Automattic\WooCommerce\Blocks\Payments\PaymentMethodRegistry')) {
+        return;
+    }
+
+    if (!class_exists('WC_Twoinc_Blocks')) {
+        require_once __DIR__ . '/class/WC_Twoinc_Blocks.php';
+    }
+
+    add_action(
+        'woocommerce_blocks_payment_method_type_registration',
+        function ( Automattic\WooCommerce\Blocks\Payments\PaymentMethodRegistry $payment_method_registry ) {
+            // Use the registry's `register()` method to expose the gateway to
+            // WooCommerce's block-based checkout.
+            $payment_method_registry->register( new WC_Twoinc_Blocks() );
+        }
+    );
 }
 
 /**
