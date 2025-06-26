@@ -26,8 +26,22 @@ final class WC_Twoinc_Blocks extends AbstractPaymentMethodType {
      * @return bool
      */
     public function is_active() {
-        $gateway = wc_get_payment_gateway_by_id($this->name);
-        return $gateway && $gateway->is_available();
+        if (!class_exists('WC_Payment_Gateways')) {
+            return false;
+        }
+
+        $gateways = WC()->payment_gateways ? WC()->payment_gateways->payment_gateways() : [];
+
+        if (isset($gateways[$this->name])) {
+            return $gateways[$this->name]->is_available();
+        }
+
+        if (class_exists('WC_Twoinc')) {
+            $gateway = new WC_Twoinc();
+            return $gateway->is_available();
+        }
+
+        return false;
     }
 
     /**
