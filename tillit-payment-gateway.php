@@ -224,7 +224,10 @@ function twoinc_woocommerce_blocks_support()
     add_action(
         'woocommerce_blocks_payment_method_type_registration',
         function (Automattic\WooCommerce\Blocks\Payments\PaymentMethodRegistry $payment_method_registry) {
-            $payment_method_registry->register_payment_method(new WC_Twoinc_Blocks());
+            // `register_payment_method_type` is available in WooCommerce Blocks
+            // versions shipping with WooCommerce 8+. It registers the gateway
+            // class so it can be used in the block checkout.
+            $payment_method_registry->register_payment_method_type(new WC_Twoinc_Blocks());
         }
     );
 }
