@@ -107,7 +107,6 @@ if (!class_exists('WC_Twoinc')) {
 
                 // On setting updated
                 add_action('woocommerce_update_options_payment_gateways_' . $this->id, [$this, 'process_admin_options']); // Built-in process_admin_options
-                add_action('woocommerce_update_options_checkout', [$this, 'update_checkout_options']);
             }
 
             // Return if plugin setup is not complete
@@ -134,9 +133,6 @@ if (!class_exists('WC_Twoinc')) {
                 add_action('save_post_shop_order', [$this, 'before_order_update'], 10, 2);
                 add_action('wp_after_insert_post', [$this, 'after_order_update'], 10, 4);
             } else {
-                // Calculate fees in order review panel on the right of shop checkout page
-                add_action('woocommerce_cart_calculate_fees', [$this, 'add_invoice_fees']);
-
                 // Change the text in Twoinc payment method in shop checkout page to reflect correct validation status
                 add_action('woocommerce_checkout_update_order_review', [$this, 'change_twoinc_payment_title']);
             }
@@ -192,6 +188,16 @@ if (!class_exists('WC_Twoinc')) {
         public function get_merchant_id()
         {
             return $this->get_option('merchant_id') ?? $this->get_option('tillit_merchant_id');
+        }
+
+        /**
+         * Get enable company search
+         *
+         * @return string
+         */
+        public function get_enable_company_search()
+        {
+            return $this->get_option('enable_company_search') ?? $this->get_option('enable_company_name');
         }
 
         /**
@@ -285,19 +291,6 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * Get payment description message
-         */
-        private function get_payment_description_msg()
-        {
-            return sprintf(
-                '<span class="twoinc-payment-desc payment-desc-global">%s</span><span class="twoinc-payment-desc payment-desc-no-funded">%s</span>',
-                __('Receive invoice and payment details via email', 'twoinc-payment-gateway'),
-                __('Receive invoice and payment details via email and EHF', 'twoinc-payment-gateway')
-            );
-
-        }
-
-        /**
          * Get payment box description
          */
         private function get_pay_box_description()
@@ -376,56 +369,6 @@ if (!class_exists('WC_Twoinc')) {
                 }
                 return ['body' => $body, 'code' => $code];
             }
-        }
-
-        /**
-         * Send the merchant logo to Twoinc API
-         *
-         * @return void
-         */
-        public function update_checkout_options()
-        {
-            if (!isset($_POST['woocommerce_woocommerce-gateway-tillit_merchant_logo']) || !isset($_POST['woocommerce_woocommerce-gateway-tillit_merchant_id'])) {
-                return;
-            }
-
-            $image_id = sanitize_text_field($_POST['woocommerce_woocommerce-gateway-tillit_merchant_logo']);
-
-            $image = $image_id ? wp_get_attachment_image_src($image_id, 'full') : null;
-            $image_src = $image ? $image[0] : null;
-
-            if (!$image_src) {
-                return;
-            }
-
-            // Update the logo url for the invoice
-            $response = $this->make_request("/v1/merchant/update", [
-                'logo_path' => $image_src
-            ]);
-
-            if (is_wp_error($response)) {
-                WC_Admin_Settings::add_error(sprintf(__('Could not forward invoice image URL to %s', 'twoinc-payment-gateway'), self::PRODUCT_NAME));
-                WC_Twoinc_Helper::send_twoinc_alert_email(
-                    "Could not send request to Two server:"
-                    . "\r\n- Request: Update merchant logo"
-                    . "\r\n- Site: " . get_site_url()
-                );
-                return;
-            }
-
-            $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
-            if ($twoinc_err) {
-                WC_Admin_Settings::add_error(sprintf(__('Could not forward invoice image URL to %s', 'twoinc-payment-gateway'), self::PRODUCT_NAME));
-                WC_Twoinc_Helper::send_twoinc_alert_email(
-                    "Got error response from Two server:"
-                    . "\r\n- Request: Update merchant logo"
-                    . "\r\n- Response message: " . $twoinc_err
-                    . "\r\n- Site: " . get_site_url()
-                );
-                //$this->update_option('merchant_logo');
-                return;
-            }
-
         }
 
         /**
@@ -575,118 +518,6 @@ if (!class_exists('WC_Twoinc')) {
             }
 
             $this->process_update_twoinc_order($order, $twoinc_meta);
-
-        }
-
-        /**
-         * Before item "Save" button
-         *
-         * @param $order_id
-         * @param $items
-         */
-        /* To be removed
-        public function before_order_item_save($order_id, $items)
-        {
-
-            $order = wc_get_order($order_id);
-            if (!WC_Twoinc_Helper::is_twoinc_order($order)) {
-                return;
-            }
-
-            $twoinc_meta = $this->get_save_twoinc_meta($order);
-            if (!$twoinc_meta) return;
-
-            // Store hash of twoinc req body
-            $order->update_meta_data('_twoinc_req_body_hash', WC_Twoinc_Helper::hash_order($order, $twoinc_meta));
-
-        }
-        */
-
-        /**
-         * After item "Save" button
-         * Notify Twoinc API after the order is updated
-         *
-         * @param $order_id
-         * @param $items
-         */
-        /* To be removed
-        public function after_order_item_save($order_id, $items)
-        {
-
-            $order = wc_get_order($order_id);
-            if (!WC_Twoinc_Helper::is_twoinc_order($order)) {
-                return;
-            }
-
-            $twoinc_meta = $this->get_save_twoinc_meta($order);
-            if (!$twoinc_meta) return;
-
-            $this->process_update_twoinc_order($order, $twoinc_meta, true);
-
-        }
-        */
-
-        /**
-         * Add invoice fee as a line item
-         *
-         * @param $order_id
-         */
-        public function add_invoice_fees()
-        {
-
-            if ($this->get_option('invoice_fee_to_buyer') === 'yes' && 'woocommerce-gateway-tillit' === WC()->session->get('chosen_payment_method')) {
-                global $woocommerce;
-
-                if (is_admin() && !defined('DOING_AJAX')) {
-                    return;
-                }
-
-                $merchant_id = $this->get_merchant_id();
-
-                if (!$merchant_id) {
-                    WC()->session->set('chosen_payment_method', 'cod');
-                    WC_Twoinc_Helper::send_twoinc_alert_email(
-                        "Could not find Twoinc merchant ID:"
-                        . "\r\n- Request: Get invoice fee"
-                        . "\r\n- Site: " . get_site_url()
-                    );
-                    return;
-                }
-
-                // Get invoice fixed fee
-                $response = $this->make_request("/v1/merchant/{$merchant_id}", [], 'GET');
-
-                if (is_wp_error($response)) {
-                    WC()->session->set('chosen_payment_method', 'cod');
-                    WC_Twoinc_Helper::send_twoinc_alert_email(
-                        "Could not send request to Two server:"
-                        . "\r\n- Request: Get invoice fee"
-                        . "\r\n- Twoinc merchant ID: " . $merchant_id
-                        . "\r\n- Site: " . get_site_url()
-                    );
-                    return;
-                }
-
-                $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
-                if ($twoinc_err) {
-                    WC()->session->set('chosen_payment_method', 'cod');
-                    WC_Twoinc_Helper::send_twoinc_alert_email(
-                        "Got error response from Two server:"
-                        . "\r\n- Request: Get invoice fee"
-                        . "\r\n- Response message: " . $twoinc_err
-                        . "\r\n- Twoinc merchant ID: " . $merchant_id
-                        . "\r\n- Site: " . get_site_url()
-                    );
-                    return;
-                }
-
-                $body = json_decode($response['body'], true);
-
-                $invoice_fixed_fee = $body['fixed_fee_per_order'];
-
-                //$invoice_percentage_fee = ($woocommerce->cart->cart_contents_total + $woocommerce->cart->tax_total + $woocommerce->cart->shipping_total + $woocommerce->cart->shipping_tax_total) * $percentage;
-                $woocommerce->cart->add_fee('Invoice fee', $invoice_fixed_fee, false, '');
-            }
 
         }
 
@@ -1940,30 +1771,6 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * Get customer types enabled in admin settings
-         */
-        public function available_account_types()
-        {
-
-            $available_types = [];
-
-            if ($this->get_option('checkout_personal') === 'yes') {
-                $available_types['personal'] = __('Personal', 'twoinc-payment-gateway');
-            }
-
-            if ($this->get_option('checkout_sole_trader') === 'yes') {
-                $available_types['sole_trader'] = __('Sole Trader', 'twoinc-payment-gateway');
-            }
-
-            if ($this->get_option('checkout_business') === 'yes') {
-                $available_types['business'] = __('Business', 'twoinc-payment-gateway');
-            }
-
-            return $available_types;
-
-        }
-
-        /**
          * Register Admin form fields
          *
          * @return void
@@ -2026,27 +1833,6 @@ if (!class_exists('WC_Twoinc')) {
                     'type'        => 'checkbox',
                     'default'     => 'yes'
                 ],
-                'checkout_business' => [
-                    'title'       => __('Separate checkout for business customers', 'twoinc-payment-gateway'),
-                    'description' => sprintf(__('Adds a separate checkout for business customers. %s payment is only available for business customers.', 'twoinc-payment-gateway'), self::PRODUCT_NAME),
-                    'desc_tip'    => true,
-                    'label'       => ' ',
-                    'type'        => 'checkbox',
-                    'default'     => 'yes'
-                ],
-                'checkout_personal' => [
-                    'title'       => __('Separate checkout for private customers', 'twoinc-payment-gateway'),
-                    'description' => sprintf(__('Adds a separate checkout for private customers. %s payment is not available for private customers.', 'twoinc-payment-gateway'), self::PRODUCT_NAME),
-                    'desc_tip'    => true,
-                    'label'       => ' ',
-                    'type'        => 'checkbox',
-                    'default'     => 'yes'
-                ],
-                'checkout_sole_trader' => [
-                    'title'       => __('Separate checkout for private sole traders', 'twoinc-payment-gateway'),
-                    'label'       => ' ',
-                    'type'        => 'checkbox'
-                ],
                 'add_field_department' => [
                     'title'       => __('Add input field for "Department"', 'twoinc-payment-gateway'),
                     'description' => __('Adds an input field where buyers can input their department to display on the invoice.', 'twoinc-payment-gateway'),
@@ -2079,29 +1865,11 @@ if (!class_exists('WC_Twoinc')) {
                     'type'        => 'checkbox',
                     'default'     => 'no'
                 ],
-                'use_account_type_buttons' => [
-                    'title'       => __('Use buttons instead of radios to select account type', 'twoinc-payment-gateway'),
-                    'label'       => ' ',
-                    'type'        => 'checkbox',
-                    'default'     => 'no'
-                ],
                 'show_abt_link' => [
                     'title'       => sprintf(__('Show "What is %s" link in checkout', 'twoinc-payment-gateway'), self::PRODUCT_NAME),
                     'label'       => ' ',
                     'type'        => 'checkbox',
                     'default'     => 'yes'
-                ],
-                'default_to_b2c' => [
-                    'title'       => __('Default to B2C check-out', 'twoinc-payment-gateway'),
-                    'label'       => ' ',
-                    'type'        => 'checkbox'
-                ],
-                'invoice_fee_to_buyer' => [
-                    'title'       => __('Shift invoice fee to the buyers', 'twoinc-payment-gateway'),
-                    'description' => __('This feature only works for merchants set up with a fixed fee per order.', 'twoinc-payment-gateway'),
-                    'desc_tip'    => true,
-                    'label'       => ' ',
-                    'type'        => 'checkbox'
                 ],
                 'display_tooltips' => [
                     'title'       => __('Display input tooltips', 'twoinc-payment-gateway'),
@@ -2119,7 +1887,7 @@ if (!class_exists('WC_Twoinc')) {
                     'type'        => 'title',
                     'title'       => __('Auto-complete settings', 'twoinc-payment-gateway')
                 ],
-                'enable_company_name' => [
+                'enable_company_search' => [
                     'title'       => __('Enable company name search and auto-complete', 'twoinc-payment-gateway'),
                     'description' => __('Enables searching for company name in the national registry and automatically filling in name and national ID.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
@@ -2127,7 +1895,15 @@ if (!class_exists('WC_Twoinc')) {
                     'type'        => 'checkbox',
                     'default'     => 'yes'
                 ],
-                'address_search' => [
+                'enable_company_search_for_others' => [
+                    'title'       => __('Enable company name search for other payment options', 'twoinc-payment-gateway'),
+                    'description' => __('Enables searching for company name even when other payment options are selected. Requires the option above to be checked.', 'twoinc-payment-gateway'),
+                    'desc_tip'    => true,
+                    'label'       => ' ',
+                    'type'        => 'checkbox',
+                    'default'     => 'yes'
+                ],
+                'enable_address_lookup' => [
                     'title'       => __('Address auto-complete', 'twoinc-payment-gateway'),
                     'description' => __('Enables automatically filling in the registered address from the national registry.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,

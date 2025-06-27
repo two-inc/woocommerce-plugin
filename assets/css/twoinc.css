@@ -2,12 +2,6 @@
   display: none !important;
 }
 
-.woocommerce form .form-row#account_type_field .woocommerce-input-wrapper label {
-  padding-left: 0.5em;
-  margin-right: 2em;
-  display: inline;
-}
-
 .woocommerce-checkout
   #payment
   ul.payment_methods
@@ -65,39 +59,6 @@
   to {
     transform: rotate(360deg);
   }
-}
-
-form.checkout.woocommerce-checkout .woocommerce-account-type-fields__field-wrapper,
-#account_type_field {
-  display: none;
-}
-
-form.checkout.woocommerce-checkout
-  .woocommerce-account-type-fields__field-wrapper
-  #account_type_field
-  > label {
-  position: unset;
-  display: block;
-}
-
-form.checkout.woocommerce-checkout
-  .woocommerce-account-type-fields__field-wrapper
-  label[for="account_type_personal"],
-form.checkout.woocommerce-checkout
-  .woocommerce-account-type-fields__field-wrapper
-  label[for="account_type_sole_trader"],
-form.checkout.woocommerce-checkout
-  .woocommerce-account-type-fields__field-wrapper
-  label[for="account_type_business"] {
-  position: unset;
-  display: inline;
-}
-
-form.checkout.woocommerce-checkout
-  .woocommerce-account-type-fields__field-wrapper
-  input[name="account_type"] {
-  height: unset;
-  width: unset;
 }
 
 .twoinc-source,
@@ -216,86 +177,4 @@ form.checkout.woocommerce-checkout
   color: #3043d1;
   position: absolute;
   right: 4px;
-}
-
-.account-type-wrapper {
-  display: flex;
-  flex-wrap: wrap;
-  margin: auto;
-  margin-bottom: 20px;
-}
-
-.account-type-wrapper h3 {
-  width: 100%;
-}
-
-.account-type-wrapper.actp-col-2 {
-  width: 60%;
-}
-
-.account-type-wrapper.actp-col-3 {
-  width: 100%;
-}
-
-.account-type-wrapper.actp-col-2 .account-type-button {
-  width: 48%;
-  margin-right: 4%;
-}
-
-.account-type-wrapper.actp-col-3 .account-type-button {
-  width: 32%;
-  margin-right: 2%;
-}
-
-.account-type-wrapper .account-type-button {
-  border: 2px solid #ebebeb;
-  padding: 12px 20px;
-  margin-right: 20px;
-  display: flex;
-  min-width: 160px;
-}
-
-.account-type-wrapper .account-type-button img {
-  margin: auto 20px auto auto;
-  width: 16px;
-  height: 16px;
-}
-
-.account-type-wrapper .account-type-button span {
-  margin: auto;
-  margin-left: 0;
-}
-
-.account-type-wrapper .account-type-button.last {
-  margin-left: auto;
-  margin-right: 0;
-}
-
-.account-type-wrapper .account-type-button.selected {
-  border-color: #000000;
-  color: #000000;
-}
-
-.account-type-wrapper .account-type-button.selected img {
-  filter: brightness(0);
-}
-
-.twoinc-payment-desc.payment-desc-no-funded {
-  display: none;
-}
-
-@media (max-width: 639px) {
-  .account-type-wrapper.actp-col-2 {
-    width: 100%;
-  }
-
-  .account-type-wrapper.actp-col-2 .account-type-button,
-  .account-type-wrapper.actp-col-3 .account-type-button {
-    width: 100%;
-    margin-right: 0;
-  }
-
-  .account-type-wrapper .account-type-button.last {
-    margin: auto;
-  }
 }

@@ -51,27 +51,17 @@ cat > docker/config/staging.json <<EOF
   "clear_options_on_deactivation": "no",
   "section_api_credentials": "",
   "api_key": "secret_test_xxx",
-  "section_invoice_settings": "",
-  "days_on_invoice": "14",
-  "merchant_logo": "",
   "section_checkout_options": "",
   "enable_order_intent": "yes",
-  "checkout_personal": "yes",
-  "checkout_sole_trader": "no",
-  "checkout_business": "yes",
-  "finalize_purchase": "no",
-  "mark_tillit_fields_required": "yes",
   "add_field_department": "yes",
   "add_field_project": "yes",
-  "use_account_type_buttons": "no",
+  "add_field_purchase_order_number": "yes",
+  "add_field_invoice_email": "yes",
   "show_abt_link": "yes",
-  "default_to_b2c": "no",
-  "invoice_fee_to_buyer": "no",
-  "display_other_payments": "yes",
-  "fallback_to_another_payment": "yes",
   "section_auto_complete_settings": "",
-  "enable_company_name": "yes",
-  "enable_company_id": "yes"
+  "enable_company_search": "yes",
+  "enable_company_search_for_others": "yes",
+  "enable_address_lookup": "yes"
 }
 EOF
 ```

@@ -5,7 +5,7 @@ services:
     container_name: wordpress
     extra_hosts:
       - "portal.localhost:host-gateway"
-    image: wordpress:6.7-php8.2-apache
+    image: wordpress:6.8-php8.2-apache
     restart: always
     ports:
       - 8888:80
@@ -43,9 +43,9 @@ services:
       WOOCOM_PLUGIN_CONFIG_JSON: ${WOOCOM_PLUGIN_CONFIG_JSON}
       WOOCOM_CURRENCY: EUR
       WOOCOM_DEFAULT_COUNTRY: NL
-      # WOOCOM_VERSION: 9.4.2
-      # WOOCOM_VERSION: 8.9.3
-      WOOCOM_VERSION: 7.9.1
+      WOOCOM_VERSION: 9.9.5
+      # WOOCOM_VERSION: 8.9.5
+      # WOOCOM_VERSION: 7.9.1
     volumes:
       - ./volumes/wordpress:/var/www/html
       - .:/opt/tillit-payment-gateway

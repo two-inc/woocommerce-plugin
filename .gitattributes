@@ -7,13 +7,18 @@
 .github/ export-ignore
 cypress/ export-ignore
 docker/ export-ignore
+docs/ export-ignore
 snippets/ export-ignore
 
 # Files to ignore
 .distignore export-ignore
 .gitignore export-ignore
 .gitattributes export-ignore
+.pre-commit-config.yaml export-ignore
+.prettierrc export-ignore
+.rgignore export-ignore
 bumpver.toml export-ignore
+dev-requirements.txt export-ignore
 docker-compose.yaml export-ignore
 README.md export-ignore
 Makefile export-ignore
