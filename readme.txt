@@ -1,7 +1,7 @@
 === Two - BNPL for businesses ===
 Tags: payment request, woocommerce
 Requires at least: 6
-Tested up to: 6.5
+Tested up to: 6.8.1
 Requires PHP: 7
 Stable tag: 2.22.0
 License: GPLv3
@@ -53,7 +53,7 @@ Feel free to reach out to [integration@two.inc](mailto:integration@two.inc) for 
 
 ## Compatibility with WooCommerce
 
-The plugin has been tested for compatibility with WooCommerce version 9 with
+The plugin has been tested for compatibility with WooCommerce version 9.9.5 with
 [HPOS](https://woocommerce.com/document/high-performance-order-storage/) enabled. However, support
 for the new [block-based checkout](https://woocommerce.com/checkout-blocks/) which is the default
 since WooCommerce 8 is on the roadmap. You will need to use the classic checkout to use this
