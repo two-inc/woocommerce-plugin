@@ -1,0 +1,18 @@
+{
+  "name": "tillit-payment-gateway",
+  "version": "2.22.0",
+  "description": "Integration between WooCommerce and Two",
+  "private": true,
+  "main": "build/index.js",
+  "scripts": {
+    "build": "NODE_OPTIONS=--openssl-legacy-provider wp-scripts build",
+    "start": "NODE_OPTIONS=--openssl-legacy-provider wp-scripts start",
+    "packages-update": "wp-scripts packages-update"
+  },
+  "author": "Two",
+  "license": "GPL-2.0-or-later",
+  "devDependencies": {
+    "@woocommerce/dependency-extraction-webpack-plugin": "latest",
+    "@wordpress/scripts": "latest"
+  }
+}

@@ -30,8 +30,17 @@ if (!in_array('woocommerce/woocommerce.php', $activeplugins)) {
 define('WC_TWOINC_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('WC_TWOINC_PLUGIN_PATH', plugin_dir_path(__FILE__));
 
+add_action( 'before_woocommerce_init', function() {
+    if ( class_exists( \Automattic\WooCommerce\Utilities\FeaturesUtil::class ) ) {
+        \Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility( 'cart_checkout_blocks', __FILE__, true );
+    }
+} );
+
 add_filter('woocommerce_payment_gateways', 'wc_twoinc_add_to_gateways');
 add_action('plugins_loaded', 'load_twoinc_classes');
+
+// Add support for WooCommerce Blocks
+add_action('woocommerce_blocks_loaded', 'wc_twoinc_blocks_support');
 
 if (is_admin() && !defined('DOING_AJAX')) {
     add_filter("plugin_action_links_" . plugin_basename(__FILE__), 'twoinc_settings_link');
@@ -91,6 +100,26 @@ function load_twoinc_classes()
     // On order bulk action
     add_action('handle_bulk_actions-edit-shop_order', 'WC_Twoinc::on_order_bulk_edit_action', 10, 3);
     add_action('admin_notices', 'WC_Twoinc::on_order_bulk_edit_notices');
+}
+
+/**
+ * Add support for WooCommerce Blocks
+ */
+function wc_twoinc_blocks_support() {
+    if ( ! class_exists( 'Automattic\WooCommerce\Blocks\Payments\Integrations\AbstractPaymentMethodType' ) ) {
+        return;
+    }
+
+    require_once __DIR__ . '/class/WC_Twoinc_Blocks_Support.php';
+
+    add_action(
+        'woocommerce_blocks_payment_method_type_registration',
+        function( Automattic\WooCommerce\Blocks\Payments\PaymentMethodRegistry $payment_method_registry ) {
+            $payment_method_registry->register(
+                new WC_Twoinc_Blocks_Support()
+            );
+        }
+    );
 }
 
 /**
@@ -200,6 +229,10 @@ function wc_twoinc_add_to_gateways($gateways)
  */
 function wc_twoinc_enqueue_styles()
 {
+    if (!is_checkout()) {
+        return;
+    }
+
     wp_enqueue_style('twoinc-payment-gateway-css', WC_TWOINC_PLUGIN_URL . '/assets/css/twoinc.css', false, get_twoinc_plugin_version());
 }
 
@@ -208,6 +241,10 @@ function wc_twoinc_enqueue_styles()
  */
 function wc_twoinc_enqueue_scripts()
 {
+    if (!is_checkout()) {
+        return;
+    }
+
     wp_enqueue_script('twoinc-payment-gateway-js', WC_TWOINC_PLUGIN_URL . '/assets/js/twoinc.js', ['jquery'], get_twoinc_plugin_version());
 }
 

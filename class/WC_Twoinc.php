@@ -62,10 +62,8 @@ if (!class_exists('WC_Twoinc')) {
 
             if (is_admin()) {
                 // Notice banner if plugin is not setup properly
-
                 add_action('admin_notices', [$this, 'twoinc_account_init_notice']);
                 add_action('network_admin_notices', [$this, 'twoinc_account_init_notice']);
-
 
                 // Verify API key on save with success/failure message
                 add_action(
@@ -333,7 +331,6 @@ if (!class_exists('WC_Twoinc')) {
 
             $response = $this->make_request("/v1/merchant/verify_api_key", [], 'GET', [], $api_key_to_use);
             $this->_log_response('GET', '/v1/merchant/verify_api_key', $response);
-
             if (!$response || is_wp_error($response)) {
                 return;
             }
@@ -1185,25 +1182,46 @@ if (!class_exists('WC_Twoinc')) {
 
             // Check payment method
             if (!WC_Twoinc_Helper::is_twoinc_order($order)) {
-                return;
+                return [
+                    'result' => 'failure',
+                    'messages' => __('Invalid payment method.', 'twoinc-payment-gateway')
+                ];
+            }
+
+            // Handle data from block-based checkout
+            $payment_data = $_POST;
+            error_log('Two Payment Gateway: Debug $payment_data: ' . print_r($payment_data, true));
+
+            if (isset($_POST['payment_data']) && is_array($_POST['payment_data'])) {
+                $parsed_data = $this->parse_blocks_payment_data($_POST['payment_data']);
+                $payment_data = array_merge($payment_data, $parsed_data);
             }
 
             // Get data
-            $company_id = array_key_exists('company_id', $_POST) ? sanitize_text_field($_POST['company_id']) : '';
-            $department = array_key_exists('department', $_POST) ? sanitize_text_field($_POST['department']) : '';
-            $project = array_key_exists('project', $_POST) ? sanitize_text_field($_POST['project']) : '';
-            $purchase_order_number = array_key_exists('purchase_order_number', $_POST) ? sanitize_text_field($_POST['purchase_order_number']) : '';
-            $tracking_id = array_key_exists('tracking_id', $_POST) ? sanitize_text_field($_POST['tracking_id']) : '';
+            $company_id = array_key_exists('company_id', $payment_data) ? sanitize_text_field($payment_data['company_id']) : '';
+            $department = array_key_exists('department', $payment_data) ? sanitize_text_field($payment_data['department']) : '';
+            $project = array_key_exists('project', $payment_data) ? sanitize_text_field($payment_data['project']) : '';
+            $purchase_order_number = array_key_exists('purchase_order_number', $payment_data) ? sanitize_text_field($payment_data['purchase_order_number']) : '';
+            $tracking_id = array_key_exists('tracking_id', $payment_data) ? sanitize_text_field($payment_data['tracking_id']) : '';
             $merchant_id = $this->get_merchant_id();
             $order_reference = wp_generate_password(64, false, false);
             // For requests from order pay page
-            $billing_country = array_key_exists('billing_country', $_POST) ? sanitize_text_field($_POST['billing_country']) : '';
+            $billing_country = array_key_exists('billing_country', $payment_data) ? sanitize_text_field($payment_data['billing_country']) : '';
             // Sometimes, billing_company_display is sent to the backend instead of billing_company
-            $billing_company_display = array_key_exists('billing_company_display', $_POST) ? sanitize_text_field($_POST['billing_company_display']) : '';
-            $billing_company = array_key_exists('billing_company', $_POST) ? sanitize_text_field($_POST['billing_company']) : billing_company_display;
-            $billing_phone = array_key_exists('billing_phone', $_POST) ? sanitize_text_field($_POST['billing_phone']) : '';
-            $invoice_email = array_key_exists('invoice_email', $_POST) ? sanitize_text_field($_POST['invoice_email']) : '';
+            $billing_company_display = array_key_exists('billing_company_display', $payment_data) ? sanitize_text_field($payment_data['billing_company_display']) : '';
+            $billing_company = array_key_exists('billing_company', $payment_data) ? sanitize_text_field($payment_data['billing_company']) : $billing_company_display;
+            $billing_phone = array_key_exists('billing_phone', $payment_data) ? sanitize_text_field($payment_data['billing_phone']) : '';
+            $invoice_email = array_key_exists('invoice_email', $payment_data) ? sanitize_text_field($payment_data['invoice_email']) : '';
             $invoice_emails = $invoice_email ? [$invoice_email] : [];
+
+            // Validate company ID is provided when required
+            if (empty($company_id)) {
+                error_log('Two Payment Gateway: Returning error for empty company ID');
+                return [
+                    'result' => 'failure',
+                    'messages' => __('Please enter a valid Organization number to pay on invoice', 'twoinc-payment-gateway')
+                ];
+            }
 
             // Store the order meta
             $order->update_meta_data('_twoinc_order_reference', $order_reference);
@@ -1288,7 +1306,10 @@ if (!class_exists('WC_Twoinc')) {
             if (is_wp_error($response)) {
                 $error_message = sprintf(__('Failed to request order creation with %s.', 'twoinc-payment-gateway'), self::PRODUCT_NAME);
                 $order->add_order_note($error_message);
-                return;
+                return [
+                    'result' => 'failure',
+                    'messages' => $error_message
+                ];
             }
 
             // Stop on process payment failure
@@ -1301,7 +1322,10 @@ if (!class_exists('WC_Twoinc')) {
             $twoinc_err = WC_Twoinc_Helper::get_twoinc_validation_msg($response);
             if ($twoinc_err) {
                 WC_Twoinc_Helper::display_ajax_error($twoinc_err);
-                return;
+                return [
+                    'result' => 'failure',
+                    'messages' => $twoinc_err
+                ];
             }
 
             // Decode the response
@@ -1311,7 +1335,10 @@ if (!class_exists('WC_Twoinc')) {
                 $error_message = sprintf(__('Invoice purchase with %s is not available for this order.', 'twoinc-payment-gateway'), self::PRODUCT_NAME);
                 $order->add_order_note($error_message);
                 WC_Twoinc_Helper::display_ajax_error($error_message);
-                return;
+                return [
+                    'result' => 'failure',
+                    'messages' => $error_message
+                ];
             }
 
             // Store the Twoinc Order Id for future use
@@ -1426,7 +1453,7 @@ if (!class_exists('WC_Twoinc')) {
                 $error_message = sprintf(__('Failed to request order refund with %s.', 'twoinc-payment-gateway'), self::PRODUCT_NAME);
                 $contact_message = sprintf(__('Please contact %s support with order ID: %s', 'twoinc-payment-gateway'), self::PRODUCT_NAME, $twoinc_order_id);
                 $response_message = sprintf(__('Response: %s', 'twoinc-payment-gateway'), $twoinc_err);
-                $order->add_order_note($error_message . " " . $contact_message . " " . $response_message);
+                $order->add_order_note($error_message . ' ' . $contact_message . ' ' . $response_message);
                 return new WP_Error(
                     'invalid_twoinc_refund',
                     sprintf(__('Could not initiate refund with %s.', 'twoinc-payment-gateway'), self::PRODUCT_NAME)
@@ -1865,8 +1892,8 @@ if (!class_exists('WC_Twoinc')) {
         /**
          * Generate a radio input
          *
-         * @param $key
-         * @param $data
+         * @param string $key
+         * @param array $data
          *
          * @return false|string
          */
@@ -1934,7 +1961,7 @@ if (!class_exists('WC_Twoinc')) {
                     </fieldset>
                 </td>
             </tr>
-        <?php
+<?php
             return ob_get_clean();
         }
 
@@ -2125,6 +2152,57 @@ if (!class_exists('WC_Twoinc')) {
             return true;
         }
 
+        private function _log_response($method, $endpoint, $response)
+        {
+            if ('yes' !== $this->get_option('enable_api_logging')) {
+                return;
+            }
+
+            $this->rotate_log_file();
+
+            $log_dir = dirname($this->get_log_file_path());
+            if (!file_exists($log_dir)) {
+                wp_mkdir_p($log_dir);
+            }
+
+            $log_entry = "[" . date("Y-m-d H:i:s") . "] ";
+            if (is_wp_error($response)) {
+                $log_entry .= "$method $endpoint: WP_Error: " . $response->get_error_message() . "\n";
+                file_put_contents($this->get_log_file_path(), $log_entry, FILE_APPEND);
+                return;
+            }
+
+            $status_code = wp_remote_retrieve_response_code($response);
+            $trace_id = wp_remote_retrieve_header($response, 'two-trace-id');
+            $body = wp_remote_retrieve_body($response);
+
+            $log_entry .= "$method $endpoint: [Status Code: $status_code] [Trace ID: $trace_id] Body: $body\n";
+            file_put_contents($this->get_log_file_path(), $log_entry, FILE_APPEND);
+        }
+
+        private function rotate_log_file()
+        {
+            $log_file = $this->get_log_file_path();
+            if (!file_exists($log_file) || filesize($log_file) < 5 * 1024 * 1024) { // 5MB
+                return;
+            }
+
+            $log_dir = dirname($log_file);
+            $log_basename = basename($log_file);
+
+            // Shift old logs
+            for ($i = 4; $i >= 1; $i--) {
+                $old_log = "{$log_dir}/{$log_basename}.{$i}";
+                if (file_exists($old_log)) {
+                    $new_log = "{$log_dir}/{$log_basename}." . ($i + 1);
+                    rename($old_log, $new_log);
+                }
+            }
+
+            // Rename current log
+            rename($log_file, "{$log_dir}/{$log_basename}.1");
+        }
+
         /**
          * Get twoinc order id with backward compatibility
          *
@@ -2232,55 +2310,28 @@ if (!class_exists('WC_Twoinc')) {
             return $log_dir . '/two-api.log';
         }
 
-        private function _log_response($method, $endpoint, $response)
+        /**
+         * Parse WooCommerce Blocks payment data format
+         * Converts array of {key, value} objects to associative array
+         *
+         * @param array $data WooCommerce Blocks payment data
+         * @return array Parsed associative array
+         */
+        private function parse_blocks_payment_data($data)
         {
-            if ('yes' !== $this->get_option('enable_api_logging')) {
-                return;
+            $parsed = [];
+
+            if (!is_array($data)) {
+                return $parsed;
             }
 
-            $this->rotate_log_file();
-
-            $log_dir = dirname($this->get_log_file_path());
-            if (!file_exists($log_dir)) {
-                wp_mkdir_p($log_dir);
-            }
-
-            $log_entry = "[" . date("Y-m-d H:i:s") . "] ";
-            if (is_wp_error($response)) {
-                $log_entry .= "$method $endpoint: WP_Error: " . $response->get_error_message() . "\n";
-                file_put_contents($this->get_log_file_path(), $log_entry, FILE_APPEND);
-                return;
-            }
-
-            $status_code = wp_remote_retrieve_response_code($response);
-            $trace_id = wp_remote_retrieve_header($response, 'two-trace-id');
-            $body = wp_remote_retrieve_body($response);
-
-            $log_entry .= "$method $endpoint: [Status Code: $status_code] [Trace ID: $trace_id] Body: $body\n";
-            file_put_contents($this->get_log_file_path(), $log_entry, FILE_APPEND);
-        }
-
-        private function rotate_log_file()
-        {
-            $log_file = $this->get_log_file_path();
-            if (!file_exists($log_file) || filesize($log_file) < 5 * 1024 * 1024) { // 5MB
-                return;
-            }
-
-            $log_dir = dirname($log_file);
-            $log_basename = basename($log_file);
-
-            // Shift old logs
-            for ($i = 4; $i >= 1; $i--) {
-                $old_log = "{$log_dir}/{$log_basename}.{$i}";
-                if (file_exists($old_log)) {
-                    $new_log = "{$log_dir}/{$log_basename}." . ($i + 1);
-                    rename($old_log, $new_log);
+            foreach ($data as $item) {
+                if (is_array($item) && isset($item['key']) && isset($item['value'])) {
+                    $parsed[$item['key']] = $item['value'];
                 }
             }
 
-            // Rename current log
-            rename($log_file, "{$log_dir}/{$log_basename}.1");
+            return $parsed;
         }
     }
 }

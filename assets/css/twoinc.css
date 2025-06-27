@@ -164,17 +164,32 @@
   white-space: nowrap;
 }
 
+/* My company is not on the list button */
 #company_not_in_btn {
-  cursor: pointer;
-  color: #3043d1;
-  margin: 4px 12px;
+    padding: 8px 12px;
+    cursor: pointer;
+    border-top: 1px solid #ddd;
+    color: #3043d1;
+}
+
+#company_not_in_btn:hover {
+  background-color: #f5f5f5;
+}
+
+#company_not_in_btn.highlighted {
+  background-color: #e6f3ff;
 }
 
 #search_company_btn {
-  text-align: right;
-  cursor: pointer;
-  padding-top: 5px;
-  color: #3043d1;
-  position: absolute;
-  right: 4px;
+    cursor: pointer;
+    color: #3043d1;
+    text-align: right;
+    }
+    
+    .twoinc-blocks-fields #search_company_btn {
+      margin-top: -15px;
+    }
+    
+    .two-split-right-item .select2-container--default .select2-selection--single {
+      border-radius: 4px;
 }
