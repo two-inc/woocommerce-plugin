@@ -19,3 +19,5 @@ volumes/
 .php-cs-fixer.cache
 *.po~
 *.pot~
+.aider*
+index.html
