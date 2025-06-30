@@ -182,18 +182,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
             return hash('sha256', $wc_twoinc->get_option('api_key')) === $_SERVER['HTTP_X_API_KEY_HASH'] || $wc_twoinc->api_key === $_SERVER['HTTP_X_API_KEY'];
         }
 
-        /**
-         * Send alert email to twoinc tech support
-         *
-         * @param $subject
-         * @param $content
-         *
-         * @return bool
-         */
-        public static function send_twoinc_alert_email($content, $subject = 'WooCommerce operation alert')
-        {
-            // TODO: remove all calls to this function
-        }
+
 
         /**
          * Check if order is paid by twoinc

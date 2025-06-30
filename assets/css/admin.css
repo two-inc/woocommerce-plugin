@@ -13,3 +13,30 @@ a.setting-dropdown {
   height: 128px;
   width: auto;
 }
+
+/* Make all text inputs in Two payment gateway settings responsive */
+.woocommerce_page_wc-settings .forminp .input-text,
+.woocommerce_page_wc-settings .forminp .regular-input {
+  display: inline-block;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* Ensure responsive behavior on narrow screens */
+@media (max-width: 768px) {
+  .woocommerce_page_wc-settings .forminp .input-text,
+  .woocommerce_page_wc-settings .forminp .regular-input {
+    width: 100% !important;
+    max-width: 300px;
+  }
+  .woocommerce_page_wc-settings .forminp div[style*="position: relative"] {
+    width: 100% !important;
+    max-width: 300px;
+  }
+
+  .woocommerce_page_wc-settings .forminp div[style*="position: relative"] .input-text,
+  .woocommerce_page_wc-settings .forminp div[style*="position: relative"] .regular-input {
+    width: 100% !important;
+    max-width: 300px;
+  }
+}
