@@ -21,3 +21,9 @@ volumes/
 *.pot~
 .aider*
 index.html
+
+# Testing artifacts
+vendor/
+coverage/
+.phpunit.result.cache
+.phpunit.cache/
