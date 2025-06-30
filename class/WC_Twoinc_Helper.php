@@ -79,9 +79,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     // Parameters validation errors
                     if (!is_string($body) && isset($body['error_json']) && is_array($body['error_json'])) {
                         $errs = array();
-                        foreach ($body['error_json'] as $er) {
-                            if ($er && $er['loc']) {
-                                $display_msg = WC_Twoinc_Helper::get_msg_from_loc(json_encode(WC_Twoinc_Helper::utf8ize($er['loc'])));
+                        foreach ($body['error_json'] as $err) {
+                            if ($err) {
+                                $display_msg = WC_Twoinc_Helper::get_msg_from_err($err);
                                 if ($display_msg) {
                                     array_push($errs, $display_msg);
                                 }
@@ -108,12 +108,22 @@ if (!class_exists('WC_Twoinc_Helper')) {
          *
          * @return string|void
          */
-        public static function get_msg_from_loc($loc_str)
+        public static function get_msg_from_err($err)
         {
+            // Check if required keys exist
+            if (!isset($err['loc']) || !isset($err['msg'])) {
+                return null;
+            }
+
+            $loc_str = json_encode(WC_Twoinc_Helper::utf8ize($err['loc']));
+            $msg_str = $err['msg'];
             $generic_err_template = __('Please enter a valid %s to pay on invoice', 'twoinc-payment-gateway');
             $loc_str = preg_replace('/\s+/', '', $loc_str);
 
             if ($loc_str === '["buyer","representative","phone_number"]') {
+                return sprintf($generic_err_template, __('Phone number', 'twoinc-payment-gateway'));
+            }
+            if ($loc_str === '["buyer"]' && strpos($msg_str, 'Invalid phone number') !== false) {
                 return sprintf($generic_err_template, __('Phone number', 'twoinc-payment-gateway'));
             }
             if ($loc_str === '["buyer","company","organization_number"]') {
@@ -142,6 +152,10 @@ if (!class_exists('WC_Twoinc_Helper')) {
             }
             if ($loc_str === '["billing_address","postal_code"]') {
                 return sprintf($generic_err_template, __('Postal code', 'twoinc-payment-gateway'));
+            }
+            // Handle invoice email validation errors
+            if (strpos($loc_str, '["invoice_details","invoice_emails"') === 0) {
+                return sprintf($generic_err_template, __('Invoice email address', 'twoinc-payment-gateway'));
             }
         }
 
@@ -182,18 +196,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
             return hash('sha256', $wc_twoinc->get_option('api_key')) === $_SERVER['HTTP_X_API_KEY_HASH'] || $wc_twoinc->api_key === $_SERVER['HTTP_X_API_KEY'];
         }
 
-        /**
-         * Send alert email to twoinc tech support
-         *
-         * @param $subject
-         * @param $content
-         *
-         * @return bool
-         */
-        public static function send_twoinc_alert_email($content, $subject = 'WooCommerce operation alert')
-        {
-            // TODO: remove all calls to this function
-        }
+
 
         /**
          * Check if order is paid by twoinc
@@ -221,14 +224,13 @@ if (!class_exists('WC_Twoinc_Helper')) {
 
             if ($twoinc_address) {
                 $is_empty = WC_Twoinc_Helper::is_str_no_word($twoinc_address['city'])
-                            && WC_Twoinc_Helper::is_str_no_word($twoinc_address['region'])
-                            && WC_Twoinc_Helper::is_str_no_word($twoinc_address['country'])
-                            && WC_Twoinc_Helper::is_str_no_word($twoinc_address['postal_code'])
-                            && WC_Twoinc_Helper::is_str_no_word($twoinc_address['street_address']);
+                    && WC_Twoinc_Helper::is_str_no_word($twoinc_address['region'])
+                    && WC_Twoinc_Helper::is_str_no_word($twoinc_address['country'])
+                    && WC_Twoinc_Helper::is_str_no_word($twoinc_address['postal_code'])
+                    && WC_Twoinc_Helper::is_str_no_word($twoinc_address['street_address']);
             }
 
             return $is_empty;
-
         }
 
         /**
@@ -242,7 +244,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
         {
 
             return !$s || !preg_replace('/[\s,.-]/', '', $s);
-
         }
 
         /**
@@ -298,7 +299,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 }
 
                 $items[] = $product;
-
             }
 
             // Shipping
@@ -354,7 +354,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
             }
 
             return $items;
-
         }
 
         /**
@@ -392,7 +391,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     $tax_subtotal_dict[$tax_key] = [];
                 }
                 $tax_subtotal_dict[$tax_key][] = $tax_single_line;
-
             }
 
             // Shipping
@@ -448,7 +446,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
             }
 
             return $tax_subtotals;
-
         }
 
         /**
@@ -816,11 +813,19 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     $d->$k = WC_Twoinc_Helper::utf8ize($v);
                 }
             } elseif (is_string($d)) {
-                if (mb_detect_encoding($d, ['UTF-8'], true)) { // already in UTF-8
+                // Return if already UTF-8
+                if (mb_check_encoding($d, 'UTF-8')) {
                     return $d;
-                } else {
-                    return utf8_encode($d);
                 }
+
+                // Try to detect encoding and convert
+                $encoding = mb_detect_encoding($d, mb_detect_order(), true);
+                if ($encoding) {
+                    return mb_convert_encoding($d, 'UTF-8', $encoding);
+                }
+
+                // Fallback: Mimic utf8_encode's original behavior
+                return mb_convert_encoding($d, 'UTF-8', 'ISO-8859-1');
             }
             return $d;
         }
@@ -917,7 +922,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 /** @var WC_Product_Simple */
                 return $line_item['data'];
             }
-
         }
 
         /**
@@ -983,6 +987,5 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 ];
             }
         }
-
     }
 }

@@ -80,4 +80,71 @@ jQuery(function ($) {
     $("#woocommerce_woocommerce-gateway-tillit_enable_company_search"),
     $("#woocommerce_woocommerce-gateway-tillit_enable_address_lookup")
   );
+
+  // API Key verification functionality
+  let verificationTimeout;
+  const $apiKeyField = $("#woocommerce_woocommerce-gateway-tillit_api_key");
+  const $verificationIcon = $("#api-key-verification-icon");
+  const $validIcon = $("#api-key-valid");
+  const $invalidIcon = $("#api-key-invalid");
+  const $loadingIcon = $("#api-key-loading");
+
+  function showVerificationStatus(status) {
+    $verificationIcon.show();
+    $validIcon.hide();
+    $invalidIcon.hide();
+    $loadingIcon.hide();
+
+    if (status === "valid") {
+      $validIcon.show();
+    } else if (status === "invalid") {
+      $invalidIcon.show();
+    } else if (status === "loading") {
+      $loadingIcon.show();
+    }
+  }
+
+  function verifyApiKey(apiKey) {
+    if (!apiKey || apiKey.length < 10) {
+      $verificationIcon.hide();
+      return;
+    }
+
+    showVerificationStatus("loading");
+
+    $.ajax({
+      url: twoinc_admin.ajax_url,
+      type: "POST",
+      data: {
+        action: "twoinc_verify_api_key",
+        api_key: apiKey,
+        nonce: twoinc_admin.nonce
+      },
+      success: function (response) {
+        if (response.success) {
+          showVerificationStatus("valid");
+        } else {
+          showVerificationStatus("invalid");
+        }
+      },
+      error: function () {
+        showVerificationStatus("invalid");
+      }
+    });
+  }
+
+  // Verify API key on input change with debouncing
+  $apiKeyField.on("input", function () {
+    const apiKey = $(this).val();
+
+    clearTimeout(verificationTimeout);
+    verificationTimeout = setTimeout(function () {
+      verifyApiKey(apiKey);
+    }, 1000); // Wait 1 second after user stops typing
+  });
+
+  // Verify on page load if API key exists
+  if ($apiKeyField.val()) {
+    verifyApiKey($apiKeyField.val());
+  }
 });

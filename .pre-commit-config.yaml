@@ -20,7 +20,7 @@ repos:
         types:
           - php
   - repo: https://github.com/two-inc/git-hooks
-    rev: 24.07.26
+    rev: 25.06.20
     hooks:
       - id: commit-msg
         stages: [commit-msg]

@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Plugin Name: Two - BNPL for businesses
  * Plugin URI: https://two.inc
@@ -10,6 +11,7 @@
  * Domain Path: /languages/
  * License: GPLv2 or later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
+ * Requires Plugins: woocommerce
  */
 
 // Make sure WooCommerce is active
@@ -46,6 +48,12 @@ function load_twoinc_classes()
 {
     // Support i18n
     init_twoinc_translation();
+
+    // Add the log viewer page
+    add_action('admin_menu', 'twoinc_add_log_viewer_page');
+
+    // Add AJAX handlers for API key verification
+    add_action('wp_ajax_twoinc_verify_api_key', 'twoinc_ajax_verify_api_key');
 
     // JSON endpoint to check plugin status
     add_action('rest_api_init', 'register_twoinc_plugin_status_checking');
@@ -225,4 +233,114 @@ function get_twoinc_plugin_version()
 
     $plugin_data = get_plugin_data(__FILE__);
     return $plugin_data['Version'];
+}
+
+/**
+ * Add Two API Log Viewer page to admin menu
+ */
+function twoinc_add_log_viewer_page()
+{
+    add_menu_page(
+        sprintf(__('%s API Logs', 'twoinc-payment-gateway'), WC_Twoinc::PRODUCT_NAME),
+        sprintf(__('%s API Logs', 'twoinc-payment-gateway'), WC_Twoinc::PRODUCT_NAME),
+        'manage_options',
+        'two-api-logs',
+        'twoinc_render_log_viewer_page',
+        'dashicons-format-aside',
+        56
+    );
+}
+
+/**
+ * Render the log viewer page
+ */
+function twoinc_render_log_viewer_page()
+{
+    // Check user capabilities
+    if (!current_user_can('manage_options')) {
+        wp_die(__('You do not have sufficient permissions to access this page.'));
+    }
+
+    $log_file_path = twoinc_get_log_file_path();
+    $log_content = file_exists($log_file_path) ? file_get_contents($log_file_path) : false;
+?>
+    <div class="wrap">
+        <h1><?php printf(__('%s API Logs', 'twoinc-payment-gateway'), WC_Twoinc::PRODUCT_NAME); ?></h1>
+        <p><?php _e('This page displays the logs for API interactions. Logging must be enabled in the plugin settings.', 'twoinc-payment-gateway'); ?></p>
+
+        <div id="log-viewer" style="background: #fff; border: 1px solid #ccd0d4; padding: 10px; margin-bottom: 10px;">
+            <pre style="white-space: pre-wrap; word-wrap: break-word; max-height: 500px; overflow-y: scroll;">
+                <?php if ($log_content) {
+                    echo esc_html($log_content);
+                } else {
+                    _e('Log file is empty or does not exist.', 'twoinc-payment-gateway');
+                } ?>
+            </pre>
+        </div>
+    </div>
+<?php
+}
+
+/**
+ * Get the log file path
+ */
+function twoinc_get_log_file_path()
+{
+    $upload_dir = wp_get_upload_dir();
+    $log_dir = $upload_dir['basedir'] . '/two-logs';
+    return $log_dir . '/two-api.log';
+}
+
+
+
+/**
+ * AJAX handler for API key verification
+ */
+function twoinc_ajax_verify_api_key()
+{
+    // Check if request method is POST
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        wp_send_json_error('Invalid request method');
+        return;
+    }
+
+    // Check if required data is present
+    if (!isset($_POST['nonce']) || !isset($_POST['api_key'])) {
+        wp_send_json_error('Missing required data');
+        return;
+    }
+
+    // Verify nonce
+    if (!wp_verify_nonce($_POST['nonce'], 'twoinc_admin_nonce')) {
+        wp_send_json_error('Security check failed');
+        return;
+    }
+
+    // Check user capabilities
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error('Insufficient permissions');
+        return;
+    }
+
+    $api_key = sanitize_text_field($_POST['api_key']);
+
+    if (empty($api_key)) {
+        wp_send_json_error('API key is required');
+        return;
+    }
+
+    // Get the Two instance and verify the API key
+    $twoinc_instance = WC_Twoinc::get_instance();
+    $result = $twoinc_instance->verify_api_key($api_key);
+
+    if ($result && isset($result['code']) && $result['code'] == 200) {
+        wp_send_json_success(['message' => 'API key is valid', 'debug' => $result]);
+    } else {
+        $debug_info = [
+            'result' => $result,
+            'api_key_length' => strlen($api_key),
+            'host' => $twoinc_instance->get_twoinc_checkout_host()
+        ];
+        wp_send_json_error(['message' => 'API key is invalid', 'debug' => $debug_info]);
+    }
 }
