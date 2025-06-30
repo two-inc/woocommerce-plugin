@@ -265,7 +265,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             }
 
             // Ensure that the API key valid
-            $result = $this->wc_twoinc->verifyAPIKey();
+            $result = $this->wc_twoinc->verify_api_key();
             if (isset($result['code']) && $result['code'] !== 200) {
                 return;
             }
