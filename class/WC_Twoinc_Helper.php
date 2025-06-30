@@ -263,11 +263,26 @@ if (!class_exists('WC_Twoinc_Helper')) {
 
                 $tax_rate = WC_Twoinc_Helper::get_item_tax_rate($line_item, $order);
 
-                $image_url = get_the_post_thumbnail_url($product_simple->get_id());
+                // Check if product exists and is a valid object. If not, use fallback values.
+                if ( ! is_object($product_simple) ) {
+                    $name = method_exists($line_item, 'get_name') ? $line_item->get_name() : 'Item';
+                    $description = '';
+                    $image_url = '';
+                    $product_page_url = '';
+                    $sku = '';
+                    $categories = [];
+                } else {
+                    $name = $product_simple->get_name();
+                    $description = substr($product_simple->get_description(), 0, 255);
+                    $image_url = $product_simple->get_id() ? get_the_post_thumbnail_url($product_simple->get_id()) : '';
+                    $product_page_url = $product_simple->get_permalink();
+                    $sku = $product_simple->get_sku();
+                    $categories = wp_get_post_terms($product_simple->get_id(), 'product_cat');
+                }
 
                 $product = [
-                    'name' => $product_simple->get_name(),
-                    'description' => substr($product_simple->get_description(), 0, 255),
+                    'name' => $name,
+                    'description' => $description,
                     'gross_amount' => strval(WC_Twoinc_Helper::round_amt($line_item['line_total'] + $line_item['line_tax'])),
                     'net_amount' => strval(WC_Twoinc_Helper::round_amt($line_item['line_total'])),
                     'discount_amount' => strval(WC_Twoinc_Helper::round_amt($line_item['line_subtotal'] - $line_item['line_total'])),
@@ -277,25 +292,24 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     'unit_price' => strval($order->get_item_subtotal($line_item, false, true)),
                     'quantity' => $line_item['quantity'],
                     'quantity_unit' => 'item',
-                    'image_url' => $image_url ? $image_url : '',
-                    'product_page_url' => $product_simple->get_permalink(),
+                    'image_url' => $image_url,
+                    'product_page_url' => $product_page_url,
                     'type' => 'PHYSICAL',
                     'details' => [
                         'barcodes' => [
                             [
                                 'type' => 'SKU',
-                                'value' => $product_simple->get_sku()
+                                'value' => $sku
                             ]
-                        ]
+                        ],
+                        'categories' => []
                     ]
                 ];
 
-                $categories = wp_get_post_terms($product_simple->get_id(), 'product_cat');
-
-                $product['details']['categories'] = [];
-
-                foreach ($categories as $category) {
-                    $product['details']['categories'][] = $category->name;
+                if ( ! empty( $categories ) && is_array( $categories ) ) {
+                    foreach ($categories as $category) {
+                        $product['details']['categories'][] = $category->name;
+                    }
                 }
 
                 $items[] = $product;
