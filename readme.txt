@@ -3,7 +3,7 @@ Tags: payment request, woocommerce
 Requires at least: 6
 Tested up to: 6.8.1
 Requires PHP: 7
-Stable tag: 2.23.4
+Stable tag: 2.23.5
 License: GPLv3
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 Two - BNPL for businesses is a WooCommerce plugin that simplifies B2B shopping, allowing merchants to safely offer invoices as a payment method.
