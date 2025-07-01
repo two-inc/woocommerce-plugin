@@ -3,7 +3,7 @@ msgstr ""
 "Project-Id-Version: Two - BNPL for businesses\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2021-04-07 07:50+0000\n"
-"PO-Revision-Date: 2025-06-30 08:50+0000\n"
+"PO-Revision-Date: 2025-07-01 09:30+0000\n"
 "Last-Translator: \n"
 "Language-Team: Norwegian (Bokmål)\n"
 "Language: nb_NO\n"
@@ -12,31 +12,25 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "X-Generator: Loco https://localise.biz/\n"
-"X-Loco-Version: 2.6.14; wp-6.7\n"
+"X-Loco-Version: 2.7.2; wp-6.8.1\n"
 "X-Domain: twoinc-payment-gateway"
 
-#: class/WC_Twoinc.php:1677
+#: class/WC_Twoinc.php:1651
 #, php-format
 msgid "%s API Key"
 msgstr "%s API-nøkkel"
 
-#: class/WC_Twoinc.php:84
+#: class/WC_Twoinc.php:2277
 #, php-format
 msgid "%s API key verified."
 msgstr "%s API-nøkkel bekreftet."
-
-#: tillit-payment-gateway.php:243 tillit-payment-gateway.php:244
-#: tillit-payment-gateway.php:267
-#, php-format
-msgid "%s API Logs"
-msgstr "%s API-logger"
 
 #: snippets/delivery-date-checkout.php:89
 #, php-format
 msgid "%s cannot be parsed."
 msgstr "%s kan ikke analyseres."
 
-#: class/WC_Twoinc.php:2189
+#: class/WC_Twoinc.php:2225
 #, php-format
 msgid ""
 "%s credit approves 90%% of business buyers, pays you upfront and minimise "
@@ -47,7 +41,7 @@ msgstr ""
 "minimerer risikoen. For å tilby %s i kassen må du registrere deg. Det er "
 "raskt, enkelt og gir deg umiddelbar tilgang til %s Merchant Portal."
 
-#: class/WC_Twoinc.php:602
+#: class/WC_Twoinc.php:582
 #, php-format
 msgid ""
 "%s has acknowledged request to fulfill %d order. An invoice will be sent to "
@@ -62,7 +56,7 @@ msgstr[1] ""
 "%s har bekreftet forespørsler om å oppfylle %d bestillinger. Fakturaer vil "
 "bli sendt til kjøpere når oppfyllelsene er fullført."
 
-#: class/WC_Twoinc.php:689
+#: class/WC_Twoinc.php:668
 #, php-format
 msgid ""
 "%s has acknowledged the request to fulfil the order. An invoice will be sent "
@@ -71,24 +65,24 @@ msgstr ""
 "%s har bekreftet forespørselen om å oppfylle bestillingen. Faktura vil bli "
 "sendt til kjøper når oppfyllelsen er fullført."
 
-#: class/WC_Twoinc.php:617
+#: class/WC_Twoinc.php:597
 #, php-format
 msgid "%s has cancelled %d order."
 msgid_plural "%s has cancelled %d orders."
 msgstr[0] "%s har kansellert %d bestilling."
 msgstr[1] "%s har kansellert %d bestillinger."
 
-#: class/WC_Twoinc.php:621
+#: class/WC_Twoinc.php:601
 #, php-format
 msgid "%s has failed to cancel order %s."
 msgstr "%s kunne ikke kansellere bestillingen %s ."
 
-#: class/WC_Twoinc.php:611
+#: class/WC_Twoinc.php:591
 #, php-format
 msgid "%s has failed to issue invoice for order %s."
 msgstr "%s har mislyktes i å utstede faktura for ordre %s ."
 
-#: class/WC_Twoinc.php:256
+#: class/WC_Twoinc.php:228
 #, php-format
 msgid ""
 "%s is a payment solution for B2B purchases online, allowing you to buy from "
@@ -104,46 +98,46 @@ msgstr ""
 msgid "%s is a required field."
 msgstr "%s er et obligatorisk felt."
 
-#: class/WC_Twoinc.php:279
+#: class/WC_Twoinc.php:251
 #, php-format
 msgid "%s lets your business pay later for the goods you purchase online."
 msgstr "%s lar bedriften din betale senere for varene du kjøper på nettet."
 
-#: class/WC_Twoinc.php:1114
+#: class/WC_Twoinc.php:1091
 #, php-format
 msgid "%s pre-filled fields"
 msgstr "%s forhåndsutfylte felt"
 
-#: class/WC_Twoinc.php:1654
+#: class/WC_Twoinc.php:1628
 #, php-format
 msgid "%s Test Server"
 msgstr "%s testserver"
 
-#: class/WC_Twoinc.php:1698
+#: class/WC_Twoinc.php:1672
 msgid "Add input field for \"Department\""
 msgstr "Legg til felt for \"Avdeling\""
 
-#: class/WC_Twoinc.php:1722
+#: class/WC_Twoinc.php:1696
 msgid "Add input field for \"Invoice email address\""
 msgstr "Legg til inndatafelt for \"E-postadresse for faktura\""
 
-#: class/WC_Twoinc.php:1706
+#: class/WC_Twoinc.php:1680
 msgid "Add input field for \"Project\""
 msgstr "Legg til felt for \"Prosjekt\""
 
-#: class/WC_Twoinc.php:1714
+#: class/WC_Twoinc.php:1688
 msgid "Add input field for \"Purchase order number\""
 msgstr "Legg til felt for \"PO nummer\""
 
-#: class/WC_Twoinc_Helper.php:135
+#: class/WC_Twoinc_Helper.php:145
 msgid "Address"
 msgstr "Adresse"
 
-#: class/WC_Twoinc.php:1768
+#: class/WC_Twoinc.php:1742
 msgid "Address auto-complete"
 msgstr "Automatisk utfylling av adresse"
 
-#: class/WC_Twoinc.php:1723
+#: class/WC_Twoinc.php:1697
 msgid ""
 "Adds an input field where buyers can input optional additional email address "
 "to receive invoice."
@@ -151,7 +145,7 @@ msgstr ""
 "Legger til et inndatafelt der kjøpere kan legge inn valgfri ekstra e-"
 "postadresse for å motta faktura."
 
-#: class/WC_Twoinc.php:1699
+#: class/WC_Twoinc.php:1673
 msgid ""
 "Adds an input field where buyers can input their department to display on "
 "the invoice."
@@ -159,7 +153,7 @@ msgstr ""
 "Legger til et inndatafelt der kjøpere kan legge inn avdelingen sin for å "
 "vises på fakturaen."
 
-#: class/WC_Twoinc.php:1707
+#: class/WC_Twoinc.php:1681
 msgid ""
 "Adds an input field where buyers can input their project in the company to "
 "display on the invoice."
@@ -167,7 +161,7 @@ msgstr ""
 "Legger til et inndatafelt der kjøpere kan legge inn prosjektet sitt i "
 "selskapet for å vise det på fakturaen."
 
-#: class/WC_Twoinc.php:1715
+#: class/WC_Twoinc.php:1689
 msgid ""
 "Adds an input field where buyers can input their purchase order number to "
 "display on the invoice."
@@ -175,32 +169,32 @@ msgstr ""
 "Legger til et inndatafelt der kjøpere kan angi innkjøpsordrenummeret sitt "
 "for å vises på fakturaen."
 
-#: class/WC_Twoinc.php:1674
+#: class/WC_Twoinc.php:1648
 msgid "API credentials"
 msgstr "Påloggingsinformasjon for API"
 
-#: class/WC_Twoinc.php:1691
+#: class/WC_Twoinc.php:1665
 msgid "Approve buyer when phone and company name is filled out."
 msgstr "Godkjenn kjøper når telefonnummer og selskapsnavn er fylt ut."
 
-#: class/WC_Twoinc.php:1749
+#: class/WC_Twoinc.php:1723
 msgid "Auto-complete settings"
 msgstr "Innstillinger for automatisk utfylling"
 
-#: class/WC_Twoinc.php:1124
+#: class/WC_Twoinc.php:1101
 msgid "Billing Company ID"
 msgstr "Organisasjonsnummer"
 
-#: class/WC_Twoinc.php:1118
+#: class/WC_Twoinc.php:1095
 msgid "Billing Company name"
 msgstr "Selskapsnavn"
 
-#: class/WC_Twoinc.php:1650
+#: class/WC_Twoinc.php:1624
 #, php-format
 msgid "Business invoice - %s days"
 msgstr "Bedriftsfaktura – %s dager"
 
-#: class/WC_Twoinc.php:257
+#: class/WC_Twoinc.php:229
 msgid "Buy now, receive your goods, pay your invoice later."
 msgstr "Kjøp nå, motta varene dine, betal fakturaen senere."
 
@@ -208,19 +202,19 @@ msgstr "Kjøp nå, motta varene dine, betal fakturaen senere."
 msgid "Buyer and merchant may not be the same company"
 msgstr "Selger og kjøper kan ikke være samme selskap"
 
-#: class/WC_Twoinc.php:1687
+#: class/WC_Twoinc.php:1661
 msgid "Checkout options"
 msgstr "Innstillinger for checkout"
 
-#: class/WC_Twoinc.php:1659
+#: class/WC_Twoinc.php:1633
 msgid "Choose your settings"
 msgstr "Velg dine innstillinger"
 
-#: class/WC_Twoinc_Helper.php:138
+#: class/WC_Twoinc_Helper.php:148
 msgid "City"
 msgstr "By"
 
-#: class/WC_Twoinc.php:1667
+#: class/WC_Twoinc.php:1641
 msgid "Clear settings on deactivation of plug-in"
 msgstr "Slett innstillinger ved deaktivering av plug-in"
 
@@ -228,46 +222,46 @@ msgstr "Slett innstillinger ved deaktivering av plug-in"
 msgid "Company ID"
 msgstr "Organisasjonsnummer"
 
-#: class/WC_Twoinc_Helper.php:123 class/WC_Twoinc_Checkout.php:74
+#: class/WC_Twoinc_Helper.php:133 class/WC_Twoinc_Checkout.php:74
 #: views/woocommerce_order_pay.php:35
 msgid "Company name"
 msgstr "Selskapsnavn"
 
-#: class/WC_Twoinc.php:2067 class/WC_Twoinc.php:2095 class/WC_Twoinc.php:2102
+#: class/WC_Twoinc.php:2049 class/WC_Twoinc.php:2076 class/WC_Twoinc.php:2083
 #, php-format
 msgid "Could not edit the order with %s."
 msgstr "Kunne ikke redigere bestillingen med %s ."
 
-#: class/WC_Twoinc.php:1367
+#: class/WC_Twoinc.php:1343
 #, php-format
 msgid "Could not find %s order ID"
 msgstr "Kunne ikke finne %s ordre-ID"
 
-#: class/WC_Twoinc.php:1401
+#: class/WC_Twoinc.php:1377
 #, php-format
 msgid "Could not initiate refund with %s"
 msgstr "Kunne ikke starte refusjon med %s"
 
-#: class/WC_Twoinc.php:1432 class/WC_Twoinc.php:1446
+#: class/WC_Twoinc.php:1407 class/WC_Twoinc.php:1421
 #, php-format
 msgid "Could not initiate refund with %s."
 msgstr "Kunne ikke starte refusjon med %s ."
 
-#: class/WC_Twoinc.php:666 class/WC_Twoinc.php:678
+#: class/WC_Twoinc.php:645 class/WC_Twoinc.php:657
 #, php-format
 msgid "Could not update order status to \"Fulfilled\" with %s."
 msgstr "Kunne ikke oppdatere ordrestatusen til \"Oppfylt\" med %s ."
 
-#: class/WC_Twoinc.php:719 class/WC_Twoinc.php:737 class/WC_Twoinc.php:745
+#: class/WC_Twoinc.php:698 class/WC_Twoinc.php:715 class/WC_Twoinc.php:723
 msgid "Could not update status to \"Cancelled\"."
 msgstr "Kunne ikke oppdatere statusen til \"Avbrutt\"."
 
-#: class/WC_Twoinc.php:647
+#: class/WC_Twoinc.php:627
 #, php-format
 msgid "Could not update status to \"Fulfilled\" with %s."
 msgstr "Kunne ikke oppdatere status til \"Oppfylt\" med %s ."
 
-#: class/WC_Twoinc_Helper.php:141
+#: class/WC_Twoinc_Helper.php:151
 msgid "Country"
 msgstr "Land"
 
@@ -279,7 +273,7 @@ msgstr "Land / Region"
 msgid "Customer"
 msgstr "Kunde"
 
-#: class/WC_Twoinc.php:1777
+#: class/WC_Twoinc.php:1751
 msgid "Debug Options"
 msgstr "Feilsøkingsalternativer"
 
@@ -291,15 +285,22 @@ msgstr "Feilsøkingsalternativer"
 msgid "Delivery Date"
 msgstr "Leveringsdato"
 
-#: class/WC_Twoinc.php:1130 class/WC_Twoinc_Checkout.php:101
+#: class/WC_Twoinc.php:1107 class/WC_Twoinc_Checkout.php:101
 msgid "Department"
 msgstr "Avdeling"
 
-#: class/WC_Twoinc.php:1736
+#: class/WC_Twoinc.php:1710
 msgid "Display input tooltips"
 msgstr "Vis tooltips for inndatafelter"
 
-#: class/WC_Twoinc_Helper.php:132
+#: class/WC_Twoinc.php:1824
+#, php-format
+msgid "Don't have an API key? Get one by signing up <a href='%s'>here</a>."
+msgstr ""
+"Har du ikke en API-nøkkel? Skaff deg en ved å registrere deg <a href='%s'>"
+"her</a> ."
+
+#: class/WC_Twoinc_Helper.php:142
 msgid "Email"
 msgstr "E-post"
 
@@ -308,24 +309,24 @@ msgstr "E-post"
 msgid "Empty response from %s."
 msgstr "Tomt svar fra %s ."
 
-#: class/WC_Twoinc.php:1644
+#: class/WC_Twoinc.php:1618
 #, php-format
 msgid "Enable %s Payments"
 msgstr "Aktiver %s betalinger"
 
-#: class/WC_Twoinc.php:1780
+#: class/WC_Twoinc.php:1754
 msgid "Enable API Logging"
 msgstr "Aktiver API-logging"
 
-#: class/WC_Twoinc.php:1752
+#: class/WC_Twoinc.php:1726
 msgid "Enable company name search and auto-complete"
 msgstr "Aktiver automatisk utfylling av selskapsnavn"
 
-#: class/WC_Twoinc.php:1760
+#: class/WC_Twoinc.php:1734
 msgid "Enable company name search for other payment options"
 msgstr "Aktiver firmanavnsøk for andre betalingsalternativer"
 
-#: class/WC_Twoinc.php:1769
+#: class/WC_Twoinc.php:1743
 msgid ""
 "Enables automatically filling in the registered address from the national "
 "registry."
@@ -333,7 +334,7 @@ msgstr ""
 "Muliggjør automatisk utfylling av addresse fra søk i det nasjonale "
 "selskapsregisteret"
 
-#: class/WC_Twoinc.php:1761
+#: class/WC_Twoinc.php:1735
 msgid ""
 "Enables searching for company name even when other payment options are "
 "selected. Requires the option above to be checked."
@@ -341,7 +342,7 @@ msgstr ""
 "Gjør det mulig å søke etter firmanavn selv når andre betalingsalternativer "
 "er valgt. Krever at alternativet ovenfor er merket av."
 
-#: class/WC_Twoinc.php:1753
+#: class/WC_Twoinc.php:1727
 msgid ""
 "Enables searching for company name in the national registry and "
 "automatically filling in name and national ID."
@@ -349,31 +350,31 @@ msgstr ""
 "Muliggjør søk etter selskapsnavn i det nasjonale selskapsregisteret og "
 "fyller automatisk inn navn og organisasjonsnummer"
 
-#: class/WC_Twoinc.php:1296
+#: class/WC_Twoinc.php:1272
 #, php-format
 msgid "Failed to process payment with %s"
 msgstr "Kunne ikke behandle betaling med %s"
 
-#: class/WC_Twoinc.php:1289
+#: class/WC_Twoinc.php:1265
 #, php-format
 msgid "Failed to request order creation with %s."
 msgstr "Kunne ikke be om opprettelse av ordre med %s ."
 
-#: class/WC_Twoinc.php:1362 class/WC_Twoinc.php:1419 class/WC_Twoinc.php:1426
-#: class/WC_Twoinc.php:1441
+#: class/WC_Twoinc.php:1338 class/WC_Twoinc.php:1394 class/WC_Twoinc.php:1401
+#: class/WC_Twoinc.php:1416
 #, php-format
 msgid "Failed to request order refund with %s."
 msgstr "Kunne ikke be om tilbakebetaling av ordre med %s ."
 
-#: class/WC_Twoinc.php:81
+#: class/WC_Twoinc.php:2281
 msgid "Failed to verify API key."
 msgstr "Kunne ikke bekrefte API-nøkkelen."
 
-#: class/WC_Twoinc_Helper.php:126
+#: class/WC_Twoinc_Helper.php:136
 msgid "First name"
 msgstr "Fornavn"
 
-#: class/WC_Twoinc.php:2188
+#: class/WC_Twoinc.php:2224
 #, php-format
 msgid "Grow your B2B sales with Buy Now, Pay Later using %s!"
 msgstr "Øk B2B-salget ditt med Kjøp nå, betal senere med %s !"
@@ -383,7 +384,7 @@ msgstr "Øk B2B-salget ditt med Kjøp nå, betal senere med %s !"
 msgid "https://two.inc"
 msgstr "https://two.inc/no"
 
-#: class/WC_Twoinc.php:1784
+#: class/WC_Twoinc.php:1758
 #, php-format
 msgid ""
 "If enabled, all API interactions will be logged. This can be useful for "
@@ -396,45 +397,45 @@ msgstr ""
 msgid "Integration between WooCommerce and Two"
 msgstr "Integrasjon mellom WooCommerce og Two"
 
-#: class/WC_Twoinc_Checkout.php:133
+#: class/WC_Twoinc_Helper.php:158 class/WC_Twoinc_Checkout.php:133
 msgid "Invoice email address"
 msgstr "E-postadresse for faktura"
 
-#: class/WC_Twoinc.php:1456
+#: class/WC_Twoinc.php:1431
 #, php-format
 msgid ""
 "Invoice has been partially refunded and credit note has been sent by %s."
 msgstr "Faktura er delvis refundert og kreditnota er sendt av %s ."
 
-#: class/WC_Twoinc.php:1453
+#: class/WC_Twoinc.php:1428
 #, php-format
 msgid "Invoice has been refunded and credit note has been sent by %s."
 msgstr "Faktura er refundert og kreditnota er sendt av %s ."
 
-#: class/WC_Twoinc_Helper.php:71 class/WC_Twoinc.php:281
-#: class/WC_Twoinc.php:1311
+#: class/WC_Twoinc_Helper.php:71 class/WC_Twoinc.php:253
+#: class/WC_Twoinc.php:1287
 #, php-format
 #| msgid "Invoice purchase is not available for this order"
 msgid "Invoice purchase with %s is not available for this order."
 msgstr "Fakturakjøp med %s er ikke tilgjengelig for denne bestillingen."
 
-#: class/WC_Twoinc_Helper.php:129
+#: class/WC_Twoinc_Helper.php:139
 msgid "Last name"
 msgstr "Etternavn"
 
-#: class/WC_Twoinc.php:1781
+#: class/WC_Twoinc.php:1755
 msgid "Log API requests and responses"
 msgstr "Logg API-forespørsler og -svar"
-
-#: tillit-payment-gateway.php:275
-msgid "Log file is empty or does not exist."
-msgstr "Loggfilen er tom eller finnes ikke."
 
 #: class/WC_Twoinc.php:44
 msgid "Making it easy for businesses to buy online."
 msgstr "Morgendagens betalingsløsning for bedrifter"
 
-#: class/WC_Twoinc.php:1999
+#: class/WC_Twoinc.php:1820
+msgid "Merchant ID:"
+msgstr "Selger-ID:"
+
+#: class/WC_Twoinc.php:1981
 msgid "Missing company ID."
 msgstr "Manglende firma-ID."
 
@@ -447,35 +448,35 @@ msgstr "Selskapet mitt er ikke på listen"
 msgid "Only for invoices being sent by %s"
 msgstr "Kun for fakturaer som sendes av %s"
 
-#: class/WC_Twoinc.php:1682
+#: class/WC_Twoinc.php:1656
 msgid "Optional vendor name if there are multiple sites"
 msgstr "Valgfritt leverandørnavn hvis det er flere nettsteder"
 
-#: class/WC_Twoinc.php:1376
+#: class/WC_Twoinc.php:1352
 #, php-format
 msgid "Order has already been fully refunded with %s."
 msgstr "Bestillingen har allerede blitt refundert i sin helhet med %s ."
 
-#: class/WC_Twoinc.php:1621
+#: class/WC_Twoinc.php:1595
 #, php-format
 msgid "Order ID %s has been placed with %s."
 msgstr "Ordre-ID %s er plassert med %s ."
 
-#: class/WC_Twoinc.php:727
+#: class/WC_Twoinc.php:706
 #, php-format
 msgid "Order is already cancelled with %s."
 msgstr "Bestillingen er allerede kansellert med %s ."
 
-#: class/WC_Twoinc.php:2121
+#: class/WC_Twoinc.php:2102
 #, php-format
 msgid "Order value is now %s."
 msgstr "Ordreverdien er nå %s ."
 
-#: class/WC_Twoinc_Helper.php:120
+#: class/WC_Twoinc_Helper.php:130
 msgid "Organization number"
 msgstr "Organisasjonsnummer"
 
-#: class/WC_Twoinc.php:308
+#: class/WC_Twoinc.php:280
 msgid "Pay on invoice with agreed terms"
 msgstr "Betal på faktura med avtalt antall fakturadager"
 
@@ -483,11 +484,11 @@ msgstr "Betal på faktura med avtalt antall fakturadager"
 msgid "Phone"
 msgstr "Telefon"
 
-#: class/WC_Twoinc_Helper.php:117
+#: class/WC_Twoinc_Helper.php:124 class/WC_Twoinc_Helper.php:127
 msgid "Phone number"
 msgstr "Telefonnummer"
 
-#: class/WC_Twoinc.php:282
+#: class/WC_Twoinc.php:254
 #| msgid "Phone number is invalid"
 msgid "Phone number is invalid."
 msgstr "Telefonnummeret er ugyldig."
@@ -496,27 +497,27 @@ msgstr "Telefonnummeret er ugyldig."
 msgid "Place order"
 msgstr "Fullfør kjøpet"
 
-#: class/WC_Twoinc.php:670 class/WC_Twoinc.php:682 class/WC_Twoinc.php:738
-#: class/WC_Twoinc.php:746 class/WC_Twoinc.php:1427 class/WC_Twoinc.php:1442
-#: class/WC_Twoinc.php:2000 class/WC_Twoinc.php:2103
+#: class/WC_Twoinc.php:649 class/WC_Twoinc.php:661 class/WC_Twoinc.php:716
+#: class/WC_Twoinc.php:724 class/WC_Twoinc.php:1402 class/WC_Twoinc.php:1417
+#: class/WC_Twoinc.php:1982 class/WC_Twoinc.php:2084
 #, php-format
 msgid "Please contact %s support with order ID: %s"
 msgstr "Vennligst kontakt %s kundestøtte med ordre-ID: %s"
 
-#: class/WC_Twoinc_Helper.php:113
+#: class/WC_Twoinc_Helper.php:120
 #, php-format
 msgid "Please enter a valid %s to pay on invoice"
 msgstr "Vennligst skriv inn %s for å betale med faktura"
 
-#: class/WC_Twoinc_Helper.php:144
+#: class/WC_Twoinc_Helper.php:154
 msgid "Postal code"
 msgstr "Postkode"
 
-#: class/WC_Twoinc.php:1690
+#: class/WC_Twoinc.php:1664
 msgid "Pre-approve buyer during checkout"
 msgstr "Godkjenn kjøper under checkout"
 
-#: class/WC_Twoinc.php:1138 class/WC_Twoinc_Checkout.php:112
+#: class/WC_Twoinc.php:1115 class/WC_Twoinc_Checkout.php:112
 msgid "Project"
 msgstr "Prosjekt"
 
@@ -524,8 +525,8 @@ msgstr "Prosjekt"
 msgid "Purchase order number"
 msgstr "PO-nummer"
 
-#: class/WC_Twoinc.php:648 class/WC_Twoinc.php:720 class/WC_Twoinc.php:1363
-#: class/WC_Twoinc.php:2068
+#: class/WC_Twoinc.php:628 class/WC_Twoinc.php:699 class/WC_Twoinc.php:1339
+#: class/WC_Twoinc.php:2050
 #, php-format
 msgid "Reason: Could not find %s order ID."
 msgstr "Årsak: Kunne ikke finne %s ordre-ID."
@@ -535,8 +536,8 @@ msgstr "Årsak: Kunne ikke finne %s ordre-ID."
 msgid "Response code from %s: %d"
 msgstr "Svarkode fra %s : %d"
 
-#: class/WC_Twoinc.php:683 class/WC_Twoinc.php:747 class/WC_Twoinc.php:1428
-#: class/WC_Twoinc.php:2104
+#: class/WC_Twoinc.php:662 class/WC_Twoinc.php:725 class/WC_Twoinc.php:1403
+#: class/WC_Twoinc.php:2085
 #, php-format
 msgid "Response: %s"
 msgstr "Svar: %s"
@@ -549,7 +550,7 @@ msgstr "Søk etter selskap"
 msgid "Select Date"
 msgstr "Velg Dato"
 
-#: class/WC_Twoinc.php:1933
+#: class/WC_Twoinc.php:1916
 msgid "Select image"
 msgstr "Velg bilde"
 
@@ -557,42 +558,34 @@ msgstr "Velg bilde"
 msgid "Select Pickup Date"
 msgstr "Velg hentedato"
 
-#: class/WC_Twoinc.php:2190
-#, php-format
-msgid "Set up my %s account"
+#: class/WC_Twoinc.php:2226
+#| msgid "Set up my %s account"
+msgid "Set up my account"
 msgstr "Sett opp min %s -konto"
 
-#: class/WC_Twoinc.php:1730
+#: class/WC_Twoinc.php:1704
 #, php-format
 msgid "Show \"What is %s\" link in checkout"
 msgstr "Vis koblingen \"Hva er %s \" i kassen"
 
-#: class/WC_Twoinc.php:1742
+#: class/WC_Twoinc.php:1716
 msgid "Skip user validation at order confirmation"
 msgstr "Hopp over brukervalidering ved ordrebekreftelse"
 
-#: class/WC_Twoinc.php:2119
+#: class/WC_Twoinc.php:2100
 #, php-format
 msgid "The order edit request has been accepted by %s."
 msgstr "Bestillingsredigeringsforespørselen er akseptert av %s ."
 
-#: class/WC_Twoinc.php:1578 class/WC_Twoinc.php:1587
+#: class/WC_Twoinc.php:1553 class/WC_Twoinc.php:1562
 msgid "The security code is not valid."
 msgstr "Koden er ikke gyldig"
 
-#: tillit-payment-gateway.php:268
-msgid ""
-"This page displays the logs for API interactions. Logging must be enabled in "
-"the plugin settings."
-msgstr ""
-"Denne siden viser loggene for API-interaksjoner. Logging må være aktivert i "
-"plugin-innstillingene."
-
-#: class/WC_Twoinc.php:1648
+#: class/WC_Twoinc.php:1622
 msgid "Title"
 msgstr "Tittel"
 
-#: class/WC_Twoinc.php:1642
+#: class/WC_Twoinc.php:1616
 msgid "Turn on/off"
 msgstr "Skru på/av"
 
@@ -604,21 +597,21 @@ msgstr "Two"
 msgid "Two - BNPL for businesses"
 msgstr "Two - BNPL for bedrifter"
 
-#: class/WC_Twoinc.php:1612
+#: class/WC_Twoinc.php:1586
 #, php-format
 msgid "Unable to confirm the order with %s."
 msgstr "Kan ikke bekrefte bestillingen med %s ."
 
-#: class/WC_Twoinc.php:1594 class/WC_Twoinc.php:1605
+#: class/WC_Twoinc.php:1569 class/WC_Twoinc.php:1579
 #, php-format
 msgid "Unable to retrieve %s order information."
 msgstr "Kan ikke hente %s ordreinformasjon."
 
-#: class/WC_Twoinc.php:1954 class/WC_Twoinc.php:1987
+#: class/WC_Twoinc.php:1937 class/WC_Twoinc.php:1969
 msgid "Unable to retrieve the order information."
 msgstr "Kan ikke hente bestillingsinformasjonen."
 
-#: class/WC_Twoinc.php:1993
+#: class/WC_Twoinc.php:1975
 msgid "Unable to retrieve the order payment information"
 msgstr "Betalingsinformasjon for ordren mangler"
 
@@ -634,12 +627,12 @@ msgstr ""
 "Vi bruker firmanavnet ditt til automatisk å fylle ut adressen din og "
 "registrere firmaet som foretok kjøpet."
 
-#: class/WC_Twoinc.php:253
+#: class/WC_Twoinc.php:225
 #, php-format
 msgid "What is %s?"
 msgstr "Hva er %s ?"
 
-#: class/WC_Twoinc.php:280
+#: class/WC_Twoinc.php:252
 #, php-format
 msgid ""
 "Your invoice purchase with %s is likely to be accepted subject to additional "
