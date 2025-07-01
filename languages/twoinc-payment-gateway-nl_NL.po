@@ -5,7 +5,7 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "X-Generator: Loco https://localise.biz/\n"
 "Project-Id-Version: woocommerce-plugin\n"
-"PO-Revision-Date: 2025-07-01 09:29+0000\n"
+"PO-Revision-Date: 2025-07-01 10:28+0000\n"
 "Last-Translator: \n"
 "Language-Team: Dutch\n"
 "Language: nl_NL\n"
@@ -567,7 +567,7 @@ msgstr "Selecteer ophaaldatum"
 #: class/WC_Twoinc.php:2226
 #| msgid "Set up my %s account"
 msgid "Set up my account"
-msgstr "Mijn %s -account instellen"
+msgstr "Mijn account instellen"
 
 #: class/WC_Twoinc.php:1704
 #, php-format

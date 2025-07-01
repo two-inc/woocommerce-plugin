@@ -3,7 +3,7 @@ msgstr ""
 "Project-Id-Version: Two - BNPL for businesses\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2022-02-09 08:30+0000\n"
-"PO-Revision-Date: 2025-07-01 09:30+0000\n"
+"PO-Revision-Date: 2025-07-01 10:29+0000\n"
 "Last-Translator: \n"
 "Language-Team: Swedish\n"
 "Language: sv_SE\n"
@@ -561,7 +561,7 @@ msgstr "Välj Upphämtningsdatum"
 #: class/WC_Twoinc.php:2226
 #| msgid "Set up my %s account"
 msgid "Set up my account"
-msgstr "Konfigurera mitt %s -konto"
+msgstr "Konfigurera mitt konto"
 
 #: class/WC_Twoinc.php:1704
 #, php-format
