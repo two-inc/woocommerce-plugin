@@ -49,9 +49,6 @@ function load_twoinc_classes()
     // Support i18n
     init_twoinc_translation();
 
-    // Add the log viewer page
-    add_action('admin_menu', 'twoinc_add_log_viewer_page');
-
     // Add AJAX handlers for API key verification
     add_action('wp_ajax_twoinc_verify_api_key', 'twoinc_ajax_verify_api_key');
 
@@ -234,64 +231,6 @@ function get_twoinc_plugin_version()
     $plugin_data = get_plugin_data(__FILE__);
     return $plugin_data['Version'];
 }
-
-/**
- * Add Two API Log Viewer page to admin menu
- */
-function twoinc_add_log_viewer_page()
-{
-    add_menu_page(
-        sprintf(__('%s API Logs', 'twoinc-payment-gateway'), WC_Twoinc::PRODUCT_NAME),
-        sprintf(__('%s API Logs', 'twoinc-payment-gateway'), WC_Twoinc::PRODUCT_NAME),
-        'manage_options',
-        'two-api-logs',
-        'twoinc_render_log_viewer_page',
-        'dashicons-format-aside',
-        56
-    );
-}
-
-/**
- * Render the log viewer page
- */
-function twoinc_render_log_viewer_page()
-{
-    // Check user capabilities
-    if (!current_user_can('manage_options')) {
-        wp_die(__('You do not have sufficient permissions to access this page.'));
-    }
-
-    $log_file_path = twoinc_get_log_file_path();
-    $log_content = file_exists($log_file_path) ? file_get_contents($log_file_path) : false;
-?>
-    <div class="wrap">
-        <h1><?php printf(__('%s API Logs', 'twoinc-payment-gateway'), WC_Twoinc::PRODUCT_NAME); ?></h1>
-        <p><?php _e('This page displays the logs for API interactions. Logging must be enabled in the plugin settings.', 'twoinc-payment-gateway'); ?></p>
-
-        <div id="log-viewer" style="background: #fff; border: 1px solid #ccd0d4; padding: 10px; margin-bottom: 10px;">
-            <pre style="white-space: pre-wrap; word-wrap: break-word; max-height: 500px; overflow-y: scroll;">
-                <?php if ($log_content) {
-                    echo esc_html($log_content);
-                } else {
-                    _e('Log file is empty or does not exist.', 'twoinc-payment-gateway');
-                } ?>
-            </pre>
-        </div>
-    </div>
-<?php
-}
-
-/**
- * Get the log file path
- */
-function twoinc_get_log_file_path()
-{
-    $upload_dir = wp_get_upload_dir();
-    $log_dir = $upload_dir['basedir'] . '/two-logs';
-    return $log_dir . '/two-api.log';
-}
-
-
 
 /**
  * AJAX handler for API key verification
