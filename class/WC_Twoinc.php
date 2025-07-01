@@ -66,38 +66,8 @@ if (!class_exists('WC_Twoinc')) {
                 add_action('admin_notices', [$this, 'twoinc_account_init_notice']);
                 add_action('network_admin_notices', [$this, 'twoinc_account_init_notice']);
 
-
-                // Verify API key on save with success/failure message
-                add_action(
-                    'woocommerce_settings_saved',
-                    function () {
-                        global $pagenow, $current_section;
-                        if ($pagenow != 'admin.php' || $current_section != 'woocommerce-gateway-tillit') {
-                            return;
-                        }
-
-                        $result = $this->verify_api_key();
-
-                        $general_error_message = sprintf(__('Failed to verify API key.', 'twoinc-payment-gateway'), self::PRODUCT_NAME);
-                        if (isset($result['body']) && isset($result['code'])) {
-                            if ($result['code'] == 200) {
-                                WC_Admin_Settings::add_message(sprintf(__('%s API key verified.', 'twoinc-payment-gateway'), self::PRODUCT_NAME));
-                            } else {
-                                if ($result['code'] == 401) {
-                                    //WC_Admin_Settings::add_error($general_error_message);
-                                    WC_Admin_Settings::add_error(sprintf('%s %s', $general_error_message, $result['body']));
-                                } else {
-                                    WC_Admin_Settings::add_error(sprintf('%s %s', $general_error_message, $result['body']));
-                                }
-                            }
-                        } else {
-                            WC_Admin_Settings::add_error($general_error_message);
-                        }
-                    }
-                );
-
                 // Verify API key quietly
-                add_action('admin_enqueue_scripts', [$this, 'verify_api_key']);
+                add_action('admin_enqueue_scripts', [$this, 'verify_api_key_action']);
 
                 // On plugin deactivated
                 add_action('deactivate_' . plugin_basename(__FILE__), [$this, 'on_deactivate_plugin']);
@@ -324,6 +294,15 @@ if (!class_exists('WC_Twoinc')) {
             }, 10, 2);
         }
 
+        /**
+         * Verify API key action
+         *
+         * Using admin_enqueue_scripts passes the page name as the first argument which prevents the merchant_id from being updated.
+         */
+        public function verify_api_key_action()
+        {
+            $this->verify_api_key();
+        }
 
         public function verify_api_key($api_key = null)
         {
@@ -1777,7 +1756,7 @@ if (!class_exists('WC_Twoinc')) {
                     'type'        => 'checkbox',
                     'description' => sprintf(
                         __('If enabled, all API interactions will be logged. This can be useful for debugging. You can view the logs <a href="%s">here</a>.', 'twoinc-payment-gateway'),
-                        admin_url('admin.php?page=two-api-logs')
+                        admin_url('admin.php?page=wc-status&tab=logs&source=twoinc-payment-gateway')
                     ),
                     'default'     => 'yes',
                 ],
@@ -1836,6 +1815,15 @@ if (!class_exists('WC_Twoinc')) {
                                 <span class="dashicons dashicons-update" style="color: #0073aa; display: none; animation: rotation 1s infinite linear; font-size: 18px;" id="api-key-loading"></span>
                             </span>
                         </div>
+                        <?php if ($this->get_option('api_key') && $merchant_id = $this->get_merchant_id()) : ?>
+                            <div style="margin-top: 8px; color: #666; font-size: 13px;">
+                                <strong><?php _e('Merchant ID:', 'twoinc-payment-gateway'); ?></strong> <?php echo esc_html($merchant_id); ?>
+                            </div>
+                        <?php else: ?>
+                            <div style="margin-top: 8px; color: #666; font-size: 13px;">
+                                <strong><?php printf(__('Don\'t have an API key? Get one by signing up <a href=\'%s\'>here</a>.', 'twoinc-payment-gateway'), $this::MERCHANT_SIGNUP_URL); ?></strong>
+                            </div>
+                        <?php endif; ?>
                         <?php echo $this->get_description_html($data); // WPCS: XSS ok.
                         ?>
                     </fieldset>
@@ -1929,7 +1917,7 @@ if (!class_exists('WC_Twoinc')) {
                     </fieldset>
                 </td>
             </tr>
-        <?php
+<?php
             return ob_get_clean();
         }
 
@@ -2167,24 +2155,41 @@ if (!class_exists('WC_Twoinc')) {
 
             // Log the response if logging is enabled
             if ('yes' === $this->get_option('enable_api_logging')) {
-                $this->rotate_log_file();
-
-                $log_dir = dirname($this->get_log_file_path());
-                if (!file_exists($log_dir)) {
-                    wp_mkdir_p($log_dir);
-                }
-
-                $log_entry = "[" . date("Y-m-d H:i:s") . "] ";
+                $logger = wc_get_logger();
+                // Redact X-API-Key from request headers for logging
+                $context = [
+                    "source" => "twoinc-payment-gateway",
+                    "request" => [
+                        "body" => $payload,
+                        "headers" => array_merge($headers, [
+                            'X-API-Key' => '[REDACTED]'
+                        ]),
+                        "params" => $params
+                    ],
+                    "response" => [
+                        "body" => null,
+                        "headers" => null,
+                        "status_code" => null
+                    ]
+                ];
                 if (is_wp_error($response)) {
-                    $log_entry .= "$method $endpoint: WP_Error: " . $response->get_error_message() . "\n";
-                    file_put_contents($this->get_log_file_path(), $log_entry, FILE_APPEND);
+                    $logger->error("$method $endpoint: WP_Error: " . $response->get_error_message(), $context);
                 } else {
-                    $status_code = wp_remote_retrieve_response_code($response);
-                    $trace_id = wp_remote_retrieve_header($response, 'two-trace-id');
-                    $body = wp_remote_retrieve_body($response);
-
-                    $log_entry .= "$method $endpoint: [Status Code: $status_code] [Trace ID: $trace_id] Body: $body\n";
-                    file_put_contents($this->get_log_file_path(), $log_entry, FILE_APPEND);
+                    $raw_body = wp_remote_retrieve_body($response);
+                    $decoded_body = json_decode($raw_body, true);
+                    // Flatten headers for logging
+                    $response_context = [
+                        "body" => (json_last_error() === JSON_ERROR_NONE) ? $decoded_body : $raw_body,
+                        "headers" => (array) wp_remote_retrieve_headers($response)->getAll(),
+                        "status_code" => (int) wp_remote_retrieve_response_code($response)
+                    ];
+                    $log_message = "$method $endpoint";
+                    $context["response"] = $response_context;
+                    if ($response_context["status_code"] >= 400) {
+                        $logger->error($log_message, $context);
+                    } else {
+                        $logger->info($log_message, $context);
+                    }
                 }
             }
 
@@ -2199,36 +2204,49 @@ if (!class_exists('WC_Twoinc')) {
         public function twoinc_account_init_notice()
         {
             global $pagenow;
+            // Return early if we're in options-general.php
+            if ($pagenow === 'options-general.php') {
+                return;
+            }
+            // Do not show on the Two plugin's own settings page
+            if (
+                $pagenow === 'admin.php' &&
+                isset($_GET['page'], $_GET['tab'], $_GET['section']) &&
+                $_GET['page'] === 'wc-settings' &&
+                $_GET['tab'] === 'checkout' &&
+                $_GET['section'] === 'woocommerce-gateway-tillit'
+            ) {
+                return;
+            }
             if ($this->get_option('api_key') && $this->get_merchant_id()) {
                 return;
             }
-            if ($pagenow !== 'options-general.php') {
-                $headline = sprintf(__('Grow your B2B sales with Buy Now, Pay Later using %s!', 'twoinc-payment-gateway'), self::PRODUCT_NAME);
-                $benefits = sprintf(__('%s credit approves 90%% of business buyers, pays you upfront and minimise your risk. To offer %s in your checkout, you need to signup. It is quick, easy and gives you immediate access to the %s Merchant Portal.', 'twoinc-payment-gateway'), self::PRODUCT_NAME, self::PRODUCT_NAME, self::PRODUCT_NAME);
-                $setup_account = sprintf(__('Set up my %s account', 'twoinc-payment-gateway'), self::PRODUCT_NAME);
-                echo '
-                <div id="twoinc-account-init-notice" class="notice notice-info is-dismissible" style="background-image: url(\'' . WC_TWOINC_PLUGIN_URL . 'assets/images/banner.png\');background-size: cover;border-left-width: 0;background-color: #e2e0ff;padding: 20px;display: flex;">
-                    <div style="width:60%;padding-right:40px;">
-                        <img style="width: 100px;" src="' . WC_TWOINC_PLUGIN_URL . 'assets/images/two-logo-w.svg">
-                        <p style="color: #ffffff;font-size: 1.3em;text-align: justify;font-weight:700;">' . $headline . '</p>
-                        <p style="color: #ffffff;font-size: 1.3em;text-align: justify;">' . $benefits . '</p>
-                    </div>
-                    <div>
-                        <div style="position: absolute;top: 50%;transform: translateY(-50%);right: 40px;">
-                            <a href="' . self::MERCHANT_SIGNUP_URL . '" target="_blank" class="button" style="margin-left: 20px;background: #edf3ff;font-size: 1.1em;font-weight: 600;color: #4848e6;padding: 7px 30px;border-color: #edf3ff;border-radius: 12px;">' . $setup_account . '</a>
-                        </div>
+            $headline = sprintf(__('Grow your B2B sales with Buy Now, Pay Later using %s!', 'twoinc-payment-gateway'), self::PRODUCT_NAME);
+            $benefits = sprintf(__('%s credit approves 90%% of business buyers, pays you upfront and minimise your risk. To offer %s in your checkout, you need to signup. It is quick, easy and gives you immediate access to the %s Merchant Portal.', 'twoinc-payment-gateway'), self::PRODUCT_NAME, self::PRODUCT_NAME, self::PRODUCT_NAME);
+            $setup_account = __('Set up my account', 'twoinc-payment-gateway');
+            $setup_url = admin_url('admin.php?page=wc-settings&tab=checkout&section=woocommerce-gateway-tillit');
+            echo '
+            <div id="twoinc-account-init-notice" class="notice notice-info is-dismissible" style="background-image: url(\'' . WC_TWOINC_PLUGIN_URL . 'assets/images/banner.png\');background-size: cover;border-left-width: 0;background-color: #e2e0ff;padding: 20px;display: flex;">
+                <div style="width:60%;padding-right:40px;">
+                    <img style="width: 100px;" src="' . WC_TWOINC_PLUGIN_URL . 'assets/images/two-logo-w.svg">
+                    <p style="color: #ffffff;font-size: 1.3em;text-align: justify;font-weight:700;">' . $headline . '</p>
+                    <p style="color: #ffffff;font-size: 1.3em;text-align: justify;">' . $benefits . '</p>
+                </div>
+                <div>
+                    <div style="position: absolute;top: 50%;transform: translateY(-50%);right: 40px;">
+                        <a href="' . $setup_url . '" target="_blank" class="button" style="margin-left: 20px;background: #edf3ff;font-size: 1.1em;font-weight: 600;color: #4848e6;padding: 7px 30px;border-color: #edf3ff;border-radius: 12px;">' . $setup_account . '</a>
                     </div>
                 </div>
+            </div>
 
-                <script type="text/javascript">
-                    jQuery(document).ready(function($){
-                        jQuery("#dismiss-twoinc-notice").click(function(){
-                            jQuery("#twoinc-account-init-notice").slideUp();
-                        });
+            <script type="text/javascript">
+                jQuery(document).ready(function($){
+                    jQuery("#dismiss-twoinc-notice").click(function(){
+                        jQuery("#twoinc-account-init-notice").slideUp();
                     });
-                </script>
-                ';
-            }
+                });
+            </script>
+            ';
         }
 
         /**
@@ -2243,36 +2261,29 @@ if (!class_exists('WC_Twoinc')) {
             }
         }
 
-        private function get_log_file_path()
+        /**
+         * Override process_admin_options to validate API key before saving settings
+         */
+        public function process_admin_options()
         {
-            $upload_dir = wp_get_upload_dir();
-            $log_dir = $upload_dir['basedir'] . '/two-logs';
-            return $log_dir . '/two-api.log';
-        }
+            $post_data = $this->get_post_data();
+            $api_key_field = 'woocommerce_woocommerce-gateway-tillit_api_key';
+            $api_key_in_post = array_key_exists($api_key_field, $post_data);
+            $api_key = $api_key_in_post ? $post_data[$api_key_field] : '';
 
-
-
-        private function rotate_log_file()
-        {
-            $log_file = $this->get_log_file_path();
-            if (!file_exists($log_file) || filesize($log_file) < 5 * 1024 * 1024) { // 5MB
-                return;
-            }
-
-            $log_dir = dirname($log_file);
-            $log_basename = basename($log_file);
-
-            // Shift old logs
-            for ($i = 4; $i >= 1; $i--) {
-                $old_log = "{$log_dir}/{$log_basename}.{$i}";
-                if (file_exists($old_log)) {
-                    $new_log = "{$log_dir}/{$log_basename}." . ($i + 1);
-                    rename($old_log, $new_log);
+            if ($api_key_in_post && $api_key) {
+                $result = $this->verify_api_key($api_key);
+                if (isset($result['body']) && isset($result['code']) && $result['code'] == 200) {
+                    WC_Admin_Settings::add_message(sprintf(__('%s API key verified.', 'twoinc-payment-gateway'), self::PRODUCT_NAME));
+                } else {
+                    // Invalid key: keep previous API key, save other settings
+                    $post_data[$api_key_field] = $this->get_option('api_key');
+                    WC_Admin_Settings::add_error(__('Failed to verify API key.', 'twoinc-payment-gateway'));
                 }
             }
-
-            // Rename current log
-            rename($log_file, "{$log_dir}/{$log_basename}.1");
+            // Save all settings (with possibly reverted API key)
+            $_POST = $post_data;
+            parent::process_admin_options();
         }
     }
 }
