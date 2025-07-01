@@ -6,6 +6,7 @@ bumpver-%:
 		exit 1; \
 	fi
 	SKIP=commit-msg bumpver update --$*
+	gh release create --latest --generate-notes
 patch: bumpver-patch
 minor: bumpver-minor
 major: bumpver-major
