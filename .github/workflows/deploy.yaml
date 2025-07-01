@@ -20,6 +20,8 @@ jobs:
     runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
     if: ${{ github.event_name == 'release' }}
     needs: php-lint
+    permissions:
+      contents: write
     env:
       slug: tillit-payment-gateway
     steps:
