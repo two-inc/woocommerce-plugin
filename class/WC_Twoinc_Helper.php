@@ -274,7 +274,11 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 } else {
                     $name = $product_simple->get_name();
                     $description = substr($product_simple->get_description(), 0, 255);
-                    $image_url = $product_simple->get_id() ? get_the_post_thumbnail_url($product_simple->get_id()) : '';
+                    $image_url = '';
+                    if ( $product_simple->get_id() ) {
+                        $thumbnail = get_the_post_thumbnail_url( $product_simple->get_id() );
+                        $image_url = $thumbnail ? $thumbnail : '';
+                    }
                     $product_page_url = $product_simple->get_permalink();
                     $sku = $product_simple->get_sku();
                     $categories = wp_get_post_terms($product_simple->get_id(), 'product_cat');
