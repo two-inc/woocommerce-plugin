@@ -2204,10 +2204,7 @@ if (!class_exists('WC_Twoinc')) {
         public function twoinc_account_init_notice()
         {
             global $pagenow;
-            // Return early if we're in options-general.php
-            if ($pagenow === 'options-general.php') {
-                return;
-            }
+
             // Do not show on the Two plugin's own settings page
             if (
                 $pagenow === 'admin.php' &&
@@ -2218,6 +2215,8 @@ if (!class_exists('WC_Twoinc')) {
             ) {
                 return;
             }
+
+            // Only show notice if either API key or merchant ID is missing
             if ($this->get_option('api_key') && $this->get_merchant_id()) {
                 return;
             }
@@ -2228,7 +2227,7 @@ if (!class_exists('WC_Twoinc')) {
             echo '
             <div id="twoinc-account-init-notice" class="notice notice-info is-dismissible" style="background-image: url(\'' . WC_TWOINC_PLUGIN_URL . 'assets/images/banner.png\');background-size: cover;border-left-width: 0;background-color: #e2e0ff;padding: 20px;display: flex;">
                 <div style="width:60%;padding-right:40px;">
-                    <img style="width: 100px;" src="' . WC_TWOINC_PLUGIN_URL . 'assets/images/two-logo-w.svg">
+                    <img style="width: 100px;" src="' . esc_url($this->icon) . '">
                     <p style="color: #ffffff;font-size: 1.3em;text-align: justify;font-weight:700;">' . $headline . '</p>
                     <p style="color: #ffffff;font-size: 1.3em;text-align: justify;">' . $benefits . '</p>
                 </div>
@@ -2284,6 +2283,17 @@ if (!class_exists('WC_Twoinc')) {
             // Save all settings (with possibly reverted API key)
             $_POST = $post_data;
             parent::process_admin_options();
+        }
+
+        /**
+         * Get payment method icon
+         *
+         * @return string
+         */
+        public function get_icon()
+        {
+            $icon_html = '<img src="' . esc_url($this->icon) . '" alt="' . esc_attr($this->title) . '" class="mollie-gateway-icon" />';
+            return apply_filters('woocommerce_gateway_icon', $icon_html, $this->id);
         }
     }
 }
