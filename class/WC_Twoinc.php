@@ -2136,6 +2136,7 @@ if (!class_exists('WC_Twoinc')) {
         {
             $params['client'] = 'wp';
             $params['client_v'] = get_twoinc_plugin_version();
+            # If api_key_override is defined, use that key instead of the saved key
             $api_key = $api_key_override ?: $this->get_option('api_key');
             $headers = [
                 'Accept-Language' => WC_Twoinc_Helper::get_locale(),
