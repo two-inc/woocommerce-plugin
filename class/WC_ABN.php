@@ -115,6 +115,10 @@ if (!class_exists('WC_ABN')) {
                     }
 
                     // Get the cart total
+                    if (!WC()->cart || !WC()->customer) {
+                        return $available_gateways;
+                    }
+
                     $cart_total = WC()->cart->total;
                     $current_currency = get_woocommerce_currency();
                     $billing_country = WC()->customer->get_billing_country();
