@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   pre-commit:
-    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    runs-on: ${{ vars.RUNNER_STANDARD }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
