@@ -75,12 +75,20 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 if (
                     is_array($cached_fields) &&
                     isset($cached_fields['billing']) &&
+                    is_array($cached_fields['billing']) &&
                     !isset($cached_fields['billing']['company_id'])
                 ) {
                     $fields_property->setValue($checkout, null);
                 }
             } catch (ReflectionException $e) {
-                // Silently fail - cache clearing is a best-effort optimization
+                // Log the exception for debugging - helps identify issues if WooCommerce internals change
+                if (function_exists('wc_get_logger')) {
+                    wc_get_logger()->warning(
+                        'Two: Failed to clear checkout field cache due to ReflectionException: ' . $e->getMessage(),
+                        ['source' => 'two-payment-gateway']
+                    );
+                }
+                // Silently continue - cache clearing is a best-effort optimization
                 // The checkout will still work, just without Two's custom fields in edge cases
             }
         }
