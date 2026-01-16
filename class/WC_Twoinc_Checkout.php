@@ -38,6 +38,51 @@ if (!class_exists('WC_Twoinc_Checkout')) {
 
             // Order pay page customization
             add_action('woocommerce_pay_order_before_submit', [$this, 'order_pay_page_customize'], 24);
+
+            // Fix for checkout field caching conflicts with other plugins (e.g., PPOM, Dokan)
+            // Some plugins trigger WC_Checkout::get_checkout_fields() early during wp_loaded,
+            // before Two's filters are registered, causing fields to be cached without Two's additions.
+            add_action('woocommerce_checkout_init', [$this, 'maybe_clear_checkout_field_cache'], 1);
+        }
+
+        /**
+         * Clear WooCommerce checkout field cache if Two's fields are missing.
+         *
+         * This fixes compatibility issues with plugins that trigger checkout field
+         * initialization before Two's filters are registered (e.g., PPOM, Dokan).
+         *
+         * @param WC_Checkout $checkout The checkout instance.
+         * @return void
+         */
+        public function maybe_clear_checkout_field_cache($checkout)
+        {
+            if (!$checkout instanceof WC_Checkout) {
+                return;
+            }
+
+            try {
+                $reflection = new ReflectionClass($checkout);
+
+                if (!$reflection->hasProperty('fields')) {
+                    return;
+                }
+
+                $fields_property = $reflection->getProperty('fields');
+                $fields_property->setAccessible(true);
+                $cached_fields = $fields_property->getValue($checkout);
+
+                // Only clear cache if fields are already set but Two's fields are missing
+                if (
+                    is_array($cached_fields) &&
+                    isset($cached_fields['billing']) &&
+                    !isset($cached_fields['billing']['company_id'])
+                ) {
+                    $fields_property->setValue($checkout, null);
+                }
+            } catch (ReflectionException $e) {
+                // Silently fail - cache clearing is a best-effort optimization
+                // The checkout will still work, just without Two's custom fields in edge cases
+            }
         }
 
         /**
