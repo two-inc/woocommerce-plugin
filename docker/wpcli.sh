@@ -13,6 +13,9 @@ if [ "$existing_products" -lt 4 ]; then
     random_price=$(shuf -i 100-200 -n 1)
     wp wc product create --user=admin --name="Product ${i}" --type=simple --regular_price=$random_price --manage_stock=true --stock_quantity=999 --status=publish
   done
+fi
+expensive_exists=$(wp wc product list --user=admin --search="Expensive Product" --format=count 2>/dev/null || echo 0)
+if [ "$expensive_exists" -lt 1 ]; then
   wp wc product create --user=admin --name="Expensive Product" --type=simple --regular_price=500000 --manage_stock=true --stock_quantity=999 --status=publish
 fi
 wp option update permalink_structure /%year%/%monthnum%/%day%/%postname%/
