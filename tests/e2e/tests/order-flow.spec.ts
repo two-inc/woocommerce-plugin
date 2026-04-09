@@ -1,15 +1,16 @@
 import { test, expect } from "@playwright/test";
 
-import { getOrderState, triggerFulfilBatch, waitForOrderState } from "../checkout-api.js";
+import { triggerFulfilBatch, waitForOrderState } from "../checkout-api.js";
 import * as checkout from "../pages/checkout.js";
 import * as store from "../pages/store.js";
 import * as wpAdmin from "../pages/wp-admin.js";
 
 test("normal order flow: place → fulfil → refund", async ({ page }) => {
+  const lastName = `E2EOrder${Date.now().toString(36)}`;
   await store.addProductToCart(page, "Product 1");
   await store.goToCheckout(page);
 
-  await checkout.fillBillingDetails(page, "Test", "E2EOrder");
+  await checkout.fillBillingDetails(page, "Test", lastName);
   await checkout.selectTwoPayment(page);
   await checkout.fillCompanySearch(page);
   const wcOrderId = await checkout.placeOrder(page);
@@ -18,16 +19,16 @@ test("normal order flow: place → fulfil → refund", async ({ page }) => {
 
   await wpAdmin.login(page);
   await wpAdmin.navigateToOrders(page);
-  await wpAdmin.openOrder(page, "E2EOrder");
+  await wpAdmin.openOrder(page, lastName);
 
   const twoOrderId = await wpAdmin.getTwoOrderId(page);
   expect(twoOrderId).toBeTruthy();
 
-  expect(await getOrderState(twoOrderId)).toBe("CONFIRMED");
+  await waitForOrderState(twoOrderId, "CONFIRMED");
 
   await wpAdmin.changeOrderStatus(page, "Completed");
   await triggerFulfilBatch();
-  expect(await getOrderState(twoOrderId)).toBe("FULFILLED");
+  await waitForOrderState(twoOrderId, "FULFILLED");
 
   await wpAdmin.refundOrder(page, 1);
   await waitForOrderState(twoOrderId, "REFUNDED");
