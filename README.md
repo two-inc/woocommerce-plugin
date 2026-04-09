@@ -74,6 +74,59 @@ docker-compose up -d
 
 Navigate to <http://localhost:8888/> on your browser to access the Wordpress site.
 
+## E2E tests
+
+Playwright e2e tests live in `tests/e2e/`. They run against the local Docker environment and verify the full checkout flow with Two payment.
+
+### Prerequisites
+
+- Docker running with the plugin config (see above)
+- Node.js 22+
+- A merchant API key (from GCP Secret Manager or your local config)
+- Two admin password (for the fulfilment batch trigger)
+
+### Setup
+
+```bash
+docker compose up -d
+# wait ~90s for wpcli bootstrap to finish (installs WooCommerce, creates products, activates plugin)
+
+make e2e-install
+```
+
+### Running
+
+```bash
+export MERCHANT_API_KEY=$(gcloud secrets versions access latest --secret=STAGING_SHOP_MERCHANT_API_KEY_TILLITTESTUK --project=two-beta)
+export TWO_ADMIN_PASSWORD=$(gcloud secrets versions access latest --secret=STAGING_TWO_ADMIN_PASSWORD --project=two-beta)
+
+make e2e-test              # headless
+make e2e-test-headed       # with browser visible
+```
+
+Or if you have a local `docker/config/staging-tillittestuk.json`:
+
+```bash
+export MERCHANT_API_KEY=$(python3 -c "import json; print(json.load(open('docker/config/staging-tillittestuk.json'))['api_key'])")
+```
+
+### Tests
+
+| Test                   | What it does                                                                                       |
+| ---------------------- | -------------------------------------------------------------------------------------------------- |
+| `order-flow.spec.ts`   | Place order → verify CONFIRMED → fulfil via WP admin → verify FULFILLED → refund → verify REFUNDED |
+| `cancel-order.spec.ts` | Place order → cancel via WP admin → verify CANCELLED                                               |
+| `max-limit.spec.ts`    | Add expensive product → expect rejection on checkout                                               |
+
+### Clean restart
+
+If products stop showing or the store behaves oddly between runs:
+
+```bash
+docker compose down -v && rm -rf volumes/
+docker compose up -d
+```
+
 ## Post installation optional steps
 
 Once Wordpress has been set up, a recommended plugin theme to install is:

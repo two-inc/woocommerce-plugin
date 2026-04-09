@@ -14,3 +14,12 @@ bumpver-%:
 patch: bumpver-patch
 minor: bumpver-minor
 major: bumpver-major
+
+e2e-install:
+	cd tests/e2e && npm install && npx playwright install chromium
+
+e2e-test:
+	cd tests/e2e && npx playwright test
+
+e2e-test-headed:
+	cd tests/e2e && npx playwright test --headed
