@@ -1,0 +1,22 @@
+{
+  "enabled": "yes",
+  "title": "Business invoice %s days",
+  "subtitle": "Receive the invoice via PDF and email",
+  "test_checkout_host": "https://api.staging.two.inc",
+  "clear_options_on_deactivation": "no",
+  "section_api_credentials": "",
+  "api_key": "${MERCHANT_API_KEY}",
+  "section_checkout_options": "",
+  "enable_order_intent": "yes",
+  "add_field_department": "yes",
+  "add_field_project": "yes",
+  "add_field_purchase_order_number": "yes",
+  "add_field_invoice_email": "yes",
+  "show_abt_link": "yes",
+  "invoice_fee_to_buyer": "no",
+  "section_auto_complete_settings": "",
+  "enable_company_search": "yes",
+  "enable_company_search_for_others": "yes",
+  "enable_address_lookup": "yes",
+  "merchant_id": "2e2bf194-a56e-44c3-af50-342fe9ebf32f"
+}

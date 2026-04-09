@@ -18,9 +18,16 @@ services:
     volumes:
       - ./volumes/wordpress:/var/www/html
       - .:/var/www/html/wp-content/plugins/tillit-payment-gateway
+      - ./docker/mu-plugins:/var/www/html/wp-content/mu-plugins
       - ./volumes/log/:/var/log/apache2/
     depends_on:
-      - mariadb
+      mariadb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost/ || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   wpcli:
     container_name: wpcli
@@ -39,17 +46,20 @@ services:
       WORDPRESS_ADMIN_PASSWORD: twoinb2b
       WORDPRESS_ADMIN_EMAIL: admin@two.inc
       WOOCOM_PLUGIN_CONFIG_JSON: docker/config/staging-tillittestuk.json
-      WOOCOM_CURRENCY: EUR
-      WOOCOM_DEFAULT_COUNTRY: NL
+      WOOCOM_CURRENCY: GBP
+      WOOCOM_DEFAULT_COUNTRY: GB
       WOOCOM_VERSION: 9.9.5
       # WOOCOM_VERSION: 8.9.5
       # WOOCOM_VERSION: 7.9.1
     volumes:
       - ./volumes/wordpress:/var/www/html
       - .:/opt/tillit-payment-gateway
+      - .:/var/www/html/wp-content/plugins/tillit-payment-gateway
     depends_on:
-      - mariadb
-      - wordpress
+      mariadb:
+        condition: service_healthy
+      wordpress:
+        condition: service_healthy
 
   mariadb:
     container_name: mariadb
@@ -62,3 +72,8 @@ services:
       MYSQL_RANDOM_ROOT_PASSWORD: "1"
     volumes:
       - ./volumes/mariadb:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "twocommerce", "-ptwocommerce"]
+      interval: 5s
+      timeout: 5s
+      retries: 10

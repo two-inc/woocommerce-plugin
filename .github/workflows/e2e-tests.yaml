@@ -1,0 +1,92 @@
+name: Tests
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: e2e-tests-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  e2e-tests:
+    runs-on: ${{ vars.RUNNER_STANDARD }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        id: gcp-auth
+        uses: google-github-actions/auth@v2
+        with:
+          token_format: access_token
+          service_account: ${{ vars.GCP_E2E_TESTS_SA_NAME_TWO_BETA }}
+          workload_identity_provider: ${{ vars.WORKLOAD_IDENTITY_PROVIDER_PREFIX_TWO_BETA }}/${{ github.event.repository.name }}
+
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Fetch secrets
+        id: secrets
+        run: |
+          MERCHANT_API_KEY=$(gcloud secrets versions access latest --secret="STAGING_SHOP_MERCHANT_API_KEY_TILLITTESTUK" --project=two-beta)
+          echo "::add-mask::$MERCHANT_API_KEY"
+          echo "MERCHANT_API_KEY=$MERCHANT_API_KEY" >> $GITHUB_OUTPUT
+
+          TWO_ADMIN_PASSWORD=$(gcloud secrets versions access latest --secret="STAGING_TWO_ADMIN_PASSWORD" --project=two-beta)
+          echo "::add-mask::$TWO_ADMIN_PASSWORD"
+          echo "TWO_ADMIN_PASSWORD=$TWO_ADMIN_PASSWORD" >> $GITHUB_OUTPUT
+
+      - name: Generate Docker plugin config
+        run: |
+          mkdir -p docker/config
+          sed "s|\${MERCHANT_API_KEY}|${MERCHANT_API_KEY}|g" docker/config/staging-tillittestuk.json.tpl > docker/config/staging-tillittestuk.json
+        env:
+          MERCHANT_API_KEY: ${{ steps.secrets.outputs.MERCHANT_API_KEY }}
+
+      - name: Start WordPress
+        run: docker compose up -d
+
+      - name: Wait for bootstrap to complete
+        run: |
+          for i in $(seq 1 60); do
+            if docker compose logs wpcli 2>&1 | grep -q "sleep infinity"; then
+              echo "Bootstrap complete"
+              break
+            fi
+            echo "Waiting for wpcli bootstrap... ($i/60)"
+            sleep 5
+          done
+          docker compose logs wpcli 2>&1 | grep -q "sleep infinity" || (echo "Bootstrap failed" && docker compose logs && exit 1)
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install e2e dependencies
+        working-directory: tests/e2e
+        run: npm ci && npx playwright install --with-deps chromium
+
+      - name: Run e2e tests
+        working-directory: tests/e2e
+        run: npx playwright test
+        env:
+          MERCHANT_API_KEY: ${{ steps.secrets.outputs.MERCHANT_API_KEY }}
+          TWO_ADMIN_PASSWORD: ${{ steps.secrets.outputs.TWO_ADMIN_PASSWORD }}
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: tests/e2e/test-results/
+          retention-days: 7
+
+      - name: Stop WordPress
+        if: always()
+        run: docker compose down
