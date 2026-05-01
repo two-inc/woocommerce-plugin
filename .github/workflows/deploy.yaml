@@ -13,7 +13,7 @@ jobs:
     runs-on: ${{ vars.RUNNER_STANDARD }}
     steps:
       - uses: actions/checkout@v6
-      - uses: StephaneBour/actions-php-lint@8.2
+      - uses: StephaneBour/actions-php-lint@8.4
         with:
           dir: "."
   release:
