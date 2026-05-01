@@ -18,18 +18,18 @@ jobs:
     runs-on: ${{ vars.RUNNER_STANDARD }}
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Authenticate to Google Cloud
         id: gcp-auth
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           token_format: access_token
           service_account: ${{ vars.GCP_E2E_TESTS_SA_NAME_TWO_BETA }}
           workload_identity_provider: ${{ vars.WORKLOAD_IDENTITY_PROVIDER_PREFIX_TWO_BETA }}/${{ github.event.repository.name }}
 
       - name: Set up Google Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
+        uses: google-github-actions/setup-gcloud@v3
 
       - name: Fetch secrets
         id: secrets
@@ -64,7 +64,7 @@ jobs:
           done
           docker compose logs wpcli 2>&1 | grep -q "sleep infinity" || (echo "Bootstrap failed" && docker compose logs && exit 1)
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "22"
 
@@ -81,7 +81,7 @@ jobs:
 
       - name: Upload test results
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: playwright-report
           path: tests/e2e/test-results/

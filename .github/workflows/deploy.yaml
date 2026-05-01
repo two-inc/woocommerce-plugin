@@ -12,7 +12,7 @@ jobs:
   php-lint:
     runs-on: ${{ vars.RUNNER_STANDARD }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
       - uses: StephaneBour/actions-php-lint@8.2
         with:
           dir: "."
@@ -25,7 +25,7 @@ jobs:
     env:
       slug: tillit-payment-gateway
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y subversion rsync
       - run: echo ${{ github.ref_name }}
