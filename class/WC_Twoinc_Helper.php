@@ -192,7 +192,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
          */
         public static function is_twoinc_order($order)
         {
-            return $order && $order->get_payment_method() && $order->get_payment_method() === 'woocommerce-gateway-tillit';
+            return $order && $order->get_payment_method() && $order->get_payment_method() === WC_Twoinc_Brand::get('gateway_id');
         }
 
         /**
@@ -454,9 +454,22 @@ if (!class_exists('WC_Twoinc_Helper')) {
         /**
          * Compose request body for twoinc create order
          *
-         * @param $order
+         * Brand extension hooks fire in this order, each seeing the
+         * previous one's result (the same hooks fire in
+         * compose_twoinc_edit_order so create and edit stay symmetric):
          *
-         * @return bool
+         * 1. `twoinc_payment_terms_line` — filters the full line_items
+         *    array (receive and return ALL line items, not a single
+         *    line); second arg is the body draft BEFORE the payload
+         *    filters below run.
+         * 2. `two_order_create` — legacy body filter, kept for existing
+         *    integrations.
+         * 3. `twoinc_order_payload` — filters the final body; second
+         *    arg is the WC_Order.
+         *
+         * @param WC_Order $order
+         *
+         * @return array
          */
         public static function compose_twoinc_order(
             $order,
@@ -569,9 +582,16 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     $order_reference,
                     wp_create_nonce('twoinc_confirm_' . $order->get_id())
                 );
-                // Brand overlays use their own confirmation route (e.g.
-                // abn-payment-gateway/confirm); without this hook an overlay
-                // would have to duplicate process_payment().
+                /**
+                 * Filter the confirmation URL sent to the Two API.
+                 *
+                 * Brand overlays use their own confirmation route (e.g.
+                 * abn-payment-gateway/confirm); without this hook an overlay
+                 * would have to duplicate process_payment().
+                 *
+                 * @param string $confirmation_url Default confirmation URL.
+                 * @param int    $order_id         WooCommerce order id.
+                 */
                 $req_body['merchant_urls']['merchant_confirmation_url'] =
                     apply_filters('twoinc_confirmation_url', $confirmation_url, $order->get_id());
             }
@@ -588,17 +608,33 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 $req_body['tracking_id'] = $tracking_id;
             }
 
-            // Per-brand payment-terms/surcharge line handling: overlays adjust
-            // the composed line items with the full payload draft for context.
+            /**
+             * Filter the composed line items (per-brand payment-terms /
+             * surcharge line handling).
+             *
+             * Receives and must return the FULL line_items array — append or
+             * adjust entries, never return a single line. The body draft is
+             * context only and predates the two_order_create /
+             * twoinc_order_payload filters below.
+             *
+             * @param array $line_items All composed line items.
+             * @param array $req_body   Body draft, pre payload filters.
+             */
             $req_body['line_items'] = apply_filters('twoinc_payment_terms_line', $req_body['line_items'], $req_body);
 
-            // Legacy hook, kept for existing integrations.
+            // Legacy body filter, kept for existing integrations; runs before
+            // twoinc_order_payload, which sees its result.
             if (has_filter('two_order_create')) {
                 $req_body = apply_filters('two_order_create', $req_body);
             }
 
-            // Brand overlays augment or reshape the create-order body here
-            // (extra fields, country-specific tax_subtotals, etc.).
+            /**
+             * Filter the final create-order body (extra brand fields,
+             * country-specific tax_subtotals, payload reshaping).
+             *
+             * @param array    $req_body Final body, after all other filters.
+             * @param WC_Order $order    The order being composed.
+             */
             $req_body = apply_filters('twoinc_order_payload', $req_body, $order);
 
             return $req_body;
@@ -676,9 +712,17 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 $req_body['tax_subtotals'] = WC_Twoinc_Helper::get_tax_subtotals($order->get_items(), $order->get_items('shipping'), $order->get_items('fee'), $order);
             }
 
+            // Same brand hooks as compose_twoinc_order, in the same order, so
+            // a brand line item or payload mutation applied at creation is not
+            // silently dropped from the edit PUT body (which would also break
+            // the change-detection hash both composers feed).
+            $req_body['line_items'] = apply_filters('twoinc_payment_terms_line', $req_body['line_items'], $req_body);
+
             if (has_filter('two_order_edit')) {
                 $req_body = apply_filters('two_order_edit', $req_body);
             }
+
+            $req_body = apply_filters('twoinc_order_payload', $req_body, $order);
 
             return $req_body;
         }
@@ -776,7 +820,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
         /**
          * Get the user locale in full form, e.g. en_US — sent as the
          * invoice PDF `lang` parameter and the Accept-Language header,
-         * both of which accept the full form (TWO-24744 audit).
+         * both of which accept the full form.
          *
          * @return string
          */

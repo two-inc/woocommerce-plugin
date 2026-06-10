@@ -5,12 +5,18 @@
  *
  * The base plugin ships brands/two.php. A brand overlay plugin points
  * the loader at its own brand file through the `twoinc_brand_file`
- * filter (registered at overlay plugin load, before WooCommerce
- * constructs the payment gateways); overlay values are merged over the
- * Two defaults so an overlay declares only what differs.
+ * filter; overlay values are merged over the Two defaults so an overlay
+ * declares only what differs.
  *
- * Local development can force a brand shipped inside this plugin with
- * the TWO_BRAND_CODE env var (resolves to brands/{code}.php).
+ * Timing contract: the config caches on first read, which happens when
+ * WooCommerce constructs the payment gateways (after `plugins_loaded`).
+ * An overlay MUST register its `twoinc_brand_file` filter no later than
+ * `plugins_loaded` at default priority, or the Two defaults get cached
+ * first.
+ *
+ * The TWO_BRAND_CODE env var forces a brand shipped inside this plugin
+ * (brands/{code}.php) and exists for local development only — never
+ * rely on it for production brand resolution.
  *
  * @author Two
  */
@@ -55,7 +61,10 @@ if (!class_exists('WC_Twoinc_Brand')) {
                 if (is_file($candidate)) {
                     $brand_file = $candidate;
                 }
-            } else {
+            }
+            if ($brand_file === null) {
+                // No (resolvable) env override: ask installed overlays. A stale
+                // env value must not silently disable an installed overlay.
                 $brand_file = apply_filters('twoinc_brand_file', null);
             }
 
@@ -69,7 +78,10 @@ if (!class_exists('WC_Twoinc_Brand')) {
         }
 
         /**
-         * Drop the cached config so the next read reloads it (tests)
+         * Drop the cached config so the next read reloads it.
+         *
+         * @internal Test-only. Clearing the cache mid-request would re-run
+         *           brand resolution with potentially different results.
          *
          * @return void
          */

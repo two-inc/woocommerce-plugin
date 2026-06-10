@@ -14,12 +14,16 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
+    strategy:
+      matrix:
+        # Oldest PHP the plugin's syntax targets, plus current
+        php-version: ["7.4", "8.2"]
     steps:
       - uses: actions/checkout@v4
 
       - uses: shivammathur/setup-php@v2
         with:
-          php-version: "8.2"
+          php-version: ${{ matrix.php-version }}
 
       - name: Run unit tests
         run: php tests/unit/run.php

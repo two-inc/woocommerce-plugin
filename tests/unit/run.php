@@ -35,6 +35,9 @@ final class BrandConfigSpec
             'testConfirmationUrlHookReceivesUrlAndOrderId',
             'testOrderPayloadHookAugmentsBody',
             'testPaymentTermsLineHookAdjustsLineItems',
+            'testEditOrderAppliesSameBrandHooks',
+            'testLegacyOrderCreateFilterRunsBeforeOrderPayload',
+            'testBrandFileReturningNonArrayFallsBackToDefaults',
         ];
         foreach ($tests as $test) {
             self::reset();
@@ -176,6 +179,57 @@ final class BrandConfigSpec
 
         TinyAssert::same(1, count($body['line_items']));
         TinyAssert::same('Surcharge for NOK', $body['line_items'][0]['name']);
+    }
+
+    private static function testEditOrderAppliesSameBrandHooks(): void
+    {
+        // Create/edit symmetry: a brand line item or payload mutation applied
+        // at creation must survive the edit PUT body too.
+        add_filter('twoinc_payment_terms_line', static function ($line_items, $payload) {
+            $line_items[] = ['name' => 'Brand line', 'type' => 'SERVICE'];
+            return $line_items;
+        }, 10, 2);
+        add_filter('twoinc_order_payload', static function ($payload, $order) {
+            $payload['vendor_name'] = 'Overlay Vendor';
+            return $payload;
+        }, 10, 2);
+
+        $body = WC_Twoinc_Helper::compose_twoinc_edit_order(new StubOrder(), 'IT', 'Project X', '', '');
+
+        TinyAssert::same('Brand line', $body['line_items'][0]['name']);
+        TinyAssert::same('Overlay Vendor', $body['vendor_name']);
+    }
+
+    private static function testLegacyOrderCreateFilterRunsBeforeOrderPayload(): void
+    {
+        $payload_saw_legacy = null;
+        add_filter('two_order_create', static function ($payload) {
+            $payload['legacy_marker'] = 'yes';
+            return $payload;
+        });
+        add_filter('twoinc_order_payload', static function ($payload, $order) use (&$payload_saw_legacy) {
+            $payload_saw_legacy = isset($payload['legacy_marker']);
+            $payload['new_marker'] = 'yes';
+            return $payload;
+        }, 10, 2);
+
+        $body = self::composeOrder();
+
+        TinyAssert::same(true, $payload_saw_legacy, 'twoinc_order_payload must see two_order_create result');
+        TinyAssert::same('yes', $body['legacy_marker']);
+        TinyAssert::same('yes', $body['new_marker']);
+    }
+
+    private static function testBrandFileReturningNonArrayFallsBackToDefaults(): void
+    {
+        add_filter('twoinc_brand_file', static function ($file) {
+            return __DIR__ . '/fixtures/nonarray.php';
+        });
+
+        // The (array) cast turns a scalar into a numeric-keyed array that
+        // merges harmlessly; all named keys keep their Two defaults.
+        TinyAssert::same('Two', WC_Twoinc_Brand::get('product_name'));
+        TinyAssert::same('woocommerce-gateway-tillit', WC_Twoinc_Brand::get('gateway_id'));
     }
 }
 

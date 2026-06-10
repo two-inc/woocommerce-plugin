@@ -118,7 +118,7 @@ function wc_twoinc_enqueue_scripts()
  */
 function twoinc_settings_link($links)
 {
-    $settings_link = '<a href="admin.php?page=wc-settings&tab=checkout&section=woocommerce-gateway-tillit">Settings</a>';
+    $settings_link = '<a href="admin.php?page=wc-settings&tab=checkout&section=' . WC_Twoinc_Brand::get('gateway_id') . '">Settings</a>';
     array_unshift($links, $settings_link);
     return $links;
 }

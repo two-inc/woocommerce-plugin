@@ -17,6 +17,9 @@ if (!class_exists('WC_Twoinc')) {
     {
         private static $instance;
 
+        // BC-frozen: external integrations may read these constants, but all
+        // runtime reads go through WC_Twoinc_Brand so overlays can rebrand.
+        // They mirror brands/two.php; tests/unit pins them against drift.
         public const PROVIDER = 'Two';
         public const PROVIDER_FULL_NAME = 'Two';
         public const PRODUCT_NAME = 'Two';
@@ -215,10 +218,11 @@ if (!class_exists('WC_Twoinc')) {
         {
             if ($this->get_option('show_abt_link') === 'yes') {
                 $abt_url = WC_Twoinc_Brand::get('about_url');
-                $link = '<a href="' . $abt_url . '" target="_blank">' . sprintf(__('What is %s?', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')) . '</a>';
+                $product_name = WC_Twoinc_Brand::get('product_name');
+                $link = '<a href="' . $abt_url . '" target="_blank">' . sprintf(__('What is %s?', 'twoinc-payment-gateway'), $product_name) . '</a>';
                 $text = sprintf(
                     '<p>%s</p><p><b>%s</b></p>',
-                    sprintf(__('%s is a payment solution for B2B purchases online, allowing you to buy from your favourite merchants and suppliers on trade credit. Using %s, you can access flexible trade credit instantly to make purchasing simple.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name'), WC_Twoinc_Brand::get('product_name')),
+                    sprintf(__('%s is a payment solution for B2B purchases online, allowing you to buy from your favourite merchants and suppliers on trade credit. Using %s, you can access flexible trade credit instantly to make purchasing simple.', 'twoinc-payment-gateway'), $product_name, $product_name),
                     __('Buy now, receive your goods, pay your invoice later.', 'twoinc-payment-gateway'),
                     $abt_url,
                 );
@@ -280,7 +284,7 @@ if (!class_exists('WC_Twoinc')) {
         public function change_twoinc_payment_title()
         {
             add_filter('woocommerce_gateway_title', function ($title, $payment_id) {
-                if ($payment_id === 'woocommerce-gateway-tillit') {
+                if ($payment_id === $this->id) {
                     $title = $this->get_pay_html_title();
                 }
                 return $title;
@@ -1460,7 +1464,7 @@ if (!class_exists('WC_Twoinc')) {
                             </div>
                         <?php else: ?>
                             <div style="margin-top: 8px; color: #666; font-size: 13px;">
-                                <strong><?php printf(__('Don\'t have an API key? Get one by signing up <a href=\'%s\'>here</a>.', 'twoinc-payment-gateway'), $this::MERCHANT_SIGNUP_URL); ?></strong>
+                                <strong><?php printf(__('Don\'t have an API key? Get one by signing up <a href=\'%s\'>here</a>.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('merchant_signup_url')); ?></strong>
                             </div>
                         <?php endif; ?>
                         <?php echo $this->get_description_html($data); // WPCS: XSS ok.
@@ -1546,7 +1550,7 @@ if (!class_exists('WC_Twoinc')) {
                 </th>
                 <td class="forminp">
                     <fieldset>
-                        <input type="hidden" name="woocommerce_woocommerce-gateway-tillit_<?php echo $field_key; ?>" id="<?php echo esc_attr($field_key); ?>" class="logo_id" value="<?php echo $image_id; ?>" />
+                        <input type="hidden" name="woocommerce_<?php echo esc_attr($this->id); ?>_<?php echo $field_key; ?>" id="<?php echo esc_attr($field_key); ?>" class="logo_id" value="<?php echo $image_id; ?>" />
                         <div class="image-container woocommerce-twoinc-image-container">
                             <?php if ($image_src): ?>
                                 <img src="<?php echo $image_src; ?>" alt="" />
@@ -1851,7 +1855,7 @@ if (!class_exists('WC_Twoinc')) {
                 isset($_GET['page'], $_GET['tab'], $_GET['section']) &&
                 $_GET['page'] === 'wc-settings' &&
                 $_GET['tab'] === 'checkout' &&
-                $_GET['section'] === 'woocommerce-gateway-tillit'
+                $_GET['section'] === $this->id
             ) {
                 return;
             }
@@ -1860,10 +1864,11 @@ if (!class_exists('WC_Twoinc')) {
             if ($this->get_option('api_key') && $this->get_merchant_id()) {
                 return;
             }
-            $headline = sprintf(__('Grow your B2B sales with Buy Now, Pay Later using %s!', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name'));
-            $benefits = sprintf(__('%s credit approves 90%% of business buyers, pays you upfront and minimise your risk. To offer %s in your checkout, you need to signup. It is quick, easy and gives you immediate access to the %s Merchant Portal.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name'), WC_Twoinc_Brand::get('product_name'), WC_Twoinc_Brand::get('product_name'));
+            $product_name = WC_Twoinc_Brand::get('product_name');
+            $headline = sprintf(__('Grow your B2B sales with Buy Now, Pay Later using %s!', 'twoinc-payment-gateway'), $product_name);
+            $benefits = sprintf(__('%s credit approves 90%% of business buyers, pays you upfront and minimise your risk. To offer %s in your checkout, you need to signup. It is quick, easy and gives you immediate access to the %s Merchant Portal.', 'twoinc-payment-gateway'), $product_name, $product_name, $product_name);
             $setup_account = __('Set up my account', 'twoinc-payment-gateway');
-            $setup_url = admin_url('admin.php?page=wc-settings&tab=checkout&section=woocommerce-gateway-tillit');
+            $setup_url = admin_url('admin.php?page=wc-settings&tab=checkout&section=' . $this->id);
             echo '
             <div id="twoinc-account-init-notice" class="notice notice-info is-dismissible" style="background-image: url(\'' . WC_TWOINC_PLUGIN_URL . 'assets/images/banner.png\');background-size: cover;border-left-width: 0;background-color: #e2e0ff;padding: 20px;display: flex;">
                 <div style="width:60%;padding-right:40px;">
@@ -1896,7 +1901,7 @@ if (!class_exists('WC_Twoinc')) {
         public function on_deactivate_plugin()
         {
             if ($this->get_option('clear_options_on_deactivation') === 'yes') {
-                delete_option('woocommerce_woocommerce-gateway-tillit_settings');
+                delete_option('woocommerce_' . $this->id . '_settings');
             }
         }
 
@@ -1906,7 +1911,7 @@ if (!class_exists('WC_Twoinc')) {
         public function process_admin_options()
         {
             $post_data = $this->get_post_data();
-            $api_key_field = 'woocommerce_woocommerce-gateway-tillit_api_key';
+            $api_key_field = 'woocommerce_' . $this->id . '_api_key';
             $api_key_in_post = array_key_exists($api_key_field, $post_data);
             $api_key = $api_key_in_post ? $post_data[$api_key_field] : '';
 

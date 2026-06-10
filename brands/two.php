@@ -6,8 +6,11 @@
  * A brand overlay plugin (e.g. the ABN AMRO edition) supplies its own
  * file with the same shape via the `twoinc_brand_file` filter; its
  * values are merged over these defaults, so an overlay declares only
- * what differs. Keys are added together with the code that consumes
- * them — do not declare config here that nothing reads yet.
+ * what differs.
+ *
+ * Every key here either has a runtime consumer or mirrors one of the
+ * BC-frozen WC_Twoinc constants (pinned by tests/unit). Do not declare
+ * speculative config — new keys land with the code that reads them.
  */
 
 return [
