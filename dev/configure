@@ -22,5 +22,4 @@ if [ -n "$TWO_API_BASE_URL" ]; then
     wp option patch update "$OPTION_KEY" test_checkout_host "$TWO_API_BASE_URL"
 fi
 
-echo "Configured $OPTION_KEY:"
-wp option patch get "$OPTION_KEY" test_checkout_host
+echo "Configured $OPTION_KEY (test_checkout_host: $(wp option pluck "$OPTION_KEY" test_checkout_host || echo unset))"
