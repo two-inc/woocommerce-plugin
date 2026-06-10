@@ -53,6 +53,7 @@ function load_twoinc_classes()
     add_action('wp_ajax_twoinc_verify_api_key', 'twoinc_ajax_verify_api_key');
 
     // Load classes
+    require_once __DIR__ . '/class/WC_Twoinc_Brand.php';
     require_once __DIR__ . '/class/WC_Twoinc_Helper.php';
     require_once __DIR__ . '/class/WC_Twoinc_Checkout.php';
     require_once __DIR__ . '/class/WC_Twoinc.php';
@@ -117,7 +118,7 @@ function wc_twoinc_enqueue_scripts()
  */
 function twoinc_settings_link($links)
 {
-    $settings_link = '<a href="admin.php?page=wc-settings&tab=checkout&section=woocommerce-gateway-tillit">Settings</a>';
+    $settings_link = '<a href="admin.php?page=wc-settings&tab=checkout&section=' . WC_Twoinc_Brand::get('gateway_id') . '">Settings</a>';
     array_unshift($links, $settings_link);
     return $links;
 }
