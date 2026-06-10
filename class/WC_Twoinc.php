@@ -1387,7 +1387,9 @@ if (!class_exists('WC_Twoinc')) {
                 'title' => [
                     'title'       => __('Title', 'twoinc-payment-gateway'),
                     'type'        => 'text',
-                    'default'     => __('Business invoice - %s days', 'twoinc-payment-gateway')
+                    // Brand-specific default: a fresh install must show the
+                    // brand's payment-method title, not the Two phrasing.
+                    'default'     => __(WC_Twoinc_Brand::get('title_default'), 'twoinc-payment-gateway')
                 ],
                 'test_checkout_host' => [
                     'type'        => 'text',

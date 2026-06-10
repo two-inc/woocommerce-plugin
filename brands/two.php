@@ -34,4 +34,8 @@ return [
     'availability_gate' => null,
     // Countries offered in the checkout company-search JS.
     'supported_buyer_countries' => ['NO', 'GB', 'SE', 'NL', 'FI', 'DK'],
+    // Default for the payment-method Title setting on fresh installs
+    // (merchant-saved titles always win). sprintf'd with the invoice
+    // day count, so a brand default may carry one %s.
+    'title_default' => 'Business invoice - %s days',
 ];

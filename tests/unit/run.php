@@ -106,6 +106,7 @@ final class BrandConfigSpec
         TinyAssert::same('Two', WC_Twoinc_Brand::get('provider'));
         TinyAssert::same('https://portal.two.inc/auth/merchant/signup', WC_Twoinc_Brand::get('merchant_signup_url'));
         TinyAssert::same(WC_TWOINC_PLUGIN_URL . 'assets/images/two-logo.svg', WC_Twoinc_Brand::get('logo_url'));
+        TinyAssert::same('Business invoice - %s days', WC_Twoinc_Brand::get('title_default'));
         TinyAssert::same(null, WC_Twoinc_Brand::get('not_a_key'));
     }
 
