@@ -36,7 +36,19 @@ Now, go to Github to create a new release which triggers publication of the new 
 
 ## Set up Wordpress for local development
 
-Also, if you wish to use a locally running Checkout API backend, no additional setup is required.
+```bash
+cp .env.example .env   # adjust TWO_API_KEY / TWO_API_BASE_URL / TWO_BRAND_CODE
+make install           # docker compose up; first provision takes ~90s (make logs-wpcli)
+```
+
+Navigate to <http://localhost:8888/>. `make configure` re-applies the
+TWO_* env values to the gateway settings after you edit `.env` (run
+`make run` first so the container env is recreated). Other targets:
+`make logs`, `make stop`, `make clean` (full reset), `make test-unit`,
+`make format`.
+
+The default `.env` targets a locally running Checkout API backend
+(`portal.localhost`) — no additional setup required.
 
 If you wish to use the staging site,
 

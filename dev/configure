@@ -1,0 +1,26 @@
+#!/bin/bash
+# Write the gateway options from the TWO_* env vars into the running
+# WordPress. Runs inside the wpcli container:
+#   make configure
+# Idempotent — safe to re-run after editing .env (compose must be
+# recreated first so the container env updates: make run).
+set -e
+
+GATEWAY_ID="${TWO_GATEWAY_ID:-woocommerce-gateway-tillit}"
+OPTION_KEY="woocommerce_${GATEWAY_ID}_settings"
+
+if ! wp option get "$OPTION_KEY" >/dev/null 2>&1; then
+    echo "Option $OPTION_KEY not found — seeding from ${WOOCOM_PLUGIN_CONFIG_JSON:-docker/config/local.json}"
+    wp option update "$OPTION_KEY" --format=json \
+        <"/opt/tillit-payment-gateway/${WOOCOM_PLUGIN_CONFIG_JSON:-docker/config/local.json}"
+fi
+
+if [ -n "$TWO_API_KEY" ]; then
+    wp option patch update "$OPTION_KEY" api_key "$TWO_API_KEY"
+fi
+if [ -n "$TWO_API_BASE_URL" ]; then
+    wp option patch update "$OPTION_KEY" test_checkout_host "$TWO_API_BASE_URL"
+fi
+
+echo "Configured $OPTION_KEY:"
+wp option patch get "$OPTION_KEY" test_checkout_host
