@@ -78,6 +78,36 @@ if (!class_exists('WC_Twoinc_Brand')) {
         }
 
         /**
+         * Brand-prefixed name, e.g. meta_prefix 'twoinc' + 'order_id'
+         * -> 'twoinc_order_id'. Used for the unprefixed-underscore meta
+         * keys, user meta keys, confirmation request params and the
+         * confirmation nonce action.
+         *
+         * @param string $name
+         *
+         * @return string
+         */
+        public static function prefixed_name($name)
+        {
+            return self::get('meta_prefix') . '_' . $name;
+        }
+
+        /**
+         * Brand-prefixed hidden order meta key, e.g. 'order_reference'
+         * -> '_twoinc_order_reference'. Live stores hold data under the
+         * brand's prefix (ABN stores hold _abn_*), so the prefix is
+         * load-bearing for existing orders — never hardcode the literal.
+         *
+         * @param string $name
+         *
+         * @return string
+         */
+        public static function meta_key($name)
+        {
+            return '_' . self::prefixed_name($name);
+        }
+
+        /**
          * Drop the cached config so the next read reloads it.
          *
          * @internal Test-only. Clearing the cache mid-request would re-run

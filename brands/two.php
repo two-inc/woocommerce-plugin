@@ -23,4 +23,15 @@ return [
     'gateway_id' => 'woocommerce-gateway-tillit',
     'logo_url' => WC_TWOINC_PLUGIN_URL . 'assets/images/two-logo.svg',
     'about_url' => 'https://www.two.inc/what-is-two',
+    // Order/user meta key prefix (e.g. _twoinc_order_reference,
+    // twoinc_order_id, twoinc_company_id) and the confirmation request
+    // param/nonce prefix. Live stores hold data under this prefix —
+    // an overlay MUST set the prefix its installed base already uses.
+    'meta_prefix' => 'twoinc',
+    // Brand product constraints removing the gateway from checkout when
+    // unmet: ['min_order_amount' => float, 'currency' => 'EUR',
+    // 'billing_countries' => ['NL']]. null = no gate (Two default).
+    'availability_gate' => null,
+    // Countries offered in the checkout company-search JS.
+    'supported_buyer_countries' => ['NO', 'GB', 'SE', 'NL', 'FI', 'DK'],
 ];

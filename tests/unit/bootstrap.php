@@ -80,12 +80,24 @@ function get_user_locale()
     return 'en_US';
 }
 
+function is_admin()
+{
+    return false;
+}
+
+function get_woocommerce_currency()
+{
+    return $GLOBALS['__twoinc_test_currency'] ?? 'EUR';
+}
+
 function WC()
 {
     static $wc = null;
     if ($wc === null) {
         $wc = new class () {
             public $countries;
+            public $cart;
+            public $customer;
 
             public function __construct()
             {
@@ -101,8 +113,24 @@ function WC()
     return $wc;
 }
 
+class StubCustomer
+{
+    private $country;
+
+    public function __construct($country)
+    {
+        $this->country = $country;
+    }
+
+    public function get_billing_country()
+    {
+        return $this->country;
+    }
+}
+
 class WC_Payment_Gateway
 {
+    public $id;
 }
 
 class WC_HTTPS

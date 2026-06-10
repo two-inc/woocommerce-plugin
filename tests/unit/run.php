@@ -38,6 +38,12 @@ final class BrandConfigSpec
             'testEditOrderAppliesSameBrandHooks',
             'testLegacyOrderCreateFilterRunsBeforeOrderPayload',
             'testBrandFileReturningNonArrayFallsBackToDefaults',
+            'testMetaKeysDeriveFromBrandPrefix',
+            'testConfirmationUrlParamsDeriveFromBrandPrefix',
+            'testAvailabilityGateAbsentForTwoBrand',
+            'testAvailabilityGateRemovesGatewayWhenUnmet',
+            'testAvailabilityGateKeepsGatewayAtExactMinimum',
+            'testPaymentValidationErrorFilterVetoes',
         ];
         foreach ($tests as $test) {
             self::reset();
@@ -50,9 +56,33 @@ final class BrandConfigSpec
     {
         WC_Twoinc_Brand::reset();
         putenv('TWO_BRAND_CODE');
-        foreach (['twoinc_brand_file', 'twoinc_checkout_fields', 'twoinc_confirmation_url', 'twoinc_order_payload', 'twoinc_payment_terms_line', 'two_order_create'] as $tag) {
+        unset($GLOBALS['__twoinc_test_currency']);
+        WC()->cart = null;
+        WC()->customer = null;
+        foreach (['twoinc_brand_file', 'twoinc_checkout_fields', 'twoinc_confirmation_url', 'twoinc_order_payload', 'twoinc_payment_terms_line', 'two_order_create', 'twoinc_payment_validation_error'] as $tag) {
             remove_all_filters($tag);
         }
+    }
+
+    /**
+     * Gateway instance with only the brand-derived id set — the full
+     * constructor needs a WooCommerce install.
+     */
+    private static function gateway(): WC_Twoinc
+    {
+        return new class () extends WC_Twoinc {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+        };
+    }
+
+    private static function useTestbrand(): void
+    {
+        add_filter('twoinc_brand_file', static function ($file) {
+            return __DIR__ . '/fixtures/testbrand.php';
+        });
     }
 
     private static function composeOrder(): array
@@ -218,6 +248,82 @@ final class BrandConfigSpec
         TinyAssert::same(true, $payload_saw_legacy, 'twoinc_order_payload must see two_order_create result');
         TinyAssert::same('yes', $body['legacy_marker']);
         TinyAssert::same('yes', $body['new_marker']);
+    }
+
+    private static function testMetaKeysDeriveFromBrandPrefix(): void
+    {
+        TinyAssert::same('_twoinc_order_reference', WC_Twoinc_Brand::meta_key('order_reference'));
+        TinyAssert::same('twoinc_order_id', WC_Twoinc_Brand::prefixed_name('order_id'));
+
+        WC_Twoinc_Brand::reset();
+        self::useTestbrand();
+
+        // Live stores hold data under the overlay's prefix — the keys
+        // must follow the brand, not the literal
+        TinyAssert::same('_testbrand_order_reference', WC_Twoinc_Brand::meta_key('order_reference'));
+        TinyAssert::same('testbrand_company_id', WC_Twoinc_Brand::prefixed_name('company_id'));
+    }
+
+    private static function testConfirmationUrlParamsDeriveFromBrandPrefix(): void
+    {
+        self::useTestbrand();
+
+        $body = self::composeOrder();
+        $url = $body['merchant_urls']['merchant_confirmation_url'];
+
+        TinyAssert::true(strpos($url, 'testbrand_order_reference=test-order-reference') !== false, $url);
+        TinyAssert::true(strpos($url, 'testbrand_nonce=') !== false, $url);
+    }
+
+    private static function testAvailabilityGateAbsentForTwoBrand(): void
+    {
+        // No WC() cart/customer set up: with no gate configured the
+        // filter must not even look at them
+        $gateways = ['woocommerce-gateway-tillit' => 'gw'];
+
+        TinyAssert::same($gateways, self::gateway()->apply_brand_availability_gate($gateways));
+    }
+
+    private static function testAvailabilityGateRemovesGatewayWhenUnmet(): void
+    {
+        self::useTestbrand();
+        WC()->cart = (object) ['total' => 249.99];
+        WC()->customer = new StubCustomer('NL');
+        $GLOBALS['__twoinc_test_currency'] = 'EUR';
+
+        $gateways = ['woocommerce-gateway-testbrand' => 'gw', 'other' => 'x'];
+        $result = self::gateway()->apply_brand_availability_gate($gateways);
+
+        TinyAssert::true(!isset($result['woocommerce-gateway-testbrand']));
+        TinyAssert::same('x', $result['other']);
+    }
+
+    private static function testAvailabilityGateKeepsGatewayAtExactMinimum(): void
+    {
+        self::useTestbrand();
+        WC()->cart = (object) ['total' => 250.0];
+        WC()->customer = new StubCustomer('NL');
+        $GLOBALS['__twoinc_test_currency'] = 'EUR';
+
+        $gateways = ['woocommerce-gateway-testbrand' => 'gw'];
+        $result = self::gateway()->apply_brand_availability_gate($gateways);
+
+        // The minimum is inclusive: an exactly-minimum basket passes
+        TinyAssert::same('gw', $result['woocommerce-gateway-testbrand']);
+    }
+
+    private static function testPaymentValidationErrorFilterVetoes(): void
+    {
+        TinyAssert::same(null, self::gateway()->get_brand_payment_validation_error(42));
+
+        add_filter('twoinc_payment_validation_error', static function ($error, $order_id) {
+            return 'You must first accept the payment terms (order ' . $order_id . ')';
+        }, 10, 2);
+
+        TinyAssert::same(
+            'You must first accept the payment terms (order 42)',
+            self::gateway()->get_brand_payment_validation_error(42)
+        );
     }
 
     private static function testBrandFileReturningNonArrayFallsBackToDefaults(): void
