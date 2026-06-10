@@ -27,6 +27,10 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             add_filter('woocommerce_checkout_fields', [$this, 'add_tracking_fields'], 21);
             add_filter('woocommerce_checkout_fields', [$this, 'update_company_fields'], 23);
 
+            // Brand overlays add/modify checkout fields after the base set
+            // is complete (priority 25 > the base mutations above)
+            add_filter('woocommerce_checkout_fields', [$this, 'apply_brand_checkout_fields'], 25);
+
             // Render the fields on checkout page
             add_action('woocommerce_before_checkout_billing_form', [$this, 'render_twoinc_fields'], 21);
             add_action('woocommerce_pay_order_before_submit', [$this, 'render_twoinc_fields'], 21);
@@ -38,6 +42,18 @@ if (!class_exists('WC_Twoinc_Checkout')) {
 
             // Order pay page customization
             add_action('woocommerce_pay_order_before_submit', [$this, 'order_pay_page_customize'], 24);
+        }
+
+        /**
+         * Let a brand overlay add or modify checkout form fields
+         *
+         * @param $fields
+         *
+         * @return mixed
+         */
+        public function apply_brand_checkout_fields($fields)
+        {
+            return apply_filters('twoinc_checkout_fields', $fields);
         }
 
         /**
@@ -133,7 +149,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     'label'       => __('Invoice email address', 'twoinc-payment-gateway'),
                     'class'       => array('form-row-wide'),
                     'type'        => 'email',
-                    'placeholder' => sprintf(__('Only for invoices being sent by %s', 'twoinc-payment-gateway'), WC_Twoinc::PRODUCT_NAME),
+                    'placeholder' => sprintf(__('Only for invoices being sent by %s', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')),
                     'validate'    => array('email'),
                     'required'    => false,
                     'priority'    => $company_name_priority + 5

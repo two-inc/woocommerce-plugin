@@ -40,11 +40,11 @@ if (!class_exists('WC_Twoinc_Helper')) {
         public static function get_twoinc_error_msg($response)
         {
             if (!$response) {
-                return sprintf(__('Empty response from %s.', 'twoinc-payment-gateway'), WC_Twoinc::PRODUCT_NAME);
+                return sprintf(__('Empty response from %s.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name'));
             }
 
             if ($response['response'] && $response['response']['code'] && $response['response']['code'] >= 400) {
-                return sprintf(__('Response code from %s: %d', 'twoinc-payment-gateway'), WC_Twoinc::PRODUCT_NAME, $response['response']['code']);
+                return sprintf(__('Response code from %s: %d', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name'), $response['response']['code']);
             }
 
             if ($response['body']) {
@@ -68,7 +68,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
          */
         public static function get_twoinc_validation_msg($response)
         {
-            $err_msg = sprintf(__('Invoice purchase with %s is not available for this order.', 'twoinc-payment-gateway'), WC_Twoinc::PRODUCT_NAME);
+            $err_msg = sprintf(__('Invoice purchase with %s is not available for this order.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name'));
             if (!$response) {
                 return $err_msg;
             }
@@ -562,13 +562,18 @@ if (!class_exists('WC_Twoinc_Helper')) {
             }
 
             if (!$skip_nonce) {
-                $req_body['merchant_urls']['merchant_confirmation_url'] = sprintf(
+                $confirmation_url = sprintf(
                     '%s/twoinc-payment-gateway/confirm?order_id=%s&twoinc_order_reference=%s&twoinc_nonce=%s',
                     get_home_url(),
                     $order->get_id(),
                     $order_reference,
                     wp_create_nonce('twoinc_confirm_' . $order->get_id())
                 );
+                // Brand overlays use their own confirmation route (e.g.
+                // abn-payment-gateway/confirm); without this hook an overlay
+                // would have to duplicate process_payment().
+                $req_body['merchant_urls']['merchant_confirmation_url'] =
+                    apply_filters('twoinc_confirmation_url', $confirmation_url, $order->get_id());
             }
 
             if ($purchase_order_number) {
@@ -583,9 +588,18 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 $req_body['tracking_id'] = $tracking_id;
             }
 
+            // Per-brand payment-terms/surcharge line handling: overlays adjust
+            // the composed line items with the full payload draft for context.
+            $req_body['line_items'] = apply_filters('twoinc_payment_terms_line', $req_body['line_items'], $req_body);
+
+            // Legacy hook, kept for existing integrations.
             if (has_filter('two_order_create')) {
                 $req_body = apply_filters('two_order_create', $req_body);
             }
+
+            // Brand overlays augment or reshape the create-order body here
+            // (extra fields, country-specific tax_subtotals, etc.).
+            $req_body = apply_filters('twoinc_order_payload', $req_body, $order);
 
             return $req_body;
         }
@@ -760,7 +774,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Get short locale, e.g. en_US to en
+         * Get the user locale in full form, e.g. en_US — sent as the
+         * invoice PDF `lang` parameter and the Accept-Language header,
+         * both of which accept the full form (TWO-24744 audit).
          *
          * @return string
          */

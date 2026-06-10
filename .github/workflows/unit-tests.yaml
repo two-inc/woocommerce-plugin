@@ -1,0 +1,25 @@
+name: Unit tests
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: unit-tests-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  unit-tests:
+    runs-on: ${{ vars.RUNNER_STANDARD }}
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.2"
+
+      - name: Run unit tests
+        run: php tests/unit/run.php
