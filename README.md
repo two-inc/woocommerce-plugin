@@ -42,7 +42,7 @@ make install           # docker compose up; first provision takes ~90s (make log
 ```
 
 Navigate to <http://localhost:8888/>. `make configure` re-applies the
-TWO_* env values to the gateway settings after you edit `.env` (run
+TWO\_\* env values to the gateway settings after you edit `.env` (run
 `make run` first so the container env is recreated). Other targets:
 `make logs`, `make stop`, `make clean` (full reset), `make test-unit`,
 `make format`.

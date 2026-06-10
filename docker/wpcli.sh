@@ -26,7 +26,9 @@ until wp plugin activate tillit-payment-gateway; do
 done
 set -e
 PLUGIN_CONFIG="/opt/tillit-payment-gateway/${WOOCOM_PLUGIN_CONFIG_JSON:-docker/config/local.json}"
-# Settings option key follows the gateway id, which follows the brand
+# Static fallback matching the two brand's gateway id; running the
+# harness as an overlay brand requires TWO_GATEWAY_ID to be set to the
+# overlay's id (and its plugin to be installed in the container)
 OPTION_KEY="woocommerce_${TWO_GATEWAY_ID:-woocommerce-gateway-tillit}_settings"
 if [ -f "$PLUGIN_CONFIG" ]; then
   wp option update "$OPTION_KEY" --format=json <"$PLUGIN_CONFIG"
