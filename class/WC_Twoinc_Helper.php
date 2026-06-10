@@ -184,21 +184,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Authenticate external REST requests
-         *
-         * @param $wc_twoinc
-         *
-         * @return bool
-         */
-        public static function auth_rest_request($wc_twoinc)
-        {
-            // TODO: Drop comparison against HTTP_X_API_KEY in a future release
-            return hash('sha256', $wc_twoinc->get_option('api_key')) === $_SERVER['HTTP_X_API_KEY_HASH'] || $wc_twoinc->api_key === $_SERVER['HTTP_X_API_KEY'];
-        }
-
-
-
-        /**
          * Check if order is paid by twoinc
          *
          * @param $order
