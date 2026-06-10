@@ -44,6 +44,7 @@ final class BrandConfigSpec
             'testAvailabilityGateRemovesGatewayWhenUnmet',
             'testAvailabilityGateKeepsGatewayAtExactMinimum',
             'testPaymentValidationErrorFilterVetoes',
+            'testConfirmationPageDetectionFollowsBrandPrefix',
         ];
         foreach ($tests as $test) {
             self::reset();
@@ -324,6 +325,36 @@ final class BrandConfigSpec
             'You must first accept the payment terms (order 42)',
             self::gateway()->get_brand_payment_validation_error(42)
         );
+    }
+
+    private static function testConfirmationPageDetectionFollowsBrandPrefix(): void
+    {
+        // The read side is the half that strands in-flight orders if it
+        // drifts from the write side: both must derive from meta_prefix.
+        self::useTestbrand();
+        $gateway = new class () extends WC_Twoinc {
+            public function __construct()
+            {
+            }
+        };
+        $is_confirmation_page = new ReflectionMethod(WC_Twoinc::class, 'is_confirmation_page');
+        $is_confirmation_page->setAccessible(true);
+
+        $_REQUEST = [
+            'order_id' => '42',
+            'testbrand_order_reference' => 'ref',
+            'testbrand_nonce' => 'nonce',
+        ];
+        TinyAssert::true($is_confirmation_page->invoke($gateway));
+
+        // Params under another brand's prefix must NOT be detected
+        $_REQUEST = [
+            'order_id' => '42',
+            'twoinc_order_reference' => 'ref',
+            'twoinc_nonce' => 'nonce',
+        ];
+        TinyAssert::same(false, $is_confirmation_page->invoke($gateway));
+        $_REQUEST = [];
     }
 
     private static function testBrandFileReturningNonArrayFallsBackToDefaults(): void

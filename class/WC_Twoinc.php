@@ -55,6 +55,10 @@ if (!class_exists('WC_Twoinc')) {
              * overlay can replace the copy wholesale (the ABN edition
              * ships its own bullet list).
              *
+             * Applied once at gateway construction: like
+             * twoinc_brand_file, an overlay must register this filter no
+             * later than plugins_loaded at default priority.
+             *
              * @param string $description Default description HTML.
              */
             $this->description = apply_filters(
@@ -828,6 +832,12 @@ if (!class_exists('WC_Twoinc')) {
             if (!$gate || is_admin() || !isset($available_gateways[$this->id])) {
                 return $available_gateways;
             }
+            if (!isset($gate['min_order_amount'], $gate['currency'], $gate['billing_countries'])) {
+                // A truthy but malformed gate must not judge with missing
+                // criteria; leave the gateway available and let the log
+                // below stay quiet (config bug, not a basket decision).
+                return $available_gateways;
+            }
             if (!function_exists('WC') || !WC()->cart || !WC()->customer) {
                 return $available_gateways;
             }
@@ -837,6 +847,26 @@ if (!class_exists('WC_Twoinc')) {
                 && in_array(WC()->customer->get_billing_country(), $gate['billing_countries'], true);
             if (!$satisfied) {
                 unset($available_gateways[$this->id]);
+                // Removing a payment method is invisible to the merchant —
+                // log the failing basket once per request so a gate
+                // misconfiguration doesn't read as the gateway vanishing.
+                static $logged = false;
+                if (!$logged && function_exists('wc_get_logger')) {
+                    $logged = true;
+                    wc_get_logger()->info(
+                        sprintf(
+                            'Brand availability gate removed %s from checkout (total=%s currency=%s country=%s; gate requires min %s %s in %s)',
+                            $this->id,
+                            WC()->cart->total,
+                            get_woocommerce_currency(),
+                            WC()->customer->get_billing_country(),
+                            $gate['min_order_amount'],
+                            $gate['currency'],
+                            implode(',', $gate['billing_countries'])
+                        ),
+                        ['source' => 'twoinc-payment-gateway']
+                    );
+                }
             }
 
             return $available_gateways;
