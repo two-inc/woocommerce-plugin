@@ -246,6 +246,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 'enable_order_intent' => $this->wc_twoinc->get_option('enable_order_intent'),
                 'display_tooltips' => $this->wc_twoinc->get_option('display_tooltips'),
                 'supported_buyer_countries' => $supported_buyer_countries,
+                'gateway_id' => WC_Twoinc_Brand::get('gateway_id'),
                 'merchant' => $merchant,
                 'days_on_invoice' => $this->wc_twoinc->get_merchant_default_days_on_invoice(),
                 'shop_base_country' => strtolower(WC()->countries->get_base_country()),

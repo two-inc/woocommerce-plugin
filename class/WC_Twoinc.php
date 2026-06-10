@@ -59,11 +59,14 @@ if (!class_exists('WC_Twoinc')) {
              * twoinc_brand_file, an overlay must register this filter no
              * later than plugins_loaded at default priority.
              *
-             * @param string $description Default description HTML.
+             * @param string     $description Default description HTML.
+             * @param WC_Twoinc  $gateway     The gateway instance (for
+             *                                get_option reads).
              */
             $this->description = apply_filters(
                 'twoinc_payment_description',
-                $this->get_pay_box_description() . $this->get_pay_subtitle()
+                $this->get_pay_box_description() . $this->get_pay_subtitle(),
+                $this
             );
 
             // Skip hooks if another instance has already been created
@@ -245,9 +248,23 @@ if (!class_exists('WC_Twoinc')) {
                     __('Buy now, receive your goods, pay your invoice later.', 'twoinc-payment-gateway'),
                     $abt_url,
                 );
-                return sprintf('<div class="abt-twoinc-text">%s</div><div class="abt-twoinc-link">%s</div>', $text, $link);
+                $html = sprintf('<div class="abt-twoinc-text">%s</div><div class="abt-twoinc-link">%s</div>', $text, $link);
+            } else {
+                $html = '';
             }
-            return '';
+
+            /**
+             * Filter the "about" block inside the payment-box subtitle —
+             * the piece of the description brand overlays actually
+             * replace (the ABN edition ships its own bullet list).
+             * Register by plugins_loaded (computed at gateway
+             * construction).
+             *
+             * @param string    $html    Default about-block HTML ('' when
+             *                           the merchant disabled the link).
+             * @param WC_Twoinc $gateway The gateway instance.
+             */
+            return apply_filters('twoinc_about_html', $html, $this);
         }
 
         /**
@@ -400,6 +417,7 @@ if (!class_exists('WC_Twoinc')) {
 
             // Localize script for AJAX
             wp_localize_script('twoinc.admin', 'twoinc_admin', [
+                'gateway_id' => $this->id,
                 'nonce' => wp_create_nonce('twoinc_admin_nonce'),
                 'ajax_url' => admin_url('admin-ajax.php')
             ]);

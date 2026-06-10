@@ -401,7 +401,7 @@ let twoincDomHelper = {
    * Deselect payment method and select the first available one
    */
   deselectPaymentMethod: function () {
-    const paymentMethodRadioObj = jQuery(':input[value="woocommerce-gateway-tillit"]');
+    const paymentMethodRadioObj = jQuery(':input[value="' + window.twoinc.gateway_id + '"]');
     // Deselect the current payment method
     if (paymentMethodRadioObj) {
       paymentMethodRadioObj.prop("checked", false);
@@ -583,7 +583,7 @@ let twoincDomHelper = {
    * Check if twoinc payment is currently selected
    */
   isTwoincSelected: function () {
-    return jQuery('input[name="payment_method"]:checked').val() === "woocommerce-gateway-tillit";
+    return jQuery('input[name="payment_method"]:checked').val() === window.twoinc.gateway_id;
   },
 
   /**
@@ -591,10 +591,10 @@ let twoincDomHelper = {
    */
   isTwoincVisible: function () {
     return (
-      jQuery("li.wc_payment_method.payment_method_woocommerce-gateway-tillit").css("display") !==
+      jQuery("li.wc_payment_method.payment_method_" + window.twoinc.gateway_id).css("display") !==
       "none"
     );
-    //return jQuery('#payment_method_woocommerce-gateway-tillit:visible').length !== 0
+    //return jQuery('#payment_method_' + window.twoinc.gateway_id + ':visible').length !== 0
   },
 
   /**
@@ -635,7 +635,7 @@ let twoincDomHelper = {
    * Rearrange descriptions in Twoinc payment to make it cleaner
    */
   rearrangeDescription: function () {
-    let twoincPaymentBox = jQuery(".payment_box.payment_method_woocommerce-gateway-tillit");
+    let twoincPaymentBox = jQuery(".payment_box.payment_method_" + window.twoinc.gateway_id);
     if (twoincPaymentBox.length > 0) {
       twoincPaymentBox.after(jQuery(".abt-twoinc"));
     }
@@ -1462,7 +1462,7 @@ let isTwoincSelected = null;
 jQuery(function () {
   if (window.twoinc) {
     if (window.twoinc.enable_order_intent === "yes") {
-      if (jQuery("#payment_method_woocommerce-gateway-tillit").length > 0) {
+      if (jQuery("#payment_method_" + window.twoinc.gateway_id).length > 0) {
         // Run Twoinc code if order intent is enabled
         Twoinc.getInstance().initialize(true);
       }
@@ -1476,7 +1476,7 @@ jQuery(function () {
         }
 
         // Run Twoinc code if Twoinc payment is selected
-        jQuery("#payment_method_woocommerce-gateway-tillit").on("change", function () {
+        jQuery("#payment_method_" + window.twoinc.gateway_id).on("change", function () {
           Twoinc.getInstance().initialize(false);
           Twoinc.getInstance().onUpdatedCheckout();
         });
@@ -1490,7 +1490,7 @@ jQuery(function () {
       );
       if (
         lastSelectedPayment &&
-        lastSelectedPayment.id === "payment_method_woocommerce-gateway-tillit"
+        lastSelectedPayment.id === "payment_method_" + window.twoinc.gateway_id
       ) {
         Twoinc.getInstance().initialize(true);
       }
