@@ -184,21 +184,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Authenticate external REST requests
-         *
-         * @param $wc_twoinc
-         *
-         * @return bool
-         */
-        public static function auth_rest_request($wc_twoinc)
-        {
-            // TODO: Drop comparison against HTTP_X_API_KEY in a future release
-            return hash('sha256', $wc_twoinc->get_option('api_key')) === $_SERVER['HTTP_X_API_KEY_HASH'] || $wc_twoinc->api_key === $_SERVER['HTTP_X_API_KEY'];
-        }
-
-
-
-        /**
          * Check if order is paid by twoinc
          *
          * @param $order
@@ -703,33 +688,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
             ];
 
             return $req_body;
-        }
-
-        /**
-         * Compose request body for twoinc refund order
-         *
-         * @param $order_id
-         *
-         * @return array
-         */
-        public static function get_private_order_notes($order_id)
-        {
-            global $wpdb;
-
-            $results = $wpdb->get_results("" .
-                "SELECT * FROM $wpdb->comments" .
-                "  WHERE `comment_post_ID` = $order_id" .
-                "    AND `comment_type` LIKE 'order_note'");
-
-            foreach ($results as $note) {
-                $order_note[]  = array(
-                    'note_id'      => $note->comment_ID,
-                    'note_date'    => $note->comment_date,
-                    'note_author'  => $note->comment_author,
-                    'note_content' => $note->comment_content,
-                );
-            }
-            return $order_note;
         }
 
         /**
