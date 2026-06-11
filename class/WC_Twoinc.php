@@ -914,18 +914,12 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * The merchant's own optional minimum order value, as
-         * ['amount', 'currency', 'basis'] or null. Interpreted in the
-         * platform minimum's currency/basis when the brand declares one,
-         * otherwise store currency, gross. The admin field is validated
-         * on save to exceed the platform minimum — merchants may only
-         * raise the bar.
-         *
-         * @return array|null
-         */
-        /**
          * Dynamic description for the Minimum Order Value setting: shows
-         * the platform minimum the merchant's value must exceed.
+         * the platform minimum the merchant's value must exceed. The
+         * field is interpreted in the STORE currency; when that differs
+         * from the platform minimum's currency the floor is shown in its
+         * native currency only — WooCommerce has no FX rate source until
+         * TWO-24776, so no converted figure can honestly be displayed.
          *
          * @return string
          */
@@ -933,16 +927,36 @@ if (!class_exists('WC_Twoinc')) {
         {
             $gate = WC_Twoinc_Brand::get('availability_gate');
             if ($gate && isset($gate['min_order_amount'], $gate['currency'])) {
+                $native_display = get_woocommerce_currency_symbol($gate['currency'])
+                    . number_format((float) $gate['min_order_amount'], 2);
+                $basis_label = ($gate['basis'] ?? 'net') === 'gross'
+                    ? __('including', 'twoinc-payment-gateway')
+                    : __('excluding', 'twoinc-payment-gateway');
+                if (get_option('woocommerce_currency') === $gate['currency']) {
+                    return sprintf(
+                        __('Platform minimum %1$s, %2$s tax. A value here is interpreted in the store currency on the same tax basis and must exceed it.', 'twoinc-payment-gateway'),
+                        $native_display,
+                        $basis_label
+                    );
+                }
                 return sprintf(
-                    __('Platform minimum: %1$s %2$s (%3$s tax). A value here must exceed it and is interpreted in the same currency and tax basis.', 'twoinc-payment-gateway'),
-                    $gate['min_order_amount'],
-                    $gate['currency'],
-                    ($gate['basis'] ?? 'net') === 'gross' ? __('including', 'twoinc-payment-gateway') : __('excluding', 'twoinc-payment-gateway')
+                    __('Platform minimum %1$s, %2$s tax. A value here is interpreted in the store currency on the same tax basis; it cannot be checked against the platform minimum (different currency) — both minimums are enforced independently.', 'twoinc-payment-gateway'),
+                    $native_display,
+                    $basis_label
                 );
             }
             return __('Hide the payment method below this order value (store currency, including tax). Leave empty for no minimum.', 'twoinc-payment-gateway');
         }
 
+        /**
+         * The merchant's own optional minimum order value, as
+         * ['amount', 'currency', 'basis'] or null. Interpreted in the
+         * STORE currency (the saved woocommerce_currency option, not the
+         * active multicurrency display currency) on the platform
+         * minimum's tax basis when the brand declares one, else gross.
+         *
+         * @return array|null
+         */
         public function get_merchant_minimum_order()
         {
             $value = (float) $this->get_option('merchant_minimum_order');
@@ -952,15 +966,19 @@ if (!class_exists('WC_Twoinc')) {
             $gate = WC_Twoinc_Brand::get('availability_gate');
             return [
                 'amount' => $value,
-                'currency' => $gate['currency'] ?? get_woocommerce_currency(),
+                'currency' => get_option('woocommerce_currency'),
                 'basis' => $gate['basis'] ?? 'gross',
             ];
         }
 
         /**
-         * Validate the merchant minimum on settings save: numeric,
-         * non-negative, and strictly above the platform minimum when the
-         * brand declares one.
+         * Validate the merchant minimum on settings save: numeric and
+         * non-negative always; strictly above the platform minimum when
+         * the brand declares one IN THE STORE CURRENCY. A platform
+         * minimum in another currency cannot be compared (no FX source
+         * in WooCommerce until TWO-24776) — the numeric floor check is
+         * skipped and both minimums are enforced independently at
+         * checkout.
          *
          * @param string $key
          * @param string $value
@@ -979,11 +997,15 @@ if (!class_exists('WC_Twoinc')) {
                 throw new Exception(__('Minimum Order Value must be a non-negative number.', 'twoinc-payment-gateway'));
             }
             $gate = WC_Twoinc_Brand::get('availability_gate');
-            if ($gate && isset($gate['min_order_amount']) && (float) $value <= (float) $gate['min_order_amount']) {
+            if (
+                $gate
+                && isset($gate['min_order_amount'], $gate['currency'])
+                && get_option('woocommerce_currency') === $gate['currency']
+                && (float) $value <= (float) $gate['min_order_amount']
+            ) {
                 throw new Exception(sprintf(
-                    __('Minimum Order Value must exceed the platform minimum of %1$s %2$s (%3$s tax).', 'twoinc-payment-gateway'),
-                    $gate['min_order_amount'],
-                    $gate['currency'],
+                    __('Minimum Order Value must exceed the platform minimum of %1$s, %2$s tax.', 'twoinc-payment-gateway'),
+                    get_woocommerce_currency_symbol($gate['currency']) . number_format((float) $gate['min_order_amount'], 2),
                     ($gate['basis'] ?? 'net') === 'gross' ? __('including', 'twoinc-payment-gateway') : __('excluding', 'twoinc-payment-gateway')
                 ));
             }
