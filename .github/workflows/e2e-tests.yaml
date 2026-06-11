@@ -50,7 +50,12 @@ jobs:
           MERCHANT_API_KEY: ${{ steps.secrets.outputs.MERCHANT_API_KEY }}
 
       - name: Start WordPress
-        run: docker compose up -d
+        run: |
+          # Compose defaults WOOCOM_PLUGIN_CONFIG_JSON to the local-dev
+          # config; CI must seed the gateway with the staging config the
+          # previous step rendered.
+          echo "WOOCOM_PLUGIN_CONFIG_JSON=docker/config/staging-tillittestuk.json" > .env
+          docker compose up -d
 
       - name: Wait for bootstrap to complete
         run: |
