@@ -81,7 +81,7 @@ EOF
 Now you can bring up your Wordpress instance:
 
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 Navigate to <http://localhost:8888/> on your browser to access the Wordpress site.
@@ -100,6 +100,9 @@ Playwright e2e tests live in `tests/e2e/`. They run against the local Docker env
 ### Setup
 
 ```bash
+# The compose default seeds the LOCAL dev config; e2e runs against the
+# staging shop, so pin the staging config first (CI does the same):
+echo WOOCOM_PLUGIN_CONFIG_JSON=docker/config/staging-tillittestuk.json > .env
 docker compose up -d
 # wait ~90s for wpcli bootstrap to finish (installs WooCommerce, creates products, activates plugin)
 

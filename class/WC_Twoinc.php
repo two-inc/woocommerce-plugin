@@ -1589,7 +1589,7 @@ if (!class_exists('WC_Twoinc')) {
                             </div>
                         <?php else: ?>
                             <div style="margin-top: 8px; color: #666; font-size: 13px;">
-                                <strong><?php printf(__('Don\'t have an API key? Get one by signing up <a href=\'%s\'>here</a>.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('merchant_signup_url')); ?></strong>
+                                <strong><?php printf(__('Don\'t have an API key? Get one by signing up <a href=\'%s\'>here</a>.', 'twoinc-payment-gateway'), esc_url(WC_Twoinc_Brand::get('sign_up_url'))); ?></strong>
                             </div>
                         <?php endif; ?>
                         <?php echo $this->get_description_html($data); // WPCS: XSS ok.

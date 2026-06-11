@@ -104,7 +104,7 @@ final class BrandConfigSpec
         TinyAssert::same('two', WC_Twoinc_Brand::get('code'));
         TinyAssert::same('Two', WC_Twoinc_Brand::get('product_name'));
         TinyAssert::same('Two', WC_Twoinc_Brand::get('provider'));
-        TinyAssert::same('https://portal.two.inc/auth/merchant/signup', WC_Twoinc_Brand::get('merchant_signup_url'));
+        TinyAssert::same('https://portal.two.inc/auth/merchant/signup', WC_Twoinc_Brand::get('sign_up_url'));
         TinyAssert::same(WC_TWOINC_PLUGIN_URL . 'assets/images/two-logo.svg', WC_Twoinc_Brand::get('logo_url'));
         TinyAssert::same('Business invoice - %s days', WC_Twoinc_Brand::get('title_default'));
         TinyAssert::same(null, WC_Twoinc_Brand::get('not_a_key'));
@@ -123,7 +123,9 @@ final class BrandConfigSpec
         TinyAssert::same(WC_Twoinc::PROVIDER, WC_Twoinc_Brand::get('provider'));
         TinyAssert::same(WC_Twoinc::PROVIDER_FULL_NAME, WC_Twoinc_Brand::get('provider_full_name'));
         TinyAssert::same(WC_Twoinc::PRODUCT_NAME, WC_Twoinc_Brand::get('product_name'));
-        TinyAssert::same(WC_Twoinc::MERCHANT_SIGNUP_URL, WC_Twoinc_Brand::get('merchant_signup_url'));
+        // Constant name keeps its BC spelling; the brand key uses the
+        // cross-plugin canonical sign_up_url (Magento's spelling)
+        TinyAssert::same(WC_Twoinc::MERCHANT_SIGNUP_URL, WC_Twoinc_Brand::get('sign_up_url'));
         TinyAssert::same(WC_Twoinc::ALERT_EMAIL_ADDRESS, WC_Twoinc_Brand::get('alert_email_address'));
     }
 

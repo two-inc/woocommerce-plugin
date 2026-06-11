@@ -69,8 +69,20 @@ if (!class_exists('WC_Twoinc_Brand')) {
             }
 
             $config = $defaults;
-            if ($brand_file && is_file($brand_file)) {
-                $config = array_merge($defaults, (array) require $brand_file);
+            // Defence in depth: a filter-supplied path must be a real .php
+            // file inside the plugins (or mu-plugins) tree. Co-resident
+            // plugins are trusted code, but this keeps the loader from ever
+            // require-ing uploads or other writable paths.
+            if ($brand_file && is_file($brand_file) && substr($brand_file, -4) === '.php') {
+                $real = realpath($brand_file);
+                $plugin_root = defined('WP_PLUGIN_DIR') ? realpath(WP_PLUGIN_DIR) : false;
+                $mu_root = defined('WPMU_PLUGIN_DIR') ? realpath(WPMU_PLUGIN_DIR) : false;
+                $inside = static function ($root) use ($real) {
+                    return $root && $real && strpos($real, $root . DIRECTORY_SEPARATOR) === 0;
+                };
+                if ($real && (!$plugin_root && !$mu_root || $inside($plugin_root) || $inside($mu_root))) {
+                    $config = array_merge($defaults, (array) require $real);
+                }
             }
 
             self::$config = $config;
