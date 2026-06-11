@@ -1053,6 +1053,23 @@ if (!class_exists('WC_Twoinc')) {
 
             if ($body['status'] == 'REJECTED') {
                 $error_message = sprintf(__('Invoice purchase with %s is not available for this order.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name'));
+                // The backend decline reason is opaque, but when the basket
+                // sits near the brand's minimum the likely cause is the
+                // minimum-order rule — tell the buyer something actionable.
+                // Same-currency only: WooCommerce has no FX rate source.
+                $gate = WC_Twoinc_Brand::get('availability_gate');
+                if ($gate
+                    && isset($gate['min_order_amount'], $gate['currency'])
+                    && $order->get_currency() === $gate['currency']
+                    && ((float) $order->get_total() - (float) $order->get_total_tax()) < (float) $gate['min_order_amount'] * 1.05
+                ) {
+                    $error_message .= ' ' . sprintf(
+                        __('Note: %1\$s requires a minimum order value of %2\$s %3\$s excluding tax.', 'twoinc-payment-gateway'),
+                        WC_Twoinc_Brand::get('product_name'),
+                        $gate['min_order_amount'],
+                        $gate['currency']
+                    );
+                }
                 $order->add_order_note($error_message);
                 WC_Twoinc_Helper::display_ajax_error($error_message);
                 return;
