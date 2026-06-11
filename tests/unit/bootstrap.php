@@ -148,6 +148,11 @@ class StubCustomer
 class WC_Payment_Gateway
 {
     public $id;
+
+    public function get_option($key, $empty_value = null)
+    {
+        return $empty_value ?? '';
+    }
 }
 
 class WC_HTTPS
