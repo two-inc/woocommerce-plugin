@@ -113,6 +113,23 @@ function WC()
     return $wc;
 }
 
+class StubCart
+{
+    public $total;
+    private $total_tax;
+
+    public function __construct($total, $total_tax = 0.0)
+    {
+        $this->total = $total;
+        $this->total_tax = $total_tax;
+    }
+
+    public function get_total_tax()
+    {
+        return $this->total_tax;
+    }
+}
+
 class StubCustomer
 {
     private $country;

@@ -30,7 +30,9 @@ return [
     'meta_prefix' => 'twoinc',
     // Brand product constraints removing the gateway from checkout when
     // unmet: ['min_order_amount' => float, 'currency' => 'EUR',
-    // 'billing_countries' => ['NL']]. null = no gate (Two default).
+    // 'billing_countries' => ['NL']]. min_order_amount compares the NET
+    // basket (total minus tax) — the funding partner's server-side risk
+    // rule compares net. null = no gate (Two default).
     'availability_gate' => null,
     // Countries offered in the checkout company-search JS.
     'supported_buyer_countries' => ['NO', 'GB', 'SE', 'NL', 'FI', 'DK'],
