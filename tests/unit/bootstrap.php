@@ -90,6 +90,19 @@ function get_woocommerce_currency()
     return $GLOBALS['__twoinc_test_currency'] ?? 'EUR';
 }
 
+function get_woocommerce_currency_symbol($currency = '')
+{
+    return $currency !== '' ? $currency . ' ' : '';
+}
+
+function get_option($key, $default = false)
+{
+    if ($key === 'woocommerce_currency') {
+        return $GLOBALS['__twoinc_test_store_currency'] ?? 'EUR';
+    }
+    return $GLOBALS['__twoinc_test_options'][$key] ?? $default;
+}
+
 function WC()
 {
     static $wc = null;

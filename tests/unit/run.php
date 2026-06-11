@@ -46,6 +46,7 @@ final class BrandConfigSpec
             'testAvailabilityGateComparesNetNotGross',
             'testMerchantMinimumRaisesTheBar',
             'testMerchantMinimumValidationRejectsValuesAtOrBelowPlatformMinimum',
+            'testMerchantMinimumValidationSkipsFloorCheckAcrossCurrencies',
             'testPaymentValidationErrorFilterVetoes',
             'testConfirmationPageDetectionFollowsBrandPrefix',
         ];
@@ -395,6 +396,23 @@ final class BrandConfigSpec
 
         TinyAssert::same('251', $gateway->validate_merchant_minimum_order_field('merchant_minimum_order', '251'));
         TinyAssert::same('', $gateway->validate_merchant_minimum_order_field('merchant_minimum_order', ''));
+    }
+
+    private static function testMerchantMinimumValidationSkipsFloorCheckAcrossCurrencies(): void
+    {
+        // Store currency GBP vs platform minimum in EUR: WooCommerce has
+        // no FX source (until TWO-24776), so the floor comparison is
+        // skipped on save — the gate enforces both minima independently.
+        self::useTestbrand();
+        $GLOBALS['__twoinc_test_store_currency'] = 'GBP';
+        try {
+            TinyAssert::same(
+                '10',
+                self::gateway()->validate_merchant_minimum_order_field('merchant_minimum_order', '10')
+            );
+        } finally {
+            unset($GLOBALS['__twoinc_test_store_currency']);
+        }
     }
 
     private static function testConfirmationPageDetectionFollowsBrandPrefix(): void
