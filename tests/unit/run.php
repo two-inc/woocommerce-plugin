@@ -44,6 +44,8 @@ final class BrandConfigSpec
             'testAvailabilityGateRemovesGatewayWhenUnmet',
             'testAvailabilityGateKeepsGatewayAtExactMinimum',
             'testAvailabilityGateComparesNetNotGross',
+            'testMerchantMinimumRaisesTheBar',
+            'testMerchantMinimumValidationRejectsValuesAtOrBelowPlatformMinimum',
             'testPaymentValidationErrorFilterVetoes',
             'testConfirmationPageDetectionFollowsBrandPrefix',
         ];
@@ -348,6 +350,51 @@ final class BrandConfigSpec
             'You must first accept the payment terms (order 42)',
             self::gateway()->get_brand_payment_validation_error(42)
         );
+    }
+
+    private static function testMerchantMinimumRaisesTheBar(): void
+    {
+        // No platform gate (Two brand): the merchant minimum gates alone
+        WC()->customer = new StubCustomer('NO');
+        $GLOBALS['__twoinc_test_currency'] = 'EUR';
+        $gateway = new class () extends WC_Twoinc {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                return $key === 'merchant_minimum_order' ? '500' : '';
+            }
+        };
+
+        $gateways = ['woocommerce-gateway-tillit' => 'gw'];
+        WC()->cart = new StubCart(499.0);
+        $result = $gateway->apply_brand_availability_gate($gateways);
+        TinyAssert::true(!isset($result['woocommerce-gateway-tillit']));
+
+        // Gross basis by default for a standalone merchant minimum
+        WC()->cart = new StubCart(500.0, 100.0);
+        $result = $gateway->apply_brand_availability_gate($gateways);
+        TinyAssert::same('gw', $result['woocommerce-gateway-tillit']);
+    }
+
+    private static function testMerchantMinimumValidationRejectsValuesAtOrBelowPlatformMinimum(): void
+    {
+        self::useTestbrand();
+        $gateway = self::gateway();
+
+        $threw = false;
+        try {
+            $gateway->validate_merchant_minimum_order_field('merchant_minimum_order', '250');
+        } catch (Exception $e) {
+            $threw = true;
+        }
+        TinyAssert::true($threw, 'A value equal to the platform minimum must be rejected');
+
+        TinyAssert::same('251', $gateway->validate_merchant_minimum_order_field('merchant_minimum_order', '251'));
+        TinyAssert::same('', $gateway->validate_merchant_minimum_order_field('merchant_minimum_order', ''));
     }
 
     private static function testConfirmationPageDetectionFollowsBrandPrefix(): void

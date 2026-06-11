@@ -13,6 +13,7 @@ return [
     'availability_gate' => [
         'min_order_amount' => 250.0,
         'currency' => 'EUR',
+        'basis' => 'net',
         'billing_countries' => ['NL'],
     ],
 ];

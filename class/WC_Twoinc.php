@@ -847,26 +847,45 @@ if (!class_exists('WC_Twoinc')) {
         public function apply_brand_availability_gate($available_gateways)
         {
             $gate = WC_Twoinc_Brand::get('availability_gate');
-            if (!$gate || is_admin() || !isset($available_gateways[$this->id])) {
-                return $available_gateways;
-            }
-            if (!isset($gate['min_order_amount'], $gate['currency'], $gate['billing_countries'])) {
+            if ($gate && !isset($gate['min_order_amount'], $gate['currency'], $gate['basis'], $gate['billing_countries'])) {
                 // A truthy but malformed gate must not judge with missing
                 // criteria; leave the gateway available and let the log
                 // below stay quiet (config bug, not a basket decision).
+                $gate = null;
+            }
+            $merchant_minimum = $this->get_merchant_minimum_order();
+            if ((!$gate && !$merchant_minimum) || is_admin() || !isset($available_gateways[$this->id])) {
                 return $available_gateways;
             }
             if (!function_exists('WC') || !WC()->cart || !WC()->customer) {
                 return $available_gateways;
             }
 
-            // Net basket value (total minus tax): the funding partner's
-            // server-side risk rule compares net, so a gross-compared gate
-            // would show the method on baskets the credit check declines.
-            $net_total = (float) WC()->cart->total - (float) WC()->cart->get_total_tax();
-            $satisfied = $net_total >= (float) $gate['min_order_amount']
-                && get_woocommerce_currency() === $gate['currency']
-                && in_array(WC()->customer->get_billing_country(), $gate['billing_countries'], true);
+            // Basket value on the configured basis: the platform minimum's
+            // basis is explicit (ABN's funding-partner rule is net; the
+            // platform's defaults are gross); the merchant minimum rides
+            // the same basis when a platform minimum exists.
+            $basis = $gate ? $gate['basis'] : ($merchant_minimum['basis'] ?? 'gross');
+            $basket_value = $basis === 'gross'
+                ? (float) WC()->cart->total
+                : (float) WC()->cart->total - (float) WC()->cart->get_total_tax();
+
+            $satisfied = true;
+            if ($gate) {
+                $satisfied = $basket_value >= (float) $gate['min_order_amount']
+                    && get_woocommerce_currency() === $gate['currency']
+                    && in_array(WC()->customer->get_billing_country(), $gate['billing_countries'], true);
+            }
+            if ($satisfied && $merchant_minimum) {
+                $satisfied = get_woocommerce_currency() === $merchant_minimum['currency']
+                    ? $basket_value >= $merchant_minimum['amount']
+                    // The merchant minimum is store-currency scoped; a
+                    // basket in another currency cannot be judged against
+                    // it (no FX source in WooCommerce) — fail open on the
+                    // merchant's own optional bar, the platform gate above
+                    // still applies.
+                    : $satisfied;
+            }
             if (!$satisfied) {
                 unset($available_gateways[$this->id]);
                 // Removing a payment method is invisible to the merchant —
@@ -877,14 +896,14 @@ if (!class_exists('WC_Twoinc')) {
                     $logged = true;
                     wc_get_logger()->info(
                         sprintf(
-                            'Brand availability gate removed %s from checkout (net_total=%s currency=%s country=%s; gate requires net min %s %s in %s)',
+                            'Brand availability gate removed %s from checkout (basket_value=%s basis=%s currency=%s country=%s; platform min %s, merchant min %s)',
                             $this->id,
-                            $net_total,
+                            $basket_value,
+                            $basis,
                             get_woocommerce_currency(),
                             WC()->customer->get_billing_country(),
-                            $gate['min_order_amount'],
-                            $gate['currency'],
-                            implode(',', $gate['billing_countries'])
+                            $gate ? $gate['min_order_amount'] . ' ' . $gate['currency'] : 'none',
+                            $merchant_minimum ? $merchant_minimum['amount'] . ' ' . $merchant_minimum['currency'] : 'none'
                         ),
                         ['source' => 'twoinc-payment-gateway']
                     );
@@ -892,6 +911,83 @@ if (!class_exists('WC_Twoinc')) {
             }
 
             return $available_gateways;
+        }
+
+        /**
+         * The merchant's own optional minimum order value, as
+         * ['amount', 'currency', 'basis'] or null. Interpreted in the
+         * platform minimum's currency/basis when the brand declares one,
+         * otherwise store currency, gross. The admin field is validated
+         * on save to exceed the platform minimum — merchants may only
+         * raise the bar.
+         *
+         * @return array|null
+         */
+        /**
+         * Dynamic description for the Minimum Order Value setting: shows
+         * the platform minimum the merchant's value must exceed.
+         *
+         * @return string
+         */
+        public function get_merchant_minimum_order_description()
+        {
+            $gate = WC_Twoinc_Brand::get('availability_gate');
+            if ($gate && isset($gate['min_order_amount'], $gate['currency'])) {
+                return sprintf(
+                    __('Platform minimum: %1$s %2$s (%3$s tax). A value here must exceed it and is interpreted in the same currency and tax basis.', 'twoinc-payment-gateway'),
+                    $gate['min_order_amount'],
+                    $gate['currency'],
+                    ($gate['basis'] ?? 'net') === 'gross' ? __('including', 'twoinc-payment-gateway') : __('excluding', 'twoinc-payment-gateway')
+                );
+            }
+            return __('Hide the payment method below this order value (store currency, including tax). Leave empty for no minimum.', 'twoinc-payment-gateway');
+        }
+
+        public function get_merchant_minimum_order()
+        {
+            $value = (float) $this->get_option('merchant_minimum_order');
+            if ($value <= 0) {
+                return null;
+            }
+            $gate = WC_Twoinc_Brand::get('availability_gate');
+            return [
+                'amount' => $value,
+                'currency' => $gate['currency'] ?? get_woocommerce_currency(),
+                'basis' => $gate['basis'] ?? 'gross',
+            ];
+        }
+
+        /**
+         * Validate the merchant minimum on settings save: numeric,
+         * non-negative, and strictly above the platform minimum when the
+         * brand declares one.
+         *
+         * @param string $key
+         * @param string $value
+         *
+         * @return string
+         * @throws Exception
+         */
+        public function validate_merchant_minimum_order_field($key, $value)
+        {
+            $value = trim((string) $value);
+            if ($value === '') {
+                return '';
+            }
+            $value = str_replace(',', '.', $value);
+            if (!is_numeric($value) || (float) $value < 0) {
+                throw new Exception(__('Minimum Order Value must be a non-negative number.', 'twoinc-payment-gateway'));
+            }
+            $gate = WC_Twoinc_Brand::get('availability_gate');
+            if ($gate && isset($gate['min_order_amount']) && (float) $value <= (float) $gate['min_order_amount']) {
+                throw new Exception(sprintf(
+                    __('Minimum Order Value must exceed the platform minimum of %1$s %2$s (%3$s tax).', 'twoinc-payment-gateway'),
+                    $gate['min_order_amount'],
+                    $gate['currency'],
+                    ($gate['basis'] ?? 'net') === 'gross' ? __('including', 'twoinc-payment-gateway') : __('excluding', 'twoinc-payment-gateway')
+                ));
+            }
+            return $value;
         }
 
         /**
@@ -1053,22 +1149,27 @@ if (!class_exists('WC_Twoinc')) {
 
             if ($body['status'] == 'REJECTED') {
                 $error_message = sprintf(__('Invoice purchase with %s is not available for this order.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name'));
-                // The backend decline reason is opaque, but when the basket
-                // sits near the brand's minimum the likely cause is the
-                // minimum-order rule — tell the buyer something actionable.
-                // Same-currency only: WooCommerce has no FX rate source.
+                // Surface the minimum when the decline is attributable to
+                // it: primarily by the API's machine-readable decline
+                // reason, with a strictly-below-minimum check as fallback
+                // while older backends carry only a generic reason. Same
+                // currency only: WooCommerce has no FX rate source.
                 $gate = WC_Twoinc_Brand::get('availability_gate');
-                if ($gate
-                    && isset($gate['min_order_amount'], $gate['currency'])
-                    && $order->get_currency() === $gate['currency']
-                    && ((float) $order->get_total() - (float) $order->get_total_tax()) < (float) $gate['min_order_amount'] * 1.05
-                ) {
-                    $error_message .= ' ' . sprintf(
-                        __('Note: %1\$s requires a minimum order value of %2\$s %3\$s excluding tax.', 'twoinc-payment-gateway'),
-                        WC_Twoinc_Brand::get('product_name'),
-                        $gate['min_order_amount'],
-                        $gate['currency']
-                    );
+                if ($gate && isset($gate['min_order_amount'], $gate['currency'], $gate['basis'])) {
+                    $order_value = $gate['basis'] === 'gross'
+                        ? (float) $order->get_total()
+                        : (float) $order->get_total() - (float) $order->get_total_tax();
+                    $declined_on_minimum = ($body['decline_reason'] ?? null) === 'ORDER_BELOW_MIN_INVOICE_AMOUNT'
+                        || ($order->get_currency() === $gate['currency']
+                            && $order_value < (float) $gate['min_order_amount']);
+                    if ($declined_on_minimum && $order->get_currency() === $gate['currency']) {
+                        $error_message .= ' ' . sprintf(
+                            __('Minimum order value is %1$s%2$s %3$s tax.', 'twoinc-payment-gateway'),
+                            get_woocommerce_currency_symbol($gate['currency']),
+                            number_format((float) $gate['min_order_amount'], 2),
+                            $gate['basis'] === 'gross' ? __('including', 'twoinc-payment-gateway') : __('excluding', 'twoinc-payment-gateway')
+                        );
+                    }
                 }
                 $order->add_order_note($error_message);
                 WC_Twoinc_Helper::display_ajax_error($error_message);
@@ -1411,6 +1512,12 @@ if (!class_exists('WC_Twoinc')) {
                     // Brand-specific default: a fresh install must show the
                     // brand's payment-method title, not the Two phrasing.
                     'default'     => __(WC_Twoinc_Brand::get('title_default'), 'twoinc-payment-gateway')
+                ],
+                'merchant_minimum_order' => [
+                    'title'       => __('Minimum Order Value', 'twoinc-payment-gateway'),
+                    'type'        => 'text',
+                    'default'     => '',
+                    'description' => $this->get_merchant_minimum_order_description(),
                 ],
                 'test_checkout_host' => [
                     'type'        => 'text',
