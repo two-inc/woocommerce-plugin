@@ -43,6 +43,7 @@ final class BrandConfigSpec
             'testAvailabilityGateAbsentForTwoBrand',
             'testAvailabilityGateRemovesGatewayWhenUnmet',
             'testAvailabilityGateKeepsGatewayAtExactMinimum',
+            'testAvailabilityGateComparesNetNotGross',
             'testPaymentValidationErrorFilterVetoes',
             'testConfirmationPageDetectionFollowsBrandPrefix',
         ];
@@ -291,7 +292,7 @@ final class BrandConfigSpec
     private static function testAvailabilityGateRemovesGatewayWhenUnmet(): void
     {
         self::useTestbrand();
-        WC()->cart = (object) ['total' => 249.99];
+        WC()->cart = new StubCart(249.99);
         WC()->customer = new StubCustomer('NL');
         $GLOBALS['__twoinc_test_currency'] = 'EUR';
 
@@ -305,7 +306,7 @@ final class BrandConfigSpec
     private static function testAvailabilityGateKeepsGatewayAtExactMinimum(): void
     {
         self::useTestbrand();
-        WC()->cart = (object) ['total' => 250.0];
+        WC()->cart = new StubCart(250.0);
         WC()->customer = new StubCustomer('NL');
         $GLOBALS['__twoinc_test_currency'] = 'EUR';
 
@@ -314,6 +315,25 @@ final class BrandConfigSpec
 
         // The minimum is inclusive: an exactly-minimum basket passes
         TinyAssert::same('gw', $result['woocommerce-gateway-testbrand']);
+    }
+
+    private static function testAvailabilityGateComparesNetNotGross(): void
+    {
+        self::useTestbrand();
+        WC()->customer = new StubCustomer('NL');
+        $GLOBALS['__twoinc_test_currency'] = 'EUR';
+        $gateways = ['woocommerce-gateway-testbrand' => 'gw'];
+
+        // EUR 302.50 gross with EUR 52.50 tax is exactly EUR 250 net: passes
+        WC()->cart = new StubCart(302.50, 52.50);
+        $result = self::gateway()->apply_brand_availability_gate($gateways);
+        TinyAssert::same('gw', $result['woocommerce-gateway-testbrand']);
+
+        // EUR 250 gross with tax is below EUR 250 net: the credit check
+        // would decline it, so the gate must hide the method
+        WC()->cart = new StubCart(250.0, 43.39);
+        $result = self::gateway()->apply_brand_availability_gate($gateways);
+        TinyAssert::true(!isset($result['woocommerce-gateway-testbrand']));
     }
 
     private static function testPaymentValidationErrorFilterVetoes(): void

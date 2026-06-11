@@ -860,7 +860,11 @@ if (!class_exists('WC_Twoinc')) {
                 return $available_gateways;
             }
 
-            $satisfied = (float) WC()->cart->total >= (float) $gate['min_order_amount']
+            // Net basket value (total minus tax): the funding partner's
+            // server-side risk rule compares net, so a gross-compared gate
+            // would show the method on baskets the credit check declines.
+            $net_total = (float) WC()->cart->total - (float) WC()->cart->get_total_tax();
+            $satisfied = $net_total >= (float) $gate['min_order_amount']
                 && get_woocommerce_currency() === $gate['currency']
                 && in_array(WC()->customer->get_billing_country(), $gate['billing_countries'], true);
             if (!$satisfied) {
@@ -873,9 +877,9 @@ if (!class_exists('WC_Twoinc')) {
                     $logged = true;
                     wc_get_logger()->info(
                         sprintf(
-                            'Brand availability gate removed %s from checkout (total=%s currency=%s country=%s; gate requires min %s %s in %s)',
+                            'Brand availability gate removed %s from checkout (net_total=%s currency=%s country=%s; gate requires net min %s %s in %s)',
                             $this->id,
-                            WC()->cart->total,
+                            $net_total,
                             get_woocommerce_currency(),
                             WC()->customer->get_billing_country(),
                             $gate['min_order_amount'],
