@@ -49,6 +49,12 @@ final class BrandConfigSpec
             'testMerchantMinimumValidationSkipsFloorCheckAcrossCurrencies',
             'testPaymentValidationErrorFilterVetoes',
             'testConfirmationPageDetectionFollowsBrandPrefix',
+            'testPaymentTermsResolveBrandIntersectAdminSubset',
+            'testPaymentTermsDefaultFallsBackToShortest',
+            'testBuyerFeeShareShapes',
+            'testOrderPayloadCarriesSelectedAndAvailableTerms',
+            'testPaymentTermsInvalidPostFallsBackToDefault',
+            'testPaymentTermsDisabledMeansNoPayloadTerms',
         ];
         foreach ($tests as $test) {
             self::reset();
@@ -62,6 +68,8 @@ final class BrandConfigSpec
         WC_Twoinc_Brand::reset();
         putenv('TWO_BRAND_CODE');
         unset($GLOBALS['__twoinc_test_currency']);
+        unset($_POST[WC_Twoinc_Payment_Terms::SESSION_KEY]);
+        WC_Twoinc_Payment_Terms::reset_fee_cache();
         WC()->cart = null;
         WC()->customer = null;
         foreach (['twoinc_brand_file', 'twoinc_checkout_fields', 'twoinc_confirmation_url', 'twoinc_order_payload', 'twoinc_payment_terms_line', 'two_order_create', 'twoinc_payment_validation_error'] as $tag) {
@@ -455,6 +463,136 @@ final class BrandConfigSpec
         // merges harmlessly; all named keys keep their Two defaults.
         TinyAssert::same('Two', WC_Twoinc_Brand::get('product_name'));
         TinyAssert::same('woocommerce-gateway-tillit', WC_Twoinc_Brand::get('gateway_id'));
+    }
+
+    /**
+     * Gateway fake with configurable options for the payment-terms logic
+     * (the real gateway constructor needs a WooCommerce install).
+     */
+    private static function termsGateway(array $options): WC_Payment_Gateway
+    {
+        return new class ($options) extends WC_Payment_Gateway {
+            private $options;
+
+            public function __construct($options)
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+                $this->options = $options;
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                return $this->options[$key] ?? $empty_value ?? '';
+            }
+        };
+    }
+
+    private static function testPaymentTermsResolveBrandIntersectAdminSubset(): void
+    {
+        // Brand default set, no admin subset: all brand terms
+        $gateway = self::termsGateway(['enable_payment_terms' => 'yes']);
+        TinyAssert::same([14, 30, 60, 90], WC_Twoinc_Payment_Terms::get_available_terms($gateway));
+        TinyAssert::true(WC_Twoinc_Payment_Terms::is_enabled($gateway));
+
+        // Admin narrows within the brand set; entries outside it drop
+        $gateway = self::termsGateway(['enable_payment_terms' => 'yes', 'payment_terms_days' => ['60', '30', '7']]);
+        TinyAssert::same([30, 60], WC_Twoinc_Payment_Terms::get_available_terms($gateway));
+
+        // Feature off regardless of terms
+        $gateway = self::termsGateway(['enable_payment_terms' => 'no']);
+        TinyAssert::same(false, WC_Twoinc_Payment_Terms::is_enabled($gateway));
+    }
+
+    private static function testPaymentTermsDefaultFallsBackToShortest(): void
+    {
+        $gateway = self::termsGateway(['enable_payment_terms' => 'yes', 'default_payment_term' => '60']);
+        TinyAssert::same(60, WC_Twoinc_Payment_Terms::get_default_term($gateway));
+
+        // Configured default outside the offered set: shortest offered wins
+        $gateway = self::termsGateway([
+            'enable_payment_terms' => 'yes',
+            'payment_terms_days' => ['30', '90'],
+            'default_payment_term' => '60',
+        ]);
+        TinyAssert::same(30, WC_Twoinc_Payment_Terms::get_default_term($gateway));
+    }
+
+    private static function testBuyerFeeShareShapes(): void
+    {
+        // Disabled: no block at all
+        $gateway = self::termsGateway(['enable_offset_pricing' => 'no']);
+        TinyAssert::same(null, WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway));
+
+        // Simple pass-through
+        $gateway = self::termsGateway(['enable_offset_pricing' => 'yes', 'offset_pricing_percentage' => '100']);
+        TinyAssert::same(['percentage' => '100'], WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway));
+
+        // Partial pass-through
+        $gateway = self::termsGateway(['enable_offset_pricing' => 'yes', 'offset_pricing_percentage' => '50']);
+        TinyAssert::same(['percentage' => '50'], WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway));
+
+        // Incremental: reference terms ride along
+        $gateway = self::termsGateway([
+            'enable_offset_pricing' => 'yes',
+            'offset_pricing_percentage' => '100',
+            'offset_pricing_reference_days' => '30',
+        ]);
+        TinyAssert::same(
+            ['percentage' => '100', 'reference_terms' => ['type' => 'NET_TERMS', 'duration_days' => 30]],
+            WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway)
+        );
+
+        // Malformed percentage falls back to full pass-through
+        $gateway = self::termsGateway(['enable_offset_pricing' => 'yes', 'offset_pricing_percentage' => '150']);
+        TinyAssert::same(['percentage' => '100'], WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway));
+    }
+
+    private static function testOrderPayloadCarriesSelectedAndAvailableTerms(): void
+    {
+        $gateway = self::termsGateway(['enable_payment_terms' => 'yes']);
+        $_POST[WC_Twoinc_Payment_Terms::SESSION_KEY] = '60';
+
+        $payment_terms = WC_Twoinc_Payment_Terms::get_order_payload_terms($gateway, new StubOrder());
+        $body = WC_Twoinc_Helper::compose_twoinc_order(
+            new StubOrder(),
+            'test-order-reference',
+            '912345678',
+            '',
+            '',
+            '',
+            [],
+            '',
+            '',
+            '',
+            '',
+            '',
+            '',
+            false,
+            $payment_terms
+        );
+
+        TinyAssert::same(['type' => 'NET_TERMS', 'duration_days' => 60], $body['terms']);
+        TinyAssert::same([14, 30, 60, 90], $body['available_terms']);
+    }
+
+    private static function testPaymentTermsInvalidPostFallsBackToDefault(): void
+    {
+        $gateway = self::termsGateway(['enable_payment_terms' => 'yes', 'default_payment_term' => '30']);
+        $_POST[WC_Twoinc_Payment_Terms::SESSION_KEY] = '17';
+
+        $payment_terms = WC_Twoinc_Payment_Terms::get_order_payload_terms($gateway, new StubOrder());
+        TinyAssert::same(30, $payment_terms['terms']['duration_days']);
+    }
+
+    private static function testPaymentTermsDisabledMeansNoPayloadTerms(): void
+    {
+        $gateway = self::termsGateway(['enable_payment_terms' => 'no']);
+        TinyAssert::same(null, WC_Twoinc_Payment_Terms::get_order_payload_terms($gateway, new StubOrder()));
+
+        // And the composed body carries no terms keys at all
+        $body = self::composeOrder();
+        TinyAssert::same(false, array_key_exists('terms', $body));
+        TinyAssert::same(false, array_key_exists('available_terms', $body));
     }
 }
 

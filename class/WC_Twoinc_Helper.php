@@ -485,7 +485,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
             $payment_reference_type = '',
             $vendor_name = '',
             $tracking_id = '',
-            $skip_nonce = false
+            $skip_nonce = false,
+            $payment_terms = null
         ) {
 
             $billing_address = [
@@ -572,6 +573,13 @@ if (!class_exists('WC_Twoinc_Helper')) {
 
             if ($vendor_name) {
                 $req_body['vendor_name'] = $vendor_name;
+            }
+
+            // Buyer-selected payment term + the offered set (TWO-24751);
+            // shape from WC_Twoinc_Payment_Terms::get_order_payload_terms.
+            if ($payment_terms) {
+                $req_body['terms'] = $payment_terms['terms'];
+                $req_body['available_terms'] = $payment_terms['available_terms'];
             }
 
             if (!$skip_nonce) {
