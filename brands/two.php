@@ -3,7 +3,7 @@
 /**
  * Two brand configuration — the default brand of the base plugin.
  *
- * A brand overlay plugin (e.g. the ABN AMRO edition) supplies its own
+ * A brand overlay plugin supplies its own
  * file with the same shape via the `twoinc_brand_file` filter; its
  * values are merged over these defaults, so an overlay declares only
  * what differs.
@@ -41,4 +41,12 @@ return [
     // (merchant-saved titles always win). sprintf'd with the invoice
     // day count, so a brand default may carry one %s.
     'title_default' => 'Business invoice - %s days',
+    // Terms the brand may offer in the checkout chip selector (the
+    // merchant narrows the set in settings; WC_Twoinc_Payment_Terms is
+    // the only reader). Mirrors the Magento brand descriptor's
+    // available_payment_terms.
+    'available_terms' => [14, 30, 60, 90],
+    // Buyer-facing label for the offset-pricing fee line; null uses the
+    // translated "Service charge" default.
+    'fee_line_label' => null,
 ];

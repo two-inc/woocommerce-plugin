@@ -316,7 +316,17 @@ class StubOrder
     }
 }
 
+function is_wp_error($thing)
+{
+    return $thing instanceof WP_Error;
+}
+
+class WP_Error
+{
+}
+
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Brand.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Helper.php';
+require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Payment_Terms.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Checkout.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc.php';

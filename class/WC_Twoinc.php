@@ -52,7 +52,7 @@ if (!class_exists('WC_Twoinc')) {
             );
             /**
              * Filter the checkout payment-box description so a brand
-             * overlay can replace the copy wholesale (the ABN edition
+             * overlay can replace the copy wholesale (a brand overlay
              * ships its own bullet list).
              *
              * Applied once at gateway construction: like
@@ -78,6 +78,13 @@ if (!class_exists('WC_Twoinc')) {
             // specific currency/market) remove the gateway from checkout
             // when unmet. Config-driven; the Two brand sets no gate.
             add_filter('woocommerce_available_payment_gateways', [$this, 'apply_brand_availability_gate']);
+
+            // Payment terms chip selector + offset pricing fee (TWO-24751).
+            // Business logic lives in WC_Twoinc_Payment_Terms; the JS layer
+            // renders only what these endpoints return.
+            add_action('woocommerce_cart_calculate_fees', ['WC_Twoinc_Payment_Terms', 'apply_cart_fee']);
+            add_action('wc_ajax_two_term_fees', ['WC_Twoinc_Payment_Terms', 'ajax_term_fees']);
+            add_action('wc_ajax_two_select_term', ['WC_Twoinc_Payment_Terms', 'ajax_select_term']);
 
             if (is_admin()) {
                 // Notice banner if plugin is not setup properly
@@ -256,7 +263,7 @@ if (!class_exists('WC_Twoinc')) {
             /**
              * Filter the "about" block inside the payment-box subtitle —
              * the piece of the description brand overlays actually
-             * replace (the ABN edition ships its own bullet list).
+             * replace (a brand overlay ships its own bullet list).
              * Register by plugins_loaded (computed at gateway
              * construction).
              *
@@ -276,6 +283,7 @@ if (!class_exists('WC_Twoinc')) {
             return sprintf(
                 '<div>
                     <div class="twoinc-pay-box twoinc-explainer">%s</div>
+                    <div class="twoinc-term-chips hidden" role="radiogroup"></div>
                     <div class="twoinc-pay-box twoinc-loader hidden"></div>
                     <div class="twoinc-pay-box twoinc-intent-approved hidden">%s</div>
                     <div class="twoinc-pay-box twoinc-err-payment-default hidden">%s</div>
@@ -286,6 +294,22 @@ if (!class_exists('WC_Twoinc')) {
                 sprintf(__('Invoice purchase with %s is not available for this order.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')),
                 __('Phone number is invalid.', 'twoinc-payment-gateway')
             );
+        }
+
+        /**
+         * Admin option list of the brand's term days, for the payment-terms
+         * settings fields.
+         *
+         * @return array<string, string>
+         */
+        private function get_payment_term_day_options(): array
+        {
+            $options = [];
+            $brand_terms = WC_Twoinc_Brand::get('available_terms');
+            foreach (is_array($brand_terms) ? $brand_terms : [] as $days) {
+                $options[strval((int) $days)] = sprintf(__('%s days', 'twoinc-payment-gateway'), (int) $days);
+            }
+            return $options;
         }
 
         /**
@@ -837,7 +861,7 @@ if (!class_exists('WC_Twoinc')) {
         /**
          * Remove the gateway from checkout when the brand's availability
          * gate (availability_gate in the brand config) is unmet. Mirrors
-         * the ABN fork's gate semantics: front-end only, minimum is
+         * Brand availability gate semantics: front-end only, minimum is
          * inclusive (an exactly-minimum basket passes).
          *
          * @param array $available_gateways
@@ -862,8 +886,8 @@ if (!class_exists('WC_Twoinc')) {
             }
 
             // Basket value on the configured basis: the platform minimum's
-            // basis is explicit (ABN's funding-partner rule is net; the
-            // platform's defaults are gross); the merchant minimum rides
+            // basis is explicit in brand config (funding-partner rules
+            // and platform defaults may differ); the merchant minimum rides
             // the same basis when a platform minimum exists.
             $basis = $gate ? $gate['basis'] : ($merchant_minimum['basis'] ?? 'gross');
             $basket_value = $basis === 'gross'
@@ -1014,7 +1038,7 @@ if (!class_exists('WC_Twoinc')) {
 
         /**
          * Brand veto on payment processing, resolved via the
-         * twoinc_payment_validation_error filter (e.g. the ABN edition's
+         * twoinc_payment_validation_error filter (e.g. a brand overlay's
          * required terms-acceptance checkbox). Returns the buyer-facing
          * error message, or null to proceed.
          *
@@ -1111,6 +1135,11 @@ if (!class_exists('WC_Twoinc')) {
             $vendor_name = $this->get_option('vendor_name');
             $order->update_meta_data('vendor_name', $vendor_name);
 
+            $payment_terms = WC_Twoinc_Payment_Terms::get_order_payload_terms($this, $order);
+            if ($payment_terms) {
+                $order->update_meta_data(WC_Twoinc_Brand::meta_key('selected_term_days'), $payment_terms['terms']['duration_days']);
+            }
+
             $order->save();
 
             // Save to user meta
@@ -1144,7 +1173,9 @@ if (!class_exists('WC_Twoinc')) {
                 $payment_reference,
                 $payment_reference_type,
                 $vendor_name,
-                $tracking_id
+                $tracking_id,
+                false,
+                $payment_terms
             ));
 
             if (is_wp_error($response)) {
@@ -1664,6 +1695,58 @@ if (!class_exists('WC_Twoinc')) {
                     'type'        => 'checkbox',
                     'default'     => 'yes'
                 ],
+                'section_payment_terms' => [
+                    'type'  => 'title',
+                    'title' => __('Payment terms and offset pricing', 'twoinc-payment-gateway'),
+                ],
+                'enable_payment_terms' => [
+                    'title'       => __('Enable payment terms selection', 'twoinc-payment-gateway'),
+                    'description' => __('Lets the buyer choose their invoice term at checkout from the terms offered below.', 'twoinc-payment-gateway'),
+                    'desc_tip'    => true,
+                    'label'       => ' ',
+                    'type'        => 'checkbox',
+                    'default'     => 'no'
+                ],
+                'payment_terms_days' => [
+                    'title'       => __('Offered terms', 'twoinc-payment-gateway'),
+                    'description' => __('Terms shown to the buyer. Leave empty to offer all terms available to this brand.', 'twoinc-payment-gateway'),
+                    'desc_tip'    => true,
+                    'type'        => 'multiselect',
+                    'class'       => 'wc-enhanced-select',
+                    'options'     => $this->get_payment_term_day_options(),
+                    'default'     => []
+                ],
+                'default_payment_term' => [
+                    'title'       => __('Default term', 'twoinc-payment-gateway'),
+                    'description' => __('Pre-selected term at checkout. Falls back to the shortest offered term.', 'twoinc-payment-gateway'),
+                    'desc_tip'    => true,
+                    'type'        => 'select',
+                    'options'     => $this->get_payment_term_day_options(),
+                    'default'     => ''
+                ],
+                'enable_offset_pricing' => [
+                    'title'       => __('Enable offset pricing', 'twoinc-payment-gateway'),
+                    'description' => __('Passes some or all of the service fee to the buyer as a separate line at checkout. The fee is computed by the platform pricing service.', 'twoinc-payment-gateway'),
+                    'desc_tip'    => true,
+                    'label'       => ' ',
+                    'type'        => 'checkbox',
+                    'default'     => 'no'
+                ],
+                'offset_pricing_percentage' => [
+                    'title'       => __('Fee pass-through percentage', 'twoinc-payment-gateway'),
+                    'description' => __('How much of the fee the buyer pays, 0-100. Invalid values fall back to 100.', 'twoinc-payment-gateway'),
+                    'desc_tip'    => true,
+                    'type'        => 'text',
+                    'default'     => '100'
+                ],
+                'offset_pricing_reference_days' => [
+                    'title'       => __('Reference term (incremental mode)', 'twoinc-payment-gateway'),
+                    'description' => __('When set, the buyer only pays the fee difference versus this baseline term (the baseline term itself shows no surcharge). When unset, the configured percentage of the full fee is passed through.', 'twoinc-payment-gateway'),
+                    'desc_tip'    => true,
+                    'type'        => 'select',
+                    'options'     => ['' => __('None - simple pass-through', 'twoinc-payment-gateway')] + $this->get_payment_term_day_options(),
+                    'default'     => ''
+                ],
                 'section_debug' => [
                     'type'  => 'title',
                     'title' => __('Debug Options', 'twoinc-payment-gateway'),
@@ -2050,7 +2133,7 @@ if (!class_exists('WC_Twoinc')) {
          *
          * @return WP_Error|array
          */
-        private function make_request($endpoint, $payload = [], $method = 'POST', $params = array(), $api_key_override = null)
+        public function make_request($endpoint, $payload = [], $method = 'POST', $params = array(), $api_key_override = null)
         {
             $params['client'] = 'wp';
             $params['client_v'] = get_twoinc_plugin_version();

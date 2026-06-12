@@ -256,6 +256,18 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 'twoinc_plugin_url' => WC_TWOINC_PLUGIN_URL,
                 'client_name' => 'wp',
                 'client_version' => get_twoinc_plugin_version(),
+                // Chip selector bootstrap (TWO-24751). JS renders only; the
+                // live data (fees, selection) comes from the wc-ajax
+                // endpoints in WC_Twoinc_Payment_Terms.
+                'payment_terms' => [
+                    'days_label' => __('%s days', 'twoinc-payment-gateway'),
+                    'enabled' => WC_Twoinc_Payment_Terms::is_enabled($this->wc_twoinc),
+                    'terms' => WC_Twoinc_Payment_Terms::get_available_terms($this->wc_twoinc),
+                    'selected' => WC_Twoinc_Payment_Terms::get_selected_term($this->wc_twoinc),
+                    'offset_pricing_enabled' => WC_Twoinc_Payment_Terms::get_offset_settings($this->wc_twoinc)['enabled'],
+                    'fees_url' => class_exists('WC_AJAX') ? WC_AJAX::get_endpoint('two_term_fees') : '',
+                    'select_url' => class_exists('WC_AJAX') ? WC_AJAX::get_endpoint('two_select_term') : '',
+                ],
             ];
 
             $user_id = wp_get_current_user()->ID;
