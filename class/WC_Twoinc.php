@@ -673,6 +673,17 @@ if (!class_exists('WC_Twoinc')) {
             $order->update_meta_data('_twoinc_order_state', 'FULFILLING');
             $order->save();
             do_action('twoinc_order_completed', $order, $body);
+
+            // Deliberate gap (TWO-24757): no merchant self-invoice upload on
+            // fulfilment. The PrestaShop plugin uploads its native invoice
+            // PDF to Two here when the merchant's
+            // invoice_distributed_by_merchant flag is set; WooCommerce has
+            // no native invoice renderer, so supporting this would mean
+            // bundling a PDF generator (e.g. dompdf) into client sites — a
+            // maintenance and security overhead we won't take on without
+            // demand. If that demand materialises, implement it here: queue
+            // an Action Scheduler background job after the fulfillments
+            // call above (TWO-24757 has the full design).
             return true;
         }
 
