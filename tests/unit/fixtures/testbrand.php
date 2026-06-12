@@ -10,10 +10,9 @@ return [
     'product_name' => 'Testbrand',
     'gateway_id' => 'woocommerce-gateway-testbrand',
     'meta_prefix' => 'testbrand',
+    // The minimum order value is API-resolved (get_platform_minimum_order);
+    // the brand gate only restricts billing countries.
     'availability_gate' => [
-        'min_order_amount' => 250.0,
-        'currency' => 'EUR',
-        'basis' => 'net',
         'billing_countries' => ['NL'],
     ],
 ];
