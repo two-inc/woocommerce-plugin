@@ -986,6 +986,298 @@ let twoincTermChips = {
   }
 };
 
+/**
+ * Sole trader checkout — presentation only (TWO-24754).
+ *
+ * All business logic (country eligibility, token minting) lives in
+ * WC_Twoinc_Sole_Trader; this module renders a Business / Sole trader
+ * toggle, suppresses company search in sole-trader mode, opens Two's
+ * hosted signup popup, and autofills the company fields from
+ * GET /autofill/v1/buyer/current. Mirrors the Magento reference flow.
+ */
+let twoincSoleTrader = {
+  mode: "business", // 'business' | 'sole_trader'
+  availabilityByCountry: {},
+  tokens: null,
+  savedCompanySearch: null,
+  messageListenerBound: false,
+
+  config: function () {
+    return (window.twoinc && window.twoinc.sole_trader) || { enabled: false };
+  },
+
+  currentCountry: function () {
+    return (jQuery("#billing_country").val() || "").toUpperCase();
+  },
+
+  /**
+   * Re-evaluate the toggle after every checkout update or country change.
+   * Availability is decided server-side (registry endpoint + merchant
+   * toggle); responses are cached per country for the page's lifetime.
+   */
+  refresh: function () {
+    const cfg = twoincSoleTrader.config();
+    const $container = jQuery(".twoinc-sole-trader-toggle");
+    if (!cfg.enabled || !cfg.availability_url || $container.length === 0) {
+      twoincSoleTrader.hide();
+      return;
+    }
+    const country = twoincSoleTrader.currentCountry();
+    if (!country) {
+      twoincSoleTrader.hide();
+      return;
+    }
+    if (country in twoincSoleTrader.availabilityByCountry) {
+      twoincSoleTrader.apply(twoincSoleTrader.availabilityByCountry[country]);
+      return;
+    }
+    jQuery
+      .get(cfg.availability_url, { country: country })
+      .done(function (response) {
+        const available = !!(response && response.success && response.data && response.data.available);
+        twoincSoleTrader.availabilityByCountry[country] = available;
+        // The buyer may have changed country while the request was in
+        // flight; only apply if the answer is still for the current one.
+        if (twoincSoleTrader.currentCountry() === country) {
+          twoincSoleTrader.apply(available);
+        }
+      })
+      .fail(function () {
+        // Fail-soft: no sole trader option, checkout proceeds as business.
+        if (twoincSoleTrader.currentCountry() === country) {
+          twoincSoleTrader.apply(false);
+        }
+      });
+  },
+
+  apply: function (available) {
+    if (available) {
+      twoincSoleTrader.render();
+    } else {
+      twoincSoleTrader.hide();
+    }
+  },
+
+  hide: function () {
+    jQuery(".twoinc-sole-trader-toggle").addClass("hidden").empty();
+    if (twoincSoleTrader.mode === "sole_trader") {
+      twoincSoleTrader.setMode("business");
+    }
+  },
+
+  render: function () {
+    const cfg = twoincSoleTrader.config();
+    const $container = jQuery(".twoinc-sole-trader-toggle");
+    $container.empty().removeClass("hidden");
+
+    [
+      { value: "business", label: cfg.text.registered_business },
+      { value: "sole_trader", label: cfg.text.sole_trader }
+    ].forEach(function (option) {
+      const checked = twoincSoleTrader.mode === option.value;
+      const $label = jQuery("<label>", { class: "twoinc-sole-trader-toggle__option" });
+      $label.append(
+        jQuery("<input>", {
+          type: "radio",
+          name: "two_account_type",
+          value: option.value,
+          checked: checked
+        }).on("change", function () {
+          twoincSoleTrader.setMode(this.value);
+        })
+      );
+      $label.append(jQuery("<span>", { text: option.label }));
+      $container.append($label);
+    });
+
+    const $prompt = jQuery("<a>", {
+      href: "#",
+      class: "twoinc-sole-trader-toggle__prompt hidden",
+      text: cfg.text.popup_prompt
+    }).on("click", function (event) {
+      event.preventDefault();
+      twoincSoleTrader.openPopup();
+    });
+    $container.append($prompt);
+  },
+
+  setMode: function (mode) {
+    if (mode === twoincSoleTrader.mode) {
+      return;
+    }
+    twoincSoleTrader.mode = mode;
+    jQuery(".twoinc-sole-trader-toggle input[name='two_account_type']").each(function () {
+      this.checked = this.value === mode;
+    });
+
+    if (mode === "sole_trader") {
+      // Suppress company search by the same lever the "company not in
+      // list" button uses, restoring the merchant's setting on the way
+      // back to business mode.
+      if (twoincSoleTrader.savedCompanySearch === null) {
+        twoincSoleTrader.savedCompanySearch = window.twoinc.enable_company_search;
+      }
+      window.twoinc.enable_company_search = "no";
+      const $display = jQuery("#billing_company_display");
+      if ($display.data("select2")) {
+        $display.select2("destroy");
+      }
+      jQuery("#company_not_in_btn, #search_company_btn").hide();
+      twoincSoleTrader.setCompany("", "");
+      jQuery("#billing_company, #company_id").prop("readonly", true);
+      twoincDomHelper.toggleBusinessFields();
+      twoincSoleTrader.fetchTokens();
+    } else {
+      twoincSoleTrader.tokens = null;
+      jQuery(".twoinc-sole-trader-toggle__prompt").addClass("hidden");
+      jQuery("#billing_company, #company_id").prop("readonly", false);
+      if (twoincSoleTrader.savedCompanySearch !== null) {
+        window.twoinc.enable_company_search = twoincSoleTrader.savedCompanySearch;
+        twoincSoleTrader.savedCompanySearch = null;
+      }
+      twoincSoleTrader.setCompany("", "");
+      twoincDomHelper.toggleBusinessFields();
+      Twoinc.getInstance().enableCompanySearch();
+    }
+  },
+
+  setCompany: function (companyId, companyName) {
+    jQuery("#company_id").val(companyId);
+    jQuery("#billing_company").val(companyName);
+    const instance = Twoinc.getInstance();
+    instance.customerCompany.organization_number = companyId;
+    instance.customerCompany.company_name = companyName;
+    if (companyId) {
+      instance.getApproval();
+    }
+  },
+
+  fetchTokens: function () {
+    const cfg = twoincSoleTrader.config();
+    if (!cfg.tokens_url) {
+      return;
+    }
+    jQuery
+      .post(cfg.tokens_url)
+      .done(function (response) {
+        if (response && response.success && response.data && response.data.autofill_token) {
+          twoincSoleTrader.tokens = response.data;
+          twoincSoleTrader.bindPopupMessageListener();
+          twoincSoleTrader.getCurrentBuyer();
+        } else {
+          twoincSoleTrader.showError();
+        }
+      })
+      .fail(function () {
+        twoincSoleTrader.showError();
+      });
+  },
+
+  /**
+   * Autofill the company fields from the buyer's current Two sole-trader
+   * business. A 404 (or an email mismatch) means the buyer has no usable
+   * registration yet — show the signup prompt instead.
+   */
+  getCurrentBuyer: function () {
+    if (!twoincSoleTrader.tokens) {
+      return;
+    }
+    fetch(window.twoinc.twoinc_checkout_host + "/autofill/v1/buyer/current", {
+      credentials: "include",
+      headers: { "two-delegated-authority-token": twoincSoleTrader.tokens.autofill_token }
+    })
+      .then(function (response) {
+        if (response.ok) return response.json();
+        if (response.status === 404) return null;
+        throw new Error("autofill/v1/buyer/current failed");
+      })
+      .then(function (json) {
+        const checkoutEmail = jQuery("#billing_email").val();
+        if (json && json.email === checkoutEmail) {
+          twoincSoleTrader.setCompany(json.organization_number, json.company_name);
+          jQuery(".twoinc-sole-trader-toggle__prompt").addClass("hidden");
+        } else {
+          jQuery(".twoinc-sole-trader-toggle__prompt").removeClass("hidden");
+        }
+      })
+      .catch(function () {
+        twoincSoleTrader.showError();
+      });
+  },
+
+  openPopup: function () {
+    if (!twoincSoleTrader.tokens) {
+      return;
+    }
+    const prefill = {
+      email: jQuery("#billing_email").val(),
+      first_name: jQuery("#billing_first_name").val(),
+      last_name: jQuery("#billing_last_name").val(),
+      company_name: jQuery("#billing_company").val(),
+      phone_number: jQuery("#billing_phone").val(),
+      billing_address: {
+        street: jQuery("#billing_address_1").val(),
+        postal_code: jQuery("#billing_postcode").val(),
+        city: jQuery("#billing_city").val(),
+        region: jQuery("#billing_state").val() || "",
+        country_code: twoincSoleTrader.currentCountry()
+      }
+    };
+    const url =
+      twoincSoleTrader.tokens.signup_url +
+      "?businessToken=" +
+      encodeURIComponent(twoincSoleTrader.tokens.delegation_token) +
+      "&autofillToken=" +
+      encodeURIComponent(twoincSoleTrader.tokens.autofill_token) +
+      "&autofillData=" +
+      encodeURIComponent(btoa(JSON.stringify(prefill)));
+    window.open(
+      url,
+      "_blank",
+      "location=yes,resizable=yes,scrollbars=yes,status=yes,height=805,width=610"
+    );
+  },
+
+  /**
+   * The hosted signup posts 'ACCEPTED' back to the opener when the buyer
+   * completes registration; re-fetch the buyer to autofill.
+   */
+  bindPopupMessageListener: function () {
+    if (twoincSoleTrader.messageListenerBound) {
+      return;
+    }
+    twoincSoleTrader.messageListenerBound = true;
+    window.addEventListener("message", function (event) {
+      if (twoincSoleTrader.mode !== "sole_trader" || !twoincSoleTrader.tokens) {
+        return;
+      }
+      const signupOrigin = new URL(twoincSoleTrader.tokens.signup_url).origin;
+      if (event.origin !== signupOrigin) {
+        return;
+      }
+      if (event.data === "ACCEPTED") {
+        twoincSoleTrader.getCurrentBuyer();
+      } else {
+        twoincSoleTrader.showError();
+      }
+    });
+  },
+
+  showError: function () {
+    const cfg = twoincSoleTrader.config();
+    const $container = jQuery(".twoinc-sole-trader-toggle");
+    if (!cfg.text || !cfg.text.error || $container.length === 0) {
+      return;
+    }
+    let $error = $container.find(".twoinc-sole-trader-toggle__error");
+    if ($error.length === 0) {
+      $error = jQuery("<span>", { class: "twoinc-sole-trader-toggle__error" });
+      $container.append($error);
+    }
+    $error.text(cfg.text.error);
+  }
+};
+
 class Twoinc {
   constructor() {
     if (instance) {
@@ -1510,6 +1802,7 @@ class Twoinc {
     twoincDomHelper.rearrangeDescription();
 
     twoincTermChips.refresh();
+    twoincSoleTrader.refresh();
   }
 
   /**
@@ -1564,6 +1857,9 @@ class Twoinc {
     twoincDomHelper.toggleBusinessFields();
 
     twoincDomHelper.clearSelectedCompany();
+
+    // Sole trader availability is per-country; re-evaluate the toggle.
+    twoincSoleTrader.refresh();
 
     Twoinc.getInstance().getApproval();
   }

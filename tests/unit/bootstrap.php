@@ -325,8 +325,41 @@ class WP_Error
 {
 }
 
+// wp_remote_* accessors over the ['response' => ['code' => …], 'body' => …,
+// 'headers' => …] response-array shape the gateway's make_request returns.
+
+function wp_remote_retrieve_response_code($response)
+{
+    if (is_wp_error($response) || !is_array($response)) {
+        return '';
+    }
+    return $response['response']['code'] ?? '';
+}
+
+function wp_remote_retrieve_body($response)
+{
+    if (is_wp_error($response) || !is_array($response)) {
+        return '';
+    }
+    return $response['body'] ?? '';
+}
+
+function wp_remote_retrieve_header($response, $header)
+{
+    if (is_wp_error($response) || !is_array($response)) {
+        return '';
+    }
+    foreach (($response['headers'] ?? []) as $name => $value) {
+        if (strtolower($name) === strtolower($header)) {
+            return $value;
+        }
+    }
+    return '';
+}
+
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Brand.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Helper.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Payment_Terms.php';
+require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Sole_Trader.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Checkout.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc.php';

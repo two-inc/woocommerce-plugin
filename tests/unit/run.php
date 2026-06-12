@@ -55,6 +55,15 @@ final class BrandConfigSpec
             'testOrderPayloadCarriesSelectedAndAvailableTerms',
             'testPaymentTermsInvalidPostFallsBackToDefault',
             'testPaymentTermsDisabledMeansNoPayloadTerms',
+            'testSoleTraderAvailableWhenRegistryAndToggleAgree',
+            'testSoleTraderHiddenWhenToggleOff',
+            'testSoleTraderHiddenWhenRegistryOmitsIt',
+            'testSoleTraderRegistryErrorFallsBackToRegisteredBusiness',
+            'testSoleTraderRegistryRejectsMalformedCountry',
+            'testSoleTraderRegistryResponseCachedPerRequest',
+            'testSoleTraderTokenMintReadsHeaderCaseInsensitively',
+            'testSoleTraderTokenMintFailsClosed',
+            'testSoleTraderSignupUrlFollowsEnvAndFilter',
         ];
         foreach ($tests as $test) {
             self::reset();
@@ -70,9 +79,10 @@ final class BrandConfigSpec
         unset($GLOBALS['__twoinc_test_currency']);
         unset($_POST[WC_Twoinc_Payment_Terms::SESSION_KEY]);
         WC_Twoinc_Payment_Terms::reset_fee_cache();
+        WC_Twoinc_Sole_Trader::reset_cache();
         WC()->cart = null;
         WC()->customer = null;
-        foreach (['twoinc_brand_file', 'twoinc_checkout_fields', 'twoinc_confirmation_url', 'twoinc_order_payload', 'twoinc_payment_terms_line', 'two_order_create', 'twoinc_payment_validation_error'] as $tag) {
+        foreach (['twoinc_brand_file', 'twoinc_checkout_fields', 'twoinc_confirmation_url', 'twoinc_order_payload', 'twoinc_payment_terms_line', 'two_order_create', 'twoinc_payment_validation_error', 'twoinc_sole_trader_signup_url'] as $tag) {
             remove_all_filters($tag);
         }
     }
@@ -593,6 +603,181 @@ final class BrandConfigSpec
         $body = self::composeOrder();
         TinyAssert::same(false, array_key_exists('terms', $body));
         TinyAssert::same(false, array_key_exists('available_terms', $body));
+    }
+
+    /**
+     * Gateway fake whose make_request returns canned responses keyed by
+     * endpoint prefix (the sole-trader logic talks to the registry +
+     * delegation endpoints through it).
+     */
+    private static function soleTraderGateway(array $options, array $responses): WC_Payment_Gateway
+    {
+        return new class ($options, $responses) extends WC_Payment_Gateway {
+            private $options;
+            private $responses;
+            public $requests = [];
+
+            public function __construct($options, $responses)
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+                $this->options = $options;
+                $this->responses = $responses;
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                return $this->options[$key] ?? $empty_value ?? '';
+            }
+
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null)
+            {
+                $this->requests[] = $endpoint;
+                foreach ($this->responses as $prefix => $response) {
+                    if (strpos($endpoint, $prefix) === 0) {
+                        return $response;
+                    }
+                }
+                return new WP_Error();
+            }
+        };
+    }
+
+    private static function registryOk(array $types): array
+    {
+        return [
+            'response' => ['code' => 200],
+            'body' => json_encode(['supported_company_types' => $types]),
+        ];
+    }
+
+    private static function testSoleTraderAvailableWhenRegistryAndToggleAgree(): void
+    {
+        $gateway = self::soleTraderGateway(['enable_sole_trader' => 'yes'], [
+            '/registry/v1/supported-company-types/' => self::registryOk(['REGISTERED_BUSINESS', 'SOLE_TRADER']),
+        ]);
+        TinyAssert::true(WC_Twoinc_Sole_Trader::is_available($gateway, 'GB'));
+        // Lowercase input normalises to the same country
+        WC_Twoinc_Sole_Trader::reset_cache();
+        TinyAssert::true(WC_Twoinc_Sole_Trader::is_available($gateway, 'gb'));
+    }
+
+    private static function testSoleTraderHiddenWhenToggleOff(): void
+    {
+        $gateway = self::soleTraderGateway(['enable_sole_trader' => 'no'], [
+            '/registry/v1/supported-company-types/' => self::registryOk(['REGISTERED_BUSINESS', 'SOLE_TRADER']),
+        ]);
+        TinyAssert::same(false, WC_Twoinc_Sole_Trader::is_available($gateway, 'GB'));
+    }
+
+    private static function testSoleTraderHiddenWhenRegistryOmitsIt(): void
+    {
+        $gateway = self::soleTraderGateway(['enable_sole_trader' => 'yes'], [
+            '/registry/v1/supported-company-types/' => self::registryOk(['REGISTERED_BUSINESS']),
+        ]);
+        TinyAssert::same(false, WC_Twoinc_Sole_Trader::is_available($gateway, 'NO'));
+    }
+
+    private static function testSoleTraderRegistryErrorFallsBackToRegisteredBusiness(): void
+    {
+        // Network error
+        $gateway = self::soleTraderGateway(['enable_sole_trader' => 'yes'], []);
+        TinyAssert::same(['REGISTERED_BUSINESS'], WC_Twoinc_Sole_Trader::get_supported_company_types($gateway, 'GB'));
+
+        // Non-200
+        WC_Twoinc_Sole_Trader::reset_cache();
+        $gateway = self::soleTraderGateway(['enable_sole_trader' => 'yes'], [
+            '/registry/v1/supported-company-types/' => ['response' => ['code' => 404], 'body' => ''],
+        ]);
+        TinyAssert::same(['REGISTERED_BUSINESS'], WC_Twoinc_Sole_Trader::get_supported_company_types($gateway, 'GB'));
+
+        // Malformed body
+        WC_Twoinc_Sole_Trader::reset_cache();
+        $gateway = self::soleTraderGateway(['enable_sole_trader' => 'yes'], [
+            '/registry/v1/supported-company-types/' => ['response' => ['code' => 200], 'body' => 'not json'],
+        ]);
+        TinyAssert::same(['REGISTERED_BUSINESS'], WC_Twoinc_Sole_Trader::get_supported_company_types($gateway, 'GB'));
+    }
+
+    private static function testSoleTraderRegistryRejectsMalformedCountry(): void
+    {
+        $gateway = self::soleTraderGateway(['enable_sole_trader' => 'yes'], [
+            '/registry/v1/supported-company-types/' => self::registryOk(['REGISTERED_BUSINESS', 'SOLE_TRADER']),
+        ]);
+        // Never hits the API for junk country input
+        TinyAssert::same(['REGISTERED_BUSINESS'], WC_Twoinc_Sole_Trader::get_supported_company_types($gateway, ''));
+        TinyAssert::same(['REGISTERED_BUSINESS'], WC_Twoinc_Sole_Trader::get_supported_company_types($gateway, 'G'));
+        TinyAssert::same(['REGISTERED_BUSINESS'], WC_Twoinc_Sole_Trader::get_supported_company_types($gateway, 'GBR'));
+        TinyAssert::same([], $gateway->requests);
+    }
+
+    private static function testSoleTraderRegistryResponseCachedPerRequest(): void
+    {
+        $gateway = self::soleTraderGateway(['enable_sole_trader' => 'yes'], [
+            '/registry/v1/supported-company-types/' => self::registryOk(['REGISTERED_BUSINESS', 'SOLE_TRADER']),
+        ]);
+        WC_Twoinc_Sole_Trader::get_supported_company_types($gateway, 'GB');
+        WC_Twoinc_Sole_Trader::get_supported_company_types($gateway, 'GB');
+        WC_Twoinc_Sole_Trader::get_supported_company_types($gateway, 'gb');
+        TinyAssert::same(1, count($gateway->requests));
+        // A different country is its own cache entry
+        WC_Twoinc_Sole_Trader::get_supported_company_types($gateway, 'US');
+        TinyAssert::same(2, count($gateway->requests));
+    }
+
+    private static function testSoleTraderTokenMintReadsHeaderCaseInsensitively(): void
+    {
+        $gateway = self::soleTraderGateway(['enable_sole_trader' => 'yes'], [
+            '/registry/v1/delegation' => [
+                'response' => ['code' => 200],
+                'headers' => ['Two-Delegated-Authority-Token' => 'reg-token'],
+            ],
+            '/autofill/v1/delegation' => [
+                'response' => ['code' => 200],
+                'headers' => ['two-delegated-authority-token' => 'autofill-token'],
+            ],
+        ]);
+        TinyAssert::same(
+            ['delegation_token' => 'reg-token', 'autofill_token' => 'autofill-token'],
+            WC_Twoinc_Sole_Trader::mint_tokens($gateway)
+        );
+    }
+
+    private static function testSoleTraderTokenMintFailsClosed(): void
+    {
+        // Second mint failing voids the pair — never hand the browser half a flow
+        $gateway = self::soleTraderGateway(['enable_sole_trader' => 'yes'], [
+            '/registry/v1/delegation' => [
+                'response' => ['code' => 200],
+                'headers' => ['two-delegated-authority-token' => 'reg-token'],
+            ],
+            '/autofill/v1/delegation' => ['response' => ['code' => 500], 'headers' => []],
+        ]);
+        TinyAssert::same(null, WC_Twoinc_Sole_Trader::mint_tokens($gateway));
+
+        // Missing header on a 200 also fails closed
+        $gateway = self::soleTraderGateway(['enable_sole_trader' => 'yes'], [
+            '/registry/v1/delegation' => ['response' => ['code' => 200], 'headers' => []],
+            '/autofill/v1/delegation' => [
+                'response' => ['code' => 200],
+                'headers' => ['two-delegated-authority-token' => 'autofill-token'],
+            ],
+        ]);
+        TinyAssert::same(null, WC_Twoinc_Sole_Trader::mint_tokens($gateway));
+    }
+
+    private static function testSoleTraderSignupUrlFollowsEnvAndFilter(): void
+    {
+        $gateway = self::soleTraderGateway([], []);
+        TinyAssert::same('https://checkout.two.inc/soletrader/signup', WC_Twoinc_Sole_Trader::get_signup_page_url($gateway));
+
+        $gateway = self::soleTraderGateway(['checkout_env' => 'SANDBOX'], []);
+        TinyAssert::same('https://checkout.sandbox.two.inc/soletrader/signup', WC_Twoinc_Sole_Trader::get_signup_page_url($gateway));
+
+        // Brand overlays adjust via the filter
+        add_filter('twoinc_sole_trader_signup_url', function ($url) {
+            return $url . '?brand=acme';
+        });
+        TinyAssert::same('https://checkout.sandbox.two.inc/soletrader/signup?brand=acme', WC_Twoinc_Sole_Trader::get_signup_page_url($gateway));
     }
 }
 

@@ -268,6 +268,20 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     'fees_url' => class_exists('WC_AJAX') ? WC_AJAX::get_endpoint('two_term_fees') : '',
                     'select_url' => class_exists('WC_AJAX') ? WC_AJAX::get_endpoint('two_select_term') : '',
                 ],
+                // Sole trader bootstrap (TWO-24754). JS renders only; country
+                // availability and token minting come from the wc-ajax
+                // endpoints in WC_Twoinc_Sole_Trader.
+                'sole_trader' => [
+                    'enabled' => WC_Twoinc_Sole_Trader::is_enabled($this->wc_twoinc),
+                    'availability_url' => class_exists('WC_AJAX') ? WC_AJAX::get_endpoint('two_sole_trader_availability') : '',
+                    'tokens_url' => class_exists('WC_AJAX') ? WC_AJAX::get_endpoint('two_sole_trader_tokens') : '',
+                    'text' => [
+                        'registered_business' => __('Registered company', 'twoinc-payment-gateway'),
+                        'sole_trader' => __('Sole trader', 'twoinc-payment-gateway'),
+                        'popup_prompt' => __('Click here to log in or sign up as a sole trader with Two.', 'twoinc-payment-gateway'),
+                        'error' => __('Something went wrong setting up sole trader checkout. Please try again.', 'twoinc-payment-gateway'),
+                    ],
+                ],
             ];
 
             $user_id = wp_get_current_user()->ID;
