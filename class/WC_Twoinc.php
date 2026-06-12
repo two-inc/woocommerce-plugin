@@ -2133,7 +2133,7 @@ if (!class_exists('WC_Twoinc')) {
          *
          * @return WP_Error|array
          */
-        private function make_request($endpoint, $payload = [], $method = 'POST', $params = array(), $api_key_override = null)
+        public function make_request($endpoint, $payload = [], $method = 'POST', $params = array(), $api_key_override = null)
         {
             $params['client'] = 'wp';
             $params['client_v'] = get_twoinc_plugin_version();
