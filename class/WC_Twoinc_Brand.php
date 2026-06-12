@@ -107,7 +107,7 @@ if (!class_exists('WC_Twoinc_Brand')) {
         /**
          * Brand-prefixed hidden order meta key, e.g. 'order_reference'
          * -> '_twoinc_order_reference'. Live stores hold data under the
-         * brand's prefix (ABN stores hold _abn_*), so the prefix is
+         * brand's prefix (a brand overlay uses its own prefix), so the prefix is
          * load-bearing for existing orders — never hardcode the literal.
          *
          * @param string $name

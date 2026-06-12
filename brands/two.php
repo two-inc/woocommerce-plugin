@@ -3,7 +3,7 @@
 /**
  * Two brand configuration — the default brand of the base plugin.
  *
- * A brand overlay plugin (e.g. the ABN AMRO edition) supplies its own
+ * A brand overlay plugin supplies its own
  * file with the same shape via the `twoinc_brand_file` filter; its
  * values are merged over these defaults, so an overlay declares only
  * what differs.

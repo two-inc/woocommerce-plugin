@@ -52,7 +52,7 @@ if (!class_exists('WC_Twoinc')) {
             );
             /**
              * Filter the checkout payment-box description so a brand
-             * overlay can replace the copy wholesale (the ABN edition
+             * overlay can replace the copy wholesale (a brand overlay
              * ships its own bullet list).
              *
              * Applied once at gateway construction: like
@@ -263,7 +263,7 @@ if (!class_exists('WC_Twoinc')) {
             /**
              * Filter the "about" block inside the payment-box subtitle —
              * the piece of the description brand overlays actually
-             * replace (the ABN edition ships its own bullet list).
+             * replace (a brand overlay ships its own bullet list).
              * Register by plugins_loaded (computed at gateway
              * construction).
              *
@@ -861,7 +861,7 @@ if (!class_exists('WC_Twoinc')) {
         /**
          * Remove the gateway from checkout when the brand's availability
          * gate (availability_gate in the brand config) is unmet. Mirrors
-         * the ABN fork's gate semantics: front-end only, minimum is
+         * Brand availability gate semantics: front-end only, minimum is
          * inclusive (an exactly-minimum basket passes).
          *
          * @param array $available_gateways
@@ -886,8 +886,8 @@ if (!class_exists('WC_Twoinc')) {
             }
 
             // Basket value on the configured basis: the platform minimum's
-            // basis is explicit (ABN's funding-partner rule is net; the
-            // platform's defaults are gross); the merchant minimum rides
+            // basis is explicit in brand config (funding-partner rules
+            // and platform defaults may differ); the merchant minimum rides
             // the same basis when a platform minimum exists.
             $basis = $gate ? $gate['basis'] : ($merchant_minimum['basis'] ?? 'gross');
             $basket_value = $basis === 'gross'
@@ -1038,7 +1038,7 @@ if (!class_exists('WC_Twoinc')) {
 
         /**
          * Brand veto on payment processing, resolved via the
-         * twoinc_payment_validation_error filter (e.g. the ABN edition's
+         * twoinc_payment_validation_error filter (e.g. a brand overlay's
          * required terms-acceptance checkbox). Returns the buyer-facing
          * error message, or null to proceed.
          *
