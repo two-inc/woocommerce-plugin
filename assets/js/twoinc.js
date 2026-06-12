@@ -1034,7 +1034,12 @@ let twoincSoleTrader = {
     jQuery
       .get(cfg.availability_url, { country: country })
       .done(function (response) {
-        const available = !!(response && response.success && response.data && response.data.available);
+        const available = !!(
+          response &&
+          response.success &&
+          response.data &&
+          response.data.available
+        );
         twoincSoleTrader.availabilityByCountry[country] = available;
         // The buyer may have changed country while the request was in
         // flight; only apply if the answer is still for the current one.
