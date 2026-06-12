@@ -58,7 +58,7 @@ final class BrandConfigSpec
             'testSoleTraderAvailableWhenRegistryAndToggleAgree',
             'testSoleTraderHiddenWhenToggleOff',
             'testSoleTraderHiddenWhenRegistryOmitsIt',
-            'testSoleTraderRegistryErrorFallsBackToRegisteredBusiness',
+            'testSoleTraderRegistryErrorFallsBackToNoSoleTrader',
             'testSoleTraderRegistryRejectsMalformedCountry',
             'testSoleTraderRegistryResponseCachedPerRequest',
             'testSoleTraderTokenMintReadsHeaderCaseInsensitively',
@@ -653,7 +653,7 @@ final class BrandConfigSpec
     private static function testSoleTraderAvailableWhenRegistryAndToggleAgree(): void
     {
         $gateway = self::soleTraderGateway(['enable_sole_trader' => 'yes'], [
-            '/registry/v1/supported-company-types/' => self::registryOk(['REGISTERED_BUSINESS', 'SOLE_TRADER']),
+            '/registry/v1/supported-company-types/' => self::registryOk(['SOLE_TRADER']),
         ]);
         TinyAssert::true(WC_Twoinc_Sole_Trader::is_available($gateway, 'GB'));
         // Lowercase input normalises to the same country
@@ -664,56 +664,59 @@ final class BrandConfigSpec
     private static function testSoleTraderHiddenWhenToggleOff(): void
     {
         $gateway = self::soleTraderGateway(['enable_sole_trader' => 'no'], [
-            '/registry/v1/supported-company-types/' => self::registryOk(['REGISTERED_BUSINESS', 'SOLE_TRADER']),
+            '/registry/v1/supported-company-types/' => self::registryOk(['SOLE_TRADER']),
         ]);
         TinyAssert::same(false, WC_Twoinc_Sole_Trader::is_available($gateway, 'GB'));
     }
 
     private static function testSoleTraderHiddenWhenRegistryOmitsIt(): void
     {
+        // Countries without sole trader support return an empty list:
+        // registered businesses need no registry enrollment, so the
+        // endpoint deliberately omits them.
         $gateway = self::soleTraderGateway(['enable_sole_trader' => 'yes'], [
-            '/registry/v1/supported-company-types/' => self::registryOk(['REGISTERED_BUSINESS']),
+            '/registry/v1/supported-company-types/' => self::registryOk([]),
         ]);
         TinyAssert::same(false, WC_Twoinc_Sole_Trader::is_available($gateway, 'NO'));
     }
 
-    private static function testSoleTraderRegistryErrorFallsBackToRegisteredBusiness(): void
+    private static function testSoleTraderRegistryErrorFallsBackToNoSoleTrader(): void
     {
         // Network error
         $gateway = self::soleTraderGateway(['enable_sole_trader' => 'yes'], []);
-        TinyAssert::same(['REGISTERED_BUSINESS'], WC_Twoinc_Sole_Trader::get_supported_company_types($gateway, 'GB'));
+        TinyAssert::same([], WC_Twoinc_Sole_Trader::get_supported_company_types($gateway, 'GB'));
 
         // Non-200
         WC_Twoinc_Sole_Trader::reset_cache();
         $gateway = self::soleTraderGateway(['enable_sole_trader' => 'yes'], [
             '/registry/v1/supported-company-types/' => ['response' => ['code' => 404], 'body' => ''],
         ]);
-        TinyAssert::same(['REGISTERED_BUSINESS'], WC_Twoinc_Sole_Trader::get_supported_company_types($gateway, 'GB'));
+        TinyAssert::same([], WC_Twoinc_Sole_Trader::get_supported_company_types($gateway, 'GB'));
 
         // Malformed body
         WC_Twoinc_Sole_Trader::reset_cache();
         $gateway = self::soleTraderGateway(['enable_sole_trader' => 'yes'], [
             '/registry/v1/supported-company-types/' => ['response' => ['code' => 200], 'body' => 'not json'],
         ]);
-        TinyAssert::same(['REGISTERED_BUSINESS'], WC_Twoinc_Sole_Trader::get_supported_company_types($gateway, 'GB'));
+        TinyAssert::same([], WC_Twoinc_Sole_Trader::get_supported_company_types($gateway, 'GB'));
     }
 
     private static function testSoleTraderRegistryRejectsMalformedCountry(): void
     {
         $gateway = self::soleTraderGateway(['enable_sole_trader' => 'yes'], [
-            '/registry/v1/supported-company-types/' => self::registryOk(['REGISTERED_BUSINESS', 'SOLE_TRADER']),
+            '/registry/v1/supported-company-types/' => self::registryOk(['SOLE_TRADER']),
         ]);
         // Never hits the API for junk country input
-        TinyAssert::same(['REGISTERED_BUSINESS'], WC_Twoinc_Sole_Trader::get_supported_company_types($gateway, ''));
-        TinyAssert::same(['REGISTERED_BUSINESS'], WC_Twoinc_Sole_Trader::get_supported_company_types($gateway, 'G'));
-        TinyAssert::same(['REGISTERED_BUSINESS'], WC_Twoinc_Sole_Trader::get_supported_company_types($gateway, 'GBR'));
+        TinyAssert::same([], WC_Twoinc_Sole_Trader::get_supported_company_types($gateway, ''));
+        TinyAssert::same([], WC_Twoinc_Sole_Trader::get_supported_company_types($gateway, 'G'));
+        TinyAssert::same([], WC_Twoinc_Sole_Trader::get_supported_company_types($gateway, 'GBR'));
         TinyAssert::same([], $gateway->requests);
     }
 
     private static function testSoleTraderRegistryResponseCachedPerRequest(): void
     {
         $gateway = self::soleTraderGateway(['enable_sole_trader' => 'yes'], [
-            '/registry/v1/supported-company-types/' => self::registryOk(['REGISTERED_BUSINESS', 'SOLE_TRADER']),
+            '/registry/v1/supported-company-types/' => self::registryOk(['SOLE_TRADER']),
         ]);
         WC_Twoinc_Sole_Trader::get_supported_company_types($gateway, 'GB');
         WC_Twoinc_Sole_Trader::get_supported_company_types($gateway, 'GB');

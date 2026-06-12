@@ -26,7 +26,6 @@
 if (!class_exists('WC_Twoinc_Sole_Trader')) {
     class WC_Twoinc_Sole_Trader
     {
-        public const REGISTERED_BUSINESS = 'REGISTERED_BUSINESS';
         public const SOLE_TRADER = 'SOLE_TRADER';
 
         /** WC session key prefix; full key is prefix + ISO country code. */
@@ -47,11 +46,16 @@ if (!class_exists('WC_Twoinc_Sole_Trader')) {
         }
 
         /**
-         * The buyer company types Two supports for a billing country, from
-         * GET /registry/v1/supported-company-types/<ISO>. Cached per session
-         * for the endpoint's own max-age. Fail-soft: any error (network,
-         * non-200, malformed body) resolves to registered-business only —
-         * checkout never blocks, the sole trader option just doesn't show.
+         * The buyer company types the Two registry supports for a billing
+         * country, from GET /registry/v1/supported-company-types/<ISO> —
+         * only the types that need registry enrollment before they can buy
+         * (sole traders). Registered businesses need no enrollment and are
+         * always supported, so the endpoint deliberately omits them: an
+         * empty list means registered-business-only checkout. Cached per
+         * session for the endpoint's own max-age. Fail-soft: any error
+         * (network, non-200, malformed body) also resolves to an empty
+         * list — checkout never blocks, the sole trader option just
+         * doesn't show.
          *
          * @return string[]
          */
@@ -59,7 +63,7 @@ if (!class_exists('WC_Twoinc_Sole_Trader')) {
         {
             $country = strtoupper(trim($country));
             if (!preg_match('/^[A-Z]{2}$/', $country)) {
-                return [self::REGISTERED_BUSINESS];
+                return [];
             }
 
             if (array_key_exists($country, self::$types_cache)) {
@@ -99,14 +103,13 @@ if (!class_exists('WC_Twoinc_Sole_Trader')) {
         {
             $response = $gateway->make_request("/registry/v1/supported-company-types/{$country}", [], 'GET');
             if (is_wp_error($response) || wp_remote_retrieve_response_code($response) !== 200) {
-                return [self::REGISTERED_BUSINESS];
+                return [];
             }
             $body = json_decode(wp_remote_retrieve_body($response), true);
             if (!is_array($body) || !isset($body['supported_company_types']) || !is_array($body['supported_company_types'])) {
-                return [self::REGISTERED_BUSINESS];
+                return [];
             }
-            $types = array_values(array_filter($body['supported_company_types'], 'is_string'));
-            return count($types) > 0 ? $types : [self::REGISTERED_BUSINESS];
+            return array_values(array_filter($body['supported_company_types'], 'is_string'));
         }
 
         /**
