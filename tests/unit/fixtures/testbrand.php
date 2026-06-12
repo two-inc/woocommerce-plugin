@@ -15,10 +15,9 @@ return [
     // get_rounding_step_options must skip rather than fatal on. Expected
     // cleaned output: 0.50, 1.00.
     'available_rounding_steps' => [1.00, 0.50, 0, -2, 'x'],
+    // The minimum order value is API-resolved (get_platform_minimum_order);
+    // the brand gate only restricts billing countries.
     'availability_gate' => [
-        'min_order_amount' => 250.0,
-        'currency' => 'EUR',
-        'basis' => 'net',
         'billing_countries' => ['NL'],
     ],
 ];

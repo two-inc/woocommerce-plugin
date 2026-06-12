@@ -44,6 +44,7 @@ final class BrandConfigSpec
             'testAvailabilityGateRemovesGatewayWhenUnmet',
             'testAvailabilityGateKeepsGatewayAtExactMinimum',
             'testAvailabilityGateComparesNetNotGross',
+            'testAvailabilityGateRestrictsBillingCountry',
             'testMerchantMinimumRaisesTheBar',
             'testMerchantMinimumValidationRejectsValuesAtOrBelowPlatformMinimum',
             'testMerchantMinimumValidationSkipsFloorCheckAcrossCurrencies',
@@ -96,17 +97,28 @@ final class BrandConfigSpec
 
     /**
      * Gateway instance with only the brand-derived id set — the full
-     * constructor needs a WooCommerce install.
+     * constructor needs a WooCommerce install. The API-resolved platform
+     * minimum is injected per test; null = none configured.
      */
-    private static function gateway(): WC_Twoinc
+    private static function gateway(?array $platform_minimum = null): WC_Twoinc
     {
-        return new class () extends WC_Twoinc {
-            public function __construct()
+        return new class ($platform_minimum) extends WC_Twoinc {
+            private $test_platform_minimum;
+
+            public function __construct($platform_minimum = null)
             {
                 $this->id = WC_Twoinc_Brand::get('gateway_id');
+                $this->test_platform_minimum = $platform_minimum;
+            }
+
+            public function get_platform_minimum_order()
+            {
+                return $this->test_platform_minimum;
             }
         };
     }
+
+    private const EUR_250_NET = ['amount' => 250.0, 'currency' => 'EUR', 'basis' => 'net'];
 
     private static function useTestbrand(): void
     {
@@ -325,7 +337,7 @@ final class BrandConfigSpec
         $GLOBALS['__twoinc_test_currency'] = 'EUR';
 
         $gateways = ['woocommerce-gateway-testbrand' => 'gw', 'other' => 'x'];
-        $result = self::gateway()->apply_brand_availability_gate($gateways);
+        $result = self::gateway(self::EUR_250_NET)->apply_brand_availability_gate($gateways);
 
         TinyAssert::true(!isset($result['woocommerce-gateway-testbrand']));
         TinyAssert::same('x', $result['other']);
@@ -339,7 +351,7 @@ final class BrandConfigSpec
         $GLOBALS['__twoinc_test_currency'] = 'EUR';
 
         $gateways = ['woocommerce-gateway-testbrand' => 'gw'];
-        $result = self::gateway()->apply_brand_availability_gate($gateways);
+        $result = self::gateway(self::EUR_250_NET)->apply_brand_availability_gate($gateways);
 
         // The minimum is inclusive: an exactly-minimum basket passes
         TinyAssert::same('gw', $result['woocommerce-gateway-testbrand']);
@@ -354,13 +366,13 @@ final class BrandConfigSpec
 
         // EUR 302.50 gross with EUR 52.50 tax is exactly EUR 250 net: passes
         WC()->cart = new StubCart(302.50, 52.50);
-        $result = self::gateway()->apply_brand_availability_gate($gateways);
+        $result = self::gateway(self::EUR_250_NET)->apply_brand_availability_gate($gateways);
         TinyAssert::same('gw', $result['woocommerce-gateway-testbrand']);
 
         // EUR 250 gross with tax is below EUR 250 net: the credit check
         // would decline it, so the gate must hide the method
         WC()->cart = new StubCart(250.0, 43.39);
-        $result = self::gateway()->apply_brand_availability_gate($gateways);
+        $result = self::gateway(self::EUR_250_NET)->apply_brand_availability_gate($gateways);
         TinyAssert::true(!isset($result['woocommerce-gateway-testbrand']));
     }
 
@@ -376,6 +388,22 @@ final class BrandConfigSpec
             'You must first accept the payment terms (order 42)',
             self::gateway()->get_brand_payment_validation_error(42)
         );
+    }
+
+    private static function testAvailabilityGateRestrictsBillingCountry(): void
+    {
+        // The brand gate's billing-country restriction stands alone now
+        // that the minimum is API-resolved: an over-minimum basket from
+        // an unsupported country is still gated.
+        self::useTestbrand();
+        WC()->cart = new StubCart(1000.0);
+        WC()->customer = new StubCustomer('DE');
+        $GLOBALS['__twoinc_test_currency'] = 'EUR';
+
+        $gateways = ['woocommerce-gateway-testbrand' => 'gw'];
+        $result = self::gateway(self::EUR_250_NET)->apply_brand_availability_gate($gateways);
+
+        TinyAssert::true(!isset($result['woocommerce-gateway-testbrand']));
     }
 
     private static function testMerchantMinimumRaisesTheBar(): void
@@ -409,7 +437,7 @@ final class BrandConfigSpec
     private static function testMerchantMinimumValidationRejectsValuesAtOrBelowPlatformMinimum(): void
     {
         self::useTestbrand();
-        $gateway = self::gateway();
+        $gateway = self::gateway(self::EUR_250_NET);
 
         $threw = false;
         try {
@@ -433,7 +461,7 @@ final class BrandConfigSpec
         try {
             TinyAssert::same(
                 '10',
-                self::gateway()->validate_merchant_minimum_order_field('merchant_minimum_order', '10')
+                self::gateway(self::EUR_250_NET)->validate_merchant_minimum_order_field('merchant_minimum_order', '10')
             );
         } finally {
             unset($GLOBALS['__twoinc_test_store_currency']);
