@@ -945,8 +945,17 @@ if (!class_exists('WC_Twoinc')) {
                     : (float) WC()->cart->total - (float) WC()->cart->get_total_tax();
             };
 
+            // The minimums judge the basket being purchased. On the
+            // pay-for-order page the session cart is not that basket (it
+            // is usually empty, and anything in it is unrelated to the
+            // order being paid), so only the billing-country gate applies
+            // there and in any other cartless context — the API still
+            // enforces the platform minimum at order creation.
+            $basket_is_judgeable = !WC()->cart->is_empty()
+                && !(function_exists('is_wc_endpoint_url') && is_wc_endpoint_url('order-pay'));
+
             $satisfied = true;
-            if ($platform_minimum) {
+            if ($platform_minimum && $basket_is_judgeable) {
                 // Fail closed on a basket in another currency: with no FX
                 // source in WooCommerce it cannot be proven to satisfy the
                 // funding partner's minimum.
@@ -956,7 +965,7 @@ if (!class_exists('WC_Twoinc')) {
             if ($satisfied && $gate) {
                 $satisfied = in_array(WC()->customer->get_billing_country(), $gate['billing_countries'], true);
             }
-            if ($satisfied && $merchant_minimum) {
+            if ($satisfied && $merchant_minimum && $basket_is_judgeable) {
                 $satisfied = get_woocommerce_currency() === $merchant_minimum['currency']
                     ? $basket_value($merchant_minimum['basis']) >= $merchant_minimum['amount']
                     // The merchant minimum is store-currency scoped; a
