@@ -50,12 +50,34 @@ if (!class_exists('WC_Twoinc')) {
                 __($this->get_option('title'), 'twoinc-payment-gateway'),
                 strval($this->get_merchant_default_days_on_invoice())
             );
-            $this->description = $this->get_pay_box_description() . $this->get_pay_subtitle();
+            /**
+             * Filter the checkout payment-box description so a brand
+             * overlay can replace the copy wholesale (the ABN edition
+             * ships its own bullet list).
+             *
+             * Applied once at gateway construction: like
+             * twoinc_brand_file, an overlay must register this filter no
+             * later than plugins_loaded at default priority.
+             *
+             * @param string     $description Default description HTML.
+             * @param WC_Twoinc  $gateway     The gateway instance (for
+             *                                get_option reads).
+             */
+            $this->description = apply_filters(
+                'twoinc_payment_description',
+                $this->get_pay_box_description() . $this->get_pay_subtitle(),
+                $this
+            );
 
             // Skip hooks if another instance has already been created
             if (null !== self::$instance) {
                 return;
             }
+
+            // Brand product constraints (e.g. a minimum order value in a
+            // specific currency/market) remove the gateway from checkout
+            // when unmet. Config-driven; the Two brand sets no gate.
+            add_filter('woocommerce_available_payment_gateways', [$this, 'apply_brand_availability_gate']);
 
             if (is_admin()) {
                 // Notice banner if plugin is not setup properly
@@ -212,6 +234,74 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
+         * The platform's minimum order value for this merchant, resolved
+         * from the Two API (min_order_amount/min_order_currency/
+         * min_order_basis on GET /v1/merchant/{id} - the funding-partner
+         * default with merchant override, the same value checkout-api
+         * enforces at order create/intent), as
+         * ['amount', 'currency', 'basis'] or null when none is configured.
+         *
+         * Cached in options for 15 minutes following the
+         * get_days_on_invoice() pattern; the no-minimum outcome is cached
+         * too (the common case must not cost an API call per checkout
+         * render). A fetch failure resolves to no minimum: the server
+         * still enforces, and hiding the payment method on an API blip
+         * would be the worse failure.
+         *
+         * @return array|null
+         */
+        public function get_platform_minimum_order()
+        {
+            $checked_on = $this->get_option('platform_minimum_order_last_checked_on');
+
+            if (!$checked_on || ((int) $checked_on + 900) <= time()) {
+                $merchant_id = $this->get_merchant_id();
+                if (!$merchant_id || !$this->get_option('api_key')) {
+                    return null;
+                }
+
+                $minimum = null;
+                $response = $this->make_request("/v1/merchant/{$merchant_id}", [], 'GET');
+                if (
+                    !is_wp_error($response)
+                    && !WC_Twoinc_Helper::get_twoinc_error_msg($response)
+                    && $response
+                    && $response['body']
+                ) {
+                    $body = json_decode($response['body'], true);
+                    $amount = $body['min_order_amount'] ?? null;
+                    $currency = $body['min_order_currency'] ?? null;
+                    $basis = $body['min_order_basis'] ?? null;
+                    // The API omits all three fields when no minimum is
+                    // configured; a partial or malformed tuple is treated
+                    // the same way rather than gating on a guess.
+                    if (
+                        is_numeric($amount) && (float) $amount > 0
+                        && is_string($currency) && $currency !== ''
+                        && in_array($basis, ['net', 'gross'], true)
+                    ) {
+                        $minimum = [
+                            'amount' => (float) $amount,
+                            'currency' => strtoupper($currency),
+                            'basis' => $basis,
+                        ];
+                    }
+                }
+
+                $this->update_option('platform_minimum_order', $minimum ? wp_json_encode($minimum) : '');
+                $this->update_option('platform_minimum_order_last_checked_on', time());
+                return $minimum;
+            }
+
+            $cached = $this->get_option('platform_minimum_order');
+            if (!$cached) {
+                return null;
+            }
+            $minimum = json_decode((string) $cached, true);
+            return is_array($minimum) ? $minimum : null;
+        }
+
+        /**
          * Get about twoinc html
          */
         private function get_abt_twoinc_html()
@@ -226,9 +316,23 @@ if (!class_exists('WC_Twoinc')) {
                     __('Buy now, receive your goods, pay your invoice later.', 'twoinc-payment-gateway'),
                     $abt_url,
                 );
-                return sprintf('<div class="abt-twoinc-text">%s</div><div class="abt-twoinc-link">%s</div>', $text, $link);
+                $html = sprintf('<div class="abt-twoinc-text">%s</div><div class="abt-twoinc-link">%s</div>', $text, $link);
+            } else {
+                $html = '';
             }
-            return '';
+
+            /**
+             * Filter the "about" block inside the payment-box subtitle —
+             * the piece of the description brand overlays actually
+             * replace (the ABN edition ships its own bullet list).
+             * Register by plugins_loaded (computed at gateway
+             * construction).
+             *
+             * @param string    $html    Default about-block HTML ('' when
+             *                           the merchant disabled the link).
+             * @param WC_Twoinc $gateway The gateway instance.
+             */
+            return apply_filters('twoinc_about_html', $html, $this);
         }
 
         /**
@@ -381,6 +485,7 @@ if (!class_exists('WC_Twoinc')) {
 
             // Localize script for AJAX
             wp_localize_script('twoinc.admin', 'twoinc_admin', [
+                'gateway_id' => $this->id,
                 'nonce' => wp_create_nonce('twoinc_admin_nonce'),
                 'ajax_url' => admin_url('admin-ajax.php')
             ]);
@@ -598,7 +703,7 @@ if (!class_exists('WC_Twoinc')) {
                 return false;
             }
 
-            $state = $order->get_meta('_twoinc_order_state', true);
+            $state = $order->get_meta(WC_Twoinc_Brand::meta_key('order_state'), true);
             $skip = ["FULFILLING", "FULFILLED", "DELIVERED", "CANCELLED", "REFUNDED", "PARTIALLY_REFUNDED"];
             if (in_array($state, $skip)) {
                 // $order->add_order_note(sprintf(__('Order is already fulfilled with Two.', 'twoinc-payment-gateway'), $twoinc_order_id));
@@ -638,7 +743,7 @@ if (!class_exists('WC_Twoinc')) {
 
             // Decode the response
             $body = json_decode($response['body'], true);
-            $order->update_meta_data('_twoinc_order_state', 'FULFILLING');
+            $order->update_meta_data(WC_Twoinc_Brand::meta_key('order_state'), 'FULFILLING');
             $order->save();
             do_action('twoinc_order_completed', $order, $body);
             return true;
@@ -669,7 +774,7 @@ if (!class_exists('WC_Twoinc')) {
                 return false;
             }
 
-            $state = $order->get_meta('_twoinc_order_state', true);
+            $state = $order->get_meta(WC_Twoinc_Brand::meta_key('order_state'), true);
             if ($state == 'CANCELLED') {
                 $order_note = sprintf(__('Order is already cancelled with %s.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name'));
                 $order->add_order_note($order_note);
@@ -695,7 +800,7 @@ if (!class_exists('WC_Twoinc')) {
                 return false;
             }
 
-            $order->update_meta_data('_twoinc_order_state', "CANCELLED");
+            $order->update_meta_data(WC_Twoinc_Brand::meta_key('order_state'), "CANCELLED");
             $order->save();
             do_action('twoinc_order_cancelled', $order, $response);
             return true;
@@ -710,7 +815,7 @@ if (!class_exists('WC_Twoinc')) {
         {
             // Get the order
             $order = wc_get_order($order_id);
-            $state = $order->get_meta('_twoinc_order_state', true);
+            $state = $order->get_meta(WC_Twoinc_Brand::meta_key('order_state'), true);
             if ($state == 'REFUNDED') {
                 return;
             }
@@ -737,19 +842,19 @@ if (!class_exists('WC_Twoinc')) {
                 <tr>
                     <th><label for="twoinc_billing_company"><?php _e('Billing Company name', 'twoinc-payment-gateway'); ?></label></th>
                     <td>
-                        <input type="text" name="twoinc_billing_company" id="twoinc_billing_company" value="<?php echo esc_attr(get_the_author_meta('twoinc_billing_company', $user->ID)); ?>" class="regular-text" />
+                        <input type="text" name="twoinc_billing_company" id="twoinc_billing_company" value="<?php echo esc_attr(get_the_author_meta(WC_Twoinc_Brand::prefixed_name('billing_company'), $user->ID)); ?>" class="regular-text" />
                     </td>
                 </tr>
                 <tr>
                     <th><label for="twoinc_company_id"><?php _e('Billing Company ID', 'twoinc-payment-gateway'); ?></label></th>
                     <td>
-                        <input type="text" name="twoinc_company_id" id="twoinc_company_id" value="<?php echo esc_attr(get_the_author_meta('twoinc_company_id', $user->ID)); ?>" class="regular-text" />
+                        <input type="text" name="twoinc_company_id" id="twoinc_company_id" value="<?php echo esc_attr(get_the_author_meta(WC_Twoinc_Brand::prefixed_name('company_id'), $user->ID)); ?>" class="regular-text" />
                     </td>
                 </tr>
                 <tr>
                     <th><label for="twoinc_department"><?php _e('Department', 'twoinc-payment-gateway'); ?></label></th>
                     <td>
-                        <input type="text" name="twoinc_department" id="twoinc_department" value="<?php echo esc_attr(get_the_author_meta('twoinc_department', $user->ID)); ?>" class="regular-text" />
+                        <input type="text" name="twoinc_department" id="twoinc_department" value="<?php echo esc_attr(get_the_author_meta(WC_Twoinc_Brand::prefixed_name('department'), $user->ID)); ?>" class="regular-text" />
                         <br />
                         <span class="description"><?php _e("The department displayed on the invoices"); ?></span>
                     </td>
@@ -757,7 +862,7 @@ if (!class_exists('WC_Twoinc')) {
                 <tr>
                     <th><label for="twoinc_project"><?php _e('Project', 'twoinc-payment-gateway'); ?></label></th>
                     <td>
-                        <input type="text" name="twoinc_project" id="twoinc_project" value="<?php echo esc_attr(get_the_author_meta('twoinc_project', $user->ID)); ?>" class="regular-text" />
+                        <input type="text" name="twoinc_project" id="twoinc_project" value="<?php echo esc_attr(get_the_author_meta(WC_Twoinc_Brand::prefixed_name('project'), $user->ID)); ?>" class="regular-text" />
                         <br />
                         <span class="description"><?php _e("The project displayed on the invoices"); ?></span>
                     </td>
@@ -784,10 +889,10 @@ if (!class_exists('WC_Twoinc')) {
                 return false;
             }
 
-            update_user_meta($user_id, 'twoinc_company_id', $_POST['twoinc_company_id']);
-            update_user_meta($user_id, 'twoinc_billing_company', $_POST['twoinc_billing_company']);
-            update_user_meta($user_id, 'twoinc_department', $_POST['twoinc_department']);
-            update_user_meta($user_id, 'twoinc_project', $_POST['twoinc_project']);
+            update_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('company_id'), $_POST['twoinc_company_id']);
+            update_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('billing_company'), $_POST['twoinc_billing_company']);
+            update_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('department'), $_POST['twoinc_department']);
+            update_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('project'), $_POST['twoinc_project']);
         }
 
         /**
@@ -797,6 +902,235 @@ if (!class_exists('WC_Twoinc')) {
          *
          * @return array
          */
+        /**
+         * Remove the gateway from checkout when the platform minimum
+         * (API-resolved, see get_platform_minimum_order()), the brand's
+         * billing-country restriction (availability_gate in the brand
+         * config), or the merchant's own minimum is unmet. Mirrors the
+         * ABN fork's gate semantics: front-end only, minimum is
+         * inclusive (an exactly-minimum basket passes).
+         *
+         * @param array $available_gateways
+         *
+         * @return array
+         */
+        public function apply_brand_availability_gate($available_gateways)
+        {
+            if (is_admin() || !isset($available_gateways[$this->id])) {
+                return $available_gateways;
+            }
+            $gate = WC_Twoinc_Brand::get('availability_gate');
+            if ($gate && !isset($gate['billing_countries'])) {
+                // A truthy but malformed gate must not judge with missing
+                // criteria; leave the gateway available and let the log
+                // below stay quiet (config bug, not a basket decision).
+                $gate = null;
+            }
+            $platform_minimum = $this->get_platform_minimum_order();
+            $merchant_minimum = $this->get_merchant_minimum_order();
+            if (!$gate && !$platform_minimum && !$merchant_minimum) {
+                return $available_gateways;
+            }
+            if (!function_exists('WC') || !WC()->cart || !WC()->customer) {
+                return $available_gateways;
+            }
+
+            // Basket value on each minimum's own basis - the platform
+            // minimum's basis is explicit (ABN's funding-partner rule is
+            // net; the platform's defaults are gross) and the merchant
+            // selects theirs independently.
+            $basket_value = static function (string $basis): float {
+                return $basis === 'gross'
+                    ? (float) WC()->cart->total
+                    : (float) WC()->cart->total - (float) WC()->cart->get_total_tax();
+            };
+
+            // The minimums judge the basket being purchased. On the
+            // pay-for-order page the session cart is not that basket (it
+            // is usually empty, and anything in it is unrelated to the
+            // order being paid), so only the billing-country gate applies
+            // there and in any other cartless context — the API still
+            // enforces the platform minimum at order creation.
+            $basket_is_judgeable = !WC()->cart->is_empty()
+                && !(function_exists('is_wc_endpoint_url') && is_wc_endpoint_url('order-pay'));
+
+            $satisfied = true;
+            if ($platform_minimum && $basket_is_judgeable) {
+                // Fail closed on a basket in another currency: with no FX
+                // source in WooCommerce it cannot be proven to satisfy the
+                // funding partner's minimum.
+                $satisfied = get_woocommerce_currency() === $platform_minimum['currency']
+                    && $basket_value($platform_minimum['basis']) >= $platform_minimum['amount'];
+            }
+            if ($satisfied && $gate) {
+                $satisfied = in_array(WC()->customer->get_billing_country(), $gate['billing_countries'], true);
+            }
+            if ($satisfied && $merchant_minimum && $basket_is_judgeable) {
+                $satisfied = get_woocommerce_currency() === $merchant_minimum['currency']
+                    ? $basket_value($merchant_minimum['basis']) >= $merchant_minimum['amount']
+                    // The merchant minimum is store-currency scoped; a
+                    // basket in another currency cannot be judged against
+                    // it (no FX source in WooCommerce) — fail open on the
+                    // merchant's own optional bar, the platform minimum
+                    // above still applies.
+                    : $satisfied;
+            }
+            if (!$satisfied) {
+                unset($available_gateways[$this->id]);
+                // Removing a payment method is invisible to the merchant —
+                // log the failing basket once per request so a gate
+                // misconfiguration doesn't read as the gateway vanishing.
+                static $logged = false;
+                if (!$logged && function_exists('wc_get_logger')) {
+                    $logged = true;
+                    wc_get_logger()->info(
+                        sprintf(
+                            'Availability gate removed %s from checkout (gross=%s net=%s currency=%s country=%s; platform min %s, merchant min %s)',
+                            $this->id,
+                            $basket_value('gross'),
+                            $basket_value('net'),
+                            get_woocommerce_currency(),
+                            WC()->customer->get_billing_country(),
+                            $platform_minimum
+                                ? $platform_minimum['amount'] . ' ' . $platform_minimum['currency'] . ' ' . $platform_minimum['basis']
+                                : 'none',
+                            $merchant_minimum
+                                ? $merchant_minimum['amount'] . ' ' . $merchant_minimum['currency'] . ' ' . $merchant_minimum['basis']
+                                : 'none'
+                        ),
+                        ['source' => 'twoinc-payment-gateway']
+                    );
+                }
+            }
+
+            return $available_gateways;
+        }
+
+        /**
+         * Dynamic description for the Minimum Order Value setting: shows
+         * the platform minimum the merchant's value must exceed. The
+         * field is interpreted in the STORE currency; when that differs
+         * from the platform minimum's currency the floor is shown in its
+         * native currency only — WooCommerce has no FX rate source until
+         * TWO-24776, so no converted figure can honestly be displayed.
+         *
+         * @return string
+         */
+        public function get_merchant_minimum_order_description()
+        {
+            $platform_minimum = $this->get_platform_minimum_order();
+            if ($platform_minimum) {
+                $native_display = get_woocommerce_currency_symbol($platform_minimum['currency'])
+                    . number_format($platform_minimum['amount'], 2);
+                $basis_label = $platform_minimum['basis'] === 'gross'
+                    ? __('including', 'twoinc-payment-gateway')
+                    : __('excluding', 'twoinc-payment-gateway');
+                if (get_option('woocommerce_currency') === $platform_minimum['currency']) {
+                    return sprintf(
+                        __('Platform minimum %1$s, %2$s tax. A value here is interpreted in the store currency on the tax basis selected below and must exceed it.', 'twoinc-payment-gateway'),
+                        $native_display,
+                        $basis_label
+                    );
+                }
+                return sprintf(
+                    __('Platform minimum %1$s, %2$s tax. A value here is interpreted in the store currency on the tax basis selected below; it cannot be checked against the platform minimum (different currency) — both minimums are enforced independently.', 'twoinc-payment-gateway'),
+                    $native_display,
+                    $basis_label
+                );
+            }
+            return __('Hide the payment method below this order value (store currency, on the tax basis selected below). Leave empty for no minimum.', 'twoinc-payment-gateway');
+        }
+
+        /**
+         * The merchant's own optional minimum order value, as
+         * ['amount', 'currency', 'basis'] or null. Interpreted in the
+         * STORE currency (the saved woocommerce_currency option, not the
+         * active multicurrency display currency) on the tax basis the
+         * merchant selects, falling back to the platform minimum's basis
+         * when unset, else gross.
+         *
+         * @return array|null
+         */
+        public function get_merchant_minimum_order()
+        {
+            $value = (float) $this->get_option('merchant_minimum_order');
+            if ($value <= 0) {
+                return null;
+            }
+            $basis = (string) $this->get_option('merchant_minimum_order_basis');
+            if (!in_array($basis, ['net', 'gross'], true)) {
+                $platform_minimum = $this->get_platform_minimum_order();
+                $basis = $platform_minimum['basis'] ?? 'gross';
+            }
+            return [
+                'amount' => $value,
+                'currency' => get_option('woocommerce_currency'),
+                'basis' => $basis,
+            ];
+        }
+
+        /**
+         * Validate the merchant minimum on settings save: numeric and
+         * non-negative always; strictly above the platform minimum when
+         * the brand declares one IN THE STORE CURRENCY. A platform
+         * minimum in another currency cannot be compared (no FX source
+         * in WooCommerce until TWO-24776) — the numeric floor check is
+         * skipped and both minimums are enforced independently at
+         * checkout.
+         *
+         * @param string $key
+         * @param string $value
+         *
+         * @return string
+         * @throws Exception
+         */
+        public function validate_merchant_minimum_order_field($key, $value)
+        {
+            $value = trim((string) $value);
+            if ($value === '') {
+                return '';
+            }
+            $value = str_replace(',', '.', $value);
+            if (!is_numeric($value) || (float) $value < 0) {
+                throw new Exception(__('Minimum Order Value must be a non-negative number.', 'twoinc-payment-gateway'));
+            }
+            $platform_minimum = $this->get_platform_minimum_order();
+            if (
+                $platform_minimum
+                && get_option('woocommerce_currency') === $platform_minimum['currency']
+                && (float) $value <= $platform_minimum['amount']
+            ) {
+                throw new Exception(sprintf(
+                    __('Minimum Order Value must exceed the platform minimum of %1$s, %2$s tax.', 'twoinc-payment-gateway'),
+                    get_woocommerce_currency_symbol($platform_minimum['currency']) . number_format($platform_minimum['amount'], 2),
+                    $platform_minimum['basis'] === 'gross' ? __('including', 'twoinc-payment-gateway') : __('excluding', 'twoinc-payment-gateway')
+                ));
+            }
+            return $value;
+        }
+
+        /**
+         * Brand veto on payment processing, resolved via the
+         * twoinc_payment_validation_error filter (e.g. the ABN edition's
+         * required terms-acceptance checkbox). Returns the buyer-facing
+         * error message, or null to proceed.
+         *
+         * @param int $order_id
+         *
+         * @return string|null
+         */
+        public function get_brand_payment_validation_error($order_id)
+        {
+            /**
+             * Filter: a brand overlay vetoes payment with a buyer-facing
+             * error without overriding process_payment().
+             *
+             * @param string|null $error    Error message, or null to proceed.
+             * @param int         $order_id WooCommerce order id.
+             */
+            return apply_filters('twoinc_payment_validation_error', null, $order_id);
+        }
+
         public function process_payment($order_id)
         {
 
@@ -805,6 +1139,12 @@ if (!class_exists('WC_Twoinc')) {
 
             // Check payment method
             if (!WC_Twoinc_Helper::is_twoinc_order($order)) {
+                return;
+            }
+
+            $brand_validation_error = $this->get_brand_payment_validation_error($order_id);
+            if ($brand_validation_error) {
+                WC_Twoinc_Helper::display_ajax_error($brand_validation_error);
                 return;
             }
 
@@ -826,8 +1166,8 @@ if (!class_exists('WC_Twoinc')) {
             $invoice_emails = $invoice_email ? array_map('sanitize_text_field', explode(',', $invoice_email)) : [];
 
             // Store the order meta
-            $order->update_meta_data('_twoinc_order_reference', $order_reference);
-            $order->update_meta_data('_twoinc_merchant_id', $merchant_id);
+            $order->update_meta_data(WC_Twoinc_Brand::meta_key('order_reference'), $order_reference);
+            $order->update_meta_data(WC_Twoinc_Brand::meta_key('merchant_id'), $merchant_id);
             $order->update_meta_data('company_id', $company_id);
             $order->update_meta_data('department', $department);
             $order->update_meta_data('project', $project);
@@ -873,17 +1213,17 @@ if (!class_exists('WC_Twoinc')) {
             // Save to user meta
             $user_id = wp_get_current_user()->ID;
             if ($user_id) {
-                if (!get_the_author_meta('twoinc_company_id', $user_id)) {
-                    update_user_meta($user_id, 'twoinc_company_id', $company_id);
+                if (!get_the_author_meta(WC_Twoinc_Brand::prefixed_name('company_id'), $user_id)) {
+                    update_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('company_id'), $company_id);
                 }
-                if (!get_the_author_meta('twoinc_billing_company', $user_id)) {
-                    update_user_meta($user_id, 'twoinc_billing_company', $billing_company);
+                if (!get_the_author_meta(WC_Twoinc_Brand::prefixed_name('billing_company'), $user_id)) {
+                    update_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('billing_company'), $billing_company);
                 }
-                if (!get_the_author_meta('twoinc_department', $user_id)) {
-                    update_user_meta($user_id, 'twoinc_department', $department);
+                if (!get_the_author_meta(WC_Twoinc_Brand::prefixed_name('department'), $user_id)) {
+                    update_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('department'), $department);
                 }
-                if (!get_the_author_meta('twoinc_project', $user_id)) {
-                    update_user_meta($user_id, 'twoinc_project', $project);
+                if (!get_the_author_meta(WC_Twoinc_Brand::prefixed_name('project'), $user_id)) {
+                    update_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('project'), $project);
                 }
             }
 
@@ -928,19 +1268,41 @@ if (!class_exists('WC_Twoinc')) {
 
             if ($body['status'] == 'REJECTED') {
                 $error_message = sprintf(__('Invoice purchase with %s is not available for this order.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name'));
+                // Surface the minimum when the decline is attributable to
+                // it: primarily by the API's machine-readable decline
+                // reason, with a strictly-below-minimum check as fallback
+                // while older backends carry only a generic reason. Same
+                // currency only: WooCommerce has no FX rate source.
+                $platform_minimum = $this->get_platform_minimum_order();
+                if ($platform_minimum) {
+                    $order_value = $platform_minimum['basis'] === 'gross'
+                        ? (float) $order->get_total()
+                        : (float) $order->get_total() - (float) $order->get_total_tax();
+                    $declined_on_minimum = ($body['decline_reason'] ?? null) === 'ORDER_BELOW_MIN_INVOICE_AMOUNT'
+                        || ($order->get_currency() === $platform_minimum['currency']
+                            && $order_value < $platform_minimum['amount']);
+                    if ($declined_on_minimum && $order->get_currency() === $platform_minimum['currency']) {
+                        $error_message .= ' ' . sprintf(
+                            __('Minimum order value is %1$s%2$s %3$s tax.', 'twoinc-payment-gateway'),
+                            get_woocommerce_currency_symbol($platform_minimum['currency']),
+                            number_format($platform_minimum['amount'], 2),
+                            $platform_minimum['basis'] === 'gross' ? __('including', 'twoinc-payment-gateway') : __('excluding', 'twoinc-payment-gateway')
+                        );
+                    }
+                }
                 $order->add_order_note($error_message);
                 WC_Twoinc_Helper::display_ajax_error($error_message);
                 return;
             }
 
             // Store the Twoinc Order Id for future use
-            $order->update_meta_data('twoinc_order_id', $body['id']);
+            $order->update_meta_data(WC_Twoinc_Brand::prefixed_name('order_id'), $body['id']);
             $twoinc_meta = $this->get_save_twoinc_meta($order, $body['id']);
             $twoinc_updated_order_hash = WC_Twoinc_Helper::hash_order($order, $twoinc_meta);
-            $order->update_meta_data('_twoinc_req_body_hash', $twoinc_updated_order_hash);
+            $order->update_meta_data(WC_Twoinc_Brand::meta_key('req_body_hash'), $twoinc_updated_order_hash);
 
             if (isset($body['state'])) {
-                $order->update_meta_data('_twoinc_order_state', $body['state']);
+                $order->update_meta_data(WC_Twoinc_Brand::meta_key('order_state'), $body['state']);
             }
 
             $order->save();
@@ -988,7 +1350,7 @@ if (!class_exists('WC_Twoinc')) {
             }
 
             // Get and check refund data
-            $state = $order->get_meta('_twoinc_order_state', true);
+            $state = $order->get_meta(WC_Twoinc_Brand::meta_key('order_state'), true);
             if ($state === 'REFUNDED') {
                 return new WP_Error(
                     'invalid_twoinc_refund',
@@ -1076,7 +1438,7 @@ if (!class_exists('WC_Twoinc')) {
             }
             $order->add_order_note($order_note);
 
-            $order->update_meta_data('_twoinc_order_state', $state);
+            $order->update_meta_data(WC_Twoinc_Brand::meta_key('order_state'), $state);
             $order->save();
 
             do_action('twoinc_order_refunded', $order, $body);
@@ -1145,7 +1507,9 @@ if (!class_exists('WC_Twoinc')) {
         private function is_confirmation_page()
         {
 
-            if (isset($_REQUEST['order_id']) && isset($_REQUEST['twoinc_order_reference']) && isset($_REQUEST['twoinc_nonce'])) {
+            if (isset($_REQUEST['order_id'])
+                && isset($_REQUEST[WC_Twoinc_Brand::prefixed_name('order_reference')])
+                && isset($_REQUEST[WC_Twoinc_Brand::prefixed_name('nonce')])) {
                 return true;
                 // Temporarily commented out until we find a solution for redirect plugins
                 // $confirm_path = '/twoinc-payment-gateway/confirm';
@@ -1189,19 +1553,19 @@ if (!class_exists('WC_Twoinc')) {
             }
 
             // Get the order reference
-            $order_reference = sanitize_text_field($_REQUEST['twoinc_order_reference']);
+            $order_reference = sanitize_text_field($_REQUEST[WC_Twoinc_Brand::prefixed_name('order_reference')]);
 
             // Verify order reference
-            if (!$order_reference || $order_reference !== $order->get_meta('_twoinc_order_reference', true)) {
+            if (!$order_reference || $order_reference !== $order->get_meta(WC_Twoinc_Brand::meta_key('order_reference'), true)) {
                 wp_die(__('The security code is not valid.', 'twoinc-payment-gateway'));
             }
 
             if ($this->get_option('skip_confirm_auth') !== 'yes') {
                 // Get the nonce
-                $nonce = sanitize_text_field($_REQUEST['twoinc_nonce']);
+                $nonce = sanitize_text_field($_REQUEST[WC_Twoinc_Brand::prefixed_name('nonce')]);
 
                 // Stop if the code is not valid
-                if (!wp_verify_nonce($nonce, 'twoinc_confirm_' . $order_id)) {
+                if (!wp_verify_nonce($nonce, WC_Twoinc_Brand::prefixed_name('confirm_' . $order_id))) {
                     wp_die(__('The security code is not valid.', 'twoinc-payment-gateway'));
                 }
             }
@@ -1237,7 +1601,7 @@ if (!class_exists('WC_Twoinc')) {
             // Add note and update Two state
             $order_note = sprintf(__('Order ID %s has been placed with %s.', 'twoinc-payment-gateway'), $twoinc_order_id, WC_Twoinc_Brand::get('product_name'));
             $order->add_order_note($order_note);
-            $order->update_meta_data('_twoinc_order_state', 'CONFIRMED');
+            $order->update_meta_data(WC_Twoinc_Brand::meta_key('order_state'), 'CONFIRMED');
             $order->save();
 
             // Mark order as processing
@@ -1264,7 +1628,30 @@ if (!class_exists('WC_Twoinc')) {
                 'title' => [
                     'title'       => __('Title', 'twoinc-payment-gateway'),
                     'type'        => 'text',
-                    'default'     => __('Business invoice - %s days', 'twoinc-payment-gateway')
+                    // Brand-specific default: a fresh install must show the
+                    // brand's payment-method title, not the Two phrasing.
+                    'default'     => __(WC_Twoinc_Brand::get('title_default'), 'twoinc-payment-gateway')
+                ],
+                'merchant_minimum_order' => [
+                    // The value is interpreted in the store currency, so
+                    // the label says which one applies.
+                    'title'       => sprintf(
+                        __('Minimum Order Value, %s', 'twoinc-payment-gateway'),
+                        get_option('woocommerce_currency')
+                    ),
+                    'type'        => 'text',
+                    'default'     => '',
+                    'description' => $this->get_merchant_minimum_order_description(),
+                ],
+                'merchant_minimum_order_basis' => [
+                    'title'       => __('Minimum Order Value Tax Basis', 'twoinc-payment-gateway'),
+                    'type'        => 'select',
+                    'default'     => 'gross',
+                    'options'     => [
+                        'gross' => __('Including tax (gross)', 'twoinc-payment-gateway'),
+                        'net'   => __('Excluding tax (net)', 'twoinc-payment-gateway'),
+                    ],
+                    'description' => __('Whether the basket is compared against the minimum including or excluding tax.', 'twoinc-payment-gateway'),
                 ],
                 'test_checkout_host' => [
                     'type'        => 'text',
@@ -1582,11 +1969,11 @@ if (!class_exists('WC_Twoinc')) {
                 }
             }
 
-            $order_reference = $order->get_meta('_twoinc_order_reference') ?? $order->get_meta('_tillit_order_reference');
-            $merchant_id = $order->get_meta('_twoinc_merchant_id');
+            $order_reference = $order->get_meta(WC_Twoinc_Brand::meta_key('order_reference')) ?? $order->get_meta('_tillit_order_reference');
+            $merchant_id = $order->get_meta(WC_Twoinc_Brand::meta_key('merchant_id'));
             if (!$merchant_id) {
                 $merchant_id = $order->get_meta('_tillit_merchant_id') ?? $this->get_merchant_id();
-                $order->update_meta_data('_twoinc_merchant_id', $merchant_id);
+                $order->update_meta_data(WC_Twoinc_Brand::meta_key('merchant_id'), $merchant_id);
                 $order->save();
             }
 
@@ -1664,11 +2051,11 @@ if (!class_exists('WC_Twoinc')) {
         private function process_update_twoinc_order($order, $twoinc_meta, $forced_reload = false)
         {
 
-            $twoinc_order_hash = $order->get_meta('_twoinc_req_body_hash');
+            $twoinc_order_hash = $order->get_meta(WC_Twoinc_Brand::meta_key('req_body_hash'));
             $twoinc_updated_order_hash = WC_Twoinc_Helper::hash_order($order, $twoinc_meta);
             if (!$twoinc_order_hash || $twoinc_order_hash != $twoinc_updated_order_hash) {
                 if ($this->update_twoinc_order($order)) {
-                    $order->update_meta_data('_twoinc_req_body_hash', $twoinc_updated_order_hash);
+                    $order->update_meta_data(WC_Twoinc_Brand::meta_key('req_body_hash'), $twoinc_updated_order_hash);
                     $order->save();
                 }
                 if ($forced_reload) {
@@ -1757,7 +2144,7 @@ if (!class_exists('WC_Twoinc')) {
         private function get_twoinc_order_id($order)
         {
 
-            $twoinc_order_id = $order->get_meta('twoinc_order_id');
+            $twoinc_order_id = $order->get_meta(WC_Twoinc_Brand::prefixed_name('order_id'));
 
             if (!$twoinc_order_id) {
                 $twoinc_order_id = $order->get_meta('tillit_order_id');
@@ -1903,6 +2290,23 @@ if (!class_exists('WC_Twoinc')) {
             if ($this->get_option('clear_options_on_deactivation') === 'yes') {
                 delete_option('woocommerce_' . $this->id . '_settings');
             }
+        }
+
+        /**
+         * Append plugin/platform version info below the settings form,
+         * mirroring the version panels in the Magento and PrestaShop
+         * plugins - the support team's first question is always
+         * "what version are you on".
+         */
+        public function admin_options()
+        {
+            parent::admin_options();
+            echo '<p><small class="description">' . esc_html(sprintf(
+                __('Plugin version: %1$s | WooCommerce: %2$s | WordPress: %3$s', 'twoinc-payment-gateway'),
+                get_twoinc_plugin_version(),
+                defined('WC_VERSION') ? WC_VERSION : '?',
+                get_bloginfo('version')
+            )) . '</small></p>';
         }
 
         /**

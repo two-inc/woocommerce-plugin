@@ -232,7 +232,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             $currency = get_woocommerce_currency();
 
             // TODO: Make this dynamic based on active merchant payee accounts
-            $supported_buyer_countries = ["NO", "GB", "SE", "NL", "FI", "DK"];
+            $supported_buyer_countries = WC_Twoinc_Brand::get('supported_buyer_countries');
 
             $properties = [
                 'text' => [
@@ -246,6 +246,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 'enable_order_intent' => $this->wc_twoinc->get_option('enable_order_intent'),
                 'display_tooltips' => $this->wc_twoinc->get_option('display_tooltips'),
                 'supported_buyer_countries' => $supported_buyer_countries,
+                'gateway_id' => WC_Twoinc_Brand::get('gateway_id'),
                 'merchant' => $merchant,
                 'days_on_invoice' => $this->wc_twoinc->get_merchant_default_days_on_invoice(),
                 'shop_base_country' => strtolower(WC()->countries->get_base_country()),
@@ -259,10 +260,10 @@ if (!class_exists('WC_Twoinc_Checkout')) {
 
             $user_id = wp_get_current_user()->ID;
             if ($user_id) {
-                $properties['company_id'] = get_user_meta($user_id, 'twoinc_company_id', true);
-                $properties['billing_company'] = get_user_meta($user_id, 'twoinc_billing_company', true);
-                $properties['department'] = get_user_meta($user_id, 'twoinc_department', true);
-                $properties['project'] = get_user_meta($user_id, 'twoinc_project', true);
+                $properties['company_id'] = get_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('company_id'), true);
+                $properties['billing_company'] = get_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('billing_company'), true);
+                $properties['department'] = get_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('department'), true);
+                $properties['project'] = get_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('project'), true);
             }
 
             return $properties;

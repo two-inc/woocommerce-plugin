@@ -39,20 +39,20 @@ jQuery(function ($) {
 
   $("body").on(
     "change",
-    "#woocommerce_woocommerce-gateway-tillit_enable_company_search",
+    "#woocommerce_" + twoinc_admin.gateway_id + "_enable_company_search",
     function (e) {
       toggleChildrenFields(
         $(this),
-        $("#woocommerce_woocommerce-gateway-tillit_enable_company_search_for_others")
+        $("#woocommerce_" + twoinc_admin.gateway_id + "_enable_company_search_for_others")
       );
       toggleChildrenFields(
         $(this),
-        $("#woocommerce_woocommerce-gateway-tillit_enable_address_lookup")
+        $("#woocommerce_" + twoinc_admin.gateway_id + "_enable_address_lookup")
       );
     }
   );
 
-  jQuery("[id*='woocommerce-gateway-tillit'].wc-settings-sub-title").append(
+  jQuery("[id*='" + twoinc_admin.gateway_id + "'].wc-settings-sub-title").append(
     '<a href="#" class="collapsed setting-dropdown"><span class="dashicons dashicons-arrow-down-alt2"></span></a>'
   );
   jQuery("h3.wc-settings-sub-title a").click(function (e) {
@@ -73,17 +73,17 @@ jQuery(function ($) {
   jQuery("h3.wc-settings-sub-title").next().hide();
 
   toggleChildrenFields(
-    $("#woocommerce_woocommerce-gateway-tillit_enable_company_search"),
-    $("#woocommerce_woocommerce-gateway-tillit_enable_company_search_for_others")
+    $("#woocommerce_" + twoinc_admin.gateway_id + "_enable_company_search"),
+    $("#woocommerce_" + twoinc_admin.gateway_id + "_enable_company_search_for_others")
   );
   toggleChildrenFields(
-    $("#woocommerce_woocommerce-gateway-tillit_enable_company_search"),
-    $("#woocommerce_woocommerce-gateway-tillit_enable_address_lookup")
+    $("#woocommerce_" + twoinc_admin.gateway_id + "_enable_company_search"),
+    $("#woocommerce_" + twoinc_admin.gateway_id + "_enable_address_lookup")
   );
 
   // API Key verification functionality
   let verificationTimeout;
-  const $apiKeyField = $("#woocommerce_woocommerce-gateway-tillit_api_key");
+  const $apiKeyField = $("#woocommerce_" + twoinc_admin.gateway_id + "_api_key");
   const $verificationIcon = $("#api-key-verification-icon");
   const $validIcon = $("#api-key-valid");
   const $invalidIcon = $("#api-key-invalid");

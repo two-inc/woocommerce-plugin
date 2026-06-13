@@ -575,12 +575,19 @@ if (!class_exists('WC_Twoinc_Helper')) {
             }
 
             if (!$skip_nonce) {
+                // Param names and nonce action derive from the brand's
+                // meta_prefix so the read side (process_confirmation)
+                // matches what live branded stores already expect. The
+                // path segment is cosmetic: confirmation detection is by
+                // param presence, not path.
                 $confirmation_url = sprintf(
-                    '%s/twoinc-payment-gateway/confirm?order_id=%s&twoinc_order_reference=%s&twoinc_nonce=%s',
+                    '%s/twoinc-payment-gateway/confirm?order_id=%s&%s=%s&%s=%s',
                     get_home_url(),
                     $order->get_id(),
+                    WC_Twoinc_Brand::prefixed_name('order_reference'),
                     $order_reference,
-                    wp_create_nonce('twoinc_confirm_' . $order->get_id())
+                    WC_Twoinc_Brand::prefixed_name('nonce'),
+                    wp_create_nonce(WC_Twoinc_Brand::prefixed_name('confirm_' . $order->get_id()))
                 );
                 /**
                  * Filter the confirmation URL sent to the Two API.
