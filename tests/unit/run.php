@@ -45,6 +45,8 @@ final class BrandConfigSpec
             'testAvailabilityGateKeepsGatewayAtExactMinimum',
             'testAvailabilityGateComparesNetNotGross',
             'testAvailabilityGateRestrictsBillingCountry',
+            'testAvailabilityGateSkipsMinimumsOnEmptyCart',
+            'testAvailabilityGateSkipsMinimumsOnOrderPayPage',
             'testMerchantMinimumRaisesTheBar',
             'testMerchantMinimumValidationRejectsValuesAtOrBelowPlatformMinimum',
             'testMerchantMinimumValidationSkipsFloorCheckAcrossCurrencies',
@@ -404,6 +406,46 @@ final class BrandConfigSpec
         $result = self::gateway(self::EUR_250_NET)->apply_brand_availability_gate($gateways);
 
         TinyAssert::true(!isset($result['woocommerce-gateway-testbrand']));
+    }
+
+    private static function testAvailabilityGateSkipsMinimumsOnEmptyCart(): void
+    {
+        // No live basket to judge (e.g. a cartless REST context): the
+        // minimums must not hide the gateway on a zero-value cart — the
+        // API still enforces them at order creation.
+        self::useTestbrand();
+        WC()->cart = new StubCart(0.0, 0.0, true);
+        WC()->customer = new StubCustomer('NL');
+        $GLOBALS['__twoinc_test_currency'] = 'EUR';
+
+        $gateways = ['woocommerce-gateway-testbrand' => 'gw'];
+        $result = self::gateway(self::EUR_250_NET)->apply_brand_availability_gate($gateways);
+
+        TinyAssert::same('gw', $result['woocommerce-gateway-testbrand']);
+    }
+
+    private static function testAvailabilityGateSkipsMinimumsOnOrderPayPage(): void
+    {
+        // Pay-for-order page: the session cart is not the basket being
+        // paid, so an under-minimum (or stale) cart must not hide the
+        // gateway. The billing-country gate still applies there.
+        self::useTestbrand();
+        WC()->cart = new StubCart(100.0);
+        WC()->customer = new StubCustomer('NL');
+        $GLOBALS['__twoinc_test_currency'] = 'EUR';
+        $GLOBALS['__twoinc_test_is_order_pay'] = true;
+
+        try {
+            $gateways = ['woocommerce-gateway-testbrand' => 'gw'];
+            $result = self::gateway(self::EUR_250_NET)->apply_brand_availability_gate($gateways);
+            TinyAssert::same('gw', $result['woocommerce-gateway-testbrand']);
+
+            WC()->customer = new StubCustomer('DE');
+            $result = self::gateway(self::EUR_250_NET)->apply_brand_availability_gate($gateways);
+            TinyAssert::true(!isset($result['woocommerce-gateway-testbrand']));
+        } finally {
+            unset($GLOBALS['__twoinc_test_is_order_pay']);
+        }
     }
 
     private static function testMerchantMinimumRaisesTheBar(): void
