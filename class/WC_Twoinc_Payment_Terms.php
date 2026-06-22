@@ -23,6 +23,17 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
     {
         public const SESSION_KEY = 'two_selected_term';
 
+        /**
+         * Stored surcharge-rounding basis → pricing-API basis. "none" (and
+         * any unmapped value) omits the rounding block. Mirrors Magento's
+         * SurchargeCalculator::ROUNDING_BASIS_TO_API.
+         */
+        private const ROUNDING_BASIS_TO_API = [
+            'up' => 'UP',
+            'down' => 'DOWN',
+            'standard' => 'STANDARD',
+        ];
+
         /** @var array<int, array|null> request-scoped fee quote cache, keyed by term days */
         private static $fee_cache = [];
 
@@ -115,7 +126,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         /**
          * Offset pricing settings resolved from gateway options.
          *
-         * @return array{enabled: bool, percentage: string, reference_days: int|null}
+         * @return array{enabled: bool, percentage: string, reference_days: int|null, rounding_basis: string, rounding_step: float|null}
          */
         public static function get_offset_settings($gateway): array
         {
@@ -124,10 +135,13 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
             if ($percentage === '' || !is_numeric($percentage) || (float) $percentage < 0 || (float) $percentage > 100) {
                 $percentage = '100';
             }
+            $rounding_step = (float) $gateway->get_option('surcharge_rounding_step');
             return [
                 'enabled' => $gateway->get_option('enable_offset_pricing') === 'yes',
                 'percentage' => $percentage,
                 'reference_days' => $reference_days > 0 ? $reference_days : null,
+                'rounding_basis' => (string) $gateway->get_option('surcharge_rounding_basis'),
+                'rounding_step' => $rounding_step > 0 ? $rounding_step : null,
             ];
         }
 
@@ -152,7 +166,33 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                     'duration_days' => $settings['reference_days'],
                 ];
             }
+            $rounding = self::build_rounding($settings);
+            if ($rounding !== null) {
+                $buyer_fee_share['rounding'] = $rounding;
+            }
             return $buyer_fee_share;
+        }
+
+        /**
+         * The rounding block for buyer_fee_share, or null when rounding is
+         * off. The backend does the arithmetic; the plugin only relays
+         * {step, basis}. A None/unmapped basis or a non-positive step omits
+         * the block (the API requires both keys and rejects step <= 0).
+         * Mirrors Magento's SurchargeCalculator::buildRounding.
+         *
+         * @param array{rounding_basis: string, rounding_step: float|null} $settings
+         * @return array{step: float, basis: string}|null
+         */
+        private static function build_rounding(array $settings): ?array
+        {
+            $basis = $settings['rounding_basis'];
+            if (!isset(self::ROUNDING_BASIS_TO_API[$basis]) || $settings['rounding_step'] === null) {
+                return null;
+            }
+            return [
+                'step' => $settings['rounding_step'],
+                'basis' => self::ROUNDING_BASIS_TO_API[$basis],
+            ];
         }
 
         /**

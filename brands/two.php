@@ -46,6 +46,12 @@ return [
     // the only reader). Mirrors the Magento brand descriptor's
     // available_payment_terms.
     'available_terms' => [14, 30, 60, 90],
+    // Increments the buyer surcharge line may be rounded to, offered in
+    // the admin Rounding Step dropdown (the merchant picks one; the None
+    // basis disables rounding). WC_Twoinc::get_rounding_step_options is
+    // the only reader. Mirrors the Magento brand descriptor's
+    // surcharge_rounding_steps; an overlay narrows the set.
+    'available_rounding_steps' => [0.10, 0.50, 1.00, 5.00, 10.00],
     // Buyer-facing label for the offset-pricing fee line; null uses the
     // translated "Service charge" default.
     'fee_line_label' => null,

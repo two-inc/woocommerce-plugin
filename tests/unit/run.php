@@ -52,6 +52,8 @@ final class BrandConfigSpec
             'testPaymentTermsResolveBrandIntersectAdminSubset',
             'testPaymentTermsDefaultFallsBackToShortest',
             'testBuyerFeeShareShapes',
+            'testBuyerFeeShareRounding',
+            'testRoundingStepOptionsCanonicalAndNarrowed',
             'testOrderPayloadCarriesSelectedAndAvailableTerms',
             'testPaymentTermsInvalidPostFallsBackToDefault',
             'testPaymentTermsDisabledMeansNoPayloadTerms',
@@ -545,6 +547,129 @@ final class BrandConfigSpec
         // Malformed percentage falls back to full pass-through
         $gateway = self::termsGateway(['enable_offset_pricing' => 'yes', 'offset_pricing_percentage' => '150']);
         TinyAssert::same(['percentage' => '100'], WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway));
+    }
+
+    private static function testBuyerFeeShareRounding(): void
+    {
+        // Each basis maps to its API value; step rides as a float
+        $gateway = self::termsGateway([
+            'enable_offset_pricing' => 'yes',
+            'surcharge_rounding_basis' => 'up',
+            'surcharge_rounding_step' => '1.00',
+        ]);
+        TinyAssert::same(
+            ['percentage' => '100', 'rounding' => ['step' => 1.0, 'basis' => 'UP']],
+            WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway)
+        );
+
+        $gateway = self::termsGateway([
+            'enable_offset_pricing' => 'yes',
+            'surcharge_rounding_basis' => 'down',
+            'surcharge_rounding_step' => '0.50',
+        ]);
+        TinyAssert::same(
+            ['percentage' => '100', 'rounding' => ['step' => 0.5, 'basis' => 'DOWN']],
+            WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway)
+        );
+
+        $gateway = self::termsGateway([
+            'enable_offset_pricing' => 'yes',
+            'surcharge_rounding_basis' => 'standard',
+            'surcharge_rounding_step' => '5.00',
+        ]);
+        TinyAssert::same(
+            ['percentage' => '100', 'rounding' => ['step' => 5.0, 'basis' => 'STANDARD']],
+            WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway)
+        );
+
+        // None basis: no rounding block even with a step configured
+        $gateway = self::termsGateway([
+            'enable_offset_pricing' => 'yes',
+            'surcharge_rounding_basis' => 'none',
+            'surcharge_rounding_step' => '1.00',
+        ]);
+        TinyAssert::same(['percentage' => '100'], WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway));
+
+        // Direction set but step <= 0 (or unset): no rounding block (API rejects step <= 0)
+        $gateway = self::termsGateway([
+            'enable_offset_pricing' => 'yes',
+            'surcharge_rounding_basis' => 'up',
+            'surcharge_rounding_step' => '0',
+        ]);
+        TinyAssert::same(['percentage' => '100'], WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway));
+
+        // Negative step: no block (pins the > 0 guard from the negative side)
+        $gateway = self::termsGateway([
+            'enable_offset_pricing' => 'yes',
+            'surcharge_rounding_basis' => 'up',
+            'surcharge_rounding_step' => '-1.00',
+        ]);
+        TinyAssert::same(['percentage' => '100'], WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway));
+
+        $gateway = self::termsGateway(['enable_offset_pricing' => 'yes', 'surcharge_rounding_basis' => 'up']);
+        TinyAssert::same(['percentage' => '100'], WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway));
+
+        // Unmapped basis (not just 'none') with a valid step: no block. Guards
+        // the general "any unmapped value omits" contract, not only 'none'.
+        $gateway = self::termsGateway([
+            'enable_offset_pricing' => 'yes',
+            'surcharge_rounding_basis' => 'garbage',
+            'surcharge_rounding_step' => '1.00',
+        ]);
+        TinyAssert::same(['percentage' => '100'], WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway));
+
+        $gateway = self::termsGateway([
+            'enable_offset_pricing' => 'yes',
+            'surcharge_rounding_basis' => '',
+            'surcharge_rounding_step' => '1.00',
+        ]);
+        TinyAssert::same(['percentage' => '100'], WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway));
+
+        // Rounding rides alongside reference terms
+        $gateway = self::termsGateway([
+            'enable_offset_pricing' => 'yes',
+            'offset_pricing_reference_days' => '30',
+            'surcharge_rounding_basis' => 'standard',
+            'surcharge_rounding_step' => '0.50',
+        ]);
+        TinyAssert::same(
+            [
+                'percentage' => '100',
+                'reference_terms' => ['type' => 'NET_TERMS', 'duration_days' => 30],
+                'rounding' => ['step' => 0.5, 'basis' => 'STANDARD'],
+            ],
+            WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway)
+        );
+
+        // Offset disabled: no block at all, rounding ignored
+        $gateway = self::termsGateway([
+            'enable_offset_pricing' => 'no',
+            'surcharge_rounding_basis' => 'up',
+            'surcharge_rounding_step' => '1.00',
+        ]);
+        TinyAssert::same(null, WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway));
+    }
+
+    private static function testRoundingStepOptionsCanonicalAndNarrowed(): void
+    {
+        $method = new ReflectionMethod(WC_Twoinc::class, 'get_rounding_step_options');
+        $method->setAccessible(true);
+        $gateway = self::gateway();
+
+        // Default brand: all five steps, canonical two-decimal, ascending
+        TinyAssert::same(
+            ['0.10' => '0.10', '0.50' => '0.50', '1.00' => '1.00', '5.00' => '5.00', '10.00' => '10.00'],
+            $method->invoke($gateway)
+        );
+
+        // Overlay narrows + reorders; invalid entries (<=0, non-numeric) are
+        // skipped, not fatal — fixture declares [1.00, 0.50, 0, -2, 'x']
+        self::useTestbrand();
+        WC_Twoinc_Brand::reset();
+        TinyAssert::same(
+            ['0.50' => '0.50', '1.00' => '1.00'],
+            $method->invoke($gateway)
+        );
     }
 
     private static function testOrderPayloadCarriesSelectedAndAvailableTerms(): void
