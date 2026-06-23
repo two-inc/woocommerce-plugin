@@ -15,6 +15,8 @@ services:
       WORDPRESS_HOME: "http://localhost:8888"
       WORDPRESS_SITEURL: "http://localhost:8888"
       WORDPRESS_DEBUG: "true"
+      # Brand override for the plugin's WC_Twoinc_Brand loader (dev only)
+      TWO_BRAND_CODE: "${TWO_BRAND_CODE:-}"
     volumes:
       - ./volumes/wordpress:/var/www/html
       - .:/var/www/html/wp-content/plugins/tillit-payment-gateway
@@ -45,12 +47,13 @@ services:
       WORDPRESS_ADMIN_USER: admin
       WORDPRESS_ADMIN_PASSWORD: twoinb2b
       WORDPRESS_ADMIN_EMAIL: admin@two.inc
-      WOOCOM_PLUGIN_CONFIG_JSON: docker/config/staging-tillittestuk.json
-      WOOCOM_CURRENCY: GBP
-      WOOCOM_DEFAULT_COUNTRY: GB
-      WOOCOM_VERSION: 9.9.5
-      # WOOCOM_VERSION: 8.9.5
-      # WOOCOM_VERSION: 7.9.1
+      WOOCOM_PLUGIN_CONFIG_JSON: "${WOOCOM_PLUGIN_CONFIG_JSON:-docker/config/local.json}"
+      WOOCOM_CURRENCY: "${WOOCOM_CURRENCY:-GBP}"
+      WOOCOM_DEFAULT_COUNTRY: "${WOOCOM_DEFAULT_COUNTRY:-GB}"
+      WOOCOM_VERSION: "${WOOCOM_VERSION:-9.9.5}"
+      TWO_BRAND_CODE: "${TWO_BRAND_CODE:-}"
+      TWO_API_KEY: "${TWO_API_KEY:-}"
+      TWO_API_BASE_URL: "${TWO_API_BASE_URL:-}"
     volumes:
       - ./volumes/wordpress:/var/www/html
       - .:/opt/tillit-payment-gateway

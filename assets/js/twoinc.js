@@ -401,7 +401,7 @@ let twoincDomHelper = {
    * Deselect payment method and select the first available one
    */
   deselectPaymentMethod: function () {
-    const paymentMethodRadioObj = jQuery(':input[value="woocommerce-gateway-tillit"]');
+    const paymentMethodRadioObj = jQuery(':input[value="' + window.twoinc.gateway_id + '"]');
     // Deselect the current payment method
     if (paymentMethodRadioObj) {
       paymentMethodRadioObj.prop("checked", false);
@@ -583,7 +583,7 @@ let twoincDomHelper = {
    * Check if twoinc payment is currently selected
    */
   isTwoincSelected: function () {
-    return jQuery('input[name="payment_method"]:checked').val() === "woocommerce-gateway-tillit";
+    return jQuery('input[name="payment_method"]:checked').val() === window.twoinc.gateway_id;
   },
 
   /**
@@ -591,10 +591,10 @@ let twoincDomHelper = {
    */
   isTwoincVisible: function () {
     return (
-      jQuery("li.wc_payment_method.payment_method_woocommerce-gateway-tillit").css("display") !==
+      jQuery("li.wc_payment_method.payment_method_" + window.twoinc.gateway_id).css("display") !==
       "none"
     );
-    //return jQuery('#payment_method_woocommerce-gateway-tillit:visible').length !== 0
+    //return jQuery('#payment_method_' + window.twoinc.gateway_id + ':visible').length !== 0
   },
 
   /**
@@ -635,7 +635,7 @@ let twoincDomHelper = {
    * Rearrange descriptions in Twoinc payment to make it cleaner
    */
   rearrangeDescription: function () {
-    let twoincPaymentBox = jQuery(".payment_box.payment_method_woocommerce-gateway-tillit");
+    let twoincPaymentBox = jQuery(".payment_box.payment_method_" + window.twoinc.gateway_id);
     if (twoincPaymentBox.length > 0) {
       twoincPaymentBox.after(jQuery(".abt-twoinc"));
     }
@@ -873,6 +873,116 @@ let twoincDomHelper = {
           '.css" type="text/css" rel="stylesheet" />'
       );
     }
+  }
+};
+
+/**
+ * Payment terms chip selector — presentation only (TWO-24751).
+ *
+ * All business logic (term availability, fee quoting, selection
+ * validation) lives in WC_Twoinc_Payment_Terms; this module renders the
+ * data the wc-ajax endpoints return and posts the buyer's selection back.
+ */
+let twoincTermChips = {
+  fees: {},
+
+  config: function () {
+    return (window.twoinc && window.twoinc.payment_terms) || { enabled: false };
+  },
+
+  /**
+   * Re-render the chips after every checkout update (cart changes move
+   * the fee quotes, so re-fetch then re-render).
+   */
+  refresh: function () {
+    const cfg = twoincTermChips.config();
+    const $container = jQuery(".twoinc-term-chips");
+    if (!cfg.enabled || !cfg.terms || cfg.terms.length === 0 || $container.length === 0) {
+      return;
+    }
+    $container.removeClass("hidden");
+    twoincTermChips.render(cfg.terms, cfg.selected);
+
+    if (cfg.offset_pricing_enabled && cfg.fees_url) {
+      jQuery
+        .post(cfg.fees_url)
+        .done(function (response) {
+          if (response && response.success && response.data) {
+            twoincTermChips.fees = response.data.fees || {};
+            twoincTermChips.render(response.data.terms, response.data.selected);
+          }
+        })
+        .fail(function () {
+          // Fee labels are decorative: chips stay usable without them.
+        });
+    }
+  },
+
+  render: function (terms, selected) {
+    const $container = jQuery(".twoinc-term-chips");
+    if ($container.length === 0) return;
+    $container.empty();
+
+    const single = terms.length === 1;
+    terms.forEach(function (days) {
+      const isSelected = days === selected;
+      const $chip = jQuery("<button>", {
+        type: "button",
+        class:
+          "twoinc-term-chip" +
+          (isSelected ? " twoinc-term-chip--selected" : "") +
+          (single ? " twoinc-term-chip--single" : ""),
+        role: "radio",
+        "aria-checked": isSelected ? "true" : "false",
+        "data-days": days,
+        disabled: single
+      });
+      const daysLabel = (twoincTermChips.config().days_label || "%s days").replace("%s", days);
+      $chip.append(jQuery("<span>", { class: "twoinc-term-chip__days", text: daysLabel }));
+
+      const fee = twoincTermChips.fees[days];
+      if (fee && parseFloat(fee.buyer_fee_share) > 0) {
+        $chip.append(
+          jQuery("<span>", {
+            class: "twoinc-term-chip__fee",
+            text: "+" + fee.buyer_fee_share + " " + fee.currency
+          })
+        );
+      }
+      if (!single) {
+        $chip.on("click", function () {
+          twoincTermChips.select(days);
+        });
+      }
+      $container.append($chip);
+    });
+
+    // The selection rides the checkout form post so process_payment can
+    // validate it without depending on the session.
+    let $hidden = $container.find("input[name='two_selected_term']");
+    if ($hidden.length === 0) {
+      $hidden = jQuery("<input>", { type: "hidden", name: "two_selected_term" });
+      $container.append($hidden);
+    }
+    $hidden.val(selected);
+  },
+
+  select: function (days) {
+    const cfg = twoincTermChips.config();
+    if (!cfg.select_url) return;
+    jQuery
+      .post(cfg.select_url, { days: days })
+      .done(function (response) {
+        if (response && response.success && response.data) {
+          cfg.selected = response.data.selected;
+          // Recalculate totals so the offset fee follows the new term;
+          // updated_checkout then re-renders the chips.
+          jQuery(document.body).trigger("update_checkout");
+        }
+      })
+      .fail(function () {
+        // Keep the previous selection on failure.
+      });
   }
 };
 
@@ -1398,6 +1508,8 @@ class Twoinc {
     });
 
     twoincDomHelper.rearrangeDescription();
+
+    twoincTermChips.refresh();
   }
 
   /**
@@ -1462,7 +1574,7 @@ let isTwoincSelected = null;
 jQuery(function () {
   if (window.twoinc) {
     if (window.twoinc.enable_order_intent === "yes") {
-      if (jQuery("#payment_method_woocommerce-gateway-tillit").length > 0) {
+      if (jQuery("#payment_method_" + window.twoinc.gateway_id).length > 0) {
         // Run Twoinc code if order intent is enabled
         Twoinc.getInstance().initialize(true);
       }
@@ -1476,7 +1588,7 @@ jQuery(function () {
         }
 
         // Run Twoinc code if Twoinc payment is selected
-        jQuery("#payment_method_woocommerce-gateway-tillit").on("change", function () {
+        jQuery("#payment_method_" + window.twoinc.gateway_id).on("change", function () {
           Twoinc.getInstance().initialize(false);
           Twoinc.getInstance().onUpdatedCheckout();
         });
@@ -1490,7 +1602,7 @@ jQuery(function () {
       );
       if (
         lastSelectedPayment &&
-        lastSelectedPayment.id === "payment_method_woocommerce-gateway-tillit"
+        lastSelectedPayment.id === "payment_method_" + window.twoinc.gateway_id
       ) {
         Twoinc.getInstance().initialize(true);
       }
