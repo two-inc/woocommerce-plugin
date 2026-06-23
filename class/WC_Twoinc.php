@@ -319,6 +319,31 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
+         * Admin option list of the brand's surcharge rounding steps, in
+         * canonical two-decimal form so the stored value round-trips
+         * against the option list (WC_Twoinc_Payment_Terms reads it back).
+         * Mirrors the Magento RoundingStep source model.
+         *
+         * @return array<string, string>
+         */
+        private function get_rounding_step_options(): array
+        {
+            $options = [];
+            $brand_steps = WC_Twoinc_Brand::get('available_rounding_steps');
+            foreach (is_array($brand_steps) ? $brand_steps : [] as $step) {
+                if (!is_numeric($step) || (float) $step <= 0) {
+                    continue;
+                }
+                $value = number_format((float) $step, 2, '.', '');
+                $options[$value] = $value;
+            }
+            // Ascending, mirroring the Magento Loader's numeric sort (keys
+            // are the formatted strings, so equal values already dedup).
+            ksort($options, SORT_NUMERIC);
+            return $options;
+        }
+
+        /**
          * Get payment subtitle
          */
         public function get_pay_subtitle()
@@ -1763,6 +1788,27 @@ if (!class_exists('WC_Twoinc')) {
                     'desc_tip'    => true,
                     'type'        => 'select',
                     'options'     => ['' => __('None - simple pass-through', 'twoinc-payment-gateway')] + $this->get_payment_term_day_options(),
+                    'default'     => ''
+                ],
+                'surcharge_rounding_basis' => [
+                    'title'       => __('Surcharge rounding', 'twoinc-payment-gateway'),
+                    'description' => __('Snap the buyer surcharge line to a clean increment. Select None for standard two-decimal amounts.', 'twoinc-payment-gateway'),
+                    'desc_tip'    => true,
+                    'type'        => 'select',
+                    'options'     => [
+                        'none'     => __('None', 'twoinc-payment-gateway'),
+                        'up'       => __('Up', 'twoinc-payment-gateway'),
+                        'down'     => __('Down', 'twoinc-payment-gateway'),
+                        'standard' => __('Standard', 'twoinc-payment-gateway'),
+                    ],
+                    'default'     => 'none'
+                ],
+                'surcharge_rounding_step' => [
+                    'title'       => __('Rounding step', 'twoinc-payment-gateway'),
+                    'description' => __('Increment the surcharge is rounded to (e.g. 1 = whole units, 0.50 = nearest half). Applies only when a rounding direction is selected.', 'twoinc-payment-gateway'),
+                    'desc_tip'    => true,
+                    'type'        => 'select',
+                    'options'     => $this->get_rounding_step_options(),
                     'default'     => ''
                 ],
                 'section_debug' => [
