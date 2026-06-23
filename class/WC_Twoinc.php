@@ -1239,6 +1239,25 @@ if (!class_exists('WC_Twoinc')) {
             $invoice_email = array_key_exists('invoice_email', $_POST) ? sanitize_text_field($_POST['invoice_email']) : '';
             $invoice_emails = $invoice_email ? array_map('sanitize_text_field', explode(',', $invoice_email)) : [];
 
+            // A company (organization number) is mandatory: the order API's
+            // CreateOrderRequestSchema requires buyer.company.organization_number
+            // and rejects an empty value with a 400 SCHEMA_ERROR. Fail fast with
+            // a clear checkout error instead of letting that raw 400 surface as a
+            // silent failure when no company has been selected (e.g. the company
+            // search result was never picked, or the selection was cleared by a
+            // later country change). Sole-trader checkout also populates
+            // company_id (via the resolved registry identity), so this guard is
+            // safe for both flows.
+            if ($company_id === '') {
+                WC_Twoinc_Helper::display_ajax_error(
+                    sprintf(
+                        __('Please select your company before paying with %s.', 'twoinc-payment-gateway'),
+                        WC_Twoinc_Brand::get('product_name')
+                    )
+                );
+                return;
+            }
+
             // Store the order meta
             $order->update_meta_data(WC_Twoinc_Brand::meta_key('order_reference'), $order_reference);
             $order->update_meta_data(WC_Twoinc_Brand::meta_key('merchant_id'), $merchant_id);
