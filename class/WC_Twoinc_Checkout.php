@@ -27,6 +27,10 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             add_filter('woocommerce_checkout_fields', [$this, 'add_tracking_fields'], 21);
             add_filter('woocommerce_checkout_fields', [$this, 'update_company_fields'], 23);
 
+            // Brand overlays add/modify checkout fields after the base set
+            // is complete (priority 25 > the base mutations above)
+            add_filter('woocommerce_checkout_fields', [$this, 'apply_brand_checkout_fields'], 25);
+
             // Render the fields on checkout page
             add_action('woocommerce_before_checkout_billing_form', [$this, 'render_twoinc_fields'], 21);
             add_action('woocommerce_pay_order_before_submit', [$this, 'render_twoinc_fields'], 21);
@@ -38,6 +42,18 @@ if (!class_exists('WC_Twoinc_Checkout')) {
 
             // Order pay page customization
             add_action('woocommerce_pay_order_before_submit', [$this, 'order_pay_page_customize'], 24);
+        }
+
+        /**
+         * Let a brand overlay add or modify checkout form fields
+         *
+         * @param $fields
+         *
+         * @return mixed
+         */
+        public function apply_brand_checkout_fields($fields)
+        {
+            return apply_filters('twoinc_checkout_fields', $fields);
         }
 
         /**
@@ -133,7 +149,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     'label'       => __('Invoice email address', 'twoinc-payment-gateway'),
                     'class'       => array('form-row-wide'),
                     'type'        => 'email',
-                    'placeholder' => sprintf(__('Only for invoices being sent by %s', 'twoinc-payment-gateway'), WC_Twoinc::PRODUCT_NAME),
+                    'placeholder' => sprintf(__('Only for invoices being sent by %s', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')),
                     'validate'    => array('email'),
                     'required'    => false,
                     'priority'    => $company_name_priority + 5
@@ -216,7 +232,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             $currency = get_woocommerce_currency();
 
             // TODO: Make this dynamic based on active merchant payee accounts
-            $supported_buyer_countries = ["NO", "GB", "SE", "NL", "FI", "DK"];
+            $supported_buyer_countries = WC_Twoinc_Brand::get('supported_buyer_countries');
 
             $properties = [
                 'text' => [
@@ -230,6 +246,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 'enable_order_intent' => $this->wc_twoinc->get_option('enable_order_intent'),
                 'display_tooltips' => $this->wc_twoinc->get_option('display_tooltips'),
                 'supported_buyer_countries' => $supported_buyer_countries,
+                'gateway_id' => WC_Twoinc_Brand::get('gateway_id'),
                 'merchant' => $merchant,
                 'days_on_invoice' => $this->wc_twoinc->get_merchant_default_days_on_invoice(),
                 'shop_base_country' => strtolower(WC()->countries->get_base_country()),
@@ -239,14 +256,42 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 'twoinc_plugin_url' => WC_TWOINC_PLUGIN_URL,
                 'client_name' => 'wp',
                 'client_version' => get_twoinc_plugin_version(),
+                // Chip selector bootstrap (TWO-24751). JS renders only; the
+                // live data (fees, selection) comes from the wc-ajax
+                // endpoints in WC_Twoinc_Payment_Terms.
+                'payment_terms' => [
+                    'days_label' => __('%s days', 'twoinc-payment-gateway'),
+                    'enabled' => WC_Twoinc_Payment_Terms::is_enabled($this->wc_twoinc),
+                    'terms' => WC_Twoinc_Payment_Terms::get_available_terms($this->wc_twoinc),
+                    'selected' => WC_Twoinc_Payment_Terms::get_selected_term($this->wc_twoinc),
+                    'offset_pricing_enabled' => WC_Twoinc_Payment_Terms::get_offset_settings($this->wc_twoinc)['enabled'],
+                    'fees_url' => class_exists('WC_AJAX') ? WC_AJAX::get_endpoint('two_term_fees') : '',
+                    'select_url' => class_exists('WC_AJAX') ? WC_AJAX::get_endpoint('two_select_term') : '',
+                    'nonce' => wp_create_nonce('twoinc_checkout'),
+                ],
+                // Sole trader bootstrap (TWO-24754). JS renders only; country
+                // availability and token minting come from the wc-ajax
+                // endpoints in WC_Twoinc_Sole_Trader.
+                'sole_trader' => [
+                    'enabled' => WC_Twoinc_Sole_Trader::is_enabled($this->wc_twoinc),
+                    'availability_url' => class_exists('WC_AJAX') ? WC_AJAX::get_endpoint('two_sole_trader_availability') : '',
+                    'tokens_url' => class_exists('WC_AJAX') ? WC_AJAX::get_endpoint('two_sole_trader_tokens') : '',
+                    'nonce' => wp_create_nonce('twoinc_checkout'),
+                    'text' => [
+                        'registered_business' => __('Registered company', 'twoinc-payment-gateway'),
+                        'sole_trader' => __('Sole trader', 'twoinc-payment-gateway'),
+                        'popup_prompt' => __('Click here to log in or sign up as a sole trader with Two.', 'twoinc-payment-gateway'),
+                        'error' => __('Something went wrong setting up sole trader checkout. Please try again.', 'twoinc-payment-gateway'),
+                    ],
+                ],
             ];
 
             $user_id = wp_get_current_user()->ID;
             if ($user_id) {
-                $properties['company_id'] = get_user_meta($user_id, 'twoinc_company_id', true);
-                $properties['billing_company'] = get_user_meta($user_id, 'twoinc_billing_company', true);
-                $properties['department'] = get_user_meta($user_id, 'twoinc_department', true);
-                $properties['project'] = get_user_meta($user_id, 'twoinc_project', true);
+                $properties['company_id'] = get_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('company_id'), true);
+                $properties['billing_company'] = get_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('billing_company'), true);
+                $properties['department'] = get_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('department'), true);
+                $properties['project'] = get_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('project'), true);
             }
 
             return $properties;

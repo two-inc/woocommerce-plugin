@@ -178,3 +178,66 @@
   position: absolute;
   right: 4px;
 }
+
+/* Payment terms chip selector (TWO-24751) */
+.twoinc-term-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}
+.twoinc-term-chips.hidden {
+  display: none;
+}
+.twoinc-term-chip {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6px 14px;
+  border: 1px solid #c4c9e8;
+  border-radius: 16px;
+  background: #fff;
+  cursor: pointer;
+  line-height: 1.3;
+}
+.twoinc-term-chip--selected {
+  border-color: #3043d1;
+  background: #eef0fb;
+}
+.twoinc-term-chip--single {
+  cursor: default;
+}
+.twoinc-term-chip__fee {
+  font-size: 0.85em;
+  color: #3043d1;
+}
+
+/* Sole trader toggle (TWO-24754) */
+.twoinc-sole-trader-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 8px 0;
+}
+.twoinc-sole-trader-toggle.hidden {
+  display: none;
+}
+.twoinc-sole-trader-toggle__option {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  cursor: pointer;
+}
+.twoinc-sole-trader-toggle__prompt {
+  flex-basis: 100%;
+  text-decoration: underline;
+}
+.twoinc-sole-trader-toggle__prompt.hidden {
+  display: none;
+}
+.twoinc-sole-trader-toggle__error {
+  flex-basis: 100%;
+  color: #b00020;
+}
