@@ -213,6 +213,9 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                 return self::$fee_cache[$days] = null;
             }
 
+            // This quote sits on the checkout render path and is fail-soft, so
+            // cap it well under make_request's 30s default to avoid stalling
+            // checkout on a slow pricing call.
             $response = $gateway->make_request('/v1/pricing/order/fee', [
                 'currency' => get_woocommerce_currency(),
                 'gross_amount' => strval(WC_Twoinc_Helper::round_amt($gross_amount)),
@@ -222,9 +225,9 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                     'duration_days' => $days,
                 ],
                 'buyer_fee_share' => $buyer_fee_share,
-            ]);
+            ], 'POST', array(), null, 10);
 
-            if (is_wp_error($response)) {
+            if (is_wp_error($response) || (int) wp_remote_retrieve_response_code($response) < 200 || (int) wp_remote_retrieve_response_code($response) >= 300) {
                 return self::$fee_cache[$days] = null;
             }
             $body = json_decode($response['body'] ?? '', true);
@@ -319,6 +322,10 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          */
         public static function ajax_term_fees(): void
         {
+            if (!check_ajax_referer('twoinc_checkout', 'nonce', false)) {
+                wp_send_json_error('Invalid nonce');
+                return;
+            }
             $gateway = WC_Twoinc::get_instance();
             if (!$gateway || !self::is_enabled($gateway)) {
                 wp_send_json_error('Payment terms are not enabled');
@@ -341,6 +348,10 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          */
         public static function ajax_select_term(): void
         {
+            if (!check_ajax_referer('twoinc_checkout', 'nonce', false)) {
+                wp_send_json_error('Invalid nonce');
+                return;
+            }
             $gateway = WC_Twoinc::get_instance();
             if (!$gateway || !self::is_enabled($gateway)) {
                 wp_send_json_error('Payment terms are not enabled');

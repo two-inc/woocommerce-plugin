@@ -84,6 +84,13 @@ if (!class_exists('WC_Twoinc_Sole_Trader')) {
             }
 
             $types = self::fetch_supported_company_types($gateway, $country);
+            if ($types === null) {
+                // Registry error (network / non-200 / malformed): fail-soft to
+                // no sole-trader option, but DON'T persist it — a transient
+                // blip must not hide the option for the rest of the session.
+                // Request-scoped only, so the next checkout update retries.
+                return self::$types_cache[$country] = [];
+            }
 
             if ($session) {
                 $session->set(self::SESSION_KEY_PREFIX . $country, [
@@ -96,18 +103,24 @@ if (!class_exists('WC_Twoinc_Sole_Trader')) {
 
         /**
          * Uncached registry call. @see get_supported_company_types()
+         * Returns null on any error (network / non-200 / malformed body) so
+         * the caller can distinguish a failure from a genuine empty list and
+         * avoid caching the failure. A clean response returns the (possibly
+         * empty) list of types.
          *
-         * @return string[]
+         * @return string[]|null
          */
-        private static function fetch_supported_company_types($gateway, string $country): array
+        private static function fetch_supported_company_types($gateway, string $country): ?array
         {
-            $response = $gateway->make_request("/registry/v1/supported-company-types/{$country}", [], 'GET');
+            // Auxiliary call off the checkout path; cap well under the 30s
+            // default so a slow registry can't stall the buyer.
+            $response = $gateway->make_request("/registry/v1/supported-company-types/{$country}", [], 'GET', array(), null, 8);
             if (is_wp_error($response) || wp_remote_retrieve_response_code($response) !== 200) {
-                return [];
+                return null;
             }
             $body = json_decode(wp_remote_retrieve_body($response), true);
             if (!is_array($body) || !isset($body['supported_company_types']) || !is_array($body['supported_company_types'])) {
-                return [];
+                return null;
             }
             return array_values(array_filter($body['supported_company_types'], 'is_string'));
         }
@@ -151,7 +164,7 @@ if (!class_exists('WC_Twoinc_Sole_Trader')) {
 
         private static function mint_token($gateway, string $endpoint, array $payload): ?string
         {
-            $response = $gateway->make_request($endpoint, $payload);
+            $response = $gateway->make_request($endpoint, $payload, 'POST', array(), null, 8);
             if (is_wp_error($response) || wp_remote_retrieve_response_code($response) >= 300) {
                 return null;
             }
@@ -181,6 +194,10 @@ if (!class_exists('WC_Twoinc_Sole_Trader')) {
          */
         public static function ajax_availability(): void
         {
+            if (!check_ajax_referer('twoinc_checkout', 'nonce', false)) {
+                wp_send_json_error('Invalid nonce');
+                return;
+            }
             $gateway = WC_Twoinc::get_instance();
             if (!$gateway) {
                 wp_send_json_error('Gateway unavailable');
@@ -199,9 +216,28 @@ if (!class_exists('WC_Twoinc_Sole_Trader')) {
          */
         public static function ajax_tokens(): void
         {
+            if (!check_ajax_referer('twoinc_checkout', 'nonce', false)) {
+                wp_send_json_error('Invalid nonce');
+                return;
+            }
             $gateway = WC_Twoinc::get_instance();
             if (!$gateway || !self::is_enabled($gateway)) {
                 wp_send_json_error('Sole trader checkout is not enabled');
+                return;
+            }
+            // Defence-in-depth: only mint delegated-authority tokens when the
+            // buyer's billing country actually supports sole trader. Without
+            // this the endpoint would mint write-scoped tokens for any request
+            // gated on the merchant toggle alone (a minting oracle). Gate on
+            // the country the browser posts (the same value the availability
+            // check used) rather than WC()->customer, which lags the DOM
+            // within the checkout-update debounce and would wrongly block a
+            // legitimate buyer. is_available() still re-checks the registry
+            // server-side, so spoofing only permits minting for a country the
+            // merchant already supports — no privilege gain.
+            $country = isset($_REQUEST['country']) ? sanitize_text_field(wp_unslash($_REQUEST['country'])) : '';
+            if (!self::is_available($gateway, (string) $country)) {
+                wp_send_json_error('Sole trader checkout is not available for this country');
                 return;
             }
             $tokens = self::mint_tokens($gateway);

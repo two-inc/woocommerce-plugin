@@ -54,6 +54,7 @@ final class BrandConfigSpec
             'testBuyerFeeShareShapes',
             'testBuyerFeeShareRounding',
             'testRoundingStepOptionsCanonicalAndNarrowed',
+            'testRoundingStepValidationEnforcesBrandOptions',
             'testOrderPayloadCarriesSelectedAndAvailableTerms',
             'testPaymentTermsInvalidPostFallsBackToDefault',
             'testPaymentTermsDisabledMeansNoPayloadTerms',
@@ -682,6 +683,24 @@ final class BrandConfigSpec
         );
     }
 
+    private static function testRoundingStepValidationEnforcesBrandOptions(): void
+    {
+        $gateway = self::gateway();
+        // Empty = no rounding, always allowed.
+        TinyAssert::same('', $gateway->validate_surcharge_rounding_step_field('surcharge_rounding_step', ''));
+        // A step the brand offers passes through unchanged.
+        TinyAssert::same('1.00', $gateway->validate_surcharge_rounding_step_field('surcharge_rounding_step', '1.00'));
+        // A value the brand does not offer is rejected, so the option-list
+        // narrowing is enforced, not merely cosmetic.
+        $threw = false;
+        try {
+            $gateway->validate_surcharge_rounding_step_field('surcharge_rounding_step', '3.33');
+        } catch (Exception $e) {
+            $threw = true;
+        }
+        TinyAssert::true($threw);
+    }
+
     private static function testOrderPayloadCarriesSelectedAndAvailableTerms(): void
     {
         $gateway = self::termsGateway(['enable_payment_terms' => 'yes']);
@@ -754,7 +773,7 @@ final class BrandConfigSpec
                 return $this->options[$key] ?? $empty_value ?? '';
             }
 
-            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null)
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
             {
                 $this->requests[] = $endpoint;
                 foreach ($this->responses as $prefix => $response) {

@@ -905,7 +905,7 @@ let twoincTermChips = {
 
     if (cfg.offset_pricing_enabled && cfg.fees_url) {
       jQuery
-        .post(cfg.fees_url)
+        .post(cfg.fees_url, { nonce: cfg.nonce })
         .done(function (response) {
           if (response && response.success && response.data) {
             twoincTermChips.fees = response.data.fees || {};
@@ -971,7 +971,7 @@ let twoincTermChips = {
     const cfg = twoincTermChips.config();
     if (!cfg.select_url) return;
     jQuery
-      .post(cfg.select_url, { days: days })
+      .post(cfg.select_url, { days: days, nonce: cfg.nonce })
       .done(function (response) {
         if (response && response.success && response.data) {
           cfg.selected = response.data.selected;
@@ -1032,7 +1032,7 @@ let twoincSoleTrader = {
       return;
     }
     jQuery
-      .get(cfg.availability_url, { country: country })
+      .get(cfg.availability_url, { country: country, nonce: cfg.nonce })
       .done(function (response) {
         const available = !!(
           response &&
@@ -1163,7 +1163,7 @@ let twoincSoleTrader = {
       return;
     }
     jQuery
-      .post(cfg.tokens_url)
+      .post(cfg.tokens_url, { nonce: cfg.nonce, country: twoincSoleTrader.currentCountry() })
       .done(function (response) {
         if (response && response.success && response.data && response.data.autofill_token) {
           twoincSoleTrader.tokens = response.data;
@@ -1235,7 +1235,7 @@ let twoincSoleTrader = {
       "&autofillToken=" +
       encodeURIComponent(twoincSoleTrader.tokens.autofill_token) +
       "&autofillData=" +
-      encodeURIComponent(btoa(JSON.stringify(prefill)));
+      encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(prefill)))));
     window.open(
       url,
       "_blank",

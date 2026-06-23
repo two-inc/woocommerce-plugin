@@ -253,7 +253,7 @@ if (!class_exists('WC_Twoinc')) {
             if ($this->get_option('show_abt_link') === 'yes') {
                 $abt_url = WC_Twoinc_Brand::get('about_url');
                 $product_name = WC_Twoinc_Brand::get('product_name');
-                $link = '<a href="' . $abt_url . '" target="_blank">' . sprintf(__('What is %s?', 'twoinc-payment-gateway'), $product_name) . '</a>';
+                $link = '<a href="' . esc_url($abt_url) . '" target="_blank">' . sprintf(__('What is %s?', 'twoinc-payment-gateway'), $product_name) . '</a>';
                 $text = sprintf(
                     '<p>%s</p><p><b>%s</b></p>',
                     sprintf(__('%s is a payment solution for B2B purchases online, allowing you to buy from your favourite merchants and suppliers on trade credit. Using %s, you can access flexible trade credit instantly to make purchasing simple.', 'twoinc-payment-gateway'), $product_name, $product_name),
@@ -341,6 +341,26 @@ if (!class_exists('WC_Twoinc')) {
             // are the formatted strings, so equal values already dedup).
             ksort($options, SORT_NUMERIC);
             return $options;
+        }
+
+        /**
+         * Enforce that a saved rounding step is one the brand actually
+         * offers. WooCommerce's default select validation sanitises but does
+         * not enforce option-list membership, so without this a tampered or
+         * stale POST could persist an arbitrary step that build_rounding()
+         * would relay verbatim to the pricing API. Empty ('' = no rounding)
+         * is allowed; any other value must be a current option.
+         */
+        public function validate_surcharge_rounding_step_field($key, $value)
+        {
+            $value = trim((string) $value);
+            if ($value === '') {
+                return '';
+            }
+            if (!array_key_exists($value, $this->get_rounding_step_options())) {
+                throw new Exception(__('Rounding step must be one of the offered values.', 'twoinc-payment-gateway'));
+            }
+            return $value;
         }
 
         /**
@@ -440,7 +460,7 @@ if (!class_exists('WC_Twoinc')) {
                 print('<p><a href="' . $this->get_twoinc_checkout_host() . "/v1/invoice/{$twoinc_order_id}/pdf?v=original&lang="
                     . WC_Twoinc_Helper::get_locale()
                     . '"><button type="button" class="button">'
-                    . sprintf(__('Download %s invoice'), WC_Twoinc_Brand::get('product_name'))
+                    . sprintf(__('Download %s invoice', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name'))
                     . '</button></a></p>');
 
                 $refunded_payments = array_filter($order->get_refunds(), fn($refund) => $refund->get_refunded_payment());
@@ -448,7 +468,7 @@ if (!class_exists('WC_Twoinc')) {
                     print('<p><a href="' . $this->get_twoinc_checkout_host() . "/v1/invoice/{$twoinc_order_id}/pdf?lang="
                         . WC_Twoinc_Helper::get_locale()
                         . '"><button type="button" class="button">'
-                        . sprintf(__('Download %s credit note'), WC_Twoinc_Brand::get('product_name'))
+                        . sprintf(__('Download %s credit note', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name'))
                         . '</button></a><p>');
                 }
 
@@ -1732,7 +1752,7 @@ if (!class_exists('WC_Twoinc')) {
                 ],
                 'enable_sole_trader' => [
                     'title'       => __('Enable sole trader checkout', 'twoinc-payment-gateway'),
-                    'description' => __('Lets buyers in supported countries (currently the UK and US) check out as a sole trader by registering or logging in with Two. The option only appears where sole traders are legally supported.', 'twoinc-payment-gateway'),
+                    'description' => __('Lets buyers check out as a sole trader by registering or logging in with Two. The option only appears for billing countries where sole traders are supported, determined automatically.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'label'       => ' ',
                     'type'        => 'checkbox',
@@ -2197,7 +2217,7 @@ if (!class_exists('WC_Twoinc')) {
          *
          * @return WP_Error|array
          */
-        public function make_request($endpoint, $payload = [], $method = 'POST', $params = array(), $api_key_override = null)
+        public function make_request($endpoint, $payload = [], $method = 'POST', $params = array(), $api_key_override = null, $timeout = 30)
         {
             $params['client'] = 'wp';
             $params['client_v'] = get_twoinc_plugin_version();
@@ -2214,7 +2234,7 @@ if (!class_exists('WC_Twoinc')) {
             $response = wp_remote_request(sprintf('%s%s?%s', $this->get_twoinc_checkout_host(), $endpoint, http_build_query($params)), [
                 'method' => $method,
                 'headers' => $headers,
-                'timeout' => 30,
+                'timeout' => $timeout,
                 'body' => empty($payload) ? '' : json_encode(WC_Twoinc_Helper::utf8ize($payload)),
                 'data_format' => 'body'
             ]);
