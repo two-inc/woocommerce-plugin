@@ -364,6 +364,104 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
+         * Render the per-term surcharge grid (WC Settings API custom field
+         * `two_surcharge_grid`). One row per offered term, columns
+         * fixed/percentage/cap, mirroring the Magento surcharge grid. Values
+         * are stored as a single option array keyed by term days.
+         */
+        public function generate_two_surcharge_grid_html($key, $data)
+        {
+            $field_key = $this->get_field_key($key);
+            $data = wp_parse_args($data, ['title' => '', 'description' => '']);
+            $stored = $this->get_option($key);
+            $stored = is_array($stored) ? $stored : [];
+            $terms = class_exists('WC_Twoinc_Payment_Terms') ? WC_Twoinc_Payment_Terms::get_available_terms($this) : [];
+
+            ob_start();
+            ?>
+            <tr valign="top">
+                <th scope="row" class="titledesc"><label><?php echo wp_kses_post($data['title']); ?></label></th>
+                <td class="forminp">
+                    <?php if ($data['description']) : ?>
+                        <p class="description"><?php echo wp_kses_post($data['description']); ?></p>
+                    <?php endif; ?>
+                    <?php if (empty($terms)) : ?>
+                        <p><?php esc_html_e('No payment terms are offered yet — configure the offered terms above first.', 'twoinc-payment-gateway'); ?></p>
+                    <?php else : ?>
+                    <table class="widefat" style="max-width:620px">
+                        <thead><tr>
+                            <th><?php esc_html_e('Term (days)', 'twoinc-payment-gateway'); ?></th>
+                            <th><?php esc_html_e('Fixed', 'twoinc-payment-gateway'); ?></th>
+                            <th><?php esc_html_e('Percentage (%)', 'twoinc-payment-gateway'); ?></th>
+                            <th><?php esc_html_e('Cap', 'twoinc-payment-gateway'); ?></th>
+                        </tr></thead>
+                        <tbody>
+                        <?php foreach ($terms as $days) :
+                            $row = isset($stored[$days]) && is_array($stored[$days]) ? $stored[$days] : []; ?>
+                            <tr>
+                                <td><?php echo esc_html($days); ?></td>
+                                <td><input type="text" name="<?php echo esc_attr($field_key); ?>[<?php echo esc_attr($days); ?>][fixed]" value="<?php echo esc_attr(isset($row['fixed']) ? $row['fixed'] : ''); ?>" style="width:90px" /></td>
+                                <td><input type="text" name="<?php echo esc_attr($field_key); ?>[<?php echo esc_attr($days); ?>][percentage]" value="<?php echo esc_attr(isset($row['percentage']) ? $row['percentage'] : ''); ?>" style="width:90px" /></td>
+                                <td><input type="text" name="<?php echo esc_attr($field_key); ?>[<?php echo esc_attr($days); ?>][limit]" value="<?php echo esc_attr(isset($row['limit']) ? $row['limit'] : ''); ?>" style="width:90px" /></td>
+                            </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                    <?php endif; ?>
+                </td>
+            </tr>
+            <?php
+            return ob_get_clean();
+        }
+
+        /**
+         * Validate + normalise the posted surcharge grid into an array keyed
+         * by term days, each row holding the non-empty of fixed/percentage/
+         * limit as canonical numeric strings. Empty cells are dropped; blank
+         * rows omitted. Rejects negatives and out-of-range percentages.
+         */
+        public function validate_two_surcharge_grid_field($key, $value)
+        {
+            $clean = [];
+            if (!is_array($value)) {
+                return $clean;
+            }
+            foreach ($value as $days => $cols) {
+                $days = (int) $days;
+                if ($days <= 0 || !is_array($cols)) {
+                    continue;
+                }
+                $row = [];
+                foreach (['fixed', 'percentage', 'limit'] as $col) {
+                    $raw = isset($cols[$col]) ? trim(str_replace(',', '.', (string) $cols[$col])) : '';
+                    if ($raw === '') {
+                        continue;
+                    }
+                    if (!is_numeric($raw) || (float) $raw < 0) {
+                        throw new Exception(sprintf(
+                            /* translators: 1: column name, 2: term days */
+                            __('Surcharge %1$s for the %2$s-day term must be a non-negative number.', 'twoinc-payment-gateway'),
+                            $col,
+                            $days
+                        ));
+                    }
+                    if ($col === 'percentage' && (float) $raw > 100) {
+                        throw new Exception(sprintf(
+                            /* translators: %s: term days */
+                            __('Surcharge percentage for the %s-day term must be between 0 and 100.', 'twoinc-payment-gateway'),
+                            $days
+                        ));
+                    }
+                    $row[$col] = $raw;
+                }
+                if (!empty($row)) {
+                    $clean[$days] = $row;
+                }
+            }
+            return $clean;
+        }
+
+        /**
          * Get payment subtitle
          */
         public function get_pay_subtitle()
@@ -1787,27 +1885,51 @@ if (!class_exists('WC_Twoinc')) {
                     'options'     => $this->get_payment_term_day_options(),
                     'default'     => ''
                 ],
-                'enable_offset_pricing' => [
-                    'title'       => __('Enable offset pricing', 'twoinc-payment-gateway'),
-                    'description' => __('Passes some or all of the service fee to the buyer as a separate line at checkout. The fee is computed by the platform pricing service.', 'twoinc-payment-gateway'),
-                    'desc_tip'    => true,
-                    'label'       => ' ',
-                    'type'        => 'checkbox',
-                    'default'     => 'no'
-                ],
-                'offset_pricing_percentage' => [
-                    'title'       => __('Fee pass-through percentage', 'twoinc-payment-gateway'),
-                    'description' => __('How much of the fee the buyer pays, 0-100. Invalid values fall back to 100.', 'twoinc-payment-gateway'),
-                    'desc_tip'    => true,
-                    'type'        => 'text',
-                    'default'     => '100'
-                ],
-                'offset_pricing_reference_days' => [
-                    'title'       => __('Reference term (incremental mode)', 'twoinc-payment-gateway'),
-                    'description' => __('When set, the buyer only pays the fee difference versus this baseline term (the baseline term itself shows no surcharge). When unset, the configured percentage of the full fee is passed through.', 'twoinc-payment-gateway'),
+                'payment_terms_type' => [
+                    'title'       => __('Payment terms type', 'twoinc-payment-gateway'),
+                    'description' => __('Standard counts the term days from the invoice date. End of month counts them from the end of the invoice month.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'type'        => 'select',
-                    'options'     => ['' => __('None - simple pass-through', 'twoinc-payment-gateway')] + $this->get_payment_term_day_options(),
+                    'options'     => [
+                        'standard'     => __('Standard (from invoice date)', 'twoinc-payment-gateway'),
+                        'end_of_month' => __('End of month', 'twoinc-payment-gateway'),
+                    ],
+                    'default'     => 'standard'
+                ],
+                'surcharge_type' => [
+                    'title'       => __('Surcharge type', 'twoinc-payment-gateway'),
+                    'description' => __('How the buyer surcharge is calculated. The platform pricing service computes the fee from this configuration. None disables the surcharge.', 'twoinc-payment-gateway'),
+                    'desc_tip'    => true,
+                    'type'        => 'select',
+                    'options'     => [
+                        'none'                 => __('None', 'twoinc-payment-gateway'),
+                        'percentage'           => __('Percentage', 'twoinc-payment-gateway'),
+                        'fixed'                => __('Fixed', 'twoinc-payment-gateway'),
+                        'fixed_and_percentage' => __('Fixed and percentage', 'twoinc-payment-gateway'),
+                    ],
+                    'default'     => 'none'
+                ],
+                'surcharge_grid' => [
+                    'title'       => __('Surcharge per term', 'twoinc-payment-gateway'),
+                    'description' => __('Per payment term: a fixed amount, a percentage of the order, and an optional cap on the percentage portion. Leave a cell blank for zero. Fixed amounts and caps are in the store currency and are not converted for multi-currency stores.', 'twoinc-payment-gateway'),
+                    'type'        => 'two_surcharge_grid',
+                ],
+                'surcharge_differential' => [
+                    'title'       => __('Surcharge basis', 'twoinc-payment-gateway'),
+                    'description' => __('Full charges the configured surcharge for the chosen term. Differential charges only the difference versus the default term (which then shows no surcharge).', 'twoinc-payment-gateway'),
+                    'desc_tip'    => true,
+                    'type'        => 'select',
+                    'options'     => [
+                        '0' => __('Full surcharge', 'twoinc-payment-gateway'),
+                        '1' => __('Differential (vs default term)', 'twoinc-payment-gateway'),
+                    ],
+                    'default'     => '0'
+                ],
+                'surcharge_line_description' => [
+                    'title'       => __('Surcharge line label', 'twoinc-payment-gateway'),
+                    'description' => __('Buyer-facing label for the surcharge line. Use %s for the term length in days. Leave blank to use the brand default.', 'twoinc-payment-gateway'),
+                    'desc_tip'    => true,
+                    'type'        => 'text',
                     'default'     => ''
                 ],
                 'surcharge_rounding_basis' => [
