@@ -334,9 +334,13 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
             if (!$settings['enabled']) {
                 return;
             }
-            // Only charge when paying with this gateway
+            // Only charge when this gateway is the chosen payment method. The
+            // hook is registered globally (see load_twoinc_classes), so it
+            // also fires on the cart page and before any method is selected;
+            // require an explicit match rather than "apply unless another is
+            // chosen" so the surcharge never leaks onto a non-Two context.
             $chosen = function_exists('WC') && (WC()->session ?? null) ? WC()->session->get('chosen_payment_method') : null;
-            if ($chosen && $chosen !== $gateway->id) {
+            if ($chosen !== $gateway->id) {
                 return;
             }
 

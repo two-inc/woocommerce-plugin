@@ -69,6 +69,15 @@ function load_twoinc_classes()
     // absent on the standalone wc-ajax request and the action fires with no
     // listener (empty 200). The handlers are static and lazily fetch the
     // gateway via WC_Twoinc::get_instance(), so no instance is needed here.
+    //
+    // The surcharge cart fee is registered here for the same reason: on an
+    // update_order_review recalc, calculate_totals() (which fires
+    // woocommerce_cart_calculate_fees) can run before WooCommerce constructs
+    // the gateway, so a constructor-registered hook is missed and the fee
+    // never lands on the order total. apply_cart_fee is static and self-gates
+    // (enabled + chosen-payment-method + selected-term), so registering it on
+    // every request is safe.
+    add_action('woocommerce_cart_calculate_fees', ['WC_Twoinc_Payment_Terms', 'apply_cart_fee']);
     add_action('wc_ajax_two_term_fees', ['WC_Twoinc_Payment_Terms', 'ajax_term_fees']);
     add_action('wc_ajax_two_select_term', ['WC_Twoinc_Payment_Terms', 'ajax_select_term']);
     add_action('wc_ajax_two_sole_trader_availability', ['WC_Twoinc_Sole_Trader', 'ajax_availability']);

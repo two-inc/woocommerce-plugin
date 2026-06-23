@@ -82,10 +82,12 @@ if (!class_exists('WC_Twoinc')) {
             // Payment terms chip selector + offset pricing fee (TWO-24751).
             // Business logic lives in WC_Twoinc_Payment_Terms; the JS layer
             // renders only what these endpoints return.
-            add_action('woocommerce_cart_calculate_fees', ['WC_Twoinc_Payment_Terms', 'apply_cart_fee']);
-            // NOTE: the wc_ajax_two_* endpoints are registered in
-            // load_twoinc_classes() (plugins_loaded), not here — the gateway
-            // constructor does not run on a standalone wc-ajax request.
+            // NOTE: the surcharge cart-fee hook and the wc_ajax_two_*
+            // endpoints are registered in load_twoinc_classes()
+            // (plugins_loaded), not here — the gateway constructor is not
+            // guaranteed to have run before woocommerce_cart_calculate_fees
+            // fires on an update_order_review recalc, nor on a standalone
+            // wc-ajax request.
 
             if (is_admin()) {
                 // Notice banner if plugin is not setup properly
