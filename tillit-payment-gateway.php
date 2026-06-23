@@ -60,6 +60,20 @@ function load_twoinc_classes()
     require_once __DIR__ . '/class/WC_Twoinc_Checkout.php';
     require_once __DIR__ . '/class/WC_Twoinc.php';
 
+    // Checkout AJAX endpoints (term-fee chips, term selection, sole-trader
+    // availability/tokens). Registered here at plugins_loaded — NOT in the
+    // gateway constructor — because a wc-ajax request is dispatched at
+    // template_redirect priority 0, before WooCommerce instantiates the
+    // payment gateways on demand. The constructor only runs on pages that
+    // load the gateway (e.g. checkout), so handlers registered there are
+    // absent on the standalone wc-ajax request and the action fires with no
+    // listener (empty 200). The handlers are static and lazily fetch the
+    // gateway via WC_Twoinc::get_instance(), so no instance is needed here.
+    add_action('wc_ajax_two_term_fees', ['WC_Twoinc_Payment_Terms', 'ajax_term_fees']);
+    add_action('wc_ajax_two_select_term', ['WC_Twoinc_Payment_Terms', 'ajax_select_term']);
+    add_action('wc_ajax_two_sole_trader_availability', ['WC_Twoinc_Sole_Trader', 'ajax_availability']);
+    add_action('wc_ajax_two_sole_trader_tokens', ['WC_Twoinc_Sole_Trader', 'ajax_tokens']);
+
     // Confirm order after returning from twoinc checkout-page, DO NOT CHANGE HOOKS
     add_action('template_redirect', 'WC_Twoinc::process_confirmation_header_redirect');
     // add_action('template_redirect', 'WC_Twoinc::before_process_confirmation');
