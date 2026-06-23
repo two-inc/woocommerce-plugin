@@ -55,6 +55,7 @@ final class BrandConfigSpec
             'testBuyerFeeShareRounding',
             'testRoundingStepOptionsCanonicalAndNarrowed',
             'testRoundingStepValidationEnforcesBrandOptions',
+            'testSurchargeGridValidationNormalisesAndRejects',
             'testOrderPayloadCarriesSelectedAndAvailableTerms',
             'testPaymentTermsInvalidPostFallsBackToDefault',
             'testPaymentTermsDisabledMeansNoPayloadTerms',
@@ -532,133 +533,151 @@ final class BrandConfigSpec
 
     private static function testBuyerFeeShareShapes(): void
     {
-        // Disabled: no block at all
-        $gateway = self::termsGateway(['enable_offset_pricing' => 'no']);
-        TinyAssert::same(null, WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway));
+        // type none (and unset/invalid): no block at all
+        TinyAssert::same(null, WC_Twoinc_Payment_Terms::build_buyer_fee_share(self::termsGateway(['surcharge_type' => 'none']), 30));
+        TinyAssert::same(null, WC_Twoinc_Payment_Terms::build_buyer_fee_share(self::termsGateway([]), 30));
 
-        // Simple pass-through
-        $gateway = self::termsGateway(['enable_offset_pricing' => 'yes', 'offset_pricing_percentage' => '100']);
-        TinyAssert::same(['percentage' => '100'], WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway));
-
-        // Partial pass-through
-        $gateway = self::termsGateway(['enable_offset_pricing' => 'yes', 'offset_pricing_percentage' => '50']);
-        TinyAssert::same(['percentage' => '50'], WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway));
-
-        // Incremental: reference terms ride along
+        // percentage: the term's grid percentage + buyer_pays basis; no surcharge/cap
         $gateway = self::termsGateway([
-            'enable_offset_pricing' => 'yes',
-            'offset_pricing_percentage' => '100',
-            'offset_pricing_reference_days' => '30',
+            'surcharge_type' => 'percentage',
+            'surcharge_grid' => [30 => ['percentage' => '2.5']],
         ]);
         TinyAssert::same(
-            ['percentage' => '100', 'reference_terms' => ['type' => 'NET_TERMS', 'duration_days' => 30]],
-            WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway)
+            ['percentage' => 2.5, 'surcharge_basis' => 'buyer_pays'],
+            WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway, 30)
         );
 
-        // Malformed percentage falls back to full pass-through
-        $gateway = self::termsGateway(['enable_offset_pricing' => 'yes', 'offset_pricing_percentage' => '150']);
-        TinyAssert::same(['percentage' => '100'], WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway));
+        // percentage with a cap (limit)
+        $gateway = self::termsGateway([
+            'surcharge_type' => 'percentage',
+            'surcharge_grid' => [30 => ['percentage' => '3', 'limit' => '50']],
+        ]);
+        TinyAssert::same(
+            ['percentage' => 3.0, 'surcharge_basis' => 'buyer_pays', 'cap' => 50.0],
+            WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway, 30)
+        );
+
+        // fixed only: percentage 0.0 (never the API default 100), surcharge present, no cap
+        $gateway = self::termsGateway([
+            'surcharge_type' => 'fixed',
+            'surcharge_grid' => [30 => ['fixed' => '10', 'percentage' => '5', 'limit' => '50']],
+        ]);
+        TinyAssert::same(
+            ['percentage' => 0.0, 'surcharge_basis' => 'buyer_pays', 'surcharge' => 10.0],
+            WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway, 30)
+        );
+
+        // fixed_and_percentage: both, plus cap
+        $gateway = self::termsGateway([
+            'surcharge_type' => 'fixed_and_percentage',
+            'surcharge_grid' => [30 => ['fixed' => '10', 'percentage' => '2', 'limit' => '40']],
+        ]);
+        TinyAssert::same(
+            ['percentage' => 2.0, 'surcharge_basis' => 'buyer_pays', 'surcharge' => 10.0, 'cap' => 40.0],
+            WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway, 30)
+        );
+
+        // a term with no grid row → percentage 0.0, no surcharge/cap
+        $gateway = self::termsGateway([
+            'surcharge_type' => 'percentage',
+            'surcharge_grid' => [30 => ['percentage' => '2.5']],
+        ]);
+        TinyAssert::same(
+            ['percentage' => 0.0, 'surcharge_basis' => 'buyer_pays'],
+            WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway, 60)
+        );
+
+        // differential: the default term (brand shortest = 14) rides as reference_terms
+        $gateway = self::termsGateway([
+            'surcharge_type' => 'percentage',
+            'surcharge_grid' => [30 => ['percentage' => '2']],
+            'surcharge_differential' => '1',
+        ]);
+        TinyAssert::same(
+            ['percentage' => 2.0, 'surcharge_basis' => 'buyer_pays', 'reference_terms' => ['type' => 'NET_TERMS', 'duration_days' => 14]],
+            WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway, 30)
+        );
+
+        // end_of_month: reference_terms carries duration_days_calculated_from
+        $gateway = self::termsGateway([
+            'surcharge_type' => 'percentage',
+            'surcharge_grid' => [30 => ['percentage' => '2']],
+            'surcharge_differential' => '1',
+            'payment_terms_type' => 'end_of_month',
+        ]);
+        TinyAssert::same(
+            ['percentage' => 2.0, 'surcharge_basis' => 'buyer_pays', 'reference_terms' => ['type' => 'NET_TERMS', 'duration_days' => 14, 'duration_days_calculated_from' => 'END_OF_MONTH']],
+            WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway, 30)
+        );
+
+        // Fixed amounts are sent as configured (store currency); WooCommerce
+        // does no multi-currency conversion (documented parity gap vs Magento),
+        // so the amount rides regardless of the active display currency.
+        $GLOBALS['__twoinc_test_currency'] = 'GBP';
+        $gateway = self::termsGateway([
+            'surcharge_type' => 'fixed',
+            'surcharge_grid' => [30 => ['fixed' => '10']],
+        ]);
+        TinyAssert::same(
+            ['percentage' => 0.0, 'surcharge_basis' => 'buyer_pays', 'surcharge' => 10.0],
+            WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway, 30)
+        );
+        unset($GLOBALS['__twoinc_test_currency']);
     }
 
     private static function testBuyerFeeShareRounding(): void
     {
-        // Each basis maps to its API value; step rides as a float
+        $base = ['surcharge_type' => 'percentage', 'surcharge_grid' => [30 => ['percentage' => '2']]];
+        $expectBase = ['percentage' => 2.0, 'surcharge_basis' => 'buyer_pays'];
+
+        // up/down/standard map to the API enum; step rides as a float
+        foreach ([['up', '1.00', 1.0, 'UP'], ['down', '0.50', 0.5, 'DOWN'], ['standard', '5.00', 5.0, 'STANDARD']] as $c) {
+            $gateway = self::termsGateway($base + ['surcharge_rounding_basis' => $c[0], 'surcharge_rounding_step' => $c[1]]);
+            TinyAssert::same(
+                $expectBase + ['rounding' => ['step' => $c[2], 'basis' => $c[3]]],
+                WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway, 30)
+            );
+        }
+
+        // none / step<=0 / negative / unset / unmapped / empty basis → no rounding block
+        foreach ([['none', '1.00'], ['up', '0'], ['up', '-1.00'], ['up', ''], ['garbage', '1.00'], ['', '1.00']] as $c) {
+            $gateway = self::termsGateway($base + ['surcharge_rounding_basis' => $c[0], 'surcharge_rounding_step' => $c[1]]);
+            TinyAssert::same($expectBase, WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway, 30));
+        }
+
+        // rounding is IGNORED for fixed-only (no percentage component, mirrors Magento $hasPercentage gate)
         $gateway = self::termsGateway([
-            'enable_offset_pricing' => 'yes',
+            'surcharge_type' => 'fixed',
+            'surcharge_grid' => [30 => ['fixed' => '10']],
             'surcharge_rounding_basis' => 'up',
             'surcharge_rounding_step' => '1.00',
         ]);
         TinyAssert::same(
-            ['percentage' => '100', 'rounding' => ['step' => 1.0, 'basis' => 'UP']],
-            WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway)
+            ['percentage' => 0.0, 'surcharge_basis' => 'buyer_pays', 'surcharge' => 10.0],
+            WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway, 30)
         );
 
-        $gateway = self::termsGateway([
-            'enable_offset_pricing' => 'yes',
-            'surcharge_rounding_basis' => 'down',
-            'surcharge_rounding_step' => '0.50',
-        ]);
-        TinyAssert::same(
-            ['percentage' => '100', 'rounding' => ['step' => 0.5, 'basis' => 'DOWN']],
-            WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway)
-        );
-
-        $gateway = self::termsGateway([
-            'enable_offset_pricing' => 'yes',
-            'surcharge_rounding_basis' => 'standard',
-            'surcharge_rounding_step' => '5.00',
-        ]);
-        TinyAssert::same(
-            ['percentage' => '100', 'rounding' => ['step' => 5.0, 'basis' => 'STANDARD']],
-            WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway)
-        );
-
-        // None basis: no rounding block even with a step configured
-        $gateway = self::termsGateway([
-            'enable_offset_pricing' => 'yes',
-            'surcharge_rounding_basis' => 'none',
-            'surcharge_rounding_step' => '1.00',
-        ]);
-        TinyAssert::same(['percentage' => '100'], WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway));
-
-        // Direction set but step <= 0 (or unset): no rounding block (API rejects step <= 0)
-        $gateway = self::termsGateway([
-            'enable_offset_pricing' => 'yes',
-            'surcharge_rounding_basis' => 'up',
-            'surcharge_rounding_step' => '0',
-        ]);
-        TinyAssert::same(['percentage' => '100'], WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway));
-
-        // Negative step: no block (pins the > 0 guard from the negative side)
-        $gateway = self::termsGateway([
-            'enable_offset_pricing' => 'yes',
-            'surcharge_rounding_basis' => 'up',
-            'surcharge_rounding_step' => '-1.00',
-        ]);
-        TinyAssert::same(['percentage' => '100'], WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway));
-
-        $gateway = self::termsGateway(['enable_offset_pricing' => 'yes', 'surcharge_rounding_basis' => 'up']);
-        TinyAssert::same(['percentage' => '100'], WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway));
-
-        // Unmapped basis (not just 'none') with a valid step: no block. Guards
-        // the general "any unmapped value omits" contract, not only 'none'.
-        $gateway = self::termsGateway([
-            'enable_offset_pricing' => 'yes',
-            'surcharge_rounding_basis' => 'garbage',
-            'surcharge_rounding_step' => '1.00',
-        ]);
-        TinyAssert::same(['percentage' => '100'], WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway));
-
-        $gateway = self::termsGateway([
-            'enable_offset_pricing' => 'yes',
-            'surcharge_rounding_basis' => '',
-            'surcharge_rounding_step' => '1.00',
-        ]);
-        TinyAssert::same(['percentage' => '100'], WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway));
-
-        // Rounding rides alongside reference terms
-        $gateway = self::termsGateway([
-            'enable_offset_pricing' => 'yes',
-            'offset_pricing_reference_days' => '30',
+        // rounding rides alongside reference_terms (differential)
+        $gateway = self::termsGateway($base + [
+            'surcharge_differential' => '1',
             'surcharge_rounding_basis' => 'standard',
             'surcharge_rounding_step' => '0.50',
         ]);
         TinyAssert::same(
-            [
-                'percentage' => '100',
-                'reference_terms' => ['type' => 'NET_TERMS', 'duration_days' => 30],
+            $expectBase + [
                 'rounding' => ['step' => 0.5, 'basis' => 'STANDARD'],
+                'reference_terms' => ['type' => 'NET_TERMS', 'duration_days' => 14],
             ],
-            WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway)
+            WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway, 30)
         );
 
-        // Offset disabled: no block at all, rounding ignored
+        // type none: no block at all, rounding ignored
         $gateway = self::termsGateway([
-            'enable_offset_pricing' => 'no',
+            'surcharge_type' => 'none',
             'surcharge_rounding_basis' => 'up',
             'surcharge_rounding_step' => '1.00',
         ]);
-        TinyAssert::same(null, WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway));
+        TinyAssert::same(null, WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway, 30));
     }
 
     private static function testRoundingStepOptionsCanonicalAndNarrowed(): void
@@ -699,6 +718,41 @@ final class BrandConfigSpec
             $threw = true;
         }
         TinyAssert::true($threw);
+    }
+
+    private static function testSurchargeGridValidationNormalisesAndRejects(): void
+    {
+        $gateway = self::gateway();
+
+        // Comma decimals normalise to dots; empty cells drop; blank rows omit;
+        // non-positive term keys are skipped.
+        $clean = $gateway->validate_two_surcharge_grid_field('surcharge_grid', [
+            '30' => ['fixed' => '10,50', 'percentage' => '2.5', 'limit' => ''],
+            '60' => ['fixed' => '', 'percentage' => '', 'limit' => ''],
+            '0'  => ['fixed' => '5'],
+        ]);
+        TinyAssert::same([30 => ['fixed' => '10.50', 'percentage' => '2.5']], $clean);
+
+        // Negative value rejected
+        $threw = false;
+        try {
+            $gateway->validate_two_surcharge_grid_field('surcharge_grid', [30 => ['fixed' => '-1']]);
+        } catch (Exception $e) {
+            $threw = true;
+        }
+        TinyAssert::true($threw);
+
+        // Percentage > 100 rejected
+        $threw = false;
+        try {
+            $gateway->validate_two_surcharge_grid_field('surcharge_grid', [30 => ['percentage' => '150']]);
+        } catch (Exception $e) {
+            $threw = true;
+        }
+        TinyAssert::true($threw);
+
+        // Non-array input → empty grid
+        TinyAssert::same([], $gateway->validate_two_surcharge_grid_field('surcharge_grid', ''));
     }
 
     private static function testOrderPayloadCarriesSelectedAndAvailableTerms(): void

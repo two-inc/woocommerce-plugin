@@ -124,53 +124,99 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         }
 
         /**
-         * Offset pricing settings resolved from gateway options.
+         * Surcharge settings resolved from gateway options, mirroring the
+         * Magento surcharge model: a type gate, a per-term grid of
+         * {fixed, percentage, limit}, a differential toggle and rounding.
          *
-         * @return array{enabled: bool, percentage: string, reference_days: int|null, rounding_basis: string, rounding_step: float|null}
+         * @return array{type: string, enabled: bool, differential: bool, grid: array<int,array>, rounding_basis: string, rounding_step: float|null}
          */
-        public static function get_offset_settings($gateway): array
+        public static function get_surcharge_settings($gateway): array
         {
-            $reference_days = (int) $gateway->get_option('offset_pricing_reference_days');
-            $percentage = trim((string) $gateway->get_option('offset_pricing_percentage'));
-            if ($percentage === '' || !is_numeric($percentage) || (float) $percentage < 0 || (float) $percentage > 100) {
-                $percentage = '100';
+            $type = (string) $gateway->get_option('surcharge_type');
+            if (!in_array($type, ['percentage', 'fixed', 'fixed_and_percentage'], true)) {
+                $type = 'none';
             }
+            $grid = $gateway->get_option('surcharge_grid');
+            $grid = is_array($grid) ? $grid : [];
             $rounding_step = (float) $gateway->get_option('surcharge_rounding_step');
             return [
-                'enabled' => $gateway->get_option('enable_offset_pricing') === 'yes',
-                'percentage' => $percentage,
-                'reference_days' => $reference_days > 0 ? $reference_days : null,
+                'type' => $type,
+                'enabled' => $type !== 'none',
+                'differential' => $gateway->get_option('surcharge_differential') === '1',
+                'grid' => $grid,
                 'rounding_basis' => (string) $gateway->get_option('surcharge_rounding_basis'),
                 'rounding_step' => $rounding_step > 0 ? $rounding_step : null,
             ];
         }
 
         /**
-         * The buyer_fee_share block for POST /v1/pricing/order/fee. The
-         * backend computes the fee from this; the plugin does no arithmetic.
-         * With reference terms configured the backend prices the increment
-         * over the baseline term; without them, plain pass-through.
+         * The buyer_fee_share block for POST /v1/pricing/order/fee for one
+         * term. The backend computes the fee from this; the plugin does no
+         * arithmetic. Mirrors Magento's SurchargeCalculator::buildBuyerFeeShare:
+         * percentage (0.0 when fixed-only, so the API default of 100% is never
+         * silently applied), surcharge_basis, the fixed surcharge (fixed/both
+         * types), a cap on the percentage portion, rounding (only with a
+         * percentage component) and, in differential mode, the default term as
+         * reference_terms.
          *
-         * @return array|null null when offset pricing is disabled
+         * @return array|null null when no surcharge is configured (type none)
          */
-        public static function build_buyer_fee_share($gateway): ?array
+        public static function build_buyer_fee_share($gateway, int $days): ?array
         {
-            $settings = self::get_offset_settings($gateway);
+            $settings = self::get_surcharge_settings($gateway);
             if (!$settings['enabled']) {
                 return null;
             }
-            $buyer_fee_share = ['percentage' => $settings['percentage']];
-            if ($settings['reference_days'] !== null) {
-                $buyer_fee_share['reference_terms'] = [
-                    'type' => 'NET_TERMS',
-                    'duration_days' => $settings['reference_days'],
-                ];
+            $has_percentage = in_array($settings['type'], ['percentage', 'fixed_and_percentage'], true);
+            $has_fixed = in_array($settings['type'], ['fixed', 'fixed_and_percentage'], true);
+            $row = isset($settings['grid'][$days]) && is_array($settings['grid'][$days]) ? $settings['grid'][$days] : [];
+
+            $buyer_fee_share = [
+                'percentage' => $has_percentage && isset($row['percentage']) ? (float) $row['percentage'] : 0.0,
+                'surcharge_basis' => 'buyer_pays',
+            ];
+
+            // Fixed amounts and caps are sent as configured, in the store
+            // currency. WooCommerce has no FX rate provider, so multi-currency
+            // conversion is NOT supported (the one parity gap vs Magento, which
+            // converts via Magento's currency rates) — fixed surcharge should
+            // be configured on single-currency stores only. Percentage-based
+            // surcharge is currency-agnostic and unaffected.
+            if ($has_fixed && isset($row['fixed']) && (float) $row['fixed'] > 0) {
+                $buyer_fee_share['surcharge'] = (float) $row['fixed'];
             }
-            $rounding = self::build_rounding($settings);
-            if ($rounding !== null) {
-                $buyer_fee_share['rounding'] = $rounding;
+            if ($has_percentage && isset($row['limit']) && (float) $row['limit'] > 0) {
+                $buyer_fee_share['cap'] = (float) $row['limit'];
+            }
+            if ($has_percentage) {
+                $rounding = self::build_rounding($settings);
+                if ($rounding !== null) {
+                    $buyer_fee_share['rounding'] = $rounding;
+                }
+            }
+            if ($settings['differential']) {
+                $default = self::get_default_term($gateway);
+                if ($default !== null) {
+                    $buyer_fee_share['reference_terms'] = self::build_terms_block($gateway, $default);
+                }
             }
             return $buyer_fee_share;
+        }
+
+        /**
+         * A NET_TERMS block for a duration, adding
+         * duration_days_calculated_from = END_OF_MONTH when the merchant has
+         * selected the end-of-month payment terms type (Magento parity).
+         *
+         * @return array{type: string, duration_days: int, duration_days_calculated_from?: string}
+         */
+        public static function build_terms_block($gateway, int $days): array
+        {
+            $block = ['type' => 'NET_TERMS', 'duration_days' => $days];
+            if ($gateway->get_option('payment_terms_type') === 'end_of_month') {
+                $block['duration_days_calculated_from'] = 'END_OF_MONTH';
+            }
+            return $block;
         }
 
         /**
@@ -208,7 +254,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                 return self::$fee_cache[$days];
             }
 
-            $buyer_fee_share = self::build_buyer_fee_share($gateway);
+            $buyer_fee_share = self::build_buyer_fee_share($gateway, $days);
             if ($buyer_fee_share === null || $gross_amount <= 0) {
                 return self::$fee_cache[$days] = null;
             }
@@ -220,10 +266,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                 'currency' => get_woocommerce_currency(),
                 'gross_amount' => strval(WC_Twoinc_Helper::round_amt($gross_amount)),
                 'buyer_country_code' => $buyer_country,
-                'order_terms' => [
-                    'type' => 'NET_TERMS',
-                    'duration_days' => $days,
-                ],
+                'order_terms' => self::build_terms_block($gateway, $days),
                 'buyer_fee_share' => $buyer_fee_share,
             ], 'POST', array(), null, 10);
 
@@ -283,7 +326,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
             if (!$gateway || !self::is_enabled($gateway)) {
                 return;
             }
-            $settings = self::get_offset_settings($gateway);
+            $settings = self::get_surcharge_settings($gateway);
             if (!$settings['enabled']) {
                 return;
             }
@@ -309,10 +352,19 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         }
 
         /**
-         * Buyer-facing label for the fee line, brand-overridable.
+         * Buyer-facing label for the fee line. A merchant-set
+         * surcharge_line_description wins (with %s replaced by the selected
+         * term days, Magento parity); otherwise the brand label, else a
+         * translated default.
          */
         public static function get_fee_label(): string
         {
+            $gateway = WC_Twoinc::get_instance();
+            $template = $gateway ? trim((string) $gateway->get_option('surcharge_line_description')) : '';
+            if ($template !== '') {
+                $days = $gateway ? self::get_selected_term($gateway) : null;
+                return $days !== null ? str_replace('%s', (string) $days, $template) : $template;
+            }
             $label = WC_Twoinc_Brand::get('fee_line_label');
             return $label ?: __('Service charge', 'twoinc-payment-gateway');
         }
@@ -383,7 +435,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                 return null;
             }
             return [
-                'terms' => ['type' => 'NET_TERMS', 'duration_days' => $selected],
+                'terms' => self::build_terms_block($gateway, $selected),
                 'available_terms' => $terms,
             ];
         }
