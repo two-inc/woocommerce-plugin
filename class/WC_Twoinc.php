@@ -83,13 +83,9 @@ if (!class_exists('WC_Twoinc')) {
             // Business logic lives in WC_Twoinc_Payment_Terms; the JS layer
             // renders only what these endpoints return.
             add_action('woocommerce_cart_calculate_fees', ['WC_Twoinc_Payment_Terms', 'apply_cart_fee']);
-            add_action('wc_ajax_two_term_fees', ['WC_Twoinc_Payment_Terms', 'ajax_term_fees']);
-            add_action('wc_ajax_two_select_term', ['WC_Twoinc_Payment_Terms', 'ajax_select_term']);
-
-            // Sole trader checkout (TWO-24754). Same split: decisioning in
-            // WC_Twoinc_Sole_Trader, JS renders only what these return.
-            add_action('wc_ajax_two_sole_trader_availability', ['WC_Twoinc_Sole_Trader', 'ajax_availability']);
-            add_action('wc_ajax_two_sole_trader_tokens', ['WC_Twoinc_Sole_Trader', 'ajax_tokens']);
+            // NOTE: the wc_ajax_two_* endpoints are registered in
+            // load_twoinc_classes() (plugins_loaded), not here — the gateway
+            // constructor does not run on a standalone wc-ajax request.
 
             if (is_admin()) {
                 // Notice banner if plugin is not setup properly
