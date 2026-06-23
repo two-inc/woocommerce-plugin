@@ -86,6 +86,11 @@ if (!class_exists('WC_Twoinc')) {
             add_action('wc_ajax_two_term_fees', ['WC_Twoinc_Payment_Terms', 'ajax_term_fees']);
             add_action('wc_ajax_two_select_term', ['WC_Twoinc_Payment_Terms', 'ajax_select_term']);
 
+            // Sole trader checkout (TWO-24754). Same split: decisioning in
+            // WC_Twoinc_Sole_Trader, JS renders only what these return.
+            add_action('wc_ajax_two_sole_trader_availability', ['WC_Twoinc_Sole_Trader', 'ajax_availability']);
+            add_action('wc_ajax_two_sole_trader_tokens', ['WC_Twoinc_Sole_Trader', 'ajax_tokens']);
+
             if (is_admin()) {
                 // Notice banner if plugin is not setup properly
 
@@ -283,6 +288,7 @@ if (!class_exists('WC_Twoinc')) {
             return sprintf(
                 '<div>
                     <div class="twoinc-pay-box twoinc-explainer">%s</div>
+                    <div class="twoinc-sole-trader-toggle hidden" role="radiogroup"></div>
                     <div class="twoinc-term-chips hidden" role="radiogroup"></div>
                     <div class="twoinc-pay-box twoinc-loader hidden"></div>
                     <div class="twoinc-pay-box twoinc-intent-approved hidden">%s</div>
@@ -1694,6 +1700,18 @@ if (!class_exists('WC_Twoinc')) {
                     'label'       => ' ',
                     'type'        => 'checkbox',
                     'default'     => 'yes'
+                ],
+                'section_sole_trader' => [
+                    'type'  => 'title',
+                    'title' => __('Sole trader checkout', 'twoinc-payment-gateway'),
+                ],
+                'enable_sole_trader' => [
+                    'title'       => __('Enable sole trader checkout', 'twoinc-payment-gateway'),
+                    'description' => __('Lets buyers in supported countries (currently the UK and US) check out as a sole trader by registering or logging in with Two. The option only appears where sole traders are legally supported.', 'twoinc-payment-gateway'),
+                    'desc_tip'    => true,
+                    'label'       => ' ',
+                    'type'        => 'checkbox',
+                    'default'     => 'no'
                 ],
                 'section_payment_terms' => [
                     'type'  => 'title',

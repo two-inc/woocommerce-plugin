@@ -56,6 +56,7 @@ function load_twoinc_classes()
     require_once __DIR__ . '/class/WC_Twoinc_Brand.php';
     require_once __DIR__ . '/class/WC_Twoinc_Helper.php';
     require_once __DIR__ . '/class/WC_Twoinc_Payment_Terms.php';
+    require_once __DIR__ . '/class/WC_Twoinc_Sole_Trader.php';
     require_once __DIR__ . '/class/WC_Twoinc_Checkout.php';
     require_once __DIR__ . '/class/WC_Twoinc.php';
 
