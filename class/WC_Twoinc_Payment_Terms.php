@@ -7,11 +7,14 @@
  * these methods return (the Gutenberg block checkout port must not need a
  * business-logic rewrite, see TWO-24767).
  *
- * Term availability: `get_available_terms()` is the single seam. Today it
- * resolves brand config (`available_terms`) intersected with the merchant's
- * admin subset; when the backend grows a term-availability surface (planned
- * convergence — backend owns which terms are offered) only this method
- * changes. Do not read term lists anywhere else.
+ * Term availability: `get_available_terms()` is the single seam. It resolves
+ * the merchant's ticked presets (brand `available_terms` ∩ admin subset) plus
+ * an optional custom term. An empty result means "offer nothing" — no term is
+ * sent and the backend applies the account default (pre-feature behaviour). The
+ * merchant cannot save into that empty state once terms are configured (see
+ * WC_Twoinc::validate_two_payment_terms_field). When the backend grows a
+ * term-availability surface (planned convergence — backend owns which terms are
+ * offered) only this method changes. Do not read term lists anywhere else.
  *
  * Fee arithmetic is never done plugin-side: the offset settings are posted to
  * POST /v1/pricing/order/fee as a `buyer_fee_share` block and the backend
@@ -38,35 +41,55 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         private static $fee_cache = [];
 
         /**
-         * Whether the chip selector is active: merchant enabled it and the
-         * resolved term set is non-empty.
+         * Whether the term feature is active: at least one term is offered. When
+         * true a term is sent on the order and any configured surcharge applies.
+         * There is no merchant on/off toggle — the offered-term set is the single
+         * switch, and an empty set falls through to the account default.
          */
         public static function is_enabled($gateway): bool
         {
-            return $gateway->get_option('enable_payment_terms') === 'yes'
-                && count(self::get_available_terms($gateway)) > 0;
+            return count(self::get_available_terms($gateway)) > 0;
+        }
+
+        /**
+         * Whether the buyer sees a term chooser: only when more than one term is
+         * offered. A single offered term is applied silently (no chip selector),
+         * so selection is implicitly disabled when just one term is configured.
+         */
+        public static function is_selector_visible($gateway): bool
+        {
+            return count(self::get_available_terms($gateway)) > 1;
         }
 
         /**
          * The terms offered at checkout, ascending. THE availability seam —
          * see the file header before adding another term-list read.
          *
+         * The merchant's ticked presets (intersected with the brand's available
+         * terms) plus an optional custom term (unioned in — it may sit outside
+         * the brand's preset list). An empty result is meaningful: no term is
+         * offered, so none is sent and the backend applies the account default
+         * (parity with the pre-feature behaviour on main).
+         *
          * @return int[]
          */
         public static function get_available_terms($gateway): array
         {
             $brand_terms = WC_Twoinc_Brand::get('available_terms');
-            if (!is_array($brand_terms) || count($brand_terms) === 0) {
-                return [];
-            }
-            $brand_terms = array_map('intval', $brand_terms);
+            $brand_terms = is_array($brand_terms) ? array_map('intval', $brand_terms) : [];
 
+            $terms = [];
             $admin_subset = $gateway->get_option('payment_terms_days');
-            if (is_array($admin_subset) && count($admin_subset) > 0) {
+            if (is_array($admin_subset) && count($admin_subset) > 0 && count($brand_terms) > 0) {
                 $admin_subset = array_map('intval', $admin_subset);
                 $terms = array_values(array_intersect($brand_terms, $admin_subset));
-            } else {
-                $terms = $brand_terms;
+            }
+
+            // Custom term offered alongside the presets (Magento parity:
+            // payment_terms_duration_days). Unioned, not intersected.
+            $custom = (int) $gateway->get_option('payment_terms_custom_days');
+            if ($custom > 0) {
+                $terms[] = $custom;
             }
 
             $terms = array_values(array_unique(array_filter($terms, static function ($days) {

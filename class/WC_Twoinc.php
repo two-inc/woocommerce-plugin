@@ -460,6 +460,110 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
+         * Render the "Payment Terms" checkboxes (WC Settings API custom field
+         * `two_payment_terms`). One checkbox per term the brand makes available;
+         * the merchant ticks which to offer the buyer. Stored as a single option
+         * array of int day counts (the offered subset). Mirrors Magento's
+         * PaymentTermsCheckboxes admin field.
+         */
+        public function generate_two_payment_terms_html($key, $data)
+        {
+            $field_key = $this->get_field_key($key);
+            $data = wp_parse_args($data, ['title' => '', 'description' => '', 'desc_tip' => false]);
+            $stored = $this->get_option($key);
+            $stored = is_array($stored) ? array_map('intval', $stored) : [];
+            $options = $this->get_payment_term_day_options();
+            if (count($stored) === 0 && count($options) > 0) {
+                // Prepopulate the shortest available term so the form never loads
+                // with no selection (a selection is mandatory on save).
+                $days = array_map('intval', array_keys($options));
+                sort($days);
+                $stored = [$days[0]];
+            }
+
+            ob_start();
+            ?>
+            <tr valign="top">
+                <th scope="row" class="titledesc">
+                    <label><?php echo wp_kses_post($data['title']); ?></label>
+                    <?php echo $this->get_tooltip_html($data); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+                </th>
+                <td class="forminp">
+                    <?php if (empty($options)) : ?>
+                        <p><?php esc_html_e('No payment terms are available for this brand.', 'twoinc-payment-gateway'); ?></p>
+                    <?php else : ?>
+                    <fieldset>
+                        <?php foreach ($options as $value => $label) :
+                            $days = (int) $value; ?>
+                            <label style="display:block;margin-bottom:4px">
+                                <input type="checkbox"
+                                       name="<?php echo esc_attr($field_key); ?>[]"
+                                       value="<?php echo esc_attr($days); ?>"
+                                       <?php checked(in_array($days, $stored, true)); ?> />
+                                <?php echo esc_html($label); ?>
+                            </label>
+                        <?php endforeach; ?>
+                    </fieldset>
+                    <?php endif; ?>
+                </td>
+            </tr>
+            <?php
+            return ob_get_clean();
+        }
+
+        /**
+         * Validate the posted "Payment Terms" checkboxes into a sorted array of
+         * unique int day counts, restricted to the brand's available terms.
+         *
+         * A selection is mandatory on save. "No selection" is well-defined
+         * internally (an empty offer falls through to the account default), but
+         * it gives the merchant no feedback on the resulting behaviour, so we
+         * insist on a selection every time they save. The custom-days sibling
+         * field (posted in the same form) also satisfies it, so a single
+         * off-preset term may be offered alone. Mirrors Magento's
+         * PaymentTermsCheckboxes::beforeSave guard.
+         */
+        public function validate_two_payment_terms_field($key, $value)
+        {
+            $allowed = array_map('intval', array_keys($this->get_payment_term_day_options()));
+            $clean = [];
+            if (is_array($value)) {
+                foreach ($value as $day) {
+                    $day = (int) $day;
+                    if ($day > 0 && in_array($day, $allowed, true)) {
+                        $clean[] = $day;
+                    }
+                }
+            }
+            $clean = array_values(array_unique($clean));
+            sort($clean);
+
+            $custom_key = $this->get_field_key('payment_terms_custom_days');
+            $posted_custom = isset($_POST[$custom_key]) ? (int) $_POST[$custom_key] : 0; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+            if (count($clean) === 0 && $posted_custom <= 0) {
+                throw new Exception(__('Select at least one payment term or enter a custom term.', 'twoinc-payment-gateway'));
+            }
+            return $clean;
+        }
+
+        /**
+         * Validate the optional custom payment term: a non-negative whole number
+         * of days, or blank. Mirrors Magento's payment_terms_duration_days
+         * (validate-digits validate-zero-or-greater).
+         */
+        public function validate_payment_terms_custom_days_field($key, $value)
+        {
+            $value = trim((string) $value);
+            if ($value === '') {
+                return '';
+            }
+            if (!ctype_digit($value)) {
+                throw new Exception(__('Custom Payment Term (days) must be a whole number of days.', 'twoinc-payment-gateway'));
+            }
+            return (string) (int) $value;
+        }
+
+        /**
          * Get payment subtitle
          */
         public function get_pay_subtitle()
@@ -1877,33 +1981,22 @@ if (!class_exists('WC_Twoinc')) {
                     'type'  => 'title',
                     'title' => __('Payment terms and offset pricing', 'twoinc-payment-gateway'),
                 ],
-                'enable_payment_terms' => [
-                    'title'       => __('Enable payment terms selection', 'twoinc-payment-gateway'),
-                    'description' => __('Lets the buyer choose their invoice term at checkout from the terms offered below.', 'twoinc-payment-gateway'),
-                    'desc_tip'    => true,
-                    'label'       => ' ',
-                    'type'        => 'checkbox',
-                    'default'     => 'no'
-                ],
                 'payment_terms_days' => [
-                    'title'       => __('Offered terms', 'twoinc-payment-gateway'),
-                    'description' => __('Terms shown to the buyer. Leave empty to offer all terms available to this brand.', 'twoinc-payment-gateway'),
+                    'title'       => __('Payment Terms', 'twoinc-payment-gateway'),
+                    'description' => __('Select the payment term(s) you want to offer.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
-                    'type'        => 'multiselect',
-                    'class'       => 'wc-enhanced-select',
-                    'options'     => $this->get_payment_term_day_options(),
-                    'default'     => []
+                    'type'        => 'two_payment_terms',
                 ],
-                'default_payment_term' => [
-                    'title'       => __('Default term', 'twoinc-payment-gateway'),
-                    'description' => __('Pre-selected term at checkout. Falls back to the shortest offered term.', 'twoinc-payment-gateway'),
-                    'desc_tip'    => true,
-                    'type'        => 'select',
-                    'options'     => $this->get_payment_term_day_options(),
-                    'default'     => ''
+                'payment_terms_custom_days' => [
+                    'title'             => __('Custom Payment Term (days)', 'twoinc-payment-gateway'),
+                    'description'       => __('Optional. Enter a custom number of days to offer alongside the selected terms above.', 'twoinc-payment-gateway'),
+                    'desc_tip'          => true,
+                    'type'              => 'number',
+                    'custom_attributes' => ['min' => '0', 'step' => '1'],
+                    'default'           => ''
                 ],
                 'payment_terms_type' => [
-                    'title'       => __('Payment terms type', 'twoinc-payment-gateway'),
+                    'title'       => __('Payment Terms Type', 'twoinc-payment-gateway'),
                     'description' => __('Standard counts the term days from the invoice date. End of month counts them from the end of the invoice month.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'type'        => 'select',
@@ -1913,44 +2006,52 @@ if (!class_exists('WC_Twoinc')) {
                     ],
                     'default'     => 'standard'
                 ],
+                'default_payment_term' => [
+                    'title'       => __('Default Payment Term', 'twoinc-payment-gateway'),
+                    'description' => __('Select the payment term that will be automatically selected for your customer.', 'twoinc-payment-gateway'),
+                    'desc_tip'    => true,
+                    'type'        => 'select',
+                    'options'     => $this->get_payment_term_day_options(),
+                    'default'     => ''
+                ],
                 'surcharge_type' => [
-                    'title'       => __('Surcharge type', 'twoinc-payment-gateway'),
-                    'description' => __('How the buyer surcharge is calculated. The platform pricing service computes the fee from this configuration. None disables the surcharge.', 'twoinc-payment-gateway'),
+                    'title'       => __('Surcharge Method', 'twoinc-payment-gateway'),
+                    'description' => __('Select a method to surcharge your customer.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'type'        => 'select',
                     'options'     => [
-                        'none'                 => __('None', 'twoinc-payment-gateway'),
+                        'none'                 => __('No surcharge applied', 'twoinc-payment-gateway'),
                         'percentage'           => __('Percentage', 'twoinc-payment-gateway'),
-                        'fixed'                => __('Fixed', 'twoinc-payment-gateway'),
-                        'fixed_and_percentage' => __('Fixed and percentage', 'twoinc-payment-gateway'),
+                        'fixed'                => __('Fixed fee', 'twoinc-payment-gateway'),
+                        'fixed_and_percentage' => __('Fixed fee and percentage', 'twoinc-payment-gateway'),
                     ],
                     'default'     => 'none'
                 ],
-                'surcharge_grid' => [
-                    'title'       => __('Surcharge per term', 'twoinc-payment-gateway'),
-                    'description' => __('Per payment term: a fixed amount, a percentage of the order, and an optional cap on the percentage portion. Leave a cell blank for zero. Fixed amounts and caps are in the store currency and are not converted for multi-currency stores.', 'twoinc-payment-gateway'),
-                    'type'        => 'two_surcharge_grid',
-                ],
                 'surcharge_differential' => [
-                    'title'       => __('Surcharge basis', 'twoinc-payment-gateway'),
-                    'description' => __('Full charges the configured surcharge for the chosen term. Differential charges only the difference versus the default term (which then shows no surcharge).', 'twoinc-payment-gateway'),
+                    'title'       => __('Surcharge Calculation Basis', 'twoinc-payment-gateway'),
+                    'description' => __('Total fee charges the configured surcharge for the chosen term. Fee difference charges only the difference versus the default term (which then shows no surcharge).', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'type'        => 'select',
                     'options'     => [
-                        '0' => __('Full surcharge', 'twoinc-payment-gateway'),
-                        '1' => __('Differential (vs default term)', 'twoinc-payment-gateway'),
+                        '0' => __('Total fee for selected term', 'twoinc-payment-gateway'),
+                        '1' => __('Fee difference vs default payment term', 'twoinc-payment-gateway'),
                     ],
                     'default'     => '0'
                 ],
                 'surcharge_line_description' => [
-                    'title'       => __('Surcharge line label', 'twoinc-payment-gateway'),
+                    'title'       => __('Surcharge Line Description', 'twoinc-payment-gateway'),
                     'description' => __('Buyer-facing label for the surcharge line. Use %s for the term length in days. Leave blank to use the brand default.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'type'        => 'text',
                     'default'     => ''
                 ],
+                'surcharge_grid' => [
+                    'title'       => __('Payment Surcharge Configuration', 'twoinc-payment-gateway'),
+                    'description' => __('Per payment term: a fixed amount, a percentage of the order, and an optional cap on the percentage portion. Leave a cell blank for zero. Fixed amounts and caps are in the store currency and are not converted for multi-currency stores.', 'twoinc-payment-gateway'),
+                    'type'        => 'two_surcharge_grid',
+                ],
                 'surcharge_rounding_basis' => [
-                    'title'       => __('Surcharge rounding', 'twoinc-payment-gateway'),
+                    'title'       => __('Surcharge Rounding', 'twoinc-payment-gateway'),
                     'description' => __('Snap the buyer surcharge line to a clean increment. Select None for standard two-decimal amounts.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'type'        => 'select',
@@ -1963,7 +2064,7 @@ if (!class_exists('WC_Twoinc')) {
                     'default'     => 'none'
                 ],
                 'surcharge_rounding_step' => [
-                    'title'       => __('Rounding step', 'twoinc-payment-gateway'),
+                    'title'       => __('Rounding Step', 'twoinc-payment-gateway'),
                     'description' => __('Increment the surcharge is rounded to (e.g. 1 = whole units, 0.50 = nearest half). Applies only when a rounding direction is selected.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'type'        => 'select',

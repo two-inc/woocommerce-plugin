@@ -162,9 +162,16 @@ class WC_Payment_Gateway
 {
     public $id;
 
+    public $plugin_id = 'woocommerce_';
+
     public function get_option($key, $empty_value = null)
     {
         return $empty_value ?? '';
+    }
+
+    public function get_field_key($key)
+    {
+        return $this->plugin_id . $this->id . '_' . $key;
     }
 }
 

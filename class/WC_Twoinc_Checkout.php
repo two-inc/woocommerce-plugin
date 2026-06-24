@@ -261,7 +261,9 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 // endpoints in WC_Twoinc_Payment_Terms.
                 'payment_terms' => [
                     'days_label' => __('%s days', 'twoinc-payment-gateway'),
-                    'enabled' => WC_Twoinc_Payment_Terms::is_enabled($this->wc_twoinc),
+                    // Chip chooser shows only with >1 offered term; a single term
+                    // is applied silently (fee still applies via apply_cart_fee).
+                    'enabled' => WC_Twoinc_Payment_Terms::is_selector_visible($this->wc_twoinc),
                     'terms' => WC_Twoinc_Payment_Terms::get_available_terms($this->wc_twoinc),
                     'selected' => WC_Twoinc_Payment_Terms::get_selected_term($this->wc_twoinc),
                     'offset_pricing_enabled' => WC_Twoinc_Payment_Terms::get_surcharge_settings($this->wc_twoinc)['enabled'],
