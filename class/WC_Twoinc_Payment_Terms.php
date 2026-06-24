@@ -327,6 +327,72 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         }
 
         /**
+         * Fetch the merchant's own pricing rate (percentage + fixed) per term
+         * for the admin inline-fee display beside the term checkboxes. This is
+         * the cost Two charges the MERCHANT, independent of any cart — distinct
+         * from the buyer surcharge quoted at checkout (fetch_term_fee). Mirrors
+         * Magento's Controller\Adminhtml\Config\Fees → /pricing/v1/merchant/rates
+         * (note the path order differs from the order-fee endpoint).
+         *
+         * @param int[]  $terms          requested net-term day counts
+         * @param string $buyer_country  ISO-2 code for the rate preview
+         * @return array{success: bool, currency?: string, fees?: array<string, array{percentage: float, fixed: float}>}
+         */
+        public static function fetch_merchant_rates($gateway, array $terms, string $buyer_country): array
+        {
+            $net_terms = [];
+            foreach ($terms as $t) {
+                $days = (int) $t;
+                if ($days > 0) {
+                    $net_terms[] = $days;
+                }
+            }
+            $net_terms = array_values(array_unique($net_terms));
+            if (count($net_terms) === 0) {
+                return ['success' => false];
+            }
+
+            $response = $gateway->make_request('/pricing/v1/merchant/rates', [
+                'buyer_country_code' => $buyer_country,
+                // No admin recourse-pricing config on either plugin yet —
+                // hardcoded false for parity with Magento's Fees controller.
+                'recourse_pricing' => false,
+                // payout_schedule omitted: the server infers it from the
+                // merchant's payee accounts (matches Magento).
+                'net_terms' => $net_terms,
+            ], 'POST', array(), null, 10);
+
+            if (is_wp_error($response)
+                || (int) wp_remote_retrieve_response_code($response) < 200
+                || (int) wp_remote_retrieve_response_code($response) >= 300) {
+                return ['success' => false];
+            }
+
+            $body = json_decode($response['body'] ?? '', true);
+            if (!is_array($body) || !isset($body['rates']) || !is_array($body['rates'])) {
+                return ['success' => false];
+            }
+
+            $fees = [];
+            foreach ($body['rates'] as $rate) {
+                if (!isset($rate['net_terms'])) {
+                    continue;
+                }
+                $days = (int) $rate['net_terms'];
+                $fees[strval($days)] = [
+                    'percentage' => (float) ($rate['percentage_fee'] ?? 0),
+                    'fixed' => (float) ($rate['fixed_fee'] ?? 0),
+                ];
+            }
+
+            return [
+                'success' => true,
+                'currency' => strval($body['currency'] ?? ''),
+                'fees' => $fees,
+            ];
+        }
+
+        /**
          * The fee-quote basis: the cart's value excluding any fee this class
          * added (the platform-rate-converted/priced fee enters the basket at
          * the pricing endpoint's output and must not feed back into its own

@@ -317,6 +317,26 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
+         * Option list for the "Default Payment Term" select: exactly the terms
+         * the merchant currently offers (ticked checkboxes ∪ custom day), not
+         * every brand preset. Mirrors Magento's AvailablePaymentTerms source
+         * model, so the dropdown reflects the saved selection on render (admin
+         * JS keeps it in sync live before save).
+         *
+         * @return array<string, string>
+         */
+        private function get_offered_payment_term_options(): array
+        {
+            $options = [];
+            if (class_exists('WC_Twoinc_Payment_Terms')) {
+                foreach (WC_Twoinc_Payment_Terms::get_available_terms($this) as $days) {
+                    $options[strval((int) $days)] = sprintf(__('%s days', 'twoinc-payment-gateway'), (int) $days);
+                }
+            }
+            return $options;
+        }
+
+        /**
          * Admin option list of the brand's surcharge rounding steps, in
          * canonical two-decimal form so the stored value round-trips
          * against the option list (WC_Twoinc_Payment_Terms reads it back).
@@ -481,6 +501,12 @@ if (!class_exists('WC_Twoinc')) {
                 $stored = [$days[0]];
             }
 
+            // Inline merchant-rate fee beside each checkbox (mirrors Magento's
+            // showInlineFees). Brand overlays opt out by setting the brand
+            // 'inline_term_fees' config to false; default on.
+            $inline_fees = WC_Twoinc_Brand::get('inline_term_fees');
+            $show_fees = ($inline_fees === null) ? true : (bool) $inline_fees;
+
             ob_start();
             ?>
             <tr valign="top">
@@ -492,15 +518,19 @@ if (!class_exists('WC_Twoinc')) {
                     <?php if (empty($options)) : ?>
                         <p><?php esc_html_e('No payment terms are available for this brand.', 'twoinc-payment-gateway'); ?></p>
                     <?php else : ?>
-                    <fieldset>
+                    <fieldset class="twoinc-term-checkboxes"<?php echo $show_fees ? ' data-fees="1"' : ''; ?>>
                         <?php foreach ($options as $value => $label) :
                             $days = (int) $value; ?>
                             <label style="display:block;margin-bottom:4px">
                                 <input type="checkbox"
+                                       class="twoinc-term-checkbox"
                                        name="<?php echo esc_attr($field_key); ?>[]"
                                        value="<?php echo esc_attr($days); ?>"
                                        <?php checked(in_array($days, $stored, true)); ?> />
                                 <?php echo esc_html($label); ?>
+                                <?php if ($show_fees) : ?>
+                                    <span class="twoinc-term-fee" data-term="<?php echo esc_attr($days); ?>" style="color:#666"></span>
+                                <?php endif; ?>
                             </label>
                         <?php endforeach; ?>
                     </fieldset>
@@ -561,6 +591,46 @@ if (!class_exists('WC_Twoinc')) {
                 throw new Exception(__('Custom Payment Term (days) must be a whole number of days.', 'twoinc-payment-gateway'));
             }
             return (string) (int) $value;
+        }
+
+        /**
+         * Coerce the saved default to a term actually being offered. The
+         * offered set is computed from the POSTed sibling fields (they save in
+         * the same request, so the stored options are stale here), mirroring
+         * the offered set the admin JS rebuilds the dropdown from. If the
+         * posted default is no longer offered (e.g. its checkbox was just
+         * unticked), repoint to the shortest offered term so the stored
+         * default is always coherent. Mirrors Magento's payment-terms-config.js
+         * default-term repointing.
+         */
+        public function validate_default_payment_term_field($key, $value)
+        {
+            $offered = [];
+            $allowed = array_map('intval', array_keys($this->get_payment_term_day_options()));
+
+            $terms_key = $this->get_field_key('payment_terms_days');
+            $posted_terms = isset($_POST[$terms_key]) ? (array) $_POST[$terms_key] : []; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+            foreach ($posted_terms as $day) {
+                $day = (int) $day;
+                if ($day > 0 && in_array($day, $allowed, true)) {
+                    $offered[] = $day;
+                }
+            }
+
+            $custom_key = $this->get_field_key('payment_terms_custom_days');
+            $posted_custom = isset($_POST[$custom_key]) ? (int) $_POST[$custom_key] : 0; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+            if ($posted_custom > 0) {
+                $offered[] = $posted_custom;
+            }
+
+            $offered = array_values(array_unique($offered));
+            sort($offered);
+
+            $value = (int) $value;
+            if (in_array($value, $offered, true)) {
+                return (string) $value;
+            }
+            return count($offered) > 0 ? (string) $offered[0] : '';
         }
 
         /**
@@ -694,7 +764,11 @@ if (!class_exists('WC_Twoinc')) {
             wp_localize_script('twoinc.admin', 'twoinc_admin', [
                 'gateway_id' => $this->id,
                 'nonce' => wp_create_nonce('twoinc_admin_nonce'),
-                'ajax_url' => admin_url('admin-ajax.php')
+                'ajax_url' => admin_url('admin-ajax.php'),
+                // %s days label for the live Default Payment Term rebuild.
+                'days_label' => __('%s days', 'twoinc-payment-gateway'),
+                // Decimal separator for rendering fetched inline fee amounts.
+                'decimal_separator' => wc_get_price_decimal_separator(),
             ]);
         }
 
@@ -2011,7 +2085,7 @@ if (!class_exists('WC_Twoinc')) {
                     'description' => __('Select the payment term that will be automatically selected for your customer.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'type'        => 'select',
-                    'options'     => $this->get_payment_term_day_options(),
+                    'options'     => $this->get_offered_payment_term_options(),
                     'default'     => ''
                 ],
                 'surcharge_type' => [
