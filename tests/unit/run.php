@@ -58,6 +58,7 @@ final class BrandConfigSpec
             'testRoundingStepValidationEnforcesBrandOptions',
             'testSurchargeGridValidationNormalisesAndRejects',
             'testPaymentTermsValidationRequiresSelection',
+            'testDefaultTermCoercedToOfferedSet',
             'testOrderPayloadCarriesSelectedAndAvailableTerms',
             'testPaymentTermsInvalidPostFallsBackToDefault',
             'testPaymentTermsDisabledMeansNoPayloadTerms',
@@ -804,6 +805,30 @@ final class BrandConfigSpec
         $_POST[$custom_key] = '45';
         TinyAssert::same([], $gateway->validate_two_payment_terms_field('payment_terms_days', []));
         unset($_POST[$custom_key]);
+    }
+
+    private static function testDefaultTermCoercedToOfferedSet(): void
+    {
+        $gateway = self::gateway();
+        $terms_key = $gateway->get_field_key('payment_terms_days');
+        $custom_key = $gateway->get_field_key('payment_terms_custom_days');
+
+        // Offered = ticked checkboxes; a default within it is kept verbatim.
+        $_POST[$terms_key] = ['30', '60'];
+        unset($_POST[$custom_key]);
+        TinyAssert::same('60', $gateway->validate_default_payment_term_field('default_payment_term', '60'));
+
+        // A default no longer offered repoints to the shortest offered term.
+        TinyAssert::same('30', $gateway->validate_default_payment_term_field('default_payment_term', '90'));
+
+        // The custom day joins the offered set and can become the default.
+        $_POST[$terms_key] = ['60'];
+        $_POST[$custom_key] = '45';
+        TinyAssert::same('45', $gateway->validate_default_payment_term_field('default_payment_term', '45'));
+        // Shortest of {45,60} wins when the posted default is not offered.
+        TinyAssert::same('45', $gateway->validate_default_payment_term_field('default_payment_term', '14'));
+
+        unset($_POST[$terms_key], $_POST[$custom_key]);
     }
 
     private static function testOrderPayloadCarriesSelectedAndAvailableTerms(): void

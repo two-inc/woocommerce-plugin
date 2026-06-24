@@ -52,6 +52,9 @@ function load_twoinc_classes()
     // Add AJAX handlers for API key verification
     add_action('wp_ajax_twoinc_verify_api_key', 'twoinc_ajax_verify_api_key');
 
+    // Admin inline merchant-rate fees beside the payment-term checkboxes
+    add_action('wp_ajax_twoinc_term_fees', 'twoinc_ajax_term_fees');
+
     // Load classes
     require_once __DIR__ . '/class/WC_Twoinc_Brand.php';
     require_once __DIR__ . '/class/WC_Twoinc_Helper.php';
@@ -211,4 +214,58 @@ function twoinc_ajax_verify_api_key()
         ];
         wp_send_json_error(['message' => 'API key is invalid', 'debug' => $debug_info]);
     }
+}
+
+/**
+ * AJAX endpoint for the admin inline merchant-rate fees beside the payment-term
+ * checkboxes. Resolves the merchant's per-term pricing rate (percentage +
+ * fixed) so the config page can preview what Two charges the merchant for each
+ * offered term. Mirrors Magento's Controller\Adminhtml\Config\Fees.
+ *
+ * Fail-soft: on any error returns success:false; the admin JS leaves the fee
+ * spans empty so the config page never breaks on a pricing-API outage.
+ */
+function twoinc_ajax_term_fees()
+{
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        wp_send_json_error('Invalid request method');
+        return;
+    }
+
+    if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'twoinc_admin_nonce')) {
+        wp_send_json_error('Security check failed');
+        return;
+    }
+
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error('Insufficient permissions');
+        return;
+    }
+
+    $raw_terms = isset($_POST['terms']) ? wp_unslash($_POST['terms']) : '';
+    $decoded = is_string($raw_terms) ? json_decode($raw_terms, true) : $raw_terms;
+    $terms = is_array($decoded) ? array_map('intval', $decoded) : [];
+    if (count(array_filter($terms, static function ($d) {
+        return $d > 0;
+    })) === 0) {
+        wp_send_json_error('No terms');
+        return;
+    }
+
+    $twoinc_instance = WC_Twoinc::get_instance();
+    // No admin-side buyer-country config exists; use the shop base country as
+    // a stand-in for the rate preview (matches Magento's resolveBuyerCountry).
+    $buyer_country = strtoupper((string) WC()->countries->get_base_country());
+
+    $rates = WC_Twoinc_Payment_Terms::fetch_merchant_rates($twoinc_instance, $terms, $buyer_country);
+
+    if (empty($rates['success'])) {
+        wp_send_json_error('Could not fetch merchant rates');
+        return;
+    }
+
+    wp_send_json_success([
+        'currency' => $rates['currency'] ?? '',
+        'fees' => $rates['fees'] ?? [],
+    ]);
 }
