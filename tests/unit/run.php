@@ -50,12 +50,14 @@ final class BrandConfigSpec
             'testPaymentValidationErrorFilterVetoes',
             'testConfirmationPageDetectionFollowsBrandPrefix',
             'testPaymentTermsResolveBrandIntersectAdminSubset',
+            'testPaymentTermsSelectorVisibleOnlyWithMultiple',
             'testPaymentTermsDefaultFallsBackToShortest',
             'testBuyerFeeShareShapes',
             'testBuyerFeeShareRounding',
             'testRoundingStepOptionsCanonicalAndNarrowed',
             'testRoundingStepValidationEnforcesBrandOptions',
             'testSurchargeGridValidationNormalisesAndRejects',
+            'testPaymentTermsValidationRequiresSelection',
             'testOrderPayloadCarriesSelectedAndAvailableTerms',
             'testPaymentTermsInvalidPostFallsBackToDefault',
             'testPaymentTermsDisabledMeansNoPayloadTerms',
@@ -503,28 +505,50 @@ final class BrandConfigSpec
 
     private static function testPaymentTermsResolveBrandIntersectAdminSubset(): void
     {
-        // Brand default set, no admin subset: all brand terms
-        $gateway = self::termsGateway(['enable_payment_terms' => 'yes']);
-        TinyAssert::same([14, 30, 60, 90], WC_Twoinc_Payment_Terms::get_available_terms($gateway));
-        TinyAssert::true(WC_Twoinc_Payment_Terms::is_enabled($gateway));
+        // No admin subset and no custom term: nothing offered → backend default
+        $gateway = self::termsGateway([]);
+        TinyAssert::same([], WC_Twoinc_Payment_Terms::get_available_terms($gateway));
+        TinyAssert::same(false, WC_Twoinc_Payment_Terms::is_enabled($gateway));
 
         // Admin narrows within the brand set; entries outside it drop
-        $gateway = self::termsGateway(['enable_payment_terms' => 'yes', 'payment_terms_days' => ['60', '30', '7']]);
+        $gateway = self::termsGateway(['payment_terms_days' => ['60', '30', '7']]);
         TinyAssert::same([30, 60], WC_Twoinc_Payment_Terms::get_available_terms($gateway));
+        TinyAssert::true(WC_Twoinc_Payment_Terms::is_enabled($gateway));
 
-        // Feature off regardless of terms
-        $gateway = self::termsGateway(['enable_payment_terms' => 'no']);
+        // A custom term is unioned in even when outside the brand presets
+        $gateway = self::termsGateway(['payment_terms_days' => ['30'], 'payment_terms_custom_days' => '45']);
+        TinyAssert::same([30, 45], WC_Twoinc_Payment_Terms::get_available_terms($gateway));
+
+        // Custom term alone (no presets ticked) still offers a term
+        $gateway = self::termsGateway(['payment_terms_custom_days' => '45']);
+        TinyAssert::same([45], WC_Twoinc_Payment_Terms::get_available_terms($gateway));
+        TinyAssert::true(WC_Twoinc_Payment_Terms::is_enabled($gateway));
+    }
+
+    private static function testPaymentTermsSelectorVisibleOnlyWithMultiple(): void
+    {
+        // One offered term: feature active but applied silently (no chooser)
+        $gateway = self::termsGateway(['payment_terms_days' => ['30']]);
+        TinyAssert::true(WC_Twoinc_Payment_Terms::is_enabled($gateway));
+        TinyAssert::same(false, WC_Twoinc_Payment_Terms::is_selector_visible($gateway));
+
+        // Two offered terms: chooser visible
+        $gateway = self::termsGateway(['payment_terms_days' => ['30', '60']]);
+        TinyAssert::true(WC_Twoinc_Payment_Terms::is_selector_visible($gateway));
+
+        // No terms: neither active nor visible
+        $gateway = self::termsGateway([]);
         TinyAssert::same(false, WC_Twoinc_Payment_Terms::is_enabled($gateway));
+        TinyAssert::same(false, WC_Twoinc_Payment_Terms::is_selector_visible($gateway));
     }
 
     private static function testPaymentTermsDefaultFallsBackToShortest(): void
     {
-        $gateway = self::termsGateway(['enable_payment_terms' => 'yes', 'default_payment_term' => '60']);
+        $gateway = self::termsGateway(['payment_terms_days' => ['30', '60'], 'default_payment_term' => '60']);
         TinyAssert::same(60, WC_Twoinc_Payment_Terms::get_default_term($gateway));
 
         // Configured default outside the offered set: shortest offered wins
         $gateway = self::termsGateway([
-            'enable_payment_terms' => 'yes',
             'payment_terms_days' => ['30', '90'],
             'default_payment_term' => '60',
         ]);
@@ -587,8 +611,9 @@ final class BrandConfigSpec
             WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway, 60)
         );
 
-        // differential: the default term (brand shortest = 14) rides as reference_terms
+        // differential: the default term (shortest offered = 14) rides as reference_terms
         $gateway = self::termsGateway([
+            'payment_terms_days' => ['14', '30'],
             'surcharge_type' => 'percentage',
             'surcharge_grid' => [30 => ['percentage' => '2']],
             'surcharge_differential' => '1',
@@ -600,6 +625,7 @@ final class BrandConfigSpec
 
         // end_of_month: reference_terms carries duration_days_calculated_from
         $gateway = self::termsGateway([
+            'payment_terms_days' => ['14', '30'],
             'surcharge_type' => 'percentage',
             'surcharge_grid' => [30 => ['percentage' => '2']],
             'surcharge_differential' => '1',
@@ -659,6 +685,7 @@ final class BrandConfigSpec
 
         // rounding rides alongside reference_terms (differential)
         $gateway = self::termsGateway($base + [
+            'payment_terms_days' => ['14', '30'],
             'surcharge_differential' => '1',
             'surcharge_rounding_basis' => 'standard',
             'surcharge_rounding_step' => '0.50',
@@ -755,9 +782,33 @@ final class BrandConfigSpec
         TinyAssert::same([], $gateway->validate_two_surcharge_grid_field('surcharge_grid', ''));
     }
 
+    private static function testPaymentTermsValidationRequiresSelection(): void
+    {
+        $gateway = self::gateway();
+        $custom_key = $gateway->get_field_key('payment_terms_custom_days');
+
+        // Valid selection normalises to sorted unique ints within brand terms
+        unset($_POST[$custom_key]);
+        TinyAssert::same([30, 60], $gateway->validate_two_payment_terms_field('payment_terms_days', ['60', '30', '7']));
+
+        // Empty selection + no custom term → rejected (selection mandatory)
+        $threw = false;
+        try {
+            $gateway->validate_two_payment_terms_field('payment_terms_days', []);
+        } catch (Exception $e) {
+            $threw = true;
+        }
+        TinyAssert::true($threw);
+
+        // Empty selection but a custom term posted → accepted
+        $_POST[$custom_key] = '45';
+        TinyAssert::same([], $gateway->validate_two_payment_terms_field('payment_terms_days', []));
+        unset($_POST[$custom_key]);
+    }
+
     private static function testOrderPayloadCarriesSelectedAndAvailableTerms(): void
     {
-        $gateway = self::termsGateway(['enable_payment_terms' => 'yes']);
+        $gateway = self::termsGateway(['payment_terms_days' => ['14', '30', '60', '90']]);
         $_POST[WC_Twoinc_Payment_Terms::SESSION_KEY] = '60';
 
         $payment_terms = WC_Twoinc_Payment_Terms::get_order_payload_terms($gateway, new StubOrder());
@@ -785,7 +836,7 @@ final class BrandConfigSpec
 
     private static function testPaymentTermsInvalidPostFallsBackToDefault(): void
     {
-        $gateway = self::termsGateway(['enable_payment_terms' => 'yes', 'default_payment_term' => '30']);
+        $gateway = self::termsGateway(['payment_terms_days' => ['30', '60'], 'default_payment_term' => '30']);
         $_POST[WC_Twoinc_Payment_Terms::SESSION_KEY] = '17';
 
         $payment_terms = WC_Twoinc_Payment_Terms::get_order_payload_terms($gateway, new StubOrder());
@@ -794,7 +845,8 @@ final class BrandConfigSpec
 
     private static function testPaymentTermsDisabledMeansNoPayloadTerms(): void
     {
-        $gateway = self::termsGateway(['enable_payment_terms' => 'no']);
+        // No terms configured: empty offer → no payload terms (backend default)
+        $gateway = self::termsGateway([]);
         TinyAssert::same(null, WC_Twoinc_Payment_Terms::get_order_payload_terms($gateway, new StubOrder()));
 
         // And the composed body carries no terms keys at all
