@@ -150,6 +150,9 @@ final class BrandConfigSpec
         TinyAssert::same('https://portal.two.inc/auth/merchant/signup', WC_Twoinc_Brand::get('sign_up_url'));
         TinyAssert::same(WC_TWOINC_PLUGIN_URL . 'assets/images/two-logo.svg', WC_Twoinc_Brand::get('logo_url'));
         TinyAssert::same('Business invoice - %s days', WC_Twoinc_Brand::get('title_default'));
+        // Two ships no checkout subtitle; an overlay supplies one.
+        TinyAssert::same('', WC_Twoinc_Brand::get('checkout_subtitle'));
+        TinyAssert::same('integration@two.inc', WC_Twoinc_Brand::get('production_key_contact_email'));
         TinyAssert::same(null, WC_Twoinc_Brand::get('not_a_key'));
     }
 

@@ -706,8 +706,17 @@ if (!class_exists('WC_Twoinc')) {
          */
         public function get_pay_subtitle()
         {
+            $subtitle = WC_Twoinc_Brand::get('checkout_subtitle');
+            $subtitle_html = $subtitle
+                ? sprintf(
+                    '<div class="twoinc-payment-subtitle">%s</div>',
+                    esc_html(__($subtitle, 'twoinc-payment-gateway'))
+                )
+                : '';
+
             return sprintf(
-                '<div class="abt-twoinc">%s</div>',
+                '%s<div class="abt-twoinc">%s</div>',
+                $subtitle_html,
                 $this->get_abt_twoinc_html(),
             );
         }
@@ -2057,7 +2066,11 @@ if (!class_exists('WC_Twoinc')) {
                 'api_key' => [
                     'title'       => sprintf(__('%s API Key', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')),
                     'type'        => 'api_key_with_verification',
-                    'description' => '<div id="api-key-status" style="margin-top: 5px;"></div>',
+                    'description' => sprintf(
+                        /* translators: %s is the contact email address for obtaining production API keys */
+                        __('API key for the sandbox environment is available on your merchant portal (however please reach out to %s for access to production keys).', 'twoinc-payment-gateway'),
+                        esc_html(WC_Twoinc_Brand::get('production_key_contact_email'))
+                    ) . '<div id="api-key-status" style="margin-top: 5px;"></div>',
                 ],
                 'vendor_name' => [
                     'title'       => __('Optional vendor name if there are multiple sites', 'twoinc-payment-gateway'),
