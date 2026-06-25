@@ -205,7 +205,15 @@ function twoinc_ajax_verify_api_key()
     $result = $twoinc_instance->verify_api_key($api_key);
 
     if ($result && isset($result['code']) && $result['code'] == 200) {
-        wp_send_json_success(['message' => 'API key is valid', 'debug' => $result]);
+        // Echo the merchant identity back so the settings page can refresh the
+        // displayed Merchant ID + short name as soon as validation completes,
+        // without a reload (the key being typed is not persisted here).
+        $body = isset($result['body']) && is_array($result['body']) ? $result['body'] : [];
+        wp_send_json_success([
+            'message' => 'API key is valid',
+            'merchant_id' => isset($body['id']) ? (string) $body['id'] : '',
+            'merchant_short_name' => isset($body['short_name']) ? (string) $body['short_name'] : '',
+        ]);
     } else {
         $debug_info = [
             'result' => $result,

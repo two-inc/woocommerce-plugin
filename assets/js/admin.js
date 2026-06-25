@@ -104,6 +104,19 @@ jQuery(function ($) {
     }
   }
 
+  // Refresh the displayed Merchant ID + short name from a verify response,
+  // so a key change reflects immediately without saving/reloading.
+  function updateMerchantInfo(data) {
+    if (!data || !data.merchant_id) {
+      return;
+    }
+    $("#twoinc-merchant-id").text(data.merchant_id);
+    const shortName = data.merchant_short_name || "";
+    $("#twoinc-merchant-short-name").text(shortName ? " · " + shortName : "");
+    $("#twoinc-merchant-info").show();
+    $("#twoinc-signup-prompt").hide();
+  }
+
   function verifyApiKey(apiKey) {
     if (!apiKey || apiKey.length < 10) {
       $verificationIcon.hide();
@@ -123,6 +136,7 @@ jQuery(function ($) {
       success: function (response) {
         if (response.success) {
           showVerificationStatus("valid");
+          updateMerchantInfo(response.data);
         } else {
           showVerificationStatus("invalid");
         }

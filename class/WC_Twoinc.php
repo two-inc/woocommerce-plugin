@@ -699,8 +699,10 @@ if (!class_exists('WC_Twoinc')) {
                 $body = json_decode($response['body'], true);
                 $code = $response['response']['code'];
                 if ($code == 200 && isset($body['id']) && !$api_key) {
-                    // Only update merchant_id if we're verifying the saved API key
+                    // Only persist when verifying the saved API key. verify_api_key
+                    // returns {id, short_name}; cache both for the settings display.
                     $this->update_option('merchant_id', $body['id']);
+                    $this->update_option('merchant_short_name', isset($body['short_name']) ? (string) $body['short_name'] : '');
                 }
                 return ['body' => $body, 'code' => $code];
             }
@@ -2214,15 +2216,18 @@ if (!class_exists('WC_Twoinc')) {
                                 <span class="dashicons dashicons-update" style="color: #0073aa; display: none; animation: rotation 1s infinite linear; font-size: 18px;" id="api-key-loading"></span>
                             </span>
                         </div>
-                        <?php if ($this->get_option('api_key') && $merchant_id = $this->get_merchant_id()) : ?>
-                            <div style="margin-top: 8px; color: #666; font-size: 13px;">
-                                <strong><?php _e('Merchant ID:', 'twoinc-payment-gateway'); ?></strong> <?php echo esc_html($merchant_id); ?>
-                            </div>
-                        <?php else: ?>
-                            <div style="margin-top: 8px; color: #666; font-size: 13px;">
-                                <strong><?php printf(__('Don\'t have an API key? Get one by signing up <a href=\'%s\'>here</a>.', 'twoinc-payment-gateway'), esc_url(WC_Twoinc_Brand::get('sign_up_url'))); ?></strong>
-                            </div>
-                        <?php endif; ?>
+                        <?php
+                            $merchant_id = $this->get_option('api_key') ? $this->get_merchant_id() : '';
+                            $merchant_short_name = $merchant_id ? (string) $this->get_option('merchant_short_name') : '';
+                        ?>
+                        <?php // Merchant identity — populated server-side on load and refreshed live by admin.js when the key is (re)validated. ?>
+                        <div id="twoinc-merchant-info" style="margin-top: 8px; color: #666; font-size: 13px;<?php echo $merchant_id ? '' : ' display: none;'; ?>">
+                            <strong><?php _e('Merchant ID:', 'twoinc-payment-gateway'); ?></strong>
+                            <span id="twoinc-merchant-id"><?php echo esc_html($merchant_id); ?></span><span id="twoinc-merchant-short-name"><?php echo $merchant_short_name !== '' ? ' &middot; ' . esc_html($merchant_short_name) : ''; ?></span>
+                        </div>
+                        <div id="twoinc-signup-prompt" style="margin-top: 8px; color: #666; font-size: 13px;<?php echo $merchant_id ? ' display: none;' : ''; ?>">
+                            <strong><?php printf(__('Don\'t have an API key? Get one by signing up <a href=\'%s\'>here</a>.', 'twoinc-payment-gateway'), esc_url(WC_Twoinc_Brand::get('sign_up_url'))); ?></strong>
+                        </div>
                         <?php echo $this->get_description_html($data); // WPCS: XSS ok.
                         ?>
                     </fieldset>
