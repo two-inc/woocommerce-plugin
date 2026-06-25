@@ -215,13 +215,13 @@ final class BrandConfigSpec
         $captured = [];
         add_filter('twoinc_confirmation_url', static function ($url, $order_id) use (&$captured) {
             $captured = [$url, $order_id];
-            return 'https://shop.example/abn-payment-gateway/confirm?order_id=' . $order_id;
+            return 'https://shop.example/example-overlay-gateway/confirm?order_id=' . $order_id;
         }, 10, 2);
 
         $body = self::composeOrder();
 
         TinyAssert::same(
-            'https://shop.example/abn-payment-gateway/confirm?order_id=42',
+            'https://shop.example/example-overlay-gateway/confirm?order_id=42',
             $body['merchant_urls']['merchant_confirmation_url']
         );
         TinyAssert::true(strpos($captured[0], '/twoinc-payment-gateway/confirm?order_id=42') !== false, 'Filter must receive the default URL: ' . $captured[0]);
