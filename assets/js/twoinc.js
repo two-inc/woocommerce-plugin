@@ -1001,6 +1001,13 @@ let twoincSoleTrader = {
   tokens: null,
   savedCompanySearch: null,
   messageListenerBound: false,
+  // Result of the most recent autofill prefetch for the entered email.
+  // ready=false until the first prefetch resolves; matches=true when the
+  // buyer on the Two cookie owns the email currently typed at checkout.
+  prefetched: { ready: false, buyer: null, matches: false },
+  // Email the prefetch last ran for, to dedupe repeated checkout re-renders
+  // (and so a pre-filled email still prefetches once on first render).
+  lastPrefetchEmail: null,
 
   config: function () {
     return (window.twoinc && window.twoinc.sole_trader) || { enabled: false };
@@ -1008,6 +1015,15 @@ let twoincSoleTrader = {
 
   currentCountry: function () {
     return (jQuery("#billing_country").val() || "").toUpperCase();
+  },
+
+  enteredEmail: function () {
+    return (jQuery("#billing_email").val() || "").trim();
+  },
+
+  isAvailable: function () {
+    const country = twoincSoleTrader.currentCountry();
+    return twoincSoleTrader.availabilityByCountry[country] === true;
   },
 
   /**
@@ -1065,6 +1081,8 @@ let twoincSoleTrader = {
 
   hide: function () {
     jQuery(".twoinc-sole-trader-toggle").addClass("hidden").empty();
+    // Re-show (e.g. country change) should prefetch afresh.
+    twoincSoleTrader.lastPrefetchEmail = null;
     if (twoincSoleTrader.mode === "sole_trader") {
       twoincSoleTrader.setMode("business");
     }
@@ -1075,45 +1093,102 @@ let twoincSoleTrader = {
     const $container = jQuery(".twoinc-sole-trader-toggle");
     $container.empty().removeClass("hidden");
 
+    // Mode chips (mirrors the Magento .mode_selector / .mode_item rendering).
+    const $selector = jQuery("<div>", { class: "twoinc-mode-selector" });
     [
       { value: "business", label: cfg.text.registered_business },
       { value: "sole_trader", label: cfg.text.sole_trader }
     ].forEach(function (option) {
-      const checked = twoincSoleTrader.mode === option.value;
-      const $label = jQuery("<label>", { class: "twoinc-sole-trader-toggle__option" });
-      $label.append(
-        jQuery("<input>", {
-          type: "radio",
-          name: "two_account_type",
-          value: option.value,
-          checked: checked
-        }).on("change", function () {
-          twoincSoleTrader.setMode(this.value);
-        })
-      );
-      $label.append(jQuery("<span>", { text: option.label }));
-      $container.append($label);
+      const $chip = jQuery("<span>", {
+        class: "twoinc-mode-item",
+        text: option.label,
+        role: "button",
+        tabindex: 0,
+        "data-mode": option.value
+      }).on("click keypress", function (event) {
+        if (event.type === "keypress" && event.which !== 13 && event.which !== 32) {
+          return;
+        }
+        event.preventDefault();
+        twoincSoleTrader.onModeChipClick(option.value);
+      });
+      $selector.append($chip);
     });
+    $container.append($selector);
 
-    const $prompt = jQuery("<a>", {
+    // Bell-icon note + signup link — shown only when sole-trader mode is
+    // active and signup is needed (no matching autofill), and as the
+    // fallback when an auto-launched popup is blocked.
+    const $note = jQuery(
+      '<div class="twoinc-sole-trader-note hidden">' +
+        '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">' +
+        '<path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0M3.124 7.5A8.969 8.969 0 015.292 3m13.416 0a8.969 8.969 0 012.168 4.5"/>' +
+        "</svg></div>"
+    );
+    jQuery("<a>", {
       href: "#",
-      class: "twoinc-sole-trader-toggle__prompt hidden",
+      class: "twoinc-sole-trader-note__link",
       text: cfg.text.popup_prompt
-    }).on("click", function (event) {
-      event.preventDefault();
-      twoincSoleTrader.openPopup();
-    });
-    $container.append($prompt);
+    })
+      .on("click", function (event) {
+        event.preventDefault();
+        twoincSoleTrader.launchSignup();
+      })
+      .appendTo($note);
+    $container.append($note);
+
+    twoincSoleTrader.updateChips();
+    // Prefetch for an already-filled email (returning/logged-in buyer), so a
+    // known sole trader is auto-selected without waiting for an email edit.
+    twoincSoleTrader.onEmailChanged();
   },
 
-  setMode: function (mode) {
-    if (mode === twoincSoleTrader.mode) {
+  updateChips: function () {
+    jQuery(".twoinc-sole-trader-toggle .twoinc-mode-item").each(function () {
+      jQuery(this).toggleClass(
+        "twoinc-mode-item--selected",
+        jQuery(this).data("mode") === twoincSoleTrader.mode
+      );
+    });
+  },
+
+  showNote: function (show) {
+    jQuery(".twoinc-sole-trader-note").toggleClass("hidden", !show);
+  },
+
+  /**
+   * A mode chip was clicked. Business is immediate; Sole trader switches
+   * mode then acts on the prefetched autofill result so the signup popup
+   * (when needed) opens in the same synchronous gesture as the click.
+   */
+  onModeChipClick: function (mode) {
+    if (mode === "business") {
+      twoincSoleTrader.setMode("business");
       return;
     }
+    twoincSoleTrader.setMode("sole_trader");
+    const pf = twoincSoleTrader.prefetched;
+    if (pf.ready && pf.matches && pf.buyer) {
+      twoincSoleTrader.setCompany(pf.buyer.organization_number, pf.buyer.company_name);
+      twoincSoleTrader.showNote(false);
+    } else if (pf.ready) {
+      // Prefetch resolved with no matching buyer → signup. Opening here keeps
+      // the user gesture intact so the popup is not blocker-killed.
+      twoincSoleTrader.launchSignup();
+    } else {
+      // Prefetch not ready (e.g. no email entered yet): fall back to the link.
+      twoincSoleTrader.showNote(true);
+    }
+  },
+
+  /**
+   * Switch mode and toggle the company-search suppression. No token/buyer
+   * work happens here — that is owned by the email-driven prefetch and the
+   * chip-click handler.
+   */
+  setMode: function (mode) {
     twoincSoleTrader.mode = mode;
-    jQuery(".twoinc-sole-trader-toggle input[name='two_account_type']").each(function () {
-      this.checked = this.value === mode;
-    });
+    twoincSoleTrader.updateChips();
 
     if (mode === "sole_trader") {
       // Suppress company search by the same lever the "company not in
@@ -1128,13 +1203,10 @@ let twoincSoleTrader = {
         $display.select2("destroy");
       }
       jQuery("#company_not_in_btn, #search_company_btn").hide();
-      twoincSoleTrader.setCompany("", "");
       jQuery("#billing_company, #company_id").prop("readonly", true);
       twoincDomHelper.toggleBusinessFields();
-      twoincSoleTrader.fetchTokens();
     } else {
-      twoincSoleTrader.tokens = null;
-      jQuery(".twoinc-sole-trader-toggle__prompt").addClass("hidden");
+      twoincSoleTrader.showNote(false);
       jQuery("#billing_company, #company_id").prop("readonly", false);
       if (twoincSoleTrader.savedCompanySearch !== null) {
         window.twoinc.enable_company_search = twoincSoleTrader.savedCompanySearch;
@@ -1144,6 +1216,70 @@ let twoincSoleTrader = {
       twoincDomHelper.toggleBusinessFields();
       Twoinc.getInstance().enableCompanySearch();
     }
+  },
+
+  /**
+   * Prefetch the autofill buyer for the entered email. Runs on every email
+   * change so the chip click can resolve synchronously. Mints tokens (needed
+   * for the signup popup) then reads the buyer on the Two cookie; a match is
+   * when that buyer owns the email currently typed at checkout.
+   */
+  onEmailChanged: function () {
+    if (!twoincSoleTrader.isAvailable()) {
+      return;
+    }
+    const email = twoincSoleTrader.enteredEmail();
+    // Dedupe repeated checkout re-renders firing for an unchanged email.
+    if (email === twoincSoleTrader.lastPrefetchEmail) {
+      return;
+    }
+    twoincSoleTrader.lastPrefetchEmail = email;
+    twoincSoleTrader.prefetched = { ready: false, buyer: null, matches: false };
+    if (!email) {
+      // No email to match → cannot be a known sole trader; leave business.
+      if (twoincSoleTrader.mode === "sole_trader") {
+        twoincSoleTrader.setMode("business");
+      }
+      return;
+    }
+    twoincSoleTrader.fetchTokens(function (ok) {
+      if (!ok) {
+        twoincSoleTrader.prefetched = { ready: true, buyer: null, matches: false };
+        twoincSoleTrader.applyPrefetch();
+        return;
+      }
+      twoincSoleTrader.fetchCurrentBuyer(function (buyer) {
+        const entered = twoincSoleTrader.enteredEmail().toLowerCase();
+        const matches = !!(buyer && buyer.email && String(buyer.email).toLowerCase() === entered);
+        twoincSoleTrader.prefetched = { ready: true, buyer: buyer, matches: matches };
+        twoincSoleTrader.applyPrefetch();
+      });
+    });
+  },
+
+  /**
+   * React to a resolved prefetch: a matching buyer auto-selects Sole trader
+   * and prefills the company; a non-match reverts an active Sole-trader
+   * selection back to Registered business (re-clicking then starts signup).
+   */
+  applyPrefetch: function () {
+    const pf = twoincSoleTrader.prefetched;
+    if (pf.matches && pf.buyer) {
+      twoincSoleTrader.setMode("sole_trader");
+      twoincSoleTrader.setCompany(pf.buyer.organization_number, pf.buyer.company_name);
+      twoincSoleTrader.showNote(false);
+    } else if (twoincSoleTrader.mode === "sole_trader") {
+      twoincSoleTrader.setMode("business");
+    }
+  },
+
+  /**
+   * Open the hosted signup popup, falling back to the visible link if the
+   * browser blocks the window (e.g. gesture lost after a slow prefetch).
+   */
+  launchSignup: function () {
+    const win = twoincSoleTrader.openPopup();
+    twoincSoleTrader.showNote(!win);
   },
 
   setCompany: function (companyId, companyName) {
@@ -1157,9 +1293,15 @@ let twoincSoleTrader = {
     }
   },
 
-  fetchTokens: function () {
+  /**
+   * Mint the delegation + autofill tokens. Invokes cb(true) once tokens are
+   * available (also binding the signup postMessage listener), cb(false) on
+   * any failure. Tokens are short-lived, so we re-mint on each email change.
+   */
+  fetchTokens: function (cb) {
     const cfg = twoincSoleTrader.config();
     if (!cfg.tokens_url) {
+      if (cb) cb(false);
       return;
     }
     jQuery
@@ -1168,23 +1310,24 @@ let twoincSoleTrader = {
         if (response && response.success && response.data && response.data.autofill_token) {
           twoincSoleTrader.tokens = response.data;
           twoincSoleTrader.bindPopupMessageListener();
-          twoincSoleTrader.getCurrentBuyer();
+          if (cb) cb(true);
         } else {
-          twoincSoleTrader.showError();
+          if (cb) cb(false);
         }
       })
       .fail(function () {
-        twoincSoleTrader.showError();
+        if (cb) cb(false);
       });
   },
 
   /**
-   * Autofill the company fields from the buyer's current Two sole-trader
-   * business. A 404 (or an email mismatch) means the buyer has no usable
-   * registration yet — show the signup prompt instead.
+   * Read the buyer on the Two cookie. Invokes cb(buyer) with the buyer
+   * details, or cb(null) when none exist (404) or on error. No UI side
+   * effects — the caller decides what to do with the result.
    */
-  getCurrentBuyer: function () {
+  fetchCurrentBuyer: function (cb) {
     if (!twoincSoleTrader.tokens) {
+      cb(null);
       return;
     }
     fetch(window.twoinc.twoinc_checkout_host + "/autofill/v1/buyer/current", {
@@ -1197,22 +1340,16 @@ let twoincSoleTrader = {
         throw new Error("autofill/v1/buyer/current failed");
       })
       .then(function (json) {
-        const checkoutEmail = jQuery("#billing_email").val();
-        if (json && json.email === checkoutEmail) {
-          twoincSoleTrader.setCompany(json.organization_number, json.company_name);
-          jQuery(".twoinc-sole-trader-toggle__prompt").addClass("hidden");
-        } else {
-          jQuery(".twoinc-sole-trader-toggle__prompt").removeClass("hidden");
-        }
+        cb(json || null);
       })
       .catch(function () {
-        twoincSoleTrader.showError();
+        cb(null);
       });
   },
 
   openPopup: function () {
     if (!twoincSoleTrader.tokens) {
-      return;
+      return null;
     }
     const prefill = {
       email: jQuery("#billing_email").val(),
@@ -1236,7 +1373,7 @@ let twoincSoleTrader = {
       encodeURIComponent(twoincSoleTrader.tokens.autofill_token) +
       "&autofillData=" +
       encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(prefill)))));
-    window.open(
+    return window.open(
       url,
       "_blank",
       "location=yes,resizable=yes,scrollbars=yes,status=yes,height=805,width=610"
@@ -1245,7 +1382,8 @@ let twoincSoleTrader = {
 
   /**
    * The hosted signup posts 'ACCEPTED' back to the opener when the buyer
-   * completes registration; re-fetch the buyer to autofill.
+   * completes registration; re-read the buyer (it now owns the entered
+   * email) and apply the result — autofilling and keeping Sole trader.
    */
   bindPopupMessageListener: function () {
     if (twoincSoleTrader.messageListenerBound) {
@@ -1261,7 +1399,15 @@ let twoincSoleTrader = {
         return;
       }
       if (event.data === "ACCEPTED") {
-        twoincSoleTrader.getCurrentBuyer();
+        twoincSoleTrader.fetchCurrentBuyer(function (buyer) {
+          const entered = twoincSoleTrader.enteredEmail().toLowerCase();
+          const matches = !!(buyer && buyer.email && String(buyer.email).toLowerCase() === entered);
+          twoincSoleTrader.prefetched = { ready: true, buyer: buyer, matches: matches };
+          if (matches) {
+            twoincSoleTrader.setCompany(buyer.organization_number, buyer.company_name);
+            twoincSoleTrader.showNote(false);
+          }
+        });
       } else {
         twoincSoleTrader.showError();
       }
@@ -1477,6 +1623,13 @@ class Twoinc {
 
     // Handle the country inputs change event
     $body.on("change", "#billing_country", self.onCountryInputChange);
+
+    // Re-evaluate the sole-trader autofill prefetch whenever the email
+    // changes, so a returning sole trader is auto-selected and the signup
+    // popup can open synchronously on the chip click.
+    $body.on("change", "#billing_email", function () {
+      twoincSoleTrader.onEmailChanged();
+    });
 
     $body.on("click", "#place_order", function () {
       clearInterval(Twoinc.getInstance().orderIntentCheck.interval);

@@ -229,29 +229,57 @@
 }
 
 /* Sole trader toggle (TWO-24754) */
+/*
+ * Sole-trader mode chips + signup note. Palette mirrors the Magento
+ * .mode_selector / .mode_item toggle: brand-blue text on white for the
+ * unselected chip, solid brand blue with white text when selected.
+ */
 .twoinc-sole-trader-toggle {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
-  margin: 8px 0;
+  margin: 12px 0;
 }
 .twoinc-sole-trader-toggle.hidden {
   display: none;
 }
-.twoinc-sole-trader-toggle__option {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin: 0;
+.twoinc-mode-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.twoinc-mode-item {
+  text-align: center;
+  padding: 5px 12px;
+  border-radius: 5px;
+  border: 1px solid #c4c9e8;
+  color: #3043d1;
+  background-color: #fff;
   cursor: pointer;
+  user-select: none;
 }
-.twoinc-sole-trader-toggle__prompt {
-  flex-basis: 100%;
-  text-decoration: underline;
+.twoinc-mode-item--selected {
+  color: #fff;
+  background-color: #3043d1;
+  border-color: #3043d1;
 }
-.twoinc-sole-trader-toggle__prompt.hidden {
+.twoinc-sole-trader-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  color: #6b6b6b;
+}
+.twoinc-sole-trader-note.hidden {
   display: none;
+}
+.twoinc-sole-trader-note svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+.twoinc-sole-trader-note__link {
+  color: #3043d1;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
 }
 .twoinc-sole-trader-toggle__error {
   flex-basis: 100%;
