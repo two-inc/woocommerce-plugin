@@ -601,7 +601,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                  * Filter the confirmation URL sent to the Two API.
                  *
                  * Brand overlays use their own confirmation route (e.g.
-                 * abn-payment-gateway/confirm); without this hook an overlay
+                 * example-overlay-gateway/confirm); without this hook an overlay
                  * would have to duplicate process_payment().
                  *
                  * @param string $confirmation_url Default confirmation URL.

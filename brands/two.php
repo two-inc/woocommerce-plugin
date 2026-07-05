@@ -55,4 +55,13 @@ return [
     // Buyer-facing label for the offset-pricing fee line; null uses the
     // translated "Service charge" default.
     'fee_line_label' => null,
+    // Short tagline rendered under the payment-method title at checkout,
+    // above the about block. '' renders nothing (the Two default).
+    // WC_Twoinc::get_pay_subtitle is the only reader. Mirrors the
+    // Magento brand descriptor's checkout_subtitle.
+    'checkout_subtitle' => '',
+    // Contact address shown in the admin API-key field help for
+    // obtaining production keys. WC_Twoinc::init_form_fields is the only
+    // reader. A brand overlay substitutes its own support address.
+    'production_key_contact_email' => 'integration@two.inc',
 ];

@@ -150,6 +150,9 @@ final class BrandConfigSpec
         TinyAssert::same('https://portal.two.inc/auth/merchant/signup', WC_Twoinc_Brand::get('sign_up_url'));
         TinyAssert::same(WC_TWOINC_PLUGIN_URL . 'assets/images/two-logo.svg', WC_Twoinc_Brand::get('logo_url'));
         TinyAssert::same('Business invoice - %s days', WC_Twoinc_Brand::get('title_default'));
+        // Two ships no checkout subtitle; an overlay supplies one.
+        TinyAssert::same('', WC_Twoinc_Brand::get('checkout_subtitle'));
+        TinyAssert::same('integration@two.inc', WC_Twoinc_Brand::get('production_key_contact_email'));
         TinyAssert::same(null, WC_Twoinc_Brand::get('not_a_key'));
     }
 
@@ -212,13 +215,13 @@ final class BrandConfigSpec
         $captured = [];
         add_filter('twoinc_confirmation_url', static function ($url, $order_id) use (&$captured) {
             $captured = [$url, $order_id];
-            return 'https://shop.example/abn-payment-gateway/confirm?order_id=' . $order_id;
+            return 'https://shop.example/example-overlay-gateway/confirm?order_id=' . $order_id;
         }, 10, 2);
 
         $body = self::composeOrder();
 
         TinyAssert::same(
-            'https://shop.example/abn-payment-gateway/confirm?order_id=42',
+            'https://shop.example/example-overlay-gateway/confirm?order_id=42',
             $body['merchant_urls']['merchant_confirmation_url']
         );
         TinyAssert::true(strpos($captured[0], '/twoinc-payment-gateway/confirm?order_id=42') !== false, 'Filter must receive the default URL: ' . $captured[0]);
