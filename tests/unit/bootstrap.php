@@ -85,6 +85,11 @@ function is_admin()
     return false;
 }
 
+function is_wc_endpoint_url($endpoint = false)
+{
+    return $endpoint === 'order-pay' && !empty($GLOBALS['__twoinc_test_is_order_pay']);
+}
+
 function get_woocommerce_currency()
 {
     return $GLOBALS['__twoinc_test_currency'] ?? 'EUR';
@@ -130,16 +135,23 @@ class StubCart
 {
     public $total;
     private $total_tax;
+    private $is_empty;
 
-    public function __construct($total, $total_tax = 0.0)
+    public function __construct($total, $total_tax = 0.0, $is_empty = false)
     {
         $this->total = $total;
         $this->total_tax = $total_tax;
+        $this->is_empty = $is_empty;
     }
 
     public function get_total_tax()
     {
         return $this->total_tax;
+    }
+
+    public function is_empty()
+    {
+        return $this->is_empty;
     }
 }
 
