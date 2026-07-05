@@ -18,7 +18,7 @@ jobs:
     runs-on: ${{ vars.RUNNER_STANDARD }}
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Authenticate to Google Cloud
         id: gcp-auth
