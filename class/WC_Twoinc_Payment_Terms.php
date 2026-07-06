@@ -74,17 +74,19 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          * offered, so none is sent and the backend applies the account default
          * (parity with the pre-feature behaviour on main).
          *
+         * Cache-only by default — this seam is reached from the gateway
+         * constructor, cart totals and wc-ajax, none of which may block on
+         * HTTP. Pass `$refresh = true` only from the sanctioned refresh
+         * points (checkout render bootstrap; the admin field render has its
+         * own path via get_payment_term_day_options).
+         *
          * @return int[]
          */
-        public static function get_available_terms($gateway): array
+        public static function get_available_terms($gateway, bool $refresh = false): array
         {
-            // The backend's offerable set (empty until a merchant record has
-            // resolved). method_exists guards the unit-test gateway fakes,
-            // which extend WC_Payment_Gateway rather than WC_Twoinc.
-            $backend_terms = method_exists($gateway, 'get_merchant_available_terms')
-                ? $gateway->get_merchant_available_terms()
-                : [];
-            $backend_terms = is_array($backend_terms) ? array_map('intval', $backend_terms) : [];
+            // The backend's offerable set (empty until a merchant record
+            // has resolved).
+            $backend_terms = array_map('intval', $gateway->get_merchant_available_terms($refresh));
 
             $terms = [];
             $admin_subset = $gateway->get_option('payment_terms_days');
@@ -424,20 +426,26 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         public static function apply_cart_fee($cart): void
         {
             $gateway = WC_Twoinc::get_instance();
-            if (!$gateway || !self::is_enabled($gateway)) {
+            if (!$gateway) {
                 return;
             }
+            // Cheap gates first: surcharge configured, and this gateway is
+            // the chosen payment method. The hook is registered globally
+            // (see load_twoinc_classes), so it also fires on the cart page
+            // and before any method is selected; require an explicit match
+            // rather than "apply unless another is chosen" so the surcharge
+            // never leaks onto a non-Two context — and so the term-set
+            // resolution below never runs for visitors who aren't paying
+            // with Two.
             $settings = self::get_surcharge_settings($gateway);
             if (!$settings['enabled']) {
                 return;
             }
-            // Only charge when this gateway is the chosen payment method. The
-            // hook is registered globally (see load_twoinc_classes), so it
-            // also fires on the cart page and before any method is selected;
-            // require an explicit match rather than "apply unless another is
-            // chosen" so the surcharge never leaks onto a non-Two context.
             $chosen = function_exists('WC') && (WC()->session ?? null) ? WC()->session->get('chosen_payment_method') : null;
             if ($chosen !== $gateway->id) {
+                return;
+            }
+            if (!self::is_enabled($gateway)) {
                 return;
             }
 

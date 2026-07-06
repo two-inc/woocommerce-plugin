@@ -54,6 +54,9 @@ final class BrandConfigSpec
             'testConfirmationPageDetectionFollowsBrandPrefix',
             'testPaymentTermsResolveBackendIntersectAdminSubset',
             'testMerchantAvailableTermsFetchNormalisesCachesAndServesStale',
+            'testMerchantAvailableTermsInvalidatedOnMerchantIdChange',
+            'testPaymentTermsValidationNonDestructiveOnUnresolvedOrNarrowedList',
+            'testSurchargeGridPreservesRowsForUnrenderedTerms',
             'testPaymentTermsSelectorVisibleOnlyWithMultiple',
             'testPaymentTermsDefaultFallsBackToShortest',
             'testBuyerFeeShareShapes',
@@ -119,7 +122,7 @@ final class BrandConfigSpec
                 return $this->test_platform_minimum;
             }
 
-            public function get_merchant_available_terms(): array
+            public function get_merchant_available_terms(bool $refresh = false): array
             {
                 // A typical resolved merchant record (TWO-24812); the fetch/
                 // cache protocol has its own dedicated test.
@@ -587,7 +590,7 @@ final class BrandConfigSpec
                 return $this->options[$key] ?? $empty_value ?? '';
             }
 
-            public function get_merchant_available_terms(): array
+            public function get_merchant_available_terms(bool $refresh = false): array
             {
                 return $this->merchant_terms;
             }
@@ -624,21 +627,6 @@ final class BrandConfigSpec
         $gateway = self::termsGateway(['payment_terms_custom_days' => '45']);
         TinyAssert::same([45], WC_Twoinc_Payment_Terms::get_available_terms($gateway));
         TinyAssert::true(WC_Twoinc_Payment_Terms::is_enabled($gateway));
-
-        // A gateway without the merchant accessor (defensive seam guard)
-        // resolves no presets rather than erroring
-        $bare = new class () extends WC_Payment_Gateway {
-            public function __construct()
-            {
-                $this->id = WC_Twoinc_Brand::get('gateway_id');
-            }
-
-            public function get_option($key, $empty_value = null)
-            {
-                return $key === 'payment_terms_days' ? ['30'] : '';
-            }
-        };
-        TinyAssert::same([], WC_Twoinc_Payment_Terms::get_available_terms($bare));
     }
 
     private static function testMerchantAvailableTermsFetchNormalisesCachesAndServesStale(): void
@@ -678,37 +666,177 @@ final class BrandConfigSpec
             $gateway->options['merchant_available_terms_last_checked_on'] = time() - 901;
         };
 
-        // First resolve: normalised (ints, dedup, non-positive dropped, sorted)
-        $gateway->responses[] = ['response' => ['code' => 200], 'body' => json_encode(['available_terms' => [60, 30, 30, 0, -5, 90]])];
-        TinyAssert::same([30, 60, 90], $gateway->get_merchant_available_terms());
+        // Default (cache-only) read NEVER fetches, even with a cold cache —
+        // the seam is reached from the constructor / cart totals / wc-ajax,
+        // none of which may block on HTTP.
+        TinyAssert::same([], $gateway->get_merchant_available_terms());
+        TinyAssert::same(0, $gateway->calls);
+
+        // First refresh: normalised (ints, dedup, non-positive dropped,
+        // non-numeric dropped rather than intval'd to a phantom 1, sorted)
+        $gateway->responses[] = ['response' => ['code' => 200], 'body' => json_encode(['available_terms' => [60, 30, 30, 0, -5, 90, [7], true, null]])];
+        TinyAssert::same([30, 60, 90], $gateway->get_merchant_available_terms(true));
         TinyAssert::same(1, $gateway->calls);
 
-        // Within the TTL: served from the cached option, no request
+        // Within the TTL: served from the cached option, no request —
+        // and cache-only reads see the refreshed list
+        TinyAssert::same([30, 60, 90], $gateway->get_merchant_available_terms(true));
         TinyAssert::same([30, 60, 90], $gateway->get_merchant_available_terms());
         TinyAssert::same(1, $gateway->calls);
 
         // Fetch failure after expiry: last-known list served, not blanked
         $expire();
         $gateway->responses[] = new WP_Error('http_request_failed', 'down');
-        TinyAssert::same([30, 60, 90], $gateway->get_merchant_available_terms());
+        TinyAssert::same([30, 60, 90], $gateway->get_merchant_available_terms(true));
+        TinyAssert::same(2, $gateway->calls);
+
+        // ...and the failure still bumped the TTL clock: an immediate
+        // re-refresh does NOT hammer the API (one stall per TTL, not per view)
+        TinyAssert::same([30, 60, 90], $gateway->get_merchant_available_terms(true));
         TinyAssert::same(2, $gateway->calls);
 
         // Successful response WITHOUT the field (older backend): stale kept
         $expire();
         $gateway->responses[] = ['response' => ['code' => 200], 'body' => json_encode(['due_in_days' => 14])];
-        TinyAssert::same([30, 60, 90], $gateway->get_merchant_available_terms());
+        TinyAssert::same([30, 60, 90], $gateway->get_merchant_available_terms(true));
 
         // Successful explicit [] : the backend says nothing is offerable
         $expire();
         $gateway->responses[] = ['response' => ['code' => 200], 'body' => json_encode(['available_terms' => []])];
-        TinyAssert::same([], $gateway->get_merchant_available_terms());
+        TinyAssert::same([], $gateway->get_merchant_available_terms(true));
 
-        // No API key: no fetch attempted, empty set
+        // No API key: no fetch attempted even on refresh, empty set
         $bare = clone $gateway;
         $bare->options = [];
         $bare->calls = 0;
-        TinyAssert::same([], $bare->get_merchant_available_terms());
+        TinyAssert::same([], $bare->get_merchant_available_terms(true));
         TinyAssert::same(0, $bare->calls);
+    }
+
+    private static function testMerchantAvailableTermsInvalidatedOnMerchantIdChange(): void
+    {
+        $gateway = new class () extends WC_Twoinc {
+            public $options = [
+                'api_key' => 'key',
+                'merchant_id' => 'old-merchant',
+                'merchant_available_terms' => '[30,60]',
+                'merchant_available_terms_last_checked_on' => 999,
+            ];
+            public $responses = [];
+
+            public function __construct()
+            {
+            }
+
+            public function get_twoinc_checkout_host()
+            {
+                return 'https://api.example';
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                return $this->options[$key] ?? $empty_value ?? '';
+            }
+
+            public function update_option($key, $value = '')
+            {
+                $this->options[$key] = $value;
+                return true;
+            }
+
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            {
+                return array_shift($this->responses);
+            }
+        };
+
+        // Saved key re-verifies to a DIFFERENT merchant: the old merchant's
+        // cached term list must be dropped (serve-stale would otherwise pin
+        // it under the new identity).
+        $gateway->responses[] = ['response' => ['code' => 200], 'body' => json_encode(['id' => 'new-merchant', 'short_name' => 'nm'])];
+        $gateway->verify_api_key();
+        TinyAssert::same('new-merchant', $gateway->options['merchant_id']);
+        TinyAssert::same('', $gateway->options['merchant_available_terms']);
+        TinyAssert::same('', $gateway->options['merchant_available_terms_last_checked_on']);
+
+        // Same merchant re-verifying does NOT drop the cache
+        $gateway->options['merchant_available_terms'] = '[30,60]';
+        $gateway->options['merchant_available_terms_last_checked_on'] = 999;
+        $gateway->responses[] = ['response' => ['code' => 200], 'body' => json_encode(['id' => 'new-merchant', 'short_name' => 'nm'])];
+        $gateway->verify_api_key();
+        TinyAssert::same('[30,60]', $gateway->options['merchant_available_terms']);
+    }
+
+    private static function testPaymentTermsValidationNonDestructiveOnUnresolvedOrNarrowedList(): void
+    {
+        // Unresolved backend list (fresh install first save, or API down on
+        // a cold cache): the checkboxes were never rendered, so an empty
+        // POST is not a merchant choice — stored selection survives, no
+        // mandatory-selection throw.
+        $gateway = self::validationGateway(['payment_terms_days' => [30, 60]], []);
+        TinyAssert::same([30, 60], $gateway->validate_two_payment_terms_field('payment_terms_days', []));
+
+        // Narrowed list between render and save: a previously saved tick
+        // outside the current backend list still saves (read-time intersect
+        // enforces the live list; save-time must not erase the tick).
+        $gateway = self::validationGateway(['payment_terms_days' => [30, 60]], [30, 90]);
+        TinyAssert::same([30, 60], $gateway->validate_two_payment_terms_field('payment_terms_days', ['30', '60']));
+
+        // A day in neither the backend list nor the stored subset still drops
+        $gateway = self::validationGateway(['payment_terms_days' => [30]], [30, 60]);
+        TinyAssert::same([30], $gateway->validate_two_payment_terms_field('payment_terms_days', ['30', '17']));
+    }
+
+    private static function testSurchargeGridPreservesRowsForUnrenderedTerms(): void
+    {
+        // The grid renders rows only for the currently offered set; a saved
+        // row for a term the backend has (transiently) withdrawn is not
+        // posted and must survive the save untouched.
+        $gateway = self::validationGateway(
+            [
+                'payment_terms_days' => [30],
+                'surcharge_grid' => [60 => ['percentage' => '2.5'], 30 => ['fixed' => '9']],
+            ],
+            [30]
+        );
+        $saved = $gateway->validate_two_surcharge_grid_field('surcharge_grid', [30 => ['fixed' => '5']]);
+        TinyAssert::same(['fixed' => '5'], $saved[30]);
+        TinyAssert::same(['percentage' => '2.5'], $saved[60]);
+    }
+
+    /**
+     * WC_Twoinc fake for validator tests: in-memory options plus an
+     * injectable backend term list (cache-only accessor).
+     */
+    private static function validationGateway(array $options, array $merchant_terms): WC_Twoinc
+    {
+        return new class ($options, $merchant_terms) extends WC_Twoinc {
+            public $options;
+            private $merchant_terms;
+
+            public function __construct($options = [], $merchant_terms = [])
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+                $this->options = $options;
+                $this->merchant_terms = $merchant_terms;
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                return $this->options[$key] ?? $empty_value ?? '';
+            }
+
+            public function update_option($key, $value = '')
+            {
+                $this->options[$key] = $value;
+                return true;
+            }
+
+            public function get_merchant_available_terms(bool $refresh = false): array
+            {
+                return $this->merchant_terms;
+            }
+        };
     }
 
     private static function testPaymentTermsSelectorVisibleOnlyWithMultiple(): void

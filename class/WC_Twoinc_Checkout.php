@@ -231,6 +231,11 @@ if (!class_exists('WC_Twoinc_Checkout')) {
         {
             $currency = get_woocommerce_currency();
 
+            // Checkout render is the sanctioned refresh point for the
+            // backend term list (TWO-24812) — every other seam read is
+            // cache-only, so resolve once here and reuse below.
+            $offered_terms = WC_Twoinc_Payment_Terms::get_available_terms($this->wc_twoinc, true);
+
             // TODO: Make this dynamic based on active merchant payee accounts
             $supported_buyer_countries = WC_Twoinc_Brand::get('supported_buyer_countries');
 
@@ -263,8 +268,8 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     'days_label' => __('%s days', 'twoinc-payment-gateway'),
                     // Chip chooser shows only with >1 offered term; a single term
                     // is applied silently (fee still applies via apply_cart_fee).
-                    'enabled' => WC_Twoinc_Payment_Terms::is_selector_visible($this->wc_twoinc),
-                    'terms' => WC_Twoinc_Payment_Terms::get_available_terms($this->wc_twoinc),
+                    'enabled' => count($offered_terms) > 1,
+                    'terms' => $offered_terms,
                     'selected' => WC_Twoinc_Payment_Terms::get_selected_term($this->wc_twoinc),
                     'offset_pricing_enabled' => WC_Twoinc_Payment_Terms::get_surcharge_settings($this->wc_twoinc)['enabled'],
                     'fees_url' => class_exists('WC_AJAX') ? WC_AJAX::get_endpoint('two_term_fees') : '',
