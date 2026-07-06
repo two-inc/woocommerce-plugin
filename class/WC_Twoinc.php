@@ -476,7 +476,7 @@ if (!class_exists('WC_Twoinc')) {
                 '<div>
                     <div class="twoinc-pay-box twoinc-explainer">%s</div>
                     <div class="twoinc-sole-trader-toggle hidden" role="radiogroup"></div>
-                    ' . $term_input . '
+                    %s
                     <div class="twoinc-term-chips hidden" role="radiogroup"></div>
                     <div class="twoinc-pay-box twoinc-loader hidden"></div>
                     <div class="twoinc-pay-box twoinc-intent-approved hidden">%s</div>
@@ -484,6 +484,7 @@ if (!class_exists('WC_Twoinc')) {
                     <div class="twoinc-pay-box twoinc-err-phone-number hidden">%s</div>
                 </div>',
                 sprintf(__('%s lets your business pay later for the goods you purchase online.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')),
+                $term_input,
                 sprintf(__('Your invoice purchase with %s is likely to be accepted subject to additional checks.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')),
                 sprintf(__('Invoice purchase with %s is not available for this order.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')),
                 __('Phone number is invalid.', 'twoinc-payment-gateway')
@@ -682,7 +683,11 @@ if (!class_exists('WC_Twoinc')) {
             $stored = $this->get_option($key);
             foreach (is_array($stored) ? $stored : [] as $days => $row) {
                 $days = (int) $days;
-                if ($days > 0 && is_array($row) && !array_key_exists($days, $posted) && !isset($clean[$days])) {
+                // A key only counts as "rendered" when it posted the row's
+                // input array — a malformed scalar entry must not delete
+                // the stored row as if it had been deliberately blanked.
+                $was_rendered = array_key_exists($days, $posted) && is_array($posted[$days]);
+                if ($days > 0 && is_array($row) && !$was_rendered && !isset($clean[$days])) {
                     $clean[$days] = $row;
                 }
             }
@@ -839,13 +844,27 @@ if (!class_exists('WC_Twoinc')) {
          */
         public function validate_default_payment_term_field($key, $value)
         {
+            $options = $this->get_payment_term_day_options();
+
+            // Unresolved backend list: the checkbox field never rendered,
+            // so nothing (or only the custom term) posted — that is not a
+            // merchant decision about the default. Keep the stored value
+            // BEFORE the custom-term append below, or a saved custom term
+            // would silently repoint the default on an API-blip save. Same
+            // degrade path as validate_two_payment_terms_field; read-time
+            // get_default_term repairs any residual incoherence.
+            if (count($options) === 0) {
+                $current = $this->get_option($key);
+                return is_scalar($current) ? (string) $current : '';
+            }
+
             $offered = [];
             // Same union as validate_two_payment_terms_field: a previously
             // saved day survives a backend list that narrowed between render
             // and save, so the default must not be repointed off it either.
             $stored = $this->get_option('payment_terms_days');
             $stored = is_array($stored) ? array_map('intval', $stored) : [];
-            $allowed = array_map('intval', array_keys($this->get_payment_term_day_options()));
+            $allowed = array_map('intval', array_keys($options));
             $allowed = array_values(array_unique(array_merge($allowed, $stored)));
 
             $terms_key = $this->get_field_key('payment_terms_days');
@@ -873,10 +892,9 @@ if (!class_exists('WC_Twoinc')) {
             if (count($offered) > 0) {
                 return (string) $offered[0];
             }
-            // Nothing offered means nothing was rendered/posted (unresolved
-            // backend list) — keep the stored default rather than blanking
-            // it, the same degrade path as validate_two_payment_terms_field.
-            return (string) $this->get_option($key);
+            // Rendered but nothing survived (all ticks removed and rejected
+            // upstream) — no coherent default to point at.
+            return '';
         }
 
         /**
@@ -3005,6 +3023,10 @@ if (!class_exists('WC_Twoinc')) {
         {
             if ($this->get_option('clear_options_on_deactivation') === 'yes') {
                 delete_option('woocommerce_' . $this->id . '_settings');
+                // The merchant term-list cache lives outside the settings
+                // blob (dedicated wp_options) — clear it too, or "clear
+                // options on deactivation" leaves orphaned rows behind.
+                $this->invalidate_merchant_available_terms();
             }
         }
 

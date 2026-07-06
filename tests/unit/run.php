@@ -707,11 +707,15 @@ final class BrandConfigSpec
         $gateway->responses[] = ['response' => ['code' => 200], 'body' => json_encode(['available_terms' => []])];
         TinyAssert::same([], $gateway->get_merchant_available_terms(true));
 
-        // No API key: no fetch attempted even on refresh, empty set
+        // No API key: no fetch attempted even on refresh. The TTL must be
+        // expired and a sentinel response queued, or this would pass on the
+        // TTL gate alone without ever exercising the api_key guard.
+        $expire();
         $bare = clone $gateway;
         $bare->options = [];
         $bare->calls = 0;
-        TinyAssert::same([], $bare->get_merchant_available_terms(true));
+        $bare->responses = [['response' => ['code' => 200], 'body' => json_encode(['available_terms' => [7]])]];
+        $bare->get_merchant_available_terms(true);
         TinyAssert::same(0, $bare->calls);
     }
 
@@ -796,6 +800,18 @@ final class BrandConfigSpec
         // rendered/posted keeps the stored default rather than blanking it
         $gateway = self::validationGateway(['payment_terms_days' => [30, 60], 'default_payment_term' => '60'], []);
         TinyAssert::same('60', $gateway->validate_default_payment_term_field('default_payment_term', ''));
+
+        // ...and a saved custom term must not punch through it: with the
+        // checkbox field unrendered, the posted custom term (the only thing
+        // the degraded form can post) must not repoint the stored default
+        $gateway = self::validationGateway(
+            ['payment_terms_days' => [30, 60], 'default_payment_term' => '30', 'payment_terms_custom_days' => '45'],
+            []
+        );
+        $custom_key = $gateway->get_field_key('payment_terms_custom_days');
+        $_POST[$custom_key] = '45';
+        TinyAssert::same('30', $gateway->validate_default_payment_term_field('default_payment_term', '45'));
+        unset($_POST[$custom_key]);
     }
 
     private static function testSurchargeGridPreservesRowsNotOnTheForm(): void
