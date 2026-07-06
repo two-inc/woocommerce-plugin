@@ -312,6 +312,109 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
+         * The merchant's offerable payment terms (net days, ascending) from
+         * `available_terms` on GET /v1/merchant/{id} — the backend resolves
+         * them from the merchant's pricing packages, so this is the
+         * authoritative set the admin narrows from (TWO-24812; the brand
+         * file no longer carries a term list). Empty means either the set
+         * cannot currently be resolved (no API key yet, no successful fetch
+         * yet) or the backend explicitly returned an empty list (nothing
+         * offerable) — in both cases no terms are offered and the backend
+         * applies the account default, the same degrade posture as
+         * Magento's SettingsProvider.
+         *
+         * By default this only READS the cached option — it never blocks on
+         * HTTP, because the terms seam is reached from contexts that must
+         * not stall (the gateway constructor via init_form_fields, cart
+         * totals, wc-ajax). A refresh (15-minute TTL, 10s request cap) runs
+         * only where `$refresh = true` is passed: the checkout render
+         * bootstrap and the admin payment-terms field render. The stored
+         * list is only overwritten by a successful response carrying an
+         * `available_terms` array; a fetch failure (or an older backend
+         * omitting the field) serves the last-known list for another TTL
+         * rather than blanking the checkout's term set on an API blip.
+         *
+         * This is the third independent reader of GET /v1/merchant in this
+         * class (see get_merchant_default_days_on_invoice and
+         * get_platform_minimum_order) — deliberate for diff size, not
+         * design; consolidating into one request-memoised merchant-record
+         * fetch is TWO-25024.
+         *
+         * The cache lives in two dedicated brand-prefixed wp_options, NOT
+         * the gateway settings blob: WC_Settings_API::update_option rewrites
+         * the entire settings array from this request's in-memory snapshot,
+         * so a checkout-render refresh writing into the blob could silently
+         * revert a concurrent admin settings save wholesale.
+         *
+         * @param bool $refresh allow a TTL-gated fetch on this call
+         * @return int[]
+         */
+        public function get_merchant_available_terms(bool $refresh = false): array
+        {
+            $terms_option = WC_Twoinc_Brand::prefixed_name('merchant_available_terms');
+            $checked_option = WC_Twoinc_Brand::prefixed_name('merchant_available_terms_checked_on');
+            $checked_on = get_option($checked_option);
+
+            if ($refresh && (!$checked_on || ((int) $checked_on + 900) <= time())) {
+                $merchant_id = $this->get_merchant_id();
+                if ($merchant_id && $this->get_option('api_key')) {
+                    // On a render path even when refreshing, so cap well
+                    // under make_request's 30s default.
+                    $response = $this->make_request("/v1/merchant/{$merchant_id}", [], 'GET', array(), null, 10);
+                    if (
+                        !is_wp_error($response)
+                        && !WC_Twoinc_Helper::get_twoinc_error_msg($response)
+                        && $response
+                        && $response['body']
+                    ) {
+                        $body = json_decode($response['body'], true);
+                        $terms = is_array($body) ? ($body['available_terms'] ?? null) : null;
+                        if (is_array($terms)) {
+                            // is_numeric guard: a malformed element (nested
+                            // array, bool) must not intval to a phantom
+                            // "1 day" term.
+                            $days = array_values(array_unique(array_filter(
+                                array_map(
+                                    static function ($t) {
+                                        return is_numeric($t) ? (int) $t : 0;
+                                    },
+                                    $terms
+                                ),
+                                static function ($t) {
+                                    return $t > 0;
+                                }
+                            )));
+                            sort($days);
+                            update_option($terms_option, wp_json_encode($days), false);
+                        }
+                    }
+                    update_option($checked_option, time(), false);
+                }
+            }
+
+            $cached = get_option($terms_option);
+            if (!$cached) {
+                return [];
+            }
+            $terms = json_decode((string) $cached, true);
+            return is_array($terms) ? array_map('intval', $terms) : [];
+        }
+
+        /**
+         * Drop the cached merchant term list. Called when the merchant
+         * identity changes (new API key, new merchant id) — serve-stale
+         * caching must never serve the OLD merchant's terms under a new
+         * identity, and the stale entry would otherwise never self-heal
+         * (the refetch against a mismatched id fails, which the serve-stale
+         * posture keeps).
+         */
+        private function invalidate_merchant_available_terms(): void
+        {
+            delete_option(WC_Twoinc_Brand::prefixed_name('merchant_available_terms'));
+            delete_option(WC_Twoinc_Brand::prefixed_name('merchant_available_terms_checked_on'));
+        }
+
+        /**
          * Get about twoinc html
          */
         private function get_abt_twoinc_html()
@@ -350,11 +453,30 @@ if (!class_exists('WC_Twoinc')) {
          */
         private function get_pay_box_description()
         {
+            // The selected term rides the checkout form post so
+            // process_payment can validate it without the session. The chips
+            // JS maintains its own hidden input INSIDE the chips container
+            // (later in the DOM, so it wins the POST when chips render);
+            // this server-side one covers the single-term case, where the
+            // chip chooser never renders and JS posts nothing (TWO-24812 —
+            // a withdrawn single term must abort, not silently re-price).
+            $term_input = '';
+            if (class_exists('WC_Twoinc_Payment_Terms') && WC_Twoinc_Payment_Terms::is_enabled($this)) {
+                $selected = WC_Twoinc_Payment_Terms::get_selected_term($this);
+                if ($selected !== null) {
+                    $term_input = sprintf(
+                        '<input type="hidden" name="%s" value="%d" />',
+                        esc_attr(WC_Twoinc_Payment_Terms::SESSION_KEY),
+                        $selected
+                    );
+                }
+            }
 
             return sprintf(
                 '<div>
                     <div class="twoinc-pay-box twoinc-explainer">%s</div>
                     <div class="twoinc-sole-trader-toggle hidden" role="radiogroup"></div>
+                    %s
                     <div class="twoinc-term-chips hidden" role="radiogroup"></div>
                     <div class="twoinc-pay-box twoinc-loader hidden"></div>
                     <div class="twoinc-pay-box twoinc-intent-approved hidden">%s</div>
@@ -362,6 +484,7 @@ if (!class_exists('WC_Twoinc')) {
                     <div class="twoinc-pay-box twoinc-err-phone-number hidden">%s</div>
                 </div>',
                 sprintf(__('%s lets your business pay later for the goods you purchase online.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')),
+                $term_input,
                 sprintf(__('Your invoice purchase with %s is likely to be accepted subject to additional checks.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')),
                 sprintf(__('Invoice purchase with %s is not available for this order.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')),
                 __('Phone number is invalid.', 'twoinc-payment-gateway')
@@ -369,16 +492,18 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * Admin option list of the brand's term days, for the payment-terms
-         * settings fields.
+         * Admin option list of the merchant's offerable term days (from
+         * GET /v1/merchant `available_terms`), for the payment-terms
+         * settings fields. Mirrors Magento's AvailablePaymentTerms source
+         * model: the backend owns which terms exist; the admin narrows.
          *
+         * @param bool $refresh allow a TTL-gated fetch (admin field render only)
          * @return array<string, string>
          */
-        private function get_payment_term_day_options(): array
+        private function get_payment_term_day_options(bool $refresh = false): array
         {
             $options = [];
-            $brand_terms = WC_Twoinc_Brand::get('available_terms');
-            foreach (is_array($brand_terms) ? $brand_terms : [] as $days) {
+            foreach ($this->get_merchant_available_terms($refresh) as $days) {
                 $options[strval((int) $days)] = sprintf(__('%s days', 'twoinc-payment-gateway'), (int) $days);
             }
             return $options;
@@ -509,10 +634,11 @@ if (!class_exists('WC_Twoinc')) {
         public function validate_two_surcharge_grid_field($key, $value)
         {
             $clean = [];
-            if (!is_array($value)) {
-                return $clean;
-            }
-            foreach ($value as $days => $cols) {
+            // A non-array POST means NO grid rows were rendered (empty term
+            // list at render time) — fall through to the preservation loop
+            // rather than wiping the stored grid.
+            $posted = is_array($value) ? $value : [];
+            foreach ($posted as $days => $cols) {
                 $days = (int) $days;
                 if ($days <= 0 || !is_array($cols)) {
                     continue;
@@ -544,14 +670,36 @@ if (!class_exists('WC_Twoinc')) {
                     $clean[$days] = $row;
                 }
             }
+
+            // Preserve stored rows for terms whose row was NOT on the form.
+            // A rendered row always posts its three inputs (even blank), so
+            // absence from the POSTed array — not the live term set, which
+            // can shift between render and save (backend-sourced, and the
+            // sibling payment_terms_days field validates first) — is the
+            // honest "never rendered" signal. A rendered-and-blanked row
+            // posts its key, lands nothing in $clean, and is deliberately
+            // dropped; an unrendered stored row survives untouched for the
+            // term the backend (or the admin's ticks) later restores.
+            $stored = $this->get_option($key);
+            foreach (is_array($stored) ? $stored : [] as $days => $row) {
+                $days = (int) $days;
+                // A key only counts as "rendered" when it posted the row's
+                // input array — a malformed scalar entry must not delete
+                // the stored row as if it had been deliberately blanked.
+                $was_rendered = array_key_exists($days, $posted) && is_array($posted[$days]);
+                if ($days > 0 && is_array($row) && !$was_rendered && !isset($clean[$days])) {
+                    $clean[$days] = $row;
+                }
+            }
             return $clean;
         }
 
         /**
          * Render the "Payment Terms" checkboxes (WC Settings API custom field
-         * `two_payment_terms`). One checkbox per term the brand makes available;
-         * the merchant ticks which to offer the buyer. Stored as a single option
-         * array of int day counts (the offered subset). Mirrors Magento's
+         * `two_payment_terms`). One checkbox per term the merchant's account
+         * makes available (GET /v1/merchant `available_terms`); the merchant
+         * ticks which to offer the buyer. Stored as a single option array of
+         * int day counts (the offered subset). Mirrors Magento's
          * PaymentTermsCheckboxes admin field.
          */
         public function generate_two_payment_terms_html($key, $data)
@@ -560,7 +708,9 @@ if (!class_exists('WC_Twoinc')) {
             $data = wp_parse_args($data, ['title' => '', 'description' => '', 'desc_tip' => false]);
             $stored = $this->get_option($key);
             $stored = is_array($stored) ? array_map('intval', $stored) : [];
-            $options = $this->get_payment_term_day_options();
+            // The admin field render is one of the two sanctioned refresh
+            // points (the other is the checkout render bootstrap).
+            $options = $this->get_payment_term_day_options(true);
             if (count($stored) === 0 && count($options) > 0) {
                 // Prepopulate the shortest available term so the form never loads
                 // with no selection (a selection is mandatory on save).
@@ -584,7 +734,7 @@ if (!class_exists('WC_Twoinc')) {
                 </th>
                 <td class="forminp">
                     <?php if (empty($options)) : ?>
-                        <p><?php esc_html_e('No payment terms are available for this brand.', 'twoinc-payment-gateway'); ?></p>
+                        <p><?php esc_html_e('No payment terms are available from your merchant account yet. Check that a valid API key is saved; if it is, the term list will load on the next refresh.', 'twoinc-payment-gateway'); ?></p>
                     <?php else : ?>
                     <fieldset class="twoinc-term-checkboxes"<?php echo $show_fees ? ' data-fees="1"' : ''; ?>>
                         <?php foreach ($options as $value => $label) :
@@ -611,7 +761,7 @@ if (!class_exists('WC_Twoinc')) {
 
         /**
          * Validate the posted "Payment Terms" checkboxes into a sorted array of
-         * unique int day counts, restricted to the brand's available terms.
+         * unique int day counts, restricted to the merchant's available terms.
          *
          * A selection is mandatory on save. "No selection" is well-defined
          * internally (an empty offer falls through to the account default), but
@@ -623,7 +773,28 @@ if (!class_exists('WC_Twoinc')) {
          */
         public function validate_two_payment_terms_field($key, $value)
         {
+            $stored = $this->get_option($key);
+            $stored = is_array($stored) ? array_values(array_unique(array_map('intval', $stored))) : [];
+
+            // Cache-only read: the list the checkboxes were rendered from.
             $allowed = array_map('intval', array_keys($this->get_payment_term_day_options()));
+
+            // Unresolved (or explicitly empty) backend set: the checkboxes
+            // were never rendered, so an empty POST is not a merchant
+            // choice — keep the stored selection untouched rather than
+            // erasing it or throwing the mandatory-selection error (a fresh
+            // install's first API-key save lands here).
+            if (count($allowed) === 0) {
+                return $stored;
+            }
+
+            // Non-destructive against a list that narrowed between render
+            // and save: a previously saved day stays saveable even if the
+            // current backend list no longer carries it. The read-time
+            // intersect in WC_Twoinc_Payment_Terms enforces the live list;
+            // save-time filtering must not permanently erase the tick.
+            $allowed = array_values(array_unique(array_merge($allowed, $stored)));
+
             $clean = [];
             if (is_array($value)) {
                 foreach ($value as $day) {
@@ -673,8 +844,28 @@ if (!class_exists('WC_Twoinc')) {
          */
         public function validate_default_payment_term_field($key, $value)
         {
+            $options = $this->get_payment_term_day_options();
+
+            // Unresolved backend list: the checkbox field never rendered,
+            // so nothing (or only the custom term) posted — that is not a
+            // merchant decision about the default. Keep the stored value
+            // BEFORE the custom-term append below, or a saved custom term
+            // would silently repoint the default on an API-blip save. Same
+            // degrade path as validate_two_payment_terms_field; read-time
+            // get_default_term repairs any residual incoherence.
+            if (count($options) === 0) {
+                $current = $this->get_option($key);
+                return is_scalar($current) ? (string) $current : '';
+            }
+
             $offered = [];
-            $allowed = array_map('intval', array_keys($this->get_payment_term_day_options()));
+            // Same union as validate_two_payment_terms_field: a previously
+            // saved day survives a backend list that narrowed between render
+            // and save, so the default must not be repointed off it either.
+            $stored = $this->get_option('payment_terms_days');
+            $stored = is_array($stored) ? array_map('intval', $stored) : [];
+            $allowed = array_map('intval', array_keys($options));
+            $allowed = array_values(array_unique(array_merge($allowed, $stored)));
 
             $terms_key = $this->get_field_key('payment_terms_days');
             $posted_terms = isset($_POST[$terms_key]) ? (array) $_POST[$terms_key] : []; // phpcs:ignore WordPress.Security.NonceVerification.Missing
@@ -698,7 +889,12 @@ if (!class_exists('WC_Twoinc')) {
             if (in_array($value, $offered, true)) {
                 return (string) $value;
             }
-            return count($offered) > 0 ? (string) $offered[0] : '';
+            if (count($offered) > 0) {
+                return (string) $offered[0];
+            }
+            // Rendered but nothing survived (all ticks removed and rejected
+            // upstream) — no coherent default to point at.
+            return '';
         }
 
         /**
@@ -778,6 +974,12 @@ if (!class_exists('WC_Twoinc')) {
                 if ($code == 200 && isset($body['id']) && !$api_key) {
                     // Only persist when verifying the saved API key. verify_api_key
                     // returns {id, short_name}; cache both for the settings display.
+                    if ((string) $this->get_option('merchant_id') !== (string) $body['id']) {
+                        // Different merchant resolved: the cached term list
+                        // belongs to the old identity and must not be served
+                        // (serve-stale would otherwise pin it — TWO-24812).
+                        $this->invalidate_merchant_available_terms();
+                    }
                     $this->update_option('merchant_id', $body['id']);
                     $this->update_option('merchant_short_name', isset($body['short_name']) ? (string) $body['short_name'] : '');
                 }
@@ -1517,6 +1719,28 @@ if (!class_exists('WC_Twoinc')) {
             if ($brand_validation_error) {
                 WC_Twoinc_Helper::display_ajax_error($brand_validation_error);
                 return;
+            }
+
+            // The backend-sourced term list can change between checkout
+            // render and submit (TWO-24812). A buyer whose selected term was
+            // withdrawn must re-confirm against the current set — silently
+            // falling back to the default term could charge a different
+            // (potentially higher) surcharge than the total they approved.
+            // The count($offered) > 0 exemption is deliberate fail-open: an
+            // EMPTY set at submit (mid-session cache invalidation, backend
+            // explicit []) sends no term block and drops the surcharge —
+            // the order proceeds on pre-feature behaviour rather than
+            // hard-blocking every checkout on a cold cache. Do not "tighten"
+            // this to abort on an empty set.
+            if (class_exists('WC_Twoinc_Payment_Terms')) {
+                $posted_term = isset($_POST[WC_Twoinc_Payment_Terms::SESSION_KEY]) ? (int) $_POST[WC_Twoinc_Payment_Terms::SESSION_KEY] : 0;
+                $offered = WC_Twoinc_Payment_Terms::get_available_terms($this);
+                if ($posted_term > 0 && count($offered) > 0 && !in_array($posted_term, $offered, true)) {
+                    WC_Twoinc_Helper::display_ajax_error(
+                        __('The selected payment term is no longer available. Please review the payment options and place the order again.', 'twoinc-payment-gateway')
+                    );
+                    return;
+                }
             }
 
             // Get data
@@ -2799,6 +3023,10 @@ if (!class_exists('WC_Twoinc')) {
         {
             if ($this->get_option('clear_options_on_deactivation') === 'yes') {
                 delete_option('woocommerce_' . $this->id . '_settings');
+                // The merchant term-list cache lives outside the settings
+                // blob (dedicated wp_options) — clear it too, or "clear
+                // options on deactivation" leaves orphaned rows behind.
+                $this->invalidate_merchant_available_terms();
             }
         }
 
@@ -2832,6 +3060,14 @@ if (!class_exists('WC_Twoinc')) {
             if ($api_key_in_post && $api_key) {
                 $result = $this->verify_api_key($api_key);
                 if (isset($result['body']) && isset($result['code']) && $result['code'] == 200) {
+                    if ((string) $api_key !== (string) $this->get_option('api_key')) {
+                        // Key changed → possibly a different merchant. Drop
+                        // the cached term list now; verify_api_key only
+                        // re-resolves merchant_id on the NEXT admin pageload,
+                        // and serve-stale caching must not bridge identities
+                        // in the meantime (TWO-24812).
+                        $this->invalidate_merchant_available_terms();
+                    }
                     WC_Admin_Settings::add_message(sprintf(__('%s API key verified.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')));
                 } else {
                     // Invalid key: keep previous API key, save other settings

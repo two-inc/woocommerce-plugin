@@ -8,13 +8,14 @@
  * business-logic rewrite, see TWO-24767).
  *
  * Term availability: `get_available_terms()` is the single seam. It resolves
- * the merchant's ticked presets (brand `available_terms` ∩ admin subset) plus
- * an optional custom term. An empty result means "offer nothing" — no term is
- * sent and the backend applies the account default (pre-feature behaviour). The
+ * the merchant's ticked presets (backend `available_terms` from GET
+ * /v1/merchant ∩ admin subset — TWO-24812, the planned convergence: the
+ * backend owns which terms are offered, the admin narrows) plus an optional
+ * custom term. An empty result means "offer nothing" — no term is sent and
+ * the backend applies the account default (pre-feature behaviour). The
  * merchant cannot save into that empty state once terms are configured (see
- * WC_Twoinc::validate_two_payment_terms_field). When the backend grows a
- * term-availability surface (planned convergence — backend owns which terms are
- * offered) only this method changes. Do not read term lists anywhere else.
+ * WC_Twoinc::validate_two_payment_terms_field). Do not read term lists
+ * anywhere else.
  *
  * Fee arithmetic is never done plugin-side: the offset settings are posted to
  * POST /v1/pricing/order/fee as a `buyer_fee_share` block and the backend
@@ -65,24 +66,33 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          * The terms offered at checkout, ascending. THE availability seam —
          * see the file header before adding another term-list read.
          *
-         * The merchant's ticked presets (intersected with the brand's available
-         * terms) plus an optional custom term (unioned in — it may sit outside
-         * the brand's preset list). An empty result is meaningful: no term is
+         * The merchant's ticked presets (intersected with the backend's
+         * `available_terms` from GET /v1/merchant, so a term the backend has
+         * withdrawn drops out even while a stale admin subset still lists it)
+         * plus an optional custom term (unioned in — it may sit outside the
+         * backend's preset list). An empty result is meaningful: no term is
          * offered, so none is sent and the backend applies the account default
          * (parity with the pre-feature behaviour on main).
          *
+         * Cache-only by default — this seam is reached from the gateway
+         * constructor, cart totals and wc-ajax, none of which may block on
+         * HTTP. Pass `$refresh = true` only from the sanctioned refresh
+         * points (checkout render bootstrap; the admin field render has its
+         * own path via get_payment_term_day_options).
+         *
          * @return int[]
          */
-        public static function get_available_terms($gateway): array
+        public static function get_available_terms($gateway, bool $refresh = false): array
         {
-            $brand_terms = WC_Twoinc_Brand::get('available_terms');
-            $brand_terms = is_array($brand_terms) ? array_map('intval', $brand_terms) : [];
+            // The backend's offerable set (empty until a merchant record
+            // has resolved).
+            $backend_terms = array_map('intval', $gateway->get_merchant_available_terms($refresh));
 
             $terms = [];
             $admin_subset = $gateway->get_option('payment_terms_days');
-            if (is_array($admin_subset) && count($admin_subset) > 0 && count($brand_terms) > 0) {
+            if (is_array($admin_subset) && count($admin_subset) > 0 && count($backend_terms) > 0) {
                 $admin_subset = array_map('intval', $admin_subset);
-                $terms = array_values(array_intersect($brand_terms, $admin_subset));
+                $terms = array_values(array_intersect($backend_terms, $admin_subset));
             }
 
             // Custom term offered alongside the presets (Magento parity:
@@ -416,20 +426,26 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         public static function apply_cart_fee($cart): void
         {
             $gateway = WC_Twoinc::get_instance();
-            if (!$gateway || !self::is_enabled($gateway)) {
+            if (!$gateway) {
                 return;
             }
+            // Cheap gates first: surcharge configured, and this gateway is
+            // the chosen payment method. The hook is registered globally
+            // (see load_twoinc_classes), so it also fires on the cart page
+            // and before any method is selected; require an explicit match
+            // rather than "apply unless another is chosen" so the surcharge
+            // never leaks onto a non-Two context — and so the term-set
+            // resolution below never runs for visitors who aren't paying
+            // with Two.
             $settings = self::get_surcharge_settings($gateway);
             if (!$settings['enabled']) {
                 return;
             }
-            // Only charge when this gateway is the chosen payment method. The
-            // hook is registered globally (see load_twoinc_classes), so it
-            // also fires on the cart page and before any method is selected;
-            // require an explicit match rather than "apply unless another is
-            // chosen" so the surcharge never leaks onto a non-Two context.
             $chosen = function_exists('WC') && (WC()->session ?? null) ? WC()->session->get('chosen_payment_method') : null;
             if ($chosen !== $gateway->id) {
+                return;
+            }
+            if (!self::is_enabled($gateway)) {
                 return;
             }
 

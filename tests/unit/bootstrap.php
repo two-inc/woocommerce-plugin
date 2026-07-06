@@ -108,6 +108,18 @@ function get_option($key, $default = false)
     return $GLOBALS['__twoinc_test_options'][$key] ?? $default;
 }
 
+function update_option($key, $value, $autoload = null)
+{
+    $GLOBALS['__twoinc_test_options'][$key] = $value;
+    return true;
+}
+
+function delete_option($key)
+{
+    unset($GLOBALS['__twoinc_test_options'][$key]);
+    return true;
+}
+
 function WC()
 {
     static $wc = null;
@@ -333,6 +345,11 @@ class StubOrder
     {
         return 'https://shop.example/edit';
     }
+}
+
+function wp_json_encode($data, $options = 0, $depth = 512)
+{
+    return json_encode($data, $options, $depth);
 }
 
 function is_wp_error($thing)

@@ -41,11 +41,10 @@ return [
     // (merchant-saved titles always win). sprintf'd with the invoice
     // day count, so a brand default may carry one %s.
     'title_default' => 'Business invoice - %s days',
-    // Terms the brand may offer in the checkout chip selector (the
-    // merchant narrows the set in settings; WC_Twoinc_Payment_Terms is
-    // the only reader). Mirrors the Magento brand descriptor's
-    // available_payment_terms.
-    'available_terms' => [14, 30, 60, 90],
+    // NOTE: the offerable payment-term list no longer lives in the brand
+    // file — it is sourced per merchant from `available_terms` on
+    // GET /v1/merchant (TWO-24812). A brand overlay defining
+    // 'available_terms' has no effect.
     // Increments the buyer surcharge line may be rounded to, offered in
     // the admin Rounding Step dropdown (the merchant picks one; the None
     // basis disables rounding). WC_Twoinc::get_rounding_step_options is
