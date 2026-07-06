@@ -312,6 +312,66 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
+         * The merchant's offerable payment terms (net days, ascending) from
+         * `available_terms` on GET /v1/merchant/{id} — the backend resolves
+         * them from the merchant's pricing packages, so this is the
+         * authoritative set the admin narrows from (TWO-24812; the brand
+         * file no longer carries a term list). Empty means the set cannot
+         * currently be resolved (no API key yet, or no successful fetch) —
+         * no terms are offered and the backend applies the account default,
+         * the same degrade posture as Magento's SettingsProvider.
+         *
+         * Cached in options for 15 minutes following the
+         * get_platform_minimum_order() pattern, with one difference: the
+         * stored list is only overwritten by a successful response carrying
+         * an `available_terms` array. A fetch failure (or an older backend
+         * omitting the field) serves the last-known list for another TTL
+         * rather than blanking the checkout's term set on an API blip.
+         *
+         * @return int[]
+         */
+        public function get_merchant_available_terms(): array
+        {
+            $checked_on = $this->get_option('merchant_available_terms_last_checked_on');
+
+            if (!$checked_on || ((int) $checked_on + 900) <= time()) {
+                $merchant_id = $this->get_merchant_id();
+                if ($merchant_id && $this->get_option('api_key')) {
+                    // Sits on the checkout render path (via the terms seam),
+                    // so cap well under make_request's 30s default.
+                    $response = $this->make_request("/v1/merchant/{$merchant_id}", [], 'GET', array(), null, 10);
+                    if (
+                        !is_wp_error($response)
+                        && !WC_Twoinc_Helper::get_twoinc_error_msg($response)
+                        && $response
+                        && $response['body']
+                    ) {
+                        $body = json_decode($response['body'], true);
+                        $terms = is_array($body) ? ($body['available_terms'] ?? null) : null;
+                        if (is_array($terms)) {
+                            $days = array_values(array_unique(array_filter(
+                                array_map('intval', $terms),
+                                static function ($t) {
+                                    return $t > 0;
+                                }
+                            )));
+                            sort($days);
+                            $this->update_option('merchant_available_terms', wp_json_encode($days));
+                        }
+                    }
+                    $this->update_option('merchant_available_terms_last_checked_on', time());
+                }
+            }
+
+            $cached = $this->get_option('merchant_available_terms');
+            if (!$cached) {
+                return [];
+            }
+            $terms = json_decode((string) $cached, true);
+            return is_array($terms) ? array_map('intval', $terms) : [];
+        }
+
+        /**
          * Get about twoinc html
          */
         private function get_abt_twoinc_html()
@@ -369,16 +429,17 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * Admin option list of the brand's term days, for the payment-terms
-         * settings fields.
+         * Admin option list of the merchant's offerable term days (from
+         * GET /v1/merchant `available_terms`), for the payment-terms
+         * settings fields. Mirrors Magento's AvailablePaymentTerms source
+         * model: the backend owns which terms exist; the admin narrows.
          *
          * @return array<string, string>
          */
         private function get_payment_term_day_options(): array
         {
             $options = [];
-            $brand_terms = WC_Twoinc_Brand::get('available_terms');
-            foreach (is_array($brand_terms) ? $brand_terms : [] as $days) {
+            foreach ($this->get_merchant_available_terms() as $days) {
                 $options[strval((int) $days)] = sprintf(__('%s days', 'twoinc-payment-gateway'), (int) $days);
             }
             return $options;
@@ -549,9 +610,10 @@ if (!class_exists('WC_Twoinc')) {
 
         /**
          * Render the "Payment Terms" checkboxes (WC Settings API custom field
-         * `two_payment_terms`). One checkbox per term the brand makes available;
-         * the merchant ticks which to offer the buyer. Stored as a single option
-         * array of int day counts (the offered subset). Mirrors Magento's
+         * `two_payment_terms`). One checkbox per term the merchant's account
+         * makes available (GET /v1/merchant `available_terms`); the merchant
+         * ticks which to offer the buyer. Stored as a single option array of
+         * int day counts (the offered subset). Mirrors Magento's
          * PaymentTermsCheckboxes admin field.
          */
         public function generate_two_payment_terms_html($key, $data)
@@ -584,7 +646,7 @@ if (!class_exists('WC_Twoinc')) {
                 </th>
                 <td class="forminp">
                     <?php if (empty($options)) : ?>
-                        <p><?php esc_html_e('No payment terms are available for this brand.', 'twoinc-payment-gateway'); ?></p>
+                        <p><?php esc_html_e('No payment terms are available yet — they load from your merchant account once a valid API key is configured.', 'twoinc-payment-gateway'); ?></p>
                     <?php else : ?>
                     <fieldset class="twoinc-term-checkboxes"<?php echo $show_fees ? ' data-fees="1"' : ''; ?>>
                         <?php foreach ($options as $value => $label) :
@@ -611,7 +673,7 @@ if (!class_exists('WC_Twoinc')) {
 
         /**
          * Validate the posted "Payment Terms" checkboxes into a sorted array of
-         * unique int day counts, restricted to the brand's available terms.
+         * unique int day counts, restricted to the merchant's available terms.
          *
          * A selection is mandatory on save. "No selection" is well-defined
          * internally (an empty offer falls through to the account default), but

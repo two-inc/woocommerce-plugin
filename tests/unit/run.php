@@ -52,7 +52,8 @@ final class BrandConfigSpec
             'testMerchantMinimumValidationSkipsFloorCheckAcrossCurrencies',
             'testPaymentValidationErrorFilterVetoes',
             'testConfirmationPageDetectionFollowsBrandPrefix',
-            'testPaymentTermsResolveBrandIntersectAdminSubset',
+            'testPaymentTermsResolveBackendIntersectAdminSubset',
+            'testMerchantAvailableTermsFetchNormalisesCachesAndServesStale',
             'testPaymentTermsSelectorVisibleOnlyWithMultiple',
             'testPaymentTermsDefaultFallsBackToShortest',
             'testBuyerFeeShareShapes',
@@ -116,6 +117,13 @@ final class BrandConfigSpec
             public function get_platform_minimum_order()
             {
                 return $this->test_platform_minimum;
+            }
+
+            public function get_merchant_available_terms(): array
+            {
+                // A typical resolved merchant record (TWO-24812); the fetch/
+                // cache protocol has its own dedicated test.
+                return [14, 30, 60, 90];
             }
         };
     }
@@ -557,39 +565,58 @@ final class BrandConfigSpec
 
     /**
      * Gateway fake with configurable options for the payment-terms logic
-     * (the real gateway constructor needs a WooCommerce install).
+     * (the real gateway constructor needs a WooCommerce install). The
+     * merchant's backend `available_terms` set is injectable; the default
+     * mirrors a typical resolved merchant record (TWO-24812).
      */
-    private static function termsGateway(array $options): WC_Payment_Gateway
+    private static function termsGateway(array $options, array $merchant_terms = [14, 30, 60, 90]): WC_Payment_Gateway
     {
-        return new class ($options) extends WC_Payment_Gateway {
+        return new class ($options, $merchant_terms) extends WC_Payment_Gateway {
             private $options;
+            private $merchant_terms;
 
-            public function __construct($options)
+            public function __construct($options, $merchant_terms)
             {
                 $this->id = WC_Twoinc_Brand::get('gateway_id');
                 $this->options = $options;
+                $this->merchant_terms = $merchant_terms;
             }
 
             public function get_option($key, $empty_value = null)
             {
                 return $this->options[$key] ?? $empty_value ?? '';
             }
+
+            public function get_merchant_available_terms(): array
+            {
+                return $this->merchant_terms;
+            }
         };
     }
 
-    private static function testPaymentTermsResolveBrandIntersectAdminSubset(): void
+    private static function testPaymentTermsResolveBackendIntersectAdminSubset(): void
     {
         // No admin subset and no custom term: nothing offered → backend default
         $gateway = self::termsGateway([]);
         TinyAssert::same([], WC_Twoinc_Payment_Terms::get_available_terms($gateway));
         TinyAssert::same(false, WC_Twoinc_Payment_Terms::is_enabled($gateway));
 
-        // Admin narrows within the brand set; entries outside it drop
+        // Admin narrows within the backend set; entries outside it drop
         $gateway = self::termsGateway(['payment_terms_days' => ['60', '30', '7']]);
         TinyAssert::same([30, 60], WC_Twoinc_Payment_Terms::get_available_terms($gateway));
         TinyAssert::true(WC_Twoinc_Payment_Terms::is_enabled($gateway));
 
-        // A custom term is unioned in even when outside the brand presets
+        // A term the backend has withdrawn drops out even while the stale
+        // admin subset still ticks it (TWO-24812: backend list is source)
+        $gateway = self::termsGateway(['payment_terms_days' => ['30', '60']], [30]);
+        TinyAssert::same([30], WC_Twoinc_Payment_Terms::get_available_terms($gateway));
+
+        // Unresolved backend set (no record yet): presets gone, feature off
+        $gateway = self::termsGateway(['payment_terms_days' => ['30', '60']], []);
+        TinyAssert::same([], WC_Twoinc_Payment_Terms::get_available_terms($gateway));
+        TinyAssert::same(false, WC_Twoinc_Payment_Terms::is_enabled($gateway));
+
+        // A custom term is unioned in even when outside the backend presets
         $gateway = self::termsGateway(['payment_terms_days' => ['30'], 'payment_terms_custom_days' => '45']);
         TinyAssert::same([30, 45], WC_Twoinc_Payment_Terms::get_available_terms($gateway));
 
@@ -597,6 +624,91 @@ final class BrandConfigSpec
         $gateway = self::termsGateway(['payment_terms_custom_days' => '45']);
         TinyAssert::same([45], WC_Twoinc_Payment_Terms::get_available_terms($gateway));
         TinyAssert::true(WC_Twoinc_Payment_Terms::is_enabled($gateway));
+
+        // A gateway without the merchant accessor (defensive seam guard)
+        // resolves no presets rather than erroring
+        $bare = new class () extends WC_Payment_Gateway {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                return $key === 'payment_terms_days' ? ['30'] : '';
+            }
+        };
+        TinyAssert::same([], WC_Twoinc_Payment_Terms::get_available_terms($bare));
+    }
+
+    private static function testMerchantAvailableTermsFetchNormalisesCachesAndServesStale(): void
+    {
+        $gateway = new class () extends WC_Twoinc {
+            public $options = ['api_key' => 'key'];
+            public $responses = [];
+            public $calls = 0;
+
+            public function __construct()
+            {
+            }
+
+            public function get_merchant_id()
+            {
+                return 'mid';
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                return $this->options[$key] ?? $empty_value ?? '';
+            }
+
+            public function update_option($key, $value = '')
+            {
+                $this->options[$key] = $value;
+                return true;
+            }
+
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            {
+                $this->calls++;
+                return array_shift($this->responses);
+            }
+        };
+        $expire = static function () use ($gateway) {
+            $gateway->options['merchant_available_terms_last_checked_on'] = time() - 901;
+        };
+
+        // First resolve: normalised (ints, dedup, non-positive dropped, sorted)
+        $gateway->responses[] = ['response' => ['code' => 200], 'body' => json_encode(['available_terms' => [60, 30, 30, 0, -5, 90]])];
+        TinyAssert::same([30, 60, 90], $gateway->get_merchant_available_terms());
+        TinyAssert::same(1, $gateway->calls);
+
+        // Within the TTL: served from the cached option, no request
+        TinyAssert::same([30, 60, 90], $gateway->get_merchant_available_terms());
+        TinyAssert::same(1, $gateway->calls);
+
+        // Fetch failure after expiry: last-known list served, not blanked
+        $expire();
+        $gateway->responses[] = new WP_Error('http_request_failed', 'down');
+        TinyAssert::same([30, 60, 90], $gateway->get_merchant_available_terms());
+        TinyAssert::same(2, $gateway->calls);
+
+        // Successful response WITHOUT the field (older backend): stale kept
+        $expire();
+        $gateway->responses[] = ['response' => ['code' => 200], 'body' => json_encode(['due_in_days' => 14])];
+        TinyAssert::same([30, 60, 90], $gateway->get_merchant_available_terms());
+
+        // Successful explicit [] : the backend says nothing is offerable
+        $expire();
+        $gateway->responses[] = ['response' => ['code' => 200], 'body' => json_encode(['available_terms' => []])];
+        TinyAssert::same([], $gateway->get_merchant_available_terms());
+
+        // No API key: no fetch attempted, empty set
+        $bare = clone $gateway;
+        $bare->options = [];
+        $bare->calls = 0;
+        TinyAssert::same([], $bare->get_merchant_available_terms());
+        TinyAssert::same(0, $bare->calls);
     }
 
     private static function testPaymentTermsSelectorVisibleOnlyWithMultiple(): void

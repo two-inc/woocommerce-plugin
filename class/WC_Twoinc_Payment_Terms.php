@@ -8,13 +8,14 @@
  * business-logic rewrite, see TWO-24767).
  *
  * Term availability: `get_available_terms()` is the single seam. It resolves
- * the merchant's ticked presets (brand `available_terms` ∩ admin subset) plus
- * an optional custom term. An empty result means "offer nothing" — no term is
- * sent and the backend applies the account default (pre-feature behaviour). The
+ * the merchant's ticked presets (backend `available_terms` from GET
+ * /v1/merchant ∩ admin subset — TWO-24812, the planned convergence: the
+ * backend owns which terms are offered, the admin narrows) plus an optional
+ * custom term. An empty result means "offer nothing" — no term is sent and
+ * the backend applies the account default (pre-feature behaviour). The
  * merchant cannot save into that empty state once terms are configured (see
- * WC_Twoinc::validate_two_payment_terms_field). When the backend grows a
- * term-availability surface (planned convergence — backend owns which terms are
- * offered) only this method changes. Do not read term lists anywhere else.
+ * WC_Twoinc::validate_two_payment_terms_field). Do not read term lists
+ * anywhere else.
  *
  * Fee arithmetic is never done plugin-side: the offset settings are posted to
  * POST /v1/pricing/order/fee as a `buyer_fee_share` block and the backend
@@ -65,9 +66,11 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          * The terms offered at checkout, ascending. THE availability seam —
          * see the file header before adding another term-list read.
          *
-         * The merchant's ticked presets (intersected with the brand's available
-         * terms) plus an optional custom term (unioned in — it may sit outside
-         * the brand's preset list). An empty result is meaningful: no term is
+         * The merchant's ticked presets (intersected with the backend's
+         * `available_terms` from GET /v1/merchant, so a term the backend has
+         * withdrawn drops out even while a stale admin subset still lists it)
+         * plus an optional custom term (unioned in — it may sit outside the
+         * backend's preset list). An empty result is meaningful: no term is
          * offered, so none is sent and the backend applies the account default
          * (parity with the pre-feature behaviour on main).
          *
@@ -75,14 +78,19 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          */
         public static function get_available_terms($gateway): array
         {
-            $brand_terms = WC_Twoinc_Brand::get('available_terms');
-            $brand_terms = is_array($brand_terms) ? array_map('intval', $brand_terms) : [];
+            // The backend's offerable set (empty until a merchant record has
+            // resolved). method_exists guards the unit-test gateway fakes,
+            // which extend WC_Payment_Gateway rather than WC_Twoinc.
+            $backend_terms = method_exists($gateway, 'get_merchant_available_terms')
+                ? $gateway->get_merchant_available_terms()
+                : [];
+            $backend_terms = is_array($backend_terms) ? array_map('intval', $backend_terms) : [];
 
             $terms = [];
             $admin_subset = $gateway->get_option('payment_terms_days');
-            if (is_array($admin_subset) && count($admin_subset) > 0 && count($brand_terms) > 0) {
+            if (is_array($admin_subset) && count($admin_subset) > 0 && count($backend_terms) > 0) {
                 $admin_subset = array_map('intval', $admin_subset);
-                $terms = array_values(array_intersect($brand_terms, $admin_subset));
+                $terms = array_values(array_intersect($backend_terms, $admin_subset));
             }
 
             // Custom term offered alongside the presets (Magento parity:
