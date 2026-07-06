@@ -56,7 +56,7 @@ final class BrandConfigSpec
             'testMerchantAvailableTermsFetchNormalisesCachesAndServesStale',
             'testMerchantAvailableTermsInvalidatedOnMerchantIdChange',
             'testPaymentTermsValidationNonDestructiveOnUnresolvedOrNarrowedList',
-            'testSurchargeGridPreservesRowsForUnrenderedTerms',
+            'testSurchargeGridPreservesRowsNotOnTheForm',
             'testPaymentTermsSelectorVisibleOnlyWithMultiple',
             'testPaymentTermsDefaultFallsBackToShortest',
             'testBuyerFeeShareShapes',
@@ -91,6 +91,7 @@ final class BrandConfigSpec
         WC_Twoinc_Brand::reset();
         putenv('TWO_BRAND_CODE');
         unset($GLOBALS['__twoinc_test_currency']);
+        $GLOBALS['__twoinc_test_options'] = [];
         unset($_POST[WC_Twoinc_Payment_Terms::SESSION_KEY]);
         WC_Twoinc_Payment_Terms::reset_fee_cache();
         WC_Twoinc_Sole_Trader::reset_cache();
@@ -662,8 +663,9 @@ final class BrandConfigSpec
                 return array_shift($this->responses);
             }
         };
-        $expire = static function () use ($gateway) {
-            $gateway->options['merchant_available_terms_last_checked_on'] = time() - 901;
+        $checked_option = WC_Twoinc_Brand::prefixed_name('merchant_available_terms_checked_on');
+        $expire = static function () use ($checked_option) {
+            $GLOBALS['__twoinc_test_options'][$checked_option] = time() - 901;
         };
 
         // Default (cache-only) read NEVER fetches, even with a cold cache —
@@ -715,12 +717,15 @@ final class BrandConfigSpec
 
     private static function testMerchantAvailableTermsInvalidatedOnMerchantIdChange(): void
     {
+        $terms_option = WC_Twoinc_Brand::prefixed_name('merchant_available_terms');
+        $checked_option = WC_Twoinc_Brand::prefixed_name('merchant_available_terms_checked_on');
+        $GLOBALS['__twoinc_test_options'][$terms_option] = '[30,60]';
+        $GLOBALS['__twoinc_test_options'][$checked_option] = 999;
+
         $gateway = new class () extends WC_Twoinc {
             public $options = [
                 'api_key' => 'key',
                 'merchant_id' => 'old-merchant',
-                'merchant_available_terms' => '[30,60]',
-                'merchant_available_terms_last_checked_on' => 999,
             ];
             public $responses = [];
 
@@ -756,15 +761,16 @@ final class BrandConfigSpec
         $gateway->responses[] = ['response' => ['code' => 200], 'body' => json_encode(['id' => 'new-merchant', 'short_name' => 'nm'])];
         $gateway->verify_api_key();
         TinyAssert::same('new-merchant', $gateway->options['merchant_id']);
-        TinyAssert::same('', $gateway->options['merchant_available_terms']);
-        TinyAssert::same('', $gateway->options['merchant_available_terms_last_checked_on']);
+        TinyAssert::same(false, array_key_exists($terms_option, $GLOBALS['__twoinc_test_options']));
+        TinyAssert::same(false, array_key_exists($checked_option, $GLOBALS['__twoinc_test_options']));
+        TinyAssert::same([], $gateway->get_merchant_available_terms());
 
         // Same merchant re-verifying does NOT drop the cache
-        $gateway->options['merchant_available_terms'] = '[30,60]';
-        $gateway->options['merchant_available_terms_last_checked_on'] = 999;
+        $GLOBALS['__twoinc_test_options'][$terms_option] = '[30,60]';
+        $GLOBALS['__twoinc_test_options'][$checked_option] = 999;
         $gateway->responses[] = ['response' => ['code' => 200], 'body' => json_encode(['id' => 'new-merchant', 'short_name' => 'nm'])];
         $gateway->verify_api_key();
-        TinyAssert::same('[30,60]', $gateway->options['merchant_available_terms']);
+        TinyAssert::same('[30,60]', $GLOBALS['__twoinc_test_options'][$terms_option]);
     }
 
     private static function testPaymentTermsValidationNonDestructiveOnUnresolvedOrNarrowedList(): void
@@ -785,23 +791,55 @@ final class BrandConfigSpec
         // A day in neither the backend list nor the stored subset still drops
         $gateway = self::validationGateway(['payment_terms_days' => [30]], [30, 60]);
         TinyAssert::same([30], $gateway->validate_two_payment_terms_field('payment_terms_days', ['30', '17']));
+
+        // The default-term validator has the same degrade path: nothing
+        // rendered/posted keeps the stored default rather than blanking it
+        $gateway = self::validationGateway(['payment_terms_days' => [30, 60], 'default_payment_term' => '60'], []);
+        TinyAssert::same('60', $gateway->validate_default_payment_term_field('default_payment_term', ''));
     }
 
-    private static function testSurchargeGridPreservesRowsForUnrenderedTerms(): void
+    private static function testSurchargeGridPreservesRowsNotOnTheForm(): void
     {
-        // The grid renders rows only for the currently offered set; a saved
-        // row for a term the backend has (transiently) withdrawn is not
-        // posted and must survive the save untouched.
+        // Preservation keys on the POSTed row keys (what was actually on
+        // the form), not the live term set — the set can shift between
+        // render and save, and the sibling terms field validates first.
+
+        // A row for a withdrawn term is not posted and survives untouched
         $gateway = self::validationGateway(
-            [
-                'payment_terms_days' => [30],
-                'surcharge_grid' => [60 => ['percentage' => '2.5'], 30 => ['fixed' => '9']],
-            ],
+            ['surcharge_grid' => [60 => ['percentage' => '2.5'], 30 => ['fixed' => '9']]],
             [30]
         );
         $saved = $gateway->validate_two_surcharge_grid_field('surcharge_grid', [30 => ['fixed' => '5']]);
         TinyAssert::same(['fixed' => '5'], $saved[30]);
         TinyAssert::same(['percentage' => '2.5'], $saved[60]);
+
+        // Same-save re-tick: the term is back in the offered set, but its
+        // row was never rendered — the stored row must still survive
+        $gateway = self::validationGateway(
+            ['surcharge_grid' => [60 => ['percentage' => '2.5'], 30 => ['fixed' => '9']]],
+            [30, 60]
+        );
+        $saved = $gateway->validate_two_surcharge_grid_field('surcharge_grid', [30 => ['fixed' => '9']]);
+        TinyAssert::same(['percentage' => '2.5'], $saved[60]);
+
+        // No rows rendered at all (unresolved list → null POST): the whole
+        // stored grid survives instead of being wiped
+        $gateway = self::validationGateway(
+            ['surcharge_grid' => [60 => ['percentage' => '2.5'], 30 => ['fixed' => '9']]],
+            []
+        );
+        $saved = $gateway->validate_two_surcharge_grid_field('surcharge_grid', null);
+        TinyAssert::same(['fixed' => '9'], $saved[30]);
+        TinyAssert::same(['percentage' => '2.5'], $saved[60]);
+
+        // A rendered-and-blanked row posts its key with empty cells and is
+        // deliberately deleted (blanking is an edit, not an omission)
+        $gateway = self::validationGateway(
+            ['surcharge_grid' => [30 => ['fixed' => '9']]],
+            [30]
+        );
+        $saved = $gateway->validate_two_surcharge_grid_field('surcharge_grid', [30 => ['fixed' => '', 'percentage' => '', 'limit' => '']]);
+        TinyAssert::same(false, array_key_exists(30, $saved));
     }
 
     /**

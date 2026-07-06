@@ -340,12 +340,20 @@ if (!class_exists('WC_Twoinc')) {
          * design; consolidating into one request-memoised merchant-record
          * fetch is TWO-25024.
          *
+         * The cache lives in two dedicated brand-prefixed wp_options, NOT
+         * the gateway settings blob: WC_Settings_API::update_option rewrites
+         * the entire settings array from this request's in-memory snapshot,
+         * so a checkout-render refresh writing into the blob could silently
+         * revert a concurrent admin settings save wholesale.
+         *
          * @param bool $refresh allow a TTL-gated fetch on this call
          * @return int[]
          */
         public function get_merchant_available_terms(bool $refresh = false): array
         {
-            $checked_on = $this->get_option('merchant_available_terms_last_checked_on');
+            $terms_option = WC_Twoinc_Brand::prefixed_name('merchant_available_terms');
+            $checked_option = WC_Twoinc_Brand::prefixed_name('merchant_available_terms_checked_on');
+            $checked_on = get_option($checked_option);
 
             if ($refresh && (!$checked_on || ((int) $checked_on + 900) <= time())) {
                 $merchant_id = $this->get_merchant_id();
@@ -377,14 +385,14 @@ if (!class_exists('WC_Twoinc')) {
                                 }
                             )));
                             sort($days);
-                            $this->update_option('merchant_available_terms', wp_json_encode($days));
+                            update_option($terms_option, wp_json_encode($days), false);
                         }
                     }
-                    $this->update_option('merchant_available_terms_last_checked_on', time());
+                    update_option($checked_option, time(), false);
                 }
             }
 
-            $cached = $this->get_option('merchant_available_terms');
+            $cached = get_option($terms_option);
             if (!$cached) {
                 return [];
             }
@@ -402,8 +410,8 @@ if (!class_exists('WC_Twoinc')) {
          */
         private function invalidate_merchant_available_terms(): void
         {
-            $this->update_option('merchant_available_terms', '');
-            $this->update_option('merchant_available_terms_last_checked_on', '');
+            delete_option(WC_Twoinc_Brand::prefixed_name('merchant_available_terms'));
+            delete_option(WC_Twoinc_Brand::prefixed_name('merchant_available_terms_checked_on'));
         }
 
         /**
@@ -445,11 +453,30 @@ if (!class_exists('WC_Twoinc')) {
          */
         private function get_pay_box_description()
         {
+            // The selected term rides the checkout form post so
+            // process_payment can validate it without the session. The chips
+            // JS maintains its own hidden input INSIDE the chips container
+            // (later in the DOM, so it wins the POST when chips render);
+            // this server-side one covers the single-term case, where the
+            // chip chooser never renders and JS posts nothing (TWO-24812 —
+            // a withdrawn single term must abort, not silently re-price).
+            $term_input = '';
+            if (class_exists('WC_Twoinc_Payment_Terms') && WC_Twoinc_Payment_Terms::is_enabled($this)) {
+                $selected = WC_Twoinc_Payment_Terms::get_selected_term($this);
+                if ($selected !== null) {
+                    $term_input = sprintf(
+                        '<input type="hidden" name="%s" value="%d" />',
+                        esc_attr(WC_Twoinc_Payment_Terms::SESSION_KEY),
+                        $selected
+                    );
+                }
+            }
 
             return sprintf(
                 '<div>
                     <div class="twoinc-pay-box twoinc-explainer">%s</div>
                     <div class="twoinc-sole-trader-toggle hidden" role="radiogroup"></div>
+                    ' . $term_input . '
                     <div class="twoinc-term-chips hidden" role="radiogroup"></div>
                     <div class="twoinc-pay-box twoinc-loader hidden"></div>
                     <div class="twoinc-pay-box twoinc-intent-approved hidden">%s</div>
@@ -606,10 +633,11 @@ if (!class_exists('WC_Twoinc')) {
         public function validate_two_surcharge_grid_field($key, $value)
         {
             $clean = [];
-            if (!is_array($value)) {
-                return $clean;
-            }
-            foreach ($value as $days => $cols) {
+            // A non-array POST means NO grid rows were rendered (empty term
+            // list at render time) — fall through to the preservation loop
+            // rather than wiping the stored grid.
+            $posted = is_array($value) ? $value : [];
+            foreach ($posted as $days => $cols) {
                 $days = (int) $days;
                 if ($days <= 0 || !is_array($cols)) {
                     continue;
@@ -642,19 +670,19 @@ if (!class_exists('WC_Twoinc')) {
                 }
             }
 
-            // Preserve stored rows for terms that were not rendered (the
-            // grid only renders rows for the currently offered set, which
-            // is backend-sourced and can shrink transiently — TWO-24812).
-            // A row that was never on the form was never edited; dropping
-            // it would silently erase the surcharge config for a term the
-            // backend later restores.
-            $rendered = class_exists('WC_Twoinc_Payment_Terms')
-                ? WC_Twoinc_Payment_Terms::get_available_terms($this)
-                : [];
+            // Preserve stored rows for terms whose row was NOT on the form.
+            // A rendered row always posts its three inputs (even blank), so
+            // absence from the POSTed array — not the live term set, which
+            // can shift between render and save (backend-sourced, and the
+            // sibling payment_terms_days field validates first) — is the
+            // honest "never rendered" signal. A rendered-and-blanked row
+            // posts its key, lands nothing in $clean, and is deliberately
+            // dropped; an unrendered stored row survives untouched for the
+            // term the backend (or the admin's ticks) later restores.
             $stored = $this->get_option($key);
             foreach (is_array($stored) ? $stored : [] as $days => $row) {
                 $days = (int) $days;
-                if ($days > 0 && is_array($row) && !in_array($days, $rendered, true) && !isset($clean[$days])) {
+                if ($days > 0 && is_array($row) && !array_key_exists($days, $posted) && !isset($clean[$days])) {
                     $clean[$days] = $row;
                 }
             }
@@ -842,7 +870,13 @@ if (!class_exists('WC_Twoinc')) {
             if (in_array($value, $offered, true)) {
                 return (string) $value;
             }
-            return count($offered) > 0 ? (string) $offered[0] : '';
+            if (count($offered) > 0) {
+                return (string) $offered[0];
+            }
+            // Nothing offered means nothing was rendered/posted (unresolved
+            // backend list) — keep the stored default rather than blanking
+            // it, the same degrade path as validate_two_payment_terms_field.
+            return (string) $this->get_option($key);
         }
 
         /**
@@ -1674,6 +1708,12 @@ if (!class_exists('WC_Twoinc')) {
             // withdrawn must re-confirm against the current set — silently
             // falling back to the default term could charge a different
             // (potentially higher) surcharge than the total they approved.
+            // The count($offered) > 0 exemption is deliberate fail-open: an
+            // EMPTY set at submit (mid-session cache invalidation, backend
+            // explicit []) sends no term block and drops the surcharge —
+            // the order proceeds on pre-feature behaviour rather than
+            // hard-blocking every checkout on a cold cache. Do not "tighten"
+            // this to abort on an empty set.
             if (class_exists('WC_Twoinc_Payment_Terms')) {
                 $posted_term = isset($_POST[WC_Twoinc_Payment_Terms::SESSION_KEY]) ? (int) $_POST[WC_Twoinc_Payment_Terms::SESSION_KEY] : 0;
                 $offered = WC_Twoinc_Payment_Terms::get_available_terms($this);
