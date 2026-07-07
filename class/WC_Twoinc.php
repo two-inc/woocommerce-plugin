@@ -17,6 +17,11 @@ if (!class_exists('WC_Twoinc')) {
     {
         private static $instance;
 
+        // Per-request memo for GET /v1/merchant/{id} (TWO-25024): one wire
+        // fetch per request shared by every consumer, failures included.
+        private static $merchant_record = null;
+        private static $merchant_record_fetched = false;
+
         // BC-frozen: external integrations may read these constants, but all
         // runtime reads go through WC_Twoinc_Brand so overlays can rebrand.
         // They mirror brands/two.php; tests/unit pins them against drift.
@@ -207,45 +212,86 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * Get merchant's default due in day from DB, or from Twoinc DB
+         * The decoded GET /v1/merchant/{id} record, fetched at most once
+         * per PHP request — the memo covers failures too, so a hanging API
+         * costs a single capped stall per request instead of one per
+         * consumer (TWO-25024). Returns the decoded body, or null when the
+         * fetch failed or the plugin is not configured. Consumers own their
+         * TTL/degrade semantics; this owns the wire.
+         */
+        private function fetch_merchant_record(): ?array
+        {
+            if (self::$merchant_record_fetched) {
+                return self::$merchant_record;
+            }
+            self::$merchant_record_fetched = true;
+            self::$merchant_record = null;
+
+            $merchant_id = $this->get_merchant_id();
+            if (!$merchant_id || !$this->get_option('api_key')) {
+                return null;
+            }
+
+            // Reached from render paths (checkout bootstrap, admin field
+            // render, constructor via init_form_fields), so cap well under
+            // make_request's 30s default.
+            $response = $this->make_request("/v1/merchant/{$merchant_id}", [], 'GET', array(), null, 10);
+            if (
+                !is_wp_error($response)
+                && !WC_Twoinc_Helper::get_twoinc_error_msg($response)
+                && $response
+                && $response['body']
+            ) {
+                $body = json_decode($response['body'], true);
+                if (is_array($body)) {
+                    self::$merchant_record = $body;
+                }
+            }
+            return self::$merchant_record;
+        }
+
+        /**
+         * Reset the per-request merchant-record memo. Production code needs
+         * this only when the merchant identity changes mid-request (API key
+         * save); the unit harness uses it to simulate request boundaries.
+         */
+        public static function reset_merchant_record_memo(): void
+        {
+            self::$merchant_record = null;
+            self::$merchant_record_fetched = false;
+        }
+
+        /**
+         * Get merchant's default due in day from the option cache, or from
+         * the Two merchant record (1h TTL, defaults to 14 days).
+         *
+         * Cached in dedicated brand-prefixed wp_options, NOT the gateway
+         * settings blob — see get_merchant_available_terms() for why a
+         * frontend TTL-expiry write into the blob can silently revert a
+         * concurrent admin settings save.
          */
         public function get_merchant_default_days_on_invoice()
         {
+            $days_option = WC_Twoinc_Brand::prefixed_name('days_on_invoice');
+            $checked_option = WC_Twoinc_Brand::prefixed_name('days_on_invoice_checked_on');
 
-            $days_on_invoice = $this->get_option('days_on_invoice');
-            $days_on_invoice_last_checked_on = $this->get_option('days_on_invoice_last_checked_on');
-
-            // Default to 14 days
-            if (!$days_on_invoice) {
+            // Default to 14 days when nothing is cached
+            $days_on_invoice = (int) get_option($days_option);
+            if ($days_on_invoice <= 0) {
                 $days_on_invoice = 14;
             }
 
-            // if last checked is not within 1 hour, ask Two server
-            if (!$days_on_invoice_last_checked_on || ($days_on_invoice_last_checked_on + 3600) <= time()) {
-
-                $merchant_id = $this->get_merchant_id();
-
-                if ($merchant_id && $this->get_option('api_key')) {
-
-                    // Get the latest due
-                    $response = $this->make_request("/v1/merchant/{$merchant_id}", [], 'GET');
-
-                    if (!is_wp_error($response)) {
-                        $twoinc_err = WC_Twoinc_Helper::get_twoinc_error_msg($response);
-                        if (!$twoinc_err && $response && $response['body']) {
-                            $body = json_decode($response['body'], true);
-                            if ($body['due_in_days']) {
-                                $days_on_invoice = $body['due_in_days'];
-                            } else {
-                                // If Twoinc DB has null value, also default to 14 days
-                                $days_on_invoice = 14;
-                            }
-                        }
-                    }
+            $checked_on = get_option($checked_option);
+            if (!$checked_on || ((int) $checked_on + 3600) <= time()) {
+                // Bump the clock before fetching: concurrent requests at
+                // expiry serve stale instead of stampeding the API.
+                update_option($checked_option, time(), false);
+                $record = $this->fetch_merchant_record();
+                if (is_array($record)) {
+                    // A null due_in_days on the record also means 14 days
+                    $days_on_invoice = !empty($record['due_in_days']) ? (int) $record['due_in_days'] : 14;
+                    update_option($days_option, $days_on_invoice, false);
                 }
-
-                $this->update_option('days_on_invoice', $days_on_invoice);
-                $this->update_option('days_on_invoice_last_checked_on', time());
             }
 
             return $days_on_invoice;
@@ -259,37 +305,33 @@ if (!class_exists('WC_Twoinc')) {
          * enforces at order create/intent), as
          * ['amount', 'currency', 'basis'] or null when none is configured.
          *
-         * Cached in options for 15 minutes following the
-         * get_days_on_invoice() pattern; the no-minimum outcome is cached
-         * too (the common case must not cost an API call per checkout
-         * render). A fetch failure resolves to no minimum: the server
-         * still enforces, and hiding the payment method on an API blip
-         * would be the worse failure.
+         * Cached for 15 minutes in dedicated brand-prefixed wp_options
+         * (never the settings blob); the no-minimum outcome is cached too
+         * (the common case must not cost an API call per checkout render).
+         * A fetch failure resolves to no minimum: the server still
+         * enforces, and hiding the payment method on an API blip would be
+         * the worse failure.
          *
          * @return array|null
          */
         public function get_platform_minimum_order()
         {
-            $checked_on = $this->get_option('platform_minimum_order_last_checked_on');
+            $minimum_option = WC_Twoinc_Brand::prefixed_name('platform_minimum_order');
+            $checked_option = WC_Twoinc_Brand::prefixed_name('platform_minimum_order_checked_on');
+            $checked_on = get_option($checked_option);
 
             if (!$checked_on || ((int) $checked_on + 900) <= time()) {
-                $merchant_id = $this->get_merchant_id();
-                if (!$merchant_id || !$this->get_option('api_key')) {
+                if (!$this->get_merchant_id() || !$this->get_option('api_key')) {
                     return null;
                 }
+                update_option($checked_option, time(), false);
 
                 $minimum = null;
-                $response = $this->make_request("/v1/merchant/{$merchant_id}", [], 'GET');
-                if (
-                    !is_wp_error($response)
-                    && !WC_Twoinc_Helper::get_twoinc_error_msg($response)
-                    && $response
-                    && $response['body']
-                ) {
-                    $body = json_decode($response['body'], true);
-                    $amount = $body['min_order_amount'] ?? null;
-                    $currency = $body['min_order_currency'] ?? null;
-                    $basis = $body['min_order_basis'] ?? null;
+                $record = $this->fetch_merchant_record();
+                if (is_array($record)) {
+                    $amount = $record['min_order_amount'] ?? null;
+                    $currency = $record['min_order_currency'] ?? null;
+                    $basis = $record['min_order_basis'] ?? null;
                     // The API omits all three fields when no minimum is
                     // configured; a partial or malformed tuple is treated
                     // the same way rather than gating on a guess.
@@ -306,12 +348,11 @@ if (!class_exists('WC_Twoinc')) {
                     }
                 }
 
-                $this->update_option('platform_minimum_order', $minimum ? wp_json_encode($minimum) : '');
-                $this->update_option('platform_minimum_order_last_checked_on', time());
+                update_option($minimum_option, $minimum ? wp_json_encode($minimum) : '', false);
                 return $minimum;
             }
 
-            $cached = $this->get_option('platform_minimum_order');
+            $cached = get_option($minimum_option);
             if (!$cached) {
                 return null;
             }
@@ -342,12 +383,6 @@ if (!class_exists('WC_Twoinc')) {
          * omitting the field) serves the last-known list for another TTL
          * rather than blanking the checkout's term set on an API blip.
          *
-         * This is the third independent reader of GET /v1/merchant in this
-         * class (see get_merchant_default_days_on_invoice and
-         * get_platform_minimum_order) — deliberate for diff size, not
-         * design; consolidating into one request-memoised merchant-record
-         * fetch is TWO-25024.
-         *
          * The cache lives in two dedicated brand-prefixed wp_options, NOT
          * the gateway settings blob: WC_Settings_API::update_option rewrites
          * the entire settings array from this request's in-memory snapshot,
@@ -364,39 +399,30 @@ if (!class_exists('WC_Twoinc')) {
             $checked_on = get_option($checked_option);
 
             if ($refresh && (!$checked_on || ((int) $checked_on + 900) <= time())) {
-                $merchant_id = $this->get_merchant_id();
-                if ($merchant_id && $this->get_option('api_key')) {
-                    // On a render path even when refreshing, so cap well
-                    // under make_request's 30s default.
-                    $response = $this->make_request("/v1/merchant/{$merchant_id}", [], 'GET', array(), null, 10);
-                    if (
-                        !is_wp_error($response)
-                        && !WC_Twoinc_Helper::get_twoinc_error_msg($response)
-                        && $response
-                        && $response['body']
-                    ) {
-                        $body = json_decode($response['body'], true);
-                        $terms = is_array($body) ? ($body['available_terms'] ?? null) : null;
-                        if (is_array($terms)) {
-                            // is_numeric guard: a malformed element (nested
-                            // array, bool) must not intval to a phantom
-                            // "1 day" term.
-                            $days = array_values(array_unique(array_filter(
-                                array_map(
-                                    static function ($t) {
-                                        return is_numeric($t) ? (int) $t : 0;
-                                    },
-                                    $terms
-                                ),
-                                static function ($t) {
-                                    return $t > 0;
-                                }
-                            )));
-                            sort($days);
-                            update_option($terms_option, wp_json_encode($days), false);
-                        }
-                    }
+                if ($this->get_merchant_id() && $this->get_option('api_key')) {
+                    // Bump the clock before fetching (stampede guard), and
+                    // on failure too: one stall per TTL, not per view.
                     update_option($checked_option, time(), false);
+                    $record = $this->fetch_merchant_record();
+                    $terms = is_array($record) ? ($record['available_terms'] ?? null) : null;
+                    if (is_array($terms)) {
+                        // is_numeric guard: a malformed element (nested
+                        // array, bool) must not intval to a phantom
+                        // "1 day" term.
+                        $days = array_values(array_unique(array_filter(
+                            array_map(
+                                static function ($t) {
+                                    return is_numeric($t) ? (int) $t : 0;
+                                },
+                                $terms
+                            ),
+                            static function ($t) {
+                                return $t > 0;
+                            }
+                        )));
+                        sort($days);
+                        update_option($terms_option, wp_json_encode($days), false);
+                    }
                 }
             }
 
@@ -409,17 +435,28 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * Drop the cached merchant term list. Called when the merchant
-         * identity changes (new API key, new merchant id) — serve-stale
-         * caching must never serve the OLD merchant's terms under a new
-         * identity, and the stale entry would otherwise never self-heal
-         * (the refetch against a mismatched id fails, which the serve-stale
-         * posture keeps).
+         * Drop every cached derivative of the merchant record (and the
+         * per-request memo). Called when the merchant identity changes
+         * (new API key, new merchant id) — serve-stale caching must never
+         * serve the OLD merchant's values under a new identity, and the
+         * stale entries would otherwise never self-heal (the refetch
+         * against a mismatched id fails, which the serve-stale posture
+         * keeps). Also the cleanup path for deactivation.
          */
-        private function invalidate_merchant_available_terms(): void
+        private function invalidate_merchant_record_caches(): void
         {
-            delete_option(WC_Twoinc_Brand::prefixed_name('merchant_available_terms'));
-            delete_option(WC_Twoinc_Brand::prefixed_name('merchant_available_terms_checked_on'));
+            self::reset_merchant_record_memo();
+            $names = [
+                'merchant_available_terms',
+                'merchant_available_terms_checked_on',
+                'days_on_invoice',
+                'days_on_invoice_checked_on',
+                'platform_minimum_order',
+                'platform_minimum_order_checked_on',
+            ];
+            foreach ($names as $name) {
+                delete_option(WC_Twoinc_Brand::prefixed_name($name));
+            }
         }
 
         /**
@@ -986,7 +1023,7 @@ if (!class_exists('WC_Twoinc')) {
                         // Different merchant resolved: the cached term list
                         // belongs to the old identity and must not be served
                         // (serve-stale would otherwise pin it — TWO-24812).
-                        $this->invalidate_merchant_available_terms();
+                        $this->invalidate_merchant_record_caches();
                     }
                     $this->update_option('merchant_id', $body['id']);
                     $this->update_option('merchant_short_name', isset($body['short_name']) ? (string) $body['short_name'] : '');
@@ -3083,10 +3120,11 @@ if (!class_exists('WC_Twoinc')) {
         {
             if ($this->get_option('clear_options_on_deactivation') === 'yes') {
                 delete_option('woocommerce_' . $this->id . '_settings');
-                // The merchant term-list cache lives outside the settings
-                // blob (dedicated wp_options) — clear it too, or "clear
-                // options on deactivation" leaves orphaned rows behind.
-                $this->invalidate_merchant_available_terms();
+                // The merchant-record caches (terms, days-on-invoice,
+                // platform minimum) live outside the settings blob in
+                // dedicated wp_options — clear them too, or "clear options
+                // on deactivation" leaves orphaned rows behind.
+                $this->invalidate_merchant_record_caches();
             }
         }
 
@@ -3126,7 +3164,7 @@ if (!class_exists('WC_Twoinc')) {
                         // re-resolves merchant_id on the NEXT admin pageload,
                         // and serve-stale caching must not bridge identities
                         // in the meantime (TWO-24812).
-                        $this->invalidate_merchant_available_terms();
+                        $this->invalidate_merchant_record_caches();
                     }
                     WC_Admin_Settings::add_message(sprintf(__('%s API key verified.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')));
                 } else {

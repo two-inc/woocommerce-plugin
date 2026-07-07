@@ -62,6 +62,7 @@ final class BrandConfigSpec
             'testMerchantAvailableTermsFetchNormalisesCachesAndServesStale',
             'testMerchantAvailableTermsInvalidatedOnMerchantIdChange',
             'testDeactivationCleanupClearsSettingsAndTermCache',
+            'testMerchantRecordFetchSharedAcrossConsumersAndOffTheBlob',
             'testPaymentTermsValidationNonDestructiveOnUnresolvedOrNarrowedList',
             'testSurchargeGridPreservesRowsNotOnTheForm',
             'testPaymentTermsSelectorVisibleOnlyWithMultiple',
@@ -102,6 +103,7 @@ final class BrandConfigSpec
         unset($_POST[WC_Twoinc_Payment_Terms::SESSION_KEY]);
         WC_Twoinc_Payment_Terms::reset_fee_cache();
         WC_Twoinc_Sole_Trader::reset_cache();
+        WC_Twoinc::reset_merchant_record_memo();
         WC()->cart = null;
         WC()->customer = null;
         foreach (['twoinc_brand_file', 'twoinc_checkout_fields', 'twoinc_confirmation_url', 'twoinc_order_payload', 'twoinc_payment_terms_line', 'two_order_create', 'twoinc_payment_validation_error', 'twoinc_sole_trader_signup_url', 'twoinc_shipping_details'] as $tag) {
@@ -868,6 +870,9 @@ final class BrandConfigSpec
         $checked_option = WC_Twoinc_Brand::prefixed_name('merchant_available_terms_checked_on');
         $expire = static function () use ($checked_option) {
             $GLOBALS['__twoinc_test_options'][$checked_option] = time() - 901;
+            // TTL expiry only ever happens across requests, so an expiry is
+            // also a request boundary for the per-request record memo.
+            WC_Twoinc::reset_merchant_record_memo();
         };
 
         // Default (cache-only) read NEVER fetches, even with a cold cache —
@@ -1035,6 +1040,86 @@ final class BrandConfigSpec
         TinyAssert::same(false, array_key_exists($settings_option, $GLOBALS['__twoinc_test_options']));
         TinyAssert::same(false, array_key_exists($terms_option, $GLOBALS['__twoinc_test_options']));
         TinyAssert::same(false, array_key_exists($checked_option, $GLOBALS['__twoinc_test_options']));
+    }
+
+    private static function testMerchantRecordFetchSharedAcrossConsumersAndOffTheBlob(): void
+    {
+        $gateway = new class () extends WC_Twoinc {
+            public $options = [
+                'api_key' => 'key',
+                'merchant_id' => 'mid',
+            ];
+            public $responses = [];
+            public $calls = 0;
+
+            public function __construct()
+            {
+            }
+
+            public function get_merchant_id()
+            {
+                return 'mid';
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                return $this->options[$key] ?? $empty_value ?? '';
+            }
+
+            public function update_option($key, $value = '')
+            {
+                $this->options[$key] = $value;
+                return true;
+            }
+
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            {
+                $this->calls++;
+                return array_shift($this->responses);
+            }
+        };
+
+        $record = [
+            'due_in_days' => 21,
+            'min_order_amount' => 100,
+            'min_order_currency' => 'nok',
+            'min_order_basis' => 'net',
+            'available_terms' => [30, 60],
+        ];
+        $gateway->responses[] = ['response' => ['code' => 200], 'body' => json_encode($record)];
+
+        // All three consumers in one request: exactly ONE wire fetch
+        TinyAssert::same([30, 60], $gateway->get_merchant_available_terms(true));
+        TinyAssert::same(21, $gateway->get_merchant_default_days_on_invoice());
+        $minimum = $gateway->get_platform_minimum_order();
+        TinyAssert::same(['amount' => 100.0, 'currency' => 'NOK', 'basis' => 'net'], $minimum);
+        TinyAssert::same(1, $gateway->calls);
+
+        // The caches live in dedicated wp_options, never the settings blob —
+        // a frontend TTL-expiry write into the blob can silently revert a
+        // concurrent admin settings save (WC_Settings_API::update_option
+        // rewrites the whole array from an in-memory snapshot).
+        TinyAssert::same(21, (int) $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('days_on_invoice')]);
+        TinyAssert::true(isset($GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('platform_minimum_order')]));
+        TinyAssert::same(false, array_key_exists('days_on_invoice', $gateway->options));
+        TinyAssert::same(false, array_key_exists('days_on_invoice_last_checked_on', $gateway->options));
+        TinyAssert::same(false, array_key_exists('platform_minimum_order', $gateway->options));
+        TinyAssert::same(false, array_key_exists('platform_minimum_order_last_checked_on', $gateway->options));
+
+        // Next request with every TTL expired and the API down: one capped
+        // stall total (memo covers failures), each consumer keeps its own
+        // degrade posture — days serves stale, minimum blanks to null,
+        // terms serve stale.
+        foreach (['merchant_available_terms_checked_on', 'days_on_invoice_checked_on', 'platform_minimum_order_checked_on'] as $name) {
+            $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name($name)] = time() - 3601;
+        }
+        WC_Twoinc::reset_merchant_record_memo();
+        $gateway->responses[] = new WP_Error('http_request_failed', 'down');
+
+        TinyAssert::same([30, 60], $gateway->get_merchant_available_terms(true));
+        TinyAssert::same(21, $gateway->get_merchant_default_days_on_invoice());
+        TinyAssert::same(null, $gateway->get_platform_minimum_order());
+        TinyAssert::same(2, $gateway->calls);
     }
 
     private static function testPaymentTermsValidationNonDestructiveOnUnresolvedOrNarrowedList(): void
