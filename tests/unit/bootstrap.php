@@ -55,6 +55,34 @@ function __($text, $domain = 'default')
     return $text;
 }
 
+function esc_html($text)
+{
+    return htmlspecialchars((string) $text, ENT_QUOTES);
+}
+
+function esc_attr($text)
+{
+    return htmlspecialchars((string) $text, ENT_QUOTES);
+}
+
+function esc_html_e($text, $domain = 'default')
+{
+    echo esc_html(__($text, $domain));
+}
+
+function wp_kses_post($content)
+{
+    return $content;
+}
+
+function wp_parse_args($args, $defaults = [])
+{
+    if (is_object($args)) {
+        $args = get_object_vars($args);
+    }
+    return is_array($args) ? array_merge($defaults, $args) : $defaults;
+}
+
 function get_home_url()
 {
     return 'https://shop.example';
