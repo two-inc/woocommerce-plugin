@@ -211,6 +211,14 @@ class WC_HTTPS
 
 class StubOrder
 {
+    // Meta store mirroring WC_Order::get_meta single-value behaviour.
+    public $meta = [];
+
+    public function get_meta($key, $single = true)
+    {
+        return $this->meta[$key] ?? '';
+    }
+
     public function get_billing_company()
     {
         return 'Test Buyer AS';

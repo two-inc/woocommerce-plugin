@@ -26,6 +26,13 @@ if (!class_exists('WC_Twoinc')) {
         public const MERCHANT_SIGNUP_URL = 'https://portal.two.inc/auth/merchant/signup';
         public const ALERT_EMAIL_ADDRESS = 'woocom-alerts@two.inc';
 
+        // Order states in which the Two API refuses order edits. Shared by
+        // the fulfilment skip-check and the edit gate in
+        // process_update_twoinc_order — their identity guarantees the
+        // tracking-failure note in on_order_completed can never be
+        // triggered by the state gate itself.
+        private const TERMINAL_ORDER_STATES = ["FULFILLING", "FULFILLED", "DELIVERED", "CANCELLED", "REFUNDED", "PARTIALLY_REFUNDED"];
+
         private bool $twoinc_process_confirmation_called = false;
 
         /**
@@ -1266,10 +1273,34 @@ if (!class_exists('WC_Twoinc')) {
             }
 
             $state = $order->get_meta(WC_Twoinc_Brand::meta_key('order_state'), true);
-            $skip = ["FULFILLING", "FULFILLED", "DELIVERED", "CANCELLED", "REFUNDED", "PARTIALLY_REFUNDED"];
-            if (in_array($state, $skip)) {
+            if (in_array($state, self::TERMINAL_ORDER_STATES)) {
                 // $order->add_order_note(sprintf(__('Order is already fulfilled with Two.', 'twoinc-payment-gateway'), $twoinc_order_id));
                 return;
+            }
+
+            // Push tracking (shipping_details) BEFORE fulfilling: the Two
+            // API only accepts order edits pre-fulfilment, so this is the
+            // last chance for the buyer's invoice to carry the tracking
+            // number. Gated on tracking actually being present so ordinary
+            // fulfilments don't grow an extra edit round-trip, and
+            // best-effort by design: an edit failure must never block
+            // fulfilment (process_update_twoinc_order only leaves an order
+            // note on failure). Tracking added AFTER completion cannot be
+            // forwarded — the edit endpoint rejects fulfilled orders
+            // (TWO-24762).
+            $shipping_details = WC_Twoinc_Helper::get_shipping_details($order);
+            if (isset($shipping_details['tracking_number']) && $shipping_details['tracking_number'] !== '') {
+                $twoinc_meta = $this->get_save_twoinc_meta($order);
+                $tracking_synced = $twoinc_meta && $this->process_update_twoinc_order($order, $twoinc_meta);
+                if (!$tracking_synced) {
+                    // The generic edit-failure note already added downstream
+                    // says "contact support"; this one says what was
+                    // actually lost so the merchant isn't left guessing.
+                    $order->add_order_note(sprintf(
+                        __('The tracking number could not be attached to the %s order. The invoice will be sent without it.', 'twoinc-payment-gateway'),
+                        WC_Twoinc_Brand::get('product_name')
+                    ));
+                }
             }
 
             // Change the order status
@@ -2780,15 +2811,36 @@ if (!class_exists('WC_Twoinc')) {
         /**
          * Run the update execution
          *
+         * The Two API only accepts order edits before fulfilment, so once
+         * the order has reached a fulfilled/terminal state this is a no-op:
+         * without the gate, any post-completion change that lands in the
+         * composed body (most commonly a tracking number added after the
+         * order was marked completed) would poison the change hash and
+         * make EVERY subsequent admin save fire an edit request the API is
+         * guaranteed to reject, each leaving a "contact support" order
+         * note (TWO-24762 review).
+         *
          * @param $order
+         * @param $twoinc_meta
+         * @param $forced_reload
+         *
+         * @return boolean true when the remote order is in sync (updated,
+         *                 or no update needed), false when an update was
+         *                 attempted and failed or the state forbids edits.
          */
         private function process_update_twoinc_order($order, $twoinc_meta, $forced_reload = false)
         {
+            $state = $order->get_meta(WC_Twoinc_Brand::meta_key('order_state'), true);
+            if (in_array($state, self::TERMINAL_ORDER_STATES)) {
+                return false;
+            }
 
             $twoinc_order_hash = $order->get_meta(WC_Twoinc_Brand::meta_key('req_body_hash'));
             $twoinc_updated_order_hash = WC_Twoinc_Helper::hash_order($order, $twoinc_meta);
+            $updated = true;
             if (!$twoinc_order_hash || $twoinc_order_hash != $twoinc_updated_order_hash) {
-                if ($this->update_twoinc_order($order)) {
+                $updated = $this->update_twoinc_order($order, $twoinc_meta);
+                if ($updated) {
                     $order->update_meta_data(WC_Twoinc_Brand::meta_key('req_body_hash'), $twoinc_updated_order_hash);
                     $order->save();
                 }
@@ -2796,16 +2848,21 @@ if (!class_exists('WC_Twoinc')) {
                     WC_Twoinc_Helper::append_admin_force_reload();
                 }
             }
+            return $updated;
         }
 
         /**
          * Run the update
          *
          * @param $order
+         * @param $twoinc_meta Optional pre-fetched meta from
+         *                     get_save_twoinc_meta, to spare a duplicate
+         *                     fetch (which can itself cost a remote GET)
+         *                     on hot paths like fulfilment.
          *
          * @return boolean
          */
-        private function update_twoinc_order($order)
+        private function update_twoinc_order($order, $twoinc_meta = null)
         {
 
             $twoinc_order_id = $this->get_twoinc_order_id($order);
@@ -2817,7 +2874,9 @@ if (!class_exists('WC_Twoinc')) {
             }
 
             // 1. Get information from the current order
-            $twoinc_meta = $this->get_save_twoinc_meta($order);
+            if (!$twoinc_meta) {
+                $twoinc_meta = $this->get_save_twoinc_meta($order);
+            }
             if (!$twoinc_meta) {
                 return false;
             }

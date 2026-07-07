@@ -452,6 +452,100 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
+         * Compose the shipping_details block for order create/edit bodies.
+         *
+         * WooCommerce core has no stable tracking-number storage (the core
+         * Fulfillments feature is still behind a beta flag), so tracking is
+         * sourced from the `_wc_shipment_tracking_items` order meta shared
+         * by the official WooCommerce Shipment Tracking extension and the
+         * zorem Advanced Shipment Tracking plugin: an array of entries with
+         * `tracking_number`, `tracking_provider` (predefined-carrier slug),
+         * `custom_tracking_provider` / `custom_tracking_link` (free-text
+         * carrier). Predefined carriers keep their tracking URL in the
+         * plugin's carrier list, not in meta, so `carrier_tracking_url` is
+         * only sent for custom entries. The most recent entry wins.
+         *
+         * @param WC_Order $order
+         *
+         * @return array
+         */
+        public static function get_shipping_details($order)
+        {
+            $shipping_details = [
+                'expected_delivery_date' => date('Y-m-d', strtotime('+ 7 days'))
+            ];
+
+            $tracking_items = $order->get_meta('_wc_shipment_tracking_items', true);
+            if (is_array($tracking_items) && count($tracking_items) > 0) {
+                $latest = end($tracking_items);
+                // The meta key is world-writable, so every field is treated
+                // as untrusted: non-scalar or whitespace-only values are
+                // dropped rather than coerced into garbage.
+                $tracking_number = is_array($latest) ? self::clean_tracking_field($latest, 'tracking_number') : '';
+                if ($tracking_number !== '') {
+                    $shipping_details['tracking_number'] = $tracking_number;
+                    $carrier_name = self::clean_tracking_field($latest, 'custom_tracking_provider');
+                    if ($carrier_name !== '') {
+                        $carrier_tracking_url = self::clean_tracking_field($latest, 'custom_tracking_link');
+                        if ($carrier_tracking_url !== '') {
+                            $shipping_details['carrier_tracking_url'] = $carrier_tracking_url;
+                        }
+                    } else {
+                        $carrier_name = self::clean_tracking_field($latest, 'tracking_provider');
+                    }
+                    if ($carrier_name !== '') {
+                        $shipping_details['carrier_name'] = $carrier_name;
+                    }
+                }
+            }
+
+            /**
+             * Filter the shipping_details sent to the Two API.
+             *
+             * Escape hatch for merchants whose tracking data lives outside
+             * the `_wc_shipment_tracking_items` meta convention (TWO-24762).
+             *
+             * Fires on EVERY order body composition: checkout order
+             * creation (where no tracking exists yet), order edits, and up
+             * to three times per fulfilment (presence gate, change-detection
+             * hash, edit body). Callbacks must therefore be fast, pure and
+             * deterministic — a slow callback drags checkout and the admin
+             * order screen; a non-deterministic one churns the change hash
+             * and fires spurious edit requests, and can make the gate and
+             * the shipped body disagree. A non-array return is discarded.
+             *
+             * @param array    $shipping_details Composed shipping details.
+             * @param WC_Order $order            WooCommerce order.
+             */
+            $filtered = apply_filters('twoinc_shipping_details', $shipping_details, $order);
+            return is_array($filtered) ? $filtered : $shipping_details;
+        }
+
+        /**
+         * Return a trimmed string field from a shipment-tracking meta
+         * entry, or '' when absent, non-scalar or whitespace-only.
+         *
+         * @param array  $entry
+         * @param string $key
+         *
+         * @return string
+         */
+        private static function clean_tracking_field($entry, $key)
+        {
+            if (!isset($entry[$key])) {
+                return '';
+            }
+            $value = $entry[$key];
+            // Booleans are excluded from the scalar family on purpose:
+            // strval(true) is '1', which would be kept as a "tracking
+            // number" rather than dropped as the garbage it is.
+            if (!is_string($value) && !is_int($value) && !is_float($value)) {
+                return '';
+            }
+            return trim(strval($value));
+        }
+
+        /**
          * Compose request body for twoinc create order
          *
          * Brand extension hooks fire in this order, each seeing the
@@ -563,12 +657,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 ],
                 'billing_address' => $billing_address,
                 'shipping_address' => $shipping_address,
-                'shipping_details' => [
-                    // 'carrier_name' => '',
-                    // 'tracking_number' => '',
-                    // 'carrier_tracking_url' => '',
-                    'expected_delivery_date' => date('Y-m-d', strtotime('+ 7 days'))
-                ]
+                'shipping_details' => WC_Twoinc_Helper::get_shipping_details($order)
             ];
 
             if ($vendor_name) {
@@ -658,9 +747,13 @@ if (!class_exists('WC_Twoinc_Helper')) {
         /**
          * Compose request body for twoinc edit order
          *
-         * @param $order
+         * @param WC_Order $order
+         * @param string   $department
+         * @param string   $project
+         * @param string   $purchase_order_number
+         * @param string   $vendor_name
          *
-         * @return bool
+         * @return array
          */
         public static function compose_twoinc_edit_order(
             $order,
@@ -707,12 +800,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 'merchant_reference' => '',
                 'billing_address' => $billing_address,
                 'shipping_address' => $shipping_address,
-                'shipping_details' => [
-                    // 'carrier_name' => '',
-                    // 'tracking_number' => '',
-                    // 'carrier_tracking_url' => '',
-                    'expected_delivery_date' => date('Y-m-d', strtotime('+ 7 days'))
-                ]
+                'shipping_details' => WC_Twoinc_Helper::get_shipping_details($order)
             ];
 
             if ($vendor_name) {
