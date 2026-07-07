@@ -105,8 +105,9 @@ if (!class_exists('WC_Twoinc')) {
                 // Verify API key quietly
                 add_action('admin_enqueue_scripts', [$this, 'verify_api_key_action']);
 
-                // On plugin deactivated
-                add_action('deactivate_' . plugin_basename(__FILE__), [$this, 'on_deactivate_plugin']);
+                // Deactivation cleanup is registered in the main plugin file
+                // (register_deactivation_hook) — a registration here would key
+                // the hook off THIS file's basename and never fire (TWO-25028).
 
                 // Add js css to admin page
                 add_action('admin_enqueue_scripts', [$this, 'twoinc_admin_styles_scripts']);

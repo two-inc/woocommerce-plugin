@@ -61,6 +61,7 @@ final class BrandConfigSpec
             'testPaymentTermsResolveBackendIntersectAdminSubset',
             'testMerchantAvailableTermsFetchNormalisesCachesAndServesStale',
             'testMerchantAvailableTermsInvalidatedOnMerchantIdChange',
+            'testDeactivationCleanupClearsSettingsAndTermCache',
             'testPaymentTermsValidationNonDestructiveOnUnresolvedOrNarrowedList',
             'testSurchargeGridPreservesRowsNotOnTheForm',
             'testPaymentTermsSelectorVisibleOnlyWithMultiple',
@@ -976,6 +977,64 @@ final class BrandConfigSpec
         $gateway->responses[] = ['response' => ['code' => 200], 'body' => json_encode(['id' => 'new-merchant', 'short_name' => 'nm'])];
         $gateway->verify_api_key();
         TinyAssert::same('[30,60]', $GLOBALS['__twoinc_test_options'][$terms_option]);
+    }
+
+    private static function testDeactivationCleanupClearsSettingsAndTermCache(): void
+    {
+        $settings_option = 'woocommerce_woocommerce-gateway-tillit_settings';
+        $terms_option = WC_Twoinc_Brand::prefixed_name('merchant_available_terms');
+        $checked_option = WC_Twoinc_Brand::prefixed_name('merchant_available_terms_checked_on');
+
+        $make_gateway = static function (string $clear) {
+            $gateway = new class () extends WC_Twoinc {
+                public $options = [];
+
+                public function __construct()
+                {
+                    $this->id = 'woocommerce-gateway-tillit';
+                }
+
+                public function get_option($key, $empty_value = null)
+                {
+                    return $this->options[$key] ?? $empty_value ?? '';
+                }
+            };
+            $gateway->options['clear_options_on_deactivation'] = $clear;
+            return $gateway;
+        };
+        $seed = static function () use ($settings_option, $terms_option, $checked_option) {
+            $GLOBALS['__twoinc_test_options'][$settings_option] = ['api_key' => 'key'];
+            $GLOBALS['__twoinc_test_options'][$terms_option] = '[30,60]';
+            $GLOBALS['__twoinc_test_options'][$checked_option] = 999;
+        };
+
+        // Toggle key absent from the settings blob: the state every merchant
+        // who never opened the toggle is in. Default is no-wipe, so nothing
+        // is deleted — same contract as an explicit 'no'.
+        $seed();
+        $absent_gateway = $make_gateway('no');
+        unset($absent_gateway->options['clear_options_on_deactivation']);
+        TinyAssert::same(false, array_key_exists('clear_options_on_deactivation', $absent_gateway->options));
+        $absent_gateway->on_deactivate_plugin();
+        TinyAssert::true(array_key_exists($settings_option, $GLOBALS['__twoinc_test_options']));
+        TinyAssert::true(array_key_exists($terms_option, $GLOBALS['__twoinc_test_options']));
+        TinyAssert::true(array_key_exists($checked_option, $GLOBALS['__twoinc_test_options']));
+
+        // Toggle off: deactivation leaves everything in place
+        $seed();
+        $make_gateway('no')->on_deactivate_plugin();
+        TinyAssert::true(array_key_exists($settings_option, $GLOBALS['__twoinc_test_options']));
+        TinyAssert::true(array_key_exists($terms_option, $GLOBALS['__twoinc_test_options']));
+        TinyAssert::true(array_key_exists($checked_option, $GLOBALS['__twoinc_test_options']));
+
+        // Toggle on: settings blob AND the dedicated term-cache options go —
+        // the cache lives outside the settings blob (TWO-24812), so clearing
+        // only the blob would leave orphaned rows.
+        $seed();
+        $make_gateway('yes')->on_deactivate_plugin();
+        TinyAssert::same(false, array_key_exists($settings_option, $GLOBALS['__twoinc_test_options']));
+        TinyAssert::same(false, array_key_exists($terms_option, $GLOBALS['__twoinc_test_options']));
+        TinyAssert::same(false, array_key_exists($checked_option, $GLOBALS['__twoinc_test_options']));
     }
 
     private static function testPaymentTermsValidationNonDestructiveOnUnresolvedOrNarrowedList(): void
