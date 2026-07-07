@@ -1272,6 +1272,24 @@ if (!class_exists('WC_Twoinc')) {
                 return;
             }
 
+            // Push tracking (shipping_details) BEFORE fulfilling: the Two
+            // API only accepts order edits pre-fulfilment, so this is the
+            // last chance for the buyer's invoice to carry the tracking
+            // number. Gated on tracking actually being present so ordinary
+            // fulfilments don't grow an extra edit round-trip, and
+            // best-effort by design: an edit failure must never block
+            // fulfilment (process_update_twoinc_order only leaves an order
+            // note on failure). Tracking added AFTER completion cannot be
+            // forwarded — the edit endpoint rejects fulfilled orders
+            // (TWO-24762).
+            $shipping_details = WC_Twoinc_Helper::get_shipping_details($order);
+            if (!empty($shipping_details['tracking_number'])) {
+                $twoinc_meta = $this->get_save_twoinc_meta($order);
+                if ($twoinc_meta) {
+                    $this->process_update_twoinc_order($order, $twoinc_meta);
+                }
+            }
+
             // Change the order status
             $response = $this->make_request("/v1/order/{$twoinc_order_id}/fulfillments");
 

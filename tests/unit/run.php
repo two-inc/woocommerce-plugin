@@ -36,6 +36,10 @@ final class BrandConfigSpec
             'testOrderPayloadHookAugmentsBody',
             'testPaymentTermsLineHookAdjustsLineItems',
             'testEditOrderAppliesSameBrandHooks',
+            'testShippingDetailsOmitTrackingWithoutMeta',
+            'testShippingDetailsFromShipmentTrackingMeta',
+            'testShippingDetailsCarriedByCreateAndEditBodies',
+            'testShippingDetailsFilterOverrides',
             'testLegacyOrderCreateFilterRunsBeforeOrderPayload',
             'testBrandFileReturningNonArrayFallsBackToDefaults',
             'testMetaKeysDeriveFromBrandPrefix',
@@ -290,6 +294,103 @@ final class BrandConfigSpec
 
         TinyAssert::same('Brand line', $body['line_items'][0]['name']);
         TinyAssert::same('Overlay Vendor', $body['vendor_name']);
+    }
+
+    private static function testShippingDetailsOmitTrackingWithoutMeta(): void
+    {
+        $body = self::composeOrder();
+
+        TinyAssert::true(isset($body['shipping_details']['expected_delivery_date']));
+        TinyAssert::same(false, array_key_exists('tracking_number', $body['shipping_details']));
+        TinyAssert::same(false, array_key_exists('carrier_name', $body['shipping_details']));
+        TinyAssert::same(false, array_key_exists('carrier_tracking_url', $body['shipping_details']));
+    }
+
+    private static function testShippingDetailsFromShipmentTrackingMeta(): void
+    {
+        // Predefined-carrier entry: provider slug becomes carrier_name and
+        // no tracking URL is sent (it lives in the tracking plugin's
+        // carrier list, not in meta). The LATEST entry must win.
+        $order = new StubOrder();
+        $order->meta['_wc_shipment_tracking_items'] = [
+            ['tracking_provider' => 'dhl', 'tracking_number' => 'OLD-1'],
+            ['tracking_provider' => 'postnord-se', 'tracking_number' => 'PN123456789SE'],
+        ];
+
+        $details = WC_Twoinc_Helper::get_shipping_details($order);
+
+        TinyAssert::same('PN123456789SE', $details['tracking_number']);
+        TinyAssert::same('postnord-se', $details['carrier_name']);
+        TinyAssert::same(false, array_key_exists('carrier_tracking_url', $details));
+
+        // Custom-carrier entry: free-text provider name wins over the slug
+        // and its link is forwarded.
+        $order->meta['_wc_shipment_tracking_items'] = [
+            [
+                'tracking_provider' => '',
+                'custom_tracking_provider' => 'Nordic Couriers',
+                'custom_tracking_link' => 'https://track.example/PN1',
+                'tracking_number' => 'NC-42',
+            ],
+        ];
+
+        $details = WC_Twoinc_Helper::get_shipping_details($order);
+
+        TinyAssert::same('NC-42', $details['tracking_number']);
+        TinyAssert::same('Nordic Couriers', $details['carrier_name']);
+        TinyAssert::same('https://track.example/PN1', $details['carrier_tracking_url']);
+
+        // Malformed entries (no tracking_number, or non-array) must not
+        // emit partial tracking fields.
+        $order->meta['_wc_shipment_tracking_items'] = [
+            ['tracking_provider' => 'dhl', 'tracking_number' => ''],
+        ];
+        $details = WC_Twoinc_Helper::get_shipping_details($order);
+        TinyAssert::same(false, array_key_exists('tracking_number', $details));
+        TinyAssert::same(false, array_key_exists('carrier_name', $details));
+
+        $order->meta['_wc_shipment_tracking_items'] = ['not-an-entry'];
+        $details = WC_Twoinc_Helper::get_shipping_details($order);
+        TinyAssert::same(false, array_key_exists('tracking_number', $details));
+    }
+
+    private static function testShippingDetailsCarriedByCreateAndEditBodies(): void
+    {
+        $order = new StubOrder();
+        $order->meta['_wc_shipment_tracking_items'] = [
+            ['tracking_provider' => 'bring', 'tracking_number' => 'BR-7'],
+        ];
+
+        $create = WC_Twoinc_Helper::compose_twoinc_order(
+            $order,
+            'test-order-reference',
+            '912345678',
+            'IT',
+            'Project X',
+            '',
+            []
+        );
+        $edit = WC_Twoinc_Helper::compose_twoinc_edit_order($order, 'IT', 'Project X', '', '');
+
+        TinyAssert::same('BR-7', $create['shipping_details']['tracking_number']);
+        TinyAssert::same('bring', $create['shipping_details']['carrier_name']);
+        TinyAssert::same($create['shipping_details'], $edit['shipping_details']);
+    }
+
+    private static function testShippingDetailsFilterOverrides(): void
+    {
+        // Merchant escape hatch (TWO-24762 option 2): tracking data living
+        // outside the shipment-tracking meta convention can be injected.
+        add_filter('twoinc_shipping_details', static function ($details, $order) {
+            $details['tracking_number'] = 'FILTERED-1';
+            $details['carrier_name'] = 'Filter Carrier';
+            return $details;
+        }, 10, 2);
+
+        $body = self::composeOrder();
+
+        TinyAssert::same('FILTERED-1', $body['shipping_details']['tracking_number']);
+        TinyAssert::same('Filter Carrier', $body['shipping_details']['carrier_name']);
     }
 
     private static function testLegacyOrderCreateFilterRunsBeforeOrderPayload(): void

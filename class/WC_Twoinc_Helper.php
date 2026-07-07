@@ -452,6 +452,62 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
+         * Compose the shipping_details block for order create/edit bodies.
+         *
+         * WooCommerce core has no stable tracking-number storage (the core
+         * Fulfillments feature is still behind a beta flag), so tracking is
+         * sourced from the `_wc_shipment_tracking_items` order meta shared
+         * by the official WooCommerce Shipment Tracking extension and the
+         * zorem Advanced Shipment Tracking plugin: an array of entries with
+         * `tracking_number`, `tracking_provider` (predefined-carrier slug),
+         * `custom_tracking_provider` / `custom_tracking_link` (free-text
+         * carrier). Predefined carriers keep their tracking URL in the
+         * plugin's carrier list, not in meta, so `carrier_tracking_url` is
+         * only sent for custom entries. The most recent entry wins.
+         *
+         * @param WC_Order $order
+         *
+         * @return array
+         */
+        public static function get_shipping_details($order)
+        {
+            $shipping_details = [
+                'expected_delivery_date' => date('Y-m-d', strtotime('+ 7 days'))
+            ];
+
+            $tracking_items = $order->get_meta('_wc_shipment_tracking_items', true);
+            if (is_array($tracking_items) && count($tracking_items) > 0) {
+                $latest = end($tracking_items);
+                if (is_array($latest) && !empty($latest['tracking_number'])) {
+                    $shipping_details['tracking_number'] = strval($latest['tracking_number']);
+                    $carrier_name = '';
+                    if (!empty($latest['custom_tracking_provider'])) {
+                        $carrier_name = strval($latest['custom_tracking_provider']);
+                        if (!empty($latest['custom_tracking_link'])) {
+                            $shipping_details['carrier_tracking_url'] = strval($latest['custom_tracking_link']);
+                        }
+                    } elseif (!empty($latest['tracking_provider'])) {
+                        $carrier_name = strval($latest['tracking_provider']);
+                    }
+                    if ($carrier_name !== '') {
+                        $shipping_details['carrier_name'] = $carrier_name;
+                    }
+                }
+            }
+
+            /**
+             * Filter the shipping_details sent to the Two API.
+             *
+             * Escape hatch for merchants whose tracking data lives outside
+             * the `_wc_shipment_tracking_items` meta convention (TWO-24762).
+             *
+             * @param array    $shipping_details Composed shipping details.
+             * @param WC_Order $order            WooCommerce order.
+             */
+            return apply_filters('twoinc_shipping_details', $shipping_details, $order);
+        }
+
+        /**
          * Compose request body for twoinc create order
          *
          * Brand extension hooks fire in this order, each seeing the
@@ -563,12 +619,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 ],
                 'billing_address' => $billing_address,
                 'shipping_address' => $shipping_address,
-                'shipping_details' => [
-                    // 'carrier_name' => '',
-                    // 'tracking_number' => '',
-                    // 'carrier_tracking_url' => '',
-                    'expected_delivery_date' => date('Y-m-d', strtotime('+ 7 days'))
-                ]
+                'shipping_details' => WC_Twoinc_Helper::get_shipping_details($order)
             ];
 
             if ($vendor_name) {
@@ -707,12 +758,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 'merchant_reference' => '',
                 'billing_address' => $billing_address,
                 'shipping_address' => $shipping_address,
-                'shipping_details' => [
-                    // 'carrier_name' => '',
-                    // 'tracking_number' => '',
-                    // 'carrier_tracking_url' => '',
-                    'expected_delivery_date' => date('Y-m-d', strtotime('+ 7 days'))
-                ]
+                'shipping_details' => WC_Twoinc_Helper::get_shipping_details($order)
             ];
 
             if ($vendor_name) {

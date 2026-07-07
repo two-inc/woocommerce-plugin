@@ -211,6 +211,15 @@ class WC_HTTPS
 
 class StubOrder
 {
+    // Order meta store; compose_twoinc_order reads
+    // `_wc_shipment_tracking_items` from here (TWO-24762 tests).
+    public $meta = [];
+
+    public function get_meta($key, $single = true)
+    {
+        return $this->meta[$key] ?? '';
+    }
+
     public function get_billing_company()
     {
         return 'Test Buyer AS';
