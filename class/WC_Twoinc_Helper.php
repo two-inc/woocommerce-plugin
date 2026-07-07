@@ -478,16 +478,20 @@ if (!class_exists('WC_Twoinc_Helper')) {
             $tracking_items = $order->get_meta('_wc_shipment_tracking_items', true);
             if (is_array($tracking_items) && count($tracking_items) > 0) {
                 $latest = end($tracking_items);
-                if (is_array($latest) && !empty($latest['tracking_number'])) {
-                    $shipping_details['tracking_number'] = strval($latest['tracking_number']);
-                    $carrier_name = '';
-                    if (!empty($latest['custom_tracking_provider'])) {
-                        $carrier_name = strval($latest['custom_tracking_provider']);
-                        if (!empty($latest['custom_tracking_link'])) {
-                            $shipping_details['carrier_tracking_url'] = strval($latest['custom_tracking_link']);
+                // The meta key is world-writable, so every field is treated
+                // as untrusted: non-scalar or whitespace-only values are
+                // dropped rather than coerced into garbage.
+                $tracking_number = is_array($latest) ? self::clean_tracking_field($latest, 'tracking_number') : '';
+                if ($tracking_number !== '') {
+                    $shipping_details['tracking_number'] = $tracking_number;
+                    $carrier_name = self::clean_tracking_field($latest, 'custom_tracking_provider');
+                    if ($carrier_name !== '') {
+                        $carrier_tracking_url = self::clean_tracking_field($latest, 'custom_tracking_link');
+                        if ($carrier_tracking_url !== '') {
+                            $shipping_details['carrier_tracking_url'] = $carrier_tracking_url;
                         }
-                    } elseif (!empty($latest['tracking_provider'])) {
-                        $carrier_name = strval($latest['tracking_provider']);
+                    } else {
+                        $carrier_name = self::clean_tracking_field($latest, 'tracking_provider');
                     }
                     if ($carrier_name !== '') {
                         $shipping_details['carrier_name'] = $carrier_name;
@@ -501,10 +505,37 @@ if (!class_exists('WC_Twoinc_Helper')) {
              * Escape hatch for merchants whose tracking data lives outside
              * the `_wc_shipment_tracking_items` meta convention (TWO-24762).
              *
+             * Fires on EVERY order body composition: checkout order
+             * creation (where no tracking exists yet), order edits, and up
+             * to three times per fulfilment (presence gate, change-detection
+             * hash, edit body). Callbacks must therefore be fast, pure and
+             * deterministic — a slow callback drags checkout and the admin
+             * order screen; a non-deterministic one churns the change hash
+             * and fires spurious edit requests, and can make the gate and
+             * the shipped body disagree. A non-array return is discarded.
+             *
              * @param array    $shipping_details Composed shipping details.
              * @param WC_Order $order            WooCommerce order.
              */
-            return apply_filters('twoinc_shipping_details', $shipping_details, $order);
+            $filtered = apply_filters('twoinc_shipping_details', $shipping_details, $order);
+            return is_array($filtered) ? $filtered : $shipping_details;
+        }
+
+        /**
+         * Return a trimmed string field from a shipment-tracking meta
+         * entry, or '' when absent, non-scalar or whitespace-only.
+         *
+         * @param array  $entry
+         * @param string $key
+         *
+         * @return string
+         */
+        private static function clean_tracking_field($entry, $key)
+        {
+            if (!isset($entry[$key]) || !is_scalar($entry[$key])) {
+                return '';
+            }
+            return trim(strval($entry[$key]));
         }
 
         /**
@@ -709,9 +740,13 @@ if (!class_exists('WC_Twoinc_Helper')) {
         /**
          * Compose request body for twoinc edit order
          *
-         * @param $order
+         * @param WC_Order $order
+         * @param string   $department
+         * @param string   $project
+         * @param string   $purchase_order_number
+         * @param string   $vendor_name
          *
-         * @return bool
+         * @return array
          */
         public static function compose_twoinc_edit_order(
             $order,

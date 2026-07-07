@@ -211,8 +211,7 @@ class WC_HTTPS
 
 class StubOrder
 {
-    // Order meta store; compose_twoinc_order reads
-    // `_wc_shipment_tracking_items` from here (TWO-24762 tests).
+    // Meta store mirroring WC_Order::get_meta single-value behaviour.
     public $meta = [];
 
     public function get_meta($key, $single = true)

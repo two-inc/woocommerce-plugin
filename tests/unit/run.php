@@ -40,6 +40,7 @@ final class BrandConfigSpec
             'testShippingDetailsFromShipmentTrackingMeta',
             'testShippingDetailsCarriedByCreateAndEditBodies',
             'testShippingDetailsFilterOverrides',
+            'testShippingDetailsFilterGarbageDiscarded',
             'testLegacyOrderCreateFilterRunsBeforeOrderPayload',
             'testBrandFileReturningNonArrayFallsBackToDefaults',
             'testMetaKeysDeriveFromBrandPrefix',
@@ -101,7 +102,7 @@ final class BrandConfigSpec
         WC_Twoinc_Sole_Trader::reset_cache();
         WC()->cart = null;
         WC()->customer = null;
-        foreach (['twoinc_brand_file', 'twoinc_checkout_fields', 'twoinc_confirmation_url', 'twoinc_order_payload', 'twoinc_payment_terms_line', 'two_order_create', 'twoinc_payment_validation_error', 'twoinc_sole_trader_signup_url'] as $tag) {
+        foreach (['twoinc_brand_file', 'twoinc_checkout_fields', 'twoinc_confirmation_url', 'twoinc_order_payload', 'twoinc_payment_terms_line', 'two_order_create', 'twoinc_payment_validation_error', 'twoinc_sole_trader_signup_url', 'twoinc_shipping_details'] as $tag) {
             remove_all_filters($tag);
         }
     }
@@ -352,6 +353,35 @@ final class BrandConfigSpec
         $order->meta['_wc_shipment_tracking_items'] = ['not-an-entry'];
         $details = WC_Twoinc_Helper::get_shipping_details($order);
         TinyAssert::same(false, array_key_exists('tracking_number', $details));
+
+        // The meta key is world-writable: numeric values are normalised to
+        // strings, whitespace-only and non-scalar values are dropped, and
+        // a tracking number with no provider fields emits no carrier_name.
+        $order->meta['_wc_shipment_tracking_items'] = [
+            ['tracking_provider' => 'dhl', 'tracking_number' => 12345],
+        ];
+        $details = WC_Twoinc_Helper::get_shipping_details($order);
+        TinyAssert::same('12345', $details['tracking_number']);
+
+        $order->meta['_wc_shipment_tracking_items'] = [
+            ['tracking_number' => 'LONESOME-1'],
+        ];
+        $details = WC_Twoinc_Helper::get_shipping_details($order);
+        TinyAssert::same('LONESOME-1', $details['tracking_number']);
+        TinyAssert::same(false, array_key_exists('carrier_name', $details));
+
+        $order->meta['_wc_shipment_tracking_items'] = [
+            ['tracking_provider' => 'dhl', 'tracking_number' => '   '],
+        ];
+        $details = WC_Twoinc_Helper::get_shipping_details($order);
+        TinyAssert::same(false, array_key_exists('tracking_number', $details));
+
+        $order->meta['_wc_shipment_tracking_items'] = [
+            ['tracking_provider' => ['nested'], 'tracking_number' => ['nested']],
+        ];
+        $details = WC_Twoinc_Helper::get_shipping_details($order);
+        TinyAssert::same(false, array_key_exists('tracking_number', $details));
+        TinyAssert::same(false, array_key_exists('carrier_name', $details));
     }
 
     private static function testShippingDetailsCarriedByCreateAndEditBodies(): void
@@ -374,7 +404,10 @@ final class BrandConfigSpec
 
         TinyAssert::same('BR-7', $create['shipping_details']['tracking_number']);
         TinyAssert::same('bring', $create['shipping_details']['carrier_name']);
-        TinyAssert::same($create['shipping_details'], $edit['shipping_details']);
+        // Tracking fields only — expected_delivery_date is computed from
+        // "now" per call and would flake across a midnight rollover.
+        TinyAssert::same('BR-7', $edit['shipping_details']['tracking_number']);
+        TinyAssert::same('bring', $edit['shipping_details']['carrier_name']);
     }
 
     private static function testShippingDetailsFilterOverrides(): void
@@ -391,6 +424,22 @@ final class BrandConfigSpec
 
         TinyAssert::same('FILTERED-1', $body['shipping_details']['tracking_number']);
         TinyAssert::same('Filter Carrier', $body['shipping_details']['carrier_name']);
+    }
+
+    private static function testShippingDetailsFilterGarbageDiscarded(): void
+    {
+        // The filter fires at checkout order creation too — a broken
+        // merchant callback returning a non-array must not be able to put
+        // scalar garbage in the create body (that would break checkout,
+        // not just tracking). The composed value wins instead.
+        add_filter('twoinc_shipping_details', static function ($details, $order) {
+            return null;
+        }, 10, 2);
+
+        $body = self::composeOrder();
+
+        TinyAssert::true(is_array($body['shipping_details']));
+        TinyAssert::true(isset($body['shipping_details']['expected_delivery_date']));
     }
 
     private static function testLegacyOrderCreateFilterRunsBeforeOrderPayload(): void
