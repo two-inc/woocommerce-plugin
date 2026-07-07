@@ -1,0 +1,152 @@
+name: Upgrade smoke
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: upgrade-smoke-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  # Merchant-upgrade smoke (TWO-25015): install the latest released tag the
+  # way a merchant runs it, then replace the plugin files with this branch's
+  # HEAD — the exact file swap a WordPress plugin upgrade performs — and
+  # verify the plugin stays active, loads, and keeps its settings. WordPress
+  # has no schema-migration step (unlike Magento's setup:upgrade), so the
+  # upgrade surface is: file replacement + option-data compatibility.
+  upgrade-smoke:
+    name: Upgrade smoke (latest release → HEAD)
+    runs-on: ${{ vars.RUNNER_STANDARD }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Resolve latest release tag
+        id: prior
+        run: |
+          set -o pipefail
+          # git ls-remote (not the GitHub tags API): no token, no per_page
+          # cap, and a transport error FAILS the step rather than yielding
+          # empty JSON that would skip-green having tested nothing (pattern
+          # from magento-plugin's upgrade-smoke job, TWO-24998).
+          if ! raw_tags=$(git ls-remote --tags --refs \
+            https://github.com/two-inc/woocommerce-plugin.git 2>&1); then
+            echo "::error::upgrade-smoke: could not list remote tags: $raw_tags"
+            exit 1
+          fi
+          TAG=$(printf '%s\n' "$raw_tags" \
+            | sed -n 's#.*refs/tags/\([0-9]\{1,\}\.[0-9]\{1,\}\.[0-9]\{1,\}\)$#\1#p' \
+            | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)
+          if [ -z "$TAG" ]; then
+            echo "::error::upgrade-smoke: no release tag found"
+            exit 1
+          fi
+          echo "Latest release resolved: $TAG"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Boot WordPress + WooCommerce
+        run: |
+          set -o pipefail
+          docker network create wpnet
+          docker volume create wpdata
+          docker run --detach --name db --network wpnet \
+            -e MYSQL_DATABASE=wp -e MYSQL_USER=wp -e MYSQL_PASSWORD=wp \
+            -e MYSQL_RANDOM_ROOT_PASSWORD=1 \
+            --health-cmd="mysqladmin ping -h localhost -u wp -pwp" \
+            --health-interval=5s --health-timeout=5s --health-retries=30 \
+            mariadb:10.6
+          until [ "$(docker inspect -f '{{.State.Health.Status}}' db)" = "healthy" ]; do
+            sleep 2
+          done
+          # Image versions mirror docker-compose.yaml (the e2e harness).
+          docker run --detach --name wp --network wpnet -v wpdata:/var/www/html \
+            -e WORDPRESS_DB_HOST=db -e WORDPRESS_DB_USER=wp \
+            -e WORDPRESS_DB_PASSWORD=wp -e WORDPRESS_DB_NAME=wp \
+            wordpress:6.8-php8.2-apache
+          docker run --detach --name cli --network wpnet -v wpdata:/var/www/html \
+            --user 33:33 \
+            -e WORDPRESS_DB_HOST=db -e WORDPRESS_DB_USER=wp \
+            -e WORDPRESS_DB_PASSWORD=wp -e WORDPRESS_DB_NAME=wp \
+            --entrypoint sleep wordpress:cli-2.11.0-php8.2 infinity
+          # The wordpress image copies core + wp-config into the shared
+          # volume on first start; wait for that before wp-cli touches it.
+          until docker exec cli test -f /var/www/html/wp-config.php \
+            && docker exec cli wp core version >/dev/null 2>&1; do
+            sleep 2
+          done
+          docker exec cli wp core install --url=http://wp --title=Smoke \
+            --admin_user=admin --admin_password=upgrade-smoke-ci \
+            --admin_email=admin@example.com
+          # Pin matches WOOCOM_VERSION in docker-compose.yaml.
+          docker exec cli wp plugin install woocommerce --version=9.9.5 --activate
+
+      - name: Install latest release + activate
+        env:
+          TAG: ${{ steps.prior.outputs.tag }}
+        run: |
+          set -o pipefail
+          curl -fsSL \
+            "https://github.com/two-inc/woocommerce-plugin/archive/refs/tags/${TAG}.tar.gz" \
+            -o /tmp/prior.tgz
+          mkdir -p /tmp/prior
+          tar -xzf /tmp/prior.tgz -C /tmp/prior --strip-components=1
+          docker exec cli mkdir -p /var/www/html/wp-content/plugins/tillit-payment-gateway
+          tar -cf - -C /tmp/prior . \
+            | docker exec -i cli tar -xf - -C /var/www/html/wp-content/plugins/tillit-payment-gateway
+          docker exec cli wp plugin activate tillit-payment-gateway
+          docker exec cli wp eval 'exit(class_exists("WC_Twoinc") ? 0 : 1);'
+          # Seed gateway settings so the HEAD leg can prove an upgrade
+          # preserves a configured merchant's options.
+          docker exec cli wp option update \
+            woocommerce_woocommerce-gateway-tillit_settings \
+            '{"enabled":"yes","title":"Business invoice"}' --format=json
+          docker exec wp curl -sf http://localhost/ -o /dev/null
+
+      - name: Upgrade to this-branch HEAD
+        run: |
+          set -o pipefail
+          # Replace the plugin files with HEAD's tracked source — the exact
+          # operation a WordPress plugin upgrade performs on a live shop.
+          docker exec cli find /var/www/html/wp-content/plugins/tillit-payment-gateway \
+            -mindepth 1 -delete
+          git ls-files -z | tar --null -cf - -T - \
+            | docker exec -i cli tar -xf - -C /var/www/html/wp-content/plugins/tillit-payment-gateway
+
+      - name: Verify upgrade landed
+        run: |
+          set -o pipefail
+          status=$(docker exec cli wp plugin get tillit-payment-gateway --field=status)
+          echo "plugin status: $status"
+          [ "$status" = "active" ] \
+            || { echo "::error::plugin not active post-upgrade"; exit 1; }
+          # The deployed main file is HEAD's, not the prior release's — the
+          # HEAD version header can legitimately equal the latest tag, so a
+          # version comparison cannot prove the swap took; a checksum can.
+          local_sum=$(md5sum tillit-payment-gateway.php | awk '{print $1}')
+          deployed_sum=$(docker exec cli md5sum \
+            /var/www/html/wp-content/plugins/tillit-payment-gateway/tillit-payment-gateway.php \
+            | awk '{print $1}')
+          [ "$local_sum" = "$deployed_sum" ] \
+            || { echo "::error::deployed main file does not match HEAD"; exit 1; }
+          # The plugin loads and the gateway class boots under HEAD.
+          docker exec cli wp eval 'exit(class_exists("WC_Twoinc") ? 0 : 1);'
+          docker exec cli wp eval 'WC_Twoinc::get_instance(); echo "gateway boots\n";'
+          # The pre-upgrade settings survived the file swap.
+          docker exec cli wp option get \
+            woocommerce_woocommerce-gateway-tillit_settings --format=json \
+            | grep -q '"enabled":"yes"' \
+            || { echo "::error::gateway settings lost across upgrade"; exit 1; }
+          # The storefront still renders without a fatal.
+          docker exec wp curl -sf http://localhost/ -o /dev/null
+
+      - name: Tear down
+        if: always()
+        run: |
+          docker rm -f wp cli db 2>/dev/null || true
+          docker network rm wpnet 2>/dev/null || true
+          docker volume rm wpdata 2>/dev/null || true
