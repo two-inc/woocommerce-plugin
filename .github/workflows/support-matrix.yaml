@@ -40,7 +40,8 @@ jobs:
         id: wc
         run: |
           set -o pipefail
-          if ! info=$(curl -fsSL "https://api.wordpress.org/plugins/info/1.0/woocommerce.json"); then
+          if ! info=$(curl -fsSL --retry 5 --retry-all-errors --retry-delay 3 \
+            "https://api.wordpress.org/plugins/info/1.0/woocommerce.json"); then
             echo "::error::support-matrix: could not query wordpress.org plugin API"
             exit 1
           fi
@@ -69,67 +70,114 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.discover.outputs.matrix) }}
+    # Two matrix legs run in parallel and can land on the same runner, so
+    # every docker resource is namespaced per leg (run id + job index) to
+    # avoid name/volume/network collisions.
+    env:
+      SFX: ${{ github.run_id }}-${{ strategy.job-index }}
     steps:
       - uses: actions/checkout@v6
 
       - name: Boot WordPress + WooCommerce ${{ matrix.woocommerce }}
         run: |
           set -o pipefail
-          docker network create wpnet
-          docker volume create wpdata
-          docker run --detach --name db --network wpnet \
+          docker network create "wpnet-$SFX"
+          docker volume create "wpdata-$SFX"
+          docker run --detach --name "db-$SFX" --network "wpnet-$SFX" \
+            --network-alias db \
             -e MYSQL_DATABASE=wp -e MYSQL_USER=wp -e MYSQL_PASSWORD=wp \
             -e MYSQL_RANDOM_ROOT_PASSWORD=1 \
             --health-cmd="mysqladmin ping -h localhost -u wp -pwp" \
             --health-interval=5s --health-timeout=5s --health-retries=30 \
             mariadb:10.6
-          until [ "$(docker inspect -f '{{.State.Health.Status}}' db)" = "healthy" ]; do
+          n=0
+          until [ "$(docker inspect -f '{{.State.Health.Status}}' "db-$SFX")" = "healthy" ]; do
+            n=$((n + 1))
+            if [ "$n" -ge 60 ]; then
+              echo "::error::support-matrix: database never became healthy"
+              docker logs "db-$SFX" || true
+              exit 1
+            fi
             sleep 2
           done
           # Latest-WP images (no WP version pin): the latest WooCommerce can
           # require a WordPress newer than any fixed pin (10.9.x needs 6.9),
           # and this workflow's whole point is tracking upstream.
-          docker run --detach --name wp --network wpnet -v wpdata:/var/www/html \
+          docker run --detach --name "wp-$SFX" --network "wpnet-$SFX" \
+            --network-alias wp -v "wpdata-$SFX":/var/www/html \
             -e WORDPRESS_DB_HOST=db -e WORDPRESS_DB_USER=wp \
             -e WORDPRESS_DB_PASSWORD=wp -e WORDPRESS_DB_NAME=wp \
             wordpress:php8.2-apache
-          docker run --detach --name cli --network wpnet -v wpdata:/var/www/html \
+          docker run --detach --name "cli-$SFX" --network "wpnet-$SFX" \
+            --network-alias cli -v "wpdata-$SFX":/var/www/html \
             --user 33:33 \
             -e WORDPRESS_DB_HOST=db -e WORDPRESS_DB_USER=wp \
             -e WORDPRESS_DB_PASSWORD=wp -e WORDPRESS_DB_NAME=wp \
             --entrypoint sleep wordpress:cli-php8.2 infinity
-          until docker exec cli test -f /var/www/html/wp-config.php \
-            && docker exec cli wp core version >/dev/null 2>&1; do
+          n=0
+          until docker exec "cli-$SFX" test -f /var/www/html/wp-config.php \
+            && docker exec "cli-$SFX" wp core version >/dev/null 2>&1; do
+            n=$((n + 1))
+            if [ "$n" -ge 60 ]; then
+              echo "::error::support-matrix: WordPress never finished initialising"
+              docker logs "wp-$SFX" || true
+              exit 1
+            fi
             sleep 2
           done
-          docker exec cli wp core install --url=http://wp --title=Matrix \
+          # Install against http://localhost so the site's canonical URL
+          # matches the host the render probes hit — otherwise WordPress
+          # 301-redirects the probe to the canonical host and curl -f passes
+          # on the 3xx without ever rendering a page (false green).
+          docker exec "cli-$SFX" wp core install --url=http://localhost --title=Matrix \
             --admin_user=admin --admin_password=support-matrix-ci \
             --admin_email=admin@example.com
-          docker exec cli wp plugin install woocommerce \
-            --version="${{ matrix.woocommerce }}" --activate
+          # wp.org can transiently rate-limit / 5xx the download; retry a few
+          # times, then fail loud rather than blocking unrelated PRs.
+          n=0
+          until docker exec "cli-$SFX" wp plugin install woocommerce \
+            --version="${{ matrix.woocommerce }}" --activate; do
+            n=$((n + 1))
+            if [ "$n" -ge 3 ]; then
+              echo "::error::support-matrix: failed to install WooCommerce ${{ matrix.woocommerce }} after 3 attempts"
+              exit 1
+            fi
+            sleep 5
+          done
 
       - name: Install plugin HEAD + smoke
         run: |
           set -o pipefail
-          docker exec cli mkdir -p /var/www/html/wp-content/plugins/tillit-payment-gateway
+          docker exec "cli-$SFX" mkdir -p /var/www/html/wp-content/plugins/tillit-payment-gateway
           git ls-files -z | tar --null -cf - -T - \
-            | docker exec -i cli tar -xf - -C /var/www/html/wp-content/plugins/tillit-payment-gateway
-          docker exec cli wp plugin activate tillit-payment-gateway
+            | docker exec -i "cli-$SFX" tar -xf - -C /var/www/html/wp-content/plugins/tillit-payment-gateway
+          docker exec "cli-$SFX" wp plugin activate tillit-payment-gateway
           # The gateway class loads and boots under this WooCommerce version.
-          docker exec cli wp eval 'exit(class_exists("WC_Twoinc") ? 0 : 1);'
-          docker exec cli wp eval 'WC_Twoinc::get_instance(); echo "gateway boots\n";'
+          docker exec "cli-$SFX" wp eval 'exit(class_exists("WC_Twoinc") ? 0 : 1);'
+          docker exec "cli-$SFX" wp eval 'WC_Twoinc::get_instance(); echo "gateway boots\n";'
           # The gateway registers with WooCommerce's gateway registry.
-          docker exec cli wp eval '
+          docker exec "cli-$SFX" wp eval '
             $ids = array_keys(WC()->payment_gateways()->payment_gateways());
             exit(in_array("woocommerce-gateway-tillit", $ids, true) ? 0 : 1);'
-          # Storefront and checkout render without a fatal.
-          docker exec wp curl -sf http://localhost/ -o /dev/null
-          docker exec cli wp option get woocommerce_checkout_page_id \
-            | xargs -I{} docker exec wp curl -sf "http://localhost/?page_id={}" -o /dev/null
+          # Storefront renders without a fatal.
+          docker exec "wp-$SFX" curl -sf http://localhost/ -o /dev/null
+          # Checkout renders without a fatal. Resolve the checkout page id
+          # explicitly and assert it is a positive integer — an empty/zero id
+          # piped through xargs runs the probe zero times and passes green.
+          id=$(docker exec "cli-$SFX" wp option get woocommerce_checkout_page_id)
+          if [ -z "$id" ]; then
+            echo "::error::support-matrix: WooCommerce checkout page id is empty"
+            exit 1
+          fi
+          if ! [ "$id" -gt 0 ] 2>/dev/null; then
+            echo "::error::support-matrix: WooCommerce checkout page id is not a positive integer (got '$id')"
+            exit 1
+          fi
+          docker exec "wp-$SFX" curl -sf "http://localhost/?page_id=$id" -o /dev/null
 
       - name: Tear down
         if: always()
         run: |
-          docker rm -f wp cli db 2>/dev/null || true
-          docker network rm wpnet 2>/dev/null || true
-          docker volume rm wpdata 2>/dev/null || true
+          docker rm -f "wp-$SFX" "cli-$SFX" "db-$SFX" 2>/dev/null || true
+          docker network rm "wpnet-$SFX" 2>/dev/null || true
+          docker volume rm "wpdata-$SFX" 2>/dev/null || true
