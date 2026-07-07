@@ -15,9 +15,14 @@ jobs:
     permissions:
       contents: read
     strategy:
+      fail-fast: false
       matrix:
-        # Oldest PHP the plugin's syntax targets, plus current
-        php-version: ["7.4", "8.2"]
+        # The PHP axis of the support matrix (TWO-25016): the plugin's
+        # declared floor (7.4 — the oldest syntax the code targets) through
+        # every currently-supported PHP minor. The suite is dependency-free
+        # and runs in seconds, so full-span legs are effectively free; the
+        # WooCommerce axis lives in support-matrix.yaml.
+        php-version: ["7.4", "8.0", "8.1", "8.2", "8.3", "8.4"]
     steps:
       - uses: actions/checkout@v4
 

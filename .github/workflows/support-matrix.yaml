@@ -1,0 +1,132 @@
+name: Support matrix
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: support-matrix-${{ github.ref_name }}
+  cancel-in-progress: true
+
+# Version-combination coverage (TWO-25016). Scope decision — a light
+# two-axis subset, NOT Magento's full N×M matrix:
+#
+#   * PHP axis: the unit-test workflow runs the dependency-free suite
+#     across the plugin's declared floor (7.4) up to current PHP — cheap,
+#     seconds per leg (see unit-tests.yaml).
+#   * WooCommerce axis (this workflow): boot-smoke the plugin HEAD against
+#     the LATEST WooCommerce release and the PREVIOUS MINOR line, both
+#     discovered live from the wordpress.org API at run time so the matrix
+#     tracks upstream without hand maintenance. WordPress and PHP stay at
+#     the image defaults here — WooCommerce gates its own WP/PHP support,
+#     so multiplying the axes re-tests WooCommerce, not this plugin.
+#
+# Honest-CI conventions (magento-plugin's support-matrix, TWO-24998): an
+# API/transport failure FAILS discovery rather than emitting an empty
+# matrix that would skip-green; every emitted leg is genuinely run.
+jobs:
+  discover:
+    name: Discover WooCommerce versions
+    runs-on: ${{ vars.RUNNER_STANDARD }}
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.wc.outputs.matrix }}
+    steps:
+      - name: Resolve latest + previous-minor WooCommerce
+        id: wc
+        run: |
+          set -o pipefail
+          if ! info=$(curl -fsSL "https://api.wordpress.org/plugins/info/1.0/woocommerce.json"); then
+            echo "::error::support-matrix: could not query wordpress.org plugin API"
+            exit 1
+          fi
+          latest=$(echo "$info" | jq -r '.version')
+          # Highest patch of the minor line BELOW the latest's minor —
+          # bare-semver keys only (the API also lists trunk/beta keys).
+          prev=$(echo "$info" | jq -r --arg latest "$latest" '
+            ($latest | split(".") | map(tonumber)) as $l
+            | .versions | keys
+            | map(select(test("^[0-9]+\\.[0-9]+\\.[0-9]+$")))
+            | map(split(".") | map(tonumber))
+            | map(select(.[0] < $l[0] or (.[0] == $l[0] and .[1] < $l[1])))
+            | sort | last // empty | map(tostring) | join(".")')
+          if [ -z "$latest" ] || [ "$latest" = "null" ] || [ -z "$prev" ]; then
+            echo "::error::support-matrix: could not resolve latest ($latest) / previous minor ($prev)"
+            exit 1
+          fi
+          echo "WooCommerce legs: latest=$latest previous-minor=$prev"
+          echo "matrix={\"woocommerce\":[\"$latest\",\"$prev\"]}" >> "$GITHUB_OUTPUT"
+
+  boot-smoke:
+    name: Boot smoke (WooCommerce ${{ matrix.woocommerce }})
+    needs: discover
+    runs-on: ${{ vars.RUNNER_STANDARD }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.discover.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Boot WordPress + WooCommerce ${{ matrix.woocommerce }}
+        run: |
+          set -o pipefail
+          docker network create wpnet
+          docker volume create wpdata
+          docker run --detach --name db --network wpnet \
+            -e MYSQL_DATABASE=wp -e MYSQL_USER=wp -e MYSQL_PASSWORD=wp \
+            -e MYSQL_RANDOM_ROOT_PASSWORD=1 \
+            --health-cmd="mysqladmin ping -h localhost -u wp -pwp" \
+            --health-interval=5s --health-timeout=5s --health-retries=30 \
+            mariadb:10.6
+          until [ "$(docker inspect -f '{{.State.Health.Status}}' db)" = "healthy" ]; do
+            sleep 2
+          done
+          docker run --detach --name wp --network wpnet -v wpdata:/var/www/html \
+            -e WORDPRESS_DB_HOST=db -e WORDPRESS_DB_USER=wp \
+            -e WORDPRESS_DB_PASSWORD=wp -e WORDPRESS_DB_NAME=wp \
+            wordpress:6.8-php8.2-apache
+          docker run --detach --name cli --network wpnet -v wpdata:/var/www/html \
+            --user 33:33 \
+            -e WORDPRESS_DB_HOST=db -e WORDPRESS_DB_USER=wp \
+            -e WORDPRESS_DB_PASSWORD=wp -e WORDPRESS_DB_NAME=wp \
+            --entrypoint sleep wordpress:cli-2.11.0-php8.2 infinity
+          until docker exec cli test -f /var/www/html/wp-config.php \
+            && docker exec cli wp core version >/dev/null 2>&1; do
+            sleep 2
+          done
+          docker exec cli wp core install --url=http://wp --title=Matrix \
+            --admin_user=admin --admin_password=support-matrix-ci \
+            --admin_email=admin@example.com
+          docker exec cli wp plugin install woocommerce \
+            --version="${{ matrix.woocommerce }}" --activate
+
+      - name: Install plugin HEAD + smoke
+        run: |
+          set -o pipefail
+          docker exec cli mkdir -p /var/www/html/wp-content/plugins/tillit-payment-gateway
+          git ls-files -z | tar --null -cf - -T - \
+            | docker exec -i cli tar -xf - -C /var/www/html/wp-content/plugins/tillit-payment-gateway
+          docker exec cli wp plugin activate tillit-payment-gateway
+          # The gateway class loads and boots under this WooCommerce version.
+          docker exec cli wp eval 'exit(class_exists("WC_Twoinc") ? 0 : 1);'
+          docker exec cli wp eval 'WC_Twoinc::get_instance(); echo "gateway boots\n";'
+          # The gateway registers with WooCommerce's gateway registry.
+          docker exec cli wp eval '
+            $ids = array_keys(WC()->payment_gateways()->payment_gateways());
+            exit(in_array("woocommerce-gateway-tillit", $ids, true) ? 0 : 1);'
+          # Storefront and checkout render without a fatal.
+          docker exec wp curl -sf http://localhost/ -o /dev/null
+          docker exec cli wp option get woocommerce_checkout_page_id \
+            | xargs -I{} docker exec wp curl -sf "http://localhost/?page_id={}" -o /dev/null
+
+      - name: Tear down
+        if: always()
+        run: |
+          docker rm -f wp cli db 2>/dev/null || true
+          docker network rm wpnet 2>/dev/null || true
+          docker volume rm wpdata 2>/dev/null || true
