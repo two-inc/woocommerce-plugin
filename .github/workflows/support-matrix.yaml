@@ -86,15 +86,18 @@ jobs:
           until [ "$(docker inspect -f '{{.State.Health.Status}}' db)" = "healthy" ]; do
             sleep 2
           done
+          # Latest-WP images (no WP version pin): the latest WooCommerce can
+          # require a WordPress newer than any fixed pin (10.9.x needs 6.9),
+          # and this workflow's whole point is tracking upstream.
           docker run --detach --name wp --network wpnet -v wpdata:/var/www/html \
             -e WORDPRESS_DB_HOST=db -e WORDPRESS_DB_USER=wp \
             -e WORDPRESS_DB_PASSWORD=wp -e WORDPRESS_DB_NAME=wp \
-            wordpress:6.8-php8.2-apache
+            wordpress:php8.2-apache
           docker run --detach --name cli --network wpnet -v wpdata:/var/www/html \
             --user 33:33 \
             -e WORDPRESS_DB_HOST=db -e WORDPRESS_DB_USER=wp \
             -e WORDPRESS_DB_PASSWORD=wp -e WORDPRESS_DB_NAME=wp \
-            --entrypoint sleep wordpress:cli-2.11.0-php8.2 infinity
+            --entrypoint sleep wordpress:cli-php8.2 infinity
           until docker exec cli test -f /var/www/html/wp-config.php \
             && docker exec cli wp core version >/dev/null 2>&1; do
             sleep 2
