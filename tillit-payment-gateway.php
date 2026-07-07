@@ -34,6 +34,23 @@ define('WC_TWOINC_PLUGIN_PATH', plugin_dir_path(__FILE__));
 add_filter('woocommerce_payment_gateways', 'wc_twoinc_add_to_gateways');
 add_action('plugins_loaded', 'load_twoinc_classes');
 
+// Must be registered from the MAIN plugin file: register_deactivation_hook()
+// keys the hook by this file's plugin basename. The old registration inside
+// class/WC_Twoinc.php built the hook name from its own __FILE__, so it never
+// fired and the "clear options on deactivation" setting was dead (TWO-25028).
+register_deactivation_hook(__FILE__, 'twoinc_on_deactivate_plugin');
+
+function twoinc_on_deactivate_plugin()
+{
+    // Deactivation runs after plugins_loaded, so load_twoinc_classes() has
+    // already required the gateway class whenever WooCommerce is active.
+    // If WooCommerce is inactive this file returns before registering the
+    // hook at all, so cleanup only happens while WooCommerce is active.
+    if (class_exists('WC_Twoinc')) {
+        WC_Twoinc::get_instance()->on_deactivate_plugin();
+    }
+}
+
 if (is_admin() && !defined('DOING_AJAX')) {
     add_filter("plugin_action_links_" . plugin_basename(__FILE__), 'twoinc_settings_link');
 }
