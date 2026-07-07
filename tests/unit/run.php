@@ -1008,6 +1008,18 @@ final class BrandConfigSpec
             $GLOBALS['__twoinc_test_options'][$checked_option] = 999;
         };
 
+        // Toggle key absent from the settings blob: the state every merchant
+        // who never opened the toggle is in. Default is no-wipe, so nothing
+        // is deleted — same contract as an explicit 'no'.
+        $seed();
+        $absent_gateway = $make_gateway('no');
+        unset($absent_gateway->options['clear_options_on_deactivation']);
+        TinyAssert::same(false, array_key_exists('clear_options_on_deactivation', $absent_gateway->options));
+        $absent_gateway->on_deactivate_plugin();
+        TinyAssert::true(array_key_exists($settings_option, $GLOBALS['__twoinc_test_options']));
+        TinyAssert::true(array_key_exists($terms_option, $GLOBALS['__twoinc_test_options']));
+        TinyAssert::true(array_key_exists($checked_option, $GLOBALS['__twoinc_test_options']));
+
         // Toggle off: deactivation leaves everything in place
         $seed();
         $make_gateway('no')->on_deactivate_plugin();
