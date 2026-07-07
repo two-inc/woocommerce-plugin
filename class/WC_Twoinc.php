@@ -386,10 +386,12 @@ if (!class_exists('WC_Twoinc')) {
         {
             $limit_option = WC_Twoinc_Brand::prefixed_name('merchant_surcharge_limit');
             $checked_option = WC_Twoinc_Brand::prefixed_name('merchant_surcharge_limit_checked_on');
-            $checked_on = get_option($checked_option);
 
-            if ($refresh && (!$checked_on || ((int) $checked_on + 900) <= time())) {
-                if ($this->get_merchant_id() && $this->get_option('api_key')) {
+            if ($refresh && $this->get_merchant_id() && $this->get_option('api_key')) {
+                $checked_on = get_option($checked_option);
+                if (!$checked_on || ((int) $checked_on + 900) <= time()) {
+                    // Bump the clock before fetching (stampede guard), and
+                    // on failure too: one stall per TTL, not per view.
                     update_option($checked_option, time(), false);
                     $record = $this->fetch_merchant_record();
                     if (is_array($record)) {
@@ -401,7 +403,11 @@ if (!class_exists('WC_Twoinc')) {
                             && is_string($currency) && $currency !== ''
                         ) {
                             $limit = [
-                                'amount' => (float) $amount,
+                                // Round to 2dp at read: the label shows the
+                                // cap to two decimals, so a raw 25.555 would
+                                // display "Max 25.56" while rejecting 25.56.
+                                // The displayed maximum must be enterable.
+                                'amount' => round((float) $amount, 2),
                                 'currency' => strtoupper($currency),
                             ];
                         }
@@ -421,11 +427,25 @@ if (!class_exists('WC_Twoinc')) {
                 return null;
             }
             // JSON round-trip turns whole floats into ints — re-cast so the
-            // shape is stable for callers regardless of cache state.
+            // shape is stable for callers regardless of cache state. The
+            // round() also covers cache entries written before rounding
+            // moved to the fetch path.
             return [
-                'amount' => (float) $limit['amount'],
+                'amount' => round((float) $limit['amount'], 2),
                 'currency' => (string) $limit['currency'],
             ];
+        }
+
+        /**
+         * Human-readable "EUR 25" / "EUR 25.5" label for a surcharge cap
+         * (['amount', 'currency']) — the single formatting shared by the
+         * grid help text and the save-validation error, so the claimed and
+         * the enforced maximum can never drift apart.
+         */
+        private function format_surcharge_limit_label(array $limit): string
+        {
+            return $limit['currency'] . ' '
+                . rtrim(rtrim(number_format((float) $limit['amount'], 2, '.', ''), '0'), '.');
         }
 
         /**
@@ -706,11 +726,17 @@ if (!class_exists('WC_Twoinc')) {
             $stored = is_array($stored) ? $stored : [];
             $terms = class_exists('WC_Twoinc_Payment_Terms') ? WC_Twoinc_Payment_Terms::get_available_terms($this) : [];
             // The grid render is a sanctioned refresh point for the
-            // funding-partner cap (admin context, TWO-24954); shown only
-            // when a cap exists, omitted entirely otherwise.
+            // funding-partner cap (admin context, TWO-24954). The Max label
+            // carries the SAME currency guard as the save-validation: when
+            // the cap's currency differs from the store currency the cap is
+            // not enforced here (Woo does no FX conversion, unlike Magento,
+            // which converts and so can always show a local maximum), and
+            // the grid must not claim a limit it won't enforce — the
+            // backend enforces instead. Omitted entirely when no cap
+            // exists or on a currency mismatch.
             $fixed_limit = $this->get_merchant_surcharge_limit(true);
-            $fixed_limit_label = $fixed_limit
-                ? $fixed_limit['currency'] . ' ' . rtrim(rtrim(number_format((float) $fixed_limit['amount'], 2, '.', ''), '0'), '.')
+            $fixed_limit_label = $fixed_limit && $fixed_limit['currency'] === strtoupper((string) get_woocommerce_currency())
+                ? $this->format_surcharge_limit_label($fixed_limit)
                 : '';
 
             ob_start();
@@ -811,7 +837,7 @@ if (!class_exists('WC_Twoinc')) {
                             /* translators: 1: term days, 2: maximum amount with currency */
                             __('Surcharge fixed amount for the %1$s-day term exceeds the maximum of %2$s.', 'twoinc-payment-gateway'),
                             $days,
-                            $limit['currency'] . ' ' . rtrim(rtrim(number_format($max_fixed, 2, '.', ''), '0'), '.')
+                            $this->format_surcharge_limit_label($limit)
                         ));
                     }
                     $row[$col] = $raw;
@@ -830,6 +856,13 @@ if (!class_exists('WC_Twoinc')) {
             // posts its key, lands nothing in $clean, and is deliberately
             // dropped; an unrendered stored row survives untouched for the
             // term the backend (or the admin's ticks) later restores.
+            //
+            // Preserved rows deliberately bypass the funding-partner cap
+            // check above: the admin can neither see nor fix a row that
+            // was never rendered, so failing the whole save on it would be
+            // a dead end. Save-time enforcement is UX parity with Magento;
+            // the funding partner's backend is the authoritative
+            // enforcement point for anything that slips through.
             $stored = $this->get_option($key);
             foreach (is_array($stored) ? $stored : [] as $days => $row) {
                 $days = (int) $days;

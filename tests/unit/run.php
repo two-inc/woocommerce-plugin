@@ -73,6 +73,8 @@ final class BrandConfigSpec
             'testRoundingStepValidationEnforcesBrandOptions',
             'testSurchargeGridValidationNormalisesAndRejects',
             'testSurchargeGridEnforcesMerchantFixedCap',
+            'testSurchargeCapZeroAmountFromApiMeansNoLimit',
+            'testSurchargeGridHelpTextOmitsMaxOnCurrencyMismatch',
             'testPaymentTermsValidationRequiresSelection',
             'testDefaultTermCoercedToOfferedSet',
             'testOrderPayloadCarriesSelectedAndAvailableTerms',
@@ -1521,6 +1523,16 @@ final class BrandConfigSpec
         }
         TinyAssert::true(strpos($message, 'EUR 25') !== false, "cap message missing, got: $message");
 
+        // Locale comma input is normalised BEFORE the cap check — '25,01'
+        // is 25.01 over a 25 cap, not a string that dodges the comparison.
+        $message = '';
+        try {
+            $gateway->validate_two_surcharge_grid_field('surcharge_grid', [30 => ['fixed' => '25,01']]);
+        } catch (Exception $e) {
+            $message = $e->getMessage();
+        }
+        TinyAssert::true(strpos($message, 'EUR 25') !== false, "comma-locale cap message missing, got: $message");
+
         // The cap binds the fixed column only — percentage and per-order
         // limit columns are governed by their own rules.
         $clean = $gateway->validate_two_surcharge_grid_field('surcharge_grid', [30 => ['percentage' => '90', 'limit' => '100']]);
@@ -1537,6 +1549,73 @@ final class BrandConfigSpec
         unset($GLOBALS['__twoinc_test_options'][$limit_option]);
         $clean = $gateway->validate_two_surcharge_grid_field('surcharge_grid', [30 => ['fixed' => '9999']]);
         TinyAssert::same([30 => ['fixed' => '9999']], $clean);
+    }
+
+    private static function testSurchargeCapZeroAmountFromApiMeansNoLimit(): void
+    {
+        // A zero-amount cap record from the API means "no limit", not
+        // "nothing may be charged": it caches the no-limit marker, so no
+        // enforcement and no Max sentence downstream.
+        $gateway = new class () extends WC_Twoinc {
+            public $options = ['api_key' => 'key', 'merchant_id' => 'mid'];
+            public $responses = [];
+
+            public function __construct()
+            {
+            }
+
+            public function get_merchant_id()
+            {
+                return 'mid';
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                return $this->options[$key] ?? $empty_value ?? '';
+            }
+
+            public function update_option($key, $value = '')
+            {
+                $this->options[$key] = $value;
+                return true;
+            }
+
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            {
+                return array_shift($this->responses);
+            }
+        };
+        $gateway->responses[] = ['response' => ['code' => 200], 'body' => json_encode([
+            'surcharge_limit_amount' => 0,
+            'surcharge_limit_currency' => 'eur',
+        ])];
+
+        TinyAssert::same(null, $gateway->get_merchant_surcharge_limit(true));
+        // The no-limit outcome is cached as the empty marker...
+        TinyAssert::same('', $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('merchant_surcharge_limit')]);
+        // ...and save-validation applies no cap.
+        $clean = $gateway->validate_two_surcharge_grid_field('surcharge_grid', [30 => ['fixed' => '9999']]);
+        TinyAssert::same([30 => ['fixed' => '9999']], $clean);
+    }
+
+    private static function testSurchargeGridHelpTextOmitsMaxOnCurrencyMismatch(): void
+    {
+        $limit_option = WC_Twoinc_Brand::prefixed_name('merchant_surcharge_limit');
+        $GLOBALS['__twoinc_test_options'][$limit_option] = json_encode(['amount' => 25.0, 'currency' => 'EUR']);
+
+        // Matching store currency: the grid claims the enforced maximum.
+        $GLOBALS['__twoinc_test_currency'] = 'EUR';
+        $gateway = self::validationGateway(['payment_terms_days' => [30]], [30]);
+        $html = $gateway->generate_two_surcharge_grid_html('surcharge_grid', []);
+        TinyAssert::true(strpos($html, 'Max EUR 25.') !== false, 'expected Max sentence for matching currency');
+
+        // Store currency differs from the cap's: save-validation skips the
+        // cap (Woo does no FX conversion), so the help text must not claim
+        // a maximum it will not enforce.
+        $GLOBALS['__twoinc_test_currency'] = 'NOK';
+        $html = $gateway->generate_two_surcharge_grid_html('surcharge_grid', []);
+        TinyAssert::true(strpos($html, 'Max') === false, 'Max sentence must be omitted on currency mismatch');
+        unset($GLOBALS['__twoinc_test_currency']);
     }
 
     private static function testPaymentTermsValidationRequiresSelection(): void
