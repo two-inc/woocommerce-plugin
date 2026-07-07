@@ -240,9 +240,9 @@ if (!class_exists('WC_Twoinc')) {
                 !is_wp_error($response)
                 && !WC_Twoinc_Helper::get_twoinc_error_msg($response)
                 && $response
-                && $response['body']
+                && !empty($response['body'])
             ) {
-                $body = json_decode($response['body'], true);
+                $body = json_decode($response['body'] ?? '', true);
                 if (is_array($body)) {
                     self::$merchant_record = $body;
                 }
@@ -251,9 +251,10 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * Reset the per-request merchant-record memo. Production code needs
-         * this only when the merchant identity changes mid-request (API key
-         * save); the unit harness uses it to simulate request boundaries.
+         * Reset the per-request merchant-record memo. Production reaches
+         * this only via invalidate_merchant_record_caches() (merchant
+         * identity change, deactivation cleanup); it is public so the unit
+         * harness can simulate request boundaries.
          */
         public static function reset_merchant_record_memo(): void
         {
@@ -281,16 +282,18 @@ if (!class_exists('WC_Twoinc')) {
                 $days_on_invoice = 14;
             }
 
-            $checked_on = get_option($checked_option);
-            if (!$checked_on || ((int) $checked_on + 3600) <= time()) {
-                // Bump the clock before fetching: concurrent requests at
-                // expiry serve stale instead of stampeding the API.
-                update_option($checked_option, time(), false);
-                $record = $this->fetch_merchant_record();
-                if (is_array($record)) {
-                    // A null due_in_days on the record also means 14 days
-                    $days_on_invoice = !empty($record['due_in_days']) ? (int) $record['due_in_days'] : 14;
-                    update_option($days_option, $days_on_invoice, false);
+            if ($this->get_merchant_id() && $this->get_option('api_key')) {
+                $checked_on = get_option($checked_option);
+                if (!$checked_on || ((int) $checked_on + 3600) <= time()) {
+                    // Bump the clock before fetching: concurrent requests at
+                    // expiry serve stale instead of stampeding the API.
+                    update_option($checked_option, time(), false);
+                    $record = $this->fetch_merchant_record();
+                    if (is_array($record)) {
+                        // A null due_in_days on the record also means 14 days
+                        $days_on_invoice = !empty($record['due_in_days']) ? (int) $record['due_in_days'] : 14;
+                        update_option($days_option, $days_on_invoice, false);
+                    }
                 }
             }
 
@@ -318,12 +321,13 @@ if (!class_exists('WC_Twoinc')) {
         {
             $minimum_option = WC_Twoinc_Brand::prefixed_name('platform_minimum_order');
             $checked_option = WC_Twoinc_Brand::prefixed_name('platform_minimum_order_checked_on');
-            $checked_on = get_option($checked_option);
 
+            if (!$this->get_merchant_id() || !$this->get_option('api_key')) {
+                return null;
+            }
+
+            $checked_on = get_option($checked_option);
             if (!$checked_on || ((int) $checked_on + 900) <= time()) {
-                if (!$this->get_merchant_id() || !$this->get_option('api_key')) {
-                    return null;
-                }
                 update_option($checked_option, time(), false);
 
                 $minimum = null;
@@ -396,10 +400,10 @@ if (!class_exists('WC_Twoinc')) {
         {
             $terms_option = WC_Twoinc_Brand::prefixed_name('merchant_available_terms');
             $checked_option = WC_Twoinc_Brand::prefixed_name('merchant_available_terms_checked_on');
-            $checked_on = get_option($checked_option);
 
-            if ($refresh && (!$checked_on || ((int) $checked_on + 900) <= time())) {
-                if ($this->get_merchant_id() && $this->get_option('api_key')) {
+            if ($refresh && $this->get_merchant_id() && $this->get_option('api_key')) {
+                $checked_on = get_option($checked_option);
+                if (!$checked_on || ((int) $checked_on + 900) <= time()) {
                     // Bump the clock before fetching (stampede guard), and
                     // on failure too: one stall per TTL, not per view.
                     update_option($checked_option, time(), false);
@@ -442,6 +446,9 @@ if (!class_exists('WC_Twoinc')) {
          * stale entries would otherwise never self-heal (the refetch
          * against a mismatched id fails, which the serve-stale posture
          * keeps). Also the cleanup path for deactivation.
+         *
+         * When adding a merchant-record consumer, register its option name
+         * pair (value + checked_on) here.
          */
         private function invalidate_merchant_record_caches(): void
         {
