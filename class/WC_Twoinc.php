@@ -26,6 +26,13 @@ if (!class_exists('WC_Twoinc')) {
         public const MERCHANT_SIGNUP_URL = 'https://portal.two.inc/auth/merchant/signup';
         public const ALERT_EMAIL_ADDRESS = 'woocom-alerts@two.inc';
 
+        // Order states in which the Two API refuses order edits. Shared by
+        // the fulfilment skip-check and the edit gate in
+        // process_update_twoinc_order — their identity guarantees the
+        // tracking-failure note in on_order_completed can never be
+        // triggered by the state gate itself.
+        private const TERMINAL_ORDER_STATES = ["FULFILLING", "FULFILLED", "DELIVERED", "CANCELLED", "REFUNDED", "PARTIALLY_REFUNDED"];
+
         private bool $twoinc_process_confirmation_called = false;
 
         /**
@@ -1266,8 +1273,7 @@ if (!class_exists('WC_Twoinc')) {
             }
 
             $state = $order->get_meta(WC_Twoinc_Brand::meta_key('order_state'), true);
-            $skip = ["FULFILLING", "FULFILLED", "DELIVERED", "CANCELLED", "REFUNDED", "PARTIALLY_REFUNDED"];
-            if (in_array($state, $skip)) {
+            if (in_array($state, self::TERMINAL_ORDER_STATES)) {
                 // $order->add_order_note(sprintf(__('Order is already fulfilled with Two.', 'twoinc-payment-gateway'), $twoinc_order_id));
                 return;
             }
@@ -1283,7 +1289,7 @@ if (!class_exists('WC_Twoinc')) {
             // forwarded — the edit endpoint rejects fulfilled orders
             // (TWO-24762).
             $shipping_details = WC_Twoinc_Helper::get_shipping_details($order);
-            if (!empty($shipping_details['tracking_number'])) {
+            if (isset($shipping_details['tracking_number']) && $shipping_details['tracking_number'] !== '') {
                 $twoinc_meta = $this->get_save_twoinc_meta($order);
                 $tracking_synced = $twoinc_meta && $this->process_update_twoinc_order($order, $twoinc_meta);
                 if (!$tracking_synced) {
@@ -2825,7 +2831,7 @@ if (!class_exists('WC_Twoinc')) {
         private function process_update_twoinc_order($order, $twoinc_meta, $forced_reload = false)
         {
             $state = $order->get_meta(WC_Twoinc_Brand::meta_key('order_state'), true);
-            if (in_array($state, ["FULFILLING", "FULFILLED", "DELIVERED", "CANCELLED", "REFUNDED", "PARTIALLY_REFUNDED"])) {
+            if (in_array($state, self::TERMINAL_ORDER_STATES)) {
                 return false;
             }
 

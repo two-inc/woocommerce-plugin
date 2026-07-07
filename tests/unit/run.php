@@ -38,6 +38,7 @@ final class BrandConfigSpec
             'testEditOrderAppliesSameBrandHooks',
             'testShippingDetailsOmitTrackingWithoutMeta',
             'testShippingDetailsFromShipmentTrackingMeta',
+            'testProcessUpdateRefusesTerminalStates',
             'testShippingDetailsCarriedByCreateAndEditBodies',
             'testShippingDetailsFilterOverrides',
             'testShippingDetailsFilterGarbageDiscarded',
@@ -382,6 +383,56 @@ final class BrandConfigSpec
         $details = WC_Twoinc_Helper::get_shipping_details($order);
         TinyAssert::same(false, array_key_exists('tracking_number', $details));
         TinyAssert::same(false, array_key_exists('carrier_name', $details));
+
+        // Booleans are dropped, not coerced (strval(true) would emit '1').
+        $order->meta['_wc_shipment_tracking_items'] = [
+            ['tracking_provider' => 'dhl', 'tracking_number' => true],
+        ];
+        $details = WC_Twoinc_Helper::get_shipping_details($order);
+        TinyAssert::same(false, array_key_exists('tracking_number', $details));
+    }
+
+    private static function testProcessUpdateRefusesTerminalStates(): void
+    {
+        // The Two API rejects order edits once fulfilment has started;
+        // without this gate a post-completion change (tracking number
+        // added late) would fire a guaranteed-rejected edit on every
+        // admin save. No-HTTP is asserted structurally: composing and
+        // sending would fatal on StubOrder methods that don't exist.
+        $gateway = new class () extends WC_Twoinc {
+            public function __construct()
+            {
+            }
+        };
+        $method = new ReflectionMethod(WC_Twoinc::class, 'process_update_twoinc_order');
+        $method->setAccessible(true);
+
+        $twoinc_meta = [
+            'order_reference' => 'test-order-reference',
+            'company_id' => '912345678',
+            'department' => '',
+            'project' => '',
+            'purchase_order_number' => '',
+            'invoice_emails' => [],
+            'payment_reference_message' => '',
+            'payment_reference_ocr' => '',
+            'payment_reference' => '',
+            'payment_reference_type' => '',
+            'vendor_name' => '',
+        ];
+
+        foreach (["FULFILLING", "FULFILLED", "DELIVERED", "CANCELLED", "REFUNDED", "PARTIALLY_REFUNDED"] as $state) {
+            $order = new StubOrder();
+            $order->meta[WC_Twoinc_Brand::meta_key('order_state')] = $state;
+            TinyAssert::same(false, $method->invoke($gateway, $order, $twoinc_meta), "state $state must refuse the edit");
+        }
+
+        // Editable state whose body hash is already current: in sync,
+        // returns true, still without composing an HTTP request.
+        $order = new StubOrder();
+        $order->meta[WC_Twoinc_Brand::meta_key('order_state')] = 'CONFIRMED';
+        $order->meta[WC_Twoinc_Brand::meta_key('req_body_hash')] = WC_Twoinc_Helper::hash_order($order, $twoinc_meta);
+        TinyAssert::same(true, $method->invoke($gateway, $order, $twoinc_meta));
     }
 
     private static function testShippingDetailsCarriedByCreateAndEditBodies(): void

@@ -532,10 +532,17 @@ if (!class_exists('WC_Twoinc_Helper')) {
          */
         private static function clean_tracking_field($entry, $key)
         {
-            if (!isset($entry[$key]) || !is_scalar($entry[$key])) {
+            if (!isset($entry[$key])) {
                 return '';
             }
-            return trim(strval($entry[$key]));
+            $value = $entry[$key];
+            // Booleans are excluded from the scalar family on purpose:
+            // strval(true) is '1', which would be kept as a "tracking
+            // number" rather than dropped as the garbage it is.
+            if (!is_string($value) && !is_int($value) && !is_float($value)) {
+                return '';
+            }
+            return trim(strval($value));
         }
 
         /**
