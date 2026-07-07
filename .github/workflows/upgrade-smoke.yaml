@@ -104,15 +104,24 @@ jobs:
           docker exec "cli-$SFX" wp core install --url=http://localhost --title=Smoke \
             --admin_user=admin --admin_password=upgrade-smoke-ci \
             --admin_email=admin@example.com
-          # Pin matches WOOCOM_VERSION in docker-compose.yaml.
-          docker exec "cli-$SFX" wp plugin install woocommerce --version=9.9.5 --activate
+          # Pin matches WOOCOM_VERSION in docker-compose.yaml. Bounded
+          # retry: wp.org rate-limits, one blip must not red the check.
+          n=0
+          until docker exec "cli-$SFX" wp plugin install woocommerce --version=9.9.5 --activate; do
+            n=$((n + 1))
+            if [ "$n" -ge 3 ]; then
+              echo "::error::upgrade-smoke: WooCommerce install failed after 3 attempts"
+              exit 1
+            fi
+            sleep 5
+          done
 
       - name: Install latest release + activate
         env:
           TAG: ${{ steps.prior.outputs.tag }}
         run: |
           set -o pipefail
-          curl -fsSL \
+          curl -fsSL --retry 5 --retry-all-errors --retry-delay 3 \
             "https://github.com/two-inc/woocommerce-plugin/archive/refs/tags/${TAG}.tar.gz" \
             -o /tmp/prior.tgz
           mkdir -p /tmp/prior
