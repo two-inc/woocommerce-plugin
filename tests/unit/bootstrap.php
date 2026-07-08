@@ -85,7 +85,7 @@ function wp_parse_args($args, $defaults = [])
 
 function get_home_url()
 {
-    return 'https://shop.example';
+    return $GLOBALS['test_home_url'] ?? 'https://shop.example';
 }
 
 function wp_create_nonce($action = -1)
@@ -224,6 +224,11 @@ class WC_Payment_Gateway
     public function get_field_key($key)
     {
         return $this->plugin_id . $this->id . '_' . $key;
+    }
+
+    public function get_option_key()
+    {
+        return $this->plugin_id . $this->id . '_settings';
     }
 }
 

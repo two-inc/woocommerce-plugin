@@ -911,13 +911,62 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 return true;
             }
 
-            // Merchant's staging
-            if (in_array($hostname, array('staging.torn.no', 'proof-3.redflamingostudio.com', 'icecreamextreme.no', 'www.staging83.avshop.no'))) {
-                return true;
-            }
-
             // Neither local nor twoinc development site
             return false;
+        }
+
+        /**
+         * Environment modes the host builder accepts. The mode string is
+         * spliced into the API hostname, and WooCommerce's select
+         * validation does not restrict POSTed values to the options list —
+         * so this allowlist is what keeps an admin-supplied string from
+         * steering the gateway's API calls to an arbitrary host.
+         */
+        public const ENVIRONMENT_MODES = ['production', 'sandbox', 'staging'];
+
+        /**
+         * Resolve the gateway's configured environment mode.
+         *
+         * Mirrors the Magento config repository's mode setting: the stored
+         * `checkout_env` option is normalised to lowercase, with the
+         * historical 'PROD'/'Production' spellings mapping to 'production'.
+         * Anything outside ENVIRONMENT_MODES (including the empty default)
+         * resolves to 'production' — the same host every unrecognised value
+         * produced before the template existed.
+         *
+         * @param WC_Payment_Gateway $gateway
+         *
+         * @return string one of ENVIRONMENT_MODES
+         */
+        public static function get_environment_mode($gateway)
+        {
+            $mode = strtolower((string) $gateway->get_option('checkout_env'));
+            if ($mode === 'prod') {
+                $mode = 'production';
+            }
+            if (!in_array($mode, self::ENVIRONMENT_MODES, true)) {
+                $mode = 'production';
+            }
+            return $mode;
+        }
+
+        /**
+         * Build an environment host from the brand's URL template, mirroring
+         * the Magento config repository: ('api', mode 'staging') on the Two
+         * brand -> https://api.staging.two.inc; production drops the mode
+         * suffix. The template itself comes from the brand registry, so a
+         * brand overlay carries its own domains.
+         *
+         * @param string             $service 'api' or 'checkout'
+         * @param WC_Payment_Gateway $gateway
+         *
+         * @return string
+         */
+        public static function get_environment_host($service, $gateway)
+        {
+            $mode = self::get_environment_mode($gateway);
+            $prefix = $mode === 'production' ? $service : $service . '.' . $mode;
+            return sprintf(WC_Twoinc_Brand::get('checkout_url_template'), $prefix);
         }
 
         /**

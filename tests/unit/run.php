@@ -89,6 +89,10 @@ final class BrandConfigSpec
             'testSoleTraderTokenMintReadsHeaderCaseInsensitively',
             'testSoleTraderTokenMintFailsClosed',
             'testSoleTraderSignupUrlFollowsEnvAndFilter',
+            'testEnvironmentModeNormalisesStoredCheckoutEnv',
+            'testEnvironmentHostFollowsModeAndBrandTemplate',
+            'testCheckoutHostPrefersExplicitModeOverDevSniffing',
+            'testCheckoutEnvOptionsPreserveStoredModeWithoutSettingsApi',
         ];
         foreach ($tests as $test) {
             self::reset();
@@ -102,6 +106,7 @@ final class BrandConfigSpec
         WC_Twoinc_Brand::reset();
         putenv('TWO_BRAND_CODE');
         unset($GLOBALS['__twoinc_test_currency']);
+        unset($GLOBALS['test_home_url']);
         $GLOBALS['__twoinc_test_options'] = [];
         unset($_POST[WC_Twoinc_Payment_Terms::SESSION_KEY]);
         WC_Twoinc_Payment_Terms::reset_fee_cache();
@@ -1369,6 +1374,7 @@ final class BrandConfigSpec
             WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway, 30)
         );
         unset($GLOBALS['__twoinc_test_currency']);
+        unset($GLOBALS['test_home_url']);
     }
 
     private static function testBuyerFeeShareRounding(): void
@@ -1544,6 +1550,7 @@ final class BrandConfigSpec
         $clean = $gateway->validate_two_surcharge_grid_field('surcharge_grid', [30 => ['fixed' => '9999']]);
         TinyAssert::same([30 => ['fixed' => '9999']], $clean);
         unset($GLOBALS['__twoinc_test_currency']);
+        unset($GLOBALS['test_home_url']);
 
         // No cap configured: behaviour unchanged
         unset($GLOBALS['__twoinc_test_options'][$limit_option]);
@@ -1616,6 +1623,7 @@ final class BrandConfigSpec
         $html = $gateway->generate_two_surcharge_grid_html('surcharge_grid', []);
         TinyAssert::true(strpos($html, 'Max') === false, 'Max sentence must be omitted on currency mismatch');
         unset($GLOBALS['__twoinc_test_currency']);
+        unset($GLOBALS['test_home_url']);
     }
 
     private static function testPaymentTermsValidationRequiresSelection(): void
@@ -1891,6 +1899,120 @@ final class BrandConfigSpec
             return $url . '?brand=acme';
         });
         TinyAssert::same('https://checkout.sandbox.two.inc/soletrader/signup?brand=acme', WC_Twoinc_Sole_Trader::get_signup_page_url($gateway));
+    }
+
+    private static function testEnvironmentModeNormalisesStoredCheckoutEnv(): void
+    {
+        $cases = [
+            ['', 'production'],
+            ['PROD', 'production'],
+            ['Production', 'production'],
+            ['SANDBOX', 'sandbox'],
+            ['staging', 'staging'],
+            // Outside the allowlist -> production (the pre-template host for
+            // every unrecognised value). The mode splices into the API
+            // hostname, so hostile admin input must not steer it off-domain.
+            ['evil.example/', 'production'],
+            ['api.evil.example/#', 'production'],
+            ['foo', 'production'],
+        ];
+        foreach ($cases as [$stored, $expected]) {
+            $gateway = self::soleTraderGateway(['checkout_env' => $stored], []);
+            TinyAssert::same($expected, WC_Twoinc_Helper::get_environment_mode($gateway), $stored ?: '(empty)');
+        }
+    }
+
+    private static function testEnvironmentHostFollowsModeAndBrandTemplate(): void
+    {
+        // Two brand (default): production drops the mode suffix.
+        $gateway = self::soleTraderGateway([], []);
+        TinyAssert::same('https://api.two.inc', WC_Twoinc_Helper::get_environment_host('api', $gateway));
+
+        $gateway = self::soleTraderGateway(['checkout_env' => 'SANDBOX'], []);
+        TinyAssert::same('https://api.sandbox.two.inc', WC_Twoinc_Helper::get_environment_host('api', $gateway));
+
+        $gateway = self::soleTraderGateway(['checkout_env' => 'staging'], []);
+        TinyAssert::same('https://api.staging.two.inc', WC_Twoinc_Helper::get_environment_host('api', $gateway));
+        TinyAssert::same('https://checkout.staging.two.inc', WC_Twoinc_Helper::get_environment_host('checkout', $gateway));
+
+        // A brand overlay's template carries the brand's own domain.
+        WC_Twoinc_Brand::reset();
+        self::useTestbrand();
+        TinyAssert::same(
+            'https://api.staging.testbrand.example',
+            WC_Twoinc_Helper::get_environment_host('api', $gateway)
+        );
+    }
+
+    private static function testCheckoutHostPrefersExplicitModeOverDevSniffing(): void
+    {
+        $make = static function (array $options) {
+            return new class ($options) extends WC_Twoinc {
+                private $options;
+                public function __construct($options)
+                {
+                    $this->id = WC_Twoinc_Brand::get('gateway_id');
+                    $this->options = $options;
+                }
+                public function get_option($key, $empty_value = null)
+                {
+                    return $this->options[$key] ?? $empty_value ?? '';
+                }
+            };
+        };
+
+        // Non-dev hostname, default mode: production host.
+        $GLOBALS['test_home_url'] = 'https://shop.merchant.example';
+        TinyAssert::same('https://api.two.inc', $make([])->get_twoinc_checkout_host());
+
+        // Dev-sniffed hostname (*.staging.two.inc) with the default mode:
+        // legacy behaviour, the configured test host wins.
+        $GLOBALS['test_home_url'] = 'https://woocom.staging.two.inc';
+        TinyAssert::same(
+            'https://api.staging.example',
+            $make(['test_checkout_host' => 'https://api.staging.example'])->get_twoinc_checkout_host()
+        );
+
+        // An explicit mode beats the sniffer — even on a dev hostname.
+        TinyAssert::same(
+            'https://api.staging.two.inc',
+            $make(['checkout_env' => 'staging', 'test_checkout_host' => 'https://api.staging.example'])->get_twoinc_checkout_host()
+        );
+
+        // Non-dev brand shop with explicit staging mode: no sniffing needed.
+        $GLOBALS['test_home_url'] = 'https://brand-shop.staging.brand.example';
+        TinyAssert::same('https://api.staging.two.inc', $make(['checkout_env' => 'staging'])->get_twoinc_checkout_host());
+    }
+
+    private static function testCheckoutEnvOptionsPreserveStoredModeWithoutSettingsApi(): void
+    {
+        // The options builder must read the raw settings row, never
+        // WC_Settings_API::get_option — that path re-enters
+        // init_form_fields() on installs missing the key (fresh installs)
+        // and recurses. The stub gateway would mask that, so assert the
+        // read goes through the wp option instead.
+        $gateway = new class () extends WC_Twoinc {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+            public function get_option($key, $empty_value = null)
+            {
+                throw new RuntimeException('settings API consulted from options builder');
+            }
+        };
+        $key = $gateway->get_option_key();
+
+        // Fresh install: no settings row at all.
+        TinyAssert::same(['PROD', 'SANDBOX'], array_keys($gateway->get_checkout_env_options()));
+
+        // Stored custom allowlisted mode is preserved as an option.
+        $GLOBALS['__twoinc_test_options'][$key] = ['checkout_env' => 'staging'];
+        TinyAssert::same(['PROD', 'SANDBOX', 'staging'], array_keys($gateway->get_checkout_env_options()));
+
+        // Garbage is NOT perpetuated as a selectable option.
+        $GLOBALS['__twoinc_test_options'][$key] = ['checkout_env' => 'evil.example/'];
+        TinyAssert::same(['PROD', 'SANDBOX'], array_keys($gateway->get_checkout_env_options()));
     }
 }
 
