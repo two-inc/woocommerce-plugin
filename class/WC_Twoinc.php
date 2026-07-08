@@ -1254,7 +1254,10 @@ if (!class_exists('WC_Twoinc')) {
                             ],
                             admin_url('admin-ajax.php')
                         ),
-                        'twoinc_admin_nonce'
+                        // Scope the nonce to the exact order + variant this
+                        // link authorizes — not the shared twoinc_admin_nonce
+                        // action the unrelated XHR handlers use.
+                        "twoinc_download_invoice_{$order->get_id()}_{$variant}"
                     );
                 };
 
@@ -1412,10 +1415,14 @@ if (!class_exists('WC_Twoinc')) {
         {
             $slug = strtolower(trim(preg_replace('/[^A-Za-z0-9]+/', '-', $product_name), '-'));
             $kind = $variant === 'credit_note' ? 'credit-note' : 'invoice';
+            // The order id is order meta (normally a UUID, but never
+            // validated) and lands in a quoted Content-Disposition filename
+            // — strip anything that could break out of the quoting.
+            $safe_id = preg_replace('/[^A-Za-z0-9_-]/', '', (string) $twoinc_order_id);
             return [
                 'action' => 'stream',
                 'body' => wp_remote_retrieve_body($response),
-                'filename' => "{$slug}-{$kind}-{$twoinc_order_id}.pdf",
+                'filename' => "{$slug}-{$kind}-{$safe_id}.pdf",
             ];
         }
 
@@ -1461,32 +1468,42 @@ if (!class_exists('WC_Twoinc')) {
          */
         public static function ajax_download_invoice()
         {
-            check_admin_referer('twoinc_admin_nonce');
-
             $order_id = isset($_GET['order_id']) ? absint($_GET['order_id']) : 0;
             $variant = isset($_GET['variant']) ? sanitize_key(wp_unslash($_GET['variant'])) : '';
 
-            // Gate on the order-screen capability, NOT manage_options:
-            // WooCommerce shop managers (edit_shop_orders, no
-            // manage_options) can use the order edit screen and could
-            // follow the previous direct-API link, so they must not be
-            // locked out of the download.
-            if (!$order_id || !current_user_can('edit_shop_orders')) {
-                wp_die(__('You are not allowed to download this invoice.', 'twoinc-payment-gateway'), '', ['response' => 403]);
-            }
+            // The nonce action is scoped to the exact order + variant the
+            // link was minted for (add_invoice_credit_note_urls), so the
+            // request params must be read before the nonce can be checked.
+            check_admin_referer("twoinc_download_invoice_{$order_id}_{$variant}");
 
             if (!in_array($variant, ['original', 'credit_note'], true)) {
                 wp_die(__('Invalid invoice variant.', 'twoinc-payment-gateway'), '', ['response' => 400]);
             }
 
-            $order = wc_get_order($order_id);
+            $order = $order_id ? wc_get_order($order_id) : false;
             if (!$order || !WC_Twoinc_Helper::is_twoinc_order($order)) {
                 wp_die(__('Order not found.', 'twoinc-payment-gateway'), '', ['response' => 404]);
+            }
+
+            // Gate on the per-order meta capability (WC's idiom for
+            // per-order actions), NOT manage_options or the blanket
+            // edit_shop_orders type capability: shop managers must not be
+            // locked out, but plugins that scope order visibility per user
+            // (multi-vendor etc.) hook the meta-cap, so the check must name
+            // the specific order being downloaded.
+            if (!current_user_can('edit_shop_order', $order_id)) {
+                wp_die(__('You are not allowed to download this invoice.', 'twoinc-payment-gateway'), '', ['response' => 403]);
             }
 
             $result = self::get_instance()->resolve_invoice_download($order, $variant);
 
             if ($result['action'] === 'stream') {
+                // Discard anything already buffered (admin-ajax and
+                // third-party plugins are known to leave stray output or
+                // whitespace) — any preceding bytes corrupt the PDF.
+                while (ob_get_level()) {
+                    ob_end_clean();
+                }
                 nocache_headers();
                 header('Content-Type: application/pdf');
                 header('Content-Disposition: attachment; filename="' . $result['filename'] . '"');
@@ -1499,7 +1516,10 @@ if (!class_exists('WC_Twoinc')) {
             // Notice outcome: park the message in a short-TTL one-shot
             // transient and bounce back to the order edit screen, where
             // render_invoice_download_notice (admin_notices) pops it.
-            set_transient('twoinc_invoice_notice_' . get_current_user_id(), [
+            // Keyed by user AND order: two order tabs downloading close
+            // together must not overwrite each other's notice (and a notice
+            // for order A must never render on order B's screen).
+            set_transient('twoinc_invoice_notice_' . get_current_user_id() . '_' . $order_id, [
                 'level' => $result['level'],
                 'message' => $result['message'],
             ], 60);
@@ -1518,7 +1538,23 @@ if (!class_exists('WC_Twoinc')) {
          */
         public function render_invoice_download_notice()
         {
-            $key = 'twoinc_invoice_notice_' . get_current_user_id();
+            // admin_notices fires on every wp-admin page, but the transient
+            // is scoped to one order — only render it on that order's edit
+            // screen. Resolve the order id the way WooCommerce routes the
+            // two order-edit screens: HPOS is admin.php?page=wc-orders&id=N,
+            // legacy is post.php?post=N.
+            if (isset($_GET['page'], $_GET['id']) && sanitize_key(wp_unslash($_GET['page'])) === 'wc-orders') {
+                $order_id = absint($_GET['id']);
+            } elseif (isset($_GET['post'])) {
+                $order_id = absint($_GET['post']);
+            } else {
+                return;
+            }
+            if (!$order_id) {
+                return;
+            }
+
+            $key = 'twoinc_invoice_notice_' . get_current_user_id() . '_' . $order_id;
             $notice = get_transient($key);
             if (!is_array($notice) || !isset($notice['message'])) {
                 return;

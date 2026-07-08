@@ -103,6 +103,9 @@ final class BrandConfigSpec
             'testInvoiceDownload200NonPdfIsError',
             'testInvoiceDownloadCreditNoteOmitsVOriginal',
             'testInvoiceDownloadCapabilityGate',
+            'testInvoiceDownloadNonceScopedToOrderAndVariant',
+            'testInvoiceDownloadNoticeIsolatedPerOrder',
+            'testInvoiceStreamFilenameSanitizesOrderId',
         ];
         foreach ($tests as $test) {
             self::reset();
@@ -2203,38 +2206,155 @@ final class BrandConfigSpec
         TinyAssert::true(strpos($result['filename'], 'credit-note') !== false);
     }
 
+    /**
+     * A StubOrder that is a Two order (payment method matches the brand
+     * gateway id) with a Two order-id meta, registered as wc_get_order(42).
+     */
+    private static function registerTwoOrder(): StubOrder
+    {
+        $order = self::invoiceOrder();
+        $order->payment_method = WC_Twoinc_Brand::get('gateway_id');
+        $GLOBALS['__twoinc_test_wc_orders'] = [42 => $order];
+        return $order;
+    }
+
+    private static function runDownloadHandler(): string
+    {
+        try {
+            WC_Twoinc::ajax_download_invoice();
+        } catch (RuntimeException $e) {
+            return $e->getMessage();
+        }
+        return '';
+    }
+
+    private static function withGatewayInstance(WC_Twoinc $gateway, callable $fn)
+    {
+        $prop = new ReflectionProperty(WC_Twoinc::class, 'instance');
+        $prop->setAccessible(true);
+        $prop->setValue(null, $gateway);
+        try {
+            return $fn();
+        } finally {
+            $prop->setValue(null, null);
+        }
+    }
+
     private static function testInvoiceDownloadCapabilityGate(): void
     {
         $_GET['_wpnonce'] = 'test';
         $_GET['order_id'] = '42';
         $_GET['variant'] = 'original';
 
-        // Without the order-screen capability the handler dies (403).
+        // The order lookup runs before the capability gate: an unknown
+        // order 404s regardless of capabilities.
         $GLOBALS['__twoinc_test_caps'] = [];
-        $message = '';
-        try {
-            WC_Twoinc::ajax_download_invoice();
-        } catch (RuntimeException $e) {
-            $message = $e->getMessage();
-        }
-        TinyAssert::true(strpos($message, 'not allowed') !== false, 'expected capability wp_die without edit_shop_orders');
-
-        // With edit_shop_orders (shop manager — no manage_options needed)
-        // the gate passes; execution proceeds to the order lookup, which
-        // fails differently here (no order registered).
-        $GLOBALS['__twoinc_test_caps'] = ['edit_shop_orders'];
+        $GLOBALS['__twoinc_test_object_caps'] = [];
         $GLOBALS['__twoinc_test_wc_orders'] = [];
-        $message = '';
-        try {
-            WC_Twoinc::ajax_download_invoice();
-        } catch (RuntimeException $e) {
-            $message = $e->getMessage();
-        }
-        TinyAssert::true(strpos($message, 'not allowed') === false, 'edit_shop_orders must pass the capability gate');
-        TinyAssert::true(strpos($message, 'Order not found') !== false);
+        TinyAssert::true(strpos(self::runDownloadHandler(), 'Order not found') !== false);
+
+        // The gate is the per-order meta capability: holding the blanket
+        // edit_shop_orders type capability but NOT edit_shop_order on this
+        // specific order (multi-vendor / restricted-visibility plugins hook
+        // the meta-cap) must be denied.
+        self::registerTwoOrder();
+        $GLOBALS['__twoinc_test_caps'] = ['edit_shop_orders'];
+        $GLOBALS['__twoinc_test_object_caps'] = ['edit_shop_order:41'];
+        $message = self::runDownloadHandler();
+        TinyAssert::true(strpos($message, 'not allowed') !== false, 'expected wp_die without per-order edit_shop_order');
+
+        // With the per-order grant the gate passes: the handler proceeds to
+        // the API call (WP_Error here → error notice) and redirects back to
+        // the order edit screen with the notice parked in a transient.
+        $GLOBALS['__twoinc_test_object_caps'] = ['edit_shop_order:42'];
+        $GLOBALS['__twoinc_test_transients'] = [];
+        $message = self::withGatewayInstance(self::invoiceGateway([]), function () {
+            return self::runDownloadHandler();
+        });
+        TinyAssert::true(strpos($message, 'redirect:') === 0, 'per-order grant must pass the gate and redirect');
+        TinyAssert::true(isset($GLOBALS['__twoinc_test_transients']['twoinc_invoice_notice_1_42']), 'notice transient must be keyed by user AND order');
 
         unset($_GET['_wpnonce'], $_GET['order_id'], $_GET['variant']);
-        unset($GLOBALS['__twoinc_test_caps'], $GLOBALS['__twoinc_test_wc_orders']);
+        unset($GLOBALS['__twoinc_test_caps'], $GLOBALS['__twoinc_test_object_caps'], $GLOBALS['__twoinc_test_wc_orders'], $GLOBALS['__twoinc_test_transients']);
+    }
+
+    private static function testInvoiceDownloadNonceScopedToOrderAndVariant(): void
+    {
+        // Mint side: the order-screen download button.
+        $order = self::registerTwoOrder();
+        $GLOBALS['__twoinc_test_nonce_url_actions'] = [];
+        ob_start();
+        self::invoiceGateway([])->add_invoice_credit_note_urls($order);
+        ob_end_clean();
+        TinyAssert::same(['twoinc_download_invoice_42_original'], $GLOBALS['__twoinc_test_nonce_url_actions']);
+
+        // Verify side: the ajax handler checks the SAME order+variant-scoped
+        // action — not the shared twoinc_admin_nonce the XHR handlers use.
+        $_GET['_wpnonce'] = 'test';
+        $_GET['order_id'] = '42';
+        $_GET['variant'] = 'original';
+        $GLOBALS['__twoinc_test_caps'] = [];
+        $GLOBALS['__twoinc_test_object_caps'] = [];
+        $GLOBALS['__twoinc_test_referer_actions'] = [];
+        self::runDownloadHandler();
+        TinyAssert::same(['twoinc_download_invoice_42_original'], $GLOBALS['__twoinc_test_referer_actions']);
+
+        unset($_GET['_wpnonce'], $_GET['order_id'], $_GET['variant']);
+        unset($GLOBALS['__twoinc_test_caps'], $GLOBALS['__twoinc_test_object_caps'], $GLOBALS['__twoinc_test_wc_orders']);
+        unset($GLOBALS['__twoinc_test_nonce_url_actions'], $GLOBALS['__twoinc_test_referer_actions']);
+    }
+
+    private static function testInvoiceDownloadNoticeIsolatedPerOrder(): void
+    {
+        $gateway = self::invoiceGateway([]);
+        $GLOBALS['__twoinc_test_transients'] = [
+            'twoinc_invoice_notice_1_42' => ['level' => 'info', 'message' => 'notice for order 42'],
+            'twoinc_invoice_notice_1_43' => ['level' => 'error', 'message' => 'notice for order 43'],
+        ];
+
+        $render = static function () use ($gateway) {
+            ob_start();
+            $gateway->render_invoice_download_notice();
+            return ob_get_clean();
+        };
+
+        // No resolvable order id on the current screen: render nothing,
+        // consume nothing (no leaking onto unrelated wp-admin pages).
+        TinyAssert::same('', $render());
+        TinyAssert::same(2, count($GLOBALS['__twoinc_test_transients']));
+
+        // HPOS order edit screen for order 42: only order 42's notice
+        // renders and only its transient is consumed.
+        $_GET['page'] = 'wc-orders';
+        $_GET['id'] = '42';
+        $out = $render();
+        TinyAssert::true(strpos($out, 'notice for order 42') !== false);
+        TinyAssert::true(strpos($out, 'notice for order 43') === false, 'order B notice must not leak to order A screen');
+        TinyAssert::true(!isset($GLOBALS['__twoinc_test_transients']['twoinc_invoice_notice_1_42']));
+        TinyAssert::true(isset($GLOBALS['__twoinc_test_transients']['twoinc_invoice_notice_1_43']));
+        unset($_GET['page'], $_GET['id']);
+
+        // Legacy (post.php?post=N) order edit screen for order 43.
+        $_GET['post'] = '43';
+        $out = $render();
+        TinyAssert::true(strpos($out, 'notice for order 43') !== false);
+        TinyAssert::same(0, count($GLOBALS['__twoinc_test_transients']));
+        unset($_GET['post']);
+
+        unset($GLOBALS['__twoinc_test_transients']);
+    }
+
+    private static function testInvoiceStreamFilenameSanitizesOrderId(): void
+    {
+        $gateway = self::invoiceGateway(['/v1/invoice/' => [self::pdfOk()]]);
+        $order = new StubOrder();
+        $order->meta[WC_Twoinc_Brand::prefixed_name('order_id')] = 'ab"c;d e/f.pdf';
+        $result = $gateway->resolve_invoice_download($order, 'original');
+        TinyAssert::same('stream', $result['action']);
+        // Raw meta lands in a quoted Content-Disposition filename: anything
+        // outside [A-Za-z0-9_-] must be stripped.
+        TinyAssert::true(strpos($result['filename'], 'abcdefpdf.pdf') !== false);
+        TinyAssert::same(false, strpbrk($result['filename'], '";/ ') !== false, 'filename must not carry quote/semicolon/slash/space');
     }
 }
 
