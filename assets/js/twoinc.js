@@ -1553,10 +1553,12 @@ class Twoinc {
     // Stop if not the checkout page
     if (jQuery("#order_review").length === 0) return;
 
-    // If we found the field — or company search should serve other
-    // payment methods even while this gateway is gated away — set up the
-    // business fields (toggleBusinessFields itself picks the right field
-    // set for the not-selected case).
+    // Set up the business fields when the gateway is visible — or when
+    // company search should serve other payment methods while this
+    // gateway is gated away. (Note isTwoincVisible() is also true when
+    // the gateway <li> is absent entirely — .css() on an empty set — so
+    // the second clause guards intent, not today's behaviour: it must
+    // survive any future tightening of isTwoincVisible.)
     if (
       twoincDomHelper.isTwoincVisible() ||
       (window.twoinc.enable_company_search === "yes" &&
@@ -2060,7 +2062,11 @@ jQuery(function () {
         } else {
           const $body = jQuery(document.body);
           const retryInit = function () {
-            if (initIfGatewayPresent()) {
+            // initialize(false): the load-time saved-input replay must not
+            // run mid-session — replaying stored radio/checkbox clicks
+            // TOGGLES state the buyer set after page load.
+            if (jQuery("#payment_method_" + window.twoinc.gateway_id).length > 0) {
+              Twoinc.getInstance().initialize(false);
               $body.off("updated_checkout", retryInit);
             }
           };

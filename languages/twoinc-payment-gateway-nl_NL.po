@@ -743,7 +743,7 @@ msgstr "Inclusief btw (bruto)"
 
 #: class/WC_Twoinc.php
 msgid "Increment the surcharge is rounded to (e.g. 1 = whole units, 0.50 = nearest half). Applies only when a rounding direction is selected."
-msgstr "Stapgrootte waarop de toeslag wordt afgerond (bijv. 1 = hele eenheden, 0,50 = halve). Geldt alleen wanneer een afrondingsrichting is gekozen."
+msgstr "Stapgrootte waarop de toeslag wordt afgerond (bijv. 1 = hele eenheden, 0,50 = halve eenheden). Geldt alleen wanneer een afrondingsrichting is gekozen."
 
 #: class/WC_Twoinc.php
 msgid "Lets buyers check out as a sole trader by registering or logging in with Two. The option only appears for billing countries where sole traders are supported, determined automatically."
@@ -803,7 +803,7 @@ msgstr "Type betalingstermijn"
 
 #: class/WC_Twoinc.php
 msgid "Payment terms and offset pricing"
-msgstr "Betalingstermijnen en prijsverrekening"
+msgstr "Betalingstermijnen en toeslagen"
 
 #: class/WC_Twoinc.php
 msgid "Per payment term: a fixed amount, a percentage of the order, and an optional cap on the percentage portion. Leave a cell blank for zero. Fixed amounts and caps are in the store currency and are not converted for multi-currency stores."
@@ -875,7 +875,7 @@ msgstr "Servicekosten"
 
 #: class/WC_Twoinc.php
 msgid "Snap the buyer surcharge line to a clean increment. Select None for standard two-decimal amounts."
-msgstr "Rond de toeslagregel voor de koper af op een nette stapgrootte. Kies Geen voor standaardbedragen met twee decimalen."
+msgstr "Rond de toeslagregel voor de koper af op een nette stapgrootte. Kies \"Geen\" voor standaardbedragen met twee decimalen."
 
 #: class/WC_Twoinc_Sole_Trader.php
 msgid "Sole trader"
@@ -887,7 +887,7 @@ msgstr "Afrekenen als eenmanszaak"
 
 #: class/WC_Twoinc_Sole_Trader.php
 msgid "Something went wrong setting up sole trader checkout. Please try again."
-msgstr "Er is iets misgegaan bij het instellen van afrekenen als eenmanszaak. Probeer het opnieuw."
+msgstr "Er is iets misgegaan bij het instellen van het afrekenen als eenmanszaak. Probeer het opnieuw."
 
 #: class/WC_Twoinc.php
 msgid "Standard"
@@ -899,7 +899,7 @@ msgstr "Standaard (vanaf factuurdatum)"
 
 #: class/WC_Twoinc.php
 msgid "Standard counts the term days from the invoice date. End of month counts them from the end of the invoice month."
-msgstr "Standaard telt de termijndagen vanaf de factuurdatum. Einde van de maand telt ze vanaf het einde van de factuurmaand."
+msgstr "Standaard telt de termijndagen vanaf de factuurdatum. Einde van de maand telt deze vanaf het einde van de factuurmaand."
 
 #: class/WC_Twoinc.php
 msgid "Surcharge %1$s for the %2$s-day term must be a non-negative number."
@@ -943,7 +943,7 @@ msgstr "Het project dat op de facturen wordt weergegeven"
 
 #: class/WC_Twoinc.php
 msgid "The selected payment term is no longer available. Please review the payment options and place the order again."
-msgstr "De geselecteerde betalingstermijn is niet meer beschikbaar. Controleer de betaalopties en plaats de bestelling opnieuw."
+msgstr "De geselecteerde betalingstermijn is niet meer beschikbaar. Controleer de betalingsopties en plaats de bestelling opnieuw."
 
 #: class/WC_Twoinc.php
 msgid "The tracking number could not be attached to the %s order. The invoice will be sent without it."
@@ -951,7 +951,7 @@ msgstr "Het trackingnummer kon niet aan de %s-bestelling worden gekoppeld. De fa
 
 #: class/WC_Twoinc.php
 msgid "Total fee charges the configured surcharge for the chosen term. Fee difference charges only the difference versus the default term (which then shows no surcharge)."
-msgstr "Totaaltarief rekent de ingestelde toeslag voor de gekozen termijn. Kostenverschil rekent alleen het verschil ten opzichte van de standaardtermijn (die dan geen toeslag toont)."
+msgstr "Totaaltarief brengt de ingestelde toeslag voor de gekozen termijn in rekening. Kostenverschil brengt alleen het verschil ten opzichte van de standaardtermijn in rekening (die dan geen toeslag toont)."
 
 #: class/WC_Twoinc.php
 msgid "Total fee for selected term"
@@ -967,7 +967,7 @@ msgstr "Of het winkelmandje met het minimum wordt vergeleken inclusief of exclus
 
 #: class/WC_Twoinc.php
 msgid "deployed %s UTC"
-msgstr "geïmplementeerd %s UTC"
+msgstr "uitgerold %s UTC"
 
 #: class/WC_Twoinc.php
 msgid "excluding"

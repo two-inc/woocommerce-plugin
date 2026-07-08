@@ -317,19 +317,24 @@ jQuery(function ($) {
     // column visibility follows the surcharge method. Server render is the
     // template contract: <tr data-days> with inputs named
     // <field_key>[<days>][fixed|percentage|limit] and twoinc-col-* classes.
-    const $grid = jQuery(".twoinc-surcharge-grid").first();
-    const $gridEmpty = jQuery(".twoinc-surcharge-grid-empty").first();
+    const $grid = $(".twoinc-surcharge-grid").first();
+    const $gridEmpty = $(".twoinc-surcharge-grid-empty").first();
     const $surchargeType = $("#" + prefix + "surcharge_type");
 
     function gridTerms() {
+      // Mirror the PHP render (WC_Twoinc_Payment_Terms::get_available_terms):
+      // ticked presets ∩ merchant-offered, then UNION the custom day — a
+      // custom term is offered at checkout even when it sits outside the
+      // backend's preset list, so its surcharge row must stay editable.
       const merchant = (twoinc_admin.merchant_available_terms || []).map(Number);
-      const offered = offeredTerms();
-      if (merchant.length === 0) {
-        return [];
-      }
-      return offered.filter(function (d) {
-        return merchant.indexOf(d) !== -1;
+      const ticked = [];
+      $checkboxes.filter(":checked").each(function () {
+        const n = parseInt($(this).val(), 10);
+        if (n > 0 && merchant.indexOf(n) !== -1) ticked.push(n);
       });
+      const c = customDay();
+      if (c > 0) ticked.push(c);
+      return uniqueSorted(ticked);
     }
 
     function buildGridRow(fieldKey, days) {
@@ -338,17 +343,17 @@ jQuery(function ($) {
       // silently clear a stored term's surcharge on untick+retick.
       const stored = (twoinc_admin.surcharge_grid || {})[days] || {};
       const cell = function (col) {
-        return jQuery("<td></td>")
+        return $("<td></td>")
           .addClass("twoinc-col-" + col)
           .append(
-            jQuery('<input type="text" style="width:90px" />')
+            $('<input type="text" style="width:90px" />')
               .attr("name", fieldKey + "[" + days + "][" + col + "]")
               .val(stored[col] || "")
           );
       };
-      return jQuery("<tr></tr>")
+      return $("<tr></tr>")
         .attr("data-days", days)
-        .append(jQuery("<td></td>").text(days))
+        .append($("<td></td>").text(days))
         .append(cell("fixed"))
         .append(cell("percentage"))
         .append(cell("limit"));
@@ -363,8 +368,8 @@ jQuery(function ($) {
       // validator preserves rows absent from the POST); only unsaved
       // edits in the removed row are lost.
       $tbody.find("tr").each(function () {
-        if (terms.indexOf(Number(jQuery(this).attr("data-days"))) === -1) {
-          jQuery(this).remove();
+        if (terms.indexOf(Number($(this).attr("data-days"))) === -1) {
+          $(this).remove();
         }
       });
       // Insert missing rows in day order.
@@ -373,8 +378,8 @@ jQuery(function ($) {
         const $row = buildGridRow(fieldKey, days);
         let $before = null;
         $tbody.find("tr").each(function () {
-          if ($before === null && Number(jQuery(this).attr("data-days")) > days) {
-            $before = jQuery(this);
+          if ($before === null && Number($(this).attr("data-days")) > days) {
+            $before = $(this);
           }
         });
         if ($before) {
@@ -398,7 +403,7 @@ jQuery(function ($) {
       // Cap bounds the percentage portion — follows the percentage column.
       $grid.find(".twoinc-col-limit").toggle(showPct);
       // No surcharge method: the whole grid row is noise.
-      jQuery(".twoinc-surcharge-grid-field").toggle(type !== "none");
+      $(".twoinc-surcharge-grid-field").toggle(type !== "none");
     }
 
     function onTermsChanged() {

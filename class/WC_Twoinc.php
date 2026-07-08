@@ -3343,6 +3343,7 @@ if (!class_exists('WC_Twoinc')) {
                 );
             }
             echo '<p><small class="description">' . esc_html(sprintf(
+                /* translators: 1: plugin (and overlay) provenance fragments, 2: WooCommerce version, 3: WordPress version */
                 __('%1$s | WooCommerce: %2$s | WordPress: %3$s', 'twoinc-payment-gateway'),
                 implode(' | ', $components),
                 defined('WC_VERSION') ? WC_VERSION : '?',
@@ -3368,13 +3369,13 @@ if (!class_exists('WC_Twoinc')) {
         {
             $detail = [];
             $git_pointer = dirname($main_file) . '/.git';
-            if (is_file($git_pointer)) {
+            if (is_file($git_pointer) && is_readable($git_pointer)) {
                 $pointer = (string) file_get_contents($git_pointer);
                 if (preg_match('#gitdir:\s*.*/([0-9a-f]{40})\s*$#', trim($pointer), $m)) {
                     $detail[] = substr($m[1], 0, 12);
                 }
             }
-            $mtime = @filemtime($main_file);
+            $mtime = is_readable($main_file) ? filemtime($main_file) : false;
             if ($detail && $mtime) {
                 $detail[] = sprintf(
                     /* translators: %s: UTC timestamp the code was deployed */
