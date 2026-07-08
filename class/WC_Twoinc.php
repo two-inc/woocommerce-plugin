@@ -603,8 +603,11 @@ if (!class_exists('WC_Twoinc')) {
          */
         private function get_abt_twoinc_html()
         {
-            if ($this->get_option('show_abt_link') === 'yes') {
-                $abt_url = WC_Twoinc_Brand::get('about_url');
+            $abt_url = WC_Twoinc_Brand::get('about_url');
+            // A brand with no about page ('' — e.g. ABN, whose subtitle
+            // already carries its own "lees meer" link) renders nothing
+            // here, regardless of the merchant's show_abt_link setting.
+            if ($this->get_option('show_abt_link') === 'yes' && $abt_url !== '') {
                 $product_name = WC_Twoinc_Brand::get('product_name');
                 $link = '<a href="' . esc_url($abt_url) . '" target="_blank">' . sprintf(__('What is %s?', 'twoinc-payment-gateway'), $product_name) . '</a>';
                 $text = sprintf(
