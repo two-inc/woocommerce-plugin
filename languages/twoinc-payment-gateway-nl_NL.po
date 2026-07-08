@@ -648,3 +648,331 @@ msgid ""
 msgstr ""
 "Uw factuuraankoop met %s wordt waarschijnlijk geaccepteerd, mits er "
 "aanvullende controles worden uitgevoerd."
+
+#: class/WC_Twoinc.php
+msgid "%1$s | WooCommerce: %2$s | WordPress: %3$s"
+msgstr "%1$s | WooCommerce: %2$s | WordPress: %3$s"
+
+#: class/WC_Twoinc.php
+msgid "%s days"
+msgstr "%s dagen"
+
+#: class/WC_Twoinc.php
+msgid "API key for the sandbox environment is available on your merchant portal (however please reach out to %s for access to production keys)."
+msgstr "De API-sleutel voor de sandboxomgeving is beschikbaar in uw verkopersportaal (neem contact op met %s voor toegang tot productiesleutels)."
+
+#: class/WC_Twoinc.php
+msgid "Brand overlay: %1$s %2$s"
+msgstr "Merkoverlay: %1$s %2$s"
+
+#: class/WC_Twoinc.php
+msgid "Buyer-facing label for the surcharge line. Use %s for the term length in days. Leave blank to use the brand default."
+msgstr "Label van de toeslagregel dat de koper ziet. Gebruik %s voor de termijn in dagen. Laat leeg voor de merkstandaard."
+
+#: class/WC_Twoinc.php
+msgid "Cap"
+msgstr "Maximum"
+
+#: class/WC_Twoinc_Sole_Trader.php
+msgid "Click here to login or sign up as a sole trader."
+msgstr "Klik hier om in te loggen of u te registreren als eenmanszaak."
+
+#: class/WC_Twoinc.php
+msgid "Custom Payment Term (days)"
+msgstr "Aangepaste betalingstermijn (dagen)"
+
+#: class/WC_Twoinc.php
+msgid "Custom Payment Term (days) must be a whole number of days."
+msgstr "Aangepaste betalingstermijn (dagen) moet een geheel aantal dagen zijn."
+
+#: class/WC_Twoinc.php
+msgid "Default Payment Term"
+msgstr "Standaard betalingstermijn"
+
+#: class/WC_Twoinc.php
+msgid "Down"
+msgstr "Omlaag"
+
+#: class/WC_Twoinc.php
+msgid "Download %s credit note"
+msgstr "Download %s-creditnota"
+
+#: class/WC_Twoinc.php
+msgid "Download %s invoice"
+msgstr "Download %s-factuur"
+
+#: class/WC_Twoinc.php
+msgid "Enable sole trader checkout"
+msgstr "Afrekenen als eenmanszaak inschakelen"
+
+#: class/WC_Twoinc.php
+msgid "End of month"
+msgstr "Einde van de maand"
+
+#: class/WC_Twoinc.php
+msgid "Enter the amount you want to charge your customer. Max %s."
+msgstr "Voer het bedrag in dat u uw klant in rekening wilt brengen. Maximaal %s."
+
+#: class/WC_Twoinc.php
+msgid "Excluding tax (net)"
+msgstr "Exclusief btw (netto)"
+
+#: class/WC_Twoinc.php
+msgid "Fee difference vs default payment term"
+msgstr "Kostenverschil t.o.v. standaard betalingstermijn"
+
+#: class/WC_Twoinc.php
+msgid "Fixed"
+msgstr "Vast"
+
+#: class/WC_Twoinc.php
+msgid "Fixed fee"
+msgstr "Vast tarief"
+
+#: class/WC_Twoinc.php
+msgid "Fixed fee and percentage"
+msgstr "Vast tarief en percentage"
+
+#: class/WC_Twoinc.php
+msgid "Hide the payment method below this order value (store currency, on the tax basis selected below). Leave empty for no minimum."
+msgstr "Verberg de betaalmethode onder deze orderwaarde (winkelvaluta, op de hieronder gekozen btw-grondslag). Laat leeg voor geen minimum."
+
+#: class/WC_Twoinc.php
+msgid "Including tax (gross)"
+msgstr "Inclusief btw (bruto)"
+
+#: class/WC_Twoinc.php
+msgid "Increment the surcharge is rounded to (e.g. 1 = whole units, 0.50 = nearest half). Applies only when a rounding direction is selected."
+msgstr "Stapgrootte waarop de toeslag wordt afgerond (bijv. 1 = hele eenheden, 0,50 = halve). Geldt alleen wanneer een afrondingsrichting is gekozen."
+
+#: class/WC_Twoinc.php
+msgid "Lets buyers check out as a sole trader by registering or logging in with Two. The option only appears for billing countries where sole traders are supported, determined automatically."
+msgstr "Laat kopers afrekenen als eenmanszaak door zich te registreren of in te loggen bij Two. De optie verschijnt alleen voor factuurlanden waar eenmanszaken worden ondersteund; dit wordt automatisch bepaald."
+
+#: class/WC_Twoinc.php
+msgid "Minimum Order Value Tax Basis"
+msgstr "Btw-grondslag minimale orderwaarde"
+
+#: class/WC_Twoinc.php
+msgid "Minimum Order Value must be a non-negative number."
+msgstr "Minimale orderwaarde moet een niet-negatief getal zijn."
+
+#: class/WC_Twoinc.php
+msgid "Minimum Order Value must exceed the platform minimum of %1$s, %2$s tax."
+msgstr "Minimale orderwaarde moet hoger zijn dan het platformminimum van %1$s, %2$s btw."
+
+#: class/WC_Twoinc.php
+msgid "Minimum Order Value, %s"
+msgstr "Minimale orderwaarde, %s"
+
+#: class/WC_Twoinc.php
+msgid "Minimum order value is %1$s%2$s %3$s tax."
+msgstr "De minimale orderwaarde is %1$s%2$s %3$s btw."
+
+#: class/WC_Twoinc.php
+msgid "No payment terms are available from your merchant account yet. Check that a valid API key is saved; if it is, the term list will load on the next refresh."
+msgstr "Er zijn nog geen betalingstermijnen beschikbaar vanuit uw verkopersaccount. Controleer of een geldige API-sleutel is opgeslagen; zo ja, dan wordt de termijnenlijst bij de volgende verversing geladen."
+
+#: class/WC_Twoinc.php
+msgid "No payment terms are offered yet — configure the offered terms above first."
+msgstr "Er worden nog geen betalingstermijnen aangeboden — stel eerst hierboven de aangeboden termijnen in."
+
+#: class/WC_Twoinc.php
+msgid "No surcharge applied"
+msgstr "Geen toeslag"
+
+#: class/WC_Twoinc.php
+msgid "None"
+msgstr "Geen"
+
+#: class/WC_Twoinc.php
+msgid "Optional. Enter a custom number of days to offer alongside the selected terms above."
+msgstr "Optioneel. Voer een aangepast aantal dagen in om aan te bieden naast de hierboven geselecteerde termijnen."
+
+#: class/WC_Twoinc.php
+msgid "Payment Surcharge Configuration"
+msgstr "Configuratie betalingstoeslag"
+
+#: class/WC_Twoinc.php
+msgid "Payment Terms"
+msgstr "Betalingstermijnen"
+
+#: class/WC_Twoinc.php
+msgid "Payment Terms Type"
+msgstr "Type betalingstermijn"
+
+#: class/WC_Twoinc.php
+msgid "Payment terms and offset pricing"
+msgstr "Betalingstermijnen en prijsverrekening"
+
+#: class/WC_Twoinc.php
+msgid "Per payment term: a fixed amount, a percentage of the order, and an optional cap on the percentage portion. Leave a cell blank for zero. Fixed amounts and caps are in the store currency and are not converted for multi-currency stores."
+msgstr "Per betalingstermijn: een vast bedrag, een percentage van de order en een optioneel maximum op het percentagedeel. Laat een cel leeg voor nul. Vaste bedragen en maxima zijn in de winkelvaluta en worden niet omgerekend voor winkels met meerdere valuta's."
+
+#: class/WC_Twoinc.php
+msgid "Percentage"
+msgstr "Percentage"
+
+#: class/WC_Twoinc.php
+msgid "Percentage (%)"
+msgstr "Percentage (%)"
+
+#: class/WC_Twoinc.php
+msgid "Platform minimum %1$s, %2$s tax. A value here is interpreted in the store currency on the tax basis selected below and must exceed it."
+msgstr "Platformminimum %1$s, %2$s btw. Een waarde hier wordt geïnterpreteerd in de winkelvaluta op de hieronder gekozen btw-grondslag en moet hoger zijn."
+
+#: class/WC_Twoinc.php
+msgid "Platform minimum %1$s, %2$s tax. A value here is interpreted in the store currency on the tax basis selected below; it cannot be checked against the platform minimum (different currency) — both minimums are enforced independently."
+msgstr "Platformminimum %1$s, %2$s btw. Een waarde hier wordt geïnterpreteerd in de winkelvaluta op de hieronder gekozen btw-grondslag; deze kan niet worden vergeleken met het platformminimum (andere valuta) — beide minima worden onafhankelijk toegepast."
+
+#: class/WC_Twoinc.php
+msgid "Please select your company before paying with %s."
+msgstr "Selecteer uw bedrijf voordat u betaalt met %s."
+
+#: class/WC_Twoinc.php
+msgid "Plugin: %s"
+msgstr "Plug-in: %s"
+
+#: class/WC_Twoinc.php
+msgid "Production"
+msgstr "Productie"
+
+#: class/WC_Twoinc.php
+msgid "Registered company"
+msgstr "Geregistreerd bedrijf"
+
+#: class/WC_Twoinc.php
+msgid "Rounding Step"
+msgstr "Afrondingsstap"
+
+#: class/WC_Twoinc.php
+msgid "Rounding step must be one of the offered values."
+msgstr "Afrondingsstap moet een van de aangeboden waarden zijn."
+
+#: class/WC_Twoinc.php
+msgid "Sandbox"
+msgstr "Sandbox"
+
+#: class/WC_Twoinc.php
+msgid "Select a method to surcharge your customer."
+msgstr "Kies een methode om uw klant een toeslag in rekening te brengen."
+
+#: class/WC_Twoinc.php
+msgid "Select at least one payment term or enter a custom term."
+msgstr "Selecteer ten minste één betalingstermijn of voer een aangepaste termijn in."
+
+#: class/WC_Twoinc.php
+msgid "Select the payment term that will be automatically selected for your customer."
+msgstr "Kies de betalingstermijn die automatisch voor uw klant wordt geselecteerd."
+
+#: class/WC_Twoinc.php
+msgid "Select the payment term(s) you want to offer."
+msgstr "Selecteer de betalingstermijn(en) die u wilt aanbieden."
+
+#: class/WC_Twoinc_Payment_Terms.php
+msgid "Service charge"
+msgstr "Servicekosten"
+
+#: class/WC_Twoinc.php
+msgid "Snap the buyer surcharge line to a clean increment. Select None for standard two-decimal amounts."
+msgstr "Rond de toeslagregel voor de koper af op een nette stapgrootte. Kies Geen voor standaardbedragen met twee decimalen."
+
+#: class/WC_Twoinc_Sole_Trader.php
+msgid "Sole trader"
+msgstr "Eenmanszaak"
+
+#: class/WC_Twoinc.php
+msgid "Sole trader checkout"
+msgstr "Afrekenen als eenmanszaak"
+
+#: class/WC_Twoinc_Sole_Trader.php
+msgid "Something went wrong setting up sole trader checkout. Please try again."
+msgstr "Er is iets misgegaan bij het instellen van afrekenen als eenmanszaak. Probeer het opnieuw."
+
+#: class/WC_Twoinc.php
+msgid "Standard"
+msgstr "Standaard"
+
+#: class/WC_Twoinc.php
+msgid "Standard (from invoice date)"
+msgstr "Standaard (vanaf factuurdatum)"
+
+#: class/WC_Twoinc.php
+msgid "Standard counts the term days from the invoice date. End of month counts them from the end of the invoice month."
+msgstr "Standaard telt de termijndagen vanaf de factuurdatum. Einde van de maand telt ze vanaf het einde van de factuurmaand."
+
+#: class/WC_Twoinc.php
+msgid "Surcharge %1$s for the %2$s-day term must be a non-negative number."
+msgstr "Toeslag %1$s voor de termijn van %2$s dagen moet een niet-negatief getal zijn."
+
+#: class/WC_Twoinc.php
+msgid "Surcharge Calculation Basis"
+msgstr "Berekeningsgrondslag toeslag"
+
+#: class/WC_Twoinc.php
+msgid "Surcharge Line Description"
+msgstr "Omschrijving toeslagregel"
+
+#: class/WC_Twoinc.php
+msgid "Surcharge Method"
+msgstr "Toeslagmethode"
+
+#: class/WC_Twoinc.php
+msgid "Surcharge Rounding"
+msgstr "Afronding toeslag"
+
+#: class/WC_Twoinc.php
+msgid "Surcharge fixed amount for the %1$s-day term exceeds the maximum of %2$s."
+msgstr "Vast toeslagbedrag voor de termijn van %1$s dagen overschrijdt het maximum van %2$s."
+
+#: class/WC_Twoinc.php
+msgid "Surcharge percentage for the %s-day term must be between 0 and 100."
+msgstr "Toeslagpercentage voor de termijn van %s dagen moet tussen 0 en 100 liggen."
+
+#: class/WC_Twoinc.php
+msgid "Term (days)"
+msgstr "Termijn (dagen)"
+
+#: class/WC_Twoinc.php
+msgid "The department displayed on the invoices"
+msgstr "De afdeling die op de facturen wordt weergegeven"
+
+#: class/WC_Twoinc.php
+msgid "The project displayed on the invoices"
+msgstr "Het project dat op de facturen wordt weergegeven"
+
+#: class/WC_Twoinc.php
+msgid "The selected payment term is no longer available. Please review the payment options and place the order again."
+msgstr "De geselecteerde betalingstermijn is niet meer beschikbaar. Controleer de betaalopties en plaats de bestelling opnieuw."
+
+#: class/WC_Twoinc.php
+msgid "The tracking number could not be attached to the %s order. The invoice will be sent without it."
+msgstr "Het trackingnummer kon niet aan de %s-bestelling worden gekoppeld. De factuur wordt zonder trackingnummer verzonden."
+
+#: class/WC_Twoinc.php
+msgid "Total fee charges the configured surcharge for the chosen term. Fee difference charges only the difference versus the default term (which then shows no surcharge)."
+msgstr "Totaaltarief rekent de ingestelde toeslag voor de gekozen termijn. Kostenverschil rekent alleen het verschil ten opzichte van de standaardtermijn (die dan geen toeslag toont)."
+
+#: class/WC_Twoinc.php
+msgid "Total fee for selected term"
+msgstr "Totaaltarief voor geselecteerde termijn"
+
+#: class/WC_Twoinc.php
+msgid "Up"
+msgstr "Omhoog"
+
+#: class/WC_Twoinc.php
+msgid "Whether the basket is compared against the minimum including or excluding tax."
+msgstr "Of het winkelmandje met het minimum wordt vergeleken inclusief of exclusief btw."
+
+#: class/WC_Twoinc.php
+msgid "deployed %s UTC"
+msgstr "geïmplementeerd %s UTC"
+
+#: class/WC_Twoinc.php
+msgid "excluding"
+msgstr "exclusief"
+
+#: class/WC_Twoinc.php
+msgid "including"
+msgstr "inclusief"

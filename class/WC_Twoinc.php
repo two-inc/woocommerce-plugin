@@ -782,31 +782,35 @@ if (!class_exists('WC_Twoinc')) {
                 : '';
 
             ob_start();
+            // Rendered rows mirror the SAVED offered set; admin.js keeps the
+            // grid live against unsaved term ticks (rows keyed by data-days,
+            // inputs named like the server-rendered ones) and toggles column
+            // visibility from the surcharge method — mirroring Magento's
+            // surcharge-grid.js. Keep the classes/data attributes in sync
+            // with initSurchargeGrid there.
             ?>
-            <tr valign="top">
+            <tr valign="top" class="twoinc-surcharge-grid-field">
                 <th scope="row" class="titledesc"><label><?php echo wp_kses_post($data['title']); ?></label></th>
                 <td class="forminp">
                     <?php if ($data['description']) : ?>
                         <p class="description"><?php echo wp_kses_post($data['description']); ?></p>
                     <?php endif; ?>
-                    <?php if (empty($terms)) : ?>
-                        <p><?php esc_html_e('No payment terms are offered yet — configure the offered terms above first.', 'twoinc-payment-gateway'); ?></p>
-                    <?php else : ?>
-                    <table class="widefat" style="max-width:620px">
+                    <p class="twoinc-surcharge-grid-empty"<?php echo empty($terms) ? '' : ' style="display:none"'; ?>><?php esc_html_e('No payment terms are offered yet — configure the offered terms above first.', 'twoinc-payment-gateway'); ?></p>
+                    <table class="widefat twoinc-surcharge-grid" data-field-key="<?php echo esc_attr($field_key); ?>" style="max-width:620px<?php echo empty($terms) ? ';display:none' : ''; ?>">
                         <thead><tr>
                             <th><?php esc_html_e('Term (days)', 'twoinc-payment-gateway'); ?></th>
-                            <th><?php esc_html_e('Fixed', 'twoinc-payment-gateway'); ?></th>
-                            <th><?php esc_html_e('Percentage (%)', 'twoinc-payment-gateway'); ?></th>
-                            <th><?php esc_html_e('Cap', 'twoinc-payment-gateway'); ?></th>
+                            <th class="twoinc-col-fixed"><?php esc_html_e('Fixed', 'twoinc-payment-gateway'); ?></th>
+                            <th class="twoinc-col-percentage"><?php esc_html_e('Percentage (%)', 'twoinc-payment-gateway'); ?></th>
+                            <th class="twoinc-col-limit"><?php esc_html_e('Cap', 'twoinc-payment-gateway'); ?></th>
                         </tr></thead>
                         <tbody>
                         <?php foreach ($terms as $days) :
                             $row = isset($stored[$days]) && is_array($stored[$days]) ? $stored[$days] : []; ?>
-                            <tr>
+                            <tr data-days="<?php echo esc_attr($days); ?>">
                                 <td><?php echo esc_html($days); ?></td>
-                                <td><input type="text" name="<?php echo esc_attr($field_key); ?>[<?php echo esc_attr($days); ?>][fixed]" value="<?php echo esc_attr(isset($row['fixed']) ? $row['fixed'] : ''); ?>" style="width:90px" /></td>
-                                <td><input type="text" name="<?php echo esc_attr($field_key); ?>[<?php echo esc_attr($days); ?>][percentage]" value="<?php echo esc_attr(isset($row['percentage']) ? $row['percentage'] : ''); ?>" style="width:90px" /></td>
-                                <td><input type="text" name="<?php echo esc_attr($field_key); ?>[<?php echo esc_attr($days); ?>][limit]" value="<?php echo esc_attr(isset($row['limit']) ? $row['limit'] : ''); ?>" style="width:90px" /></td>
+                                <td class="twoinc-col-fixed"><input type="text" name="<?php echo esc_attr($field_key); ?>[<?php echo esc_attr($days); ?>][fixed]" value="<?php echo esc_attr(isset($row['fixed']) ? $row['fixed'] : ''); ?>" style="width:90px" /></td>
+                                <td class="twoinc-col-percentage"><input type="text" name="<?php echo esc_attr($field_key); ?>[<?php echo esc_attr($days); ?>][percentage]" value="<?php echo esc_attr(isset($row['percentage']) ? $row['percentage'] : ''); ?>" style="width:90px" /></td>
+                                <td class="twoinc-col-limit"><input type="text" name="<?php echo esc_attr($field_key); ?>[<?php echo esc_attr($days); ?>][limit]" value="<?php echo esc_attr(isset($row['limit']) ? $row['limit'] : ''); ?>" style="width:90px" /></td>
                             </tr>
                         <?php endforeach; ?>
                         </tbody>
@@ -817,7 +821,6 @@ if (!class_exists('WC_Twoinc')) {
                             __('Enter the amount you want to charge your customer. Max %s.', 'twoinc-payment-gateway'),
                             $fixed_limit_label
                         )); ?></p>
-                    <?php endif; ?>
                     <?php endif; ?>
                 </td>
             </tr>
@@ -1275,6 +1278,15 @@ if (!class_exists('WC_Twoinc')) {
                 'days_label' => __('%s days', 'twoinc-payment-gateway'),
                 // Decimal separator for rendering fetched inline fee amounts.
                 'decimal_separator' => wc_get_price_decimal_separator(),
+                // Merchant-offered terms (cache-only read): the live surcharge
+                // grid mirrors ticked terms ∩ this list, matching the PHP
+                // render's get_available_terms() intersection.
+                'merchant_available_terms' => $this->get_merchant_available_terms(),
+                // Stored grid values: rows the live grid re-creates must carry
+                // the saved cell values — an empty re-created row would post
+                // blank cells and wipe the stored row on save (the validator
+                // treats rendered-and-blank as a deliberate clear).
+                'surcharge_grid' => (array) $this->get_option('surcharge_grid', []),
             ]);
         }
 
@@ -3315,12 +3327,80 @@ if (!class_exists('WC_Twoinc')) {
         public function admin_options()
         {
             parent::admin_options();
+            $components = [sprintf(
+                /* translators: 1: base plugin provenance, e.g. "2.23.9 (eb7bf92cec07, deployed 2026-07-08 11:35 UTC)" */
+                __('Plugin: %s', 'twoinc-payment-gateway'),
+                self::describe_component_provenance(WC_TWOINC_PLUGIN_PATH . 'tillit-payment-gateway.php', get_twoinc_plugin_version())
+            )];
+            $overlay = self::get_brand_overlay_main_file();
+            if ($overlay !== null) {
+                $overlay_data = function_exists('get_plugin_data') ? get_plugin_data($overlay, false, false) : [];
+                $components[] = sprintf(
+                    /* translators: 1: overlay plugin slug, 2: overlay provenance */
+                    __('Brand overlay: %1$s %2$s', 'twoinc-payment-gateway'),
+                    basename(dirname($overlay)),
+                    self::describe_component_provenance($overlay, isset($overlay_data['Version']) ? $overlay_data['Version'] : '?')
+                );
+            }
             echo '<p><small class="description">' . esc_html(sprintf(
-                __('Plugin version: %1$s | WooCommerce: %2$s | WordPress: %3$s', 'twoinc-payment-gateway'),
-                get_twoinc_plugin_version(),
+                __('%1$s | WooCommerce: %2$s | WordPress: %3$s', 'twoinc-payment-gateway'),
+                implode(' | ', $components),
                 defined('WC_VERSION') ? WC_VERSION : '?',
                 get_bloginfo('version')
             )) . '</small></p>';
+        }
+
+        /**
+         * Human version line for one deployed component: plugin version,
+         * plus — when the plugin dir was materialised from a git-sync
+         * worktree — the deployed commit and timestamp. A worktree copy
+         * carries a plain .git FILE whose gitdir path ends in the commit
+         * SHA (git-sync names worktree dirs by commit), and the deployer
+         * stamps a fresh mtime on the copied tree. Released (wp.org)
+         * installs have neither and show the bare version.
+         *
+         * @param string $main_file plugin main file path
+         * @param string $version   version header value
+         *
+         * @return string e.g. "2.23.9 (eb7bf92cec07, deployed 2026-07-08 11:35 UTC)"
+         */
+        private static function describe_component_provenance($main_file, $version)
+        {
+            $detail = [];
+            $git_pointer = dirname($main_file) . '/.git';
+            if (is_file($git_pointer)) {
+                $pointer = (string) file_get_contents($git_pointer);
+                if (preg_match('#gitdir:\s*.*/([0-9a-f]{40})\s*$#', trim($pointer), $m)) {
+                    $detail[] = substr($m[1], 0, 12);
+                }
+            }
+            $mtime = @filemtime($main_file);
+            if ($detail && $mtime) {
+                $detail[] = sprintf(
+                    /* translators: %s: UTC timestamp the code was deployed */
+                    __('deployed %s UTC', 'twoinc-payment-gateway'),
+                    gmdate('Y-m-d H:i', $mtime)
+                );
+            }
+            return $detail ? sprintf('%s (%s)', $version, implode(', ', $detail)) : $version;
+        }
+
+        /**
+         * Main plugin file of the installed brand overlay, or null on a
+         * vanilla (Two-brand) install. Derived from the brand file the
+         * overlay registered: <overlay>/brands/<code>.php.
+         *
+         * @return string|null
+         */
+        private static function get_brand_overlay_main_file()
+        {
+            $brand_file = apply_filters('twoinc_brand_file', null);
+            if (!is_string($brand_file) || $brand_file === '') {
+                return null;
+            }
+            $overlay_dir = dirname(dirname($brand_file));
+            $main = $overlay_dir . '/' . basename($overlay_dir) . '.php';
+            return is_file($main) ? $main : null;
         }
 
         /**

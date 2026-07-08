@@ -312,15 +312,107 @@ jQuery(function ($) {
         });
     }
 
+    // ── (C) Live surcharge grid (mirrors Magento's surcharge-grid.js) ────
+    // Rows follow ticked terms ∩ merchant-offered terms without a save;
+    // column visibility follows the surcharge method. Server render is the
+    // template contract: <tr data-days> with inputs named
+    // <field_key>[<days>][fixed|percentage|limit] and twoinc-col-* classes.
+    const $grid = jQuery(".twoinc-surcharge-grid").first();
+    const $gridEmpty = jQuery(".twoinc-surcharge-grid-empty").first();
+    const $surchargeType = $("#" + prefix + "surcharge_type");
+
+    function gridTerms() {
+      const merchant = (twoinc_admin.merchant_available_terms || []).map(Number);
+      const offered = offeredTerms();
+      if (merchant.length === 0) {
+        return [];
+      }
+      return offered.filter(function (d) {
+        return merchant.indexOf(d) !== -1;
+      });
+    }
+
+    function buildGridRow(fieldKey, days) {
+      // Re-created rows carry the SAVED values: the validator wipes a
+      // rendered-and-blank row on save, so an empty re-created row would
+      // silently clear a stored term's surcharge on untick+retick.
+      const stored = (twoinc_admin.surcharge_grid || {})[days] || {};
+      const cell = function (col) {
+        return jQuery("<td></td>")
+          .addClass("twoinc-col-" + col)
+          .append(
+            jQuery("<input type=\"text\" style=\"width:90px\" />")
+              .attr("name", fieldKey + "[" + days + "][" + col + "]")
+              .val(stored[col] || "")
+          );
+      };
+      return jQuery("<tr></tr>")
+        .attr("data-days", days)
+        .append(jQuery("<td></td>").text(days))
+        .append(cell("fixed"))
+        .append(cell("percentage"))
+        .append(cell("limit"));
+    }
+
+    function updateGridRows() {
+      if ($grid.length === 0) return;
+      const fieldKey = $grid.data("field-key");
+      const terms = gridTerms();
+      const $tbody = $grid.find("tbody");
+      // Drop rows for un-ticked terms. Their SAVED values survive (the
+      // validator preserves rows absent from the POST); only unsaved
+      // edits in the removed row are lost.
+      $tbody.find("tr").each(function () {
+        if (terms.indexOf(Number(jQuery(this).attr("data-days"))) === -1) {
+          jQuery(this).remove();
+        }
+      });
+      // Insert missing rows in day order.
+      jQuery.each(terms, function (_, days) {
+        if ($tbody.find("tr[data-days=\"" + days + "\"]").length) return;
+        const $row = buildGridRow(fieldKey, days);
+        let $before = null;
+        $tbody.find("tr").each(function () {
+          if ($before === null && Number(jQuery(this).attr("data-days")) > days) {
+            $before = jQuery(this);
+          }
+        });
+        if ($before) {
+          $row.insertBefore($before);
+        } else {
+          $tbody.append($row);
+        }
+      });
+      $grid.toggle(terms.length > 0);
+      $gridEmpty.toggle(terms.length === 0);
+      updateGridColumns();
+    }
+
+    function updateGridColumns() {
+      if ($grid.length === 0) return;
+      const type = $surchargeType.val() || "none";
+      const showFixed = type === "fixed" || type === "fixed_and_percentage";
+      const showPct = type === "percentage" || type === "fixed_and_percentage";
+      $grid.find(".twoinc-col-fixed").toggle(showFixed);
+      $grid.find(".twoinc-col-percentage").toggle(showPct);
+      // Cap bounds the percentage portion — follows the percentage column.
+      $grid.find(".twoinc-col-limit").toggle(showPct);
+      // No surcharge method: the whole grid row is noise.
+      jQuery(".twoinc-surcharge-grid-field").toggle(type !== "none");
+    }
+
     function onTermsChanged() {
       rebuildDefaultTerm();
       loadFees();
+      updateGridRows();
     }
 
     $checkboxes.on("change", onTermsChanged);
     $customDays.on("change keyup", onTermsChanged);
+    $surchargeType.on("change", updateGridColumns);
 
     rebuildDefaultTerm();
     loadFees();
+    updateGridRows();
   })();
 });
