@@ -341,7 +341,7 @@ jQuery(function ($) {
         return jQuery("<td></td>")
           .addClass("twoinc-col-" + col)
           .append(
-            jQuery("<input type=\"text\" style=\"width:90px\" />")
+            jQuery('<input type="text" style="width:90px" />')
               .attr("name", fieldKey + "[" + days + "][" + col + "]")
               .val(stored[col] || "")
           );
@@ -369,7 +369,7 @@ jQuery(function ($) {
       });
       // Insert missing rows in day order.
       jQuery.each(terms, function (_, days) {
-        if ($tbody.find("tr[data-days=\"" + days + "\"]").length) return;
+        if ($tbody.find('tr[data-days="' + days + '"]').length) return;
         const $row = buildGridRow(fieldKey, days);
         let $before = null;
         $tbody.find("tr").each(function () {
