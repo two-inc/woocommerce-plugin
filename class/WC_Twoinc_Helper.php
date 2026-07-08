@@ -337,7 +337,11 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 }
                 $tax_rate = WC_Twoinc_Helper::get_item_tax_rate($fee, $order);
                 $fee_line = [
-                    'name' => 'Fee - ' . $fee->get_name(),
+                    // The fee name is already the resolved, translated,
+                    // brand-correct label (get_fee_label()); no hardcoded
+                    // prefix — Magento's ComposeOrder never prefixes either,
+                    // and 'type' => 'SERVICE' carries the semantic.
+                    'name' => $fee->get_name(),
                     'description' => '',
                     'gross_amount' => strval(WC_Twoinc_Helper::round_amt($fee->get_total() + $fee->get_total_tax())),
                     'net_amount' => strval(WC_Twoinc_Helper::round_amt($fee->get_total())),
