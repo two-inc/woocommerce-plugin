@@ -54,6 +54,7 @@ function twoinc_on_deactivate_plugin()
 if (is_admin() && !defined('DOING_AJAX')) {
     add_filter("plugin_action_links_" . plugin_basename(__FILE__), 'twoinc_settings_link');
     add_filter('all_plugins', 'twoinc_rebrand_plugin_row');
+    add_filter('plugins_api_result', 'twoinc_rebrand_dependency_api_name', 10, 3);
 }
 
 if (!is_admin() && !defined('DOING_AJAX')) {
@@ -207,6 +208,33 @@ function twoinc_rebrand_plugin_row($plugins)
         $plugins[$base]['PluginURI'] = '';
     }
     return $plugins;
+}
+
+/**
+ * Whitelabel this plugin's name in Plugins API results when a brand overlay
+ * is active. WP_Plugin_Dependencies renders the overlay row's "Requires:"
+ * note from plugins_api('plugin_information') data for the dependency slug
+ * — real wp.org data that bypasses the all_plugins rebrand above — so the
+ * note would otherwise leak the base plugin's real name. Filtering the API
+ * result keeps the note consistent with the rebranded row. The filtered
+ * name is what WP caches (12h transient), so it sticks.
+ */
+function twoinc_rebrand_dependency_api_name($res, $action, $args)
+{
+    if ($action !== 'plugin_information') {
+        return $res;
+    }
+    $slug = dirname(plugin_basename(__FILE__));
+    if (!isset($args->slug) || $args->slug !== $slug) {
+        return $res;
+    }
+    if (apply_filters('twoinc_brand_file', null) === null) {
+        return $res;
+    }
+    if (is_object($res) && isset($res->name)) {
+        $res->name = 'Utility library for ' . WC_Twoinc_Brand::get('provider');
+    }
+    return $res;
 }
 
 /**
