@@ -186,9 +186,11 @@ if (!class_exists('WC_Twoinc')) {
             // TWOINC_DEV_HOSTNAMES env var, *.two.inc dev subdomains):
             // installs predating the explicit environment mode carry the
             // default mode and rely on the sniffed test host. Consulted only
-            // while checkout_env is still the default — an explicitly set
-            // mode always wins. Set checkout_env ('staging', 'sandbox', ...)
-            // instead of extending the sniffer.
+            // while the mode resolves to production — an explicit
+            // non-production mode ('staging', 'sandbox') always wins, while
+            // an explicit Production selection is indistinguishable from the
+            // never-configured default, so the sniffer still applies there.
+            // Set checkout_env instead of extending the sniffer.
             if (
                 WC_Twoinc_Helper::get_environment_mode($this) === 'production'
                 && WC_Twoinc_Helper::is_twoinc_development()
@@ -213,9 +215,20 @@ if (!class_exists('WC_Twoinc')) {
                 'PROD'    => __('Production', 'twoinc-payment-gateway'),
                 'SANDBOX' => __('Sandbox', 'twoinc-payment-gateway'),
             ];
-            $stored = (string) $this->get_option('checkout_env');
-            if ($stored !== '' && !in_array(strtolower($stored), ['prod', 'production', 'sandbox'], true)) {
-                $options[$stored] = ucfirst(strtolower($stored));
+            // Raw settings row, NOT $this->get_option(): this runs inside
+            // init_form_fields(), and WC_Settings_API::get_option() on a
+            // missing key re-enters get_form_fields() -> init_form_fields()
+            // — infinite recursion on any install whose settings blob lacks
+            // checkout_env (fresh installs, and dev shops where the field
+            // was previously unset from the form).
+            $saved = get_option($this->get_option_key(), null);
+            $stored = is_array($saved) ? (string) ($saved['checkout_env'] ?? '') : '';
+            $normalized = strtolower($stored);
+            if (
+                in_array($normalized, WC_Twoinc_Helper::ENVIRONMENT_MODES, true)
+                && !in_array($normalized, ['production', 'sandbox'], true)
+            ) {
+                $options[$stored] = ucfirst($normalized);
             }
             return $options;
         }
@@ -2513,12 +2526,12 @@ if (!class_exists('WC_Twoinc')) {
                 'test_checkout_host' => [
                     'type'        => 'text',
                     'title'       => sprintf(__('%s Test Server', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')),
-                    'default'     => 'https://api.staging.two.inc'
+                    'default'     => sprintf(WC_Twoinc_Brand::get('checkout_url_template'), 'api.staging')
                 ],
                 'checkout_env' => [
                     'type'        => 'select',
                     'title'       => __('Choose your settings', 'twoinc-payment-gateway'),
-                    'default'     => 'Production',
+                    'default'     => 'PROD',
                     'options'     => $this->get_checkout_env_options(),
                 ],
                 'clear_options_on_deactivation' => [

@@ -916,23 +916,35 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
+         * Environment modes the host builder accepts. The mode string is
+         * spliced into the API hostname, and WooCommerce's select
+         * validation does not restrict POSTed values to the options list —
+         * so this allowlist is what keeps an admin-supplied string from
+         * steering the gateway's API calls to an arbitrary host.
+         */
+        public const ENVIRONMENT_MODES = ['production', 'sandbox', 'staging'];
+
+        /**
          * Resolve the gateway's configured environment mode.
          *
          * Mirrors the Magento config repository's mode setting: the stored
          * `checkout_env` option is normalised to lowercase, with the
          * historical 'PROD'/'Production' spellings mapping to 'production'.
-         * Any other stored value ('staging', ...) passes through as-is, so
-         * non-production shops select their environment explicitly instead
-         * of relying on hostname sniffing.
+         * Anything outside ENVIRONMENT_MODES (including the empty default)
+         * resolves to 'production' — the same host every unrecognised value
+         * produced before the template existed.
          *
          * @param WC_Payment_Gateway $gateway
          *
-         * @return string 'production', 'sandbox', 'staging', ...
+         * @return string one of ENVIRONMENT_MODES
          */
         public static function get_environment_mode($gateway)
         {
             $mode = strtolower((string) $gateway->get_option('checkout_env'));
-            if ($mode === '' || $mode === 'prod') {
+            if ($mode === 'prod') {
+                $mode = 'production';
+            }
+            if (!in_array($mode, self::ENVIRONMENT_MODES, true)) {
                 $mode = 'production';
             }
             return $mode;

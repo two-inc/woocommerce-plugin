@@ -225,6 +225,11 @@ class WC_Payment_Gateway
     {
         return $this->plugin_id . $this->id . '_' . $key;
     }
+
+    public function get_option_key()
+    {
+        return $this->plugin_id . $this->id . '_settings';
+    }
 }
 
 class WC_HTTPS
