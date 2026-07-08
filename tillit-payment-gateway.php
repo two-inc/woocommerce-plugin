@@ -197,7 +197,9 @@ function twoinc_rebrand_plugin_row($plugins)
     $base = plugin_basename(__FILE__);
     if (isset($plugins[$base])) {
         $provider = WC_Twoinc_Brand::get('provider');
-        $plugins[$base]['Name'] = $provider . ' Payment Gateway Provider';
+        // "Utility library for..." — sorts well below the brand's own row
+        // in the (alphabetical) Plugins list, never above it.
+        $plugins[$base]['Name'] = 'Utility library for the ' . $provider;
         $plugins[$base]['Description'] = 'Common libraries for the ' . $provider . ' payment gateway';
     }
     return $plugins;
