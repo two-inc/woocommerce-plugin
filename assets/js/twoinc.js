@@ -1553,8 +1553,17 @@ class Twoinc {
     // Stop if not the checkout page
     if (jQuery("#order_review").length === 0) return;
 
-    // If we found the field
-    if (twoincDomHelper.isTwoincVisible()) {
+    // Set up the business fields when the gateway is visible — or when
+    // company search should serve other payment methods while this
+    // gateway is gated away. (Note isTwoincVisible() is also true when
+    // the gateway <li> is absent entirely — .css() on an empty set — so
+    // the second clause guards intent, not today's behaviour: it must
+    // survive any future tightening of isTwoincVisible.)
+    if (
+      twoincDomHelper.isTwoincVisible() ||
+      (window.twoinc.enable_company_search === "yes" &&
+        window.twoinc.enable_company_search_for_others === "yes")
+    ) {
       // Toggle the business fields
       twoincDomHelper.toggleBusinessFields();
 
@@ -2028,9 +2037,41 @@ let isTwoincSelected = null;
 jQuery(function () {
   if (window.twoinc) {
     if (window.twoinc.enable_order_intent === "yes") {
-      if (jQuery("#payment_method_" + window.twoinc.gateway_id).length > 0) {
-        // Run Twoinc code if order intent is enabled
-        Twoinc.getInstance().initialize(true);
+      const initIfGatewayPresent = function () {
+        if (jQuery("#payment_method_" + window.twoinc.gateway_id).length > 0) {
+          // Run Twoinc code if order intent is enabled
+          Twoinc.getInstance().initialize(true);
+          return true;
+        }
+        return false;
+      };
+      if (!initIfGatewayPresent()) {
+        // The gateway can be absent at page load yet appear later: the
+        // server-side availability gate re-evaluates per order-review
+        // refresh (basket total crossing the platform minimum, billing
+        // country change). The old one-shot check left company search
+        // unwired for the whole session. Re-check on every
+        // updated_checkout; and when company search is enabled for other
+        // methods, wire it immediately — that setting exists precisely
+        // for checkouts where this gateway isn't offered.
+        if (
+          window.twoinc.enable_company_search === "yes" &&
+          window.twoinc.enable_company_search_for_others === "yes"
+        ) {
+          Twoinc.getInstance().initialize(true);
+        } else {
+          const $body = jQuery(document.body);
+          const retryInit = function () {
+            // initialize(false): the load-time saved-input replay must not
+            // run mid-session — replaying stored radio/checkbox clicks
+            // TOGGLES state the buyer set after page load.
+            if (jQuery("#payment_method_" + window.twoinc.gateway_id).length > 0) {
+              Twoinc.getInstance().initialize(false);
+              $body.off("updated_checkout", retryInit);
+            }
+          };
+          $body.on("updated_checkout", retryInit);
+        }
       }
     } else {
       // Handle initialization every time order review (right panel) is updated

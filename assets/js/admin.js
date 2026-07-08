@@ -312,15 +312,112 @@ jQuery(function ($) {
         });
     }
 
+    // ── (C) Live surcharge grid (mirrors Magento's surcharge-grid.js) ────
+    // Rows follow ticked terms ∩ merchant-offered terms without a save;
+    // column visibility follows the surcharge method. Server render is the
+    // template contract: <tr data-days> with inputs named
+    // <field_key>[<days>][fixed|percentage|limit] and twoinc-col-* classes.
+    const $grid = $(".twoinc-surcharge-grid").first();
+    const $gridEmpty = $(".twoinc-surcharge-grid-empty").first();
+    const $surchargeType = $("#" + prefix + "surcharge_type");
+
+    function gridTerms() {
+      // Mirror the PHP render (WC_Twoinc_Payment_Terms::get_available_terms):
+      // ticked presets ∩ merchant-offered, then UNION the custom day — a
+      // custom term is offered at checkout even when it sits outside the
+      // backend's preset list, so its surcharge row must stay editable.
+      const merchant = (twoinc_admin.merchant_available_terms || []).map(Number);
+      const ticked = [];
+      $checkboxes.filter(":checked").each(function () {
+        const n = parseInt($(this).val(), 10);
+        if (n > 0 && merchant.indexOf(n) !== -1) ticked.push(n);
+      });
+      const c = customDay();
+      if (c > 0) ticked.push(c);
+      return uniqueSorted(ticked);
+    }
+
+    function buildGridRow(fieldKey, days) {
+      // Re-created rows carry the SAVED values: the validator wipes a
+      // rendered-and-blank row on save, so an empty re-created row would
+      // silently clear a stored term's surcharge on untick+retick.
+      const stored = (twoinc_admin.surcharge_grid || {})[days] || {};
+      const cell = function (col) {
+        return $("<td></td>")
+          .addClass("twoinc-col-" + col)
+          .append(
+            $('<input type="text" style="width:90px" />')
+              .attr("name", fieldKey + "[" + days + "][" + col + "]")
+              .val(stored[col] || "")
+          );
+      };
+      return $("<tr></tr>")
+        .attr("data-days", days)
+        .append($("<td></td>").text(days))
+        .append(cell("fixed"))
+        .append(cell("percentage"))
+        .append(cell("limit"));
+    }
+
+    function updateGridRows() {
+      if ($grid.length === 0) return;
+      const fieldKey = $grid.data("field-key");
+      const terms = gridTerms();
+      const $tbody = $grid.find("tbody");
+      // Drop rows for un-ticked terms. Their SAVED values survive (the
+      // validator preserves rows absent from the POST); only unsaved
+      // edits in the removed row are lost.
+      $tbody.find("tr").each(function () {
+        if (terms.indexOf(Number($(this).attr("data-days"))) === -1) {
+          $(this).remove();
+        }
+      });
+      // Insert missing rows in day order.
+      jQuery.each(terms, function (_, days) {
+        if ($tbody.find('tr[data-days="' + days + '"]').length) return;
+        const $row = buildGridRow(fieldKey, days);
+        let $before = null;
+        $tbody.find("tr").each(function () {
+          if ($before === null && Number($(this).attr("data-days")) > days) {
+            $before = $(this);
+          }
+        });
+        if ($before) {
+          $row.insertBefore($before);
+        } else {
+          $tbody.append($row);
+        }
+      });
+      $grid.toggle(terms.length > 0);
+      $gridEmpty.toggle(terms.length === 0);
+      updateGridColumns();
+    }
+
+    function updateGridColumns() {
+      if ($grid.length === 0) return;
+      const type = $surchargeType.val() || "none";
+      const showFixed = type === "fixed" || type === "fixed_and_percentage";
+      const showPct = type === "percentage" || type === "fixed_and_percentage";
+      $grid.find(".twoinc-col-fixed").toggle(showFixed);
+      $grid.find(".twoinc-col-percentage").toggle(showPct);
+      // Cap bounds the percentage portion — follows the percentage column.
+      $grid.find(".twoinc-col-limit").toggle(showPct);
+      // No surcharge method: the whole grid row is noise.
+      $(".twoinc-surcharge-grid-field").toggle(type !== "none");
+    }
+
     function onTermsChanged() {
       rebuildDefaultTerm();
       loadFees();
+      updateGridRows();
     }
 
     $checkboxes.on("change", onTermsChanged);
     $customDays.on("change keyup", onTermsChanged);
+    $surchargeType.on("change", updateGridColumns);
 
     rebuildDefaultTerm();
     loadFees();
+    updateGridRows();
   })();
 });
