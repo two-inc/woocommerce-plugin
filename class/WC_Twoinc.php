@@ -131,9 +131,13 @@ if (!class_exists('WC_Twoinc')) {
                 // Add HTML in order edit page
                 add_action('woocommerce_admin_order_data_after_order_details', [$this, 'add_invoice_credit_note_urls']);
 
-                // One-shot notice from the invoice/credit-note download
-                // handler (ajax_download_invoice redirects back here)
-                add_action('admin_notices', [$this, 'render_invoice_download_notice']);
+                // NOTE: render_invoice_download_notice is registered on
+                // admin_notices in load_twoinc_classes() (plugins_loaded),
+                // NOT here: on the order edit screen WooCommerce constructs
+                // the gateway lazily during the order-data metabox render,
+                // which is AFTER admin_notices has already fired — a
+                // constructor registration is silently too late and the
+                // parked notice never renders (TWO-25041 follow-up).
 
                 // Advanced Custom Fields plugin hides custom fields, we must display them
                 add_filter('acf/settings/remove_wp_meta_box', '__return_false');
@@ -1554,8 +1558,15 @@ if (!class_exists('WC_Twoinc')) {
         /**
          * Render (and clear) the one-shot invoice-download notice parked by
          * ajax_download_invoice for the current user.
+         *
+         * Static and registered on admin_notices in load_twoinc_classes()
+         * (plugins_loaded), not in the gateway constructor: on the order
+         * edit screen the gateway is only constructed during the order-data
+         * metabox render, after admin_notices has fired, so a
+         * constructor-registered callback never runs on the very request
+         * that should display the notice.
          */
-        public function render_invoice_download_notice()
+        public static function render_invoice_download_notice()
         {
             // admin_notices fires on every wp-admin page, but the transient
             // is scoped to one order — only render it on that order's edit

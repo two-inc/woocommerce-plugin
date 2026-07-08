@@ -2346,15 +2346,25 @@ final class BrandConfigSpec
 
     private static function testInvoiceDownloadNoticeIsolatedPerOrder(): void
     {
-        $gateway = self::invoiceGateway([]);
+        // The renderer must be STATIC: it is registered on admin_notices in
+        // load_twoinc_classes() (plugins_loaded), not the gateway
+        // constructor — on the order edit screen the gateway is only
+        // constructed during the metabox render, AFTER admin_notices has
+        // fired, so a constructor registration silently never renders the
+        // notice (the TWO-25041 "button does nothing" bug).
+        TinyAssert::true(
+            (new ReflectionMethod(WC_Twoinc::class, 'render_invoice_download_notice'))->isStatic(),
+            'render_invoice_download_notice must be static so plugins_loaded can register it without a gateway instance'
+        );
+
         $GLOBALS['__twoinc_test_transients'] = [
             'twoinc_invoice_notice_1_42' => ['level' => 'info', 'message' => 'notice for order 42'],
             'twoinc_invoice_notice_1_43' => ['level' => 'error', 'message' => 'notice for order 43'],
         ];
 
-        $render = static function () use ($gateway) {
+        $render = static function () {
             ob_start();
-            $gateway->render_invoice_download_notice();
+            WC_Twoinc::render_invoice_download_notice();
             return ob_get_clean();
         };
 
