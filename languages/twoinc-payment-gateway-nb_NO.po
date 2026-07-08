@@ -640,3 +640,7 @@ msgid ""
 msgstr ""
 "Fakturakjøpet ditt med %s vil sannsynligvis bli akseptert med forbehold om "
 "ytterligere kontroller."
+
+#: class/WC_Twoinc.php
+msgid "The invoice for this order is still being prepared. Please try again later."
+msgstr "Fakturaen for denne ordren blir fortsatt klargjort. Prøv igjen senere."
