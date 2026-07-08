@@ -103,6 +103,13 @@ function load_twoinc_classes()
     add_action('wc_ajax_two_sole_trader_availability', ['WC_Twoinc_Sole_Trader', 'ajax_availability']);
     add_action('wc_ajax_two_sole_trader_tokens', ['WC_Twoinc_Sole_Trader', 'ajax_tokens']);
 
+    // Admin invoice / credit-note PDF download from the order edit screen:
+    // streams the PDF, or redirects back with a notice after the
+    // ORDER_NOT_FULFILLED state check (TWO-25041). A static handler
+    // registered here at plugins_loaded like the wc-ajax endpoints above,
+    // since an admin-ajax request does not construct the payment gateway.
+    add_action('wp_ajax_twoinc_download_invoice', ['WC_Twoinc', 'ajax_download_invoice']);
+
     // Confirm order after returning from twoinc checkout-page, DO NOT CHANGE HOOKS
     add_action('template_redirect', 'WC_Twoinc::process_confirmation_header_redirect');
     // add_action('template_redirect', 'WC_Twoinc::before_process_confirmation');

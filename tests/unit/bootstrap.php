@@ -377,6 +377,26 @@ class StubOrder
         return 42;
     }
 
+    // Settable per test: '' means "not a Two order" (is_twoinc_order false).
+    public $payment_method = '';
+
+    public function get_payment_method()
+    {
+        return $this->payment_method;
+    }
+
+    public $status = 'completed';
+
+    public function get_status()
+    {
+        return $this->status;
+    }
+
+    public function get_refunds()
+    {
+        return [];
+    }
+
     public function get_cancel_order_url()
     {
         return 'https://shop.example/cancel';
@@ -432,6 +452,115 @@ function wp_remote_retrieve_header($response, $header)
         }
     }
     return '';
+}
+
+// ── Admin-ajax handler stubs (invoice download gate tests) ─────────
+
+function absint($maybeint)
+{
+    return abs((int) $maybeint);
+}
+
+function sanitize_key($key)
+{
+    return preg_replace('/[^a-z0-9_\-]/', '', strtolower((string) $key));
+}
+
+function wp_unslash($value)
+{
+    return is_string($value) ? stripslashes($value) : $value;
+}
+
+function check_admin_referer($action = -1, $query_arg = '_wpnonce')
+{
+    // Record the action so tests can assert the nonce is scoped to the
+    // resource it authorizes.
+    $GLOBALS['__twoinc_test_referer_actions'][] = $action;
+    return 1;
+}
+
+// Capability set injected per test via $GLOBALS['__twoinc_test_caps'].
+// Meta-capability checks against a specific object (e.g.
+// current_user_can('edit_shop_order', $order_id)) resolve against
+// $GLOBALS['__twoinc_test_object_caps'] as "capability:object_id" strings,
+// so tests can distinguish the blanket type capability from the per-object
+// grant.
+function current_user_can($capability, ...$args)
+{
+    if ($args !== []) {
+        return in_array($capability . ':' . $args[0], $GLOBALS['__twoinc_test_object_caps'] ?? [], true);
+    }
+    return in_array($capability, $GLOBALS['__twoinc_test_caps'] ?? [], true);
+}
+
+function get_current_user_id()
+{
+    return $GLOBALS['__twoinc_test_user_id'] ?? 1;
+}
+
+// ── Transients (invoice-download one-shot notice) ───────────────────
+
+function set_transient($key, $value, $expiration = 0)
+{
+    $GLOBALS['__twoinc_test_transients'][$key] = $value;
+    return true;
+}
+
+function get_transient($key)
+{
+    return $GLOBALS['__twoinc_test_transients'][$key] ?? false;
+}
+
+function delete_transient($key)
+{
+    unset($GLOBALS['__twoinc_test_transients'][$key]);
+    return true;
+}
+
+// wp_safe_redirect must halt the handler (it is followed by exit, which
+// would kill the test runner): surface it as an exception the test catches.
+function wp_safe_redirect($location, $status = 302)
+{
+    throw new RuntimeException('redirect:' . $location);
+}
+
+function esc_url_raw($url, $protocols = null)
+{
+    return $url;
+}
+
+function esc_url($url, $protocols = null)
+{
+    return $url;
+}
+
+function admin_url($path = '')
+{
+    return 'https://shop.example/wp-admin/' . ltrim($path, '/');
+}
+
+function add_query_arg($args, $url)
+{
+    return $url . (strpos($url, '?') === false ? '?' : '&') . http_build_query($args);
+}
+
+function wp_nonce_url($actionurl, $action = -1, $name = '_wpnonce')
+{
+    // Record the action so tests can assert mint-side scoping matches the
+    // verify-side check_admin_referer action.
+    $GLOBALS['__twoinc_test_nonce_url_actions'][] = $action;
+    return add_query_arg([$name => 'testnonce'], $actionurl);
+}
+
+// wp_die must halt the handler: surface it as an exception the test catches.
+function wp_die($message = '', $title = '', $args = [])
+{
+    throw new RuntimeException(is_string($message) ? $message : 'wp_die');
+}
+
+function wc_get_order($order_id)
+{
+    return $GLOBALS['__twoinc_test_wc_orders'][$order_id] ?? false;
 }
 
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Brand.php';
