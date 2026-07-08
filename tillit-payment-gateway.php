@@ -199,8 +199,12 @@ function twoinc_rebrand_plugin_row($plugins)
         $provider = WC_Twoinc_Brand::get('provider');
         // "Utility library for..." — sorts well below the brand's own row
         // in the (alphabetical) Plugins list, never above it.
-        $plugins[$base]['Name'] = 'Utility library for the ' . $provider;
+        $plugins[$base]['Name'] = 'Utility library for ' . $provider;
         $plugins[$base]['Description'] = 'Common libraries for the ' . $provider . ' payment gateway';
+        // PluginURI drives the "Version x.y.z" link WP renders in the row
+        // meta line — clear it so the rebranded row carries no lingering
+        // link back to two.inc.
+        $plugins[$base]['PluginURI'] = '';
     }
     return $plugins;
 }
