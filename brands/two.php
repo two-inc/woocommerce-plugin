@@ -20,6 +20,12 @@ return [
     'provider_full_name' => 'Two',
     'product_name' => 'Two',
     'sign_up_url' => 'https://portal.two.inc/auth/merchant/signup',
+    // sprintf template building environment hosts, mirroring the Magento
+    // brand descriptor's checkout_url_template: %s receives 'api' /
+    // 'checkout' in production, or 'api.<mode>' / 'checkout.<mode>' for
+    // any other checkout_env mode ('sandbox', 'staging', ...). Overlays
+    // set their own domain here — brand domains never live in base code.
+    'checkout_url_template' => 'https://%s.two.inc',
     'alert_email_address' => 'woocom-alerts@two.inc',
     'gateway_id' => 'woocommerce-gateway-tillit',
     'logo_url' => WC_TWOINC_PLUGIN_URL . 'assets/images/two-logo.svg',

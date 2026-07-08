@@ -179,11 +179,7 @@ if (!class_exists('WC_Twoinc_Sole_Trader')) {
          */
         public static function get_signup_page_url($gateway): string
         {
-            if ($gateway->get_option('checkout_env') === 'SANDBOX') {
-                $url = 'https://checkout.sandbox.two.inc/soletrader/signup';
-            } else {
-                $url = 'https://checkout.two.inc/soletrader/signup';
-            }
+            $url = WC_Twoinc_Helper::get_environment_host('checkout', $gateway) . '/soletrader/signup';
             return apply_filters('twoinc_sole_trader_signup_url', $url);
         }
 

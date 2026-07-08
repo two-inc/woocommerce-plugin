@@ -182,13 +182,42 @@ if (!class_exists('WC_Twoinc')) {
          */
         public function get_twoinc_checkout_host()
         {
-            if (WC_Twoinc_Helper::is_twoinc_development()) {
+            // Deprecated dev-environment sniffing (localhost, the
+            // TWOINC_DEV_HOSTNAMES env var, *.two.inc dev subdomains):
+            // installs predating the explicit environment mode carry the
+            // default mode and rely on the sniffed test host. Consulted only
+            // while checkout_env is still the default — an explicitly set
+            // mode always wins. Set checkout_env ('staging', 'sandbox', ...)
+            // instead of extending the sniffer.
+            if (
+                WC_Twoinc_Helper::get_environment_mode($this) === 'production'
+                && WC_Twoinc_Helper::is_twoinc_development()
+            ) {
                 return $this->get_option('test_checkout_host');
-            } elseif ($this->get_option('checkout_env') === 'SANDBOX') {
-                return 'https://api.sandbox.two.inc';
-            } else {
-                return 'https://api.two.inc';
             }
+            return WC_Twoinc_Helper::get_environment_host('api', $this);
+        }
+
+        /**
+         * Options for the checkout_env select. Merchants choose between
+         * Production and Sandbox; any other stored mode (e.g. 'staging' on
+         * Two's own staging shops, set via wp-cli rather than the UI) is
+         * preserved as a selectable option so saving the settings form
+         * doesn't silently reset it. Mirrors the Magento Mode source model.
+         *
+         * @return array
+         */
+        public function get_checkout_env_options()
+        {
+            $options = [
+                'PROD'    => __('Production', 'twoinc-payment-gateway'),
+                'SANDBOX' => __('Sandbox', 'twoinc-payment-gateway'),
+            ];
+            $stored = (string) $this->get_option('checkout_env');
+            if ($stored !== '' && !in_array(strtolower($stored), ['prod', 'production', 'sandbox'], true)) {
+                $options[$stored] = ucfirst(strtolower($stored));
+            }
+            return $options;
         }
 
         /**
@@ -2490,10 +2519,7 @@ if (!class_exists('WC_Twoinc')) {
                     'type'        => 'select',
                     'title'       => __('Choose your settings', 'twoinc-payment-gateway'),
                     'default'     => 'Production',
-                    'options'     => array(
-                        'PROD'     => 'Production',
-                        'SANDBOX'  => 'Sandbox'
-                    )
+                    'options'     => $this->get_checkout_env_options(),
                 ],
                 'clear_options_on_deactivation' => [
                     'title'       => __('Clear settings on deactivation of plug-in', 'twoinc-payment-gateway'),
@@ -2730,9 +2756,10 @@ if (!class_exists('WC_Twoinc')) {
                 ],
             ];
 
-            if (WC_Twoinc_Helper::is_twoinc_development()) {
-                unset($twoinc_form_fields['checkout_env']);
-            } else {
+            // checkout_env is always shown — it is the environment selector.
+            // The free-text test host only appears on sniffed dev
+            // environments, where it remains the legacy override.
+            if (!WC_Twoinc_Helper::is_twoinc_development()) {
                 unset($twoinc_form_fields['test_checkout_host']);
             }
 

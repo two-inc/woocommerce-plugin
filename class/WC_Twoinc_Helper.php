@@ -911,13 +911,50 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 return true;
             }
 
-            // Merchant's staging
-            if (in_array($hostname, array('staging.torn.no', 'proof-3.redflamingostudio.com', 'icecreamextreme.no', 'www.staging83.avshop.no'))) {
-                return true;
-            }
-
             // Neither local nor twoinc development site
             return false;
+        }
+
+        /**
+         * Resolve the gateway's configured environment mode.
+         *
+         * Mirrors the Magento config repository's mode setting: the stored
+         * `checkout_env` option is normalised to lowercase, with the
+         * historical 'PROD'/'Production' spellings mapping to 'production'.
+         * Any other stored value ('staging', ...) passes through as-is, so
+         * non-production shops select their environment explicitly instead
+         * of relying on hostname sniffing.
+         *
+         * @param WC_Payment_Gateway $gateway
+         *
+         * @return string 'production', 'sandbox', 'staging', ...
+         */
+        public static function get_environment_mode($gateway)
+        {
+            $mode = strtolower((string) $gateway->get_option('checkout_env'));
+            if ($mode === '' || $mode === 'prod') {
+                $mode = 'production';
+            }
+            return $mode;
+        }
+
+        /**
+         * Build an environment host from the brand's URL template, mirroring
+         * the Magento config repository: ('api', mode 'staging') on the Two
+         * brand -> https://api.staging.two.inc; production drops the mode
+         * suffix. The template itself comes from the brand registry, so a
+         * brand overlay carries its own domains.
+         *
+         * @param string             $service 'api' or 'checkout'
+         * @param WC_Payment_Gateway $gateway
+         *
+         * @return string
+         */
+        public static function get_environment_host($service, $gateway)
+        {
+            $mode = self::get_environment_mode($gateway);
+            $prefix = $mode === 'production' ? $service : $service . '.' . $mode;
+            return sprintf(WC_Twoinc_Brand::get('checkout_url_template'), $prefix);
         }
 
         /**

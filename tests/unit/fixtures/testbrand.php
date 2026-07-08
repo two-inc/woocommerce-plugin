@@ -10,6 +10,7 @@ return [
     'product_name' => 'Testbrand',
     'gateway_id' => 'woocommerce-gateway-testbrand',
     'meta_prefix' => 'testbrand',
+    'checkout_url_template' => 'https://%s.testbrand.example',
     // Deliberately messy: an overlay narrows the step set; declared
     // unsorted and with invalid entries (<=0, non-numeric) that
     // get_rounding_step_options must skip rather than fatal on. Expected
