@@ -479,7 +479,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                 return $days !== null ? str_replace('%s', (string) $days, $template) : $template;
             }
             $label = WC_Twoinc_Brand::get('fee_line_label');
-            return $label ?: __('Service charge', 'twoinc-payment-gateway');
+            return $label ? __($label, 'twoinc-payment-gateway') : __('Service charge', 'twoinc-payment-gateway');
         }
 
         /**

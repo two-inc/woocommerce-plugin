@@ -633,6 +633,20 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
+         * Buyer-facing notice shown once order intent is approved, pending
+         * final checks. A brand overlay may set 'intent_approved_notice'
+         * to '' to suppress it entirely.
+         */
+        private function get_intent_approved_notice(): string
+        {
+            $template = WC_Twoinc_Brand::get('intent_approved_notice');
+            if ($template === '') {
+                return '';
+            }
+            return sprintf(__($template, 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name'));
+        }
+
+        /**
          * Get payment box description
          */
         private function get_pay_box_description()
@@ -669,7 +683,7 @@ if (!class_exists('WC_Twoinc')) {
                 </div>',
                 sprintf(__('%s lets your business pay later for the goods you purchase online.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')),
                 $term_input,
-                sprintf(__('Your invoice purchase with %s is likely to be accepted subject to additional checks.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')),
+                $this->get_intent_approved_notice(),
                 sprintf(__('Invoice purchase with %s is not available for this order.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')),
                 __('Phone number is invalid.', 'twoinc-payment-gateway')
             );
@@ -1135,10 +1149,12 @@ if (!class_exists('WC_Twoinc')) {
         public function get_pay_subtitle()
         {
             $subtitle = WC_Twoinc_Brand::get('checkout_subtitle');
+            // wp_kses_post, not esc_html: a brand's subtitle may carry an
+            // inline link (e.g. ABN's "lees meer") — esc_html stripped it.
             $subtitle_html = $subtitle
                 ? sprintf(
                     '<div class="twoinc-payment-subtitle">%s</div>',
-                    esc_html(__($subtitle, 'twoinc-payment-gateway'))
+                    wp_kses_post(__($subtitle, 'twoinc-payment-gateway'))
                 )
                 : '';
 
