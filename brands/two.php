@@ -63,4 +63,9 @@ return [
     // obtaining production keys. WC_Twoinc::init_form_fields is the only
     // reader. A brand overlay substitutes its own support address.
     'production_key_contact_email' => 'integration@two.inc',
+    // Buyer-facing notice shown once order intent is approved, pending
+    // final checks. sprintf'd with the brand product_name (one %s). ''
+    // renders nothing. WC_Twoinc::get_pay_box_description is the only
+    // reader.
+    'intent_approved_notice' => 'Your invoice purchase with %s is likely to be accepted subject to additional checks.',
 ];

@@ -36,6 +36,7 @@ add_action('plugins_loaded', 'load_twoinc_classes');
 
 if (is_admin() && !defined('DOING_AJAX')) {
     add_filter("plugin_action_links_" . plugin_basename(__FILE__), 'twoinc_settings_link');
+    add_filter('all_plugins', 'twoinc_rebrand_plugin_row');
 }
 
 if (!is_admin() && !defined('DOING_AJAX')) {
@@ -146,9 +147,36 @@ function wc_twoinc_enqueue_scripts()
  */
 function twoinc_settings_link($links)
 {
+    // A brand overlay re-skins this same gateway under its own row — the
+    // base plugin's own row is just the required library, so it carries
+    // no independent Settings link when an overlay is active.
+    if (apply_filters('twoinc_brand_file', null) !== null) {
+        return $links;
+    }
     $settings_link = '<a href="admin.php?page=wc-settings&tab=checkout&section=' . WC_Twoinc_Brand::get('gateway_id') . '">Settings</a>';
     array_unshift($links, $settings_link);
     return $links;
+}
+
+/**
+ * Rebrand the base plugin's own Plugins-list row when a brand overlay is
+ * active, using the overlay's own provider name — overlay-agnostic, so
+ * every overlay gets this via the twoinc_brand_file seam they already
+ * implement, with no per-overlay duplication. Standalone installs (no
+ * overlay) keep the base plugin's own caption untouched.
+ */
+function twoinc_rebrand_plugin_row($plugins)
+{
+    if (apply_filters('twoinc_brand_file', null) === null) {
+        return $plugins;
+    }
+    $base = plugin_basename(__FILE__);
+    if (isset($plugins[$base])) {
+        $provider = WC_Twoinc_Brand::get('provider');
+        $plugins[$base]['Name'] = $provider . ' Payment Gateway Provider';
+        $plugins[$base]['Description'] = 'Common libraries for the ' . $provider . ' payment gateway';
+    }
+    return $plugins;
 }
 
 /**
