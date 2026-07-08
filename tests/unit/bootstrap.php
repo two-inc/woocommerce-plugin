@@ -434,6 +434,45 @@ function wp_remote_retrieve_header($response, $header)
     return '';
 }
 
+// ── Admin-ajax handler stubs (invoice download gate tests) ─────────
+
+function absint($maybeint)
+{
+    return abs((int) $maybeint);
+}
+
+function sanitize_key($key)
+{
+    return preg_replace('/[^a-z0-9_\-]/', '', strtolower((string) $key));
+}
+
+function wp_unslash($value)
+{
+    return is_string($value) ? stripslashes($value) : $value;
+}
+
+function check_admin_referer($action = -1, $query_arg = '_wpnonce')
+{
+    return 1;
+}
+
+// Capability set injected per test via $GLOBALS['__twoinc_test_caps'].
+function current_user_can($capability, ...$args)
+{
+    return in_array($capability, $GLOBALS['__twoinc_test_caps'] ?? [], true);
+}
+
+// wp_die must halt the handler: surface it as an exception the test catches.
+function wp_die($message = '', $title = '', $args = [])
+{
+    throw new RuntimeException(is_string($message) ? $message : 'wp_die');
+}
+
+function wc_get_order($order_id)
+{
+    return $GLOBALS['__twoinc_test_wc_orders'][$order_id] ?? false;
+}
+
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Brand.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Helper.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Payment_Terms.php';

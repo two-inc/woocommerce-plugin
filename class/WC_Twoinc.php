@@ -131,6 +131,10 @@ if (!class_exists('WC_Twoinc')) {
                 // Add HTML in order edit page
                 add_action('woocommerce_admin_order_data_after_order_details', [$this, 'add_invoice_credit_note_urls']);
 
+                // One-shot notice from the invoice/credit-note download
+                // handler (ajax_download_invoice redirects back here)
+                add_action('admin_notices', [$this, 'render_invoice_download_notice']);
+
                 // Advanced Custom Fields plugin hides custom fields, we must display them
                 add_filter('acf/settings/remove_wp_meta_box', '__return_false');
 
@@ -1234,18 +1238,36 @@ if (!class_exists('WC_Twoinc')) {
 
             if ($twoinc_order_id) {
 
+                // Route the downloads through the plugin's admin-ajax handler
+                // (ajax_download_invoice) instead of linking straight at the
+                // API: a direct link surfaces the raw 400 ORDER_NOT_FULFILLED
+                // JSON when the order is still being fulfilled, while the
+                // handler can check the order state and show a proper notice
+                // (TWO-25041).
+                $download_url = function ($variant) use ($order) {
+                    return wp_nonce_url(
+                        add_query_arg(
+                            [
+                                'action' => 'twoinc_download_invoice',
+                                'order_id' => $order->get_id(),
+                                'variant' => $variant,
+                            ],
+                            admin_url('admin-ajax.php')
+                        ),
+                        'twoinc_admin_nonce'
+                    );
+                };
+
                 print('<div style="margin-top:20px;float:left;">');
 
-                print('<p><a href="' . $this->get_twoinc_checkout_host() . "/v1/invoice/{$twoinc_order_id}/pdf?v=original&lang="
-                    . WC_Twoinc_Helper::get_locale()
+                print('<p><a href="' . esc_url($download_url('original'))
                     . '"><button type="button" class="button">'
                     . sprintf(__('Download %s invoice', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name'))
                     . '</button></a></p>');
 
                 $refunded_payments = array_filter($order->get_refunds(), fn($refund) => $refund->get_refunded_payment());
                 if (count($refunded_payments) > 0) {
-                    print('<p><a href="' . $this->get_twoinc_checkout_host() . "/v1/invoice/{$twoinc_order_id}/pdf?lang="
-                        . WC_Twoinc_Helper::get_locale()
+                    print('<p><a href="' . esc_url($download_url('credit_note'))
                         . '"><button type="button" class="button">'
                         . sprintf(__('Download %s credit note', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name'))
                         . '</button></a><p>');
@@ -1253,6 +1275,261 @@ if (!class_exists('WC_Twoinc')) {
 
                 print('</div>');
             }
+        }
+
+        /**
+         * Timeout (seconds) for the admin invoice-download API calls. The
+         * download is a blocking browser navigation that can chain up to
+         * three serial requests (invoice fetch, order-state fetch, invoice
+         * retry), so it uses a tighter timeout than make_request's default
+         * 30s — scoped to this call site only.
+         */
+        private const INVOICE_DOWNLOAD_TIMEOUT = 10;
+
+        /**
+         * Resolve an admin invoice/credit-note download attempt into a
+         * discriminated result — either the PDF bytes to stream or an admin
+         * notice — implementing the ORDER_NOT_FULFILLED state check
+         * (TWO-25041):
+         *
+         *   - invoice fetch OK → stream the PDF
+         *   - 400 ORDER_NOT_FULFILLED → GET /v1/order/{id} and branch on state:
+         *       FULFILLING → info notice "not ready yet, try again later"
+         *       FULFILLED  → retry the invoice fetch once; error notice if it
+         *                    fails again
+         *       any other  → info notice naming the state
+         *   - any other error → error notice (same terminal path as before
+         *     the state check existed)
+         *
+         * Pure branching over make_request (no echo/exit/headers) so the
+         * unit runner can cover every branch; ajax_download_invoice maps the
+         * result to stream-or-redirect.
+         *
+         * @param $order WC_Order
+         * @param string $variant 'original' | 'credit_note'
+         *
+         * @return array ['action' => 'stream', 'body' => string, 'filename' => string]
+         *             | ['action' => 'notice', 'level' => 'info'|'error', 'message' => string]
+         */
+        public function resolve_invoice_download($order, $variant)
+        {
+            $product_name = WC_Twoinc_Brand::get('product_name');
+
+            $twoinc_order_id = $this->get_twoinc_order_id($order);
+            if (!$twoinc_order_id) {
+                return [
+                    'action' => 'notice',
+                    'level' => 'error',
+                    'message' => sprintf(__('No %s order reference is set for this order.', 'twoinc-payment-gateway'), $product_name),
+                ];
+            }
+
+            $endpoint = "/v1/invoice/{$twoinc_order_id}/pdf";
+            $params = ['lang' => WC_Twoinc_Helper::get_locale()];
+            if ($variant === 'original') {
+                $params['v'] = 'original';
+            }
+
+            $response = $this->make_request($endpoint, [], 'GET', $params, null, self::INVOICE_DOWNLOAD_TIMEOUT);
+
+            if ($this->is_pdf_response($response)) {
+                return $this->invoice_stream_result($response, $variant, $twoinc_order_id, $product_name);
+            }
+
+            if (is_wp_error($response)) {
+                return $this->invoice_unreachable_notice($product_name);
+            }
+
+            $code = (int) wp_remote_retrieve_response_code($response);
+            $body = json_decode(wp_remote_retrieve_body($response), true);
+            $error_code = (is_array($body) && isset($body['error_code']) && is_string($body['error_code'])) ? $body['error_code'] : '';
+
+            if ($code !== 400 || $error_code !== 'ORDER_NOT_FULFILLED') {
+                // Any error other than ORDER_NOT_FULFILLED keeps today's
+                // terminal-error behaviour.
+                return $this->invoice_error_notice($response, $product_name);
+            }
+
+            // Invoice not ready: ask the API what state the order is in.
+            $order_response = $this->make_request("/v1/order/{$twoinc_order_id}", [], 'GET', [], null, self::INVOICE_DOWNLOAD_TIMEOUT);
+            $state = '';
+            if (!is_wp_error($order_response) && (int) wp_remote_retrieve_response_code($order_response) === 200) {
+                $order_body = json_decode(wp_remote_retrieve_body($order_response), true);
+                if (is_array($order_body) && isset($order_body['state']) && is_string($order_body['state'])) {
+                    $state = $order_body['state'];
+                }
+            }
+            if ($state === '') {
+                return $this->invoice_unreachable_notice($product_name);
+            }
+
+            if ($state === 'FULFILLING') {
+                return [
+                    'action' => 'notice',
+                    'level' => 'info',
+                    'message' => sprintf(__('The %s invoice is not ready yet — the order is still being fulfilled. Please try again later.', 'twoinc-payment-gateway'), $product_name),
+                ];
+            }
+
+            if ($state === 'FULFILLED') {
+                // The order claims fulfilled, so the 400 was likely a race —
+                // retry once. No retry on other states (pointless).
+                $retry = $this->make_request($endpoint, [], 'GET', $params, null, self::INVOICE_DOWNLOAD_TIMEOUT);
+                if ($this->is_pdf_response($retry)) {
+                    return $this->invoice_stream_result($retry, $variant, $twoinc_order_id, $product_name);
+                }
+                if (is_wp_error($retry)) {
+                    return $this->invoice_unreachable_notice($product_name);
+                }
+                return $this->invoice_error_notice($retry, $product_name);
+            }
+
+            return [
+                'action' => 'notice',
+                'level' => 'info',
+                'message' => sprintf(__('No %1$s invoice is available because the order is in state: %2$s.', 'twoinc-payment-gateway'), $product_name, $state),
+            ];
+        }
+
+        /**
+         * A response is streamable only if it is a 200 that actually carries
+         * a PDF (content-type or %PDF- magic bytes) — never stream a JSON
+         * error body as a .pdf.
+         */
+        private function is_pdf_response($response)
+        {
+            if (is_wp_error($response) || (int) wp_remote_retrieve_response_code($response) !== 200) {
+                return false;
+            }
+            $content_type = wp_remote_retrieve_header($response, 'content-type');
+            if (is_string($content_type) && stripos($content_type, 'application/pdf') !== false) {
+                return true;
+            }
+            return strpos((string) wp_remote_retrieve_body($response), '%PDF-') === 0;
+        }
+
+        private function invoice_stream_result($response, $variant, $twoinc_order_id, $product_name)
+        {
+            $slug = strtolower(trim(preg_replace('/[^A-Za-z0-9]+/', '-', $product_name), '-'));
+            $kind = $variant === 'credit_note' ? 'credit-note' : 'invoice';
+            return [
+                'action' => 'stream',
+                'body' => wp_remote_retrieve_body($response),
+                'filename' => "{$slug}-{$kind}-{$twoinc_order_id}.pdf",
+            ];
+        }
+
+        private function invoice_unreachable_notice($product_name)
+        {
+            return [
+                'action' => 'notice',
+                'level' => 'error',
+                'message' => sprintf(__('Could not reach %s to retrieve the invoice. Please try again.', 'twoinc-payment-gateway'), $product_name),
+            ];
+        }
+
+        private function invoice_error_notice($response, $product_name)
+        {
+            $message = WC_Twoinc_Helper::get_twoinc_error_msg($response);
+            if (!$message) {
+                $message = sprintf(__('Could not retrieve the %s invoice.', 'twoinc-payment-gateway'), $product_name);
+            }
+            // get_twoinc_error_msg returns the generic "Response code from
+            // X: NNN" for any >= 400 response before it ever reaches its
+            // error_code branch, so surface the API's error_code alongside
+            // it where the body carries one.
+            $body = json_decode((string) wp_remote_retrieve_body($response), true);
+            if (is_array($body) && isset($body['error_code']) && is_string($body['error_code']) && $body['error_code'] !== '' && strpos($message, $body['error_code']) === false) {
+                $message .= ' (' . $body['error_code'] . ')';
+            }
+            return [
+                'action' => 'notice',
+                'level' => 'error',
+                'message' => $message,
+            ];
+        }
+
+        /**
+         * Admin-ajax handler for wp_ajax_twoinc_download_invoice — the
+         * invoice / credit-note buttons on the admin order edit screen.
+         *
+         * This is a browser navigation (link click), not an XHR POST like
+         * twoinc_ajax_verify_api_key / twoinc_ajax_term_fees, so — unlike
+         * those handlers' wp_verify_nonce($_POST['nonce']) pattern — the
+         * nonce travels as the _wpnonce query arg and is verified with
+         * check_admin_referer(). Registered in load_twoinc_classes().
+         */
+        public static function ajax_download_invoice()
+        {
+            check_admin_referer('twoinc_admin_nonce');
+
+            $order_id = isset($_GET['order_id']) ? absint($_GET['order_id']) : 0;
+            $variant = isset($_GET['variant']) ? sanitize_key(wp_unslash($_GET['variant'])) : '';
+
+            // Gate on the order-screen capability, NOT manage_options:
+            // WooCommerce shop managers (edit_shop_orders, no
+            // manage_options) can use the order edit screen and could
+            // follow the previous direct-API link, so they must not be
+            // locked out of the download.
+            if (!$order_id || !current_user_can('edit_shop_orders')) {
+                wp_die(__('You are not allowed to download this invoice.', 'twoinc-payment-gateway'), '', ['response' => 403]);
+            }
+
+            if (!in_array($variant, ['original', 'credit_note'], true)) {
+                wp_die(__('Invalid invoice variant.', 'twoinc-payment-gateway'), '', ['response' => 400]);
+            }
+
+            $order = wc_get_order($order_id);
+            if (!$order || !WC_Twoinc_Helper::is_twoinc_order($order)) {
+                wp_die(__('Order not found.', 'twoinc-payment-gateway'), '', ['response' => 404]);
+            }
+
+            $result = self::get_instance()->resolve_invoice_download($order, $variant);
+
+            if ($result['action'] === 'stream') {
+                nocache_headers();
+                header('Content-Type: application/pdf');
+                header('Content-Disposition: attachment; filename="' . $result['filename'] . '"');
+                header('Content-Length: ' . strlen($result['body']));
+                // Raw PDF bytes — must not be escaped or re-encoded.
+                echo $result['body']; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+                exit;
+            }
+
+            // Notice outcome: park the message in a short-TTL one-shot
+            // transient and bounce back to the order edit screen, where
+            // render_invoice_download_notice (admin_notices) pops it.
+            set_transient('twoinc_invoice_notice_' . get_current_user_id(), [
+                'level' => $result['level'],
+                'message' => $result['message'],
+            ], 60);
+
+            // get_edit_order_url() is HPOS-aware, unlike get_edit_post_link
+            // (which also HTML-encodes ampersands — wrong for a Location
+            // header); pair it with esc_url_raw, not esc_url, to keep the
+            // redirect URL raw.
+            wp_safe_redirect(esc_url_raw(wp_specialchars_decode($order->get_edit_order_url())));
+            exit;
+        }
+
+        /**
+         * Render (and clear) the one-shot invoice-download notice parked by
+         * ajax_download_invoice for the current user.
+         */
+        public function render_invoice_download_notice()
+        {
+            $key = 'twoinc_invoice_notice_' . get_current_user_id();
+            $notice = get_transient($key);
+            if (!is_array($notice) || !isset($notice['message'])) {
+                return;
+            }
+            delete_transient($key);
+            $class = (isset($notice['level']) && $notice['level'] === 'info') ? 'notice-info' : 'notice-error';
+            printf(
+                '<div class="notice %s is-dismissible"><p>%s</p></div>',
+                esc_attr($class),
+                esc_html($notice['message'])
+            );
         }
 
         /**
