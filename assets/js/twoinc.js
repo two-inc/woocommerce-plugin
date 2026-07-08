@@ -2036,6 +2036,23 @@ let instance = null;
 let isTwoincSelected = null;
 jQuery(function () {
   if (window.twoinc) {
+    // WooCommerce core's own radio-click handler for payment method
+    // selection (checkout.js payment_method_selected) calls
+    // e.stopPropagation() and only fires a bare `payment_method_selected`
+    // event on document.body — it never triggers `update_checkout`. This
+    // gateway's buyer surcharge fee (apply_cart_fee) is conditional on
+    // which payment method is currently chosen, so without an explicit
+    // recalculation trigger here the fee neither appears when switching
+    // TO this gateway nor disappears when switching AWAY from it, until
+    // something unrelated (e.g. a term-chip click) happens to fire
+    // update_checkout first. Bound once at page load; WC fires
+    // payment_method_selected only when the checked radio actually
+    // changes, so this does not cause extra recalculations on unrelated
+    // re-renders.
+    jQuery(document.body).on("payment_method_selected", function () {
+      jQuery(document.body).trigger("update_checkout");
+    });
+
     if (window.twoinc.enable_order_intent === "yes") {
       const initIfGatewayPresent = function () {
         if (jQuery("#payment_method_" + window.twoinc.gateway_id).length > 0) {
