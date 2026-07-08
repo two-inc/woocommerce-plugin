@@ -2157,7 +2157,7 @@ final class BrandConfigSpec
         $result = $gateway->resolve_invoice_download(self::invoiceOrder(), 'original');
         TinyAssert::same('notice', $result['action']);
         TinyAssert::same('info', $result['level']);
-        TinyAssert::true(strpos($result['message'], 'not ready yet') !== false);
+        TinyAssert::true(strpos($result['message'], 'still being prepared') !== false);
         // No pointless retry while the order is still FULFILLING.
         TinyAssert::same(1, self::invoiceCallCount($gateway));
     }

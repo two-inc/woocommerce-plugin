@@ -976,3 +976,7 @@ msgstr "exclusief"
 #: class/WC_Twoinc.php
 msgid "including"
 msgstr "inclusief"
+
+#: class/WC_Twoinc.php
+msgid "The invoice for this order is still being prepared. Please try again later."
+msgstr "De factuur voor deze bestelling wordt nog voorbereid. Probeer het later opnieuw."

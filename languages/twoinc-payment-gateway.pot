@@ -933,3 +933,7 @@ msgstr ""
 #: class/WC_Twoinc.php
 msgid "including"
 msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "The invoice for this order is still being prepared. Please try again later."
+msgstr ""

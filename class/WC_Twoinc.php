@@ -1393,7 +1393,7 @@ if (!class_exists('WC_Twoinc')) {
                 return [
                     'action' => 'notice',
                     'level' => 'info',
-                    'message' => sprintf(__('The %s invoice is not ready yet — the order is still being fulfilled. Please try again later.', 'twoinc-payment-gateway'), $product_name),
+                    'message' => __('The invoice for this order is still being prepared. Please try again later.', 'twoinc-payment-gateway'),
                 ];
             }
 
