@@ -35,6 +35,7 @@ final class BrandConfigSpec
             'testConfirmationUrlHookReceivesUrlAndOrderId',
             'testOrderPayloadHookAugmentsBody',
             'testPaymentTermsLineHookAdjustsLineItems',
+            'testFeeLineItemNameUsesResolvedLabelWithoutPrefix',
             'testEditOrderAppliesSameBrandHooks',
             'testShippingDetailsOmitTrackingWithoutMeta',
             'testShippingDetailsFromShipmentTrackingMeta',
@@ -301,6 +302,45 @@ final class BrandConfigSpec
 
         TinyAssert::same(1, count($body['line_items']));
         TinyAssert::same('Surcharge for NOK', $body['line_items'][0]['name']);
+    }
+
+    private static function testFeeLineItemNameUsesResolvedLabelWithoutPrefix(): void
+    {
+        // TWO-25046: the API line-item name for a cart fee must be the
+        // fee's own (already resolved, translated, brand-correct) name —
+        // no hardcoded 'Fee - ' prefix. Magento's ComposeOrder is the
+        // reference: it never prefixes the surcharge description.
+        $fee = new class {
+            public function get_name()
+            {
+                return 'Servicekosten';
+            }
+
+            public function get_total()
+            {
+                return 10.0;
+            }
+
+            public function get_total_tax()
+            {
+                return 2.5;
+            }
+
+            public function get_taxes()
+            {
+                return ['total' => []];
+            }
+        };
+
+        $items = WC_Twoinc_Helper::get_line_items([], [], [$fee], new StubOrder());
+
+        TinyAssert::same(1, count($items));
+        TinyAssert::same('Servicekosten', $items[0]['name']);
+        TinyAssert::same('SERVICE', $items[0]['type']);
+        TinyAssert::true(
+            strpos($items[0]['name'], 'Fee - ') === false,
+            'Fee line-item name must not carry a hardcoded prefix'
+        );
     }
 
     private static function testEditOrderAppliesSameBrandHooks(): void
