@@ -89,6 +89,7 @@ final class BrandConfigSpec
             'testSoleTraderTokenMintReadsHeaderCaseInsensitively',
             'testSoleTraderTokenMintFailsClosed',
             'testSoleTraderSignupUrlFollowsEnvAndFilter',
+            'testDevEnvironmentDetectionCoversBrandStagingShops',
         ];
         foreach ($tests as $test) {
             self::reset();
@@ -1891,6 +1892,23 @@ final class BrandConfigSpec
             return $url . '?brand=acme';
         });
         TinyAssert::same('https://checkout.sandbox.two.inc/soletrader/signup?brand=acme', WC_Twoinc_Sole_Trader::get_signup_page_url($gateway));
+    }
+
+    private static function testDevEnvironmentDetectionCoversBrandStagingShops(): void
+    {
+        $cases = [
+            ['https://woocom.staging.two.inc', true],
+            ['https://woocom-dev.staging.achterafbetalen.co', true],
+            ['https://woocom.staging.achterafbetalen.co', true],
+            ['https://shop.achterafbetalen.co', false],
+            ['https://staging.achterafbetalen.co.evil.example', false],
+            ['https://merchant-shop.example', false],
+        ];
+        foreach ($cases as [$url, $expected]) {
+            $GLOBALS['test_home_url'] = $url;
+            TinyAssert::same($expected, WC_Twoinc_Helper::is_twoinc_development(), $url);
+        }
+        unset($GLOBALS['test_home_url']);
     }
 }
 

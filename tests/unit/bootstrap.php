@@ -85,7 +85,7 @@ function wp_parse_args($args, $defaults = [])
 
 function get_home_url()
 {
-    return 'https://shop.example';
+    return $GLOBALS['test_home_url'] ?? 'https://shop.example';
 }
 
 function wp_create_nonce($action = -1)

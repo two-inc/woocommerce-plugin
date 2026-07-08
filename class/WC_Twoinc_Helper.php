@@ -911,6 +911,14 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 return true;
             }
 
+            // Brand staging shops (e.g. *.staging.achterafbetalen.co) — without
+            // this they fall through to the Production checkout host and every
+            // merchant-record fetch 401s against a staging API key.
+            $brand_staging_sites = '/^.*\.staging\.achterafbetalen\.co$/';
+            if (preg_match($brand_staging_sites, $hostname) === 1) {
+                return true;
+            }
+
             // Merchant's staging
             if (in_array($hostname, array('staging.torn.no', 'proof-3.redflamingostudio.com', 'icecreamextreme.no', 'www.staging83.avshop.no'))) {
                 return true;
