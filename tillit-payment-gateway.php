@@ -111,6 +111,14 @@ function load_twoinc_classes()
     // since an admin-ajax request does not construct the payment gateway.
     add_action('wp_ajax_twoinc_download_invoice', ['WC_Twoinc', 'ajax_download_invoice']);
 
+    // The one-shot notice that handler parks must also be registered here,
+    // not in the gateway constructor: on the order edit screen WooCommerce
+    // constructs the gateway lazily during the order-data metabox render,
+    // AFTER admin_notices has already fired — a constructor registration is
+    // silently too late and the "invoice not ready yet" notice never
+    // renders, so the button click looks like a no-op (TWO-25041 follow-up).
+    add_action('admin_notices', ['WC_Twoinc', 'render_invoice_download_notice']);
+
     // Confirm order after returning from twoinc checkout-page, DO NOT CHANGE HOOKS
     add_action('template_redirect', 'WC_Twoinc::process_confirmation_header_redirect');
     // add_action('template_redirect', 'WC_Twoinc::before_process_confirmation');
