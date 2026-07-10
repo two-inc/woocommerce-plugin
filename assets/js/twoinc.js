@@ -885,6 +885,7 @@ let twoincDomHelper = {
  */
 let twoincTermChips = {
   fees: {},
+  feesLoaded: false,
 
   config: function () {
     return (window.twoinc && window.twoinc.payment_terms) || { enabled: false };
@@ -901,19 +902,31 @@ let twoincTermChips = {
       return;
     }
     $container.removeClass("hidden");
+
+    const willFetchFees = Boolean(cfg.offset_pricing_enabled && cfg.fees_url);
+    // A checkout update invalidates the previous quotes, so show the
+    // loading dots again until the fresh quotes arrive. When no fetch
+    // will happen, skip straight to the settled (no-fee) state.
+    twoincTermChips.feesLoaded = !willFetchFees;
     twoincTermChips.render(cfg.terms, cfg.selected);
 
-    if (cfg.offset_pricing_enabled && cfg.fees_url) {
+    if (willFetchFees) {
       jQuery
         .post(cfg.fees_url, { nonce: cfg.nonce })
         .done(function (response) {
+          twoincTermChips.feesLoaded = true;
           if (response && response.success && response.data) {
             twoincTermChips.fees = response.data.fees || {};
             twoincTermChips.render(response.data.terms, response.data.selected);
+          } else {
+            twoincTermChips.render(cfg.terms, cfg.selected);
           }
         })
         .fail(function () {
           // Fee labels are decorative: chips stay usable without them.
+          // Re-render to settle the loading dots into the no-fee state.
+          twoincTermChips.feesLoaded = true;
+          twoincTermChips.render(cfg.terms, cfg.selected);
         });
     }
   },
@@ -940,14 +953,28 @@ let twoincTermChips = {
       const daysLabel = (twoincTermChips.config().days_label || "%s days").replace("%s", days);
       $chip.append(jQuery("<span>", { class: "twoinc-term-chip__days", text: daysLabel }));
 
-      const fee = twoincTermChips.fees[days];
-      if (fee && parseFloat(fee.buyer_fee_share) > 0) {
-        $chip.append(
-          jQuery("<span>", {
-            class: "twoinc-term-chip__fee",
-            text: "+" + fee.buyer_fee_share + " " + fee.currency
-          })
-        );
+      if (!twoincTermChips.feesLoaded) {
+        // Fee quote in flight: show animated loading dots instead of a
+        // blank chip. Never render the configured rate — only the real
+        // quoted amount once it arrives.
+        const $loading = jQuery("<span>", {
+          class: "twoinc-term-chip__loading",
+          "aria-hidden": "true"
+        });
+        for (let i = 0; i < 3; i++) {
+          $loading.append(jQuery("<span>", { text: "." }));
+        }
+        $chip.append($loading);
+      } else {
+        const fee = twoincTermChips.fees[days];
+        if (fee && parseFloat(fee.buyer_fee_share) > 0) {
+          $chip.append(
+            jQuery("<span>", {
+              class: "twoinc-term-chip__fee",
+              text: "+" + fee.buyer_fee_share + " " + fee.currency
+            })
+          );
+        }
       }
       if (!single) {
         $chip.on("click", function () {
