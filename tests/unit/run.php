@@ -1853,6 +1853,14 @@ final class BrandConfigSpec
         TinyAssert::same(['', 'b2b-levy'], array_keys($options));
         TinyAssert::same('B2B Levy', $options['b2b-levy']);
 
+        // A pathological class name whose slug sanitises to '' is skipped —
+        // it must not overwrite the '' placeholder option.
+        $GLOBALS['__twoinc_test_tax_classes'] = ['!!!', 'B2B Levy'];
+        $options = $gateway->get_surcharge_tax_class_options();
+        TinyAssert::same(['', 'b2b-levy'], array_keys($options), 'empty-slug class must not clobber the placeholder');
+        TinyAssert::same('— select a tax class —', $options['']);
+        $GLOBALS['__twoinc_test_tax_classes'] = ['B2B Levy'];
+
         // Save-validation: live slug and '' pass, a dead slug is rejected
         // (WC's select validation does not enforce option membership).
         TinyAssert::same('b2b-levy', $gateway->validate_surcharge_tax_class_field('surcharge_tax_class', 'b2b-levy'));
@@ -1882,6 +1890,17 @@ final class BrandConfigSpec
             'surcharge_tax_class' => 'deleted-class',
         ]);
         TinyAssert::true(strpos($stale->get_surcharge_tax_class_stale_notice(), 'no longer exists') !== false);
+
+        // The stored slug is echoed into the settings description (raw HTML
+        // context) — a crafted value must come out HTML-escaped.
+        $crafted = self::surchargeFeeGateway([
+            'surcharge_tax_treatment' => 'custom_class',
+            'surcharge_tax_class' => '<script>alert(1)</script>',
+        ]);
+        $notice = $crafted->get_surcharge_tax_class_stale_notice();
+        TinyAssert::true(strpos($notice, '<script>') === false, 'stale notice must HTML-escape the stored slug');
+        TinyAssert::true(strpos($notice, '&lt;script&gt;') !== false);
+
         $healthy = self::surchargeFeeGateway([
             'surcharge_tax_treatment' => 'custom_class',
             'surcharge_tax_class' => 'b2b-levy',

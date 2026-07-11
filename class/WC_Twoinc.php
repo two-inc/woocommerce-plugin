@@ -801,7 +801,14 @@ if (!class_exists('WC_Twoinc')) {
                 if ($name === '') {
                     continue;
                 }
-                $options[sanitize_title($name)] = $name;
+                $slug = sanitize_title($name);
+                if ($slug === '') {
+                    // A pathological class name (e.g. all punctuation) can
+                    // sanitize to '' — skip it rather than overwrite the
+                    // placeholder option keyed by ''.
+                    continue;
+                }
+                $options[$slug] = $name;
             }
             return $options;
         }
@@ -827,7 +834,10 @@ if (!class_exists('WC_Twoinc')) {
             }
             return sprintf(
                 __('⚠ The previously selected tax class ("%s") no longer exists. The surcharge is currently taxed under the Standard treatment — select an existing tax class or change the tax treatment above.', 'twoinc-payment-gateway'),
-                $stored
+                // The notice is rendered as raw HTML in the settings field
+                // description, so escape the stored value (it may have been
+                // written outside the dropdown, e.g. direct DB/API edits).
+                esc_html($stored)
             );
         }
 
