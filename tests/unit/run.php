@@ -76,6 +76,11 @@ final class BrandConfigSpec
             'testSurchargeGridEnforcesMerchantFixedCap',
             'testSurchargeCapZeroAmountFromApiMeansNoLimit',
             'testSurchargeGridHelpTextOmitsMaxOnCurrencyMismatch',
+            'testSurchargeFeeStandardModeUnchanged',
+            'testSurchargeFeeCustomClassTaxedAtSelectedClassRates',
+            'testSurchargeFeeAlwaysZeroNeverTaxed',
+            'testSurchargeFeeCustomClassFallsBackWhenClassDeleted',
+            'testSurchargeTaxSettingsValidationAndStaleNotice',
             'testPaymentTermsValidationRequiresSelection',
             'testDefaultTermCoercedToOfferedSet',
             'testOrderPayloadCarriesSelectedAndAvailableTerms',
@@ -128,6 +133,8 @@ final class BrandConfigSpec
         WC_Twoinc::reset_merchant_record_memo();
         WC()->cart = null;
         WC()->customer = null;
+        WC()->session = null;
+        unset($GLOBALS['__twoinc_test_tax_classes'], $GLOBALS['__twoinc_test_tax_rates']);
         foreach (['twoinc_brand_file', 'twoinc_checkout_fields', 'twoinc_confirmation_url', 'twoinc_order_payload', 'twoinc_payment_terms_line', 'two_order_create', 'twoinc_payment_validation_error', 'twoinc_sole_trader_signup_url', 'twoinc_shipping_details'] as $tag) {
             remove_all_filters($tag);
         }
@@ -1677,6 +1684,233 @@ final class BrandConfigSpec
         TinyAssert::true(strpos($html, 'Max') === false, 'Max sentence must be omitted on currency mismatch');
         unset($GLOBALS['__twoinc_test_currency']);
         unset($GLOBALS['test_home_url']);
+    }
+
+    // ── Surcharge tax treatment (TWO-25070) ────────────────────────────
+
+    /**
+     * Gateway fake for the surcharge cart-fee path: options injected, one
+     * merchant term offered, and the pricing endpoint canned to quote a
+     * 12.50 buyer fee share.
+     */
+    private static function surchargeFeeGateway(array $options): WC_Twoinc
+    {
+        return new class ($options) extends WC_Twoinc {
+            private $options;
+
+            public function __construct($options = [])
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+                $this->options = $options;
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                return $this->options[$key] ?? $empty_value ?? '';
+            }
+
+            public function get_merchant_available_terms(bool $refresh = false): array
+            {
+                return [30, 60];
+            }
+
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            {
+                if (strpos($endpoint, '/v1/pricing/order/fee') === 0) {
+                    return [
+                        'response' => ['code' => 200],
+                        'body' => json_encode(['buyer_fee_share' => '12.50', 'currency' => 'EUR']),
+                    ];
+                }
+                return new WP_Error();
+            }
+        };
+    }
+
+    /**
+     * Drive the woocommerce_cart_calculate_fees handler end-to-end (session
+     * gateway match, term resolution, fee quote, add_fee) against a
+     * StubFeeCart, and return the cart for assertions on the recorded
+     * add_fee call. $options rides on top of a minimal enabled-surcharge
+     * configuration.
+     */
+    private static function runApplyCartFee(array $options): StubFeeCart
+    {
+        $gateway = self::surchargeFeeGateway(array_merge([
+            'surcharge_type' => 'percentage',
+            'payment_terms_days' => [30],
+            'surcharge_grid' => [30 => ['percentage' => 2.0]],
+        ], $options));
+        return self::withGatewayInstance($gateway, static function () use ($gateway) {
+            WC_Twoinc_Payment_Terms::reset_fee_cache();
+            WC()->session = new StubSession();
+            WC()->session->set('chosen_payment_method', $gateway->id);
+            WC()->customer = new StubCustomer('US');
+            $cart = new StubFeeCart();
+            WC_Twoinc_Payment_Terms::apply_cart_fee($cart);
+            TinyAssert::same(1, count($cart->fees), 'expected exactly one surcharge fee line');
+            return $cart;
+        });
+    }
+
+    private static function testSurchargeFeeStandardModeUnchanged(): void
+    {
+        // Regression pin: no tax-treatment option stored (pre-feature
+        // install) → the pre-feature 3-arg taxable call, byte-for-byte, so
+        // WC taxes the fee under Standard exactly as today.
+        $GLOBALS['__twoinc_test_tax_classes'] = ['Reduced rate'];
+        $GLOBALS['__twoinc_test_tax_rates'] = ['' => [25.0], 'reduced-rate' => [5.0]];
+
+        $fee = self::runApplyCartFee([])->fees[0];
+        TinyAssert::same(3, $fee['argc'], 'standard mode must keep the pre-feature 3-arg add_fee call');
+        TinyAssert::same(true, $fee['taxable']);
+        TinyAssert::same(12.5, $fee['amount']);
+        TinyAssert::same(12.5 * 0.25, $fee['tax'], 'standard mode taxes at the Standard rate');
+
+        // An explicit 'standard' selection is identical.
+        $fee = self::runApplyCartFee(['surcharge_tax_treatment' => 'standard'])->fees[0];
+        TinyAssert::same(3, $fee['argc']);
+        TinyAssert::same(true, $fee['taxable']);
+    }
+
+    private static function testSurchargeFeeCustomClassTaxedAtSelectedClassRates(): void
+    {
+        // 'B2B Levy' carries TWO simultaneous destination-matched rate rows
+        // (the US state+local / CA GST+PST shape): WC's engine applies them
+        // additively, and the fee must be taxed at 5% + 2%, not at the 25%
+        // Standard rate.
+        $GLOBALS['__twoinc_test_tax_classes'] = ['B2B Levy', 'Reduced rate'];
+        $GLOBALS['__twoinc_test_tax_rates'] = [
+            '' => [25.0],
+            'b2b-levy' => [5.0, 2.0],
+            'reduced-rate' => [10.0],
+        ];
+
+        $fee = self::runApplyCartFee([
+            'surcharge_tax_treatment' => 'custom_class',
+            'surcharge_tax_class' => 'b2b-levy',
+        ])->fees[0];
+        TinyAssert::same(4, $fee['argc'], 'custom_class mode must pass the tax_class argument');
+        TinyAssert::same(true, $fee['taxable']);
+        TinyAssert::same('b2b-levy', $fee['tax_class']);
+        // 5% + 2% of 12.50 = 0.875 (exact in binary floating point).
+        TinyAssert::same(0.875, $fee['tax'], 'multi-rate rows for the selected class stack additively');
+    }
+
+    private static function testSurchargeFeeAlwaysZeroNeverTaxed(): void
+    {
+        // Fat Standard rate and a "Zero rate" class that a merchant has
+        // (mis)filled with rate rows: always_zero must not consult either —
+        // it is add_fee(…, taxable: false), not a binding to any class, so
+        // the guarantee is destination-independent by construction.
+        $GLOBALS['__twoinc_test_tax_classes'] = ['Zero rate'];
+        $GLOBALS['__twoinc_test_tax_rates'] = ['' => [25.0], 'zero-rate' => [19.0]];
+
+        $fee = self::runApplyCartFee(['surcharge_tax_treatment' => 'always_zero'])->fees[0];
+        TinyAssert::same(3, $fee['argc'], 'always_zero must not pass a tax class');
+        TinyAssert::same(false, $fee['taxable']);
+        TinyAssert::same(0.0, $fee['tax']);
+    }
+
+    private static function testSurchargeFeeCustomClassFallsBackWhenClassDeleted(): void
+    {
+        // The stored class was deleted from WooCommerce → Settings → Tax.
+        // Core's add_fee would silently tax it as Standard; the resolver
+        // must degrade to EXPLICIT standard treatment instead (same tax
+        // outcome, but visible in settings and never passing a dead slug).
+        $GLOBALS['__twoinc_test_tax_classes'] = ['Reduced rate'];
+        $GLOBALS['__twoinc_test_tax_rates'] = ['' => [25.0], 'reduced-rate' => [5.0]];
+
+        $options = [
+            'surcharge_tax_treatment' => 'custom_class',
+            'surcharge_tax_class' => 'deleted-class',
+        ];
+        $settings = WC_Twoinc_Payment_Terms::get_surcharge_settings(
+            self::surchargeFeeGateway(array_merge(['surcharge_type' => 'percentage'], $options))
+        );
+        TinyAssert::same('standard', $settings['tax_treatment'], 'a dead slug must degrade to standard treatment');
+        TinyAssert::same('', $settings['tax_class']);
+
+        $fee = self::runApplyCartFee($options)->fees[0];
+        TinyAssert::same(3, $fee['argc'], 'fallback must use the plain 3-arg call, never a dead slug');
+        TinyAssert::same(true, $fee['taxable']);
+        TinyAssert::same(12.5 * 0.25, $fee['tax'], 'fallback taxes at the Standard rate');
+
+        // An empty stored class in custom_class mode degrades the same way.
+        $settings = WC_Twoinc_Payment_Terms::get_surcharge_settings(
+            self::surchargeFeeGateway(['surcharge_type' => 'percentage', 'surcharge_tax_treatment' => 'custom_class'])
+        );
+        TinyAssert::same('standard', $settings['tax_treatment']);
+    }
+
+    private static function testSurchargeTaxSettingsValidationAndStaleNotice(): void
+    {
+        $GLOBALS['__twoinc_test_tax_classes'] = ['B2B Levy'];
+
+        // Options are built live from WC_Tax, keyed by slug.
+        $gateway = self::surchargeFeeGateway([]);
+        $options = $gateway->get_surcharge_tax_class_options();
+        TinyAssert::same(['', 'b2b-levy'], array_keys($options));
+        TinyAssert::same('B2B Levy', $options['b2b-levy']);
+
+        // A pathological class name whose slug sanitises to '' is skipped —
+        // it must not overwrite the '' placeholder option.
+        $GLOBALS['__twoinc_test_tax_classes'] = ['!!!', 'B2B Levy'];
+        $options = $gateway->get_surcharge_tax_class_options();
+        TinyAssert::same(['', 'b2b-levy'], array_keys($options), 'empty-slug class must not clobber the placeholder');
+        TinyAssert::same('— select a tax class —', $options['']);
+        $GLOBALS['__twoinc_test_tax_classes'] = ['B2B Levy'];
+
+        // Save-validation: live slug and '' pass, a dead slug is rejected
+        // (WC's select validation does not enforce option membership).
+        TinyAssert::same('b2b-levy', $gateway->validate_surcharge_tax_class_field('surcharge_tax_class', 'b2b-levy'));
+        TinyAssert::same('', $gateway->validate_surcharge_tax_class_field('surcharge_tax_class', ''));
+        $threw = false;
+        try {
+            $gateway->validate_surcharge_tax_class_field('surcharge_tax_class', 'deleted-class');
+        } catch (Exception $e) {
+            $threw = true;
+        }
+        TinyAssert::true($threw, 'a non-live tax class must be rejected at save');
+
+        // Treatment validation enforces the three modes.
+        TinyAssert::same('always_zero', $gateway->validate_surcharge_tax_treatment_field('surcharge_tax_treatment', 'always_zero'));
+        $threw = false;
+        try {
+            $gateway->validate_surcharge_tax_treatment_field('surcharge_tax_treatment', 'zero_rate_class');
+        } catch (Exception $e) {
+            $threw = true;
+        }
+        TinyAssert::true($threw);
+
+        // Stale-selection notice: shown only when custom_class is selected
+        // AND the stored slug no longer matches a live class.
+        $stale = self::surchargeFeeGateway([
+            'surcharge_tax_treatment' => 'custom_class',
+            'surcharge_tax_class' => 'deleted-class',
+        ]);
+        TinyAssert::true(strpos($stale->get_surcharge_tax_class_stale_notice(), 'no longer exists') !== false);
+
+        // The stored slug is echoed into the settings description (raw HTML
+        // context) — a crafted value must come out HTML-escaped.
+        $crafted = self::surchargeFeeGateway([
+            'surcharge_tax_treatment' => 'custom_class',
+            'surcharge_tax_class' => '<script>alert(1)</script>',
+        ]);
+        $notice = $crafted->get_surcharge_tax_class_stale_notice();
+        TinyAssert::true(strpos($notice, '<script>') === false, 'stale notice must HTML-escape the stored slug');
+        TinyAssert::true(strpos($notice, '&lt;script&gt;') !== false);
+
+        $healthy = self::surchargeFeeGateway([
+            'surcharge_tax_treatment' => 'custom_class',
+            'surcharge_tax_class' => 'b2b-levy',
+        ]);
+        TinyAssert::same('', $healthy->get_surcharge_tax_class_stale_notice());
+        $standard = self::surchargeFeeGateway([
+            'surcharge_tax_treatment' => 'standard',
+            'surcharge_tax_class' => 'deleted-class',
+        ]);
+        TinyAssert::same('', $standard->get_surcharge_tax_class_stale_notice(), 'no notice outside custom_class mode');
     }
 
     private static function testPaymentTermsValidationRequiresSelection(): void

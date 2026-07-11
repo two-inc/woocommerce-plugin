@@ -406,6 +406,21 @@ jQuery(function ($) {
       $(".twoinc-surcharge-grid-field").toggle(type !== "none");
     }
 
+    // ── Surcharge tax treatment/class visibility ─────────────────────
+    // Both rows follow the surcharge method (no surcharge → no tax
+    // question); the class dropdown additionally follows the treatment
+    // (only "Specific tax class" needs it). Selection changes mirror
+    // without a save; the stored values are untouched until Save.
+    const $taxTreatment = $("#" + prefix + "surcharge_tax_treatment");
+    const $taxClass = $("#" + prefix + "surcharge_tax_class");
+
+    function updateTaxFields() {
+      const type = $surchargeType.val() || "none";
+      const treatment = $taxTreatment.val() || "standard";
+      $taxTreatment.closest("tr").toggle(type !== "none");
+      $taxClass.closest("tr").toggle(type !== "none" && treatment === "custom_class");
+    }
+
     function onTermsChanged() {
       rebuildDefaultTerm();
       loadFees();
@@ -415,9 +430,12 @@ jQuery(function ($) {
     $checkboxes.on("change", onTermsChanged);
     $customDays.on("change keyup", onTermsChanged);
     $surchargeType.on("change", updateGridColumns);
+    $surchargeType.on("change", updateTaxFields);
+    $taxTreatment.on("change", updateTaxFields);
 
     rebuildDefaultTerm();
     loadFees();
     updateGridRows();
+    updateTaxFields();
   })();
 });

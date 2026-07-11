@@ -161,7 +161,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          * Magento surcharge model: a type gate, a per-term grid of
          * {fixed, percentage, limit}, a differential toggle and rounding.
          *
-         * @return array{type: string, enabled: bool, differential: bool, grid: array<int,array>, rounding_basis: string, rounding_step: float|null}
+         * @return array{type: string, enabled: bool, differential: bool, grid: array<int,array>, rounding_basis: string, rounding_step: float|null, tax_treatment: string, tax_class: string}
          */
         public static function get_surcharge_settings($gateway): array
         {
@@ -172,6 +172,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
             $grid = $gateway->get_option('surcharge_grid');
             $grid = is_array($grid) ? $grid : [];
             $rounding_step = (float) $gateway->get_option('surcharge_rounding_step');
+            $tax = self::resolve_surcharge_tax_treatment($gateway);
             return [
                 'type' => $type,
                 'enabled' => $type !== 'none',
@@ -179,7 +180,53 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                 'grid' => $grid,
                 'rounding_basis' => (string) $gateway->get_option('surcharge_rounding_basis'),
                 'rounding_step' => $rounding_step > 0 ? $rounding_step : null,
+                'tax_treatment' => $tax['treatment'],
+                'tax_class' => $tax['tax_class'],
             ];
+        }
+
+        /**
+         * The EFFECTIVE surcharge tax treatment: the stored mode, degraded
+         * to 'standard' when it cannot be honoured. In custom_class mode the
+         * stored slug is re-validated against the LIVE tax-class list on
+         * every read: WC_Cart_Fees::add_fee() silently reverts an unknown
+         * tax class to Standard rather than erroring, so if the merchant
+         * deleted the selected class the surcharge would quietly change tax
+         * behaviour anyway — degrading explicitly here keeps the runtime
+         * honest and lets the settings page surface the stale selection
+         * (WC_Twoinc::init_form_fields carries the matching admin warning).
+         *
+         * @return array{treatment: string, tax_class: string}
+         */
+        public static function resolve_surcharge_tax_treatment($gateway): array
+        {
+            $treatment = (string) $gateway->get_option('surcharge_tax_treatment');
+            if (!in_array($treatment, ['standard', 'custom_class', 'always_zero'], true)) {
+                $treatment = 'standard';
+            }
+            if ($treatment !== 'custom_class') {
+                return ['treatment' => $treatment, 'tax_class' => ''];
+            }
+            $slug = trim((string) $gateway->get_option('surcharge_tax_class'));
+            if ($slug === '' || !in_array($slug, self::live_tax_class_slugs(), true)) {
+                return ['treatment' => 'standard', 'tax_class' => ''];
+            }
+            return ['treatment' => 'custom_class', 'tax_class' => $slug];
+        }
+
+        /**
+         * The store's current additional tax-class slugs (Standard is the
+         * implicit '' class and is never in this list). Guarded so the
+         * resolver stays callable outside a full WooCommerce bootstrap.
+         *
+         * @return string[]
+         */
+        private static function live_tax_class_slugs(): array
+        {
+            if (!class_exists('WC_Tax') || !method_exists('WC_Tax', 'get_tax_class_slugs')) {
+                return [];
+            }
+            return array_values(array_map('strval', (array) WC_Tax::get_tax_class_slugs()));
         }
 
         /**
@@ -461,7 +508,34 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                 return;
             }
 
-            $cart->add_fee(self::get_fee_label(), (float) $fee['buyer_fee_share'], true);
+            $label = self::get_fee_label();
+            $amount = (float) $fee['buyer_fee_share'];
+            switch ($settings['tax_treatment']) {
+                case 'always_zero':
+                    // Unconditionally non-taxable via add_fee's $taxable
+                    // flag — deliberately NOT bound to WC's "Zero rate" tax
+                    // class. "Zero rate" is only an empty class by naming
+                    // convention (core creates it with no rate rows and no
+                    // special semantics); a merchant could later add rate
+                    // rows to it and silently break the guarantee, whereas
+                    // taxable=false is destination-independent by
+                    // construction.
+                    $cart->add_fee($label, $amount, false);
+                    break;
+                case 'custom_class':
+                    // The slug is pre-validated against the live class list
+                    // (resolve_surcharge_tax_treatment) — an unknown class
+                    // never reaches here, because WC_Cart_Fees::add_fee()
+                    // would silently tax it as Standard. WC's own tax engine
+                    // (WC_Tax::get_matched_tax_rates) handles the rest:
+                    // additive multi-rate jurisdictions and zero when no
+                    // rate matches the destination.
+                    $cart->add_fee($label, $amount, true, $settings['tax_class']);
+                    break;
+                default:
+                    // 'standard' — pre-feature behaviour, byte-for-byte.
+                    $cart->add_fee($label, $amount, true);
+            }
         }
 
         /**

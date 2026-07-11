@@ -780,6 +780,101 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
+         * Admin option list for the surcharge tax class: the store's LIVE
+         * additional tax classes (WC_Tax::get_tax_classes), keyed by slug —
+         * the value WC_Cart_Fees::add_fee() resolves rates by. Built fresh
+         * on every settings render, never hardcoded, so it always mirrors
+         * WooCommerce → Settings → Tax. Mirrors core's
+         * wc_get_product_tax_class_options() slug mapping (minus the
+         * implicit Standard entry, which is the 'standard' treatment mode).
+         *
+         * @return array<string, string> slug => display name
+         */
+        public function get_surcharge_tax_class_options(): array
+        {
+            $options = ['' => __('— select a tax class —', 'twoinc-payment-gateway')];
+            if (!class_exists('WC_Tax')) {
+                return $options;
+            }
+            foreach ((array) WC_Tax::get_tax_classes() as $name) {
+                $name = (string) $name;
+                if ($name === '') {
+                    continue;
+                }
+                $slug = sanitize_title($name);
+                if ($slug === '') {
+                    // A pathological class name (e.g. all punctuation) can
+                    // sanitize to '' — skip it rather than overwrite the
+                    // placeholder option keyed by ''.
+                    continue;
+                }
+                $options[$slug] = $name;
+            }
+            return $options;
+        }
+
+        /**
+         * Visible warning for the surcharge tax class field when the stored
+         * selection no longer matches a live tax class (the merchant deleted
+         * it). Without this the failure is silent twice over: core's
+         * add_fee() would quietly tax the fee as Standard, and the effective-
+         * treatment resolver (WC_Twoinc_Payment_Terms::
+         * resolve_surcharge_tax_treatment) therefore deliberately degrades
+         * to standard mode — this notice is what makes that degradation
+         * visible to the merchant.
+         */
+        public function get_surcharge_tax_class_stale_notice(): string
+        {
+            if ($this->get_option('surcharge_tax_treatment') !== 'custom_class') {
+                return '';
+            }
+            $stored = trim((string) $this->get_option('surcharge_tax_class'));
+            if ($stored === '' || array_key_exists($stored, $this->get_surcharge_tax_class_options())) {
+                return '';
+            }
+            return sprintf(
+                __('⚠ The previously selected tax class ("%s") no longer exists. The surcharge is currently taxed under the Standard treatment — select an existing tax class or change the tax treatment above.', 'twoinc-payment-gateway'),
+                // The notice is rendered as raw HTML in the settings field
+                // description, so escape the stored value (it may have been
+                // written outside the dropdown, e.g. direct DB/API edits).
+                esc_html($stored)
+            );
+        }
+
+        /**
+         * Enforce that a saved surcharge tax treatment is one of the three
+         * supported modes (WooCommerce's default select validation sanitises
+         * but does not enforce option-list membership).
+         */
+        public function validate_surcharge_tax_treatment_field($key, $value)
+        {
+            $value = trim((string) $value);
+            if (!in_array($value, ['standard', 'custom_class', 'always_zero'], true)) {
+                throw new Exception(__('Surcharge tax treatment must be one of the offered modes.', 'twoinc-payment-gateway'));
+            }
+            return $value;
+        }
+
+        /**
+         * Enforce that a saved surcharge tax class is one of the store's
+         * live tax classes ('' = none selected is allowed; the effective
+         * treatment then degrades to standard). Guards against a tampered
+         * or stale POST persisting a slug that WC_Cart_Fees::add_fee()
+         * would silently tax as Standard.
+         */
+        public function validate_surcharge_tax_class_field($key, $value)
+        {
+            $value = trim((string) $value);
+            if ($value === '') {
+                return '';
+            }
+            if (!array_key_exists($value, $this->get_surcharge_tax_class_options())) {
+                throw new Exception(__('Surcharge tax class must be one of the store\'s existing tax classes.', 'twoinc-payment-gateway'));
+            }
+            return $value;
+        }
+
+        /**
          * Render the per-term surcharge grid (WC Settings API custom field
          * `two_surcharge_grid`). One row per offered term, columns
          * fixed/percentage/cap, mirroring the Magento surcharge grid. Values
@@ -3080,6 +3175,29 @@ if (!class_exists('WC_Twoinc')) {
                     'description' => __('Buyer-facing label for the surcharge line. Use %s for the term length in days. Leave blank to use the brand default.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'type'        => 'text',
+                    'default'     => ''
+                ],
+                'surcharge_tax_treatment' => [
+                    'title'       => __('Surcharge Tax Treatment', 'twoinc-payment-gateway'),
+                    'description' => __('How the surcharge line is taxed. Standard applies your store\'s default tax rules to the fee. Specific tax class taxes the fee under a WooCommerce tax class you select below. Never taxed adds the fee as non-taxable, regardless of the customer\'s destination.', 'twoinc-payment-gateway'),
+                    'desc_tip'    => true,
+                    'type'        => 'select',
+                    'options'     => [
+                        'standard'     => __('Standard (store default tax rules)', 'twoinc-payment-gateway'),
+                        'custom_class' => __('Specific tax class', 'twoinc-payment-gateway'),
+                        'always_zero'  => __('Never taxed', 'twoinc-payment-gateway'),
+                    ],
+                    'default'     => 'standard'
+                ],
+                'surcharge_tax_class' => [
+                    'title'       => __('Surcharge Tax Class', 'twoinc-payment-gateway'),
+                    'desc_tip'    => __('The WooCommerce tax class applied to the surcharge when the tax treatment is "Specific tax class". Manage tax classes under WooCommerce → Settings → Tax.', 'twoinc-payment-gateway'),
+                    // Visible (non-tooltip) description: carries the stale-
+                    // selection warning when the stored class has been
+                    // deleted, empty otherwise.
+                    'description' => $this->get_surcharge_tax_class_stale_notice(),
+                    'type'        => 'select',
+                    'options'     => $this->get_surcharge_tax_class_options(),
                     'default'     => ''
                 ],
                 'surcharge_grid' => [
