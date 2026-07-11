@@ -64,8 +64,12 @@ if (!class_exists('WC_Twoinc_Checkout')) {
         public function move_country_field($fields)
         {
 
-            // Change the priority for the country field
-            $fields['billing']['billing_country']['priority'] = $fields['billing']['billing_company']['priority'] - 1;
+            // Change the priority for the country field. billing_company may
+            // be absent (e.g. WooCommerce's own "Company name" field toggle
+            // disabled) — fall back to core's default priority (30) rather
+            // than warning on an undefined array key.
+            $company_priority = $fields['billing']['billing_company']['priority'] ?? 30;
+            $fields['billing']['billing_country']['priority'] = $company_priority - 1;
 
             // Return the fields list
             return $fields;
@@ -82,7 +86,8 @@ if (!class_exists('WC_Twoinc_Checkout')) {
         public function update_company_fields($fields)
         {
 
-            $company_name_priority = $fields['billing']['billing_company']['priority'];
+            // billing_company may be absent (see move_country_field above).
+            $company_name_priority = $fields['billing']['billing_company']['priority'] ?? 30;
 
             if ($this->wc_twoinc->get_enable_company_search() === 'yes') {
 
