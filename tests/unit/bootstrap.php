@@ -156,6 +156,7 @@ function WC()
             public $countries;
             public $cart;
             public $customer;
+            public $session;
 
             public function __construct()
             {
@@ -192,6 +193,116 @@ class StubCart
     public function is_empty()
     {
         return $this->is_empty;
+    }
+}
+
+class StubSession
+{
+    private $data = [];
+
+    public function get($key, $default = null)
+    {
+        return $this->data[$key] ?? $default;
+    }
+
+    public function set($key, $value)
+    {
+        $this->data[$key] = $value;
+    }
+}
+
+/**
+ * WC_Tax stub: additional tax classes from
+ * $GLOBALS['__twoinc_test_tax_classes'] (display names, as core stores
+ * them); destination-matched rate rows per class slug from
+ * $GLOBALS['__twoinc_test_tax_rates'] ('' = Standard). The rate rows
+ * model what core's WC_Tax::get_matched_tax_rates() returns for the
+ * current destination: a LIST of percentages (multi-rate jurisdictions
+ * have several rows, applied additively), empty when nothing matches.
+ */
+class WC_Tax
+{
+    public static function get_tax_classes()
+    {
+        return $GLOBALS['__twoinc_test_tax_classes'] ?? [];
+    }
+
+    public static function get_tax_class_slugs()
+    {
+        return array_filter(array_map('sanitize_title', self::get_tax_classes()));
+    }
+
+    /** @return float[] matched rate percentages for a class slug */
+    public static function get_rates_for_class($slug)
+    {
+        return $GLOBALS['__twoinc_test_tax_rates'][$slug] ?? [];
+    }
+}
+
+function sanitize_title($title)
+{
+    $title = strtolower(trim((string) $title));
+    $title = preg_replace('/[^a-z0-9]+/', '-', $title);
+    return trim($title, '-');
+}
+
+/**
+ * Cart stub for the surcharge cart-fee hook. add_fee() records its exact
+ * arguments (argc included, so tests can pin the 3-arg pre-feature call
+ * shape) and computes the fee tax the way core does:
+ *
+ *  - $taxable false → no tax, unconditionally (never consults rates).
+ *  - a $tax_class that doesn't match a live class silently reverts to
+ *    Standard (the WC_Cart_Fees::add_fee / WC_Tax::get_rates gotcha the
+ *    plugin-side validation defends against — mirrored here faithfully
+ *    so a regression in that validation shows up as the WRONG TAX, not
+ *    as a stub error).
+ *  - matched rate rows apply additively (US state+local, CA GST+PST).
+ */
+class StubFeeCart
+{
+    public $fees = [];
+
+    public function get_cart_contents_total()
+    {
+        return 100.0;
+    }
+
+    public function get_cart_contents_tax()
+    {
+        return 25.0;
+    }
+
+    public function get_shipping_total()
+    {
+        return 10.0;
+    }
+
+    public function get_shipping_tax()
+    {
+        return 2.5;
+    }
+
+    public function add_fee($name, $amount, $taxable = false, $tax_class = '')
+    {
+        $tax = 0.0;
+        if ($taxable) {
+            $class = (string) $tax_class;
+            if ($class !== '' && !in_array($class, WC_Tax::get_tax_class_slugs(), true)) {
+                $class = ''; // core's silent revert-to-Standard
+            }
+            foreach (WC_Tax::get_rates_for_class($class) as $percent) {
+                $tax += (float) $amount * (float) $percent / 100;
+            }
+        }
+        $this->fees[] = [
+            'name' => $name,
+            'amount' => $amount,
+            'taxable' => $taxable,
+            'tax_class' => $tax_class,
+            'argc' => func_num_args(),
+            'tax' => $tax,
+        ];
     }
 }
 
