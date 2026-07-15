@@ -1,0 +1,27 @@
+#!/bin/bash
+# Install and configure Xdebug inside the WordPress container.
+# Called by: make debug
+# Usage (inside the container): dev/install-xdebug [mode]   (mode defaults to "off")
+set -e
+
+MODE="${1:-off}"
+
+if ! php -m 2>/dev/null | grep -qi '^xdebug$'; then
+    echo "Installing Xdebug..."
+    apt-get update -qq
+    apt-get install -y -qq --no-install-recommends $PHPIZE_DEPS >/dev/null
+    pecl install xdebug
+    docker-php-ext-enable xdebug
+fi
+
+# Our own conf file, loaded after the docker-php-ext-enable one (alphabetical
+# conf.d order) so it always wins. Re-run to flip mode without reinstalling.
+cat >/usr/local/etc/php/conf.d/99-xdebug-two.ini <<INI
+xdebug.mode=${MODE}
+xdebug.start_with_request=yes
+xdebug.client_host=host.docker.internal
+xdebug.client_port=9003
+xdebug.idekey=VSCODE
+INI
+
+php -r 'echo "Xdebug " . phpversion("xdebug") . " installed (mode=" . ini_get("xdebug.mode") . ")\n";'
