@@ -362,10 +362,69 @@ class WC_HTTPS
 
 // ── Order stub for compose_twoinc_order ─────────────────────────────
 
+/**
+ * Product line item stub: WC_Order_Item_Product is ArrayAccess-backed,
+ * and get_line_items() reads it both ways (['line_subtotal'] and
+ * ->get_taxes()). Only what the exercised code paths touch is stubbed.
+ */
+class StubProductLineItem implements ArrayAccess
+{
+    private $data;
+
+    public function __construct(array $data)
+    {
+        $this->data = array_merge(
+            ['line_tax' => 0.0, 'quantity' => 1, 'data' => null],
+            $data
+        );
+    }
+
+    #[\ReturnTypeWillChange]
+    public function offsetExists($offset)
+    {
+        return isset($this->data[$offset]);
+    }
+
+    #[\ReturnTypeWillChange]
+    public function offsetGet($offset)
+    {
+        return $this->data[$offset] ?? null;
+    }
+
+    #[\ReturnTypeWillChange]
+    public function offsetSet($offset, $value)
+    {
+        $this->data[$offset] = $value;
+    }
+
+    #[\ReturnTypeWillChange]
+    public function offsetUnset($offset)
+    {
+        unset($this->data[$offset]);
+    }
+
+    public function get_name()
+    {
+        return $this->data['name'] ?? 'Stub product';
+    }
+
+    public function get_taxes()
+    {
+        return ['total' => []];
+    }
+}
+
 class StubOrder
 {
     // Meta store mirroring WC_Order::get_meta single-value behaviour.
     public $meta = [];
+
+    public function get_item_subtotal($item, $inc_tax = false, $round = true)
+    {
+        $qty = max(1, (int) $item['quantity']);
+        $subtotal = $item['line_subtotal'] / $qty;
+        return $round ? round($subtotal, 2) : $subtotal;
+    }
 
     public function get_meta($key, $single = true)
     {
