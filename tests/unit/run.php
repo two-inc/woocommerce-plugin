@@ -113,6 +113,11 @@ final class BrandConfigSpec
             'testInvoiceDownloadNonceScopedToOrderAndVariant',
             'testInvoiceDownloadNoticeIsolatedPerOrder',
             'testInvoiceStreamFilenameSanitizesOrderId',
+            'testNegativeDiscountGuardPassesLegitimateDiscount',
+            'testNegativeDiscountGuardThrowsOnNegativeLineDiscount',
+            'testNegativeDiscountGuardThrowsOnNegativeOrderDiscount',
+            'testNegativeDiscountGuardNoFalsePositiveFromEarlyRounding',
+            'testNegativeDiscountGuardSkipsRefundLineItems',
         ];
         foreach ($tests as $test) {
             self::reset();
@@ -2716,6 +2721,157 @@ final class BrandConfigSpec
         // outside [A-Za-z0-9_-] must be stripped.
         TinyAssert::true(strpos($result['filename'], 'abcdefpdf.pdf') !== false);
         TinyAssert::same(false, strpbrk($result['filename'], '";/ ') !== false, 'filename must not carry quote/semicolon/slash/space');
+    }
+
+    // ── Negative-discount guard (TWO-25097) ─────────────────────────
+
+    private static function testNegativeDiscountGuardPassesLegitimateDiscount(): void
+    {
+        // (a) A legitimate positive discount passes through untouched.
+        $line_item = new StubProductLineItem([
+            'name' => 'Discounted widget',
+            'line_subtotal' => 100.0,
+            'line_total' => 90.0,
+            'line_tax' => 22.5,
+            'quantity' => 2,
+        ]);
+
+        $items = WC_Twoinc_Helper::get_line_items([$line_item], [], [], new StubOrder());
+
+        TinyAssert::same(1, count($items));
+        TinyAssert::same('10.00', $items[0]['discount_amount']);
+        TinyAssert::same('90.00', $items[0]['net_amount']);
+
+        // Order-level surface: zero discount composes as plain '0.00'.
+        $body = self::composeOrder();
+        TinyAssert::same('0.00', $body['discount_amount']);
+
+        // Order-level surface: a positive total discount passes untouched
+        // through both compose bodies.
+        $order = new class extends StubOrder {
+            public function get_total_discount()
+            {
+                return 12.5;
+            }
+        };
+        $body = WC_Twoinc_Helper::compose_twoinc_order($order, 'test-order-reference', '912345678', 'IT', 'Project X', '', []);
+        TinyAssert::same('12.50', $body['discount_amount']);
+        $body = WC_Twoinc_Helper::compose_twoinc_edit_order($order, 'IT', 'Project X', '', '');
+        TinyAssert::same('12.50', $body['discount_amount']);
+    }
+
+    private static function testNegativeDiscountGuardThrowsOnNegativeLineDiscount(): void
+    {
+        // (b) A genuinely negative line discount fails loud with a clear
+        // message — never silently clamped to zero.
+        $line_item = new StubProductLineItem([
+            'name' => 'Broken widget',
+            'line_subtotal' => 90.0,
+            'line_total' => 100.0,
+        ]);
+
+        $thrown = null;
+        try {
+            WC_Twoinc_Helper::get_line_items([$line_item], [], [], new StubOrder());
+        } catch (Exception $e) {
+            $thrown = $e;
+        }
+
+        TinyAssert::true($thrown instanceof Exception, 'negative line discount must throw');
+        TinyAssert::true(
+            strpos($thrown->getMessage(), 'Negative discount amount calculated') !== false,
+            'exception must name the negative-discount failure'
+        );
+        TinyAssert::true(
+            strpos($thrown->getMessage(), 'Broken widget') !== false,
+            'exception must identify the offending product'
+        );
+    }
+
+    private static function testNegativeDiscountGuardThrowsOnNegativeOrderDiscount(): void
+    {
+        // (b) Order-level surfaces: both compose bodies guard
+        // get_total_discount().
+        $order = new class extends StubOrder {
+            public function get_total_discount()
+            {
+                return -5.0;
+            }
+        };
+
+        $thrown = null;
+        try {
+            WC_Twoinc_Helper::compose_twoinc_order($order, 'test-order-reference', '912345678', 'IT', 'Project X', '', []);
+        } catch (Exception $e) {
+            $thrown = $e;
+        }
+        TinyAssert::true($thrown instanceof Exception, 'negative order discount must fail order create');
+        TinyAssert::true(
+            strpos($thrown->getMessage(), 'Negative discount amount calculated') !== false,
+            'create exception must name the negative-discount failure'
+        );
+
+        $thrown = null;
+        try {
+            WC_Twoinc_Helper::compose_twoinc_edit_order($order, 'IT', 'Project X', '', '');
+        } catch (Exception $e) {
+            $thrown = $e;
+        }
+        TinyAssert::true($thrown instanceof Exception, 'negative order discount must fail order edit');
+    }
+
+    private static function testNegativeDiscountGuardNoFalsePositiveFromEarlyRounding(): void
+    {
+        // (c) Rounding-order regression (the PrestaShop TWO-24741 round-1
+        // finding): a native-precision difference that only goes negative
+        // if the operands are rounded early must NOT false-positive.
+        //
+        // 25.024 - 25.026 = -0.002 at native precision, which rounds to
+        // zero at the payload boundary. Rounding the operands first gives
+        // 25.02 - 25.03 = -0.01, a phantom negative that would fire the
+        // fail-loud throw on a legitimate cart.
+        $line_item = new StubProductLineItem([
+            'name' => 'Residue widget',
+            'line_subtotal' => 25.024,
+            'line_total' => 25.026,
+        ]);
+
+        $items = WC_Twoinc_Helper::get_line_items([$line_item], [], [], new StubOrder());
+
+        TinyAssert::same(1, count($items));
+        // Once-rounded sub-cent residue is zero — and plain '0.00', never
+        // a negative-zero '-0.00' artefact in the payload.
+        TinyAssert::same('0.00', $items[0]['discount_amount']);
+
+        // Same shape at the order level: sub-cent float residue in
+        // get_total_discount() must not fail checkout.
+        $order = new class extends StubOrder {
+            public function get_total_discount()
+            {
+                return -0.002;
+            }
+        };
+        $body = WC_Twoinc_Helper::compose_twoinc_order($order, 'test-order-reference', '912345678', 'IT', 'Project X', '', []);
+        TinyAssert::same('0.00', $body['discount_amount']);
+    }
+
+    private static function testNegativeDiscountGuardSkipsRefundLineItems(): void
+    {
+        // Refund bodies carry NEGATED line amounts: refunding a discounted
+        // line gives e.g. -100 - (-90) = -10, a legitimately negative
+        // discount diff. The guard must not fire there — refund behaviour
+        // is unchanged (compose_twoinc_refund passes is_refund = true).
+        $line_item = new StubProductLineItem([
+            'name' => 'Refunded widget',
+            'line_subtotal' => -100.0,
+            'line_total' => -90.0,
+            'line_tax' => -22.5,
+        ]);
+
+        $items = WC_Twoinc_Helper::get_line_items([$line_item], [], [], new StubOrder(), true);
+
+        TinyAssert::same(1, count($items));
+        TinyAssert::same('-10.00', $items[0]['discount_amount']);
     }
 }
 

@@ -3597,18 +3597,39 @@ if (!class_exists('WC_Twoinc')) {
                 return false;
             }
 
-            $twoinc_order_hash = $order->get_meta(WC_Twoinc_Brand::meta_key('req_body_hash'));
-            $twoinc_updated_order_hash = WC_Twoinc_Helper::hash_order($order, $twoinc_meta);
-            $updated = true;
-            if (!$twoinc_order_hash || $twoinc_order_hash != $twoinc_updated_order_hash) {
-                $updated = $this->update_twoinc_order($order, $twoinc_meta);
-                if ($updated) {
-                    $order->update_meta_data(WC_Twoinc_Brand::meta_key('req_body_hash'), $twoinc_updated_order_hash);
-                    $order->save();
+            // Compose-time validation (e.g. the negative-discount guard,
+            // TWO-25097) throws to fail checkout loud. This path is fired
+            // from non-checkout hooks (admin order save, status
+            // transitions, fulfilment sync) — contain the failure to the
+            // Two sync: note + log it and abort the update, but do not
+            // crash the surrounding save/transition.
+            try {
+                $twoinc_order_hash = $order->get_meta(WC_Twoinc_Brand::meta_key('req_body_hash'));
+                $twoinc_updated_order_hash = WC_Twoinc_Helper::hash_order($order, $twoinc_meta);
+                $updated = true;
+                if (!$twoinc_order_hash || $twoinc_order_hash != $twoinc_updated_order_hash) {
+                    $updated = $this->update_twoinc_order($order, $twoinc_meta);
+                    if ($updated) {
+                        $order->update_meta_data(WC_Twoinc_Brand::meta_key('req_body_hash'), $twoinc_updated_order_hash);
+                        $order->save();
+                    }
+                    if ($forced_reload) {
+                        WC_Twoinc_Helper::append_admin_force_reload();
+                    }
                 }
-                if ($forced_reload) {
-                    WC_Twoinc_Helper::append_admin_force_reload();
+            } catch (Exception $e) {
+                $order->add_order_note(sprintf(
+                    __('Could not update the order with %s. Reason: %s', 'twoinc-payment-gateway'),
+                    WC_Twoinc_Brand::get('product_name'),
+                    $e->getMessage()
+                ));
+                if (function_exists('wc_get_logger')) {
+                    wc_get_logger()->error(
+                        'Order update sync failed for order ' . $order->get_id() . ': ' . $e->getMessage(),
+                        ['source' => 'twoinc-payment-gateway']
+                    );
                 }
+                return false;
             }
             return $updated;
         }
