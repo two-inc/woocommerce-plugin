@@ -29,15 +29,21 @@
  *    older/newer plugin version, manual editing) and a poisoned entry must
  *    not reach the division in get_rate().
  *
- * On-demand path: a checkout in a currency the FRESH cached table does not
- * carry triggers one synchronous re-fetch (tight timeout) — a fresh table
- * is, by construction, the endpoint's complete table, so a currency absent
- * from it is conclusively unsupported and re-fetching would only repeat
- * that same conclusion on every request (an unbounded fetch loop, not a
- * cache). A STALE table's absence is inconclusive (a fresher table might
- * carry the currency), so that case still re-fetches. A failed fetch arms
- * a short retry-throttle transient so a flapping API cannot be hammered
- * once per conversion.
+ * On-demand path: a checkout in a currency the cached table does not carry
+ * triggers one synchronous re-fetch (tight timeout) whenever the table is
+ * STALE — a stale table's absence is inconclusive (a fresher fetch might
+ * carry the currency). In practice get_table() already re-fetches on ANY
+ * stale read, regardless of which currency is being looked up, so that is
+ * usually what performs this refetch; the currency-specific check in
+ * get_rate() is defense-in-depth for the case get_table()'s own attempt
+ * still left the table without a fetched_at fresh enough (e.g. its fetch
+ * failed and returned last-known-good). A currency absent from a FRESH
+ * table is never re-fetched: a fresh table is, by construction, the
+ * endpoint's complete table, so the currency is conclusively unsupported
+ * and re-fetching would only repeat that same conclusion on every request
+ * (an unbounded fetch loop, not a cache — this was TWO-25104's round-1
+ * bug). A failed fetch arms a short retry-throttle transient so a
+ * flapping API cannot be hammered once per conversion.
  *
  * Fail semantics (per TWO-25104):
  *  - Gate conversions (minimum-order availability) use last-known-good and

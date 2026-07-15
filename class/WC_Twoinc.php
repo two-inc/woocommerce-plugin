@@ -2384,6 +2384,7 @@ if (!class_exists('WC_Twoinc')) {
                 );
                 if ($converted !== null) {
                     return sprintf(
+                        /* translators: 1: platform minimum in its native currency, e.g. "EUR 250.00", 2: the same minimum converted into the store currency at the current FX rate, e.g. "NOK 2,941.18", 3: tax basis label, "including" or "excluding" */
                         __('Platform minimum %1$s (approximately %2$s at the current exchange rate), %3$s tax. A value here is interpreted in the store currency on the tax basis selected below — both minimums are enforced independently.', 'twoinc-payment-gateway'),
                         $native_display,
                         get_woocommerce_currency_symbol(get_option('woocommerce_currency')) . number_format($converted, 2),
