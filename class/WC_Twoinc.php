@@ -854,9 +854,13 @@ if (!class_exists('WC_Twoinc')) {
             $post_data = $this->get_post_data();
             $field_key = $this->get_field_key($key);
             if (is_array($post_data) && array_key_exists($field_key, $post_data)) {
-                return trim((string) $post_data[$field_key]);
+                // Non-scalar values (e.g. a tampered field[]= submission)
+                // are meaningless for these scalar selects — treat as unset
+                // rather than tripping PHP's array-to-string warning.
+                return is_scalar($post_data[$field_key]) ? trim((string) $post_data[$field_key]) : '';
             }
-            return trim((string) $this->get_option($key));
+            $stored = $this->get_option($key);
+            return is_scalar($stored) ? trim((string) $stored) : '';
         }
 
         /**
@@ -871,7 +875,7 @@ if (!class_exists('WC_Twoinc')) {
          */
         public function validate_surcharge_type_field($key, $value)
         {
-            $value = trim((string) $value);
+            $value = is_scalar($value) ? trim((string) $value) : '';
             // Same enabled-set the runtime uses (get_surcharge_settings
             // coerces anything else to 'none'), so the gate matches what
             // will actually surcharge.
@@ -898,7 +902,7 @@ if (!class_exists('WC_Twoinc')) {
          */
         public function validate_surcharge_tax_treatment_field($key, $value)
         {
-            $value = trim((string) $value);
+            $value = is_scalar($value) ? trim((string) $value) : '';
             if ($value === '') {
                 $type = $this->get_sibling_field_save_value('surcharge_type');
                 if (in_array($type, ['percentage', 'fixed', 'fixed_and_percentage'], true)) {
