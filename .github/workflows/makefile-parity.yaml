@@ -1,0 +1,56 @@
+name: Makefile parity
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - Makefile
+      - dev/install-xdebug
+      - dev/patch-proxy
+      - start-proxy.sh
+      - frpc.toml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: makefile-parity-${{ github.ref_name }}
+  cancel-in-progress: true
+
+# Canonical local-dev target set (TWO-25100), shared across the plugin repos
+# (magento-plugin, prestashop, woocommerce-plugin). No docker/GCP needed:
+# `make -n` dry-runs a recipe (parses + prints it) without executing it, so
+# this catches Makefile syntax errors and missing script references without
+# booting a container or touching secrets.
+jobs:
+  parity-check:
+    runs-on: ${{ vars.RUNNER_STANDARD }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: All 14 canonical targets present
+        run: |
+          for t in help install configure run debug proxy stop test clean logs patch minor major format; do
+            if ! grep -qE "^${t}:" Makefile; then
+              echo "::error::missing canonical Makefile target: $t"
+              exit 1
+            fi
+          done
+
+      - name: help is the default goal and lists every target
+        run: |
+          bare=$(make)
+          named=$(make help)
+          [ "$bare" = "$named" ] || { echo "::error::bare 'make' does not match 'make help' — .DEFAULT_GOAL is not help"; exit 1; }
+          for t in install configure run debug proxy stop test clean logs patch minor major format; do
+            echo "$named" | grep -q "$t" || { echo "::error::'make help' does not list target: $t"; exit 1; }
+          done
+
+      - name: New targets dry-run cleanly (no docker/network needed)
+        run: |
+          make -n debug
+          make -n proxy
+
+      - name: dev scripts are syntactically valid
+        run: bash -n dev/install-xdebug dev/patch-proxy start-proxy.sh
