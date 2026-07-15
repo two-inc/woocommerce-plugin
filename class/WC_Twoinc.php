@@ -842,13 +842,67 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
+         * A sibling field's value as it will stand AFTER this save: the
+         * posted value when the field is in the submission, else the stored
+         * option. Lets one field's validator enforce a cross-field invariant
+         * against the state actually being saved, not the stale stored one
+         * (e.g. enabling surcharges and picking a tax treatment in the same
+         * save must pass).
+         */
+        private function get_sibling_field_save_value(string $key): string
+        {
+            $post_data = $this->get_post_data();
+            $field_key = $this->get_field_key($key);
+            if (is_array($post_data) && array_key_exists($field_key, $post_data)) {
+                return trim((string) $post_data[$field_key]);
+            }
+            return trim((string) $this->get_option($key));
+        }
+
+        /**
+         * Block ENABLING surcharges while no valid surcharge tax treatment
+         * is selected (server-side — the treatment field has no default, so
+         * a never-configured shop posts the '' placeholder). Enforced on
+         * this field, not just the treatment field, because WooCommerce's
+         * per-field validation only skips the failing field: without this
+         * check a save could enable surcharges while the treatment error
+         * merely left the treatment unset. Disabling ('none') never needs a
+         * treatment.
+         */
+        public function validate_surcharge_type_field($key, $value)
+        {
+            $value = trim((string) $value);
+            if (
+                $value !== 'none' && $value !== ''
+                && !in_array(
+                    $this->get_sibling_field_save_value('surcharge_tax_treatment'),
+                    ['standard', 'custom_class', 'always_zero'],
+                    true
+                )
+            ) {
+                throw new Exception(__('Select a surcharge tax treatment before enabling surcharges.', 'twoinc-payment-gateway'));
+            }
+            return $value;
+        }
+
+        /**
          * Enforce that a saved surcharge tax treatment is one of the three
          * supported modes (WooCommerce's default select validation sanitises
-         * but does not enforce option-list membership).
+         * but does not enforce option-list membership). The '' placeholder
+         * is only storable while surcharges are (staying) disabled — with
+         * surcharges enabled a real treatment must be selected; there is no
+         * silent fall-back to Standard at save time.
          */
         public function validate_surcharge_tax_treatment_field($key, $value)
         {
             $value = trim((string) $value);
+            if ($value === '') {
+                $type = $this->get_sibling_field_save_value('surcharge_type');
+                if ($type !== 'none' && $type !== '') {
+                    throw new Exception(__('Select a surcharge tax treatment before enabling surcharges.', 'twoinc-payment-gateway'));
+                }
+                return '';
+            }
             if (!in_array($value, ['standard', 'custom_class', 'always_zero'], true)) {
                 throw new Exception(__('Surcharge tax treatment must be one of the offered modes.', 'twoinc-payment-gateway'));
             }
@@ -3183,11 +3237,23 @@ if (!class_exists('WC_Twoinc')) {
                     'desc_tip'    => true,
                     'type'        => 'select',
                     'options'     => [
+                        ''             => __('-- Select surcharge tax treatment --', 'twoinc-payment-gateway'),
                         'standard'     => __('Standard (store default tax rules)', 'twoinc-payment-gateway'),
                         'custom_class' => __('Specific tax class', 'twoinc-payment-gateway'),
                         'always_zero'  => __('Never taxed', 'twoinc-payment-gateway'),
                     ],
-                    'default'     => 'standard'
+                    // Deliberately NO pre-selected default (unified rule
+                    // across the WC/PS/Magento plugins): how a fee is taxed
+                    // must be an explicit merchant decision, so the field
+                    // starts on the placeholder until the merchant picks a
+                    // mode. This default only feeds get_option() for shops
+                    // that have NEVER saved this field — a persisted
+                    // settings-row value (including 'standard' accepted
+                    // under the old default) is returned as-is and is never
+                    // migrated or reset by this change. Save-time
+                    // enforcement lives in validate_surcharge_type_field /
+                    // validate_surcharge_tax_treatment_field.
+                    'default'     => ''
                 ],
                 'surcharge_tax_class' => [
                     'title'       => __('Surcharge Tax Class', 'twoinc-payment-gateway'),
