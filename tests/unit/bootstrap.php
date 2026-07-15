@@ -742,6 +742,30 @@ function wc_get_order($order_id)
     return $GLOBALS['__twoinc_test_wc_orders'][$order_id] ?? false;
 }
 
+// ── Action Scheduler stubs (FX recurring refresh, TWO-25104) ────────
+// Minimal: enough to exercise WC_Twoinc_FX::maybe_schedule_refresh's
+// has-scheduled-action guard and the $unique argument it passes, without
+// a real Action Scheduler install. Calls recorded in
+// $GLOBALS['__twoinc_test_as_schedule_calls'] for assertions.
+
+function as_has_scheduled_action($hook, $args = null, $group = '')
+{
+    return !empty($GLOBALS['__twoinc_test_as_scheduled'][$hook]);
+}
+
+function as_schedule_recurring_action($timestamp, $interval, $hook, $args = [], $group = '', $unique = false)
+{
+    $GLOBALS['__twoinc_test_as_schedule_calls'][] = ['hook' => $hook, 'unique' => $unique];
+    $GLOBALS['__twoinc_test_as_scheduled'][$hook] = true;
+    return 1;
+}
+
+function as_unschedule_all_actions($hook, $args = [], $group = '')
+{
+    unset($GLOBALS['__twoinc_test_as_scheduled'][$hook]);
+    return true;
+}
+
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Brand.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Helper.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_FX.php';

@@ -15,19 +15,29 @@
  *
  * Cache model (three layers):
  *  - Request memo: one table read/parse per PHP request.
- *  - Freshness transient (6h): while present, the stored table is trusted
- *    and no HTTP happens. A recurring Action Scheduler job re-fetches on
- *    the same cadence so checkout traffic normally never pays for a fetch.
+ *  - Freshness transient (6h + a grace margin): while present, the stored
+ *    table is trusted and no HTTP happens. A recurring Action Scheduler job
+ *    re-fetches on the 6h cadence; the grace margin absorbs Action
+ *    Scheduler's best-effort timing (it runs on traffic/cron, not a
+ *    guaranteed clock) so a late job normally still beats the transient's
+ *    expiry and checkout traffic never pays for a fetch.
  *  - Last-known-good option (durable, non-autoloaded): survives transient
  *    expiry and fetch failures. Rates move a few times a day at most, so a
  *    stale table is a far better basis for a gate decision than no table.
+ *    Values are re-validated on every read (not just on fetch): a table can
+ *    reach wp_options via a route other than fetch_table (a DB import, an
+ *    older/newer plugin version, manual editing) and a poisoned entry must
+ *    not reach the division in get_rate().
  *
- * On-demand path: a checkout in a currency the cached table does not carry
- * triggers one synchronous re-fetch (tight timeout) — the endpoint returns
- * the full table, so a successful fetch caches every currency at once, and
- * a currency still absent afterwards is genuinely unsupported. A failed
- * fetch arms a short retry-throttle transient so a flapping API cannot be
- * hammered once per conversion.
+ * On-demand path: a checkout in a currency the FRESH cached table does not
+ * carry triggers one synchronous re-fetch (tight timeout) — a fresh table
+ * is, by construction, the endpoint's complete table, so a currency absent
+ * from it is conclusively unsupported and re-fetching would only repeat
+ * that same conclusion on every request (an unbounded fetch loop, not a
+ * cache). A STALE table's absence is inconclusive (a fresher table might
+ * carry the currency), so that case still re-fetches. A failed fetch arms
+ * a short retry-throttle transient so a flapping API cannot be hammered
+ * once per conversion.
  *
  * Fail semantics (per TWO-25104):
  *  - Gate conversions (minimum-order availability) use last-known-good and
@@ -46,8 +56,18 @@
 if (!class_exists('WC_Twoinc_FX')) {
     class WC_Twoinc_FX
     {
-        /** Background refresh cadence and freshness window (seconds). */
+        /** Background refresh cadence (seconds). */
         public const REFRESH_INTERVAL = 6 * 3600;
+
+        /**
+         * Extra slack added to the freshness transient beyond
+         * REFRESH_INTERVAL. Action Scheduler is best-effort (it runs on
+         * traffic/WP-cron, not a guaranteed clock), so the transient must
+         * outlive the nominal interval or checkout traffic pays for a
+         * fetch every cycle at the boundary, right when the previous
+         * fetch is due anyway.
+         */
+        public const FRESHNESS_GRACE = 3600;
 
         /** Retry throttle after a failed fetch (seconds). */
         public const FAILURE_RETRY_WINDOW = 300;
@@ -116,12 +136,20 @@ if (!class_exists('WC_Twoinc_FX')) {
                 $scheduled = as_next_scheduled_action(self::refresh_hook()) !== false;
             }
             if (!$scheduled) {
+                // $unique = true: two concurrent requests in the cold
+                // state (first install, or right after a
+                // deactivate/reactivate cleared the job) both observe
+                // "not scheduled" — the has-scheduled-action check above
+                // is not atomic with the schedule call. Without $unique
+                // both would schedule, and a duplicate recurring series
+                // self-perpetuates forever.
                 as_schedule_recurring_action(
                     time() + self::REFRESH_INTERVAL,
                     self::REFRESH_INTERVAL,
                     self::refresh_hook(),
                     [],
-                    'twoinc-payment-gateway'
+                    'twoinc-payment-gateway',
+                    true
                 );
             }
         }
@@ -154,7 +182,7 @@ if (!class_exists('WC_Twoinc_FX')) {
                 return false;
             }
             update_option(self::option_key(), wp_json_encode($table), false);
-            set_transient(self::fresh_transient_key(), $table['fetched_at'], self::REFRESH_INTERVAL);
+            set_transient(self::fresh_transient_key(), $table['fetched_at'], self::REFRESH_INTERVAL + self::FRESHNESS_GRACE);
             delete_transient(self::retry_transient_key());
             self::$table_memo = $table;
             return true;
@@ -179,24 +207,43 @@ if (!class_exists('WC_Twoinc_FX')) {
                 return null;
             }
             $body = json_decode(wp_remote_retrieve_body($response), true);
-            if (!is_array($body) || !isset($body['base'], $body['rates']) || !is_array($body['rates'])) {
+            if (!is_array($body) || !isset($body['base'], $body['rates']) || !is_array($body['rates']) || !is_string($body['base'])) {
                 return null;
             }
-            $rates = [];
-            foreach ($body['rates'] as $currency => $rate) {
-                if (is_string($currency) && $currency !== '' && is_numeric($rate) && (float) $rate > 0) {
-                    $rates[strtoupper($currency)] = (float) $rate;
-                }
-            }
-            if (count($rates) === 0) {
+            $rates = self::sanitize_rates($body['rates']);
+            if ($rates === null) {
                 return null;
             }
             return [
-                'base' => strtoupper(strval($body['base'])),
+                'base' => strtoupper($body['base']),
                 'rates' => $rates,
                 'as_of' => isset($body['as_of']) && is_string($body['as_of']) ? $body['as_of'] : null,
                 'fetched_at' => time(),
             ];
+        }
+
+        /**
+         * Filter a raw rates map down to positive-numeric entries keyed by
+         * uppercase currency code, or null when nothing usable remains.
+         * Shared by the fetch path and the stored-table read path: a
+         * table can reach wp_options by a route other than fetch_table
+         * (a DB import, a different plugin version's shape, manual
+         * editing), so a poisoned entry (zero, negative, non-numeric)
+         * must be caught on every read, not only at fetch time — a stray
+         * zero or string reaching the division in get_rate() is a fatal,
+         * not a bad conversion.
+         *
+         * @return array<string, float>|null
+         */
+        private static function sanitize_rates(array $raw): ?array
+        {
+            $rates = [];
+            foreach ($raw as $currency => $rate) {
+                if (is_string($currency) && $currency !== '' && is_numeric($rate) && (float) $rate > 0) {
+                    $rates[strtoupper($currency)] = (float) $rate;
+                }
+            }
+            return count($rates) > 0 ? $rates : null;
         }
 
         /**
@@ -213,7 +260,16 @@ if (!class_exists('WC_Twoinc_FX')) {
                 return self::$table_memo;
             }
             $stored = self::read_stored_table();
-            $fresh = get_transient(self::fresh_transient_key()) !== false;
+            // The transient is the primary freshness signal, but an
+            // object cache (Redis/memcached) can evict it under memory
+            // pressure well before its TTL — typically the first thing to
+            // go, often right when the site is busiest. Falling back to
+            // the durable fetched_at (stored in the same DB row as the
+            // table) means an eviction degrades to "one extra freshness
+            // check", not "every request re-fetches".
+            $fresh = get_transient(self::fresh_transient_key()) !== false
+                || ($stored !== null && isset($stored['fetched_at'])
+                    && (time() - (int) $stored['fetched_at']) < (self::REFRESH_INTERVAL + self::FRESHNESS_GRACE));
             if ($stored !== null && $fresh) {
                 return self::$table_memo = $stored;
             }
@@ -239,9 +295,15 @@ if (!class_exists('WC_Twoinc_FX')) {
                 return null;
             }
             $table = json_decode($raw, true);
-            if (!is_array($table) || !isset($table['base'], $table['rates']) || !is_array($table['rates']) || count($table['rates']) === 0) {
+            if (!is_array($table) || !isset($table['base'], $table['rates']) || !is_array($table['rates']) || !is_string($table['base'])) {
                 return null;
             }
+            $rates = self::sanitize_rates($table['rates']);
+            if ($rates === null) {
+                return null;
+            }
+            $table['rates'] = $rates;
+            $table['base'] = strtoupper($table['base']);
             return $table;
         }
 
@@ -288,10 +350,17 @@ if (!class_exists('WC_Twoinc_FX')) {
             if (($from_value === null || $to_value === null)
                 && $gateway
                 && !self::$fetched_this_request
+                && !self::is_fresh($table)
                 && get_transient(self::retry_transient_key()) === false
             ) {
-                // Uncached currency at checkout: one live re-fetch, then
-                // re-resolve from whatever table that produced.
+                // Uncached currency, but the table we have is STALE: it
+                // may not be the endpoint's current full table, so one
+                // live re-fetch is worth it before concluding the
+                // currency is unsupported. A currency missing from a
+                // FRESH table is conclusive — the endpoint always returns
+                // its complete table, so re-fetching would only repeat
+                // the same "still absent" result on every request (an
+                // unbounded synchronous-fetch loop, not a cache).
                 self::refresh($gateway);
                 $table = self::get_table($gateway);
                 if ($table === null) {
@@ -304,6 +373,16 @@ if (!class_exists('WC_Twoinc_FX')) {
                 return null;
             }
             return $from_value / $to_value;
+        }
+
+        /**
+         * Whether $table is within the freshness window by either signal
+         * (transient or durable fetched_at — see get_table()).
+         */
+        private static function is_fresh(array $table): bool
+        {
+            return get_transient(self::fresh_transient_key()) !== false
+                || (isset($table['fetched_at']) && (time() - (int) $table['fetched_at']) < (self::REFRESH_INTERVAL + self::FRESHNESS_GRACE));
         }
 
         /**

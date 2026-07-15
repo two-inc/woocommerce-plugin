@@ -297,13 +297,21 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                         }
                         return null;
                     }
-                    $fixed = $fixed !== null ? (float) WC_Twoinc_Helper::round_amt($fixed * $rate) : null;
-                    $cap = $cap !== null ? (float) WC_Twoinc_Helper::round_amt($cap * $rate) : null;
+                    $converted_fixed = $fixed !== null ? (float) WC_Twoinc_Helper::round_amt($fixed * $rate) : null;
+                    $converted_cap = $cap !== null ? (float) WC_Twoinc_Helper::round_amt($cap * $rate) : null;
                     // A tiny configured amount can round to 0.00 in a much
-                    // stronger currency; the > 0 rule above still applies
-                    // to the converted values (a 0 cap would zero the fee).
-                    $fixed = $fixed !== null && $fixed > 0 ? $fixed : null;
-                    $cap = $cap !== null && $cap > 0 ? $cap : null;
+                    // stronger currency. Dropping only the cap while
+                    // leaving the percentage component in place would
+                    // send an UNCAPPED fee — the opposite of what the
+                    // merchant configured — so a component that rounds
+                    // away withholds the whole surcharge, same as no rate
+                    // being available at all, rather than silently
+                    // changing what is charged.
+                    if (($fixed !== null && $converted_fixed <= 0) || ($cap !== null && $converted_cap <= 0)) {
+                        return null;
+                    }
+                    $fixed = $converted_fixed;
+                    $cap = $converted_cap;
                 }
             }
             if ($fixed !== null) {
@@ -556,7 +564,11 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
             // — never re-converted store-side. A response echoing a
             // different currency than the cart's would land as a raw
             // number in the wrong money; skip it rather than mischarge.
-            if ($fee['currency'] !== '' && $fee['currency'] !== get_woocommerce_currency()) {
+            // Normalised the same way the FX layer normalises currency
+            // codes (case/whitespace) so this guard can't be defeated by
+            // a harmlessly-differently-cased echo.
+            $fee_currency = strtoupper(trim((string) $fee['currency']));
+            if ($fee_currency !== '' && $fee_currency !== strtoupper(get_woocommerce_currency())) {
                 return;
             }
 

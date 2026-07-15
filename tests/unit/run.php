@@ -124,6 +124,9 @@ final class BrandConfigSpec
             'testFxStaleRefreshFailureFallsBackToLastKnownGood',
             'testFxMalformedResponsesAreRejected',
             'testFxUncachedCurrencyRefetchesOnceThenConcludes',
+            'testFxFreshTableMissingCurrencyDoesNotRefetch',
+            'testFxCorruptedStoredTableIsRejectedNotFatal',
+            'testFxDuplicateScheduleGuardedByUniqueFlag',
             'testFxGateFailsClosedWhenNoRateEverFetched',
             'testFxGateConvertsBasketAcrossCurrencies',
             'testFxGateUsesLastKnownGoodOnApiFailure',
@@ -131,6 +134,7 @@ final class BrandConfigSpec
             'testBuyerFeeShareConvertsFixedAndCapAcrossCurrencies',
             'testBuyerFeeShareWithheldWhenNoRateAvailable',
             'testBuyerFeeShareSameCurrencyNeverTouchesFx',
+            'testBuyerFeeShareCapRoundingToZeroWithholdsWholeSurcharge',
             'testCartFeeSkippedOnQuoteCurrencyMismatch',
             'testMinimumDescriptionShowsConvertedFloorWhenRateAvailable',
         ];
@@ -154,6 +158,8 @@ final class BrandConfigSpec
         WC_Twoinc::reset_merchant_record_memo();
         WC_Twoinc_FX::reset_request_cache();
         $GLOBALS['__twoinc_test_transients'] = [];
+        $GLOBALS['__twoinc_test_as_scheduled'] = [];
+        $GLOBALS['__twoinc_test_as_schedule_calls'] = [];
         WC()->cart = null;
         WC()->customer = null;
         WC()->session = null;
@@ -2959,6 +2965,23 @@ final class BrandConfigSpec
     /** The EUR-pivot fixture: 1 NOK = 0.085 EUR, 1 SEK = 0.088 EUR. */
     private const FX_TABLE = ['NOK' => 0.085, 'SEK' => 0.088];
 
+    /**
+     * Age the stored FX table past the freshness window on BOTH signals
+     * (the freshness transient and the durable fetched_at fallback that
+     * covers object-cache eviction of the transient) — simulates "6h+
+     * later" for tests that need a genuinely stale table, as opposed to
+     * merely an evicted transient.
+     */
+    private static function ageStoredFxTable(): void
+    {
+        delete_transient(WC_Twoinc_FX::fresh_transient_key());
+        $raw = $GLOBALS['__twoinc_test_options'][WC_Twoinc_FX::option_key()] ?? null;
+        TinyAssert::true($raw !== null, 'ageStoredFxTable requires a table already stored');
+        $table = json_decode($raw, true);
+        $table['fetched_at'] = time() - WC_Twoinc_FX::REFRESH_INTERVAL - WC_Twoinc_FX::FRESHNESS_GRACE - 1;
+        $GLOBALS['__twoinc_test_options'][WC_Twoinc_FX::option_key()] = json_encode($table);
+    }
+
     private static function assertClose(float $expected, $actual, string $message = ''): void
     {
         TinyAssert::true(
@@ -3017,7 +3040,7 @@ final class BrandConfigSpec
         // refresh attempt fails and conversion falls back to the stored
         // last-known-good table rather than flapping to null.
         WC_Twoinc_FX::reset_request_cache();
-        delete_transient(WC_Twoinc_FX::fresh_transient_key());
+        self::ageStoredFxTable();
         $failing = self::fxGateway(null, [new WP_Error()]);
         self::assertClose(0.085, WC_Twoinc_FX::get_rate($failing, 'NOK', 'EUR'));
         TinyAssert::same(1, $failing->fx_requests);
@@ -3053,13 +3076,14 @@ final class BrandConfigSpec
 
     private static function testFxUncachedCurrencyRefetchesOnceThenConcludes(): void
     {
-        // Seed a fresh table that carries NOK but not DKK.
+        // Seed a STALE table (freshness transient expired) that carries
+        // NOK but not DKK: a currency missing from a stale table is
+        // inconclusive (a newer fetch might carry it), so one live
+        // re-fetch is worth it before giving up.
         $seeder = self::fxGateway(null, [self::fxOk(['NOK' => 0.085])]);
         WC_Twoinc_FX::get_rate($seeder, 'NOK', 'EUR');
+        self::ageStoredFxTable();
 
-        // A checkout in an uncached currency triggers one live re-fetch
-        // even inside the freshness window; the full table it returns then
-        // resolves the pair.
         WC_Twoinc_FX::reset_request_cache();
         $gateway = self::fxGateway(null, [self::fxOk(['NOK' => 0.085, 'DKK' => 0.134])]);
         self::assertClose(0.134 / 0.085, WC_Twoinc_FX::get_rate($gateway, 'DKK', 'NOK'));
@@ -3069,6 +3093,79 @@ final class BrandConfigSpec
         // unsupported: null, and no further request in the same cycle.
         TinyAssert::same(null, WC_Twoinc_FX::get_rate($gateway, 'XXX', 'NOK'));
         TinyAssert::same(1, $gateway->fx_requests);
+    }
+
+    private static function testFxFreshTableMissingCurrencyDoesNotRefetch(): void
+    {
+        // The bug three reviewers converged on: a currency missing from a
+        // table that is ALREADY FRESH must not trigger a re-fetch. The
+        // endpoint always returns its complete table, so "fresh but
+        // missing DKK" already conclusively means DKK is unsupported —
+        // re-fetching would repeat that same conclusion on every request
+        // for every buyer in that currency (an unbounded synchronous-fetch
+        // loop disguised as a cache).
+        $seeder = self::fxGateway(null, [self::fxOk(['NOK' => 0.085])]);
+        WC_Twoinc_FX::get_rate($seeder, 'NOK', 'EUR');
+
+        WC_Twoinc_FX::reset_request_cache();
+        $gateway = self::fxGateway(null, [self::fxOk(['NOK' => 0.085, 'DKK' => 0.134])]);
+        TinyAssert::same(null, WC_Twoinc_FX::get_rate($gateway, 'DKK', 'NOK'));
+        TinyAssert::same(0, $gateway->fx_requests, 'a fresh table must not be re-fetched for a currency it conclusively lacks');
+
+        // Across many simulated requests in the same unsupported
+        // currency, still zero fetches — this was the reproduced
+        // per-request fetch storm.
+        for ($i = 0; $i < 5; $i++) {
+            WC_Twoinc_FX::reset_request_cache();
+            TinyAssert::same(null, WC_Twoinc_FX::get_rate($gateway, 'DKK', 'NOK'));
+        }
+        TinyAssert::same(0, $gateway->fx_requests);
+    }
+
+    private static function testFxCorruptedStoredTableIsRejectedNotFatal(): void
+    {
+        // A table can reach wp_options by a route other than fetch_table
+        // (a DB import, an older/newer plugin version's shape, manual
+        // editing). A poisoned rate — zero, negative, or non-numeric —
+        // must be dropped on read, not divided against: reproduced as a
+        // DivisionByZeroError before the fix.
+        $GLOBALS['__twoinc_test_options'][WC_Twoinc_FX::option_key()] = json_encode([
+            'base' => 'EUR',
+            'rates' => ['NOK' => 0, 'SEK' => -1, 'DKK' => 'not-a-number'],
+            'as_of' => '2026-07-14',
+            'fetched_at' => time(),
+        ]);
+        $gateway = self::fxGateway(null, []);
+        TinyAssert::same(null, WC_Twoinc_FX::get_rate($gateway, 'NOK', 'EUR'));
+        TinyAssert::same(null, WC_Twoinc_FX::get_rate($gateway, 'SEK', 'DKK'));
+
+        // A valid entry alongside garbage entries is still usable — only
+        // the poisoned keys are dropped, not the whole table.
+        $GLOBALS['__twoinc_test_options'][WC_Twoinc_FX::option_key()] = json_encode([
+            'base' => 'EUR',
+            'rates' => ['NOK' => 0.085, 'SEK' => -1],
+            'as_of' => '2026-07-14',
+            'fetched_at' => time(),
+        ]);
+        WC_Twoinc_FX::reset_request_cache();
+        self::assertClose(0.085, WC_Twoinc_FX::get_rate(self::fxGateway(null, []), 'NOK', 'EUR'));
+    }
+
+    private static function testFxDuplicateScheduleGuardedByUniqueFlag(): void
+    {
+        // Two concurrent requests in the cold state (nothing scheduled
+        // yet) both observe "not scheduled" before either schedules — the
+        // has-scheduled-action check is not atomic with the schedule
+        // call. $unique = true is what prevents a duplicate recurring
+        // series from being created; assert it is actually passed.
+        WC_Twoinc_FX::maybe_schedule_refresh();
+        TinyAssert::same(1, count($GLOBALS['__twoinc_test_as_schedule_calls']));
+        TinyAssert::same(true, $GLOBALS['__twoinc_test_as_schedule_calls'][0]['unique']);
+        TinyAssert::same(WC_Twoinc_FX::refresh_hook(), $GLOBALS['__twoinc_test_as_schedule_calls'][0]['hook']);
+
+        // Already scheduled: a second call is a no-op.
+        WC_Twoinc_FX::maybe_schedule_refresh();
+        TinyAssert::same(1, count($GLOBALS['__twoinc_test_as_schedule_calls']));
     }
 
     private static function testFxGateFailsClosedWhenNoRateEverFetched(): void
@@ -3124,7 +3221,7 @@ final class BrandConfigSpec
         WC_Twoinc_FX::get_rate($seeder, 'NOK', 'EUR');
 
         WC_Twoinc_FX::reset_request_cache();
-        delete_transient(WC_Twoinc_FX::fresh_transient_key());
+        self::ageStoredFxTable();
         $gateway = self::fxGateway(self::EUR_250_NET, [new WP_Error()]);
         $result = $gateway->apply_brand_availability_gate(['woocommerce-gateway-testbrand' => 'gw']);
         TinyAssert::same('gw', $result['woocommerce-gateway-testbrand']);
@@ -3205,6 +3302,25 @@ final class BrandConfigSpec
         TinyAssert::same(2.5, $share['surcharge']);
         TinyAssert::same(10.0, $share['cap']);
         TinyAssert::same(0, $gateway->fx_requests);
+    }
+
+    private static function testBuyerFeeShareCapRoundingToZeroWithholdsWholeSurcharge(): void
+    {
+        // A cap configured in a strong store currency can round to 0.00
+        // once converted into a much weaker checkout currency. Dropping
+        // only the cap (as an earlier version of this code did) would
+        // send the percentage fee UNCAPPED — the opposite of the
+        // merchant's configuration — so the whole surcharge is withheld
+        // instead, same as the no-rate-available case.
+        $GLOBALS['__twoinc_test_currency'] = 'JPY';
+        $gateway = self::fxGateway(null, [self::fxOk(['JPY' => 1000000.0])], [
+            // Store currency EUR (default in these tests): a cap of 0.001
+            // EUR converts to 1000000 * 0.001 = 1000 JPY... use an
+            // absurdly weak rate the other way so the cap rounds to 0.
+            'surcharge_type' => 'fixed_and_percentage',
+            'surcharge_grid' => [30 => ['fixed' => 0.001, 'percentage' => 1.5, 'limit' => 0.001]],
+        ]);
+        TinyAssert::same(null, WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway, 30));
     }
 
     private static function testCartFeeSkippedOnQuoteCurrencyMismatch(): void
