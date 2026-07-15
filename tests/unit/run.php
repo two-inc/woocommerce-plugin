@@ -117,6 +117,7 @@ final class BrandConfigSpec
             'testNegativeDiscountGuardThrowsOnNegativeLineDiscount',
             'testNegativeDiscountGuardThrowsOnNegativeOrderDiscount',
             'testNegativeDiscountGuardNoFalsePositiveFromEarlyRounding',
+            'testNegativeDiscountGuardSkipsRefundLineItems',
         ];
         foreach ($tests as $test) {
             self::reset();
@@ -2744,6 +2745,19 @@ final class BrandConfigSpec
         // Order-level surface: zero discount composes as plain '0.00'.
         $body = self::composeOrder();
         TinyAssert::same('0.00', $body['discount_amount']);
+
+        // Order-level surface: a positive total discount passes untouched
+        // through both compose bodies.
+        $order = new class extends StubOrder {
+            public function get_total_discount()
+            {
+                return 12.5;
+            }
+        };
+        $body = WC_Twoinc_Helper::compose_twoinc_order($order, 'test-order-reference', '912345678', 'IT', 'Project X', '', []);
+        TinyAssert::same('12.50', $body['discount_amount']);
+        $body = WC_Twoinc_Helper::compose_twoinc_edit_order($order, 'IT', 'Project X', '', '');
+        TinyAssert::same('12.50', $body['discount_amount']);
     }
 
     private static function testNegativeDiscountGuardThrowsOnNegativeLineDiscount(): void
@@ -2839,6 +2853,25 @@ final class BrandConfigSpec
         };
         $body = WC_Twoinc_Helper::compose_twoinc_order($order, 'test-order-reference', '912345678', 'IT', 'Project X', '', []);
         TinyAssert::same('0.00', $body['discount_amount']);
+    }
+
+    private static function testNegativeDiscountGuardSkipsRefundLineItems(): void
+    {
+        // Refund bodies carry NEGATED line amounts: refunding a discounted
+        // line gives e.g. -100 - (-90) = -10, a legitimately negative
+        // discount diff. The guard must not fire there — refund behaviour
+        // is unchanged (compose_twoinc_refund passes is_refund = true).
+        $line_item = new StubProductLineItem([
+            'name' => 'Refunded widget',
+            'line_subtotal' => -100.0,
+            'line_total' => -90.0,
+            'line_tax' => -22.5,
+        ]);
+
+        $items = WC_Twoinc_Helper::get_line_items([$line_item], [], [], new StubOrder(), true);
+
+        TinyAssert::same(1, count($items));
+        TinyAssert::same('-10.00', $items[0]['discount_amount']);
     }
 }
 

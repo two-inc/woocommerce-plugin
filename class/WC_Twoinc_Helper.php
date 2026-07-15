@@ -50,18 +50,23 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * posting a bad payload to the Two API.
          *
          * @param float  $discount_amount discount at native precision
-         * @param string $context         diagnostic: surface, ids, operands
+         * @param string $subject         short surface identifier for the
+         *                                exception (safe to surface to the
+         *                                shopper as a checkout notice)
+         * @param string $log_context     full diagnostic for the log only:
+         *                                ids and raw operands
          *
          * @return string the once-rounded, non-negative discount amount
          * @throws Exception when the rounded discount is negative
          */
-        public static function guard_negative_discount($discount_amount, $context)
+        public static function guard_negative_discount($discount_amount, $subject, $log_context)
         {
             $rounded = WC_Twoinc_Helper::round_amt($discount_amount);
             if ((float) $rounded < 0) {
                 if (function_exists('wc_get_logger')) {
                     wc_get_logger()->error(
-                        'Negative discount amount calculated for ' . $context
+                        'Negative discount amount calculated for ' . $subject
+                            . ': ' . $log_context
                             . ' (native ' . var_export($discount_amount, true)
                             . ', rounded ' . $rounded . ')',
                         ['source' => 'twoinc-payment-gateway']
@@ -70,7 +75,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 throw new Exception(
                     sprintf(
                         __('Negative discount amount calculated for %s.', 'twoinc-payment-gateway'),
-                        $context
+                        $subject
                     )
                 );
             }
@@ -286,9 +291,15 @@ if (!class_exists('WC_Twoinc_Helper')) {
         /**
          * Compose the cart items
          *
+         * @param bool $is_refund true when composing a refund body: refund
+         *                        line items carry negated amounts, so the
+         *                        negative-discount guard does not apply
+         *                        (a refunded discounted line legitimately
+         *                        yields a negative subtotal-total diff).
+         *
          * @return array
          */
-        public static function get_line_items($line_items, $shippings, $fees, $order)
+        public static function get_line_items($line_items, $shippings, $fees, $order, $is_refund = false)
         {
 
             $items = [];
@@ -323,17 +334,23 @@ if (!class_exists('WC_Twoinc_Helper')) {
 
                 // Derive the line discount at native precision; the guard
                 // rounds once at the payload boundary and fails loud on a
-                // genuinely negative discount (TWO-25097).
-                $discount_amount = WC_Twoinc_Helper::guard_negative_discount(
-                    $line_item['line_subtotal'] - $line_item['line_total'],
-                    sprintf(
-                        'product "%s" on order %s (line_subtotal %s - line_total %s)',
-                        $name,
-                        $order->get_id(),
-                        var_export($line_item['line_subtotal'], true),
-                        var_export($line_item['line_total'], true)
-                    )
-                );
+                // genuinely negative discount (TWO-25097). Refund bodies
+                // carry negated line amounts, so the sign check is skipped
+                // there (legacy behaviour preserved).
+                if ($is_refund) {
+                    $discount_amount = WC_Twoinc_Helper::round_amt($line_item['line_subtotal'] - $line_item['line_total']);
+                } else {
+                    $discount_amount = WC_Twoinc_Helper::guard_negative_discount(
+                        $line_item['line_subtotal'] - $line_item['line_total'],
+                        sprintf('product "%s"', $name),
+                        sprintf(
+                            'order %s, line_subtotal %s - line_total %s',
+                            $order->get_id(),
+                            var_export($line_item['line_subtotal'], true),
+                            var_export($line_item['line_total'], true)
+                        )
+                    );
+                }
 
                 $product = [
                     'name' => $name,
@@ -696,11 +713,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 // payload boundary and fails loud on a negative (TWO-25097).
                 'discount_amount' => WC_Twoinc_Helper::guard_negative_discount(
                     $order->get_total_discount(),
-                    sprintf(
-                        'order %s (total discount %s)',
-                        $order->get_id(),
-                        var_export($order->get_total_discount(), true)
-                    )
+                    sprintf('order %s', $order->get_id()),
+                    sprintf('total discount %s', var_export($order->get_total_discount(), true))
                 ),
                 'discount_rate' => '0',
                 'invoice_type' => 'FUNDED_INVOICE',
@@ -871,11 +885,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 // payload boundary and fails loud on a negative (TWO-25097).
                 'discount_amount' => WC_Twoinc_Helper::guard_negative_discount(
                     $order->get_total_discount(),
-                    sprintf(
-                        'order %s (total discount %s)',
-                        $order->get_id(),
-                        var_export($order->get_total_discount(), true)
-                    )
+                    sprintf('order %s', $order->get_id()),
+                    sprintf('total discount %s', var_export($order->get_total_discount(), true))
                 ),
                 'discount_rate' => '0',
                 'invoice_type' => 'FUNDED_INVOICE',
@@ -933,7 +944,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
             $req_body = [
                 'amount' => strval(WC_Twoinc_Helper::round_amt($amount)),
                 'currency' => $currency,
-                'line_items' => WC_Twoinc_Helper::get_line_items($order_refund->get_items(), $order_refund->get_items('shipping'), $order_refund->get_items('fee'), $order_refund)
+                'line_items' => WC_Twoinc_Helper::get_line_items($order_refund->get_items(), $order_refund->get_items('shipping'), $order_refund->get_items('fee'), $order_refund, true)
             ];
 
             return $req_body;
