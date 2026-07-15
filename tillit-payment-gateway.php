@@ -77,6 +77,7 @@ function load_twoinc_classes()
     // Load classes
     require_once __DIR__ . '/class/WC_Twoinc_Brand.php';
     require_once __DIR__ . '/class/WC_Twoinc_Helper.php';
+    require_once __DIR__ . '/class/WC_Twoinc_FX.php';
     require_once __DIR__ . '/class/WC_Twoinc_Payment_Terms.php';
     require_once __DIR__ . '/class/WC_Twoinc_Sole_Trader.php';
     require_once __DIR__ . '/class/WC_Twoinc_Checkout.php';
@@ -100,6 +101,14 @@ function load_twoinc_classes()
     // (enabled + chosen-payment-method + selected-term), so registering it on
     // every request is safe.
     add_action('woocommerce_cart_calculate_fees', ['WC_Twoinc_Payment_Terms', 'apply_cart_fee']);
+
+    // FX rate cache (TWO-25104): a recurring 6h Action Scheduler refresh
+    // keeps the spot table warm so checkout conversions (min-order gates,
+    // fixed-surcharge amounts) are served from cache. Registered on init —
+    // Action Scheduler's data stores are not ready at plugins_loaded. The
+    // hook callback is static and self-bootstrapping via get_instance().
+    add_action('init', ['WC_Twoinc_FX', 'maybe_schedule_refresh']);
+    add_action(WC_Twoinc_FX::refresh_hook(), ['WC_Twoinc_FX', 'run_scheduled_refresh']);
     add_action('wc_ajax_two_term_fees', ['WC_Twoinc_Payment_Terms', 'ajax_term_fees']);
     add_action('wc_ajax_two_select_term', ['WC_Twoinc_Payment_Terms', 'ajax_select_term']);
     add_action('wc_ajax_two_sole_trader_availability', ['WC_Twoinc_Sole_Trader', 'ajax_availability']);

@@ -2287,26 +2287,36 @@ if (!class_exists('WC_Twoinc')) {
             $basket_is_judgeable = !WC()->cart->is_empty()
                 && !(function_exists('is_wc_endpoint_url') && is_wc_endpoint_url('order-pay'));
 
+            // A basket in another currency is judged by converting its
+            // value into the minimum's currency via the Two FX layer
+            // (TWO-25104): last-known-good rates, so a transient rates-API
+            // failure never flaps the gateway. Null (no rate ever fetched,
+            // or an unsupported currency) fails CLOSED — a basket that
+            // cannot be proven to satisfy a minimum is not offered the
+            // gateway; the API still enforces the platform minimum at
+            // order creation. Same-currency baskets never touch the FX
+            // layer.
+            $meets_minimum = function (array $minimum) use ($basket_value): bool {
+                $value = $basket_value($minimum['basis']);
+                $basket_currency = get_woocommerce_currency();
+                if ($basket_currency !== $minimum['currency']) {
+                    $value = WC_Twoinc_FX::convert($this, $value, $basket_currency, $minimum['currency']);
+                    if ($value === null) {
+                        return false;
+                    }
+                }
+                return $value >= $minimum['amount'];
+            };
+
             $satisfied = true;
             if ($platform_minimum && $basket_is_judgeable) {
-                // Fail closed on a basket in another currency: with no FX
-                // source in WooCommerce it cannot be proven to satisfy the
-                // funding partner's minimum.
-                $satisfied = get_woocommerce_currency() === $platform_minimum['currency']
-                    && $basket_value($platform_minimum['basis']) >= $platform_minimum['amount'];
+                $satisfied = $meets_minimum($platform_minimum);
             }
             if ($satisfied && $gate) {
                 $satisfied = in_array(WC()->customer->get_billing_country(), $gate['billing_countries'], true);
             }
             if ($satisfied && $merchant_minimum && $basket_is_judgeable) {
-                $satisfied = get_woocommerce_currency() === $merchant_minimum['currency']
-                    ? $basket_value($merchant_minimum['basis']) >= $merchant_minimum['amount']
-                    // The merchant minimum is store-currency scoped; a
-                    // basket in another currency cannot be judged against
-                    // it (no FX source in WooCommerce) — fail open on the
-                    // merchant's own optional bar, the platform minimum
-                    // above still applies.
-                    : $satisfied;
+                $satisfied = $meets_minimum($merchant_minimum);
             }
             if (!$satisfied) {
                 unset($available_gateways[$this->id]);
@@ -2343,9 +2353,10 @@ if (!class_exists('WC_Twoinc')) {
          * Dynamic description for the Minimum Order Value setting: shows
          * the platform minimum the merchant's value must exceed. The
          * field is interpreted in the STORE currency; when that differs
-         * from the platform minimum's currency the floor is shown in its
-         * native currency only — WooCommerce has no FX rate source until
-         * TWO-24776, so no converted figure can honestly be displayed.
+         * from the platform minimum's currency an approximate store-
+         * currency figure converted via the Two FX layer is appended
+         * (display conversion — fail soft: without a rate the floor is
+         * shown in its native currency only).
          *
          * @return string
          */
@@ -2362,6 +2373,20 @@ if (!class_exists('WC_Twoinc')) {
                     return sprintf(
                         __('Platform minimum %1$s, %2$s tax. A value here is interpreted in the store currency on the tax basis selected below and must exceed it.', 'twoinc-payment-gateway'),
                         $native_display,
+                        $basis_label
+                    );
+                }
+                $converted = WC_Twoinc_FX::convert(
+                    $this,
+                    (float) $platform_minimum['amount'],
+                    (string) $platform_minimum['currency'],
+                    strval(get_option('woocommerce_currency'))
+                );
+                if ($converted !== null) {
+                    return sprintf(
+                        __('Platform minimum %1$s (approximately %2$s at the current exchange rate), %3$s tax. A value here is interpreted in the store currency on the tax basis selected below — both minimums are enforced independently.', 'twoinc-payment-gateway'),
+                        $native_display,
+                        get_woocommerce_currency_symbol(get_option('woocommerce_currency')) . number_format($converted, 2),
                         $basis_label
                     );
                 }
@@ -2406,10 +2431,11 @@ if (!class_exists('WC_Twoinc')) {
          * Validate the merchant minimum on settings save: numeric and
          * non-negative always; strictly above the platform minimum when
          * the brand declares one IN THE STORE CURRENCY. A platform
-         * minimum in another currency cannot be compared (no FX source
-         * in WooCommerce until TWO-24776) — the numeric floor check is
-         * skipped and both minimums are enforced independently at
-         * checkout.
+         * minimum in another currency is deliberately not floor-checked
+         * even though an FX rate may be available (TWO-25104): a save
+         * that is valid one day would fail the next as rates drift, so
+         * both minimums are enforced independently at checkout instead
+         * (the availability gate converts there).
          *
          * @param string $key
          * @param string $value
@@ -3863,6 +3889,12 @@ if (!class_exists('WC_Twoinc')) {
          */
         public function on_deactivate_plugin()
         {
+            // The recurring FX refresh must not keep firing (listener-less)
+            // while the plugin is deactivated; it is re-registered on init
+            // when the plugin comes back (WC_Twoinc_FX::maybe_schedule_refresh).
+            if (class_exists('WC_Twoinc_FX') && function_exists('as_unschedule_all_actions')) {
+                as_unschedule_all_actions(WC_Twoinc_FX::refresh_hook());
+            }
             if ($this->get_option('clear_options_on_deactivation') === 'yes') {
                 delete_option('woocommerce_' . $this->id . '_settings');
                 // The merchant-record caches (terms, days-on-invoice,
@@ -3870,6 +3902,9 @@ if (!class_exists('WC_Twoinc')) {
                 // dedicated wp_options — clear them too, or "clear options
                 // on deactivation" leaves orphaned rows behind.
                 $this->invalidate_merchant_record_caches();
+                if (class_exists('WC_Twoinc_FX')) {
+                    WC_Twoinc_FX::purge();
+                }
             }
         }
 
