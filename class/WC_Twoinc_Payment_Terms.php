@@ -196,6 +196,14 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          * honest and lets the settings page surface the stale selection
          * (WC_Twoinc::init_form_fields carries the matching admin warning).
          *
+         * '' (the treatment field has no default and starts unselected)
+         * also degrades to 'standard' here: save-validation blocks enabling
+         * surcharges without a treatment, so an enabled-but-unset
+         * combination can only mean a shop that enabled surcharges before
+         * the treatment field existed (or a direct DB edit) — 'standard' is
+         * byte-for-byte the pre-feature fee behaviour those shops were
+         * already getting.
+         *
          * @return array{treatment: string, tax_class: string}
          */
         public static function resolve_surcharge_tax_treatment($gateway): array

@@ -327,6 +327,15 @@ class WC_Payment_Gateway
 
     public $plugin_id = 'woocommerce_';
 
+    // Mirrors WC_Settings_API::get_post_data (the submitted settings form),
+    // injectable per test for cross-field save validation.
+    public $test_post_data = [];
+
+    public function get_post_data()
+    {
+        return $this->test_post_data;
+    }
+
     public function get_option($key, $empty_value = null)
     {
         return $empty_value ?? '';
