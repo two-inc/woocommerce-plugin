@@ -872,8 +872,11 @@ if (!class_exists('WC_Twoinc')) {
         public function validate_surcharge_type_field($key, $value)
         {
             $value = trim((string) $value);
+            // Same enabled-set the runtime uses (get_surcharge_settings
+            // coerces anything else to 'none'), so the gate matches what
+            // will actually surcharge.
             if (
-                $value !== 'none' && $value !== ''
+                in_array($value, ['percentage', 'fixed', 'fixed_and_percentage'], true)
                 && !in_array(
                     $this->get_sibling_field_save_value('surcharge_tax_treatment'),
                     ['standard', 'custom_class', 'always_zero'],
@@ -898,8 +901,8 @@ if (!class_exists('WC_Twoinc')) {
             $value = trim((string) $value);
             if ($value === '') {
                 $type = $this->get_sibling_field_save_value('surcharge_type');
-                if ($type !== 'none' && $type !== '') {
-                    throw new Exception(__('Select a surcharge tax treatment before enabling surcharges.', 'twoinc-payment-gateway'));
+                if (in_array($type, ['percentage', 'fixed', 'fixed_and_percentage'], true)) {
+                    throw new Exception(__('Select a surcharge tax treatment — surcharges cannot be used without one.', 'twoinc-payment-gateway'));
                 }
                 return '';
             }
