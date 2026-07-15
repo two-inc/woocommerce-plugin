@@ -64,7 +64,7 @@ jobs:
           done
           docker compose logs wpcli 2>&1 | grep -q "sleep infinity" || (echo "Bootstrap failed" && docker compose logs && exit 1)
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
 
