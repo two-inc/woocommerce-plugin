@@ -11,7 +11,6 @@
  * @author Two
  */
 
-
 if (!class_exists('WC_Twoinc')) {
     class WC_Twoinc extends WC_Payment_Gateway
     {
@@ -119,7 +118,6 @@ if (!class_exists('WC_Twoinc')) {
 
                 // On setting updated
                 add_action('woocommerce_update_options_payment_gateways_' . $this->id, [$this, 'process_admin_options']); // Built-in process_admin_options
-
             }
 
             // Return if plugin setup is not complete
@@ -1416,7 +1414,6 @@ if (!class_exists('WC_Twoinc')) {
             $twoinc_order_id = $this->get_twoinc_order_id($order);
 
             if ($twoinc_order_id) {
-
                 // Route the downloads through the plugin's admin-ajax handler
                 // (ajax_download_invoice) instead of linking straight at the
                 // API: a direct link surfaces the raw 400 ORDER_NOT_FULFILLED
@@ -2168,7 +2165,7 @@ if (!class_exists('WC_Twoinc')) {
          */
         public static function display_user_meta_edit($user)
         {
-?>
+            ?>
             <h3><?php printf(__('%s pre-filled fields', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')); ?></h3>
 
             <table class="form-table">
@@ -2201,7 +2198,7 @@ if (!class_exists('WC_Twoinc')) {
                     </td>
                 </tr>
             </table>
-        <?php
+            <?php
         }
 
         /**
@@ -2915,9 +2912,11 @@ if (!class_exists('WC_Twoinc')) {
         private function is_confirmation_page()
         {
 
-            if (isset($_REQUEST['order_id'])
+            if (
+                isset($_REQUEST['order_id'])
                 && isset($_REQUEST[WC_Twoinc_Brand::prefixed_name('order_reference')])
-                && isset($_REQUEST[WC_Twoinc_Brand::prefixed_name('nonce')])) {
+                && isset($_REQUEST[WC_Twoinc_Brand::prefixed_name('nonce')])
+            ) {
                 return true;
                 // Temporarily commented out until we find a solution for redirect plugins
                 // $confirm_path = '/twoinc-payment-gateway/confirm';
@@ -3378,18 +3377,18 @@ if (!class_exists('WC_Twoinc')) {
             $data = wp_parse_args($data, $defaults);
 
             ob_start();
-        ?>
+            ?>
             <tr valign="top">
                 <th scope="row" class="titledesc">
                     <label for="<?php echo esc_attr($field_key); ?>"><?php echo wp_kses_post($data['title']); ?> <?php echo $this->get_tooltip_html($data); // WPCS: XSS ok.
-                                                                                                                    ?></label>
+                    ?></label>
                 </th>
                 <td class="forminp">
                     <fieldset>
                         <legend class="screen-reader-text"><span><?php echo wp_kses_post($data['title']); ?></span></legend>
                         <div style="position: relative; display: inline-block;">
                             <input class="input-text regular-input <?php echo esc_attr($data['class']); ?>" type="password" name="<?php echo esc_attr($field_key); ?>" id="<?php echo esc_attr($field_key); ?>" style="<?php echo esc_attr($data['css']); ?> padding-right: 35px;" value="<?php echo esc_attr($this->get_option($key)); ?>" placeholder="<?php echo esc_attr($data['placeholder']); ?>" <?php disabled($data['disabled'], true); ?> <?php echo $this->get_custom_attribute_html($data); // WPCS: XSS ok.
-                                                                                                                                                                                                                                                                                                                                                                                                                                                    ?> />
+                            ?> />
                             <span id="api-key-verification-icon" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); display: none; pointer-events: none; z-index: 10;">
                                 <span class="dashicons dashicons-yes-alt" style="color: #46b450; display: none; font-size: 18px;" id="api-key-valid"></span>
                                 <span class="dashicons dashicons-dismiss" style="color: #dc3232; display: none; font-size: 18px;" id="api-key-invalid"></span>
@@ -3424,7 +3423,7 @@ if (!class_exists('WC_Twoinc')) {
                     }
                 }
             </style>
-        <?php
+            <?php
 
             return ob_get_clean();
         }
@@ -3460,20 +3459,20 @@ if (!class_exists('WC_Twoinc')) {
             }
 
             ob_start();
-        ?>
+            ?>
             <tr valign="top">
                 <td class="forminp" colspan="2">
                     <fieldset>
                         <legend class="screen-reader-text"><span><?php echo wp_kses_post($data['title']); ?></span></legend>
                         <label for="<?php echo esc_attr($field_key); ?>">
                             <input <?php disabled($data['disabled'], true); ?> class="<?php echo esc_attr($data['class']); ?>" type="radio" name="<?php echo esc_attr($field_key); ?>" id="<?php echo esc_attr($field_key); ?>" style="<?php echo esc_attr($data['css']); ?>" value="1" <?php checked($data['checked'] === true, true); ?> <?php echo $this->get_custom_attribute_html($data); // WPCS: XSS ok.
-                                                                                                                                                                                                                                                                                                                                            ?> /> <?php echo wp_kses_post($data['label']); ?></label><br />
+                            ?> /> <?php echo wp_kses_post($data['label']); ?></label><br />
                         <?php echo $this->get_description_html($data); // WPCS: XSS ok.
                         ?>
                     </fieldset>
                 </td>
             </tr>
-        <?php
+            <?php
 
             return ob_get_clean();
         }
@@ -3484,7 +3483,7 @@ if (!class_exists('WC_Twoinc')) {
             $image = $image_id ? wp_get_attachment_image_src($image_id, 'full') : null;
             $image_src = $image ? $image[0] : null;
             ob_start();
-        ?>
+            ?>
             <tr valign="top">
                 <th scope="row" class="titledesc">
                     <label for="<?php echo esc_attr($field_key); ?>"><?php echo wp_kses_post($data['title']); ?></label>
@@ -3493,7 +3492,7 @@ if (!class_exists('WC_Twoinc')) {
                     <fieldset>
                         <input type="hidden" name="woocommerce_<?php echo esc_attr($this->id); ?>_<?php echo $field_key; ?>" id="<?php echo esc_attr($field_key); ?>" class="logo_id" value="<?php echo $image_id; ?>" />
                         <div class="image-container woocommerce-twoinc-image-container">
-                            <?php if ($image_src): ?>
+                            <?php if ($image_src) : ?>
                                 <img src="<?php echo $image_src; ?>" alt="" />
                             <?php endif; ?>
                         </div>
@@ -3501,7 +3500,7 @@ if (!class_exists('WC_Twoinc')) {
                     </fieldset>
                 </td>
             </tr>
-<?php
+            <?php
             return ob_get_clean();
         }
 

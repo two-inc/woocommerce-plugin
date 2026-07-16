@@ -67,7 +67,7 @@ document.addEventListener("DOMContentLoaded", function() {
 })
 </script>
 
-<?php
+    <?php
 }
 add_action('woocommerce_before_checkout_billing_form', 'add_demo_replace_due_in_days_script');
 
@@ -115,7 +115,7 @@ document.addEventListener("DOMContentLoaded", function() {
 })
 </script>
 
-<?php
+        <?php
     }
 }
 add_action('wp_footer', 'update_due_in_days_in_confirm_page');

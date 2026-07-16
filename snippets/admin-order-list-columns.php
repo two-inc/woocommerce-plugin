@@ -24,7 +24,6 @@ function add_filtering_query($query)
         && in_array($pagenow, array('edit.php', 'upload.php'))
         && (! empty($_GET['delivery_date_from']) || ! empty($_GET['delivery_date_to']))
     ) {
-
         $orderby = $query->get('orderby');
 
         if (true || 'order_delivery_date' == $orderby) {
@@ -94,7 +93,6 @@ function add_custom_columns($columns)
     }
 
     return $new_columns;
-
 }
 
 
@@ -109,7 +107,6 @@ function add_custom_sortable_columns($columns)
     $columns['order_delivery_date'] = 'order_delivery_date';
 
     return $columns;
-
 }
 
 
@@ -137,7 +134,6 @@ function add_custom_columns_content($column)
             }
         }
     }
-
 }
 
 
@@ -180,5 +176,4 @@ function add_delivery_date_filter_form_inputs()
 
     });
     </script>';
-
 }

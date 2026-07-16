@@ -33,7 +33,7 @@ function add_delivery_date_field($checkout)
     $dateoptions = array('' => __('Select Pickup Date', 'twoinc-payment-gateway'));
 
     echo '<div id="delivery-date">';
-    echo '<h3>'.__('Delivery Date', 'twoinc-payment-gateway').'</h3>';
+    echo '<h3>' . __('Delivery Date', 'twoinc-payment-gateway') . '</h3>';
 
     echo '
     <script>
@@ -147,12 +147,10 @@ function prepend_to_order_note($post_id, $post, $update)
     $existing_note = $order->get_customer_note();
     $order->set_customer_note('Delivery date: ' . $d->format(get_option('date_format')));
     if ($existing_note) {
-
         $order->set_customer_note($order->get_customer_note() . '
 '
         . $existing_note);
     }
 
     $order->save();
-
 }

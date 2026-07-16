@@ -3,7 +3,7 @@
 
 .PHONY: help install configure run debug proxy stop clean logs logs-wpcli \
 	test-unit test format archive patch minor major \
-	e2e-install e2e-test e2e-test-headed
+	e2e-install e2e-test e2e-test-headed phpcs phpstan
 
 .DEFAULT_GOAL := help
 
@@ -73,6 +73,22 @@ test: test-unit
 ## Format frontend/config files with pre-commit
 format:
 	pre-commit run --all-files
+
+## Run PHP_CodeSniffer (PSR-12 gate, same as CI)
+phpcs:
+	@mkdir -p dev/stubs
+	@test -f dev/stubs/phpcs.phar || curl -sSfL --retry 3 --retry-connrefused --max-time 30 https://github.com/PHPCSStandards/PHP_CodeSniffer/releases/download/4.0.1/phpcs.phar -o dev/stubs/phpcs.phar
+	docker run --rm -v "$(CURDIR)":/app -w /app php:8.3-cli php dev/stubs/phpcs.phar
+
+## Run PHPStan (level 2 + baseline, same as CI)
+# Stub SHAs pinned below must match .github/workflows/static-analysis.yaml —
+# bump both together, deliberately, alongside a baseline regen.
+phpstan:
+	@mkdir -p dev/stubs
+	@test -f dev/stubs/phpstan.phar || curl -sSfL --retry 3 --retry-connrefused --max-time 30 https://github.com/phpstan/phpstan/releases/download/2.2.5/phpstan.phar -o dev/stubs/phpstan.phar
+	@test -f dev/stubs/wordpress-stubs.php || curl -sSfL --retry 3 --retry-connrefused --max-time 30 https://raw.githubusercontent.com/php-stubs/wordpress-stubs/04ebb2e841429038322c92043154a0ff5641e3c9/wordpress-stubs.php -o dev/stubs/wordpress-stubs.php
+	@test -f dev/stubs/woocommerce-stubs.php || curl -sSfL --retry 3 --retry-connrefused --max-time 30 https://raw.githubusercontent.com/php-stubs/woocommerce-stubs/8e52e5bfbcd0f5cb65a8bec696761867e3096ab7/woocommerce-stubs.php -o dev/stubs/woocommerce-stubs.php
+	docker run --rm -v "$(CURDIR)":/app -w /app php:8.3-cli php dev/stubs/phpstan.phar analyse --no-progress --memory-limit=4G
 
 ## Create a versioned zip archive
 archive:

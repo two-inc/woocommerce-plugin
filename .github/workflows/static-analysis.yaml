@@ -1,0 +1,59 @@
+name: Static analysis
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: static-analysis-${{ github.ref_name }}
+  cancel-in-progress: true
+
+# phpcs (PSR-12, phpcs.xml) + phpstan (level 2, phpstan.neon) — TWO-25108.
+# The repo has no Composer, so both tools are installed as standalone phars
+# via shivammathur/setup-php `tools:` (same action the unit-test matrix
+# already uses). Tool versions are pinned to the releases the committed
+# baselines were generated with; bump them together with a baseline refresh.
+jobs:
+  phpcs:
+    runs-on: ${{ vars.RUNNER_STANDARD }}
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          tools: phpcs:4.0.1
+
+      - name: Run phpcs
+        run: phpcs
+
+  phpstan:
+    runs-on: ${{ vars.RUNNER_STANDARD }}
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          tools: phpstan:2.2.5
+
+      # No Composer, so the WordPress/WooCommerce API stubs are fetched
+      # fresh rather than committed (large, third-party, would go stale).
+      # phpstan.neon references them via scanFiles at this path.
+      # Pinned to a commit SHA (not `master`) so stub content — and thus
+      # what phpstan-baseline.neon reflects — only changes when we
+      # deliberately bump these SHAs and regenerate the baseline.
+      - name: Download WordPress/WooCommerce stubs
+        run: |
+          mkdir -p dev/stubs
+          curl -sSfL --retry 3 --retry-connrefused --max-time 30 https://raw.githubusercontent.com/php-stubs/wordpress-stubs/04ebb2e841429038322c92043154a0ff5641e3c9/wordpress-stubs.php -o dev/stubs/wordpress-stubs.php
+          curl -sSfL --retry 3 --retry-connrefused --max-time 30 https://raw.githubusercontent.com/php-stubs/woocommerce-stubs/8e52e5bfbcd0f5cb65a8bec696761867e3096ab7/woocommerce-stubs.php -o dev/stubs/woocommerce-stubs.php
+
+      - name: Run phpstan
+        run: phpstan analyse --no-progress --memory-limit=4G

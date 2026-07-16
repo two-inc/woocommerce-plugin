@@ -73,7 +73,6 @@ if (!class_exists('WC_Twoinc_Checkout')) {
 
             // Return the fields list
             return $fields;
-
         }
 
         /**
@@ -90,7 +89,6 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             $company_name_priority = $fields['billing']['billing_company']['priority'] ?? 30;
 
             if ($this->wc_twoinc->get_enable_company_search() === 'yes') {
-
                 $fields['billing']['billing_company_display'] = [
                     'label' => __('Company name', 'twoinc-payment-gateway'),
                     'autocomplete' => 'organization',
@@ -106,7 +104,6 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     'required' => false,
                     'priority' => $company_name_priority
                 ];
-
             }
 
             $fields['billing']['company_id'] = [
@@ -117,36 +114,30 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             ];
 
             if ($this->wc_twoinc->get_option('add_field_department') === 'yes') {
-
                 $fields['billing']['department'] = [
                     'label' => __('Department', 'twoinc-payment-gateway'),
                     'class' => array('hidden'),
                     'required' => false,
                     'priority' => $company_name_priority + 2
                 ];
-
             }
 
             if ($this->wc_twoinc->get_option('add_field_project') === 'yes') {
-
                 $fields['billing']['project'] = [
                     'label' => __('Project', 'twoinc-payment-gateway'),
                     'class' => array('hidden'),
                     'required' => false,
                     'priority' => $company_name_priority + 3
                 ];
-
             }
 
             if ($this->wc_twoinc->get_option('add_field_purchase_order_number') === 'yes') {
-
                 $fields['billing']['purchase_order_number'] = [
                     'label' => __('Purchase order number', 'twoinc-payment-gateway'),
                     'class' => array('hidden'),
                     'required' => false,
                     'priority' => $company_name_priority + 4
                 ];
-
             }
 
             if ($this->wc_twoinc->get_option('add_field_invoice_email') == 'yes') {
@@ -163,7 +154,6 @@ if (!class_exists('WC_Twoinc_Checkout')) {
 
             // Return the fields
             return $fields;
-
         }
 
         /**
@@ -185,7 +175,6 @@ if (!class_exists('WC_Twoinc_Checkout')) {
 
             // Return the fields list
             return $fields;
-
         }
 
         /**
@@ -308,7 +297,6 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             }
 
             return $properties;
-
         }
 
         /**
@@ -333,6 +321,5 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 printf('<script>window.twoinc = %s;</script>', $twoinc_obj);
             }
         }
-
     }
 }

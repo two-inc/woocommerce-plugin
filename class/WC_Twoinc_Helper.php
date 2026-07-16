@@ -306,13 +306,12 @@ if (!class_exists('WC_Twoinc_Helper')) {
 
             /** @var WC_Order_Item_Product $line_item */
             foreach ($line_items as $line_item) {
-
                 $product_simple = WC_Twoinc_Helper::get_product($line_item);
 
                 $tax_rate = WC_Twoinc_Helper::get_item_tax_rate($line_item, $order);
 
                 // Check if product exists and is a valid object. If not, use fallback values.
-                if ( ! is_object($product_simple) ) {
+                if (! is_object($product_simple)) {
                     $name = method_exists($line_item, 'get_name') ? $line_item->get_name() : 'Item';
                     $description = '';
                     $image_url = '';
@@ -323,8 +322,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     $name = $product_simple->get_name();
                     $description = substr($product_simple->get_description(), 0, 255);
                     $image_url = '';
-                    if ( $product_simple->get_id() ) {
-                        $thumbnail = get_the_post_thumbnail_url( $product_simple->get_id() );
+                    if ($product_simple->get_id()) {
+                        $thumbnail = get_the_post_thumbnail_url($product_simple->get_id());
                         $image_url = $thumbnail ? $thumbnail : '';
                     }
                     $product_page_url = $product_simple->get_permalink();
@@ -378,7 +377,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     ]
                 ];
 
-                if ( ! empty( $categories ) && is_array( $categories ) ) {
+                if (! empty($categories) && is_array($categories)) {
                     foreach ($categories as $category) {
                         $product['details']['categories'][] = $category->name;
                     }
@@ -469,7 +468,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
 
             /** @var WC_Order_Item_Product $line_item */
             foreach ($line_items as $line_item) {
-
                 $tax_rate = WC_Twoinc_Helper::get_item_tax_rate($line_item, $order);
                 $tax_single_line = [
                     'tax_amount' => $line_item['line_tax'],

@@ -471,9 +471,11 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                 'net_terms' => $net_terms,
             ], 'POST', array(), null, 10);
 
-            if (is_wp_error($response)
+            if (
+                is_wp_error($response)
                 || (int) wp_remote_retrieve_response_code($response) < 200
-                || (int) wp_remote_retrieve_response_code($response) >= 300) {
+                || (int) wp_remote_retrieve_response_code($response) >= 300
+            ) {
                 return ['success' => false];
             }
 
