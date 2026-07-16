@@ -347,9 +347,11 @@ function twoinc_ajax_term_fees()
     $raw_terms = isset($_POST['terms']) ? wp_unslash($_POST['terms']) : '';
     $decoded = is_string($raw_terms) ? json_decode($raw_terms, true) : $raw_terms;
     $terms = is_array($decoded) ? array_map('intval', $decoded) : [];
-    if (count(array_filter($terms, static function ($d) {
-        return $d > 0;
-    })) === 0) {
+    if (
+        count(array_filter($terms, static function ($d) {
+            return $d > 0;
+        })) === 0
+    ) {
         wp_send_json_error('No terms');
         return;
     }

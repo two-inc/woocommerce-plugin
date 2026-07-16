@@ -1,0 +1,97 @@
+parameters:
+	ignoreErrors:
+		-
+			message: '#^Access to an undefined property WC_Cart\:\:\$total\.$#'
+			identifier: property.notFound
+			count: 2
+			path: class/WC_Twoinc.php
+
+		-
+			message: '#^Call to sprintf contains 2 placeholders, 3 values given\.$#'
+			identifier: argument.sprintf
+			count: 1
+			path: class/WC_Twoinc.php
+
+		-
+			message: '#^Comparison operation "\>" between \*NEVER\* and 0 results in an error\.$#'
+			identifier: greater.invalid
+			count: 1
+			path: class/WC_Twoinc.php
+
+		-
+			message: '#^Method WC_Twoinc\:\:process_admin_options\(\) should return bool but return statement is missing\.$#'
+			identifier: return.missing
+			count: 1
+			path: class/WC_Twoinc.php
+
+		-
+			message: '#^PHPDoc tag @extends has invalid value \(WC_Payment_Gateway\)\: Unexpected token "\\n \* ", expected ''\<'' at offset 133 on line 7$#'
+			identifier: phpDoc.parseError
+			count: 1
+			path: class/WC_Twoinc.php
+
+		-
+			message: '#^Result of method WC_Twoinc\:\:process_refund\(\) \(void\) is used\.$#'
+			identifier: method.void
+			count: 1
+			path: class/WC_Twoinc.php
+
+		-
+			message: '#^Variable \$_POST in isset\(\) always exists and is not nullable\.$#'
+			identifier: isset.variable
+			count: 2
+			path: class/WC_Twoinc.php
+
+		-
+			message: '#^Variable \$response in isset\(\) always exists and is not nullable\.$#'
+			identifier: isset.variable
+			count: 1
+			path: class/WC_Twoinc.php
+
+		-
+			message: '#^Variable \$categories in empty\(\) always exists and is always falsy\.$#'
+			identifier: empty.variable
+			count: 1
+			path: class/WC_Twoinc_Helper.php
+
+		-
+			message: '#^Function add_sorting_query\(\) should return array but return statement is missing\.$#'
+			identifier: return.missing
+			count: 2
+			path: snippets/admin-order-list-columns.php
+
+		-
+			message: '#^Undefined variable\: \$order$#'
+			identifier: variable.undefined
+			count: 2
+			path: snippets/delivery-date-checkout.php
+
+		-
+			message: '#^Call to an undefined static method WC_Tax\:\:get_rates_for_class\(\)\.$#'
+			identifier: staticMethod.notFound
+			count: 1
+			path: tests/unit/bootstrap.php
+
+		-
+			message: '#^Access to an undefined property WC_Payment_Gateway\:\:\$requests\.$#'
+			identifier: property.notFound
+			count: 3
+			path: tests/unit/run.php
+
+		-
+			message: '#^Access to an undefined property WC_Twoinc\:\:\$requests\.$#'
+			identifier: property.notFound
+			count: 6
+			path: tests/unit/run.php
+
+		-
+			message: '#^Access to an undefined property WC_Twoinc\:\:\$test_post_data\.$#'
+			identifier: property.notFound
+			count: 2
+			path: tests/unit/run.php
+
+		-
+			message: '#^Constant ABSPATH not found\.$#'
+			identifier: constant.notFound
+			count: 1
+			path: tillit-payment-gateway.php

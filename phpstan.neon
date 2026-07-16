@@ -1,0 +1,25 @@
+
+# Static analysis config (TWO-25108). The repo has no Composer, so the
+# WordPress/WooCommerce stubs are downloaded into dev/stubs/ (gitignored)
+# before running — see .github/workflows/static-analysis.yaml and the
+# Makefile's `phpstan` target for the pinned-SHA curl commands (bump those,
+# not this comment, when refreshing stubs).
+includes:
+    - phpstan-baseline.neon
+
+parameters:
+    level: 2
+    # Analyse as the plugin's declared PHP floor (see unit-tests.yaml matrix)
+    # so results don't drift with the PHP version running phpstan.
+    phpVersion: 70400
+    paths:
+        - tillit-payment-gateway.php
+        - class
+        - brands
+        - snippets
+        - views
+        - tests/unit
+        - docker/mu-plugins
+    scanFiles:
+        - dev/stubs/wordpress-stubs.php
+        - dev/stubs/woocommerce-stubs.php

@@ -1,0 +1,49 @@
+<?xml version="1.0"?>
+<ruleset name="TwoincWooCommercePlugin">
+    <description>PSR-12 house style for the Two WooCommerce plugin (TWO-25108).</description>
+
+    <file>.</file>
+
+    <!-- Non-PHP / third-party / generated trees -->
+    <exclude-pattern>*/\.git/*</exclude-pattern>
+    <exclude-pattern>*/node_modules/*</exclude-pattern>
+    <exclude-pattern>*/volumes/*</exclude-pattern>
+    <exclude-pattern>*/tests/e2e/*</exclude-pattern>
+    <!-- Downloaded WP/WC stubs + phars used by phpstan (gitignored) -->
+    <exclude-pattern>*/dev/stubs/*</exclude-pattern>
+
+    <arg name="extensions" value="php"/>
+    <arg name="colors"/>
+    <arg value="sp"/>
+
+    <!-- Warnings (e.g. the PSR-12 120-char soft line limit) are reported but
+         do not fail the run; only errors gate CI. -->
+    <config name="ignore_warnings_on_exit" value="1"/>
+
+    <rule ref="PSR12">
+        <!-- WooCommerce gateway API and WordPress hook callbacks are
+             snake_case by upstream convention (process_payment,
+             init_form_fields, ...); renaming would break the integration. -->
+        <exclude name="PSR1.Methods.CamelCapsMethodName"/>
+        <!-- Classes follow the WooCommerce core naming convention
+             (WC_Twoinc mirrors WC_Payment_Gateway). -->
+        <exclude name="Squiz.Classes.ValidClassName.NotPascalCase"/>
+        <!-- Classic WordPress plugin: prefixed classes in the global
+             namespace by design. -->
+        <exclude name="PSR1.Classes.ClassDeclaration.MissingNamespace"/>
+    </rule>
+
+    <!-- WordPress plugin entry point, drop-in snippets and the test harness
+         are side-effect files by nature. class/ stays gated. -->
+    <rule ref="PSR1.Files.SideEffects">
+        <exclude-pattern>tillit-payment-gateway\.php</exclude-pattern>
+        <exclude-pattern>*/snippets/*</exclude-pattern>
+        <exclude-pattern>*/tests/*</exclude-pattern>
+    </rule>
+
+    <!-- The dependency-free test harness keeps its WP/WC shim classes in one
+         bootstrap file on purpose. -->
+    <rule ref="PSR1.Classes.ClassDeclaration.MultipleClasses">
+        <exclude-pattern>*/tests/*</exclude-pattern>
+    </rule>
+</ruleset>
