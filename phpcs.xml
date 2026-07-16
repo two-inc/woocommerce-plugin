@@ -11,6 +11,12 @@
     <exclude-pattern>*/tests/e2e/*</exclude-pattern>
     <!-- Downloaded WP/WC stubs + phars used by phpstan (gitignored) -->
     <exclude-pattern>*/dev/stubs/*</exclude-pattern>
+    <!-- Defensive: this repo has no vendor/ or coverage/ today (no Composer,
+         no PHPUnit), but exclude them so a local `composer install` or
+         coverage-report run doesn't sweep third-party/generated PHP into
+         a scan. -->
+    <exclude-pattern>*/vendor/*</exclude-pattern>
+    <exclude-pattern>*/coverage/*</exclude-pattern>
 
     <arg name="extensions" value="php"/>
     <arg name="colors"/>
