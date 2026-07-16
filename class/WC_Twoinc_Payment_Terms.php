@@ -264,17 +264,61 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                 'surcharge_basis' => 'buyer_pays',
             ];
 
-            // Fixed amounts and caps are sent as configured, in the store
-            // currency. WooCommerce has no FX rate provider, so multi-currency
-            // conversion is NOT supported (the one parity gap vs Magento, which
-            // converts via Magento's currency rates) — fixed surcharge should
-            // be configured on single-currency stores only. Percentage-based
-            // surcharge is currency-agnostic and unaffected.
-            if ($has_fixed && isset($row['fixed']) && (float) $row['fixed'] > 0) {
-                $buyer_fee_share['surcharge'] = (float) $row['fixed'];
+            // Fixed amounts and caps are configured in the STORE currency
+            // (the saved woocommerce_currency option) while the pricing
+            // request is made in the ACTIVE checkout currency, so when a
+            // multi-currency setup has them diverge the monetary
+            // components are converted via the Two FX layer (TWO-25104 —
+            // Magento parity, which converts via the store's own rates).
+            // A wrong-currency amount must never be sent: if the pair
+            // cannot be converted (no rate ever fetched, or an unsupported
+            // currency) the whole surcharge is withheld for this quote —
+            // fail soft to no fee, matching the quote path's
+            // never-block-checkout posture. Same-currency stores never
+            // reach the FX layer. Percentage-based surcharge is
+            // currency-agnostic and unaffected.
+            $fixed = $has_fixed && isset($row['fixed']) && (float) $row['fixed'] > 0 ? (float) $row['fixed'] : null;
+            $cap = $has_percentage && isset($row['limit']) && (float) $row['limit'] > 0 ? (float) $row['limit'] : null;
+            if ($fixed !== null || $cap !== null) {
+                $store_currency = strval(get_option('woocommerce_currency'));
+                $active_currency = get_woocommerce_currency();
+                if ($store_currency !== $active_currency) {
+                    $rate = WC_Twoinc_FX::get_rate($gateway, $store_currency, $active_currency);
+                    if ($rate === null) {
+                        if (function_exists('wc_get_logger')) {
+                            wc_get_logger()->warning(
+                                sprintf(
+                                    'Surcharge withheld: no FX rate to convert configured %s amounts to checkout currency %s',
+                                    $store_currency,
+                                    $active_currency
+                                ),
+                                ['source' => 'twoinc-payment-gateway']
+                            );
+                        }
+                        return null;
+                    }
+                    $converted_fixed = $fixed !== null ? (float) WC_Twoinc_Helper::round_amt($fixed * $rate) : null;
+                    $converted_cap = $cap !== null ? (float) WC_Twoinc_Helper::round_amt($cap * $rate) : null;
+                    // A tiny configured amount can round to 0.00 in a much
+                    // stronger currency. Dropping only the cap while
+                    // leaving the percentage component in place would
+                    // send an UNCAPPED fee — the opposite of what the
+                    // merchant configured — so a component that rounds
+                    // away withholds the whole surcharge, same as no rate
+                    // being available at all, rather than silently
+                    // changing what is charged.
+                    if (($fixed !== null && $converted_fixed <= 0) || ($cap !== null && $converted_cap <= 0)) {
+                        return null;
+                    }
+                    $fixed = $converted_fixed;
+                    $cap = $converted_cap;
+                }
             }
-            if ($has_percentage && isset($row['limit']) && (float) $row['limit'] > 0) {
-                $buyer_fee_share['cap'] = (float) $row['limit'];
+            if ($fixed !== null) {
+                $buyer_fee_share['surcharge'] = $fixed;
+            }
+            if ($cap !== null) {
+                $buyer_fee_share['cap'] = $cap;
             }
             if ($has_percentage) {
                 $rounding = self::build_rounding($settings);
@@ -513,6 +557,18 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
             $buyer_country = $customer ? $customer->get_billing_country() : '';
             $fee = self::fetch_term_fee($gateway, $selected, self::get_fee_basis($cart), $buyer_country);
             if ($fee === null || (float) $fee['buyer_fee_share'] <= 0) {
+                return;
+            }
+            // The fee enters the basket at the pricing endpoint's output
+            // (any FX conversion happened on the request inputs, TWO-25104)
+            // — never re-converted store-side. A response echoing a
+            // different currency than the cart's would land as a raw
+            // number in the wrong money; skip it rather than mischarge.
+            // Normalised the same way the FX layer normalises currency
+            // codes (case/whitespace) so this guard can't be defeated by
+            // a harmlessly-differently-cased echo.
+            $fee_currency = strtoupper(trim((string) $fee['currency']));
+            if ($fee_currency !== '' && $fee_currency !== strtoupper(get_woocommerce_currency())) {
                 return;
             }
 

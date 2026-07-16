@@ -77,6 +77,7 @@ function load_twoinc_classes()
     // Load classes
     require_once __DIR__ . '/class/WC_Twoinc_Brand.php';
     require_once __DIR__ . '/class/WC_Twoinc_Helper.php';
+    require_once __DIR__ . '/class/WC_Twoinc_FX.php';
     require_once __DIR__ . '/class/WC_Twoinc_Payment_Terms.php';
     require_once __DIR__ . '/class/WC_Twoinc_Sole_Trader.php';
     require_once __DIR__ . '/class/WC_Twoinc_Checkout.php';
@@ -100,6 +101,24 @@ function load_twoinc_classes()
     // (enabled + chosen-payment-method + selected-term), so registering it on
     // every request is safe.
     add_action('woocommerce_cart_calculate_fees', ['WC_Twoinc_Payment_Terms', 'apply_cart_fee']);
+
+    // FX rate cache (TWO-25104): a recurring 6h Action Scheduler refresh
+    // keeps the spot table warm so checkout conversions (min-order gates,
+    // fixed-surcharge amounts) are served from cache. Both registrations
+    // are deferred to init, in one closure, rather than resolved here at
+    // plugins_loaded: WC_Twoinc_FX::refresh_hook() reads the brand prefix
+    // on first call, which PERMANENTLY caches WC_Twoinc_Brand's config
+    // (see its class header — an overlay's twoinc_brand_file filter must
+    // be registered by plugins_loaded at default priority). Calling it
+    // here, at plugins_loaded priority 10, would move that first read
+    // earlier than the gateway construction it used to happen at,
+    // narrowing the window a compliant same-priority overlay has to
+    // register first. Action Scheduler's data stores are also not ready
+    // at plugins_loaded, independent of the brand-timing concern.
+    add_action('init', static function () {
+        add_action(WC_Twoinc_FX::refresh_hook(), ['WC_Twoinc_FX', 'run_scheduled_refresh']);
+        WC_Twoinc_FX::maybe_schedule_refresh();
+    });
     add_action('wc_ajax_two_term_fees', ['WC_Twoinc_Payment_Terms', 'ajax_term_fees']);
     add_action('wc_ajax_two_select_term', ['WC_Twoinc_Payment_Terms', 'ajax_select_term']);
     add_action('wc_ajax_two_sole_trader_availability', ['WC_Twoinc_Sole_Trader', 'ajax_availability']);
