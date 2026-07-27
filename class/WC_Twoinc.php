@@ -57,10 +57,11 @@ if (!class_exists('WC_Twoinc')) {
             $this->init_form_fields();
             $this->init_settings();
             $this->drop_removed_settings();
+            $this->drop_renamed_option_rows();
 
             $this->title = sprintf(
                 __($this->get_option('title'), 'twoinc-payment-gateway'),
-                strval($this->get_merchant_default_days_on_invoice())
+                strval($this->get_merchant_due_in_days())
             );
             /**
              * Filter the checkout payment-box description so a brand
@@ -324,15 +325,15 @@ if (!class_exists('WC_Twoinc')) {
          * frontend TTL-expiry write into the blob can silently revert a
          * concurrent admin settings save.
          */
-        public function get_merchant_default_days_on_invoice()
+        public function get_merchant_due_in_days()
         {
-            $days_option = WC_Twoinc_Brand::prefixed_name('days_on_invoice');
-            $checked_option = WC_Twoinc_Brand::prefixed_name('days_on_invoice_checked_on');
+            $days_option = WC_Twoinc_Brand::prefixed_name('merchant_due_in_days');
+            $checked_option = WC_Twoinc_Brand::prefixed_name('merchant_due_in_days_checked_on');
 
             // Default to 14 days when nothing is cached
-            $days_on_invoice = (int) get_option($days_option);
-            if ($days_on_invoice <= 0) {
-                $days_on_invoice = 14;
+            $due_in_days = (int) get_option($days_option);
+            if ($due_in_days <= 0) {
+                $due_in_days = 14;
             }
 
             if ($this->get_merchant_id() && $this->get_option('api_key')) {
@@ -344,13 +345,13 @@ if (!class_exists('WC_Twoinc')) {
                     $record = $this->fetch_merchant_record();
                     if (is_array($record)) {
                         // A null due_in_days on the record also means 14 days
-                        $days_on_invoice = !empty($record['due_in_days']) ? (int) $record['due_in_days'] : 14;
-                        update_option($days_option, $days_on_invoice, false);
+                        $due_in_days = !empty($record['due_in_days']) ? (int) $record['due_in_days'] : 14;
+                        update_option($days_option, $due_in_days, false);
                     }
                 }
             }
 
-            return $days_on_invoice;
+            return $due_in_days;
         }
 
         /**
@@ -593,8 +594,8 @@ if (!class_exists('WC_Twoinc')) {
             $names = [
                 'merchant_available_terms',
                 'merchant_available_terms_checked_on',
-                'days_on_invoice',
-                'days_on_invoice_checked_on',
+                'merchant_due_in_days',
+                'merchant_due_in_days_checked_on',
                 'platform_minimum_order',
                 'platform_minimum_order_checked_on',
                 'merchant_surcharge_limit',
@@ -624,6 +625,37 @@ if (!class_exists('WC_Twoinc')) {
          *
          * @return void
          */
+        /**
+         * Delete option rows whose key was renamed, so an upgraded install
+         * doesn't leave an orphan row behind under the old name.
+         *
+         * Same self-limiting shape as drop_removed_settings(): it only
+         * writes when a legacy row is actually present, and after that one
+         * pass there is nothing left to do on any later request — no
+         * versioned migration runner needed. To retire another renamed row,
+         * add its unprefixed name to $renamed.
+         *
+         * Currently: `days_on_invoice` / `days_on_invoice_checked_on`
+         * (TWO-24859) — renamed to `merchant_due_in_days` /
+         * `merchant_due_in_days_checked_on`, because the value is the
+         * MERCHANT's default due-in-days off GET /v1/merchant, not anything
+         * about a specific invoice. No value is carried across: the row is a
+         * 1h TTL cache of the merchant record, so the new key self-heals on
+         * the first request that has an API key.
+         *
+         * @return void
+         */
+        private function drop_renamed_option_rows()
+        {
+            $renamed = ['days_on_invoice', 'days_on_invoice_checked_on'];
+            foreach ($renamed as $name) {
+                $option = WC_Twoinc_Brand::prefixed_name($name);
+                if (get_option($option, null) !== null) {
+                    delete_option($option);
+                }
+            }
+        }
+
         private function drop_removed_settings()
         {
             $removed = ['enable_sole_trader'];
@@ -1394,7 +1426,7 @@ if (!class_exists('WC_Twoinc')) {
                 '<span class="payment-term-number">%s</span><span class="payment-term-nonumber">%s</span>',
                 sprintf(
                     __($this->get_option('title'), 'twoinc-payment-gateway'),
-                    '<span class="due-in-days">' . strval($this->get_merchant_default_days_on_invoice()) . '</span>'
+                    '<span class="due-in-days">' . strval($this->get_merchant_due_in_days()) . '</span>'
                 ),
                 __('Pay on invoice with agreed terms', 'twoinc-payment-gateway')
             );

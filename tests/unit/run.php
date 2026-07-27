@@ -64,6 +64,7 @@ final class BrandConfigSpec
             'testMerchantAvailableTermsInvalidatedOnMerchantIdChange',
             'testDeactivationCleanupClearsSettingsAndTermCache',
             'testMerchantRecordFetchSharedAcrossConsumersAndOffTheBlob',
+            'testLegacyDaysOnInvoiceOptionRowsDropped',
             'testPaymentTermsValidationNonDestructiveOnUnresolvedOrNarrowedList',
             'testSurchargeGridPreservesRowsNotOnTheForm',
             'testPaymentTermsSelectorVisibleOnlyWithMultiple',
@@ -1199,7 +1200,7 @@ final class BrandConfigSpec
 
         // All four consumers in one request: exactly ONE wire fetch
         TinyAssert::same([30, 60], $gateway->get_merchant_available_terms(true));
-        TinyAssert::same(21, $gateway->get_merchant_default_days_on_invoice());
+        TinyAssert::same(21, $gateway->get_merchant_due_in_days());
         $minimum = $gateway->get_platform_minimum_order();
         TinyAssert::same(['amount' => 100.0, 'currency' => 'NOK', 'basis' => 'net'], $minimum);
         TinyAssert::same(['amount' => 25.0, 'currency' => 'EUR'], $gateway->get_merchant_surcharge_limit(true));
@@ -1209,10 +1210,10 @@ final class BrandConfigSpec
         // a frontend TTL-expiry write into the blob can silently revert a
         // concurrent admin settings save (WC_Settings_API::update_option
         // rewrites the whole array from an in-memory snapshot).
-        TinyAssert::same(21, (int) $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('days_on_invoice')]);
+        TinyAssert::same(21, (int) $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('merchant_due_in_days')]);
         TinyAssert::true(isset($GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name('platform_minimum_order')]));
-        TinyAssert::same(false, array_key_exists('days_on_invoice', $gateway->options));
-        TinyAssert::same(false, array_key_exists('days_on_invoice_last_checked_on', $gateway->options));
+        TinyAssert::same(false, array_key_exists('merchant_due_in_days', $gateway->options));
+        TinyAssert::same(false, array_key_exists('merchant_due_in_days_checked_on', $gateway->options));
         TinyAssert::same(false, array_key_exists('platform_minimum_order', $gateway->options));
         TinyAssert::same(false, array_key_exists('platform_minimum_order_last_checked_on', $gateway->options));
 
@@ -1220,7 +1221,7 @@ final class BrandConfigSpec
         // stall total (memo covers failures), each consumer keeps its own
         // degrade posture — days serves stale, minimum blanks to null,
         // terms serve stale.
-        foreach (['merchant_available_terms_checked_on', 'days_on_invoice_checked_on', 'platform_minimum_order_checked_on', 'merchant_surcharge_limit_checked_on'] as $name) {
+        foreach (['merchant_available_terms_checked_on', 'merchant_due_in_days_checked_on', 'platform_minimum_order_checked_on', 'merchant_surcharge_limit_checked_on'] as $name) {
             $GLOBALS['__twoinc_test_options'][WC_Twoinc_Brand::prefixed_name($name)] = time() - 3601;
         }
         WC_Twoinc::reset_merchant_record_memo();
@@ -1229,10 +1230,47 @@ final class BrandConfigSpec
         $gateway->responses[] = new WP_Error('http_request_failed', 'down');
 
         TinyAssert::same([30, 60], $gateway->get_merchant_available_terms(true));
-        TinyAssert::same(21, $gateway->get_merchant_default_days_on_invoice());
+        TinyAssert::same(21, $gateway->get_merchant_due_in_days());
         TinyAssert::same(null, $gateway->get_platform_minimum_order());
         TinyAssert::same(['amount' => 25.0, 'currency' => 'EUR'], $gateway->get_merchant_surcharge_limit(true));
         TinyAssert::same(2, $gateway->calls);
+    }
+
+    private static function testLegacyDaysOnInvoiceOptionRowsDropped(): void
+    {
+        // TWO-24859: the merchant's default due-in-days cache moved from
+        // `days_on_invoice` to `merchant_due_in_days`. No value is carried
+        // across - the row is a 1h TTL cache of GET /v1/merchant, so the new
+        // key self-heals on the first request with an API key - but the old
+        // rows must not be left behind as orphans.
+        $gateway = new class () extends WC_Twoinc {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+        };
+        $drop = new ReflectionMethod(WC_Twoinc::class, 'drop_renamed_option_rows');
+        $drop->setAccessible(true);
+
+        $legacy_days = WC_Twoinc_Brand::prefixed_name('days_on_invoice');
+        $legacy_checked = WC_Twoinc_Brand::prefixed_name('days_on_invoice_checked_on');
+        $current_days = WC_Twoinc_Brand::prefixed_name('merchant_due_in_days');
+
+        $GLOBALS['__twoinc_test_options'][$legacy_days] = 21;
+        $GLOBALS['__twoinc_test_options'][$legacy_checked] = time();
+        $GLOBALS['__twoinc_test_options'][$current_days] = 30;
+
+        $drop->invoke($gateway);
+
+        TinyAssert::same(false, array_key_exists($legacy_days, $GLOBALS['__twoinc_test_options']));
+        TinyAssert::same(false, array_key_exists($legacy_checked, $GLOBALS['__twoinc_test_options']));
+        // The renamed row is untouched.
+        TinyAssert::same(30, $GLOBALS['__twoinc_test_options'][$current_days]);
+
+        // Nothing stored under the legacy names: self-limiting, no writes.
+        $drop->invoke($gateway);
+        TinyAssert::same(false, array_key_exists($legacy_days, $GLOBALS['__twoinc_test_options']));
+        TinyAssert::same(30, $GLOBALS['__twoinc_test_options'][$current_days]);
     }
 
     private static function testPaymentTermsValidationNonDestructiveOnUnresolvedOrNarrowedList(): void
