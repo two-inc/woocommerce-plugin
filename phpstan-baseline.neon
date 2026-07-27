@@ -79,12 +79,6 @@ parameters:
 			path: tests/unit/run.php
 
 		-
-			message: '#^Access to an undefined property WC_Twoinc\:\:\$fx_requests\.$#'
-			identifier: property.notFound
-			count: 11
-			path: tests/unit/run.php
-
-		-
 			message: '#^Access to an undefined property WC_Twoinc\:\:\$requests\.$#'
 			identifier: property.notFound
 			count: 6
