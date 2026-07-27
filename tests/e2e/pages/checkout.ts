@@ -86,6 +86,28 @@ export async function fillCompanySearch(page: Page, companyName = BUYER_COMPANY,
   }
 }
 
+/**
+ * Pick a billing country through the select2 the checkout actually renders
+ * (the underlying <select> is hidden, so it cannot be driven directly).
+ */
+export async function setBillingCountry(page: Page, countryName: string) {
+  const container = page.locator("#select2-billing_country-container");
+  await container.waitFor({ state: "visible" });
+  await container.click();
+
+  const search = page.locator(".select2-container--open .select2-search__field");
+  await search.waitFor({ state: "visible", timeout: DEFAULT_TIMEOUT });
+  await search.pressSequentially(countryName, { delay: 50 });
+
+  const option = page
+    .locator(".select2-container--open .select2-results__option:not(.select2-results__message)")
+    .first();
+  await option.waitFor({ state: "visible", timeout: DEFAULT_TIMEOUT });
+  await option.click();
+
+  await expect(container).toHaveText(countryName, { timeout: DEFAULT_TIMEOUT });
+}
+
 export async function fillBillingDetails(page: Page, firstName: string, lastName: string) {
   await page.locator("#billing_first_name").fill(firstName);
   await page.locator("#billing_last_name").fill(lastName);
