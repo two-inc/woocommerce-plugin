@@ -97,7 +97,15 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                         'data-multiple' => true,
                         'data-multi' => true
                     ],*/
-                    'class' => array('billing_company_selectwoo', 'hidden'),
+                    // form-row-wide is what carries WooCommerce's
+                    // `clear: both` (and full width) for a checkout row.
+                    // Without it this row does not clear the
+                    // form-row-first/form-row-last float pair that the first-
+                    // and last-name rows form, so its label's line boxes get
+                    // squeezed into the gutter between those two 47% floats —
+                    // the label renders wrapped between the two name inputs
+                    // (TWO-25160).
+                    'class' => array('billing_company_selectwoo', 'form-row-wide', 'hidden'),
                     'options' => [
                         '' => '&nbsp;'
                     ],
