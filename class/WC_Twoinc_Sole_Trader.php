@@ -179,6 +179,27 @@ if (!class_exists('WC_Twoinc_Sole_Trader')) {
         }
 
         /**
+         * Log why a sole-trader wc-ajax request was refused.
+         *
+         * The early bails in the two handlers below are indistinguishable to
+         * the buyer — the checkout renders one generic error whichever fires —
+         * which is how a live break stayed unnoticed for two weeks
+         * (TWO-25170). The buyer-facing copy stays generic on purpose; the log
+         * line does not, so a store's WooCommerce logs say which gate refused.
+         *
+         * @return void
+         */
+        private static function log_refusal(string $handler, string $reason)
+        {
+            if (function_exists('wc_get_logger')) {
+                wc_get_logger()->warning(
+                    sprintf('Sole trader %s refused: %s', $handler, $reason),
+                    ['source' => 'twoinc-payment-gateway']
+                );
+            }
+        }
+
+        /**
          * wc-ajax handler: whether the sole trader option applies for a
          * billing country. JS re-queries this when the billing country
          * changes; the registry answer is resolved server-side.
@@ -186,11 +207,13 @@ if (!class_exists('WC_Twoinc_Sole_Trader')) {
         public static function ajax_availability(): void
         {
             if (!check_ajax_referer('twoinc_checkout', 'nonce', false)) {
+                self::log_refusal('availability check', 'invalid or expired checkout nonce');
                 wp_send_json_error('Invalid nonce');
                 return;
             }
             $gateway = WC_Twoinc::get_instance();
             if (!$gateway) {
+                self::log_refusal('availability check', 'gateway instance unavailable');
                 wp_send_json_error('Gateway unavailable');
                 return;
             }
@@ -208,11 +231,13 @@ if (!class_exists('WC_Twoinc_Sole_Trader')) {
         public static function ajax_tokens(): void
         {
             if (!check_ajax_referer('twoinc_checkout', 'nonce', false)) {
+                self::log_refusal('token mint', 'invalid or expired checkout nonce');
                 wp_send_json_error('Invalid nonce');
                 return;
             }
             $gateway = WC_Twoinc::get_instance();
             if (!$gateway) {
+                self::log_refusal('token mint', 'gateway instance unavailable');
                 wp_send_json_error('Gateway unavailable');
                 return;
             }
@@ -230,11 +255,16 @@ if (!class_exists('WC_Twoinc_Sole_Trader')) {
             // registry already supports — no privilege gain.
             $country = isset($_REQUEST['country']) ? sanitize_text_field(wp_unslash($_REQUEST['country'])) : '';
             if (!self::is_available($gateway, (string) $country)) {
+                self::log_refusal(
+                    'token mint',
+                    sprintf('billing country "%s" is not sole-trader capable per the registry', (string) $country)
+                );
                 wp_send_json_error('Sole trader checkout is not available for this country');
                 return;
             }
             $tokens = self::mint_tokens($gateway);
             if ($tokens === null) {
+                self::log_refusal('token mint', 'the delegation endpoints did not return a usable token pair');
                 wp_send_json_error('Could not initialise the sole trader flow');
                 return;
             }
