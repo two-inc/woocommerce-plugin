@@ -139,6 +139,8 @@ final class BrandConfigSpec
             'testBuyerFeeShareCapRoundingToZeroWithholdsWholeSurcharge',
             'testCartFeeSkippedOnQuoteCurrencyMismatch',
             'testMinimumDescriptionShowsConvertedFloorWhenRateAvailable',
+            'testMethodTitleUsesBrandOverrideWhenDeclared',
+            'testMethodTitleFallsBackToProductNameWhenAbsent',
         ];
         foreach ($tests as $test) {
             self::reset();
@@ -3496,6 +3498,30 @@ final class BrandConfigSpec
         } finally {
             unset($GLOBALS['__twoinc_test_store_currency']);
         }
+    }
+
+    private static function testMethodTitleUsesBrandOverrideWhenDeclared(): void
+    {
+        // An overlay declaring method_title labels the admin
+        // Settings > Payments row without disturbing product_name.
+        add_filter('twoinc_brand_file', static function ($file) {
+            return __DIR__ . '/fixtures/methodtitlebrand.php';
+        });
+
+        TinyAssert::same('Admin Label Override', WC_Twoinc::get_brand_method_title());
+        TinyAssert::same('Methodtitlebrand', WC_Twoinc_Brand::get('product_name'));
+    }
+
+    private static function testMethodTitleFallsBackToProductNameWhenAbsent(): void
+    {
+        // Two declares no method_title, and testbrand (like any overlay
+        // predating the key) does not either — both fall back.
+        TinyAssert::same(null, WC_Twoinc_Brand::get('method_title'));
+        TinyAssert::same('Two', WC_Twoinc::get_brand_method_title());
+
+        WC_Twoinc_Brand::reset();
+        self::useTestbrand();
+        TinyAssert::same('Testbrand', WC_Twoinc::get_brand_method_title());
     }
 }
 
