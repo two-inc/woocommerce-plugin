@@ -197,6 +197,10 @@ if (!class_exists('WC_Twoinc')) {
             // an explicit Production selection is indistinguishable from the
             // never-configured default, so the sniffer still applies there.
             // Set checkout_env instead of extending the sniffer.
+            //
+            // WC_Twoinc_Helper::get_effective_environment_mode() encodes the
+            // same condition so that every other host the gateway emits lands
+            // in the environment this host picks; keep the two in step.
             if (
                 WC_Twoinc_Helper::get_environment_mode($this) === 'production'
                 && WC_Twoinc_Helper::is_twoinc_development()
