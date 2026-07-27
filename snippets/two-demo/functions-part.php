@@ -52,7 +52,7 @@ function replaceDueInDays() {
     if (jQuery('#twoinc-due-in-days').length == 0) {
         jQuery('label[for="payment_method_woocommerce-gateway-tillit"]').html(
             jQuery('label[for="payment_method_woocommerce-gateway-tillit"]').html()
-                .replace(twoinc.days_on_invoice, '<span id="twoinc-due-in-days"></span>')
+                .replace(twoinc.merchant_due_in_days, '<span id="twoinc-due-in-days"></span>')
         )
     }
     jQuery('#twoinc-due-in-days').text(jQuery('#billing_due_in_days').val())
@@ -101,7 +101,7 @@ function getNodesThatContain(text) {
 
 function replaceDueInDays() {
     let dueInDays = <?php echo $twoinc_due_in_days; ?>;
-    let defaultDueInDays = <?php echo $twoinc_obj->get_merchant_default_days_on_invoice(); ?>;
+    let defaultDueInDays = <?php echo $twoinc_obj->get_merchant_due_in_days(); ?>;
     let twoincMethodText = "<?php echo $twoinc_obj->title; ?>";
     getNodesThatContain(twoincMethodText).each(function (){
         jQuery(this).html(jQuery(this).html().replace(twoincMethodText, twoincMethodText.replace(defaultDueInDays, dueInDays)))

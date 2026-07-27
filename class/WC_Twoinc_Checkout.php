@@ -256,7 +256,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 'supported_buyer_countries' => $supported_buyer_countries,
                 'gateway_id' => WC_Twoinc_Brand::get('gateway_id'),
                 'merchant' => $merchant,
-                'days_on_invoice' => $this->wc_twoinc->get_merchant_default_days_on_invoice(),
+                'merchant_due_in_days' => $this->wc_twoinc->get_merchant_due_in_days(),
                 'shop_base_country' => strtolower(WC()->countries->get_base_country()),
                 'currency' => $currency,
                 'price_decimal_separator' => wc_get_price_decimal_separator(),
