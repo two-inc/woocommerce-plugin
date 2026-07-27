@@ -16,7 +16,13 @@ concurrency:
 jobs:
   e2e-tests:
     runs-on: ${{ vars.RUNNER_STANDARD }}
-    timeout-minutes: 15
+    # Must exceed Playwright's own worst case, or a fully-failing suite is
+    # killed before it can report: 3 tests x 2 attempts (retries: 1) x the
+    # 180s per-test timeout = 18m of testing, plus ~4m of setup. At 15m the
+    # job was cancelled mid-run, which discards the reporter output AND the
+    # traces, leaving no way to see why a test failed. A passing run still
+    # takes ~4m, so this ceiling only ever costs time on a broken suite.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v6
 
@@ -85,12 +91,18 @@ jobs:
           TWO_ADMIN_PASSWORD: ${{ steps.secrets.outputs.TWO_ADMIN_PASSWORD }}
 
       - name: Upload test results
-        if: failure()
+        # always(), not failure(): a job that exceeds timeout-minutes is
+        # CANCELLED, not failed, and a cancelled job skips every step whose
+        # condition doesn't explicitly reference always()/cancelled() — so
+        # failure() silently threw away the traces for exactly the runs that
+        # needed them most.
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: tests/e2e/test-results/
           retention-days: 7
+          if-no-files-found: ignore
 
       - name: Stop WordPress
         if: always()
