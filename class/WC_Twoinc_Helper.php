@@ -1048,11 +1048,79 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
+         * The environment the gateway actually talks to, i.e. the one the API
+         * host resolves to — which is not always the configured mode.
+         *
+         * On a dev-sniffed shop (see is_twoinc_development()) carrying the
+         * never-configured default mode, the API host comes from the free-text
+         * `test_checkout_host` option rather than from the brand template, so
+         * the configured mode ('production') is not the environment in use.
+         * Every host the gateway hands the browser has to follow the API host,
+         * or the shop mints tokens in one environment and sends the buyer to
+         * an app in another (TWO-25170: staging-minted delegation tokens
+         * rejected 401 by the production API behind the production hosted
+         * signup page). So read the environment back out of the test host.
+         *
+         * @param WC_Payment_Gateway $gateway
+         *
+         * @return string one of ENVIRONMENT_MODES
+         */
+        public static function get_effective_environment_mode($gateway)
+        {
+            $mode = self::get_environment_mode($gateway);
+            if ($mode !== 'production' || !self::is_twoinc_development()) {
+                return $mode;
+            }
+            return self::environment_mode_of_host((string) $gateway->get_option('test_checkout_host'));
+        }
+
+        /**
+         * Classify an API host into an environment mode: the brand's
+         * production API host is 'production', a host whose leading labels are
+         * `api.<mode>` is that mode (any domain — dev shops legitimately point
+         * the test host off the brand's domains).
+         *
+         * A dev-sniffed shop is by definition not a production shop, so a host
+         * this cannot classify (localhost, a bespoke tunnel) falls back to
+         * 'staging' — the option's own default, and the safe direction: a test
+         * environment can neither take real money nor accept a production
+         * token.
+         *
+         * @param string $host
+         *
+         * @return string one of ENVIRONMENT_MODES
+         */
+        private static function environment_mode_of_host($host)
+        {
+            $hostname = (string) parse_url($host, PHP_URL_HOST);
+            $production = (string) parse_url(
+                sprintf(WC_Twoinc_Brand::get('checkout_url_template'), 'api'),
+                PHP_URL_HOST
+            );
+            if ($hostname !== '' && $hostname === $production) {
+                return 'production';
+            }
+            $labels = explode('.', $hostname);
+            if (
+                count($labels) > 1
+                && $labels[0] === 'api'
+                && in_array($labels[1], self::ENVIRONMENT_MODES, true)
+                && $labels[1] !== 'production'
+            ) {
+                return $labels[1];
+            }
+            return 'staging';
+        }
+
+        /**
          * Build an environment host from the brand's URL template, mirroring
          * the Magento config repository: ('api', mode 'staging') on the Two
          * brand -> https://api.staging.two.inc; production drops the mode
          * suffix. The template itself comes from the brand registry, so a
          * brand overlay carries its own domains.
+         *
+         * Resolves off the *effective* mode, so every service host the gateway
+         * emits sits in the same environment as its API host.
          *
          * @param string             $service 'api' or 'checkout'
          * @param WC_Payment_Gateway $gateway
@@ -1061,7 +1129,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
          */
         public static function get_environment_host($service, $gateway)
         {
-            $mode = self::get_environment_mode($gateway);
+            $mode = self::get_effective_environment_mode($gateway);
             $prefix = $mode === 'production' ? $service : $service . '.' . $mode;
             return sprintf(WC_Twoinc_Brand::get('checkout_url_template'), $prefix);
         }
