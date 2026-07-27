@@ -144,6 +144,12 @@ final class BrandConfigSpec
             'testBuyerFeeShareCapRoundingToZeroWithholdsWholeSurcharge',
             'testCartFeeSkippedOnQuoteCurrencyMismatch',
             'testMinimumDescriptionShowsConvertedFloorWhenRateAvailable',
+            'testDeployedCommitSidecarWinsOverGitlink',
+            'testGarbageOrEmptySidecarFallsThroughToGitlink',
+            'testNoProvenanceSourcesYieldsBareVersion',
+            'testClientVersionNeverEmitsTrailingPlus',
+            'testClientVersionSuffixesShortShaWhenStamped',
+            'testClientVersionIsQueryEncodedAsPlus',
         ];
         foreach ($tests as $test) {
             self::reset();
@@ -3678,6 +3684,140 @@ final class BrandConfigSpec
         } finally {
             unset($GLOBALS['__twoinc_test_store_currency']);
         }
+    }
+
+    /**
+     * Scratch component dir containing a plugin main file, plus whichever
+     * of the two provenance sources the caller asked for. Returns the dir.
+     */
+    private static function makeComponentDir(array $files): string
+    {
+        $dir = sys_get_temp_dir() . '/twoinc-prov-' . bin2hex(random_bytes(6));
+        mkdir($dir, 0777, true);
+        file_put_contents($dir . '/main.php', "<?php\n");
+        foreach ($files as $name => $contents) {
+            file_put_contents($dir . '/' . $name, $contents);
+        }
+        return $dir;
+    }
+
+    private static function removeComponentDir(string $dir): void
+    {
+        foreach ((array) glob($dir . '/{,.}*', GLOB_BRACE) as $path) {
+            if (is_file($path)) {
+                unlink($path);
+            }
+        }
+        if (is_dir($dir)) {
+            rmdir($dir);
+        }
+    }
+
+    private static function provenanceOf(string $dir, string $version): string
+    {
+        $method = new ReflectionMethod(WC_Twoinc::class, 'describe_component_provenance');
+        $method->setAccessible(true);
+        return $method->invoke(null, $dir . '/main.php', $version);
+    }
+
+    private static function clientVersion(): string
+    {
+        $method = new ReflectionMethod(WC_Twoinc::class, 'client_version');
+        $method->setAccessible(true);
+        return $method->invoke(null);
+    }
+
+    private static function testDeployedCommitSidecarWinsOverGitlink(): void
+    {
+        // Released zips ship .two-deployed-commit; when both sources are
+        // present the sidecar is authoritative.
+        $gitlink = 'gitdir: /var/sync/worktrees/' . str_repeat('a', 40) . "\n";
+        $dir = self::makeComponentDir([
+            '.two-deployed-commit' => "deadbee\n",
+            '.git' => $gitlink,
+        ]);
+        try {
+            TinyAssert::true(
+                strpos(self::provenanceOf($dir, '2.23.9'), '2.23.9 (deadbee,') === 0,
+                self::provenanceOf($dir, '2.23.9')
+            );
+        } finally {
+            self::removeComponentDir($dir);
+        }
+    }
+
+    private static function testGarbageOrEmptySidecarFallsThroughToGitlink(): void
+    {
+        // An empty or non-hex sidecar must not win, and must not suppress
+        // the gitlink that git-synced shops still rely on.
+        $sha = str_repeat('b', 40);
+        $gitlink = 'gitdir: /var/sync/worktrees/' . $sha . "\n";
+        foreach (["\n", '   ', 'not-a-sha', 'abc', str_repeat('f', 41)] as $junk) {
+            $dir = self::makeComponentDir([
+                '.two-deployed-commit' => $junk,
+                '.git' => $gitlink,
+            ]);
+            try {
+                $described = self::provenanceOf($dir, '2.23.9');
+                TinyAssert::true(strpos($described, '2.23.9 (bbbbbbbbbbbb,') === 0, $described);
+            } finally {
+                self::removeComponentDir($dir);
+            }
+        }
+    }
+
+    private static function testNoProvenanceSourcesYieldsBareVersion(): void
+    {
+        $dir = self::makeComponentDir([]);
+        try {
+            TinyAssert::same('2.23.9', self::provenanceOf($dir, '2.23.9'));
+        } finally {
+            self::removeComponentDir($dir);
+        }
+    }
+
+    private static function testClientVersionNeverEmitsTrailingPlus(): void
+    {
+        // No sidecar and no gitlink SHA in the checkout: client_v is the
+        // bare version, never "2.23.9+".
+        $GLOBALS['__twoinc_test_plugin_version'] = '2.23.9';
+        try {
+            $value = self::clientVersion();
+            TinyAssert::same('2.23.9', $value);
+            TinyAssert::true(substr($value, -1) !== '+', $value);
+        } finally {
+            unset($GLOBALS['__twoinc_test_plugin_version']);
+        }
+    }
+
+    private static function testClientVersionSuffixesShortShaWhenStamped(): void
+    {
+        // With the release stamp present, client_v carries the 7-char SHA.
+        $stamp = WC_TWOINC_PLUGIN_PATH . '.two-deployed-commit';
+        $preexisting = is_file($stamp) ? file_get_contents($stamp) : null;
+        $GLOBALS['__twoinc_test_plugin_version'] = '2.23.9';
+        file_put_contents($stamp, "1a2b3c4\n");
+        try {
+            TinyAssert::same('2.23.9+1a2b3c4', self::clientVersion());
+        } finally {
+            unset($GLOBALS['__twoinc_test_plugin_version']);
+            if ($preexisting === null) {
+                unlink($stamp);
+            } else {
+                file_put_contents($stamp, $preexisting);
+            }
+        }
+    }
+
+    private static function testClientVersionIsQueryEncodedAsPlus(): void
+    {
+        // make_request builds its query with http_build_query, which
+        // percent-encodes '+' as %2B. A literal '+' would decode to a
+        // space server-side, so this encoding is load-bearing.
+        TinyAssert::same(
+            'client_v=2.23.9%2B1a2b3c4',
+            http_build_query(['client_v' => '2.23.9+1a2b3c4'])
+        );
     }
 }
 

@@ -36,3 +36,6 @@ dev/stubs/
 
 # Local worktrees (org convention: <repo>/.worktrees/<branch-slug>/)
 .worktrees/
+
+# Release provenance stamp, written by the deploy workflow
+.two-deployed-commit
