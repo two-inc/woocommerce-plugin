@@ -3830,7 +3830,7 @@ if (!class_exists('WC_Twoinc')) {
         public function make_request($endpoint, $payload = [], $method = 'POST', $params = array(), $api_key_override = null, $timeout = 30)
         {
             $params['client'] = 'wp';
-            $params['client_v'] = get_twoinc_plugin_version();
+            $params['client_v'] = self::client_version();
             # If api_key_override is defined, use that key instead of the saved key
             $api_key = $api_key_override ?: $this->get_option('api_key');
             $headers = [
@@ -4021,12 +4021,9 @@ if (!class_exists('WC_Twoinc')) {
         private static function describe_component_provenance($main_file, $version)
         {
             $detail = [];
-            $git_pointer = dirname($main_file) . '/.git';
-            if (is_file($git_pointer) && is_readable($git_pointer)) {
-                $pointer = (string) file_get_contents($git_pointer);
-                if (preg_match('#gitdir:\s*.*/([0-9a-f]{40})\s*$#', trim($pointer), $m)) {
-                    $detail[] = substr($m[1], 0, 12);
-                }
+            $commit = self::resolve_component_commit(dirname($main_file));
+            if ($commit !== null) {
+                $detail[] = substr($commit, 0, 12);
             }
             $mtime = is_readable($main_file) ? filemtime($main_file) : false;
             if ($detail && $mtime) {
@@ -4037,6 +4034,61 @@ if (!class_exists('WC_Twoinc')) {
                 );
             }
             return $detail ? sprintf('%s (%s)', $version, implode(', ', $detail)) : $version;
+        }
+
+        /**
+         * Deployed commit SHA for one component directory, or null when it
+         * cannot be established. Two sources, in precedence order:
+         *
+         *  1. `.two-deployed-commit` — a sidecar written by the release
+         *     workflow and shipped inside the zip, so wp.org / released
+         *     installs (which carry no git metadata at all) still know
+         *     which commit they were built from.
+         *  2. The `.git` gitlink FILE of a git-sync worktree copy, whose
+         *     gitdir path ends in the commit SHA.
+         *
+         * An absent, unreadable, empty or malformed sidecar falls through
+         * to the gitlink rather than winning. Never throws.
+         *
+         * @param string $dir component directory (no trailing slash needed)
+         *
+         * @return string|null lowercase hex SHA, 7-40 chars
+         */
+        private static function resolve_component_commit($dir)
+        {
+            $dir = rtrim((string) $dir, '/');
+
+            $stamp = $dir . '/.two-deployed-commit';
+            if (is_file($stamp) && is_readable($stamp)) {
+                $raw = @file_get_contents($stamp);
+                if (is_string($raw) && preg_match('/^[0-9a-f]{7,40}$/i', trim($raw))) {
+                    return strtolower(trim($raw));
+                }
+            }
+
+            $git_pointer = $dir . '/.git';
+            if (is_file($git_pointer) && is_readable($git_pointer)) {
+                $pointer = @file_get_contents($git_pointer);
+                if (is_string($pointer) && preg_match('#gitdir:\s*.*/([0-9a-f]{40})\s*$#', trim($pointer), $m)) {
+                    return strtolower($m[1]);
+                }
+            }
+
+            return null;
+        }
+
+        /**
+         * Value of the `client_v` API query param: the plugin version,
+         * suffixed with `+<7-char sha>` only when the deployed commit
+         * resolves. Never emits a bare trailing `+`.
+         *
+         * @return string
+         */
+        private static function client_version()
+        {
+            $version = get_twoinc_plugin_version();
+            $commit = self::resolve_component_commit(WC_TWOINC_PLUGIN_PATH);
+            return $commit === null ? $version : $version . '+' . substr($commit, 0, 7);
         }
 
         /**

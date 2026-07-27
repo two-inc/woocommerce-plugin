@@ -811,6 +811,16 @@ function as_unschedule_all_actions($hook, $args = [], $group = '')
     return true;
 }
 
+// The real one lives in tillit-payment-gateway.php, which the suite does
+// not load (it bootstraps WordPress hooks on include). Tests that care
+// override $GLOBALS['__twoinc_test_plugin_version'].
+function get_twoinc_plugin_version()
+{
+    return isset($GLOBALS['__twoinc_test_plugin_version'])
+        ? $GLOBALS['__twoinc_test_plugin_version']
+        : '2.23.9';
+}
+
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Brand.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Helper.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_FX.php';

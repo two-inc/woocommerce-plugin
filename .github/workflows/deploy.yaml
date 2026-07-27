@@ -29,6 +29,16 @@ jobs:
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y subversion rsync
       - run: echo ${{ github.ref_name }}
+      # Released zips carry no git metadata, so the admin provenance line
+      # and the API `client_v` param have nothing to report the deployed
+      # commit from. Stamp it into the workspace before the 10up action
+      # rsyncs it into the build (TWO-25196). The SHA goes through `env:`
+      # rather than `${{ }}` interpolation so it is never spliced into the
+      # shell source.
+      - name: Stamp deployed commit
+        env:
+          SHA: ${{ github.sha }}
+        run: echo "${SHA:0:7}" > "$GITHUB_WORKSPACE/.two-deployed-commit"
       - name: WordPress Plugin Deploy
         id: deploy
         uses: 10up/action-wordpress-plugin-deploy@stable
