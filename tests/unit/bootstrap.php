@@ -350,6 +350,19 @@ class WC_Payment_Gateway
     {
         return $this->plugin_id . $this->id . '_settings';
     }
+
+    // Mirrors WC_Settings_API::$settings and init_settings(): the stored
+    // settings blob, read from the single wp option WooCommerce keeps every
+    // gateway setting in. Unlike core it does NOT merge form-field defaults
+    // over the stored values — tests that care about defaults read
+    // form_fields directly.
+    public $settings = [];
+
+    public function init_settings()
+    {
+        $stored = get_option($this->get_option_key(), []);
+        $this->settings = is_array($stored) ? $stored : [];
+    }
 }
 
 class WC_HTTPS
@@ -640,6 +653,11 @@ function absint($maybeint)
     return abs((int) $maybeint);
 }
 
+function sanitize_text_field($str)
+{
+    return is_string($str) ? trim(strip_tags($str)) : '';
+}
+
 function sanitize_key($key)
 {
     return preg_replace('/[^a-z0-9_\-]/', '', strtolower((string) $key));
@@ -740,6 +758,28 @@ function wp_die($message = '', $title = '', $args = [])
 function wc_get_order($order_id)
 {
     return $GLOBALS['__twoinc_test_wc_orders'][$order_id] ?? false;
+}
+
+// ── wc-ajax handler stubs (sole-trader availability / token minting) ─
+// The real wp_send_json_* die; these record the outcome instead, which is
+// enough because every handler returns immediately after calling them.
+// $GLOBALS['__twoinc_test_ajax_nonce_ok'] drives the nonce branch and
+// $GLOBALS['__twoinc_test_ajax_json'] holds the last response.
+
+function check_ajax_referer($action = -1, $query_arg = false, $stop = true)
+{
+    $GLOBALS['__twoinc_test_ajax_referer_actions'][] = $action;
+    return $GLOBALS['__twoinc_test_ajax_nonce_ok'] ?? true;
+}
+
+function wp_send_json_success($data = null, $status_code = null, $flags = 0)
+{
+    $GLOBALS['__twoinc_test_ajax_json'] = ['success' => true, 'data' => $data];
+}
+
+function wp_send_json_error($data = null, $status_code = null, $flags = 0)
+{
+    $GLOBALS['__twoinc_test_ajax_json'] = ['success' => false, 'data' => $data];
 }
 
 // ── Action Scheduler stubs (FX recurring refresh, TWO-25104) ────────

@@ -56,6 +56,7 @@ if (!class_exists('WC_Twoinc')) {
             // Load the settings
             $this->init_form_fields();
             $this->init_settings();
+            $this->drop_removed_settings();
 
             $this->title = sprintf(
                 __($this->get_option('title'), 'twoinc-payment-gateway'),
@@ -602,6 +603,43 @@ if (!class_exists('WC_Twoinc')) {
             foreach ($names as $name) {
                 delete_option(WC_Twoinc_Brand::prefixed_name($name));
             }
+        }
+
+        /**
+         * Drop settings keys whose feature no longer exists, so an upgraded
+         * install doesn't carry a dead key inside the gateway settings blob
+         * (a WooCommerce gateway keeps every setting in the single
+         * `woocommerce_<gateway id>_settings` option, so there is no row to
+         * delete — the key has to be unset from the stored array).
+         *
+         * The plugin has no versioned migration runner, and this deliberately
+         * doesn't introduce one: the routine is self-limiting. It only writes
+         * when a removed key is actually present, and after that one write
+         * there is nothing left for it to do on any later request. To retire
+         * another key, add it to $removed.
+         *
+         * Currently: `enable_sole_trader` (TWO-25163) — sole trader checkout
+         * is gated on the registry's country answer alone, never a merchant
+         * toggle, so a stored value would be silently ignored.
+         *
+         * @return void
+         */
+        private function drop_removed_settings()
+        {
+            $removed = ['enable_sole_trader'];
+            $present = [];
+            foreach ($removed as $key) {
+                if (is_array($this->settings) && array_key_exists($key, $this->settings)) {
+                    $present[] = $key;
+                }
+            }
+            if (count($present) === 0) {
+                return;
+            }
+            foreach ($present as $key) {
+                unset($this->settings[$key]);
+            }
+            update_option($this->get_option_key(), $this->settings);
         }
 
         /**
@@ -3205,18 +3243,9 @@ if (!class_exists('WC_Twoinc')) {
                     'type'        => 'checkbox',
                     'default'     => 'yes'
                 ],
-                'section_sole_trader' => [
-                    'type'  => 'title',
-                    'title' => __('Sole trader checkout', 'twoinc-payment-gateway'),
-                ],
-                'enable_sole_trader' => [
-                    'title'       => __('Enable sole trader checkout', 'twoinc-payment-gateway'),
-                    'description' => __('Lets buyers check out as a sole trader by registering or logging in with Two. The option only appears for billing countries where sole traders are supported, determined automatically.', 'twoinc-payment-gateway'),
-                    'desc_tip'    => true,
-                    'label'       => ' ',
-                    'type'        => 'checkbox',
-                    'default'     => 'no'
-                ],
+                // No sole-trader section: sole trader checkout is gated on the
+                // registry's answer for the billing country alone, with no
+                // merchant setting to configure (TWO-25163).
                 'section_payment_terms' => [
                     'type'  => 'title',
                     'title' => __('Payment terms and offset pricing', 'twoinc-payment-gateway'),

@@ -87,8 +87,10 @@ final class BrandConfigSpec
             'testOrderPayloadCarriesSelectedAndAvailableTerms',
             'testPaymentTermsInvalidPostFallsBackToDefault',
             'testPaymentTermsDisabledMeansNoPayloadTerms',
-            'testSoleTraderAvailableWhenRegistryAndToggleAgree',
-            'testSoleTraderHiddenWhenToggleOff',
+            'testSoleTraderAvailableWhenRegistryListsIt',
+            'testSoleTraderTokensRefusedForNonCapableCountry',
+            'testSoleTraderTokensMintedForCapableCountry',
+            'testSoleTraderHasNoMerchantToggleSetting',
             'testSoleTraderHiddenWhenRegistryOmitsIt',
             'testSoleTraderRegistryErrorFallsBackToNoSoleTrader',
             'testSoleTraderRegistryRejectsMalformedCountry',
@@ -2167,9 +2169,9 @@ final class BrandConfigSpec
         ];
     }
 
-    private static function testSoleTraderAvailableWhenRegistryAndToggleAgree(): void
+    private static function testSoleTraderAvailableWhenRegistryListsIt(): void
     {
-        $gateway = self::soleTraderGateway(['enable_sole_trader' => 'yes'], [
+        $gateway = self::soleTraderGateway([], [
             '/registry/v1/supported-company-types/' => self::registryOk(['SOLE_TRADER']),
         ]);
         TinyAssert::true(WC_Twoinc_Sole_Trader::is_available($gateway, 'GB'));
@@ -2178,12 +2180,107 @@ final class BrandConfigSpec
         TinyAssert::true(WC_Twoinc_Sole_Trader::is_available($gateway, 'gb'));
     }
 
-    private static function testSoleTraderHiddenWhenToggleOff(): void
+    /**
+     * Run the token-minting wc-ajax handler with $gateway installed as the
+     * gateway singleton, and return the recorded JSON response.
+     */
+    private static function runTokensHandler($gateway): array
     {
-        $gateway = self::soleTraderGateway(['enable_sole_trader' => 'no'], [
-            '/registry/v1/supported-company-types/' => self::registryOk(['SOLE_TRADER']),
+        $prop = new ReflectionProperty(WC_Twoinc::class, 'instance');
+        $prop->setAccessible(true);
+        $prop->setValue(null, $gateway);
+        $GLOBALS['__twoinc_test_ajax_json'] = null;
+        try {
+            WC_Twoinc_Sole_Trader::ajax_tokens();
+        } finally {
+            $prop->setValue(null, null);
+        }
+        return $GLOBALS['__twoinc_test_ajax_json'];
+    }
+
+    /** Gateway that would happily mint if it were ever asked to. */
+    private static function tokenMintingGateway(array $types): WC_Payment_Gateway
+    {
+        return self::soleTraderGateway([], [
+            '/registry/v1/supported-company-types/' => self::registryOk($types),
+            '/registry/v1/delegation' => [
+                'response' => ['code' => 200],
+                'headers' => ['two-delegated-authority-token' => 'reg-token'],
+            ],
+            '/autofill/v1/delegation' => [
+                'response' => ['code' => 200],
+                'headers' => ['two-delegated-authority-token' => 'autofill-token'],
+            ],
         ]);
-        TinyAssert::same(false, WC_Twoinc_Sole_Trader::is_available($gateway, 'GB'));
+    }
+
+    private static function testSoleTraderTokensRefusedForNonCapableCountry(): void
+    {
+        // With the merchant toggle gone (TWO-25163) the country check is the
+        // ONLY authorisation gate on the token mint. A country the registry
+        // does not list must still be refused, and must not reach either
+        // delegation endpoint.
+        $gateway = self::tokenMintingGateway([]);
+        $_REQUEST = ['country' => 'NO'];
+        $response = self::runTokensHandler($gateway);
+        $_REQUEST = [];
+        TinyAssert::same(false, $response['success']);
+        TinyAssert::same(['/registry/v1/supported-company-types/NO'], $gateway->requests);
+
+        // A missing country is equally unauthorised (and never hits the API).
+        WC_Twoinc_Sole_Trader::reset_cache();
+        $gateway = self::tokenMintingGateway(['SOLE_TRADER']);
+        $_REQUEST = [];
+        $response = self::runTokensHandler($gateway);
+        TinyAssert::same(false, $response['success']);
+        TinyAssert::same([], $gateway->requests);
+    }
+
+    private static function testSoleTraderTokensMintedForCapableCountry(): void
+    {
+        $gateway = self::tokenMintingGateway(['SOLE_TRADER']);
+        $_REQUEST = ['country' => 'GB'];
+        $response = self::runTokensHandler($gateway);
+        $_REQUEST = [];
+        TinyAssert::true($response['success']);
+        TinyAssert::same('reg-token', $response['data']['delegation_token']);
+        TinyAssert::same('autofill-token', $response['data']['autofill_token']);
+        TinyAssert::same(
+            'https://checkout.two.inc/soletrader/signup',
+            $response['data']['signup_url']
+        );
+    }
+
+    private static function testSoleTraderHasNoMerchantToggleSetting(): void
+    {
+        $gateway = new class () extends WC_Twoinc {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+        };
+        $gateway->init_form_fields();
+        // Nothing merchant-facing left to configure (TWO-25163) — neither the
+        // toggle nor the section heading that existed only to carry it.
+        TinyAssert::same(false, array_key_exists('enable_sole_trader', $gateway->form_fields));
+        TinyAssert::same(false, array_key_exists('section_sole_trader', $gateway->form_fields));
+
+        // An upgraded install that stored the toggle has the dead key removed
+        // from the settings blob rather than left behind.
+        $key = $gateway->get_option_key();
+        $drop = new ReflectionMethod(WC_Twoinc::class, 'drop_removed_settings');
+        $drop->setAccessible(true);
+
+        $GLOBALS['__twoinc_test_options'][$key] = ['enable_sole_trader' => 'no', 'api_key' => 'keep-me'];
+        $gateway->init_settings();
+        $drop->invoke($gateway);
+        TinyAssert::same(['api_key' => 'keep-me'], $GLOBALS['__twoinc_test_options'][$key]);
+
+        // Nothing stored: the routine self-limits and leaves the blob alone.
+        $GLOBALS['__twoinc_test_options'][$key] = ['api_key' => 'keep-me'];
+        $gateway->init_settings();
+        $drop->invoke($gateway);
+        TinyAssert::same(['api_key' => 'keep-me'], $GLOBALS['__twoinc_test_options'][$key]);
     }
 
     private static function testSoleTraderHiddenWhenRegistryOmitsIt(): void
@@ -2191,7 +2288,7 @@ final class BrandConfigSpec
         // Countries without sole trader support return an empty list:
         // registered businesses need no registry enrollment, so the
         // endpoint deliberately omits them.
-        $gateway = self::soleTraderGateway(['enable_sole_trader' => 'yes'], [
+        $gateway = self::soleTraderGateway([], [
             '/registry/v1/supported-company-types/' => self::registryOk([]),
         ]);
         TinyAssert::same(false, WC_Twoinc_Sole_Trader::is_available($gateway, 'NO'));
@@ -2200,19 +2297,19 @@ final class BrandConfigSpec
     private static function testSoleTraderRegistryErrorFallsBackToNoSoleTrader(): void
     {
         // Network error
-        $gateway = self::soleTraderGateway(['enable_sole_trader' => 'yes'], []);
+        $gateway = self::soleTraderGateway([], []);
         TinyAssert::same([], WC_Twoinc_Sole_Trader::get_supported_company_types($gateway, 'GB'));
 
         // Non-200
         WC_Twoinc_Sole_Trader::reset_cache();
-        $gateway = self::soleTraderGateway(['enable_sole_trader' => 'yes'], [
+        $gateway = self::soleTraderGateway([], [
             '/registry/v1/supported-company-types/' => ['response' => ['code' => 404], 'body' => ''],
         ]);
         TinyAssert::same([], WC_Twoinc_Sole_Trader::get_supported_company_types($gateway, 'GB'));
 
         // Malformed body
         WC_Twoinc_Sole_Trader::reset_cache();
-        $gateway = self::soleTraderGateway(['enable_sole_trader' => 'yes'], [
+        $gateway = self::soleTraderGateway([], [
             '/registry/v1/supported-company-types/' => ['response' => ['code' => 200], 'body' => 'not json'],
         ]);
         TinyAssert::same([], WC_Twoinc_Sole_Trader::get_supported_company_types($gateway, 'GB'));
@@ -2220,7 +2317,7 @@ final class BrandConfigSpec
 
     private static function testSoleTraderRegistryRejectsMalformedCountry(): void
     {
-        $gateway = self::soleTraderGateway(['enable_sole_trader' => 'yes'], [
+        $gateway = self::soleTraderGateway([], [
             '/registry/v1/supported-company-types/' => self::registryOk(['SOLE_TRADER']),
         ]);
         // Never hits the API for junk country input
@@ -2232,7 +2329,7 @@ final class BrandConfigSpec
 
     private static function testSoleTraderRegistryResponseCachedPerRequest(): void
     {
-        $gateway = self::soleTraderGateway(['enable_sole_trader' => 'yes'], [
+        $gateway = self::soleTraderGateway([], [
             '/registry/v1/supported-company-types/' => self::registryOk(['SOLE_TRADER']),
         ]);
         WC_Twoinc_Sole_Trader::get_supported_company_types($gateway, 'GB');
@@ -2246,7 +2343,7 @@ final class BrandConfigSpec
 
     private static function testSoleTraderTokenMintReadsHeaderCaseInsensitively(): void
     {
-        $gateway = self::soleTraderGateway(['enable_sole_trader' => 'yes'], [
+        $gateway = self::soleTraderGateway([], [
             '/registry/v1/delegation' => [
                 'response' => ['code' => 200],
                 'headers' => ['Two-Delegated-Authority-Token' => 'reg-token'],
@@ -2265,7 +2362,7 @@ final class BrandConfigSpec
     private static function testSoleTraderTokenMintFailsClosed(): void
     {
         // Second mint failing voids the pair — never hand the browser half a flow
-        $gateway = self::soleTraderGateway(['enable_sole_trader' => 'yes'], [
+        $gateway = self::soleTraderGateway([], [
             '/registry/v1/delegation' => [
                 'response' => ['code' => 200],
                 'headers' => ['two-delegated-authority-token' => 'reg-token'],
@@ -2275,7 +2372,7 @@ final class BrandConfigSpec
         TinyAssert::same(null, WC_Twoinc_Sole_Trader::mint_tokens($gateway));
 
         // Missing header on a 200 also fails closed
-        $gateway = self::soleTraderGateway(['enable_sole_trader' => 'yes'], [
+        $gateway = self::soleTraderGateway([], [
             '/registry/v1/delegation' => ['response' => ['code' => 200], 'headers' => []],
             '/autofill/v1/delegation' => [
                 'response' => ['code' => 200],

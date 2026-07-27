@@ -1037,7 +1037,7 @@ let twoincSoleTrader = {
   lastPrefetchEmail: null,
 
   config: function () {
-    return (window.twoinc && window.twoinc.sole_trader) || { enabled: false };
+    return (window.twoinc && window.twoinc.sole_trader) || {};
   },
 
   currentCountry: function () {
@@ -1055,13 +1055,14 @@ let twoincSoleTrader = {
 
   /**
    * Re-evaluate the toggle after every checkout update or country change.
-   * Availability is decided server-side (registry endpoint + merchant
-   * toggle); responses are cached per country for the page's lifetime.
+   * Availability is decided server-side by the registry answer for the
+   * billing country (there is no merchant toggle — TWO-25163); responses
+   * are cached per country for the page's lifetime.
    */
   refresh: function () {
     const cfg = twoincSoleTrader.config();
     const $container = jQuery(".twoinc-sole-trader-toggle");
-    if (!cfg.enabled || !cfg.availability_url || $container.length === 0) {
+    if (!cfg.availability_url || $container.length === 0) {
       twoincSoleTrader.hide();
       return;
     }

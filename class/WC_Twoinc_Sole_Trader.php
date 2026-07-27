@@ -7,11 +7,13 @@
  * methods return (the Gutenberg block checkout port must not need a
  * business-logic rewrite, see TWO-24767).
  *
- * Two gates decide whether the Sole Trader option shows for a billing
- * country, and both must pass:
- *  - country-level legal truth from the registry endpoint
- *    GET /registry/v1/supported-company-types/<ISO> (TWO-24753), and
- *  - the merchant's `enable_sole_trader` admin toggle.
+ * One gate decides whether the Sole Trader option shows for a billing
+ * country: country-level legal truth from the registry endpoint
+ * GET /registry/v1/supported-company-types/<ISO> (TWO-24753). There is
+ * deliberately no merchant on/off toggle (TWO-25163) — whether a country's
+ * company types include sole trader is a fact about the country, not a
+ * merchant preference, and a second gate only adds a way for the feature to
+ * be invisible for its whole life because an installer defaulted it off.
  *
  * The flow mirrors the Magento reference (gateway_method.js): the buyer
  * switches to sole-trader mode, the plugin server-side mints two delegated
@@ -36,14 +38,6 @@ if (!class_exists('WC_Twoinc_Sole_Trader')) {
 
         /** @var array<string, string[]> request-scoped cache, keyed by country */
         private static $types_cache = [];
-
-        /**
-         * Whether the merchant has opted into offering sole trader checkout.
-         */
-        public static function is_enabled($gateway): bool
-        {
-            return $gateway->get_option('enable_sole_trader') === 'yes';
-        }
 
         /**
          * The buyer company types the Two registry supports for a billing
@@ -127,12 +121,13 @@ if (!class_exists('WC_Twoinc_Sole_Trader')) {
 
         /**
          * Whether the Sole Trader option should be offered for a billing
-         * country: merchant toggle on AND the country legally supports it.
+         * country: the registry's answer for that country, and nothing else.
+         * This is the ONLY gate, and it is also the authorisation gate the
+         * token-minting endpoint relies on (see ajax_tokens()).
          */
         public static function is_available($gateway, string $country): bool
         {
-            return self::is_enabled($gateway)
-                && in_array(self::SOLE_TRADER, self::get_supported_company_types($gateway, $country), true);
+            return in_array(self::SOLE_TRADER, self::get_supported_company_types($gateway, $country), true);
         }
 
         /**
@@ -184,18 +179,41 @@ if (!class_exists('WC_Twoinc_Sole_Trader')) {
         }
 
         /**
+         * Log why a sole-trader wc-ajax request was refused.
+         *
+         * The early bails in the two handlers below are indistinguishable to
+         * the buyer — the checkout renders one generic error whichever fires —
+         * which is how a live break stayed unnoticed for two weeks
+         * (TWO-25170). The buyer-facing copy stays generic on purpose; the log
+         * line does not, so a store's WooCommerce logs say which gate refused.
+         *
+         * @return void
+         */
+        private static function log_refusal(string $handler, string $reason)
+        {
+            if (function_exists('wc_get_logger')) {
+                wc_get_logger()->warning(
+                    sprintf('Sole trader %s refused: %s', $handler, $reason),
+                    ['source' => 'twoinc-payment-gateway']
+                );
+            }
+        }
+
+        /**
          * wc-ajax handler: whether the sole trader option applies for a
          * billing country. JS re-queries this when the billing country
-         * changes; the answer combines both gates server-side.
+         * changes; the registry answer is resolved server-side.
          */
         public static function ajax_availability(): void
         {
             if (!check_ajax_referer('twoinc_checkout', 'nonce', false)) {
+                self::log_refusal('availability check', 'invalid or expired checkout nonce');
                 wp_send_json_error('Invalid nonce');
                 return;
             }
             $gateway = WC_Twoinc::get_instance();
             if (!$gateway) {
+                self::log_refusal('availability check', 'gateway instance unavailable');
                 wp_send_json_error('Gateway unavailable');
                 return;
             }
@@ -213,31 +231,40 @@ if (!class_exists('WC_Twoinc_Sole_Trader')) {
         public static function ajax_tokens(): void
         {
             if (!check_ajax_referer('twoinc_checkout', 'nonce', false)) {
+                self::log_refusal('token mint', 'invalid or expired checkout nonce');
                 wp_send_json_error('Invalid nonce');
                 return;
             }
             $gateway = WC_Twoinc::get_instance();
-            if (!$gateway || !self::is_enabled($gateway)) {
-                wp_send_json_error('Sole trader checkout is not enabled');
+            if (!$gateway) {
+                self::log_refusal('token mint', 'gateway instance unavailable');
+                wp_send_json_error('Gateway unavailable');
                 return;
             }
-            // Defence-in-depth: only mint delegated-authority tokens when the
-            // buyer's billing country actually supports sole trader. Without
-            // this the endpoint would mint write-scoped tokens for any request
-            // gated on the merchant toggle alone (a minting oracle). Gate on
+            // The authorisation gate: only mint delegated-authority tokens
+            // when the buyer's billing country actually supports sole trader.
+            // With the merchant toggle removed (TWO-25163) this country check
+            // is the ONLY thing standing between an unauthenticated request
+            // and a write-scoped token pair — it must never be relaxed, or
+            // the endpoint becomes a minting oracle for any country. Gate on
             // the country the browser posts (the same value the availability
             // check used) rather than WC()->customer, which lags the DOM
             // within the checkout-update debounce and would wrongly block a
-            // legitimate buyer. is_available() still re-checks the registry
+            // legitimate buyer. is_available() re-checks the registry
             // server-side, so spoofing only permits minting for a country the
-            // merchant already supports — no privilege gain.
+            // registry already supports — no privilege gain.
             $country = isset($_REQUEST['country']) ? sanitize_text_field(wp_unslash($_REQUEST['country'])) : '';
             if (!self::is_available($gateway, (string) $country)) {
+                self::log_refusal(
+                    'token mint',
+                    sprintf('billing country "%s" is not sole-trader capable per the registry', (string) $country)
+                );
                 wp_send_json_error('Sole trader checkout is not available for this country');
                 return;
             }
             $tokens = self::mint_tokens($gateway);
             if ($tokens === null) {
+                self::log_refusal('token mint', 'the delegation endpoints did not return a usable token pair');
                 wp_send_json_error('Could not initialise the sole trader flow');
                 return;
             }
