@@ -283,7 +283,6 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 // availability and token minting come from the wc-ajax
                 // endpoints in WC_Twoinc_Sole_Trader.
                 'sole_trader' => [
-                    'enabled' => WC_Twoinc_Sole_Trader::is_enabled($this->wc_twoinc),
                     'availability_url' => class_exists('WC_AJAX') ? WC_AJAX::get_endpoint('two_sole_trader_availability') : '',
                     'tokens_url' => class_exists('WC_AJAX') ? WC_AJAX::get_endpoint('two_sole_trader_tokens') : '',
                     'nonce' => wp_create_nonce('twoinc_checkout'),
