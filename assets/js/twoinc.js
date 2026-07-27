@@ -1364,8 +1364,15 @@ let twoincSoleTrader = {
     })
       .then(function (response) {
         if (response.ok) return response.json();
-        if (response.status === 404) return null;
-        throw new Error("autofill/v1/buyer/current failed");
+        // Every non-2xx path must still drain the body. Abandoning an unread
+        // response leaves the request in flight as far as the browser is
+        // concerned, so the in-flight request count never returns to zero and
+        // anything waiting on network-idle (tooling, analytics, some themes)
+        // hangs.
+        return response.text().then(function () {
+          if (response.status === 404) return null;
+          throw new Error("autofill/v1/buyer/current failed");
+        });
       })
       .then(function (json) {
         cb(json || null);
