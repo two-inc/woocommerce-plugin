@@ -972,8 +972,8 @@ final class BrandConfigSpec
             // TTL expiry only ever happens across requests, so an expiry is
             // also a request boundary for the per-request record memo.
             WC_Twoinc::reset_merchant_record_memo();
-        WC_Twoinc_FX::reset_request_cache();
-        $GLOBALS['__twoinc_test_transients'] = [];
+            WC_Twoinc_FX::reset_request_cache();
+            $GLOBALS['__twoinc_test_transients'] = [];
         };
 
         // Default (cache-only) read NEVER fetches, even with a cold cache —
