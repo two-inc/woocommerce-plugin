@@ -33,3 +33,6 @@ tests/e2e/test-results/
 tests/e2e/playwright-report/
 .review/
 dev/stubs/
+
+# Local worktrees (org convention: <repo>/.worktrees/<branch-slug>/)
+.worktrees/
