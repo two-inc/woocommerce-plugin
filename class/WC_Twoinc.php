@@ -48,7 +48,7 @@ if (!class_exists('WC_Twoinc')) {
             $this->id = WC_Twoinc_Brand::get('gateway_id');
             $this->has_fields = false;
             $this->order_button_text = __('Place order', 'twoinc-payment-gateway');
-            $this->method_title = self::get_brand_method_title();
+            $this->method_title = WC_Twoinc_Brand::get('product_name');
             $this->method_description = __('Making it easy for businesses to buy online.', 'twoinc-payment-gateway');
             $this->icon = WC_HTTPS::force_https_url(WC_Twoinc_Brand::get('logo_url'));
             $this->supports = ['products', 'refunds'];
@@ -712,23 +712,6 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * Admin-facing gateway name shown in WooCommerce's
-         * Settings > Payments list.
-         *
-         * A brand overlay may set 'method_title' to label the gateway
-         * there without touching product_name, which is load-bearing
-         * elsewhere. An absent or empty key falls back to product_name,
-         * so an overlay that never declares it behaves as before.
-         *
-         * @return string
-         */
-        public static function get_brand_method_title()
-        {
-            $method_title = WC_Twoinc_Brand::get('method_title');
-            return $method_title ? strval($method_title) : strval(WC_Twoinc_Brand::get('product_name'));
-        }
-
-        /**
          * Buyer-facing notice shown once order intent is approved, pending
          * final checks. A brand overlay may set 'intent_approved_notice'
          * to '' to suppress it entirely.
@@ -768,7 +751,6 @@ if (!class_exists('WC_Twoinc')) {
 
             return sprintf(
                 '<div>
-                    <div class="twoinc-pay-box twoinc-explainer">%s</div>
                     <div class="twoinc-sole-trader-toggle hidden" role="radiogroup"></div>
                     %s
                     <div class="twoinc-term-chips hidden" role="radiogroup"></div>
@@ -777,7 +759,6 @@ if (!class_exists('WC_Twoinc')) {
                     <div class="twoinc-pay-box twoinc-err-payment-default hidden">%s</div>
                     <div class="twoinc-pay-box twoinc-err-phone-number hidden">%s</div>
                 </div>',
-                sprintf(__('%s lets your business pay later for the goods you purchase online.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')),
                 $term_input,
                 $this->get_intent_approved_notice(),
                 sprintf(__('Invoice purchase with %s is not available for this order.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')),
