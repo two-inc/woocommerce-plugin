@@ -795,7 +795,12 @@ function as_has_scheduled_action($hook, $args = null, $group = '')
 
 function as_schedule_recurring_action($timestamp, $interval, $hook, $args = [], $group = '', $unique = false)
 {
-    $GLOBALS['__twoinc_test_as_schedule_calls'][] = ['hook' => $hook, 'unique' => $unique];
+    $GLOBALS['__twoinc_test_as_schedule_calls'][] = [
+        'hook' => $hook,
+        'unique' => $unique,
+        'timestamp' => $timestamp,
+        'interval' => $interval,
+    ];
     $GLOBALS['__twoinc_test_as_scheduled'][$hook] = true;
     return 1;
 }

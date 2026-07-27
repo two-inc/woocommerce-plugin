@@ -66,6 +66,20 @@ if (!class_exists('WC_Twoinc_FX')) {
         public const REFRESH_INTERVAL = 6 * 3600;
 
         /**
+         * Delay before the FIRST run of the recurring refresh (seconds).
+         *
+         * Scheduling the first run one full REFRESH_INTERVAL out leaves a
+         * cold install (or a reactivation, which clears the job) with an
+         * empty cache for six hours, so the first cross-currency checkout
+         * in that window pays a synchronous fetch on the hot path — or
+         * fails its gate closed if that fetch fails. A short delay instead
+         * of an immediate run keeps the warm-up off the request that
+         * happens to trigger `init` while still populating the cache long
+         * before any realistic first checkout (TWO-25183).
+         */
+        public const INITIAL_REFRESH_DELAY = 60;
+
+        /**
          * Extra slack added to the freshness transient beyond
          * REFRESH_INTERVAL. Action Scheduler is best-effort (it runs on
          * traffic/WP-cron, not a guaranteed clock), so the transient must
@@ -149,8 +163,12 @@ if (!class_exists('WC_Twoinc_FX')) {
                 // is not atomic with the schedule call. Without $unique
                 // both would schedule, and a duplicate recurring series
                 // self-perpetuates forever.
+                //
+                // First run is INITIAL_REFRESH_DELAY out, not a full
+                // interval: see that constant — a cold cache must not wait
+                // six hours for its first table.
                 as_schedule_recurring_action(
-                    time() + self::REFRESH_INTERVAL,
+                    time() + self::INITIAL_REFRESH_DELAY,
                     self::REFRESH_INTERVAL,
                     self::refresh_hook(),
                     [],
