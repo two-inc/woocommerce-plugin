@@ -131,6 +131,8 @@ final class BrandConfigSpec
             'testFxFreshTableMissingCurrencyDoesNotRefetch',
             'testFxCorruptedStoredTableIsRejectedNotFatal',
             'testFxDuplicateScheduleGuardedByUniqueFlag',
+            'testFxFirstScheduledRunIsNearTermNotOneIntervalOut',
+            'testFxColdCacheFetchesOnceAndFailureThrottlesRetries',
             'testFxGateFailsClosedWhenNoRateEverFetched',
             'testFxGateConvertsBasketAcrossCurrencies',
             'testFxGateUsesLastKnownGoodOnApiFailure',
@@ -3372,6 +3374,51 @@ final class BrandConfigSpec
         // Already scheduled: a second call is a no-op.
         WC_Twoinc_FX::maybe_schedule_refresh();
         TinyAssert::same(1, count($GLOBALS['__twoinc_test_as_schedule_calls']));
+    }
+
+    private static function testFxFirstScheduledRunIsNearTermNotOneIntervalOut(): void
+    {
+        // Cold install: the first run of the recurring series must be
+        // near-term so the cache is warm before any realistic first
+        // checkout. Scheduling it a full REFRESH_INTERVAL out (the
+        // pre-TWO-25183 behaviour) left six hours in which the first
+        // cross-currency checkout paid a synchronous fetch, or failed its
+        // gate closed when that fetch failed.
+        $before = time();
+        WC_Twoinc_FX::maybe_schedule_refresh();
+        $call = $GLOBALS['__twoinc_test_as_schedule_calls'][0];
+
+        TinyAssert::true($call['timestamp'] <= $before + WC_Twoinc_FX::INITIAL_REFRESH_DELAY);
+        TinyAssert::true($call['timestamp'] < $before + WC_Twoinc_FX::REFRESH_INTERVAL);
+        // The cadence itself is unchanged — only the first run moved.
+        TinyAssert::same(WC_Twoinc_FX::REFRESH_INTERVAL, $call['interval']);
+        // Anti-stampede guarantee must survive the change.
+        TinyAssert::same(true, $call['unique']);
+    }
+
+    private static function testFxColdCacheFetchesOnceAndFailureThrottlesRetries(): void
+    {
+        // Nothing ever stored (cold install, scheduled warm-up not run
+        // yet): a conversion fetches inline rather than concluding "no
+        // rates".
+        TinyAssert::same(false, get_option(WC_Twoinc_FX::option_key()));
+        $gateway = self::fxGateway(null, [self::fxOk(self::FX_TABLE)]);
+        self::assertClose(0.085, WC_Twoinc_FX::get_rate($gateway, 'NOK', 'EUR'));
+        TinyAssert::same(1, $gateway->fx_requests);
+
+        // Cold cache and a dead API: one attempt, then the retry throttle
+        // (FAILURE_RETRY_WINDOW) holds off further attempts across request
+        // cycles — a flapping API must not be hammered once per conversion.
+        delete_option(WC_Twoinc_FX::option_key());
+        delete_transient(WC_Twoinc_FX::fresh_transient_key());
+        delete_transient(WC_Twoinc_FX::retry_transient_key());
+        WC_Twoinc_FX::reset_request_cache();
+        $failing = self::fxGateway(null, [new WP_Error(), new WP_Error(), new WP_Error()]);
+        TinyAssert::same(null, WC_Twoinc_FX::get_rate($failing, 'NOK', 'EUR'));
+        TinyAssert::same(1, $failing->fx_requests);
+        WC_Twoinc_FX::reset_request_cache();
+        TinyAssert::same(null, WC_Twoinc_FX::get_rate($failing, 'NOK', 'EUR'));
+        TinyAssert::same(1, $failing->fx_requests);
     }
 
     private static function testFxGateFailsClosedWhenNoRateEverFetched(): void
