@@ -751,7 +751,6 @@ if (!class_exists('WC_Twoinc')) {
 
             return sprintf(
                 '<div>
-                    <div class="twoinc-pay-box twoinc-explainer">%s</div>
                     <div class="twoinc-sole-trader-toggle hidden" role="radiogroup"></div>
                     %s
                     <div class="twoinc-term-chips hidden" role="radiogroup"></div>
@@ -760,7 +759,6 @@ if (!class_exists('WC_Twoinc')) {
                     <div class="twoinc-pay-box twoinc-err-payment-default hidden">%s</div>
                     <div class="twoinc-pay-box twoinc-err-phone-number hidden">%s</div>
                 </div>',
-                sprintf(__('%s lets your business pay later for the goods you purchase online.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')),
                 $term_input,
                 $this->get_intent_approved_notice(),
                 sprintf(__('Invoice purchase with %s is not available for this order.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')),

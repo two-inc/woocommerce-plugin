@@ -87,11 +87,6 @@ msgstr ""
 msgid "%s is a required field."
 msgstr ""
 
-#: class/WC_Twoinc.php:251
-#, php-format
-msgid "%s lets your business pay later for the goods you purchase online."
-msgstr ""
-
 #: class/WC_Twoinc.php:1091
 #, php-format
 msgid "%s pre-filled fields"

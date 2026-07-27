@@ -432,9 +432,7 @@ let twoincDomHelper = {
    */
   togglePaySubtitleDesc: function (action, errSelector) {
     jQuery(".twoinc-pay-box").addClass("hidden");
-    jQuery(".twoinc-pay-box.twoinc-explainer").removeClass("hidden");
     if (["checking-intent", "intent-approved", "errored"].includes(action)) {
-      jQuery(".twoinc-pay-box.twoinc-explainer").addClass("hidden");
       if (action === "checking-intent") {
         jQuery(".twoinc-pay-box.twoinc-loader").removeClass("hidden");
       } else if (action === "intent-approved") {
