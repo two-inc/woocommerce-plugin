@@ -98,6 +98,7 @@ final class BrandConfigSpec
             'testSoleTraderSignupUrlFollowsEnvAndFilter',
             'testEnvironmentModeNormalisesStoredCheckoutEnv',
             'testEnvironmentHostFollowsModeAndBrandTemplate',
+            'testLocaleFollowsRequestLocaleWithEnglishFallback',
             'testCheckoutHostPrefersExplicitModeOverDevSniffing',
             'testCheckoutEnvOptionsPreserveStoredModeWithoutSettingsApi',
             'testInvoiceDownloadStreamsPdf',
@@ -2314,6 +2315,24 @@ final class BrandConfigSpec
         foreach ($cases as [$stored, $expected]) {
             $gateway = self::soleTraderGateway(['checkout_env' => $stored], []);
             TinyAssert::same($expected, WC_Twoinc_Helper::get_environment_mode($gateway), $stored ?: '(empty)');
+        }
+    }
+
+    private static function testLocaleFollowsRequestLocaleWithEnglishFallback(): void
+    {
+        // The locale travels as the Accept-Language header and the invoice
+        // PDF `lang` param, so it must describe the language of the request
+        // being served. determine_locale() is the source (the stub is the
+        // only definition in the harness — reverting to get_user_locale()
+        // would fatal here), and an empty result falls back to en_US rather
+        // than sending a blank header.
+        $GLOBALS['__twoinc_test_locale'] = 'nb_NO';
+        try {
+            TinyAssert::same('nb_NO', WC_Twoinc_Helper::get_locale());
+            $GLOBALS['__twoinc_test_locale'] = '';
+            TinyAssert::same('en_US', WC_Twoinc_Helper::get_locale());
+        } finally {
+            unset($GLOBALS['__twoinc_test_locale']);
         }
     }
 

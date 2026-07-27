@@ -1067,15 +1067,25 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Get the user locale in full form, e.g. en_US — sent as the
-         * invoice PDF `lang` parameter and the Accept-Language header,
-         * both of which accept the full form.
+         * Get the locale of the current request in full form, e.g. en_US —
+         * sent as the invoice PDF `lang` parameter and the Accept-Language
+         * header, both of which accept the full form (underscore, not
+         * hyphen: the API matches `lang` literally against its allow-list).
+         *
+         * determine_locale(), not get_user_locale(): on the storefront the
+         * page — including this plugin's own translated strings — is rendered
+         * in the site/switched locale, so that is the language the API should
+         * answer in too. get_user_locale() instead returns the WP profile
+         * language of a logged-in buyer, which can differ from the checkout
+         * page around it. In wp-admin (and admin-ajax, i.e. the invoice
+         * download) determine_locale() resolves to the user locale anyway,
+         * so that path is unchanged.
          *
          * @return string
          */
         public static function get_locale()
         {
-            $locale = get_user_locale();
+            $locale = determine_locale();
             if ($locale && strlen($locale) > 0) {
                 return $locale;
             }
