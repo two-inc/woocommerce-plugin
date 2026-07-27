@@ -971,8 +971,8 @@ final class BrandConfigSpec
             // TTL expiry only ever happens across requests, so an expiry is
             // also a request boundary for the per-request record memo.
             WC_Twoinc::reset_merchant_record_memo();
-        WC_Twoinc_FX::reset_request_cache();
-        $GLOBALS['__twoinc_test_transients'] = [];
+            WC_Twoinc_FX::reset_request_cache();
+            $GLOBALS['__twoinc_test_transients'] = [];
         };
 
         // Default (cache-only) read NEVER fetches, even with a cold cache —
@@ -2927,8 +2927,12 @@ final class BrandConfigSpec
      * (last entry sticky), and a request counter for over-fetch
      * assertions. Any other endpoint errors — the FX layer must never
      * stray off its own endpoint.
+     *
+     * No `: WC_Twoinc` return type — that widens the anonymous class away
+     * and static analysis then cannot see $fx_requests on the returned
+     * object. Returning it untyped lets the exact anon class be inferred.
      */
-    private static function fxGateway(?array $platform_minimum, array $fx_responses, array $options = []): WC_Twoinc
+    private static function fxGateway(?array $platform_minimum, array $fx_responses, array $options = [])
     {
         return new class ($platform_minimum, $fx_responses, $options) extends WC_Twoinc {
             private $test_platform_minimum;
