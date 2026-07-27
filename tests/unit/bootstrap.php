@@ -103,9 +103,9 @@ function wc_get_price_decimals()
     return 2;
 }
 
-function get_user_locale()
+function determine_locale()
 {
-    return 'en_US';
+    return $GLOBALS['__twoinc_test_locale'] ?? 'en_US';
 }
 
 function is_admin()

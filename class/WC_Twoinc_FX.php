@@ -353,7 +353,8 @@ if (!class_exists('WC_Twoinc_FX')) {
             }
             $from_value = self::base_value($table, $from);
             $to_value = self::base_value($table, $to);
-            if (($from_value === null || $to_value === null)
+            if (
+                ($from_value === null || $to_value === null)
                 && $gateway
                 && !self::$fetched_this_request
                 && !self::is_fresh($table)
