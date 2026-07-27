@@ -19,15 +19,6 @@ return [
     'provider' => 'Two',
     'provider_full_name' => 'Two',
     'product_name' => 'Two',
-    // Admin-facing gateway name in WooCommerce's Settings > Payments
-    // list (WC_Payment_Gateway::$method_title). Separate from
-    // product_name because an overlay may want a different admin label
-    // there without moving the load-bearing product_name used in the
-    // plugin name, API-key labels, error notices and about copy. null
-    // or '' falls back to product_name, so an overlay that never declares
-    // this key behaves exactly as before.
-    // WC_Twoinc::get_brand_method_title is the only reader.
-    'method_title' => null,
     'sign_up_url' => 'https://portal.two.inc/auth/merchant/signup',
     // sprintf template building environment hosts, mirroring the Magento
     // brand descriptor's checkout_url_template: %s receives 'api' /
