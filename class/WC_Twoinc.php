@@ -3400,7 +3400,7 @@ if (!class_exists('WC_Twoinc')) {
                     'desc_tip'    => true,
                     'label'       => ' ',
                     'type'        => 'checkbox',
-                    'default'     => 'no'
+                    'default'     => 'yes'
                 ],
                 'show_abt_link' => [
                     'title'       => sprintf(__('Show "What is %s" link in checkout', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')),
