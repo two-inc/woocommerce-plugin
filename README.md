@@ -134,12 +134,12 @@ export MERCHANT_API_KEY=$(python3 -c "import json; print(json.load(open('docker/
 
 ### Tests
 
-| Test                   | What it does                                                                                       |
-| ---------------------- | -------------------------------------------------------------------------------------------------- |
-| `order-flow.spec.ts`   | Place order → verify CONFIRMED → fulfil via WP admin → verify FULFILLED → refund → verify REFUNDED |
-| `cancel-order.spec.ts` | Place order → cancel via WP admin → verify CANCELLED                                               |
-| `max-limit.spec.ts`    | Add "Expensive Product" → expect rejection on checkout                                             |
-| `sole-trader-availability.spec.ts` | Sole-trader chooser appears only where the registry supports it (GB yes, NO no)         |
+| Test                               | What it does                                                                                       |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `order-flow.spec.ts`               | Place order → verify CONFIRMED → fulfil via WP admin → verify FULFILLED → refund → verify REFUNDED |
+| `cancel-order.spec.ts`             | Place order → cancel via WP admin → verify CANCELLED                                               |
+| `max-limit.spec.ts`                | Add "Expensive Product" → expect rejection on checkout                                             |
+| `sole-trader-availability.spec.ts` | Sole-trader chooser appears only where the registry supports it (GB yes, NO no)                    |
 
 ### Clean restart
 
