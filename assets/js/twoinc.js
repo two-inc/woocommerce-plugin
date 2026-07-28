@@ -973,8 +973,11 @@ let twoincTermChips = {
         // Fee quote in flight: show animated loading dots instead of a
         // blank chip. Never render the configured rate — only the real
         // quoted amount once it arrives.
+        // twoinc-dots carries the shared dot-pulse styling (also used by
+        // the order-intent loader); the BEM class stays as the chip-scoped
+        // hook. Appearance is unchanged.
         const $loading = jQuery("<span>", {
-          class: "twoinc-term-chip__loading",
+          class: "twoinc-term-chip__loading twoinc-dots",
           "aria-hidden": "true"
         });
         for (let i = 0; i < 3; i++) {

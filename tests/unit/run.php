@@ -156,6 +156,7 @@ final class BrandConfigSpec
             'testIntentApprovedNoticeSuppressedBrandEmitsNoBlock',
             'testIntentApprovedNoticeDefaultBrandCarriesBothVariants',
             'testIntentApprovedNoticeBrandTemplateUsedVerbatim',
+            'testIntentLoaderRendersTheOneSharedDotPulse',
         ];
         foreach ($tests as $test) {
             self::reset();
@@ -3989,6 +3990,43 @@ final class BrandConfigSpec
         TinyAssert::true(
             strpos($html, 'Your invoice with Customnoticebrand is likely to be accepted, subject to additional checks.') !== false,
             'the no-company fallback stays the platform default copy'
+        );
+    }
+
+    /**
+     * The order-intent loading state renders the shared three-dot pulse,
+     * decorative dots plus an announced accessible name — not the old
+     * rotating image, and not a second copy of the dot animation. The CSS
+     * assertions are the point of the refactor: one .twoinc-dots rule and
+     * one keyframes block serve both the term chips and this loader.
+     */
+    private static function testIntentLoaderRendersTheOneSharedDotPulse(): void
+    {
+        $html = self::gateway()->build_payment_description();
+        TinyAssert::true(
+            strpos($html, '<div class="twoinc-pay-box twoinc-loader hidden" role="status">') !== false,
+            'the loader keeps its pay-box state class and announces itself'
+        );
+        TinyAssert::true(
+            strpos($html, '<span class="twoinc-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span>')
+                !== false,
+            'the loader must render the shared dot markup, dots hidden from assistive technology'
+        );
+
+        $css = (string) file_get_contents(dirname(__DIR__, 2) . '/assets/css/twoinc.css');
+        TinyAssert::true(
+            strpos($css, '.twoinc-dots {') !== false,
+            'the shared dot rule must exist'
+        );
+        TinyAssert::same(
+            1,
+            preg_match_all('/@keyframes\s+twoinc-dot-pulse/', $css),
+            'exactly one dot animation may be declared'
+        );
+        TinyAssert::same(
+            0,
+            preg_match_all('/@keyframes\s+spin|loader\.svg/', $css),
+            'the retired rotating spinner must be gone from the stylesheet'
         );
     }
 }

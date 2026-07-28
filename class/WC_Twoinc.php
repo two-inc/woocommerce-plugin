@@ -712,6 +712,31 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
+         * The order-intent check's loading state: the same three-dot pulse
+         * the term chips use for their fee quote (.twoinc-dots), which is
+         * the only Two-owned loading idiom across the checkout surfaces.
+         * It replaces a rotating SVG spinner — no image, no dependency on a
+         * theme's spinner, and nothing borrowed from another platform's
+         * core (notably not a full-screen blocking mask).
+         *
+         * The dots are decorative, so aria-hidden; the accessible name is
+         * the visually hidden sentence, and role="status" lets assistive
+         * technology announce the wait when the box is unhidden. The old
+         * spinner was a CSS ::before with content "" and no role, so it
+         * announced nothing at all.
+         */
+        private function get_intent_loader_html(): string
+        {
+            return sprintf(
+                '<div class="twoinc-pay-box twoinc-loader hidden" role="status">'
+                . '<span class="twoinc-sr-only">%s</span>'
+                . '<span class="twoinc-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span>'
+                . '</div>',
+                esc_html(__('Checking your order, one moment.', 'twoinc-payment-gateway'))
+            );
+        }
+
+        /**
          * Placeholder the buyer's company name is substituted for, in the
          * browser, inside the intent-approved notice's company variant.
          * Must match the token assets/js/twoinc.js replaces.
@@ -809,12 +834,13 @@ if (!class_exists('WC_Twoinc')) {
                     %s
                     <div class="twoinc-term-chips hidden" role="radiogroup"></div>
                     <div class="twoinc-sole-trader-toggle hidden" role="radiogroup"></div>
-                    <div class="twoinc-pay-box twoinc-loader hidden"></div>
+                    %s
                     %s
                     <div class="twoinc-pay-box twoinc-err-payment-default hidden">%s</div>
                     <div class="twoinc-pay-box twoinc-err-phone-number hidden">%s</div>
                 </div>',
                 $term_input,
+                $this->get_intent_loader_html(),
                 $this->get_intent_approved_notice(),
                 sprintf(__('Invoice purchase with %s is not available for this order.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')),
                 __('Phone number is invalid.', 'twoinc-payment-gateway')
