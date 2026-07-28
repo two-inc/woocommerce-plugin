@@ -680,8 +680,8 @@ if (!class_exists('WC_Twoinc')) {
         private function get_abt_twoinc_html()
         {
             $abt_url = WC_Twoinc_Brand::get('about_url');
-            // A brand with no about page ('' — e.g. ABN, whose subtitle
-            // already carries its own "lees meer" link) renders nothing
+            // A brand with no about page ('' — e.g. a partner edition whose
+            // subtitle already carries its own inline "read more" link) renders nothing
             // here, regardless of the merchant's show_abt_link setting.
             if ($this->get_option('show_abt_link') === 'yes' && $abt_url !== '') {
                 $product_name = WC_Twoinc_Brand::get('product_name');
@@ -1383,7 +1383,8 @@ if (!class_exists('WC_Twoinc')) {
         {
             $subtitle = WC_Twoinc_Brand::get('checkout_subtitle');
             // wp_kses_post, not esc_html: a brand's subtitle may carry an
-            // inline link (e.g. ABN's "lees meer") — esc_html stripped it.
+            // inline link (e.g. a partner edition's localised "read more"
+            // link) — esc_html stripped it.
             $subtitle_html = $subtitle
                 ? sprintf(
                     '<div class="twoinc-payment-subtitle">%s</div>',
