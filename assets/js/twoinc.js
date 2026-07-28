@@ -58,6 +58,16 @@ let twoincSelectWooHelper = {
    * is the last-resort fallback for a page where the localised string is
    * missing (older cached PHP, brand overlay that trims the text map).
    */
+  /**
+   * Sequence number of the most recently dispatched company-search request.
+   * A superseded request must not act on the shared spinner: select2 does
+   * abort the previous request before dispatching the next, so today the
+   * hide always lands before the next show — but that ordering is an
+   * internal detail of select2's ajax adapter, and a stuck-hidden spinner
+   * would be a silent regression if it ever changed.
+   */
+  companySearchSeq: 0,
+
   companySearchUnavailableText: function () {
     return (
       (window.twoinc && window.twoinc.text && window.twoinc.text.company_search_unavailable) ||
@@ -153,6 +163,7 @@ let twoincSelectWooHelper = {
          * and this code owns the messaging.
          */
         transport: function (params, success) {
+          const seq = ++twoincSelectWooHelper.companySearchSeq;
           twoincSelectWooHelper.toggleCompanySearchSpinner(true);
 
           const request = jQuery.ajax(
@@ -181,10 +192,14 @@ let twoincSelectWooHelper = {
             // transport error must not — left silent it renders as "no
             // companies found", which is a wrong answer, not a missing one.
             if (textStatus === "abort") return;
+            // A superseded request must not paint over a newer one's results.
+            if (seq !== twoincSelectWooHelper.companySearchSeq) return;
             twoincSelectWooHelper.showCompanySearchUnavailable();
           });
 
           request.always(function () {
+            // Only the newest request owns the spinner (see companySearchSeq).
+            if (seq !== twoincSelectWooHelper.companySearchSeq) return;
             twoincSelectWooHelper.toggleCompanySearchSpinner(false);
           });
 
