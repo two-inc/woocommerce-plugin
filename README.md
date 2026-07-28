@@ -22,17 +22,52 @@ This produces `tillit-payment-gateway.zip`, which can be uploaded to your Wordpr
 wp plugin install tillit-payment-gateway --activate
 ```
 
-## Releasing a new version
+## Versioning and releasing
 
-Ensure that you have `bumpver` installed.
+The version-bump level is decided by convention, not by hand:
+
+| Change lands on | Level | Who does it                                      |
+| --------------- | ----- | ------------------------------------------------ |
+| `staging`       | patch | Automatic — `.github/workflows/version-bump.yml` |
+| `main`          | minor | Manual — `make bump`                             |
+| either          | major | Escape hatch, see below                          |
+
+**Do not hand-run a bump on `staging`.** It is automated, and a manual bump on
+the same push would double-bump.
+
+A major is not chosen by hand either. Two independent signals are considered
+and the higher wins:
+
+- **Declared** — a root `.next-major` file whose first token is the target
+  major, with a short reason on the same line:
+
+      3  # dropped PHP 7.4, 3.0.0 release
+
+  This covers a _planned_ major that no single commit happens to mark. It is
+  reviewable in the PR that decides it, and it is not cleared afterwards — it
+  disarms itself once the major it names has shipped. A `.next-major` naming a
+  major _below_ the current version is a hard failure, not a no-op.
+
+- **Discovered** — a `!` on a conventional-commit type (`feat!:`) or a
+  `BREAKING CHANGE:` footer, in the commits since the last bump.
+
+`.github/scripts/decide-bump-level.sh` implements all of this and logs its full
+reasoning on every run. It is identical in every Two plugin repository.
+
+### Releasing
+
+Ensure that you have `bumpver` installed:
 
     pip install -r dev-requirements.txt
 
-To bump version:
+Then, on `main`:
 
-    bumpver update --major | --minor | --patch
+    make bump
 
-Now, go to Github to create a new release which triggers publication of the new version to Wordpress plugin directory.
+That bumps the version at the level the convention dictates and creates the
+GitHub Release, which triggers publication to the WordPress plugin directory.
+`make patch` / `make minor` / `make major` remain available for the case where
+you genuinely mean to override the convention.
 
 ## Set up Wordpress for local development
 

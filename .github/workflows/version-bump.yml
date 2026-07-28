@@ -1,0 +1,87 @@
+name: Version bump
+
+# Automates the staging half of the version-bump convention (TWO-25230):
+# patch on merge to `staging`, minor on merge to `main`, major via the
+# escape hatch in .github/scripts/decide-bump-level.sh.
+#
+# `main` is deliberately NOT automated here — it stays on the manual
+# `make minor` path in the Makefile, which also cuts the GitHub Release.
+# Only the staging patch cadence is automated, because that is the one that
+# was silently not happening: the last hand-run bump was 2025-11-18.
+#
+# Why `push` and not `workflow_run`: for `push` events GitHub resolves the
+# workflow file from the branch that was pushed, so this is live the moment
+# the PR lands on `staging`. `workflow_run` resolves the workflow from the
+# repository's DEFAULT branch, which is `main` here, so a staging-based
+# change would sit inert until it was promoted.
+on:
+  push:
+    branches: [staging]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: version-bump-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    name: Bump version on staging
+    runs-on: ${{ vars.RUNNER_STANDARD }}
+    timeout-minutes: 10
+    # Skip our own bump commit. Strictly belt-and-braces: the push below goes
+    # out under the default GITHUB_TOKEN, and GITHUB_TOKEN pushes do not
+    # trigger workflows, so the loop cannot form in the first place. The guard
+    # stays because that is a property of the token, not of this file, and it
+    # would be an unpleasant way to find out it had changed. The subject must
+    # match `commit_message` in bumpver.toml.
+    # (quoted: the literal `chore: Bump version` contains ": ", which YAML
+    # would otherwise read as a nested mapping)
+    if: "${{ !startsWith(github.event.head_commit.message, 'chore: Bump version') }}"
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Check out the branch, not the SHA, so HEAD is on `staging` and
+          # bumpver's commit advances the branch — otherwise the push below
+          # would have nothing to push.
+          ref: staging
+          # Full history: the level decision reads the commit range back to
+          # the last bump / tag, and needs tags present.
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install bumpver
+        run: pip install bumpver
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Decide bump level
+        id: level
+        run: .github/scripts/decide-bump-level.sh staging
+
+      - name: Bump version (files + commit only)
+        env:
+          LEVEL: ${{ steps.level.outputs.level }}
+          SET_VERSION: ${{ steps.level.outputs.set_version }}
+        run: |
+          set -euo pipefail
+          # --no-tag-commit --no-push override tag/push in bumpver.toml: the
+          # push is done explicitly below, and staging is never tagged — tags
+          # and Releases belong to `main`.
+          if [ -n "$SET_VERSION" ]; then
+            # --set-version rather than --major: a declared `.next-major` may
+            # skip more than one major, which --major cannot express.
+            bumpver update --set-version "$SET_VERSION" --no-tag-commit --no-push
+          else
+            bumpver update "--${LEVEL}" --no-tag-commit --no-push
+          fi
+
+      - name: Push
+        run: git push origin staging
