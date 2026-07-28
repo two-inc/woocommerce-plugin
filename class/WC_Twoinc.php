@@ -78,7 +78,7 @@ if (!class_exists('WC_Twoinc')) {
              */
             $this->description = apply_filters(
                 'twoinc_payment_description',
-                $this->get_pay_box_description() . $this->get_pay_subtitle(),
+                $this->build_payment_description(),
                 $this
             );
 
@@ -712,9 +712,58 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
+         * The order-intent check's loading state: the same three-dot pulse
+         * the term chips use for their fee quote (.twoinc-dots), which is
+         * the only Two-owned loading idiom across the checkout surfaces.
+         * It replaces a rotating SVG spinner — no image, no dependency on a
+         * theme's spinner, and nothing borrowed from another platform's
+         * core (notably not a full-screen blocking mask).
+         *
+         * The dots are decorative, so aria-hidden; the accessible name is
+         * the visually hidden sentence, and role="status" lets assistive
+         * technology announce the wait when the box is unhidden. The old
+         * spinner was a CSS ::before with content "" and no role, so it
+         * announced nothing at all.
+         */
+        private function get_intent_loader_html(): string
+        {
+            return sprintf(
+                '<div class="twoinc-pay-box twoinc-loader hidden" role="status">'
+                . '<span class="twoinc-sr-only">%s</span>'
+                . '<span class="twoinc-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span>'
+                . '</div>',
+                esc_html(__('Checking your order, one moment.', 'twoinc-payment-gateway'))
+            );
+        }
+
+        /**
+         * Placeholder the buyer's company name is substituted for, in the
+         * browser, inside the intent-approved notice's company variant.
+         * Must match the token assets/js/twoinc.js replaces.
+         */
+        private const INTENT_NOTICE_COMPANY_TOKEN = '{company}';
+
+        /**
          * Buyer-facing notice shown once order intent is approved, pending
-         * final checks. A brand overlay may set 'intent_approved_notice'
-         * to '' to suppress it entirely.
+         * final checks — the whole `.twoinc-intent-approved` block, or ''.
+         *
+         * Three-state brand contract, shared verbatim with the other
+         * platforms' checkout renderers:
+         *   - 'intent_approved_notice' absent or null -> the platform
+         *     default copy below, notice shown;
+         *   - ''                                      -> suppressed
+         *     entirely, no markup emitted at all (an empty notice must not
+         *     leave an empty div behind, same as an empty tagline);
+         *   - non-empty string                        -> used verbatim as
+         *     the company-name variant's sprintf template.
+         *
+         * Two placeholders, in this order: %1$s is the brand product name,
+         * substituted here; %2$s is the buyer's company name, which only
+         * the browser knows, so it is emitted as a token on
+         * data-company-template for the checkout JS to substitute at
+         * unhide time. The div's own text is the no-company variant, so a
+         * buyer whose company is unknown (or whose JS never runs) still
+         * reads a complete sentence.
          */
         private function get_intent_approved_notice(): string
         {
@@ -722,7 +771,29 @@ if (!class_exists('WC_Twoinc')) {
             if ($template === '') {
                 return '';
             }
-            return sprintf(__($template, 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name'));
+            if ($template === null) {
+                $template = __(
+                    'Your invoice with %1$s is likely to be accepted for %2$s, subject to additional checks.',
+                    'twoinc-payment-gateway'
+                );
+            }
+
+            $product_name = WC_Twoinc_Brand::get('product_name');
+            $with_company = sprintf($template, $product_name, self::INTENT_NOTICE_COMPANY_TOKEN);
+            // The no-company fallback is always the platform default copy:
+            // a brand overriding the notice overrides the company variant
+            // only, since dropping a clause out of arbitrary brand copy is
+            // not something this layer can do safely.
+            $without_company = sprintf(
+                __('Your invoice with %1$s is likely to be accepted, subject to additional checks.', 'twoinc-payment-gateway'),
+                $product_name
+            );
+
+            return sprintf(
+                '<div class="twoinc-pay-box twoinc-intent-approved hidden" data-company-template="%s">%s</div>',
+                esc_attr($with_company),
+                esc_html($without_company)
+            );
         }
 
         /**
@@ -749,17 +820,27 @@ if (!class_exists('WC_Twoinc')) {
                 }
             }
 
+            // Block order mirrors the Magento Luma renderer's
+            // gateway_method.html: term chips first, then the sole-trader
+            // mode toggle.
+            //
+            // $term_input stays AHEAD of the chips container on purpose: the
+            // chips JS appends its own copy of the same input INSIDE that
+            // container, and the later element wins the POST. Moving this
+            // one after the container would let the stale server-rendered
+            // term override the buyer's chip selection.
             return sprintf(
                 '<div>
-                    <div class="twoinc-sole-trader-toggle hidden" role="radiogroup"></div>
                     %s
                     <div class="twoinc-term-chips hidden" role="radiogroup"></div>
-                    <div class="twoinc-pay-box twoinc-loader hidden"></div>
-                    <div class="twoinc-pay-box twoinc-intent-approved hidden">%s</div>
+                    <div class="twoinc-sole-trader-toggle hidden" role="radiogroup"></div>
+                    %s
+                    %s
                     <div class="twoinc-pay-box twoinc-err-payment-default hidden">%s</div>
                     <div class="twoinc-pay-box twoinc-err-phone-number hidden">%s</div>
                 </div>',
                 $term_input,
+                $this->get_intent_loader_html(),
                 $this->get_intent_approved_notice(),
                 sprintf(__('Invoice purchase with %s is not available for this order.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')),
                 __('Phone number is invalid.', 'twoinc-payment-gateway')
@@ -1377,26 +1458,59 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * Get payment subtitle
+         * Assemble the checkout payment-box description.
+         *
+         * Block order mirrors the Magento Luma renderer
+         * (view/frontend/web/template/payment/gateway_method.html): brand
+         * tagline directly under the method title, then the term chips,
+         * then the sole-trader toggle, with the about block trailing.
+         *
+         * WooCommerce core renders the method title and the gateway icon
+         * together inside the payment method's <label>, and this
+         * description in the payment box below it. The tagline therefore
+         * leads the description box rather than sitting inside the label:
+         * a tagline may carry a link, and an <a> inside a <label for>
+         * both toggles the radio and follows the href.
+         */
+        public function build_payment_description()
+        {
+            return $this->get_pay_subtitle()
+                . $this->get_pay_box_description()
+                . $this->get_about_block_html();
+        }
+
+        /**
+         * Brand tagline shown directly under the payment-method title.
+         *
+         * Returns ONLY the tagline. The about block used to be concatenated
+         * on here, which pinned the two together at the very bottom of the
+         * payment box; the tagline now leads the box and the about block
+         * still trails it (see get_about_block_html and the description
+         * assembly in the constructor).
          */
         public function get_pay_subtitle()
         {
             $subtitle = WC_Twoinc_Brand::get('checkout_subtitle');
-            // wp_kses_post, not esc_html: a brand's subtitle may carry an
-            // inline link (e.g. a partner edition's localised "read more"
-            // link) — esc_html stripped it.
-            $subtitle_html = $subtitle
-                ? sprintf(
-                    '<div class="twoinc-payment-subtitle">%s</div>',
-                    wp_kses_post(__($subtitle, 'twoinc-payment-gateway'))
-                )
-                : '';
+            if (!$subtitle) {
+                return '';
+            }
 
+            // wp_kses_post, not esc_html: a brand's subtitle may carry an
+            // inline link (e.g. a brand FAQ "read more") — esc_html stripped it.
             return sprintf(
-                '%s<div class="abt-twoinc">%s</div>',
-                $subtitle_html,
-                $this->get_abt_twoinc_html(),
+                '<div class="twoinc-payment-subtitle">%s</div>',
+                wp_kses_post(__($subtitle, 'twoinc-payment-gateway'))
             );
+        }
+
+        /**
+         * The about block, wrapped, as the trailing element of the payment
+         * box. Split out of get_pay_subtitle; the twoinc_about_html filter
+         * seam is untouched and still applies inside get_abt_twoinc_html.
+         */
+        private function get_about_block_html()
+        {
+            return sprintf('<div class="abt-twoinc">%s</div>', $this->get_abt_twoinc_html());
         }
 
         /**

@@ -151,6 +151,13 @@ final class BrandConfigSpec
             'testClientVersionNeverEmitsTrailingPlus',
             'testClientVersionSuffixesShortShaWhenStamped',
             'testClientVersionIsQueryEncodedAsPlus',
+            'testPaymentBoxOrdersTaglineChipsThenSoleTrader',
+            'testSelectedTermInputPrecedesChipsContainer',
+            'testBrandWithoutTaglineEmitsNoTaglineBlock',
+            'testIntentApprovedNoticeSuppressedBrandEmitsNoBlock',
+            'testIntentApprovedNoticeDefaultBrandCarriesBothVariants',
+            'testIntentApprovedNoticeBrandTemplateUsedVerbatim',
+            'testIntentLoaderRendersTheOneSharedDotPulse',
         ];
         foreach ($tests as $test) {
             self::reset();
@@ -3844,6 +3851,209 @@ final class BrandConfigSpec
         TinyAssert::same(
             'client_v=2.23.9%2B1a2b3c4',
             http_build_query(['client_v' => '2.23.9+1a2b3c4'])
+        );
+    }
+
+    /**
+     * Brand file declaring a tagline, so the tagline block renders. Uses an
+     * inline filter rather than the shared testbrand fixture, which other
+     * specs assert against.
+     */
+    private static function useTaglineBrand(): void
+    {
+        add_filter('twoinc_brand_file', static function ($file) {
+            return __DIR__ . '/fixtures/taglinebrand.php';
+        });
+    }
+
+    /**
+     * The payment box must order the brand tagline above the term
+     * chips, and the chips above the sole-trader toggle, matching the
+     * Magento Luma renderer. Pinned because the whole box is one
+     * concatenated string, so ordering is a silent, easy regression.
+     */
+    private static function testPaymentBoxOrdersTaglineChipsThenSoleTrader(): void
+    {
+        self::useTaglineBrand();
+        $html = self::gateway()->build_payment_description();
+
+        $tagline = strpos($html, 'twoinc-payment-subtitle');
+        $chips = strpos($html, 'twoinc-term-chips');
+        $sole_trader = strpos($html, 'twoinc-sole-trader-toggle');
+        $about = strpos($html, 'abt-twoinc');
+
+        TinyAssert::true($tagline !== false, 'tagline block missing');
+        TinyAssert::true($chips !== false, 'chips container missing');
+        TinyAssert::true($sole_trader !== false, 'sole-trader toggle missing');
+        TinyAssert::true($about !== false, 'about block missing');
+
+        TinyAssert::true($tagline < $chips, 'tagline must precede the chips');
+        TinyAssert::true($chips < $sole_trader, 'chips must precede the sole-trader toggle');
+        TinyAssert::true($sole_trader < $about, 'about block must trail the box');
+    }
+
+    /**
+     * The chips JS appends its own copy of the selected-term input inside
+     * the chips container, and the LAST such input wins the POST. The
+     * server-rendered one must therefore stay ahead of the container, or a
+     * stale server value would override the buyer's chip selection.
+     */
+    private static function testSelectedTermInputPrecedesChipsContainer(): void
+    {
+        self::useTaglineBrand();
+        // Payment terms must actually be enabled, or the input is never
+        // rendered and this asserts nothing.
+        $gateway = new class extends WC_Twoinc {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+
+            public function get_merchant_available_terms(bool $refresh = false): array
+            {
+                return [14, 30, 60];
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                if ($key === 'payment_terms_days') {
+                    return [14, 30, 60];
+                }
+                return $empty_value ?? '';
+            }
+        };
+
+        $html = $gateway->build_payment_description();
+        $input = strpos($html, WC_Twoinc_Payment_Terms::SESSION_KEY);
+        $chips = strpos($html, 'twoinc-term-chips');
+
+        TinyAssert::true($input !== false, 'server-rendered term input missing');
+        TinyAssert::true(
+            $input < $chips,
+            'server-rendered term input must precede the chips container'
+        );
+    }
+
+    /**
+     * A brand leaving checkout_subtitle empty (the Two default) emits no
+     * tagline wrapper at all — the reorder must not introduce an empty div
+     * into vanilla checkout.
+     */
+    private static function testBrandWithoutTaglineEmitsNoTaglineBlock(): void
+    {
+        $html = self::gateway()->build_payment_description();
+        TinyAssert::same('', WC_Twoinc_Brand::get('checkout_subtitle'));
+        TinyAssert::true(
+            strpos($html, 'twoinc-payment-subtitle') === false,
+            'a brand with no tagline must emit no tagline block'
+        );
+    }
+
+    /**
+     * State two of the intent-approved notice's brand contract: '' means
+     * suppressed, and suppressed means no markup at all — an empty div
+     * would still occupy the payment box's spacing.
+     */
+    private static function testIntentApprovedNoticeSuppressedBrandEmitsNoBlock(): void
+    {
+        add_filter('twoinc_brand_file', static function ($file) {
+            return __DIR__ . '/fixtures/suppressednoticebrand.php';
+        });
+        TinyAssert::same('', WC_Twoinc_Brand::get('intent_approved_notice'));
+
+        $html = self::gateway()->build_payment_description();
+        TinyAssert::true(
+            strpos($html, 'twoinc-intent-approved') === false,
+            'a brand suppressing the notice must emit no notice block'
+        );
+    }
+
+    /**
+     * State one: no brand override (the Two default, now null) renders the
+     * platform default copy. The div's text is the no-company sentence and
+     * data-company-template carries the company variant with the brand
+     * name already resolved and the company name left as a token — the
+     * server cannot know the buyer's company, so the JS substitutes it.
+     */
+    private static function testIntentApprovedNoticeDefaultBrandCarriesBothVariants(): void
+    {
+        TinyAssert::same(null, WC_Twoinc_Brand::get('intent_approved_notice'));
+
+        $html = self::gateway()->build_payment_description();
+        TinyAssert::true(
+            strpos($html, 'twoinc-pay-box twoinc-intent-approved hidden') !== false,
+            'the default brand must emit the notice block'
+        );
+        TinyAssert::true(
+            strpos($html, 'Your invoice with Two is likely to be accepted, subject to additional checks.') !== false,
+            'the notice text must be the no-company variant'
+        );
+        TinyAssert::true(
+            strpos(
+                $html,
+                'data-company-template="Your invoice with Two is likely to be accepted for {company},'
+                . ' subject to additional checks."'
+            ) !== false,
+            'the notice must carry the company variant, brand name resolved, company name tokenised'
+        );
+    }
+
+    /**
+     * State three: a non-empty brand string is the company-variant
+     * template, used verbatim. The no-company fallback stays the platform
+     * default — this layer cannot drop a clause out of arbitrary copy.
+     */
+    private static function testIntentApprovedNoticeBrandTemplateUsedVerbatim(): void
+    {
+        add_filter('twoinc_brand_file', static function ($file) {
+            return __DIR__ . '/fixtures/customnoticebrand.php';
+        });
+
+        $html = self::gateway()->build_payment_description();
+        TinyAssert::true(
+            strpos($html, 'data-company-template="Brand copy: Customnoticebrand may accept this for {company}."') !== false,
+            'a brand template must be used verbatim for the company variant'
+        );
+        TinyAssert::true(
+            strpos($html, 'Your invoice with Customnoticebrand is likely to be accepted, subject to additional checks.') !== false,
+            'the no-company fallback stays the platform default copy'
+        );
+    }
+
+    /**
+     * The order-intent loading state renders the shared three-dot pulse,
+     * decorative dots plus an announced accessible name — not the old
+     * rotating image, and not a second copy of the dot animation. The CSS
+     * assertions are the point of the refactor: one .twoinc-dots rule and
+     * one keyframes block serve both the term chips and this loader.
+     */
+    private static function testIntentLoaderRendersTheOneSharedDotPulse(): void
+    {
+        $html = self::gateway()->build_payment_description();
+        TinyAssert::true(
+            strpos($html, '<div class="twoinc-pay-box twoinc-loader hidden" role="status">') !== false,
+            'the loader keeps its pay-box state class and announces itself'
+        );
+        TinyAssert::true(
+            strpos($html, '<span class="twoinc-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span>')
+                !== false,
+            'the loader must render the shared dot markup, dots hidden from assistive technology'
+        );
+
+        $css = (string) file_get_contents(dirname(__DIR__, 2) . '/assets/css/twoinc.css');
+        TinyAssert::true(
+            strpos($css, '.twoinc-dots {') !== false,
+            'the shared dot rule must exist'
+        );
+        TinyAssert::same(
+            1,
+            preg_match_all('/@keyframes\s+twoinc-dot-pulse/', $css),
+            'exactly one dot animation may be declared'
+        );
+        TinyAssert::same(
+            0,
+            preg_match_all('/@keyframes\s+spin|loader\.svg/', $css),
+            'the retired rotating spinner must be gone from the stylesheet'
         );
     }
 }
