@@ -197,14 +197,21 @@
  * text on a white fill for the unselected state, solid brand blue with
  * white text when selected. Set an explicit colour so the chip text never
  * inherits a theme's light-on-light foreground (white-on-white bug).
+ *
+ * Geometry mirrors the same rule: 8px/16px padding and an 8px radius, i.e.
+ * a rounded rectangle rather than the pill a radius at half the chip
+ * height would give. Keep both in step with Magento's style.css. The
+ * --selected and --single variants restyle colour only, so they inherit
+ * the padding and radius and need no duplicate declarations; the same is
+ * true of the brand overlays' chip rules.
  */
 .twoinc-term-chip {
   display: inline-flex;
   flex-direction: column;
   align-items: center;
-  padding: 6px 14px;
+  padding: 8px 16px;
   border: 1px solid #c4c9e8;
-  border-radius: 16px;
+  border-radius: 8px;
   background: #fff;
   color: #3043d1;
   cursor: pointer;
