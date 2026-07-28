@@ -744,17 +744,63 @@ if (!class_exists('WC_Twoinc')) {
         private const INTENT_NOTICE_COMPANY_TOKEN = '{company}';
 
         /**
+         * Whether the brand wants the intent-approved notice at all.
+         *
+         * 'intent_approved_notice_enabled' is an explicit boolean and
+         * nothing else, shared verbatim with the other platforms:
+         *   - true            -> notice shown;
+         *   - false           -> suppressed entirely;
+         *   - absent / null   -> the documented default, true. This is
+         *     what keeps a third-party overlay that declares neither
+         *     notice key on ON;
+         *   - anything else   -> a clear logged error naming the key, the
+         *     offending value's type and the brand code, and then the
+         *     documented default true.
+         *
+         * The invalid case deliberately does NOT throw: this runs on a
+         * buyer-facing checkout render, where a white screen is a worse
+         * failure than a notice that stays on. Erring to ON is also the
+         * fail-safe direction — a brand that wanted it off gets a visible,
+         * reported wrong state and nobody loses a sale.
+         */
+        private function is_intent_approved_notice_enabled(): bool
+        {
+            $enabled = WC_Twoinc_Brand::get('intent_approved_notice_enabled');
+            if (is_bool($enabled)) {
+                return $enabled;
+            }
+            if ($enabled === null) {
+                return true;
+            }
+
+            $message = sprintf(
+                'Brand "%s" declares intent_approved_notice_enabled as %s; an explicit bool is required.'
+                . ' Falling back to the documented default true (notice shown).',
+                (string) WC_Twoinc_Brand::get('code'),
+                gettype($enabled)
+            );
+            if (function_exists('wc_get_logger')) {
+                wc_get_logger()->error($message, ['source' => 'twoinc-payment-gateway']);
+            } else {
+                error_log('Twoinc: ' . $message);
+            }
+            return true;
+        }
+
+        /**
          * Buyer-facing notice shown once order intent is approved, pending
          * final checks — the whole `.twoinc-intent-approved` block, or ''.
          *
-         * Three-state brand contract, shared verbatim with the other
-         * platforms' checkout renderers:
-         *   - 'intent_approved_notice' absent or null -> the platform
-         *     default copy below, notice shown;
-         *   - ''                                      -> suppressed
-         *     entirely, no markup emitted at all (an empty notice must not
-         *     leave an empty div behind, same as an empty tagline);
-         *   - non-empty string                        -> used verbatim as
+         * Two independent brand keys, shared verbatim with the other
+         * platforms' checkout renderers. On/off is
+         * 'intent_approved_notice_enabled' (see above); this method owns
+         * only the wording, from 'intent_approved_notice':
+         *   - absent / null / '' / whitespace-only -> the platform default
+         *     copy below. An empty override is INERT — it used to mean
+         *     "suppressed" (TWO-25213) and no longer does, so a stale
+         *     overlay still carrying one renders the default copy rather
+         *     than breaking the checkout;
+         *   - non-empty string                     -> used verbatim as
          *     the company-name variant's sprintf template.
          *
          * Two placeholders, in this order: %1$s is the brand product name,
@@ -767,11 +813,12 @@ if (!class_exists('WC_Twoinc')) {
          */
         private function get_intent_approved_notice(): string
         {
-            $template = WC_Twoinc_Brand::get('intent_approved_notice');
-            if ($template === '') {
+            if (!$this->is_intent_approved_notice_enabled()) {
                 return '';
             }
-            if ($template === null) {
+
+            $template = WC_Twoinc_Brand::get('intent_approved_notice');
+            if (!is_string($template) || trim($template) === '') {
                 $template = __(
                     'Your invoice with %1$s is likely to be accepted for %2$s, subject to additional checks.',
                     'twoinc-payment-gateway'

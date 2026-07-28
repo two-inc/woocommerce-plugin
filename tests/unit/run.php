@@ -154,9 +154,13 @@ final class BrandConfigSpec
             'testPaymentBoxOrdersTaglineChipsThenSoleTrader',
             'testSelectedTermInputPrecedesChipsContainer',
             'testBrandWithoutTaglineEmitsNoTaglineBlock',
-            'testIntentApprovedNoticeSuppressedBrandEmitsNoBlock',
+            'testIntentApprovedNoticeDisabledBrandEmitsNoBlock',
             'testIntentApprovedNoticeDefaultBrandCarriesBothVariants',
             'testIntentApprovedNoticeBrandTemplateUsedVerbatim',
+            'testIntentApprovedNoticeEmptyCopyOverrideIsInert',
+            'testIntentApprovedNoticeSwitchAbsentDefaultsOn',
+            'testIntentApprovedNoticeOverlayDeclaringNothingKeepsNoticeOn',
+            'testIntentApprovedNoticeInvalidSwitchReportsAndDefaultsOn',
             'testIntentLoaderRendersTheOneSharedDotPulse',
         ];
         foreach ($tests as $test) {
@@ -179,6 +183,7 @@ final class BrandConfigSpec
         WC_Twoinc::reset_merchant_record_memo();
         WC_Twoinc_FX::reset_request_cache();
         $GLOBALS['__twoinc_test_transients'] = [];
+        $GLOBALS['__twoinc_test_logs'] = [];
         $GLOBALS['__twoinc_test_as_scheduled'] = [];
         $GLOBALS['__twoinc_test_as_schedule_calls'] = [];
         WC()->cart = null;
@@ -3950,33 +3955,37 @@ final class BrandConfigSpec
     }
 
     /**
-     * State two of the intent-approved notice's brand contract: '' means
-     * suppressed, and suppressed means no markup at all — an empty div
-     * would still occupy the payment box's spacing.
+     * The off switch: 'intent_approved_notice_enabled' => false suppresses
+     * the notice entirely — no markup at all, since an empty div would
+     * still occupy the payment box's spacing. Also pins that a `false`
+     * overlay value survives the brand merge: array_merge keeps it, but a
+     * falsy-means-absent filter anywhere in the loader would silently
+     * turn the switch back on.
      */
-    private static function testIntentApprovedNoticeSuppressedBrandEmitsNoBlock(): void
+    private static function testIntentApprovedNoticeDisabledBrandEmitsNoBlock(): void
     {
         add_filter('twoinc_brand_file', static function ($file) {
             return __DIR__ . '/fixtures/suppressednoticebrand.php';
         });
-        TinyAssert::same('', WC_Twoinc_Brand::get('intent_approved_notice'));
+        TinyAssert::same(false, WC_Twoinc_Brand::get('intent_approved_notice_enabled'));
 
         $html = self::gateway()->build_payment_description();
         TinyAssert::true(
             strpos($html, 'twoinc-intent-approved') === false,
-            'a brand suppressing the notice must emit no notice block'
+            'a brand disabling the notice must emit no notice block'
         );
     }
 
     /**
-     * State one: no brand override (the Two default, now null) renders the
-     * platform default copy. The div's text is the no-company sentence and
+     * Switch on, no copy override (the Two defaults): the platform default
+     * copy renders. The div's text is the no-company sentence and
      * data-company-template carries the company variant with the brand
      * name already resolved and the company name left as a token — the
      * server cannot know the buyer's company, so the JS substitutes it.
      */
     private static function testIntentApprovedNoticeDefaultBrandCarriesBothVariants(): void
     {
+        TinyAssert::same(true, WC_Twoinc_Brand::get('intent_approved_notice_enabled'));
         TinyAssert::same(null, WC_Twoinc_Brand::get('intent_approved_notice'));
 
         $html = self::gateway()->build_payment_description();
@@ -3999,7 +4008,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * State three: a non-empty brand string is the company-variant
+     * The copy override: a non-empty brand string is the company-variant
      * template, used verbatim. The no-company fallback stays the platform
      * default — this layer cannot drop a clause out of arbitrary copy.
      */
@@ -4017,6 +4026,125 @@ final class BrandConfigSpec
         TinyAssert::true(
             strpos($html, 'Your invoice with Customnoticebrand is likely to be accepted, subject to additional checks.') !== false,
             'the no-company fallback stays the platform default copy'
+        );
+    }
+
+    /**
+     * Empty and whitespace-only copy overrides are INERT (TWO-25218): both
+     * render the platform default copy with the notice ON. '' used to mean
+     * "suppressed"; a stale overlay still carrying one must degrade to the
+     * default wording, not to a broken store and not to a silent off.
+     */
+    private static function testIntentApprovedNoticeEmptyCopyOverrideIsInert(): void
+    {
+        foreach (['inertemptynoticebrand', 'blanknoticecopybrand'] as $fixture) {
+            WC_Twoinc_Brand::reset();
+            remove_all_filters('twoinc_brand_file');
+            add_filter('twoinc_brand_file', static function ($file) use ($fixture) {
+                return __DIR__ . '/fixtures/' . $fixture . '.php';
+            });
+
+            $product = WC_Twoinc_Brand::get('product_name');
+            $html = self::gateway()->build_payment_description();
+            TinyAssert::true(
+                strpos($html, 'twoinc-pay-box twoinc-intent-approved hidden') !== false,
+                $fixture . ': an inert copy override must still emit the notice block'
+            );
+            TinyAssert::true(
+                strpos($html, 'Your invoice with ' . $product . ' is likely to be accepted, subject to additional checks.') !== false,
+                $fixture . ': an inert copy override must render the platform default copy'
+            );
+            TinyAssert::true(
+                strpos(
+                    $html,
+                    'data-company-template="Your invoice with ' . $product
+                    . ' is likely to be accepted for {company}, subject to additional checks."'
+                ) !== false,
+                $fixture . ': the company variant must be the platform default copy too'
+            );
+        }
+    }
+
+    /**
+     * Absent switch means the documented default true. Unreachable through
+     * a brand file (brands/two.php always declares the key), so the
+     * resolved config is reflected into the loader with the key removed —
+     * which is the shape a brand overlay predating the key resolves to
+     * against a stale base.
+     */
+    private static function testIntentApprovedNoticeSwitchAbsentDefaultsOn(): void
+    {
+        $config = WC_Twoinc_Brand::config();
+        unset($config['intent_approved_notice_enabled']);
+        $cache = new ReflectionProperty(WC_Twoinc_Brand::class, 'config');
+        $cache->setAccessible(true);
+        $cache->setValue(null, $config);
+
+        TinyAssert::same(null, WC_Twoinc_Brand::get('intent_approved_notice_enabled'));
+        TinyAssert::true(
+            strpos(self::gateway()->build_payment_description(), 'twoinc-intent-approved') !== false,
+            'an absent switch must default to the notice being shown'
+        );
+        TinyAssert::same([], $GLOBALS['__twoinc_test_logs'], 'absent is the documented default, not an error');
+    }
+
+    /**
+     * Must not regress: a third-party overlay declaring NEITHER notice key
+     * keeps the notice ON, with the platform default copy.
+     */
+    private static function testIntentApprovedNoticeOverlayDeclaringNothingKeepsNoticeOn(): void
+    {
+        add_filter('twoinc_brand_file', static function ($file) {
+            return __DIR__ . '/fixtures/silentnoticebrand.php';
+        });
+        TinyAssert::same('silentnoticebrand', WC_Twoinc_Brand::get('code'));
+
+        $html = self::gateway()->build_payment_description();
+        TinyAssert::true(
+            strpos($html, 'twoinc-pay-box twoinc-intent-approved hidden') !== false,
+            'an overlay with no notice opinion must keep the notice on'
+        );
+        TinyAssert::true(
+            strpos($html, 'Your invoice with Silentnoticebrand is likely to be accepted, subject to additional checks.') !== false,
+            'and must render the platform default copy'
+        );
+    }
+
+    /**
+     * A non-bool switch is a reported error and then the documented
+     * default true — never a silent third behaviour, and never a throw on
+     * a buyer-facing render. The log line has to name the key, the
+     * offending value's type and the brand code, or a store operator
+     * cannot act on it.
+     */
+    private static function testIntentApprovedNoticeInvalidSwitchReportsAndDefaultsOn(): void
+    {
+        add_filter('twoinc_brand_file', static function ($file) {
+            return __DIR__ . '/fixtures/invalidnoticeswitchbrand.php';
+        });
+        TinyAssert::same('', WC_Twoinc_Brand::get('intent_approved_notice_enabled'));
+
+        $html = self::gateway()->build_payment_description();
+        TinyAssert::true(
+            strpos($html, 'twoinc-pay-box twoinc-intent-approved hidden') !== false,
+            'an invalid switch must fall back to the notice being shown'
+        );
+
+        TinyAssert::same(1, count($GLOBALS['__twoinc_test_logs']), 'the invalid switch must be reported exactly once');
+        $entry = $GLOBALS['__twoinc_test_logs'][0];
+        TinyAssert::same('error', $entry['level']);
+        TinyAssert::same('twoinc-payment-gateway', $entry['context']['source'] ?? null);
+        TinyAssert::true(
+            strpos($entry['message'], 'intent_approved_notice_enabled') !== false,
+            'the log line must name the offending key'
+        );
+        TinyAssert::true(
+            strpos($entry['message'], 'string') !== false,
+            'the log line must name the offending value type'
+        );
+        TinyAssert::true(
+            strpos($entry['message'], 'invalidnoticeswitchbrand') !== false,
+            'the log line must name the brand code'
         );
     }
 
