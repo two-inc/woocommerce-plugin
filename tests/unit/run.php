@@ -162,6 +162,7 @@ final class BrandConfigSpec
             'testIntentApprovedNoticeOverlayDeclaringNothingKeepsNoticeOn',
             'testIntentApprovedNoticeInvalidSwitchReportsAndDefaultsOn',
             'testIntentLoaderRendersTheOneSharedDotPulse',
+            'testIntentLoaderSuppressedWithTheNoticeButErrorBoxesSurvive',
         ];
         foreach ($tests as $test) {
             self::reset();
@@ -4182,6 +4183,43 @@ final class BrandConfigSpec
             0,
             preg_match_all('/@keyframes\s+spin|loader\.svg/', $css),
             'the retired rotating spinner must be gone from the stylesheet'
+        );
+    }
+
+    /**
+     * TWO-25224: the switch governs the reassurance messaging around the
+     * order-intent pre-check, and the loading state is part of that — a
+     * brand that declined the approval sentence was still announcing
+     * "Checking your order, one moment." while the check ran.
+     *
+     * The two ERROR boxes are deliberately NOT gated: a merchant who wants
+     * no reassurance still needs failures surfaced, or a declined buyer
+     * sees nothing at all. This test fails if either half regresses — the
+     * loader coming back, or the error boxes disappearing with it.
+     */
+    private static function testIntentLoaderSuppressedWithTheNoticeButErrorBoxesSurvive(): void
+    {
+        add_filter('twoinc_brand_file', static function ($file) {
+            return __DIR__ . '/fixtures/suppressednoticebrand.php';
+        });
+        TinyAssert::same(false, WC_Twoinc_Brand::get('intent_approved_notice_enabled'));
+
+        $html = self::gateway()->build_payment_description();
+        TinyAssert::true(
+            strpos($html, 'twoinc-loader') === false,
+            'a brand disabling the notice must emit no order-intent loading state'
+        );
+        TinyAssert::true(
+            strpos($html, 'Checking your order') === false,
+            'and none of the loading copy either, not even as a screen-reader name'
+        );
+        TinyAssert::true(
+            strpos($html, 'twoinc-pay-box twoinc-err-payment-default hidden') !== false,
+            'the default payment error box must survive the notice being off'
+        );
+        TinyAssert::true(
+            strpos($html, 'twoinc-pay-box twoinc-err-phone-number hidden') !== false,
+            'the phone-number error box must survive the notice being off'
         );
     }
 }

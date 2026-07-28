@@ -434,6 +434,10 @@ let twoincDomHelper = {
     jQuery(".twoinc-pay-box").addClass("hidden");
     if (["checking-intent", "intent-approved", "errored"].includes(action)) {
       if (action === "checking-intent") {
+        // Suppressed by the brand => the loader div is absent too
+        // (TWO-25224: the notice switch covers the whole reassurance
+        // pass, loading state included), so this is a no-op on an empty
+        // jQuery set. The error branches below are never suppressed.
         jQuery(".twoinc-pay-box.twoinc-loader").removeClass("hidden");
       } else if (action === "intent-approved") {
         // The notice ships the no-company sentence as its text and the

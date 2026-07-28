@@ -69,15 +69,21 @@ return [
     // obtaining production keys. WC_Twoinc::init_form_fields is the only
     // reader. A brand overlay substitutes its own support address.
     'production_key_contact_email' => 'integration@two.inc',
-    // On/off switch for the buyer-facing notice shown once order intent
-    // is approved, pending final checks. Explicit boolean ONLY, shared
+    // On/off switch for the buyer-facing reassurance messaging around the
+    // order-intent pre-check: the notice shown once intent is approved
+    // (pending final checks) AND the loading state shown while the check
+    // runs (TWO-25224 — both carry our own copy about the check, so they
+    // switch together). The pre-check's two ERROR boxes are NOT covered:
+    // a brand that wants no reassurance still needs failures surfaced.
+    // Explicit boolean ONLY, shared
     // with the other platforms: true = notice shown; false = suppressed
     // entirely, no markup emitted at all. Absent or null = the
     // documented default true, which is what keeps a third-party overlay
     // that declares nothing on ON. Any other value ('', 0, 'yes', an
     // array) is a logged error and the default true is used — never a
     // silent third behaviour.
-    // WC_Twoinc::is_intent_approved_notice_enabled is the only reader.
+    // WC_Twoinc::is_intent_approved_notice_enabled is the only reader; it
+    // resolves once per render and both consumers take the result.
     'intent_approved_notice_enabled' => true,
     // Copy override for that notice — WORDING ONLY. It carried the
     // on/off meaning too until TWO-25218; it no longer does. null, ''

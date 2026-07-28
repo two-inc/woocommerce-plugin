@@ -724,9 +724,29 @@ if (!class_exists('WC_Twoinc')) {
          * technology announce the wait when the box is unhidden. The old
          * spinner was a CSS ::before with content "" and no role, so it
          * announced nothing at all.
+         *
+         * Returns '' when the brand suppressed the intent-approved notice
+         * (TWO-25224). That switch turns off the *reassurance messaging*
+         * around the order-intent pre-check, and this loader is part of it —
+         * it carries our own sentence about the check being in progress, so
+         * a brand that declined the approval sentence was still announcing
+         * the check. The two error boxes are NOT gated on the switch: a
+         * merchant who wants no reassurance still needs failures surfaced.
+         *
+         * With the div absent, assets/js/twoinc.js's "checking-intent"
+         * branch unhides an empty jQuery set — a no-op, no JS-side gate
+         * needed.
+         *
+         * @param bool $notice_enabled resolved once per render by the caller,
+         *                             so an invalid brand value is reported
+         *                             once rather than once per consumer.
          */
-        private function get_intent_loader_html(): string
+        private function get_intent_loader_html(bool $notice_enabled): string
         {
+            if (!$notice_enabled) {
+                return '';
+            }
+
             return sprintf(
                 '<div class="twoinc-pay-box twoinc-loader hidden" role="status">'
                 . '<span class="twoinc-sr-only">%s</span>'
@@ -810,10 +830,13 @@ if (!class_exists('WC_Twoinc')) {
          * unhide time. The div's own text is the no-company variant, so a
          * buyer whose company is unknown (or whose JS never runs) still
          * reads a complete sentence.
+         *
+         * @param bool $notice_enabled resolved once per render by the caller
+         *                             (see get_intent_loader_html()).
          */
-        private function get_intent_approved_notice(): string
+        private function get_intent_approved_notice(bool $notice_enabled): string
         {
-            if (!$this->is_intent_approved_notice_enabled()) {
+            if (!$notice_enabled) {
                 return '';
             }
 
@@ -876,6 +899,13 @@ if (!class_exists('WC_Twoinc')) {
             // container, and the later element wins the POST. Moving this
             // one after the container would let the stale server-rendered
             // term override the buyer's chip selection.
+            //
+            // One resolution of the brand's notice switch feeds both the
+            // loading state and the approved notice (TWO-25224): they are two
+            // halves of the same reassurance messaging, and resolving it twice
+            // would report an invalid brand value twice per render.
+            $notice_enabled = $this->is_intent_approved_notice_enabled();
+
             return sprintf(
                 '<div>
                     %s
@@ -887,8 +917,8 @@ if (!class_exists('WC_Twoinc')) {
                     <div class="twoinc-pay-box twoinc-err-phone-number hidden">%s</div>
                 </div>',
                 $term_input,
-                $this->get_intent_loader_html(),
-                $this->get_intent_approved_notice(),
+                $this->get_intent_loader_html($notice_enabled),
+                $this->get_intent_approved_notice($notice_enabled),
                 sprintf(__('Invoice purchase with %s is not available for this order.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')),
                 __('Phone number is invalid.', 'twoinc-payment-gateway')
             );
