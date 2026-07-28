@@ -14,13 +14,13 @@ cd woocommerce-plugin
 make archive
 ```
 
+This produces `tillit-payment-gateway.zip`, which can be uploaded to your Wordpress site.
+
 ### Using the CLI
 
 ```bash
 wp plugin install tillit-payment-gateway --activate
 ```
-
-This will produce a zip file which can be uploaded to your Wordpress site.
 
 ## Releasing a new version
 
@@ -76,19 +76,26 @@ cat > docker/config/staging.json <<EOF
   "enable_address_lookup": "yes"
 }
 EOF
+make run
 ```
-
-Now you can bring up your Wordpress instance:
-
-```bash
-docker compose up -d
-```
-
-Navigate to <http://localhost:8888/> on your browser to access the Wordpress site.
 
 ## E2E tests
 
-Playwright e2e tests live in `tests/e2e/`. They run against the local Docker environment and verify the full checkout flow with Two payment.
+Playwright e2e tests live in `tests/e2e/`. They run against the local Docker
+environment and verify the full checkout flow with Two payment: WooCommerce
+store checkout, order lifecycle through WP admin, and Two API state
+verification.
+
+Identity verification / SCA, merchant-portal flows and multi-country coverage
+are out of scope here — they live in the `e2e-tests` repo.
+
+### Environment
+
+- Store: <http://localhost:8888>, admin at `/wp-admin` (`admin` / `twoinb2b`)
+- Products: "Product 1"–"Product 4" (random prices 100–200) plus "Expensive
+  Product" (500000) for the max-limit test
+- Merchant: `tillittestuk` (UK, org 13078389) — has a merchant-wide
+  `skip_verification` rule, so checkout completes without an identity step
 
 ### Prerequisites
 
@@ -127,19 +134,19 @@ export MERCHANT_API_KEY=$(python3 -c "import json; print(json.load(open('docker/
 
 ### Tests
 
-| Test                   | What it does                                                                                       |
-| ---------------------- | -------------------------------------------------------------------------------------------------- |
-| `order-flow.spec.ts`   | Place order → verify CONFIRMED → fulfil via WP admin → verify FULFILLED → refund → verify REFUNDED |
-| `cancel-order.spec.ts` | Place order → cancel via WP admin → verify CANCELLED                                               |
-| `max-limit.spec.ts`    | Add expensive product → expect rejection on checkout                                               |
+| Test                               | What it does                                                                                       |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `order-flow.spec.ts`               | Place order → verify CONFIRMED → fulfil via WP admin → verify FULFILLED → refund → verify REFUNDED |
+| `cancel-order.spec.ts`             | Place order → cancel via WP admin → verify CANCELLED                                               |
+| `max-limit.spec.ts`                | Add "Expensive Product" → expect rejection on checkout                                             |
+| `sole-trader-availability.spec.ts` | Sole-trader chooser appears only where the registry supports it (GB yes, NO no)                    |
 
 ### Clean restart
 
 If products stop showing or the store behaves oddly between runs:
 
 ```bash
-docker compose down -v && rm -rf volumes/
-docker compose up -d
+make clean && make run
 ```
 
 ## Post installation optional steps
