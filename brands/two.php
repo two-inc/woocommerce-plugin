@@ -70,8 +70,12 @@ return [
     // reader. A brand overlay substitutes its own support address.
     'production_key_contact_email' => 'integration@two.inc',
     // Buyer-facing notice shown once order intent is approved, pending
-    // final checks. sprintf'd with the brand product_name (one %s). ''
-    // renders nothing. WC_Twoinc::get_pay_box_description is the only
-    // reader.
-    'intent_approved_notice' => 'Your invoice purchase with %s is likely to be accepted subject to additional checks.',
+    // final checks. Three states, shared with the other platforms:
+    // null = the platform default translated copy in
+    // WC_Twoinc::get_intent_approved_notice (where it lives so WordPress
+    // i18n tooling can extract it); '' = suppressed entirely, no markup;
+    // a non-empty string = that sprintf template verbatim, with %1$s the
+    // brand product_name and %2$s the buyer's company name.
+    // WC_Twoinc::get_intent_approved_notice is the only reader.
+    'intent_approved_notice' => null,
 ];

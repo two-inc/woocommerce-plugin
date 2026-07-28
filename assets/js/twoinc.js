@@ -436,7 +436,25 @@ let twoincDomHelper = {
       if (action === "checking-intent") {
         jQuery(".twoinc-pay-box.twoinc-loader").removeClass("hidden");
       } else if (action === "intent-approved") {
-        jQuery(".twoinc-pay-box.twoinc-intent-approved").removeClass("hidden");
+        // The notice ships the no-company sentence as its text and the
+        // company-name variant as a template on data-company-template
+        // (only the browser knows the buyer's company). Substitute here,
+        // always from the template, so a later company change re-renders
+        // and an emptied company falls back to the served sentence.
+        // Suppressed by the brand => the div is absent and every call
+        // below is a no-op on an empty jQuery set.
+        let intentBox = jQuery(".twoinc-pay-box.twoinc-intent-approved");
+        if (intentBox.data("twoincDefaultText") === undefined) {
+          intentBox.data("twoincDefaultText", intentBox.text());
+        }
+        let companyTemplate = intentBox.attr("data-company-template");
+        let companyName = (twoincDomHelper.getCompanyName() || "").trim();
+        if (companyTemplate && companyName) {
+          intentBox.text(companyTemplate.replace("{company}", companyName));
+        } else {
+          intentBox.text(intentBox.data("twoincDefaultText"));
+        }
+        intentBox.removeClass("hidden");
       } else if (action === "errored") {
         jQuery(".twoinc-pay-box" + errSelector).removeClass("hidden");
       }
@@ -955,8 +973,11 @@ let twoincTermChips = {
         // Fee quote in flight: show animated loading dots instead of a
         // blank chip. Never render the configured rate — only the real
         // quoted amount once it arrives.
+        // twoinc-dots carries the shared dot-pulse styling (also used by
+        // the order-intent loader); the BEM class stays as the chip-scoped
+        // hook. Appearance is unchanged.
         const $loading = jQuery("<span>", {
-          class: "twoinc-term-chip__loading",
+          class: "twoinc-term-chip__loading twoinc-dots",
           "aria-hidden": "true"
         });
         for (let i = 0; i < 3; i++) {
