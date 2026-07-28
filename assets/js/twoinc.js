@@ -436,7 +436,25 @@ let twoincDomHelper = {
       if (action === "checking-intent") {
         jQuery(".twoinc-pay-box.twoinc-loader").removeClass("hidden");
       } else if (action === "intent-approved") {
-        jQuery(".twoinc-pay-box.twoinc-intent-approved").removeClass("hidden");
+        // The notice ships the no-company sentence as its text and the
+        // company-name variant as a template on data-company-template
+        // (only the browser knows the buyer's company). Substitute here,
+        // always from the template, so a later company change re-renders
+        // and an emptied company falls back to the served sentence.
+        // Suppressed by the brand => the div is absent and every call
+        // below is a no-op on an empty jQuery set.
+        let intentBox = jQuery(".twoinc-pay-box.twoinc-intent-approved");
+        if (intentBox.data("twoincDefaultText") === undefined) {
+          intentBox.data("twoincDefaultText", intentBox.text());
+        }
+        let companyTemplate = intentBox.attr("data-company-template");
+        let companyName = (twoincDomHelper.getCompanyName() || "").trim();
+        if (companyTemplate && companyName) {
+          intentBox.text(companyTemplate.replace("{company}", companyName));
+        } else {
+          intentBox.text(intentBox.data("twoincDefaultText"));
+        }
+        intentBox.removeClass("hidden");
       } else if (action === "errored") {
         jQuery(".twoinc-pay-box" + errSelector).removeClass("hidden");
       }

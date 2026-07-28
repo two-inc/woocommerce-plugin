@@ -712,9 +712,33 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
+         * Placeholder the buyer's company name is substituted for, in the
+         * browser, inside the intent-approved notice's company variant.
+         * Must match the token assets/js/twoinc.js replaces.
+         */
+        private const INTENT_NOTICE_COMPANY_TOKEN = '{company}';
+
+        /**
          * Buyer-facing notice shown once order intent is approved, pending
-         * final checks. A brand overlay may set 'intent_approved_notice'
-         * to '' to suppress it entirely.
+         * final checks — the whole `.twoinc-intent-approved` block, or ''.
+         *
+         * Three-state brand contract, shared verbatim with the other
+         * platforms' checkout renderers:
+         *   - 'intent_approved_notice' absent or null -> the platform
+         *     default copy below, notice shown;
+         *   - ''                                      -> suppressed
+         *     entirely, no markup emitted at all (an empty notice must not
+         *     leave an empty div behind, same as an empty tagline);
+         *   - non-empty string                        -> used verbatim as
+         *     the company-name variant's sprintf template.
+         *
+         * Two placeholders, in this order: %1$s is the brand product name,
+         * substituted here; %2$s is the buyer's company name, which only
+         * the browser knows, so it is emitted as a token on
+         * data-company-template for the checkout JS to substitute at
+         * unhide time. The div's own text is the no-company variant, so a
+         * buyer whose company is unknown (or whose JS never runs) still
+         * reads a complete sentence.
          */
         private function get_intent_approved_notice(): string
         {
@@ -722,7 +746,29 @@ if (!class_exists('WC_Twoinc')) {
             if ($template === '') {
                 return '';
             }
-            return sprintf(__($template, 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name'));
+            if ($template === null) {
+                $template = __(
+                    'Your invoice with %1$s is likely to be accepted for %2$s, subject to additional checks.',
+                    'twoinc-payment-gateway'
+                );
+            }
+
+            $product_name = WC_Twoinc_Brand::get('product_name');
+            $with_company = sprintf($template, $product_name, self::INTENT_NOTICE_COMPANY_TOKEN);
+            // The no-company fallback is always the platform default copy:
+            // a brand overriding the notice overrides the company variant
+            // only, since dropping a clause out of arbitrary brand copy is
+            // not something this layer can do safely.
+            $without_company = sprintf(
+                __('Your invoice with %1$s is likely to be accepted, subject to additional checks.', 'twoinc-payment-gateway'),
+                $product_name
+            );
+
+            return sprintf(
+                '<div class="twoinc-pay-box twoinc-intent-approved hidden" data-company-template="%s">%s</div>',
+                esc_attr($with_company),
+                esc_html($without_company)
+            );
         }
 
         /**
@@ -764,7 +810,7 @@ if (!class_exists('WC_Twoinc')) {
                     <div class="twoinc-term-chips hidden" role="radiogroup"></div>
                     <div class="twoinc-sole-trader-toggle hidden" role="radiogroup"></div>
                     <div class="twoinc-pay-box twoinc-loader hidden"></div>
-                    <div class="twoinc-pay-box twoinc-intent-approved hidden">%s</div>
+                    %s
                     <div class="twoinc-pay-box twoinc-err-payment-default hidden">%s</div>
                     <div class="twoinc-pay-box twoinc-err-phone-number hidden">%s</div>
                 </div>',

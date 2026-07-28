@@ -153,6 +153,9 @@ final class BrandConfigSpec
             'testPaymentBoxOrdersTaglineChipsThenSoleTrader',
             'testSelectedTermInputPrecedesChipsContainer',
             'testBrandWithoutTaglineEmitsNoTaglineBlock',
+            'testIntentApprovedNoticeSuppressedBrandEmitsNoBlock',
+            'testIntentApprovedNoticeDefaultBrandCarriesBothVariants',
+            'testIntentApprovedNoticeBrandTemplateUsedVerbatim',
         ];
         foreach ($tests as $test) {
             self::reset();
@@ -3915,6 +3918,77 @@ final class BrandConfigSpec
         TinyAssert::true(
             strpos($html, 'twoinc-payment-subtitle') === false,
             'a brand with no tagline must emit no tagline block'
+        );
+    }
+
+    /**
+     * State two of the intent-approved notice's brand contract: '' means
+     * suppressed, and suppressed means no markup at all — an empty div
+     * would still occupy the payment box's spacing.
+     */
+    private static function testIntentApprovedNoticeSuppressedBrandEmitsNoBlock(): void
+    {
+        add_filter('twoinc_brand_file', static function ($file) {
+            return __DIR__ . '/fixtures/suppressednoticebrand.php';
+        });
+        TinyAssert::same('', WC_Twoinc_Brand::get('intent_approved_notice'));
+
+        $html = self::gateway()->build_payment_description();
+        TinyAssert::true(
+            strpos($html, 'twoinc-intent-approved') === false,
+            'a brand suppressing the notice must emit no notice block'
+        );
+    }
+
+    /**
+     * State one: no brand override (the Two default, now null) renders the
+     * platform default copy. The div's text is the no-company sentence and
+     * data-company-template carries the company variant with the brand
+     * name already resolved and the company name left as a token — the
+     * server cannot know the buyer's company, so the JS substitutes it.
+     */
+    private static function testIntentApprovedNoticeDefaultBrandCarriesBothVariants(): void
+    {
+        TinyAssert::same(null, WC_Twoinc_Brand::get('intent_approved_notice'));
+
+        $html = self::gateway()->build_payment_description();
+        TinyAssert::true(
+            strpos($html, 'twoinc-pay-box twoinc-intent-approved hidden') !== false,
+            'the default brand must emit the notice block'
+        );
+        TinyAssert::true(
+            strpos($html, 'Your invoice with Two is likely to be accepted, subject to additional checks.') !== false,
+            'the notice text must be the no-company variant'
+        );
+        TinyAssert::true(
+            strpos(
+                $html,
+                'data-company-template="Your invoice with Two is likely to be accepted for {company},'
+                . ' subject to additional checks."'
+            ) !== false,
+            'the notice must carry the company variant, brand name resolved, company name tokenised'
+        );
+    }
+
+    /**
+     * State three: a non-empty brand string is the company-variant
+     * template, used verbatim. The no-company fallback stays the platform
+     * default — this layer cannot drop a clause out of arbitrary copy.
+     */
+    private static function testIntentApprovedNoticeBrandTemplateUsedVerbatim(): void
+    {
+        add_filter('twoinc_brand_file', static function ($file) {
+            return __DIR__ . '/fixtures/customnoticebrand.php';
+        });
+
+        $html = self::gateway()->build_payment_description();
+        TinyAssert::true(
+            strpos($html, 'data-company-template="Brand copy: Customnoticebrand may accept this for {company}."') !== false,
+            'a brand template must be used verbatim for the company variant'
+        );
+        TinyAssert::true(
+            strpos($html, 'Your invoice with Customnoticebrand is likely to be accepted, subject to additional checks.') !== false,
+            'the no-company fallback stays the platform default copy'
         );
     }
 }
