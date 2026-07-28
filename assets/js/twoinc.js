@@ -173,6 +173,9 @@ let twoincSelectWooHelper = {
           );
 
           request.done(function (data) {
+            // Same supersession rule as the failure path: a stale response
+            // must not repopulate the list under a newer search.
+            if (seq !== twoincSelectWooHelper.companySearchSeq) return;
             // `degraded` marks an HTTP 200 whose (near-empty) result set is
             // unreliable because the upstream provider lookup timed out.
             // The field may not be deployed yet, so absent must read as not
