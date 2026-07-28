@@ -69,13 +69,25 @@ return [
     // obtaining production keys. WC_Twoinc::init_form_fields is the only
     // reader. A brand overlay substitutes its own support address.
     'production_key_contact_email' => 'integration@two.inc',
-    // Buyer-facing notice shown once order intent is approved, pending
-    // final checks. Three states, shared with the other platforms:
-    // null = the platform default translated copy in
+    // On/off switch for the buyer-facing notice shown once order intent
+    // is approved, pending final checks. Explicit boolean ONLY, shared
+    // with the other platforms: true = notice shown; false = suppressed
+    // entirely, no markup emitted at all. Absent or null = the
+    // documented default true, which is what keeps a third-party overlay
+    // that declares nothing on ON. Any other value ('', 0, 'yes', an
+    // array) is a logged error and the default true is used — never a
+    // silent third behaviour.
+    // WC_Twoinc::is_intent_approved_notice_enabled is the only reader.
+    'intent_approved_notice_enabled' => true,
+    // Copy override for that notice — WORDING ONLY. It carried the
+    // on/off meaning too until TWO-25218; it no longer does. null, ''
+    // and whitespace-only are all INERT and mean the same thing: the
+    // platform default translated copy in
     // WC_Twoinc::get_intent_approved_notice (where it lives so WordPress
-    // i18n tooling can extract it); '' = suppressed entirely, no markup;
-    // a non-empty string = that sprintf template verbatim, with %1$s the
-    // brand product_name and %2$s the buyer's company name.
+    // i18n tooling can extract it). An empty string is NOT an off
+    // switch — use 'intent_approved_notice_enabled' => false for that.
+    // A non-empty string is that sprintf template verbatim, with %1$s
+    // the brand product_name and %2$s the buyer's company name.
     // WC_Twoinc::get_intent_approved_notice is the only reader.
     'intent_approved_notice' => null,
 ];

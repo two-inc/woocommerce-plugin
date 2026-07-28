@@ -48,6 +48,35 @@ function remove_all_filters($tag)
     return true;
 }
 
+// ── WooCommerce logger ──────────────────────────────────────────────
+// The plugin logs through wc_get_logger() behind function_exists(), so a
+// stub here is what makes "the error was reported" assertable. Every call
+// is recorded as ['level' => …, 'message' => …, 'context' => …] in
+// $GLOBALS['__twoinc_test_logs'] (cleared per test).
+
+$GLOBALS['__twoinc_test_logs'] = [];
+
+class StubWcLogger
+{
+    public function __call($level, $args)
+    {
+        $GLOBALS['__twoinc_test_logs'][] = [
+            'level' => $level,
+            'message' => (string) ($args[0] ?? ''),
+            'context' => $args[1] ?? [],
+        ];
+    }
+}
+
+function wc_get_logger()
+{
+    static $logger = null;
+    if ($logger === null) {
+        $logger = new StubWcLogger();
+    }
+    return $logger;
+}
+
 // ── WP/WC function stubs ────────────────────────────────────────────
 
 function __($text, $domain = 'default')
