@@ -246,6 +246,10 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 'text' => [
                     'tooltip_phone' => __('We require your phone number so we can verify your purchase.', 'twoinc-payment-gateway'),
                     'tooltip_company' => __('We use your company name to automatically populate your address and register the company that made the purchase.', 'twoinc-payment-gateway'),
+                    // Shown in the company-search dropdown when the lookup
+                    // times out or comes back degraded (TWO-25232) — never
+                    // for a search that simply matched nothing.
+                    'company_search_unavailable' => __('Company search is temporarily unavailable. Please try again.', 'twoinc-payment-gateway'),
                 ],
                 'twoinc_checkout_host' => $this->wc_twoinc->get_twoinc_checkout_host(),
                 'enable_company_search' => $this->wc_twoinc->get_enable_company_search(),
