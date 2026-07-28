@@ -680,8 +680,8 @@ if (!class_exists('WC_Twoinc')) {
         private function get_abt_twoinc_html()
         {
             $abt_url = WC_Twoinc_Brand::get('about_url');
-            // A brand with no about page ('' — e.g. ABN, whose subtitle
-            // already carries its own "lees meer" link) renders nothing
+            // A brand with no about page ('' — e.g. a partner edition whose
+            // subtitle already carries its own inline "read more" link) renders nothing
             // here, regardless of the merchant's show_abt_link setting.
             if ($this->get_option('show_abt_link') === 'yes' && $abt_url !== '') {
                 $product_name = WC_Twoinc_Brand::get('product_name');
@@ -4155,15 +4155,19 @@ if (!class_exists('WC_Twoinc')) {
          * Deployed commit SHA for one component directory, or null when it
          * cannot be established. Two sources, in precedence order:
          *
-         *  1. `.two-deployed-commit` — a sidecar written by the release
+         *  1. The `.git` gitlink FILE of a git-sync worktree copy, whose
+         *     gitdir path ends in the commit SHA. This reflects what is
+         *     checked out RIGHT NOW, so it wins: on a live git-synced shop
+         *     a stamped tree can later be checked out over, at which point
+         *     the sidecar is frozen at the build that produced it and lies.
+         *  2. `.two-deployed-commit` — a sidecar written by the release
          *     workflow and shipped inside the zip, so wp.org / released
          *     installs (which carry no git metadata at all) still know
          *     which commit they were built from.
-         *  2. The `.git` gitlink FILE of a git-sync worktree copy, whose
-         *     gitdir path ends in the commit SHA.
          *
-         * An absent, unreadable, empty or malformed sidecar falls through
-         * to the gitlink rather than winning. Never throws.
+         * Each source falls THROUGH to the next when it is absent,
+         * unreadable, empty or malformed — neither short-circuits to null.
+         * Never throws.
          *
          * @param string $dir component directory (no trailing slash needed)
          *
@@ -4173,19 +4177,19 @@ if (!class_exists('WC_Twoinc')) {
         {
             $dir = rtrim((string) $dir, '/');
 
+            $git_pointer = $dir . '/.git';
+            if (is_file($git_pointer) && is_readable($git_pointer)) {
+                $pointer = @file_get_contents($git_pointer);
+                if (is_string($pointer) && preg_match('#gitdir:\s*.*/([0-9a-f]{7,40})\s*$#i', trim($pointer), $m)) {
+                    return strtolower($m[1]);
+                }
+            }
+
             $stamp = $dir . '/.two-deployed-commit';
             if (is_file($stamp) && is_readable($stamp)) {
                 $raw = @file_get_contents($stamp);
                 if (is_string($raw) && preg_match('/^[0-9a-f]{7,40}$/i', trim($raw))) {
                     return strtolower(trim($raw));
-                }
-            }
-
-            $git_pointer = $dir . '/.git';
-            if (is_file($git_pointer) && is_readable($git_pointer)) {
-                $pointer = @file_get_contents($git_pointer);
-                if (is_string($pointer) && preg_match('#gitdir:\s*.*/([0-9a-f]{40})\s*$#', trim($pointer), $m)) {
-                    return strtolower($m[1]);
                 }
             }
 

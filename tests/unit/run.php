@@ -144,8 +144,9 @@ final class BrandConfigSpec
             'testBuyerFeeShareCapRoundingToZeroWithholdsWholeSurcharge',
             'testCartFeeSkippedOnQuoteCurrencyMismatch',
             'testMinimumDescriptionShowsConvertedFloorWhenRateAvailable',
-            'testDeployedCommitSidecarWinsOverGitlink',
+            'testDeployedCommitGitlinkWinsOverSidecar',
             'testGarbageOrEmptySidecarFallsThroughToGitlink',
+            'testGarbageOrEmptyGitlinkFallsThroughToSidecar',
             'testNoProvenanceSourcesYieldsBareVersion',
             'testClientVersionNeverEmitsTrailingPlus',
             'testClientVersionSuffixesShortShaWhenStamped',
@@ -3734,20 +3735,19 @@ final class BrandConfigSpec
         return $method->invoke(null);
     }
 
-    private static function testDeployedCommitSidecarWinsOverGitlink(): void
+    private static function testDeployedCommitGitlinkWinsOverSidecar(): void
     {
-        // Released zips ship .two-deployed-commit; when both sources are
-        // present the sidecar is authoritative.
+        // The gitlink reflects what is checked out RIGHT NOW; the sidecar is
+        // frozen at the build that stamped it, so when both are present the
+        // gitlink is authoritative (org-wide order, TWO-25196).
         $gitlink = 'gitdir: /var/sync/worktrees/' . str_repeat('a', 40) . "\n";
         $dir = self::makeComponentDir([
             '.two-deployed-commit' => "deadbee\n",
             '.git' => $gitlink,
         ]);
         try {
-            TinyAssert::true(
-                strpos(self::provenanceOf($dir, '2.23.9'), '2.23.9 (deadbee,') === 0,
-                self::provenanceOf($dir, '2.23.9')
-            );
+            $described = self::provenanceOf($dir, '2.23.9');
+            TinyAssert::true(strpos($described, '2.23.9 (aaaaaaaaaaaa,') === 0, $described);
         } finally {
             self::removeComponentDir($dir);
         }
@@ -3767,6 +3767,33 @@ final class BrandConfigSpec
             try {
                 $described = self::provenanceOf($dir, '2.23.9');
                 TinyAssert::true(strpos($described, '2.23.9 (bbbbbbbbbbbb,') === 0, $described);
+            } finally {
+                self::removeComponentDir($dir);
+            }
+        }
+    }
+
+    private static function testGarbageOrEmptyGitlinkFallsThroughToSidecar(): void
+    {
+        // Mirror of the above now that the gitlink is first: a `.git` file
+        // that carries no usable SHA (submodule pointer, plain gitdir, too
+        // few hex chars) must fall through to the sidecar, not to null.
+        $pointers = [
+            "\n",
+            '   ',
+            'gitdir: ../.git/modules/twoinc',
+            'gitdir: /var/sync/worktrees/abcdef',
+            'gitdir: /var/sync/worktrees/' . str_repeat('f', 41),
+            'ref: refs/heads/staging',
+        ];
+        foreach ($pointers as $pointer) {
+            $dir = self::makeComponentDir([
+                '.two-deployed-commit' => "deadbee\n",
+                '.git' => $pointer,
+            ]);
+            try {
+                $described = self::provenanceOf($dir, '2.23.9');
+                TinyAssert::true(strpos($described, '2.23.9 (deadbee,') === 0, $described);
             } finally {
                 self::removeComponentDir($dir);
             }
