@@ -272,6 +272,32 @@
   }
 }
 
+/*
+ * Company-search spinner (TWO-25232). Sits inside the select2 search field
+ * itself, not in the results list, so it reads as "this field is working"
+ * and does not fight the results message it would otherwise replace. Same
+ * .twoinc-dots pulse as every other loading state here. Only laid out while
+ * .twoinc-searching is set, so the reserved right-hand gutter appears with
+ * the spinner instead of permanently narrowing the input.
+ */
+.select2-search--dropdown.twoinc-searching {
+  position: relative;
+}
+.twoinc-search-spinner {
+  display: none;
+}
+.select2-search--dropdown.twoinc-searching .twoinc-search-spinner {
+  display: inline-block;
+  position: absolute;
+  top: 50%;
+  right: 14px;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.select2-search--dropdown.twoinc-searching .select2-search__field {
+  padding-right: 30px;
+}
+
 /* Sole trader toggle (TWO-24754) */
 /*
  * Sole-trader mode chips + signup note. Palette mirrors the Magento

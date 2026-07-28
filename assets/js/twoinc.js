@@ -43,6 +43,64 @@ let twoincUtilHelper = {
 
 let twoincSelectWooHelper = {
   /**
+   * Hard ceiling on a single company-search request, ms (TWO-25232). Before
+   * this there was no client timeout at all, so a request that never
+   * completed left the dropdown spinning forever. Deliberately wider than
+   * the backend's own retry envelope for the upstream provider lookup, so a
+   * slow-but-arriving response is never cut off client-side — this is the
+   * backstop for a request that does not arrive at all.
+   */
+  companySearchTimeoutMs: 30000,
+
+  /**
+   * Text for a company search that could not be completed. Read lazily
+   * because window.twoinc is populated by the checkout render; the literal
+   * is the last-resort fallback for a page where the localised string is
+   * missing (older cached PHP, brand overlay that trims the text map).
+   */
+  companySearchUnavailableText: function () {
+    return (
+      (window.twoinc && window.twoinc.text && window.twoinc.text.company_search_unavailable) ||
+      "Company search is temporarily unavailable. Please try again."
+    );
+  },
+
+  /**
+   * Toggle the in-field search spinner. Reuses the one loading idiom in
+   * this plugin (.twoinc-dots — shared with the order-intent check and the
+   * term-chip fee quote) rather than introducing a second one.
+   *
+   * The search input lives inside the dropdown, which select2 tears down
+   * and rebuilds on every open, so the spinner node is created lazily on
+   * each search rather than once at init.
+   */
+  toggleCompanySearchSpinner: function (isSearching) {
+    const $search = jQuery('input[aria-owns="select2-billing_company_display-results"]').parent();
+    if ($search.length === 0) return;
+    if ($search.find(".twoinc-search-spinner").length === 0) {
+      $search.append(
+        '<span class="twoinc-search-spinner" aria-hidden="true">' +
+          '<span class="twoinc-dots"><span>.</span><span>.</span><span>.</span></span>' +
+          "</span>"
+      );
+    }
+    $search.toggleClass("twoinc-searching", !!isSearching);
+  },
+
+  /**
+   * Replace the results list with the "search unavailable" message. Goes
+   * through select2's own results:message channel (the results adapter
+   * listens on the container for it) so the message is cleared on the next
+   * query like any other, instead of us hand-managing dropdown DOM.
+   */
+  showCompanySearchUnavailable: function () {
+    const select2 = jQuery("#billing_company_display").data("select2");
+    if (select2 && typeof select2.trigger === "function") {
+      select2.trigger("results:message", { message: "errorLoading" });
+    }
+  },
+
+  /**
    * Generate parameters for selectwoo
    */
   genSelectWooParams: function () {
@@ -63,9 +121,11 @@ let twoincSelectWooHelper = {
       },
       language: {
         errorLoading: function () {
-          // return wc_country_select_params.i18n_ajax_error
-          // Should not show ajax error if request is cancelled
-          return wc_country_select_params.i18n_searching;
+          // Only ever reached deliberately now: the custom ajax transport
+          // below suppresses the cancelled-request case (which is why this
+          // used to masquerade as "searching…") and raises this message
+          // only for a timeout, a transport error, or a degraded response.
+          return twoincSelectWooHelper.companySearchUnavailableText();
         },
         inputTooShort: function (t) {
           t = t.minimum - t.input.length;
@@ -82,7 +142,54 @@ let twoincSelectWooHelper = {
       },
       ajax: {
         dataType: "json",
-        delay: 200,
+        // 300ms across all three plugin checkouts (was 200 here).
+        delay: 300,
+        /**
+         * Replaces select2's default transport so the request carries a
+         * timeout and so failures can be told apart. select2's own failure
+         * handler cannot make that distinction — it treats any jqXHR with
+         * status 0 as a cancellation, and a jQuery timeout also reports
+         * status 0 — which is why failure() is not called from here at all
+         * and this code owns the messaging.
+         */
+        transport: function (params, success) {
+          twoincSelectWooHelper.toggleCompanySearchSpinner(true);
+
+          const request = jQuery.ajax(
+            jQuery.extend({}, params, {
+              timeout: twoincSelectWooHelper.companySearchTimeoutMs
+            })
+          );
+
+          request.done(function (data) {
+            // `degraded` marks an HTTP 200 whose (near-empty) result set is
+            // unreliable because the upstream provider lookup timed out.
+            // The field may not be deployed yet, so absent must read as not
+            // degraded — hence the explicit === true rather than truthiness.
+            if (data && data.degraded === true) {
+              success({ items: [] });
+              twoincSelectWooHelper.showCompanySearchUnavailable();
+              return;
+            }
+            success(data);
+          });
+
+          request.fail(function (jqXHR, textStatus) {
+            // A cancelled request is routine: select2 aborts the in-flight
+            // search on every keystroke, and the widget is re-created on
+            // country change. Those must stay silent. A timeout or a real
+            // transport error must not — left silent it renders as "no
+            // companies found", which is a wrong answer, not a missing one.
+            if (textStatus === "abort") return;
+            twoincSelectWooHelper.showCompanySearchUnavailable();
+          });
+
+          request.always(function () {
+            twoincSelectWooHelper.toggleCompanySearchSpinner(false);
+          });
+
+          return request;
+        },
         url: function (params) {
           const searchParams = new URLSearchParams({
             country: country,
@@ -97,8 +204,11 @@ let twoincSelectWooHelper = {
         },
         processResults: function (response, params) {
           const items = [];
-          for (let i = 0; i < response.items.length; i++) {
-            const item = response.items[i];
+          // A degraded response is fed through here with a synthesised
+          // empty payload, and a malformed body must not throw either.
+          const rawItems = response && Array.isArray(response.items) ? response.items : [];
+          for (let i = 0; i < rawItems.length; i++) {
+            const item = rawItems[i];
             items.push({
               id: item.name,
               text: item.name,
