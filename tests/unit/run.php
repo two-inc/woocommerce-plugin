@@ -150,6 +150,9 @@ final class BrandConfigSpec
             'testClientVersionNeverEmitsTrailingPlus',
             'testClientVersionSuffixesShortShaWhenStamped',
             'testClientVersionIsQueryEncodedAsPlus',
+            'testPaymentBoxOrdersTaglineChipsThenSoleTrader',
+            'testSelectedTermInputPrecedesChipsContainer',
+            'testBrandWithoutTaglineEmitsNoTaglineBlock',
         ];
         foreach ($tests as $test) {
             self::reset();
@@ -3817,6 +3820,101 @@ final class BrandConfigSpec
         TinyAssert::same(
             'client_v=2.23.9%2B1a2b3c4',
             http_build_query(['client_v' => '2.23.9+1a2b3c4'])
+        );
+    }
+
+    /**
+     * Brand file declaring a tagline, so the tagline block renders. Uses an
+     * inline filter rather than the shared testbrand fixture, which other
+     * specs assert against.
+     */
+    private static function useTaglineBrand(): void
+    {
+        add_filter('twoinc_brand_file', static function ($file) {
+            return __DIR__ . '/fixtures/taglinebrand.php';
+        });
+    }
+
+    /**
+     * The payment box must order the brand tagline above the term
+     * chips, and the chips above the sole-trader toggle, matching the
+     * Magento Luma renderer. Pinned because the whole box is one
+     * concatenated string, so ordering is a silent, easy regression.
+     */
+    private static function testPaymentBoxOrdersTaglineChipsThenSoleTrader(): void
+    {
+        self::useTaglineBrand();
+        $html = self::gateway()->build_payment_description();
+
+        $tagline = strpos($html, 'twoinc-payment-subtitle');
+        $chips = strpos($html, 'twoinc-term-chips');
+        $sole_trader = strpos($html, 'twoinc-sole-trader-toggle');
+        $about = strpos($html, 'abt-twoinc');
+
+        TinyAssert::true($tagline !== false, 'tagline block missing');
+        TinyAssert::true($chips !== false, 'chips container missing');
+        TinyAssert::true($sole_trader !== false, 'sole-trader toggle missing');
+        TinyAssert::true($about !== false, 'about block missing');
+
+        TinyAssert::true($tagline < $chips, 'tagline must precede the chips');
+        TinyAssert::true($chips < $sole_trader, 'chips must precede the sole-trader toggle');
+        TinyAssert::true($sole_trader < $about, 'about block must trail the box');
+    }
+
+    /**
+     * The chips JS appends its own copy of the selected-term input inside
+     * the chips container, and the LAST such input wins the POST. The
+     * server-rendered one must therefore stay ahead of the container, or a
+     * stale server value would override the buyer's chip selection.
+     */
+    private static function testSelectedTermInputPrecedesChipsContainer(): void
+    {
+        self::useTaglineBrand();
+        // Payment terms must actually be enabled, or the input is never
+        // rendered and this asserts nothing.
+        $gateway = new class extends WC_Twoinc {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+
+            public function get_merchant_available_terms(bool $refresh = false): array
+            {
+                return [14, 30, 60];
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                if ($key === 'payment_terms_days') {
+                    return [14, 30, 60];
+                }
+                return $empty_value ?? '';
+            }
+        };
+
+        $html = $gateway->build_payment_description();
+        $input = strpos($html, WC_Twoinc_Payment_Terms::SESSION_KEY);
+        $chips = strpos($html, 'twoinc-term-chips');
+
+        TinyAssert::true($input !== false, 'server-rendered term input missing');
+        TinyAssert::true(
+            $input < $chips,
+            'server-rendered term input must precede the chips container'
+        );
+    }
+
+    /**
+     * A brand leaving checkout_subtitle empty (the Two default) emits no
+     * tagline wrapper at all — the reorder must not introduce an empty div
+     * into vanilla checkout.
+     */
+    private static function testBrandWithoutTaglineEmitsNoTaglineBlock(): void
+    {
+        $html = self::gateway()->build_payment_description();
+        TinyAssert::same('', WC_Twoinc_Brand::get('checkout_subtitle'));
+        TinyAssert::true(
+            strpos($html, 'twoinc-payment-subtitle') === false,
+            'a brand with no tagline must emit no tagline block'
         );
     }
 }

@@ -78,7 +78,7 @@ if (!class_exists('WC_Twoinc')) {
              */
             $this->description = apply_filters(
                 'twoinc_payment_description',
-                $this->get_pay_box_description() . $this->get_pay_subtitle(),
+                $this->build_payment_description(),
                 $this
             );
 
@@ -749,11 +749,20 @@ if (!class_exists('WC_Twoinc')) {
                 }
             }
 
+            // Block order mirrors the Magento Luma renderer's
+            // gateway_method.html: term chips first, then the sole-trader
+            // mode toggle.
+            //
+            // $term_input stays AHEAD of the chips container on purpose: the
+            // chips JS appends its own copy of the same input INSIDE that
+            // container, and the later element wins the POST. Moving this
+            // one after the container would let the stale server-rendered
+            // term override the buyer's chip selection.
             return sprintf(
                 '<div>
-                    <div class="twoinc-sole-trader-toggle hidden" role="radiogroup"></div>
                     %s
                     <div class="twoinc-term-chips hidden" role="radiogroup"></div>
+                    <div class="twoinc-sole-trader-toggle hidden" role="radiogroup"></div>
                     <div class="twoinc-pay-box twoinc-loader hidden"></div>
                     <div class="twoinc-pay-box twoinc-intent-approved hidden">%s</div>
                     <div class="twoinc-pay-box twoinc-err-payment-default hidden">%s</div>
@@ -1377,25 +1386,59 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * Get payment subtitle
+         * Assemble the checkout payment-box description.
+         *
+         * Block order mirrors the Magento Luma renderer
+         * (view/frontend/web/template/payment/gateway_method.html): brand
+         * tagline directly under the method title, then the term chips,
+         * then the sole-trader toggle, with the about block trailing.
+         *
+         * WooCommerce core renders the method title and the gateway icon
+         * together inside the payment method's <label>, and this
+         * description in the payment box below it. The tagline therefore
+         * leads the description box rather than sitting inside the label:
+         * a tagline may carry a link, and an <a> inside a <label for>
+         * both toggles the radio and follows the href.
+         */
+        public function build_payment_description()
+        {
+            return $this->get_pay_subtitle()
+                . $this->get_pay_box_description()
+                . $this->get_about_block_html();
+        }
+
+        /**
+         * Brand tagline shown directly under the payment-method title.
+         *
+         * Returns ONLY the tagline. The about block used to be concatenated
+         * on here, which pinned the two together at the very bottom of the
+         * payment box; the tagline now leads the box and the about block
+         * still trails it (see get_about_block_html and the description
+         * assembly in the constructor).
          */
         public function get_pay_subtitle()
         {
             $subtitle = WC_Twoinc_Brand::get('checkout_subtitle');
-            // wp_kses_post, not esc_html: a brand's subtitle may carry an
-            // inline link (e.g. ABN's "lees meer") — esc_html stripped it.
-            $subtitle_html = $subtitle
-                ? sprintf(
-                    '<div class="twoinc-payment-subtitle">%s</div>',
-                    wp_kses_post(__($subtitle, 'twoinc-payment-gateway'))
-                )
-                : '';
+            if (!$subtitle) {
+                return '';
+            }
 
+            // wp_kses_post, not esc_html: a brand's subtitle may carry an
+            // inline link (e.g. a brand FAQ "read more") — esc_html stripped it.
             return sprintf(
-                '%s<div class="abt-twoinc">%s</div>',
-                $subtitle_html,
-                $this->get_abt_twoinc_html(),
+                '<div class="twoinc-payment-subtitle">%s</div>',
+                wp_kses_post(__($subtitle, 'twoinc-payment-gateway'))
             );
+        }
+
+        /**
+         * The about block, wrapped, as the trailing element of the payment
+         * box. Split out of get_pay_subtitle; the twoinc_about_html filter
+         * seam is untouched and still applies inside get_abt_twoinc_html.
+         */
+        private function get_about_block_html()
+        {
+            return sprintf('<div class="abt-twoinc">%s</div>', $this->get_abt_twoinc_html());
         }
 
         /**
