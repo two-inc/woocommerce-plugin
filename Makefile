@@ -2,7 +2,7 @@
 # Copy .env.example to .env first; docker compose reads it natively.
 
 .PHONY: help install configure run debug proxy stop clean logs logs-wpcli \
-	test-unit test format archive patch minor major \
+	test-unit test format archive bump patch minor major \
 	e2e-install e2e-test e2e-test-headed phpcs phpstan
 
 .DEFAULT_GOAL := help
@@ -93,6 +93,16 @@ phpstan:
 ## Create a versioned zip archive
 archive:
 	git archive --format zip HEAD > tillit-payment-gateway.zip
+# Version-bump convention (TWO-25230): patch on staging, minor on main, major
+# via the escape hatch. The staging half is automated in
+# .github/workflows/version-bump.yml, so DO NOT hand-run a bump on staging —
+# it would double-bump when the workflow fires on the same push. These targets
+# are the `main` half, which stays manual because it also cuts the Release.
+#
+# Prefer `make bump`: it asks .github/scripts/decide-bump-level.sh for the
+# level instead of leaving it to whoever is at the keyboard, which is how the
+# level used to be chosen. The explicit patch/minor/major targets remain for
+# the case where you genuinely mean to override it.
 bumpver-%:
 	@if [ "$$(git rev-parse --abbrev-ref HEAD)" != "main" ]; then \
 		echo "Error: Version bumping is only allowed on the main branch. Current branch: $$(git rev-parse --abbrev-ref HEAD)"; \
@@ -104,11 +114,37 @@ bumpver-%:
 	fi
 	SKIP=commit-msg bumpver update --$*
 	gh release create --latest --generate-notes
-## Bump patch version (main branch only)
+
+## Bump the version at the level the convention says (main branch only)
+bump:
+	@branch="$$(git rev-parse --abbrev-ref HEAD)"; \
+	out="$$(.github/scripts/decide-bump-level.sh "$$branch")"; \
+	level="$$(printf '%s\n' "$$out" | sed -n 's/^level=//p')"; \
+	set_version="$$(printf '%s\n' "$$out" | sed -n 's/^set_version=//p')"; \
+	reason="$$(printf '%s\n' "$$out" | sed -n 's/^reason=//p')"; \
+	if [ -n "$$set_version" ]; then \
+		echo "Convention says major -> $$set_version ($$reason)"; \
+		$(MAKE) bumpver-set-version SET_VERSION="$$set_version"; \
+	else \
+		echo "Convention says $$level ($$reason)"; \
+		$(MAKE) "bumpver-$$level"; \
+	fi
+
+# --set-version rather than --major: a declared `.next-major` may skip more
+# than one major, which --major cannot express.
+bumpver-set-version:
+	@if [ "$$(git rev-parse --abbrev-ref HEAD)" != "main" ]; then \
+		echo "Error: Version bumping is only allowed on the main branch. Current branch: $$(git rev-parse --abbrev-ref HEAD)"; \
+		exit 1; \
+	fi
+	SKIP=commit-msg bumpver update --set-version "$(SET_VERSION)"
+	gh release create --latest --generate-notes
+
+## Bump patch version (main branch only; prefer `make bump`)
 patch: bumpver-patch
-## Bump minor version (main branch only)
+## Bump minor version (main branch only; prefer `make bump`)
 minor: bumpver-minor
-## Bump major version (main branch only)
+## Bump major version (main branch only; prefer `make bump`)
 major: bumpver-major
 
 e2e-install:
