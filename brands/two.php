@@ -72,6 +72,11 @@ return [
     // whole sentence in <checkout_subtitle>. Magento's translator resolves
     // a runtime key, so a variable string is translatable there; gettext
     // extracts statically and cannot.
+    // Accepted constraint of that inversion: every brand setting this key
+    // gets the SAME sentence, because the sentence is now platform copy. A
+    // brand needing different wording needs a new msgid in
+    // get_pay_subtitle, not a value here — brand config cannot carry
+    // translatable prose at all.
     'checkout_subtitle_faq_url' => null,
     // Contact address shown in the admin API-key field help for
     // obtaining production keys. WC_Twoinc::init_form_fields is the only
