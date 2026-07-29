@@ -108,22 +108,6 @@ msgstr "%s forhåndsutfylte felt"
 msgid "%s Test Server"
 msgstr "%s testserver"
 
-#: class/WC_Twoinc.php:1672
-msgid "Add input field for \"Department\""
-msgstr "Legg til felt for \"Avdeling\""
-
-#: class/WC_Twoinc.php:1696
-msgid "Add input field for \"Invoice email address\""
-msgstr "Legg til inndatafelt for \"E-postadresse for faktura\""
-
-#: class/WC_Twoinc.php:1680
-msgid "Add input field for \"Project\""
-msgstr "Legg til felt for \"Prosjekt\""
-
-#: class/WC_Twoinc.php:1688
-msgid "Add input field for \"Purchase order number\""
-msgstr "Legg til felt for \"PO nummer\""
-
 #: class/WC_Twoinc_Helper.php:145
 msgid "Address"
 msgstr "Adresse"
@@ -562,6 +546,22 @@ msgstr "Sett opp kontoen min"
 #, php-format
 msgid "Show \"What is %s\" link in checkout"
 msgstr "Vis koblingen \"Hva er %s \" i kassen"
+
+#: class/WC_Twoinc.php:3446
+msgid "Show Department field"
+msgstr "Vis feltet for avdeling"
+
+#: class/WC_Twoinc.php:3422
+msgid "Show Invoice email field"
+msgstr "Vis e-postfeltet for faktura"
+
+#: class/WC_Twoinc.php:3438
+msgid "Show Project field"
+msgstr "Vis feltet for prosjekt"
+
+#: class/WC_Twoinc.php:3430
+msgid "Show Purchase order number field"
+msgstr "Vis feltet for PO-nummer"
 
 #: class/WC_Twoinc.php:1716
 msgid "Skip user validation at order confirmation"

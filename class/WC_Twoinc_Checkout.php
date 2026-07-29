@@ -76,7 +76,8 @@ if (!class_exists('WC_Twoinc_Checkout')) {
         }
 
         /**
-         * Add fields: Company name, Company ID, Department, Project
+         * Add fields: Company name, Company ID, and the optional buyer fields
+         * (invoice email, purchase order number, project, department).
          *
          * @param $fields
          *
@@ -121,21 +122,22 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 'priority' => $company_name_priority + 1
             ];
 
-            if ($this->wc_twoinc->get_option('add_field_department') === 'yes') {
-                $fields['billing']['department'] = [
-                    'label' => __('Department', 'twoinc-payment-gateway'),
-                    'class' => array('hidden'),
-                    'required' => false,
-                    'priority' => $company_name_priority + 2
-                ];
-            }
-
-            if ($this->wc_twoinc->get_option('add_field_project') === 'yes') {
-                $fields['billing']['project'] = [
-                    'label' => __('Project', 'twoinc-payment-gateway'),
-                    'class' => array('hidden'),
-                    'required' => false,
-                    'priority' => $company_name_priority + 3
+            // Optional checkout fields. ORDER IS LOAD-BEARING: WooCommerce sorts
+            // the billing fields by `priority` (wc_checkout_fields_uasort_comparison),
+            // so the ascending offsets below are what the buyer sees, and they must
+            // match the admin pane sequence in WC_Twoinc::init_form_fields() —
+            // invoice email, purchase order number, project, department. The order
+            // note is WooCommerce core's own `order_comments` and stays where core
+            // puts it (the "Additional information" block, after billing). TWO-25263.
+            if ($this->wc_twoinc->get_option('add_field_invoice_email') === 'yes') {
+                $fields['billing']['invoice_email'] = [
+                    'label'       => __('Invoice email address', 'twoinc-payment-gateway'),
+                    'class'       => array('form-row-wide'),
+                    'type'        => 'email',
+                    'placeholder' => sprintf(__('Only for invoices being sent by %s', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')),
+                    'validate'    => array('email'),
+                    'required'    => false,
+                    'priority'    => $company_name_priority + 2
                 ];
             }
 
@@ -144,19 +146,25 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     'label' => __('Purchase order number', 'twoinc-payment-gateway'),
                     'class' => array('hidden'),
                     'required' => false,
+                    'priority' => $company_name_priority + 3
+                ];
+            }
+
+            if ($this->wc_twoinc->get_option('add_field_project') === 'yes') {
+                $fields['billing']['project'] = [
+                    'label' => __('Project', 'twoinc-payment-gateway'),
+                    'class' => array('hidden'),
+                    'required' => false,
                     'priority' => $company_name_priority + 4
                 ];
             }
 
-            if ($this->wc_twoinc->get_option('add_field_invoice_email') == 'yes') {
-                $fields['billing']['invoice_email'] = [
-                    'label'       => __('Invoice email address', 'twoinc-payment-gateway'),
-                    'class'       => array('form-row-wide'),
-                    'type'        => 'email',
-                    'placeholder' => sprintf(__('Only for invoices being sent by %s', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')),
-                    'validate'    => array('email'),
-                    'required'    => false,
-                    'priority'    => $company_name_priority + 5
+            if ($this->wc_twoinc->get_option('add_field_department') === 'yes') {
+                $fields['billing']['department'] = [
+                    'label' => __('Department', 'twoinc-payment-gateway'),
+                    'class' => array('hidden'),
+                    'required' => false,
+                    'priority' => $company_name_priority + 5
                 ];
             }
 

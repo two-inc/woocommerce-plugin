@@ -108,22 +108,6 @@ msgstr "%s förifyllda fält"
 msgid "%s Test Server"
 msgstr "%s testserver"
 
-#: class/WC_Twoinc.php:1672
-msgid "Add input field for \"Department\""
-msgstr "Lägg till inmatningsfält för \"Avdelning\""
-
-#: class/WC_Twoinc.php:1696
-msgid "Add input field for \"Invoice email address\""
-msgstr "Lägg till inmatningsfält för \"E-postadress för faktura\""
-
-#: class/WC_Twoinc.php:1680
-msgid "Add input field for \"Project\""
-msgstr "Lägg till inmatningsfält för \"Projekt\""
-
-#: class/WC_Twoinc.php:1688
-msgid "Add input field for \"Purchase order number\""
-msgstr "Lägg till inmatningsfält för \"Inköpsordernummer\""
-
 #: class/WC_Twoinc_Helper.php:145
 msgid "Address"
 msgstr "Adress"
@@ -562,6 +546,22 @@ msgstr "Konfigurera mitt konto"
 #, php-format
 msgid "Show \"What is %s\" link in checkout"
 msgstr "Visa länken \"Vad är %s \" i kassan"
+
+#: class/WC_Twoinc.php:3446
+msgid "Show Department field"
+msgstr "Visa fältet för avdelning"
+
+#: class/WC_Twoinc.php:3422
+msgid "Show Invoice email field"
+msgstr "Visa e-postfältet för faktura"
+
+#: class/WC_Twoinc.php:3438
+msgid "Show Project field"
+msgstr "Visa fältet för projekt"
+
+#: class/WC_Twoinc.php:3430
+msgid "Show Purchase order number field"
+msgstr "Visa fältet för PO-nummer"
 
 #: class/WC_Twoinc.php:1716
 msgid "Skip user validation at order confirmation"

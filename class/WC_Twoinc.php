@@ -2503,19 +2503,19 @@ if (!class_exists('WC_Twoinc')) {
                     </td>
                 </tr>
                 <tr>
-                    <th><label for="twoinc_department"><?php _e('Department', 'twoinc-payment-gateway'); ?></label></th>
-                    <td>
-                        <input type="text" name="twoinc_department" id="twoinc_department" value="<?php echo esc_attr(get_the_author_meta(WC_Twoinc_Brand::prefixed_name('department'), $user->ID)); ?>" class="regular-text" />
-                        <br />
-                        <span class="description"><?php _e("The department displayed on the invoices"); ?></span>
-                    </td>
-                </tr>
-                <tr>
                     <th><label for="twoinc_project"><?php _e('Project', 'twoinc-payment-gateway'); ?></label></th>
                     <td>
                         <input type="text" name="twoinc_project" id="twoinc_project" value="<?php echo esc_attr(get_the_author_meta(WC_Twoinc_Brand::prefixed_name('project'), $user->ID)); ?>" class="regular-text" />
                         <br />
                         <span class="description"><?php _e("The project displayed on the invoices"); ?></span>
+                    </td>
+                </tr>
+                <tr>
+                    <th><label for="twoinc_department"><?php _e('Department', 'twoinc-payment-gateway'); ?></label></th>
+                    <td>
+                        <input type="text" name="twoinc_department" id="twoinc_department" value="<?php echo esc_attr(get_the_author_meta(WC_Twoinc_Brand::prefixed_name('department'), $user->ID)); ?>" class="regular-text" />
+                        <br />
+                        <span class="description"><?php _e("The department displayed on the invoices"); ?></span>
                     </td>
                 </tr>
             </table>
@@ -3427,33 +3427,41 @@ if (!class_exists('WC_Twoinc')) {
                     'type'        => 'checkbox',
                     'default'     => 'yes'
                 ],
-                'add_field_department' => [
-                    'title'       => __('Add input field for "Department"', 'twoinc-payment-gateway'),
-                    'description' => __('Adds an input field where buyers can input their department to display on the invoice.', 'twoinc-payment-gateway'),
-                    'desc_tip'    => true,
-                    'label'       => ' ',
-                    'type'        => 'checkbox',
-                    'default'     => 'yes'
-                ],
-                'add_field_project' => [
-                    'title'       => __('Add input field for "Project"', 'twoinc-payment-gateway'),
-                    'description' => __('Adds an input field where buyers can input their project in the company to display on the invoice.', 'twoinc-payment-gateway'),
+                // Optional checkout fields. ORDER IS LOAD-BEARING: WooCommerce's
+                // WC_Settings_API renders form_fields in array order, so this
+                // sequence is what the merchant reads top-to-bottom. It must match
+                // the cross-plugin canonical order (invoice email, purchase order
+                // number, project, department) and the checkout priorities in
+                // WC_Twoinc_Checkout::update_company_fields(). The order note is
+                // not listed here — WooCommerce core owns it (`order_comments`),
+                // so the plugin has no toggle and no field of its own. TWO-25263.
+                'add_field_invoice_email' => [
+                    'title'       => __('Show Invoice email field', 'twoinc-payment-gateway'),
+                    'description' => __('Adds an input field where buyers can input optional additional email address to receive invoice.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'label'       => ' ',
                     'type'        => 'checkbox',
                     'default'     => 'yes'
                 ],
                 'add_field_purchase_order_number' => [
-                    'title'       => __('Add input field for "Purchase order number"', 'twoinc-payment-gateway'),
+                    'title'       => __('Show Purchase order number field', 'twoinc-payment-gateway'),
                     'description' => __('Adds an input field where buyers can input their purchase order number to display on the invoice.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'label'       => ' ',
                     'type'        => 'checkbox',
                     'default'     => 'yes'
                 ],
-                'add_field_invoice_email' => [
-                    'title'       => __('Add input field for "Invoice email address"', 'twoinc-payment-gateway'),
-                    'description' => __('Adds an input field where buyers can input optional additional email address to receive invoice.', 'twoinc-payment-gateway'),
+                'add_field_project' => [
+                    'title'       => __('Show Project field', 'twoinc-payment-gateway'),
+                    'description' => __('Adds an input field where buyers can input their project in the company to display on the invoice.', 'twoinc-payment-gateway'),
+                    'desc_tip'    => true,
+                    'label'       => ' ',
+                    'type'        => 'checkbox',
+                    'default'     => 'yes'
+                ],
+                'add_field_department' => [
+                    'title'       => __('Show Department field', 'twoinc-payment-gateway'),
+                    'description' => __('Adds an input field where buyers can input their department to display on the invoice.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'label'       => ' ',
                     'type'        => 'checkbox',
