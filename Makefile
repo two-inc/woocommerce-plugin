@@ -103,16 +103,14 @@ phpstan:
 ## Create a versioned zip archive
 archive:
 	git archive --format zip HEAD > tillit-payment-gateway.zip
-# Version-bump convention (TWO-25230): patch on staging, minor on main, major
-# via the escape hatch. The staging half is automated in
-# .github/workflows/version-bump.yml, so DO NOT hand-run a bump on staging —
-# it would double-bump when the workflow fires on the same push. These targets
-# are the `main` half, which stays manual because it also cuts the Release.
+# Version-bump convention (TWO-25256): the version is computed from the
+# conventional-commit types of a PR's own commits and committed onto that PR's
+# branch by .github/workflows/version-bump.yml, so it describes the change
+# rather than the branch it merges into. DO NOT hand-run a bump for a PR into
+# `staging` - CI owns it, and a hand-run one is at best redundant.
 #
-# Prefer `make bump`: it asks .github/scripts/decide-bump-level.sh for the
-# level instead of leaving it to whoever is at the keyboard, which is how the
-# level used to be chosen. The explicit patch/minor/major targets remain for
-# the case where you genuinely mean to override it.
+# `make bump` is now a PREVIEW of that decision (it writes nothing). The
+# explicit patch/minor/major targets remain for a deliberate manual override.
 bumpver-%:
 	@if [ "$$(git rev-parse --abbrev-ref HEAD)" != "main" ]; then \
 		echo "Error: Version bumping is only allowed on the main branch. Current branch: $$(git rev-parse --abbrev-ref HEAD)"; \
@@ -125,20 +123,9 @@ bumpver-%:
 	SKIP=commit-msg bumpver update --$*
 	gh release create --latest --generate-notes
 
-## Bump the version at the level the convention says (main branch only)
+## Preview the version this branch's PR will land with (writes nothing)
 bump:
-	@branch="$$(git rev-parse --abbrev-ref HEAD)"; \
-	out="$$(.github/scripts/decide-bump-level.sh "$$branch")"; \
-	level="$$(printf '%s\n' "$$out" | sed -n 's/^level=//p')"; \
-	set_version="$$(printf '%s\n' "$$out" | sed -n 's/^set_version=//p')"; \
-	reason="$$(printf '%s\n' "$$out" | sed -n 's/^reason=//p')"; \
-	if [ -n "$$set_version" ]; then \
-		echo "Convention says major -> $$set_version ($$reason)"; \
-		$(MAKE) bumpver-set-version SET_VERSION="$$set_version"; \
-	else \
-		echo "Convention says $$level ($$reason)"; \
-		$(MAKE) "bumpver-$$level"; \
-	fi
+	@.github/scripts/decide-bump-level.sh origin/staging HEAD >/dev/null
 
 # --set-version rather than --major: a declared `.next-major` may skip more
 # than one major, which --major cannot express.
