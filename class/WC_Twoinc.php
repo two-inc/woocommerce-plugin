@@ -1186,9 +1186,23 @@ if (!class_exists('WC_Twoinc')) {
             // backend enforces instead. Omitted entirely when no cap
             // exists or on a currency mismatch.
             $fixed_limit = $this->get_merchant_surcharge_limit(true);
-            $fixed_limit_label = $fixed_limit && $fixed_limit['currency'] === strtoupper((string) get_woocommerce_currency())
+            $currency_code = strtoupper((string) get_woocommerce_currency());
+            $fixed_limit_label = $fixed_limit && $fixed_limit['currency'] === $currency_code
                 ? $this->format_surcharge_limit_label($fixed_limit)
                 : '';
+            // Percentage ceiling. Mirrors Magento's
+            // ConfigRepository::SURCHARGE_PERCENTAGE_MAX; here the bound is
+            // the one validate_two_surcharge_grid_field() enforces, so the
+            // claimed and the enforced maximum stay the same number.
+            $percentage_limit_label = '100%';
+            // Shared trailing sentence on both percentage-bearing help
+            // variants, exactly as Magento's surcharge-grid.phtml composes
+            // it. %s is the currency SYMBOL there, not the code.
+            $limit_sentence = sprintf(
+                /* translators: %s: store currency symbol, e.g. "€" */
+                __('Enter a limit amount (in %s) if you do not want to charge your customer more than a specific amount. Leave the limit field empty if you don\'t want to impose a limit amount.', 'twoinc-payment-gateway'),
+                html_entity_decode(get_woocommerce_currency_symbol($currency_code), ENT_QUOTES, 'UTF-8')
+            );
 
             ob_start();
             // Rendered rows mirror the SAVED offered set; admin.js keeps the
@@ -1201,9 +1215,6 @@ if (!class_exists('WC_Twoinc')) {
             <tr valign="top" class="twoinc-surcharge-grid-field">
                 <th scope="row" class="titledesc"><label><?php echo wp_kses_post($data['title']); ?></label></th>
                 <td class="forminp">
-                    <?php if ($data['description']) : ?>
-                        <p class="description"><?php echo wp_kses_post($data['description']); ?></p>
-                    <?php endif; ?>
                     <p class="twoinc-surcharge-grid-empty"<?php echo empty($terms) ? '' : ' style="display:none"'; ?>><?php esc_html_e('No payment terms are offered yet — configure the offered terms above first.', 'twoinc-payment-gateway'); ?></p>
                     <table class="widefat twoinc-surcharge-grid" data-field-key="<?php echo esc_attr($field_key); ?>" style="max-width:620px<?php echo empty($terms) ? ';display:none' : ''; ?>">
                         <thead><tr>
@@ -1224,13 +1235,36 @@ if (!class_exists('WC_Twoinc')) {
                         <?php endforeach; ?>
                         </tbody>
                     </table>
+                    <?php if ($data['description']) : ?>
+                        <p class="description"><?php echo wp_kses_post($data['description']); ?></p>
+                    <?php endif; ?>
+                    <p class="description twoinc-surcharge-grid-currency-note"<?php echo empty($terms) ? ' style="display:none"' : ''; ?>><?php echo esc_html(sprintf(
+                        /* translators: %s: store currency code, e.g. "EUR" */
+                        __('Amounts are shown in %s.', 'twoinc-payment-gateway'),
+                        $currency_code
+                    )); ?></p>
                     <?php if ($fixed_limit_label !== '') : ?>
-                        <p class="description"><?php echo esc_html(sprintf(
+                        <p class="description twoinc-surcharge-grid-help twoinc-surcharge-grid-help--fixed" style="display:none"><?php echo esc_html(sprintf(
                             /* translators: %s: maximum fixed amount with currency, e.g. "EUR 25" */
                             __('Enter the amount you want to charge your customer. Max %s.', 'twoinc-payment-gateway'),
                             $fixed_limit_label
                         )); ?></p>
                     <?php endif; ?>
+                    <p class="description twoinc-surcharge-grid-help twoinc-surcharge-grid-help--percentage" style="display:none"><?php echo esc_html(sprintf(
+                        /* translators: %s: maximum percentage, e.g. "100%%" */
+                        __('Enter the percentage of the fee you want to charge your customer. Max: %s.', 'twoinc-payment-gateway'),
+                        $percentage_limit_label
+                    ) . ' ' . $limit_sentence); ?></p>
+                    <p class="description twoinc-surcharge-grid-help twoinc-surcharge-grid-help--fixed_and_percentage" style="display:none"><?php echo esc_html(($fixed_limit_label !== '' ? sprintf(
+                        /* translators: 1: maximum fixed amount with currency, e.g. "EUR 25"; 2: maximum percentage, e.g. "100%%" */
+                        __('Enter the amount and percentage of the fee you want to charge your customer. Max %1$s / %2$s.', 'twoinc-payment-gateway'),
+                        $fixed_limit_label,
+                        $percentage_limit_label
+                    ) : sprintf(
+                        /* translators: %s: maximum percentage, e.g. "100%%" */
+                        __('Enter the percentage of the fee you want to charge your customer. Max: %s.', 'twoinc-payment-gateway'),
+                        $percentage_limit_label
+                    )) . ' ' . $limit_sentence); ?></p>
                 </td>
             </tr>
             <?php
@@ -3556,7 +3590,13 @@ if (!class_exists('WC_Twoinc')) {
                 ],
                 'surcharge_grid' => [
                     'title'       => __('Payment Surcharge Configuration', 'twoinc-payment-gateway'),
-                    'description' => __('Per payment term: a fixed amount, a percentage of the order, and an optional cap on the percentage portion. Leave a cell blank for zero. Fixed amounts and caps are in the store currency and are not converted for multi-currency stores.', 'twoinc-payment-gateway'),
+                    // No 'description': the grid's help text is the
+                    // surcharge-method-keyed copy that
+                    // generate_two_surcharge_grid_html() renders BELOW the
+                    // table, word-for-word from Magento's
+                    // view/adminhtml/templates/system/config/field/surcharge-grid.phtml
+                    // (ABN-476). A 'description' set by a wc_two_form_fields
+                    // filter is still rendered, also below the table.
                     'type'        => 'two_surcharge_grid',
                 ],
                 'surcharge_rounding_basis' => [

@@ -404,6 +404,12 @@ jQuery(function ($) {
       $grid.find(".twoinc-col-limit").toggle(showPct);
       // No surcharge method: the whole grid row is noise.
       $(".twoinc-surcharge-grid-field").toggle(type !== "none");
+      // Help text below the grid follows the surcharge method, exactly as
+      // Magento's surcharge-grid.js switches its .surcharge-grid__helper-
+      // text--<type> paragraphs. Only one is ever visible; "none" shows
+      // none of them (the whole field row is hidden anyway).
+      $(".twoinc-surcharge-grid-help").hide();
+      $(".twoinc-surcharge-grid-help--" + type).show();
     }
 
     // ── Surcharge tax treatment/class visibility ─────────────────────
