@@ -4025,33 +4025,41 @@ final class BrandConfigSpec
             'tagline msgid missing from the .pot — it would be untranslatable'
         );
 
-        // And the locale that actually needs a non-English tagline must
-        // still carry one. Asserted against the COMPILED .mo, not the .po:
+        // And every locale that ships a tagline translation must still
+        // carry it. Asserted against the COMPILED .mo, not the .po:
         // WordPress reads only the .mo, the pair is hand-maintained, and
         // the two ways this silently reverts to English on a Dutch shop —
         // a forgotten msgfmt, or a fuzzy marker (which msgfmt drops) — are
         // both invisible in the .po text. Binary strpos is enough: msgstrs
         // are stored verbatim in the .mo string table.
-        $nl_mo = file_get_contents($languages . 'twoinc-payment-gateway-nl_NL.mo');
-        TinyAssert::true(
-            strpos($nl_mo, 'Voor alle bedrijven, %1$slees meer%2$s.') !== false,
-            'compiled nl_NL catalogue carries no tagline translation — '
-                . 'a Dutch shop would render English (recompile with msgfmt?)'
-        );
-        // The msgid has to match the source literal too, or the lookup
-        // misses and WordPress renders English however good the msgstr is.
-        // A msgid typo is otherwise undetectable here: __() is stubbed to
-        // identity, so the render assertion above cannot see it.
-        TinyAssert::true(
-            strpos($nl_mo, 'For all companies, %1$sread more%2$s.') !== false,
-            'compiled nl_NL msgid has drifted from the source literal'
-        );
+        $translated = [
+            'nl_NL' => 'Voor alle bedrijven, %1$slees meer%2$s.',
+            'nb_NO' => 'For alle bedrifter, %1$sles mer%2$s.',
+            'sv_SE' => 'För alla företag, %1$släs mer%2$s.',
+        ];
+        foreach ($translated as $locale => $msgstr) {
+            $mo = file_get_contents($languages . 'twoinc-payment-gateway-' . $locale . '.mo');
+            TinyAssert::true(
+                strpos($mo, $msgstr) !== false,
+                "compiled $locale catalogue carries no tagline translation — that shop "
+                    . 'would render English (recompile with msgfmt?)'
+            );
+            // The msgid has to match the source literal too, or the lookup
+            // misses and WordPress renders English however good the msgstr
+            // is. A msgid typo is otherwise undetectable here: __() is
+            // stubbed to identity, so the render assertion above cannot see
+            // it.
+            TinyAssert::true(
+                strpos($mo, 'For all companies, %1$sread more%2$s.') !== false,
+                "compiled $locale msgid has drifted from the source literal"
+            );
+        }
         // Both placeholders are pinned by that same match, which carries
         // them verbatim — a msgstr that dropped %2$s would sprintf an
         // unclosed <a>, and wp_kses_post does not balance tags, so the
         // anchor would swallow the payment box. Asserting %1$s/%2$s
-        // anywhere in the .mo separately would be vacuous: nine other
-        // msgstrs in this catalogue carry both.
+        // anywhere in a .mo separately would be vacuous: other msgstrs in
+        // these catalogues carry both.
     }
 
     /**

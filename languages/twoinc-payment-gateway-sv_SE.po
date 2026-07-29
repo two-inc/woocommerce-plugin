@@ -353,6 +353,12 @@ msgstr "Det gick inte att verifiera API-nyckeln."
 msgid "First name"
 msgstr "Förnamn"
 
+#. translators: %1$s opens and %2$s closes a link to the brand's FAQ page.
+#: class/WC_Twoinc.php
+#, php-format
+msgid "For all companies, %1$sread more%2$s."
+msgstr "För alla företag, %1$släs mer%2$s."
+
 #: class/WC_Twoinc.php:2224
 #, php-format
 msgid "Grow your B2B sales with Buy Now, Pay Later using %s!"
