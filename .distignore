@@ -6,6 +6,8 @@ cypress/
 docker/
 docs/
 snippets/
+node_modules/
+tests/js/
 
 # Files to ignore
 .distignore
@@ -17,6 +19,8 @@ snippets/
 bumpver.toml
 dev-requirements.txt
 docker-compose.yaml
+package.json
+package-lock.json
 README.md
 Makefile
 CODEOWNERS

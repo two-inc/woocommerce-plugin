@@ -1,0 +1,14 @@
+{
+  "name": "two-inc/woocommerce",
+  "description": "Two payment gateway for WooCommerce — JS dev-only manifest. The plugin's runtime metadata lives in tillit-payment-gateway.php; this file exists so the npm-based Jest test runner has somewhere to declare devDeps. Excluded from the release zip by .distignore.",
+  "private": true,
+  "scripts": {
+    "test:js": "jest --config tests/js/jest.config.js"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
+    "jquery": "^3.7.1",
+    "selectwoo": "https://codeload.github.com/woocommerce/selectWoo/tar.gz/e154b677c4b73a7070928ae20169a3934cea380d"
+  }
+}
