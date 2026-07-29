@@ -875,9 +875,13 @@ if (!class_exists('WC_Twoinc')) {
             // process_payment can validate it without the session. The chips
             // JS maintains its own hidden input INSIDE the chips container
             // (later in the DOM, so it wins the POST when chips render);
-            // this server-side one covers the single-term case, where the
-            // chip chooser never renders and JS posts nothing (TWO-24812 —
-            // a withdrawn single term must abort, not silently re-price).
+            // this server-side one is the fallback for every path where that
+            // JS never runs — JS disabled, a theme that strips the container,
+            // or the pay-for-order page (TWO-24812 — a withdrawn single term
+            // must abort, not silently re-price). Since ABN-468 the chips DO
+            // render for a single offered term, so this is no longer the
+            // single-term case's only input; it stays as the belt to the
+            // JS input's braces.
             $term_input = '';
             if (class_exists('WC_Twoinc_Payment_Terms') && WC_Twoinc_Payment_Terms::is_enabled($this)) {
                 $selected = WC_Twoinc_Payment_Terms::get_selected_term($this);

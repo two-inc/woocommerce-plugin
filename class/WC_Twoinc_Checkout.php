@@ -287,9 +287,11 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     // Chips render whenever a term is offered, including the
                     // single-term case — Magento shows that one term (and its
                     // surcharge) as a disabled chip rather than hiding it.
-                    // `selectable` is the narrower "buyer can choose" state.
+                    // Whether the buyer can CHOOSE is not sent: render()
+                    // derives it from the term list it is handed, which the
+                    // fees response can revise after this bootstrap is
+                    // written, so a flag fixed here would go stale.
                     'enabled' => WC_Twoinc_Payment_Terms::is_enabled($this->wc_twoinc),
-                    'selectable' => WC_Twoinc_Payment_Terms::is_selector_visible($this->wc_twoinc),
                     'terms' => $offered_terms,
                     'selected' => WC_Twoinc_Payment_Terms::get_selected_term($this->wc_twoinc),
                     'offset_pricing_enabled' => WC_Twoinc_Payment_Terms::get_surcharge_settings($this->wc_twoinc)['enabled'],
