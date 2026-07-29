@@ -1793,10 +1793,19 @@ final class BrandConfigSpec
 
         // Store currency differs from the cap's: save-validation skips the
         // cap (Woo does no FX conversion), so the help text must not claim
-        // a maximum it will not enforce.
+        // a fixed maximum it will not enforce. The fixed-amount help
+        // paragraph disappears entirely and the combined variant degrades
+        // to the percentage-only wording (ABN-476) — the percentage
+        // ceiling itself is always enforced, so "Max: 100%" stays.
         $GLOBALS['__twoinc_test_currency'] = 'NOK';
         $html = $gateway->generate_two_surcharge_grid_html('surcharge_grid', []);
-        TinyAssert::true(strpos($html, 'Max') === false, 'Max sentence must be omitted on currency mismatch');
+        TinyAssert::true(strpos($html, 'Max EUR') === false, 'fixed Max sentence must be omitted on currency mismatch');
+        TinyAssert::true(strpos($html, 'Max NOK') === false, 'no fixed maximum may be claimed on currency mismatch');
+        TinyAssert::true(
+            strpos($html, 'twoinc-surcharge-grid-help--fixed"') === false,
+            'the fixed-only help paragraph must not render without an enforceable cap'
+        );
+        TinyAssert::true(strpos($html, 'Max: 100%.') !== false, 'percentage ceiling is always claimable');
         unset($GLOBALS['__twoinc_test_currency']);
         unset($GLOBALS['test_home_url']);
     }
