@@ -273,9 +273,25 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 // endpoints in WC_Twoinc_Payment_Terms.
                 'payment_terms' => [
                     'days_label' => __('%s days', 'twoinc-payment-gateway'),
-                    // Chip chooser shows only with >1 offered term; a single term
-                    // is applied silently (fee still applies via apply_cart_fee).
-                    'enabled' => WC_Twoinc_Payment_Terms::is_selector_visible($this->wc_twoinc),
+                    // Chip copy, verbatim from magento-plugin's Luma renderer
+                    // (view/frontend/web/js/view/payment/method-renderer/
+                    // gateway_method.js + template/payment/gateway_method.html),
+                    // which is also what the Amasty and Fire checkouts render —
+                    // they share that one template (ABN-468).
+                    //
+                    // >1 term  → `heading` sits ABOVE the chips.
+                    // exactly 1 → no heading; `single_label` replaces the bare
+                    //             "N days" text INSIDE the single chip.
+                    'heading' => __('Selected payment terms', 'twoinc-payment-gateway'),
+                    'single_label' => __('Payment Terms %s days', 'twoinc-payment-gateway'),
+                    // Chips render whenever a term is offered, including the
+                    // single-term case — Magento shows that one term (and its
+                    // surcharge) as a disabled chip rather than hiding it.
+                    // Whether the buyer can CHOOSE is not sent: render()
+                    // derives it from the term list it is handed, which the
+                    // fees response can revise after this bootstrap is
+                    // written, so a flag fixed here would go stale.
+                    'enabled' => WC_Twoinc_Payment_Terms::is_enabled($this->wc_twoinc),
                     'terms' => $offered_terms,
                     'selected' => WC_Twoinc_Payment_Terms::get_selected_term($this->wc_twoinc),
                     'offset_pricing_enabled' => WC_Twoinc_Payment_Terms::get_surcharge_settings($this->wc_twoinc)['enabled'],

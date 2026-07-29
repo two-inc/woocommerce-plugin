@@ -160,8 +160,10 @@ rather than every behaviour in a 2300-line file. Mutating any of the following l
 suite green:
 
 - everything reached through the `Twoinc` class and the page bootstrap: order-intent checks,
-  the surcharge fee recalculation trigger, saved-input replay, term chips, sole-trader
-  fields;
+  the surcharge fee recalculation trigger, saved-input replay, sole-trader fields;
+- the fetch half of `twoincTermChips` — `refresh()`'s fee POST and its done/fail branches.
+  `render()` itself IS covered, by `term-chips.test.js`: the singular/plural chip labelling
+  and heading placement, and the currency-symbol fee label (ABN-468);
 - the selection side of company search — `onCompanySelected`-equivalent handling in
   `Twoinc.initialize`'s `select2:select` binding, `clearSelectedCompany()`, the
   company-not-found button, the address autofill;

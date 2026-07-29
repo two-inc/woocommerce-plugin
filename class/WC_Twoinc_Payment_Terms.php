@@ -641,11 +641,51 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
             $basis = $cart ? self::get_fee_basis($cart) : 0.0;
             $buyer_country = $customer ? $customer->get_billing_country() : '';
 
+            $fees = self::fetch_term_fees($gateway, $basis, $buyer_country);
+            foreach ($fees as $days => $fee) {
+                if (is_array($fee) && isset($fee['buyer_fee_share'])) {
+                    $fees[$days]['buyer_fee_share_display'] = self::format_fee_amount(
+                        (float) $fee['buyer_fee_share'],
+                        (string) ($fee['currency'] ?? get_woocommerce_currency())
+                    );
+                }
+            }
+
             wp_send_json_success([
                 'terms' => self::get_available_terms($gateway),
                 'selected' => self::get_selected_term($gateway),
-                'fees' => self::fetch_term_fees($gateway, $basis, $buyer_country),
+                'fees' => $fees,
             ]);
+        }
+
+        /**
+         * Buyer-facing chip amount: the store's own price format, so the chip
+         * shows the currency SYMBOL in the store's configured position with
+         * the store's separators — "€12,50", not "12.50 EUR" (ABN-468).
+         *
+         * This is the WooCommerce equivalent of Magento's
+         * priceUtils.formatPrice(amount, quote.getPriceFormat()) in
+         * view/frontend/web/js/view/payment/method-renderer/gateway_method.js:
+         * both take the symbol and layout from the store's display format
+         * rather than echoing the currency code the pricing API returned.
+         *
+         * wc_price() is the single source of that format in WooCommerce, but
+         * it returns markup; the chip is rendered with jQuery `text`, so the
+         * tags are stripped and the entities (&euro;, &nbsp;) decoded to the
+         * plain string. Deliberately NOT reimplemented from
+         * get_woocommerce_currency_symbol() + separators — that would be a
+         * second, drifting copy of the store's price format.
+         */
+        public static function format_fee_amount(float $amount, string $currency): string
+        {
+            if (!function_exists('wc_price')) {
+                return strval(WC_Twoinc_Helper::round_amt($amount));
+            }
+            return trim(html_entity_decode(
+                wp_strip_all_tags(wc_price($amount, ['currency' => strtoupper($currency)])),
+                ENT_QUOTES,
+                'UTF-8'
+            ));
         }
 
         /**

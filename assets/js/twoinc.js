@@ -1074,6 +1074,9 @@ let twoincTermChips = {
     const cfg = twoincTermChips.config();
     const $container = jQuery(".twoinc-term-chips");
     if (!cfg.enabled || !cfg.terms || cfg.terms.length === 0 || $container.length === 0) {
+      // Nothing to offer: make sure a heading left over from an earlier
+      // checkout update does not sit above an empty container.
+      jQuery(".twoinc-term-chips-heading").addClass("hidden").text("");
       return;
     }
     $container.removeClass("hidden");
@@ -1111,7 +1114,20 @@ let twoincTermChips = {
     if ($container.length === 0) return;
     $container.empty();
 
+    const cfg = twoincTermChips.config();
     const single = terms.length === 1;
+
+    // Heading placement mirrors Magento's Luma template: shown ABOVE the
+    // chips only when the buyer has a choice to make. A single chip carries
+    // its own "Payment Terms N days" label instead, so a heading there would
+    // say the same thing twice (ABN-468).
+    const $heading = jQuery(".twoinc-term-chips-heading");
+    if (single || terms.length === 0) {
+      $heading.addClass("hidden").text("");
+    } else {
+      $heading.text(cfg.heading || "").removeClass("hidden");
+    }
+
     terms.forEach(function (days) {
       const isSelected = days === selected;
       const $chip = jQuery("<button>", {
@@ -1125,7 +1141,13 @@ let twoincTermChips = {
         "data-days": days,
         disabled: single
       });
-      const daysLabel = (twoincTermChips.config().days_label || "%s days").replace("%s", days);
+      // A lone chip is not a choice, so it names what it is: Magento's
+      // singleTermLabel ("Payment Terms N days") rather than the bare
+      // "N days" used when the buyer is picking between chips.
+      const labelTemplate = single
+        ? cfg.single_label || "Payment Terms %s days"
+        : cfg.days_label || "%s days";
+      const daysLabel = labelTemplate.replace("%s", days);
       $chip.append(jQuery("<span>", { class: "twoinc-term-chip__days", text: daysLabel }));
 
       if (!twoincTermChips.feesLoaded) {
@@ -1146,10 +1168,18 @@ let twoincTermChips = {
       } else {
         const fee = twoincTermChips.fees[days];
         if (fee && parseFloat(fee.buyer_fee_share) > 0) {
+          // buyer_fee_share_display is the amount run through the store's
+          // own price format server-side, so it carries the currency SYMBOL
+          // in the store's position — "+€12,50", matching Magento's
+          // priceUtils.formatPrice. The raw amount + currency CODE is kept
+          // only as the degraded fallback for a response that predates it.
+          const feeLabel = fee.buyer_fee_share_display
+            ? fee.buyer_fee_share_display
+            : fee.buyer_fee_share + " " + fee.currency;
           $chip.append(
             jQuery("<span>", {
               class: "twoinc-term-chip__fee",
-              text: "+" + fee.buyer_fee_share + " " + fee.currency
+              text: "+" + feeLabel
             })
           );
         }

@@ -609,6 +609,15 @@ msgstr ""
 msgid "%s days"
 msgstr ""
 
+#: class/WC_Twoinc_Checkout.php
+#, php-format
+msgid "Payment Terms %s days"
+msgstr ""
+
+#: class/WC_Twoinc_Checkout.php
+msgid "Selected payment terms"
+msgstr ""
+
 #: class/WC_Twoinc.php
 msgid "API key for the sandbox environment is available on your merchant portal (however please reach out to %s for access to production keys)."
 msgstr ""

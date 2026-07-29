@@ -157,6 +157,28 @@ function get_woocommerce_currency_symbol($currency = '')
     return $currency !== '' ? $currency . ' ' : '';
 }
 
+function wp_strip_all_tags($text, $remove_breaks = false)
+{
+    return strip_tags((string) $text);
+}
+
+/**
+ * Shaped like the real wc_price(): entity-encoded symbol wrapped in the
+ * WooCommerce price markup. Deliberately NOT built on the
+ * get_woocommerce_currency_symbol() stub above, which returns the currency
+ * CODE — the point of the callers under test is that they show the symbol.
+ */
+function wc_price($price, $args = [])
+{
+    $symbols = ['EUR' => '&euro;', 'GBP' => '&pound;', 'NOK' => 'kr'];
+    $currency = strtoupper((string) ($args['currency'] ?? get_woocommerce_currency()));
+    return '<span class="woocommerce-Price-amount amount"><bdi>'
+        . '<span class="woocommerce-Price-currencySymbol">'
+        . ($symbols[$currency] ?? $currency)
+        . '</span>' . number_format((float) $price, 2, '.', ',')
+        . '</bdi></span>';
+}
+
 function get_option($key, $default = false)
 {
     if ($key === 'woocommerce_currency') {
