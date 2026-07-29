@@ -358,22 +358,6 @@ msgstr "Förnamn"
 msgid "Grow your B2B sales with Buy Now, Pay Later using %s!"
 msgstr "Öka din B2B-försäljning med Köp nu, betala senare med %s !"
 
-#: class/WC_Twoinc.php:3446
-msgid "Show Department field"
-msgstr "Visa fältet för avdelning"
-
-#: class/WC_Twoinc.php:3422
-msgid "Show Invoice email field"
-msgstr "Visa fältet för e-postadress för faktura"
-
-#: class/WC_Twoinc.php:3438
-msgid "Show Project field"
-msgstr "Visa fältet för projekt"
-
-#: class/WC_Twoinc.php:3430
-msgid "Show Purchase order number field"
-msgstr "Visa fältet för PO-nummer"
-
 #. URI of the plugin
 #. Author URI of the plugin
 msgid "https://two.inc"
@@ -562,6 +546,22 @@ msgstr "Konfigurera mitt konto"
 #, php-format
 msgid "Show \"What is %s\" link in checkout"
 msgstr "Visa länken \"Vad är %s \" i kassan"
+
+#: class/WC_Twoinc.php:3446
+msgid "Show Department field"
+msgstr "Visa fältet för avdelning"
+
+#: class/WC_Twoinc.php:3422
+msgid "Show Invoice email field"
+msgstr "Visa e-postfältet för faktura"
+
+#: class/WC_Twoinc.php:3438
+msgid "Show Project field"
+msgstr "Visa fältet för projekt"
+
+#: class/WC_Twoinc.php:3430
+msgid "Show Purchase order number field"
+msgstr "Visa fältet för PO-nummer"
 
 #: class/WC_Twoinc.php:1716
 msgid "Skip user validation at order confirmation"

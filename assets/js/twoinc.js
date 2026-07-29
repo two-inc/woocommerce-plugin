@@ -496,10 +496,10 @@ let twoincDomHelper = {
       "#billing_company_display_field",
       "#billing_company_field",
       "#company_id_field",
-      "#department_field",
-      "#project_field",
+      "#invoice_email_field",
       "#purchase_order_number_field",
-      "#invoice_email_field"
+      "#project_field",
+      "#department_field"
     ];
     let requiredBusinessTargets = [];
     let visibleTargets = [
@@ -515,10 +515,10 @@ let twoincDomHelper = {
 
     if (isTwoincSelected) {
       visibleTargets.push(
-        "#department_field",
-        "#project_field",
+        "#invoice_email_field",
         "#purchase_order_number_field",
-        "#invoice_email_field"
+        "#project_field",
+        "#department_field"
       );
       requiredTargets.push("#billing_phone_field");
       if (twoincDomHelper.isCountrySupported() && window.twoinc.enable_company_search === "yes") {

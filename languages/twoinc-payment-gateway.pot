@@ -331,22 +331,6 @@ msgstr ""
 msgid "Grow your B2B sales with Buy Now, Pay Later using %s!"
 msgstr ""
 
-#: class/WC_Twoinc.php:3446
-msgid "Show Department field"
-msgstr ""
-
-#: class/WC_Twoinc.php:3422
-msgid "Show Invoice email field"
-msgstr ""
-
-#: class/WC_Twoinc.php:3438
-msgid "Show Project field"
-msgstr ""
-
-#: class/WC_Twoinc.php:3430
-msgid "Show Purchase order number field"
-msgstr ""
-
 #. URI of the plugin
 #. Author URI of the plugin
 msgid "https://two.inc"
@@ -529,6 +513,22 @@ msgstr ""
 #: class/WC_Twoinc.php:1704
 #, php-format
 msgid "Show \"What is %s\" link in checkout"
+msgstr ""
+
+#: class/WC_Twoinc.php:3446
+msgid "Show Department field"
+msgstr ""
+
+#: class/WC_Twoinc.php:3422
+msgid "Show Invoice email field"
+msgstr ""
+
+#: class/WC_Twoinc.php:3438
+msgid "Show Project field"
+msgstr ""
+
+#: class/WC_Twoinc.php:3430
+msgid "Show Purchase order number field"
 msgstr ""
 
 #: class/WC_Twoinc.php:1716

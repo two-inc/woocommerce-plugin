@@ -362,22 +362,6 @@ msgstr "Voornaam"
 msgid "Grow your B2B sales with Buy Now, Pay Later using %s!"
 msgstr "Vergroot uw B2B-omzet met Koop nu, betaal later met %s !"
 
-#: class/WC_Twoinc.php:3446
-msgid "Show Department field"
-msgstr "Veld voor afdeling weergeven"
-
-#: class/WC_Twoinc.php:3422
-msgid "Show Invoice email field"
-msgstr "Veld voor factuur e-mailadres weergeven"
-
-#: class/WC_Twoinc.php:3438
-msgid "Show Project field"
-msgstr "Veld voor project weergeven"
-
-#: class/WC_Twoinc.php:3430
-msgid "Show Purchase order number field"
-msgstr "Veld voor PO-nummer weergeven"
-
 #. URI of the plugin
 #. Author URI of the plugin
 msgid "https://two.inc"
@@ -566,6 +550,22 @@ msgstr "Mijn account instellen"
 #, php-format
 msgid "Show \"What is %s\" link in checkout"
 msgstr "Toon de link \"Wat is %s \" bij het afrekenen"
+
+#: class/WC_Twoinc.php:3446
+msgid "Show Department field"
+msgstr "Veld voor afdeling weergeven"
+
+#: class/WC_Twoinc.php:3422
+msgid "Show Invoice email field"
+msgstr "Veld voor factuur e-mailadres weergeven"
+
+#: class/WC_Twoinc.php:3438
+msgid "Show Project field"
+msgstr "Veld voor project weergeven"
+
+#: class/WC_Twoinc.php:3430
+msgid "Show Purchase order number field"
+msgstr "Veld voor PO-nummer weergeven"
 
 #: class/WC_Twoinc.php:1716
 msgid "Skip user validation at order confirmation"

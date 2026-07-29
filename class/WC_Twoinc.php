@@ -2503,19 +2503,19 @@ if (!class_exists('WC_Twoinc')) {
                     </td>
                 </tr>
                 <tr>
-                    <th><label for="twoinc_department"><?php _e('Department', 'twoinc-payment-gateway'); ?></label></th>
-                    <td>
-                        <input type="text" name="twoinc_department" id="twoinc_department" value="<?php echo esc_attr(get_the_author_meta(WC_Twoinc_Brand::prefixed_name('department'), $user->ID)); ?>" class="regular-text" />
-                        <br />
-                        <span class="description"><?php _e("The department displayed on the invoices"); ?></span>
-                    </td>
-                </tr>
-                <tr>
                     <th><label for="twoinc_project"><?php _e('Project', 'twoinc-payment-gateway'); ?></label></th>
                     <td>
                         <input type="text" name="twoinc_project" id="twoinc_project" value="<?php echo esc_attr(get_the_author_meta(WC_Twoinc_Brand::prefixed_name('project'), $user->ID)); ?>" class="regular-text" />
                         <br />
                         <span class="description"><?php _e("The project displayed on the invoices"); ?></span>
+                    </td>
+                </tr>
+                <tr>
+                    <th><label for="twoinc_department"><?php _e('Department', 'twoinc-payment-gateway'); ?></label></th>
+                    <td>
+                        <input type="text" name="twoinc_department" id="twoinc_department" value="<?php echo esc_attr(get_the_author_meta(WC_Twoinc_Brand::prefixed_name('department'), $user->ID)); ?>" class="regular-text" />
+                        <br />
+                        <span class="description"><?php _e("The department displayed on the invoices"); ?></span>
                     </td>
                 </tr>
             </table>
