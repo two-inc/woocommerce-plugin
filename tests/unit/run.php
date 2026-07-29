@@ -156,6 +156,8 @@ final class BrandConfigSpec
             'testSelectedTermInputPrecedesChipsContainer',
             'testBrandWithoutTaglineEmitsNoTaglineBlock',
             'testTaglineSentenceIsPlatformCopyWithBrandFaqLink',
+            'testRetiredFreeFormSubtitleKeyIsInert',
+            'testNonStringBrandFaqUrlEmitsNoTagline',
             'testIntentApprovedNoticeDisabledBrandEmitsNoBlock',
             'testIntentApprovedNoticeDefaultBrandCarriesBothVariants',
             'testIntentApprovedNoticeBrandTemplateUsedVerbatim',
@@ -4016,11 +4018,54 @@ final class BrandConfigSpec
 
         // The literal passed to __() must appear verbatim in the catalogues,
         // or the string is unreachable for translators however it renders.
-        $pot = file_get_contents(dirname(__DIR__, 2) . '/languages/twoinc-payment-gateway.pot');
+        $languages = dirname(__DIR__, 2) . '/languages/';
+        $pot = file_get_contents($languages . 'twoinc-payment-gateway.pot');
         TinyAssert::true(
             strpos($pot, 'msgid "For all companies, %1$sread more%2$s."') !== false,
             'tagline msgid missing from the .pot — it would be untranslatable'
         );
+
+        // And the locale that actually needs a non-English tagline must
+        // still carry one. Asserted because the .po/.mo pair is hand-
+        // maintained: a catalogue round-trip that dropped this msgstr would
+        // silently put English back on a Dutch shop, which is the bug this
+        // fixed wearing different clothes.
+        $nl = file_get_contents($languages . 'twoinc-payment-gateway-nl_NL.po');
+        TinyAssert::true(
+            strpos($nl, 'msgid "For all companies, %1$sread more%2$s."' . "\n"
+                . 'msgstr "Voor alle bedrijven, %1$slees meer%2$s."') !== false,
+            'nl_NL translation for the tagline missing or emptied'
+        );
+    }
+
+    /**
+     * The retired 'checkout_subtitle' key is inert: a brand declaring a
+     * whole sentence there gets no tagline at all, never that sentence.
+     * Pinned so a "legacy support" path cannot quietly restore the
+     * variable-msgid render that made the tagline untranslatable.
+     */
+    private static function testRetiredFreeFormSubtitleKeyIsInert(): void
+    {
+        add_filter('twoinc_brand_file', static function () {
+            return __DIR__ . '/fixtures/legacysubtitlebrand.php';
+        });
+
+        TinyAssert::same('', self::gateway()->get_pay_subtitle());
+    }
+
+    /**
+     * A non-string FAQ URL yields no tagline rather than a TypeError out of
+     * esc_url taking the checkout page down. The sibling case — a scheme
+     * esc_url rejects, which it returns as '' and the same guard drops —
+     * cannot be exercised here: the harness stubs esc_url as identity.
+     */
+    private static function testNonStringBrandFaqUrlEmitsNoTagline(): void
+    {
+        add_filter('twoinc_brand_file', static function () {
+            return __DIR__ . '/fixtures/badfaqurlbrand.php';
+        });
+
+        TinyAssert::same('', self::gateway()->get_pay_subtitle());
     }
 
     /**

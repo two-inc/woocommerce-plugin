@@ -67,7 +67,11 @@ return [
     // translated per locale from languages/*.po. A brand owns only its own
     // FAQ URL. null or '' renders no tagline at all (the Two default).
     // Replaces the former free-form 'checkout_subtitle' string, which was
-    // untranslatable by construction — see TWO-25270.
+    // untranslatable by construction — see TWO-25270. This is a DELIBERATE
+    // divergence from the Magento brand descriptor, which still carries the
+    // whole sentence in <checkout_subtitle>; Magento's translator resolves
+    // a runtime key so a variable string is translatable there, and
+    // gettext's is not.
     'checkout_subtitle_faq_url' => null,
     // Contact address shown in the admin API-key field help for
     // obtaining production keys. WC_Twoinc::init_form_fields is the only

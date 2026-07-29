@@ -1632,7 +1632,12 @@ if (!class_exists('WC_Twoinc')) {
          */
         public function get_pay_subtitle()
         {
+            // Escape first, then test: esc_url returns '' for a disallowed
+            // scheme, and a tagline whose "read more" points at the current
+            // page is worse than no tagline. is_string guards a brand
+            // declaring an array, which esc_url would fatal on.
             $faq_url = WC_Twoinc_Brand::get('checkout_subtitle_faq_url');
+            $faq_url = is_string($faq_url) ? esc_url($faq_url) : '';
             if (!$faq_url) {
                 return '';
             }
@@ -1640,7 +1645,7 @@ if (!class_exists('WC_Twoinc')) {
             $subtitle = sprintf(
                 /* translators: %1$s opens and %2$s closes a link to the brand's FAQ page. */
                 __('For all companies, %1$sread more%2$s.', 'twoinc-payment-gateway'),
-                sprintf('<a href="%s" target="_blank" rel="noopener">', esc_url($faq_url)),
+                sprintf('<a href="%s" target="_blank" rel="noopener">', $faq_url),
                 '</a>'
             );
 

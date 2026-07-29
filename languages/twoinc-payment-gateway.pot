@@ -327,7 +327,7 @@ msgid "First name"
 msgstr ""
 
 #. translators: %1$s opens and %2$s closes a link to the brand's FAQ page.
-#: class/WC_Twoinc.php:1642
+#: class/WC_Twoinc.php:1647
 #, php-format
 msgid "For all companies, %1$sread more%2$s."
 msgstr ""
