@@ -32,3 +32,29 @@ jobs:
 
       - name: Run unit tests
         run: php tests/unit/run.php
+
+  jest:
+    name: Jest (Node 20)
+    runs-on: ${{ vars.RUNNER_STANDARD }}
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install JS devDependencies
+        run: npm ci --no-audit --no-fund
+
+      # Real gate, deliberately not continue-on-error: the company-search
+      # regressions these tests pin (a timeout rendering as "no companies
+      # found", a superseded response overwriting a newer one, a throw inside
+      # processResults leaving the dropdown stuck on "Searching…") were all
+      # invisible to the PHP suite, so an advisory JS job would have caught
+      # none of them.
+      - name: Run Jest
+        run: npm run test:js

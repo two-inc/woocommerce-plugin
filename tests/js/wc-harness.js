@@ -1,0 +1,339 @@
+/**
+ * TWO-25244. Browser-JS-in-Jest harness for the WooCommerce plugin.
+ *
+ * `assets/js/twoinc.js` is a plain classic script: it declares a handful of
+ * top-level helper objects and a `Twoinc` class, and it is enqueued by
+ * tillit-payment-gateway.php into a checkout page where jQuery, WooCommerce's
+ * selectWoo widget and WooCommerce's own `wc_country_select_params` /
+ * `window.twoinc` localisation globals already exist. There is nothing to
+ * `require()` and nothing to import.
+ *
+ * So rather than mock the browser, this harness assembles the real one:
+ *
+ *   - jsdom (Jest's `testEnvironment`) supplies document/window,
+ *   - the REAL jQuery and the REAL selectWoo widget are loaded onto that
+ *     window,
+ *   - `wc_country_select_params` and `window.twoinc` are small stubs, because
+ *     they are `wp_localize_script` output with no npm distribution,
+ *   - the plugin source is then evaluated in global scope, exactly as a
+ *     `<script>` tag would evaluate it.
+ *
+ * Using the real widget rather than a mock is deliberate: the reason the
+ * plugin owns a custom `ajax.transport` at all is a property OF select2's
+ * ajax adapter (its failure handler treats any status-0 jqXHR as a
+ * cancellation, and a jQuery timeout is also status 0), and the
+ * "unavailable" message is delivered through the widget's own
+ * `results:message` channel and rendered by its results adapter. A mock
+ * would have to reproduce both correctly to catch either bug, which is
+ * precisely the assumption that let them ship.
+ *
+ * NO production code was refactored to make this testable. The script loads
+ * as-is.
+ */
+
+"use strict";
+
+const fs = require("fs");
+const path = require("path");
+
+const REPO_ROOT = path.resolve(__dirname, "..", "..");
+
+const SOURCE_PATH = "assets/js/twoinc.js";
+
+/**
+ * Put the real jQuery + the real selectWoo widget on the jsdom window.
+ *
+ * @returns {Function} the jQuery instance bound to the current jsdom window
+ */
+function installJQuery() {
+  // jquery's UMD head keys on `global.document` — present under
+  // jest-environment-jsdom — and calls its factory with `noGlobal = true`, so
+  // it deliberately does NOT assign window.$ / window.jQuery itself. The four
+  // assignments below are therefore load-bearing, not tidying: the plugin
+  // source's free `jQuery` would otherwise resolve to nothing. Do not remove.
+  const jQuery = require("jquery");
+  global.$ = jQuery;
+  global.jQuery = jQuery;
+  global.window.$ = jQuery;
+  global.window.jQuery = jQuery;
+  // selectWoo's dist bundle is AMD-or-CommonJS-or-globals. Under Jest the
+  // CommonJS branch wins and exports a `function (root, jQuery)` rather than
+  // self-registering, so it has to be invoked by hand. It then defines BOTH
+  // `$.fn.select2` and `$.fn.selectWoo`, which is what the plugin calls.
+  require("selectwoo/dist/js/selectWoo.full.js")(global.window, jQuery);
+  if (typeof jQuery.fn.selectWoo !== "function" || typeof jQuery.fn.select2 !== "function") {
+    throw new Error("harness: selectWoo did not register");
+  }
+  return jQuery;
+}
+
+/**
+ * WooCommerce's `wc_country_select_params` localisation object, reduced to the
+ * four strings the plugin's selectWoo `language` callbacks read.
+ *
+ * @returns {Object}
+ */
+function installWcParams() {
+  const params = {
+    i18n_input_too_short_1: "Please enter 1 or more characters",
+    i18n_input_too_short_n: "Please enter %qty% or more characters",
+    i18n_no_matches: "No matches found",
+    i18n_searching: "Searching…"
+  };
+  global.wc_country_select_params = params;
+  global.window.wc_country_select_params = params;
+  return params;
+}
+
+/**
+ * Evaluate the plugin source the way a <script> tag would, and hand back the
+ * top-level bindings it declares.
+ *
+ * twoinc.js declares its helpers with `let` and never assigns them to
+ * `window`. In a real browser those become global *lexical* bindings —
+ * reachable as free variables from any later script, but absent from `window`.
+ * Global `eval` reproduces exactly that: the bindings live in the eval's own
+ * scope and never land on `window` either. So the expression appended below —
+ * evaluated inside that same scope — is the only way to reach them, and it is
+ * the same access pattern the browser gives a second `<script>` tag.
+ *
+ * `indirectEval` (rather than a direct `eval` call) keeps evaluation in global
+ * scope, so `class Twoinc` and the file's free references to `jQuery` /
+ * `wc_country_select_params` behave as they do in the browser.
+ *
+ * @returns {Object} the source's top-level helper objects and Twoinc class
+ */
+function loadPluginSource() {
+  const src = fs.readFileSync(path.join(REPO_ROOT, SOURCE_PATH), "utf8");
+  const indirectEval = eval;
+  const exported = indirectEval(
+    src +
+      "\n;({ twoincUtilHelper, twoincSelectWooHelper, twoincDomHelper," +
+      " twoincTermChips, twoincSoleTrader, Twoinc });"
+  );
+  if (!exported || typeof exported.twoincSelectWooHelper !== "object") {
+    throw new Error("harness: twoinc.js did not yield its top-level bindings");
+  }
+  return exported;
+}
+
+/**
+ * Load twoinc.js with jQuery, selectWoo and the WooCommerce globals in place.
+ *
+ * Deliberately loaded with `window.twoinc` ABSENT. The file's trailing
+ * `jQuery(function () { if (window.twoinc) { ... } })` bootstrap wires the
+ * whole checkout — payment-method listeners, a 1s `setTimeout`, order-intent
+ * init — and jsdom's document is already "ready", so jQuery would run it
+ * immediately. Every test here is about the company-search helper, so the
+ * bootstrap is left to no-op and `window.twoinc` is installed afterwards.
+ *
+ * @param {Object} [twoinc] value for `window.twoinc`, installed post-load
+ * @returns {{helper: Object, util: Object, dom: Object, $: Function, twoinc: Object}}
+ */
+function loadTwoinc(twoinc) {
+  const $ = installJQuery();
+  installWcParams();
+  const exported = loadPluginSource();
+  const settings = Object.assign(
+    {
+      gateway_id: "woocommerce-gateway-tillit",
+      enable_company_search: "yes",
+      twoinc_checkout_host: "https://api.example.test",
+      client_name: "woocommerce",
+      client_version: "0.0.0-test",
+      text: {}
+    },
+    twoinc || {}
+  );
+  global.twoinc = settings;
+  global.window.twoinc = settings;
+  // Belt and braces. Every call re-evaluates the source and so yields a fresh
+  // helper object, which is what actually keeps the sequence counter from
+  // leaking between tests — and what the "advances once per search" test
+  // asserts. This line is here so that memoising the eval later (2300 lines,
+  // once per test) cannot silently turn that counter into shared state.
+  exported.twoincSelectWooHelper.companySearchSeq = 0;
+  return {
+    helper: exported.twoincSelectWooHelper,
+    util: exported.twoincUtilHelper,
+    dom: exported.twoincDomHelper,
+    $: $,
+    twoinc: settings
+  };
+}
+
+/**
+ * The subset of the WooCommerce checkout form the company-search code reads.
+ *
+ * `#billing_company_display` is the select the widget is attached to;
+ * `#billing_country` is where the search's country parameter comes from;
+ * `#billing_company` is the real (hidden) company field.
+ *
+ * @param {Object} [options]
+ * @param {string} [options.country] ISO code for the selected country option
+ * @returns {void}
+ */
+function buildCheckoutForm(options) {
+  const opts = options || {};
+  const country = opts.country || "GB";
+  document.body.innerHTML = [
+    '<form class="checkout woocommerce-checkout">',
+    '  <p id="billing_country_field">',
+    '    <select id="billing_country" name="billing_country">',
+    '      <option value="' + country + '" selected>Selected country</option>',
+    "    </select>",
+    "  </p>",
+    '  <p id="billing_company_display_field">',
+    '    <select id="billing_company_display" name="billing_company_display"></select>',
+    "  </p>",
+    '  <p id="billing_company_field">',
+    "    <input type='text' id='billing_company' name='billing_company' value='' />",
+    "  </p>",
+    "</form>"
+  ].join("\n");
+}
+
+/**
+ * Attach the real selectWoo widget to `#billing_company_display` using the
+ * plugin's own params, and open it.
+ *
+ * Opening is what creates the search `<input aria-owns="select2-...-results">`
+ * that `toggleCompanySearchSpinner()` looks for, and the results container the
+ * `results:message` channel renders into — neither exists on a closed widget,
+ * which is why the plugin creates the spinner node lazily per search.
+ *
+ * @param {Function} $ jQuery instance
+ * @param {Object} helper twoincSelectWooHelper
+ * @returns {Object} the jQuery-wrapped select
+ */
+function openCompanyWidget($, helper) {
+  const $select = $("#billing_company_display");
+  $select.selectWoo(helper.genSelectWooParams());
+  $select.select2("open");
+  return $select;
+}
+
+/**
+ * Read the text the widget is currently rendering in its results list.
+ *
+ * @param {Function} $ jQuery instance
+ * @returns {string}
+ */
+function resultsText($) {
+  return $("#select2-billing_company_display-results").text();
+}
+
+/**
+ * Replace `jQuery.ajax` with a recorder that hands each call's deferred back
+ * so a test can settle them in whatever order it wants.
+ *
+ * Real network timing is the thing under test here — out-of-order responses,
+ * aborts, timeouts — so driving the settlement explicitly is the point, not a
+ * shortcut. The returned object is a real jQuery Deferred promise with an
+ * `abort` bolted on, which is the jqXHR surface twoinc.js uses
+ * (`.done`/`.fail`/`.always`); jQuery fires those callbacks synchronously, so
+ * no test needs to await anything.
+ *
+ * @param {Function} $ jQuery instance
+ * @returns {{calls: Array, last: Function, restore: Function}}
+ */
+function stubAjax($) {
+  const original = $.ajax;
+  const calls = [];
+  $.ajax = function (settings) {
+    const deferred = $.Deferred();
+    const jqXHR = deferred.promise();
+    const record = {
+      settings: settings,
+      url: settings && settings.url,
+      timeout: settings && settings.timeout,
+      aborted: false,
+      /** Resolve as HTTP 200 with `data`. */
+      succeed: function (data) {
+        deferred.resolveWith(jqXHR, [data, "success", jqXHR]);
+      },
+      /**
+       * Resolve as a failure. `textStatus` is jQuery's, so 'timeout',
+       * 'error', 'parsererror' or 'abort'.
+       *
+       * `status: 0` on the jqXHR is not incidental: a jQuery timeout and
+       * a cancellation are indistinguishable by status, which is the
+       * whole reason the plugin cannot rely on select2's own failure
+       * handler and keys off textStatus instead.
+       */
+      fail: function (textStatus, error) {
+        jqXHR.status = 0;
+        deferred.rejectWith(jqXHR, [jqXHR, textStatus, error || textStatus]);
+      }
+    };
+    jqXHR.abort = function () {
+      record.aborted = true;
+      // jQuery reports an aborted request through the failure path with
+      // textStatus 'abort', synchronously.
+      record.fail("abort", "abort");
+    };
+    calls.push(record);
+    return jqXHR;
+  };
+  return {
+    calls: calls,
+    last: function () {
+      return calls[calls.length - 1];
+    },
+    restore: function () {
+      $.ajax = original;
+    }
+  };
+}
+
+/**
+ * Collect every `success` callback invocation the transport makes.
+ *
+ * select2's ajax adapter passes `success` in; the transport is expected to
+ * call it exactly once per search that is still current, and not at all for
+ * one that has been superseded or cancelled.
+ *
+ * @returns {{fn: Function, calls: Array}}
+ */
+function successRecorder() {
+  const calls = [];
+  return {
+    calls: calls,
+    fn: function (data) {
+      calls.push(data);
+    }
+  };
+}
+
+/**
+ * Release the selectWoo widget bound to the company select.
+ *
+ * select2 binds document-level handlers in its `_create` that wiping
+ * `document.body.innerHTML` does not unbind, so an abandoned widget keeps
+ * listening for the rest of the test file. Call this from `afterEach` BEFORE
+ * clearing the DOM: without it the handlers accumulate one per test and the
+ * first test that dispatches a document-level event inherits `close()` calls
+ * from every zombie — which presents as an order-dependent flake rather than
+ * as the leak it is.
+ *
+ * @param {Function} $ jQuery instance
+ * @returns {void}
+ */
+function releaseWidgets($) {
+  const $select = $("#billing_company_display");
+  if ($select.length && $select.data("select2")) {
+    $select.select2("destroy");
+  }
+}
+
+module.exports = {
+  REPO_ROOT: REPO_ROOT,
+  SOURCE_PATH: SOURCE_PATH,
+  loadTwoinc: loadTwoinc,
+  buildCheckoutForm: buildCheckoutForm,
+  openCompanyWidget: openCompanyWidget,
+  resultsText: resultsText,
+  stubAjax: stubAjax,
+  successRecorder: successRecorder,
+  releaseWidgets: releaseWidgets
+};

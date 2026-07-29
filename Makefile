@@ -2,7 +2,7 @@
 # Copy .env.example to .env first; docker compose reads it natively.
 
 .PHONY: help install configure run debug proxy stop clean logs logs-wpcli \
-	test-unit test format archive bump patch minor major \
+	test-unit test-js test format archive bump patch minor major \
 	e2e-install e2e-test e2e-test-headed phpcs phpstan
 
 .DEFAULT_GOAL := help
@@ -66,6 +66,16 @@ clean:
 ## Run the unit test harness (same suite CI runs)
 test-unit:
 	docker run --rm -v "$(CURDIR)":/app -w /app php:8.2-cli php tests/unit/run.php
+
+## Run the browser-JS test suite (same suite CI runs; needs host Node 20+)
+# Deliberately NOT wired into `test`, mirroring prestashop-plugin: `test` runs
+# in a php container and needs no Node, and the canonical target set predates
+# this suite.
+test-js:
+	@if [ ! -d node_modules ] || [ package-lock.json -nt node_modules ]; then \
+		npm ci --no-audit --no-fund; \
+	fi
+	npm run test:js
 
 ## Run the unit test harness (same suite CI runs)
 test: test-unit

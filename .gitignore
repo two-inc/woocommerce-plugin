@@ -8,6 +8,11 @@ docker/config/
 *.env.json
 .DS_Store
 package-lock.json
+# ...except the root one (TWO-25244). The Jest job runs `npm ci`, which needs a
+# committed lockfile, and `setup-node`'s npm cache keys off it. It also carries
+# the integrity hash pinning the selectWoo tarball. tests/e2e/package-lock.json
+# is tracked too, force-added past the line above.
+!/package-lock.json
 languages/*.php
 screenshots/
 videos/
