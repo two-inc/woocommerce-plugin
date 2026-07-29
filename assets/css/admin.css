@@ -40,3 +40,20 @@ a.setting-dropdown {
     max-width: 300px;
   }
 }
+
+/*
+ * Surcharge grid: the container is the SINGLE width source for the grid
+ * and for the notes/help paragraphs that sit below it. The table is
+ * width:100% of the container and the paragraphs are its children, so
+ * the help text wraps at exactly the grid's width instead of running out
+ * to the page margin of the wide <td class="forminp">. Mirrors Magento's
+ * #surcharge-grid-container (.surcharge-grid is width:100%, .note
+ * paragraphs are siblings in the same box). Change the width here only.
+ */
+.twoinc-surcharge-grid-container {
+  max-width: 620px;
+}
+
+.twoinc-surcharge-grid-container .twoinc-surcharge-grid {
+  width: 100%;
+}
