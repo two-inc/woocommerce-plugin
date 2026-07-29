@@ -4026,15 +4026,24 @@ final class BrandConfigSpec
         );
 
         // And the locale that actually needs a non-English tagline must
-        // still carry one. Asserted because the .po/.mo pair is hand-
-        // maintained: a catalogue round-trip that dropped this msgstr would
-        // silently put English back on a Dutch shop, which is the bug this
-        // fixed wearing different clothes.
-        $nl = file_get_contents($languages . 'twoinc-payment-gateway-nl_NL.po');
+        // still carry one. Asserted against the COMPILED .mo, not the .po:
+        // WordPress reads only the .mo, the pair is hand-maintained, and
+        // the two ways this silently reverts to English on a Dutch shop —
+        // a forgotten msgfmt, or a fuzzy marker (which msgfmt drops) — are
+        // both invisible in the .po text. Binary strpos is enough: msgstrs
+        // are stored verbatim in the .mo string table.
+        $nl_mo = file_get_contents($languages . 'twoinc-payment-gateway-nl_NL.mo');
         TinyAssert::true(
-            strpos($nl, 'msgid "For all companies, %1$sread more%2$s."' . "\n"
-                . 'msgstr "Voor alle bedrijven, %1$slees meer%2$s."') !== false,
-            'nl_NL translation for the tagline missing or emptied'
+            strpos($nl_mo, 'Voor alle bedrijven, %1$slees meer%2$s.') !== false,
+            'compiled nl_NL catalogue carries no tagline translation — '
+                . 'a Dutch shop would render English (recompile with msgfmt?)'
+        );
+        // Both placeholders must survive translation. sprintf on a msgstr
+        // that dropped %2$s emits an unclosed <a>, and wp_kses_post does
+        // not balance tags, so the anchor would swallow the payment box.
+        TinyAssert::true(
+            strpos($nl_mo, '%1$s') !== false && strpos($nl_mo, '%2$s') !== false,
+            'nl_NL tagline translation lost a link placeholder'
         );
     }
 
