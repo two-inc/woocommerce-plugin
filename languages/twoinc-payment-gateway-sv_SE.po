@@ -108,22 +108,6 @@ msgstr "%s förifyllda fält"
 msgid "%s Test Server"
 msgstr "%s testserver"
 
-#: class/WC_Twoinc.php:1672
-msgid "Add input field for \"Department\""
-msgstr "Lägg till inmatningsfält för \"Avdelning\""
-
-#: class/WC_Twoinc.php:1696
-msgid "Add input field for \"Invoice email address\""
-msgstr "Lägg till inmatningsfält för \"E-postadress för faktura\""
-
-#: class/WC_Twoinc.php:1680
-msgid "Add input field for \"Project\""
-msgstr "Lägg till inmatningsfält för \"Projekt\""
-
-#: class/WC_Twoinc.php:1688
-msgid "Add input field for \"Purchase order number\""
-msgstr "Lägg till inmatningsfält för \"Inköpsordernummer\""
-
 #: class/WC_Twoinc_Helper.php:145
 msgid "Address"
 msgstr "Adress"
@@ -373,6 +357,22 @@ msgstr "Förnamn"
 #, php-format
 msgid "Grow your B2B sales with Buy Now, Pay Later using %s!"
 msgstr "Öka din B2B-försäljning med Köp nu, betala senare med %s !"
+
+#: class/WC_Twoinc.php:1672
+msgid "Show Department field"
+msgstr "Visa fältet för avdelning"
+
+#: class/WC_Twoinc.php:1696
+msgid "Show Invoice email field"
+msgstr "Visa fältet för fakturamejl"
+
+#: class/WC_Twoinc.php:1680
+msgid "Show Project field"
+msgstr "Visa fältet för projekt"
+
+#: class/WC_Twoinc.php:1688
+msgid "Show Purchase order number field"
+msgstr "Visa fältet för inköpsordernummer"
 
 #. URI of the plugin
 #. Author URI of the plugin

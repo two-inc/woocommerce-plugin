@@ -109,22 +109,6 @@ msgstr "%s vooraf ingevulde velden"
 msgid "%s Test Server"
 msgstr "%s Testserver"
 
-#: class/WC_Twoinc.php:1672
-msgid "Add input field for \"Department\""
-msgstr "Voeg invoerveld toe voor \"Afdeling\""
-
-#: class/WC_Twoinc.php:1696
-msgid "Add input field for \"Invoice email address\""
-msgstr "Voeg invoerveld toe voor \"Factuur-e-mailadres\""
-
-#: class/WC_Twoinc.php:1680
-msgid "Add input field for \"Project\""
-msgstr "Voeg invoerveld toe voor \"Project\""
-
-#: class/WC_Twoinc.php:1688
-msgid "Add input field for \"Purchase order number\""
-msgstr "Voeg invoerveld toe voor \"Inkoopordernummer\""
-
 #: class/WC_Twoinc_Helper.php:145
 msgid "Address"
 msgstr "Adres"
@@ -377,6 +361,22 @@ msgstr "Voornaam"
 #, php-format
 msgid "Grow your B2B sales with Buy Now, Pay Later using %s!"
 msgstr "Vergroot uw B2B-omzet met Koop nu, betaal later met %s !"
+
+#: class/WC_Twoinc.php:1672
+msgid "Show Department field"
+msgstr "Afdelingsveld weergeven"
+
+#: class/WC_Twoinc.php:1696
+msgid "Show Invoice email field"
+msgstr "Factuur-e-mailveld weergeven"
+
+#: class/WC_Twoinc.php:1680
+msgid "Show Project field"
+msgstr "Projectveld weergeven"
+
+#: class/WC_Twoinc.php:1688
+msgid "Show Purchase order number field"
+msgstr "Veld voor inkoopordernummer weergeven"
 
 #. URI of the plugin
 #. Author URI of the plugin

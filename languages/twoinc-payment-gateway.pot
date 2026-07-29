@@ -97,22 +97,6 @@ msgstr ""
 msgid "%s Test Server"
 msgstr ""
 
-#: class/WC_Twoinc.php:1672
-msgid "Add input field for \"Department\""
-msgstr ""
-
-#: class/WC_Twoinc.php:1696
-msgid "Add input field for \"Invoice email address\""
-msgstr ""
-
-#: class/WC_Twoinc.php:1680
-msgid "Add input field for \"Project\""
-msgstr ""
-
-#: class/WC_Twoinc.php:1688
-msgid "Add input field for \"Purchase order number\""
-msgstr ""
-
 #: class/WC_Twoinc_Helper.php:145
 msgid "Address"
 msgstr ""
@@ -345,6 +329,22 @@ msgstr ""
 #: class/WC_Twoinc.php:2224
 #, php-format
 msgid "Grow your B2B sales with Buy Now, Pay Later using %s!"
+msgstr ""
+
+#: class/WC_Twoinc.php:1672
+msgid "Show Department field"
+msgstr ""
+
+#: class/WC_Twoinc.php:1696
+msgid "Show Invoice email field"
+msgstr ""
+
+#: class/WC_Twoinc.php:1680
+msgid "Show Project field"
+msgstr ""
+
+#: class/WC_Twoinc.php:1688
+msgid "Show Purchase order number field"
 msgstr ""
 
 #. URI of the plugin
