@@ -666,6 +666,26 @@ msgid "Enter the amount you want to charge your customer. Max %s."
 msgstr ""
 
 #: class/WC_Twoinc.php
+#, php-format
+msgid "Enter the amount and percentage of the fee you want to charge your customer. Max %1$s / %2$s."
+msgstr ""
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Enter the percentage of the fee you want to charge your customer. Max: %s."
+msgstr ""
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Enter a limit amount (in %s) if you do not want to charge your customer more than a specific amount. Leave the limit field empty if you don't want to impose a limit amount."
+msgstr ""
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Amounts are shown in %s."
+msgstr ""
+
+#: class/WC_Twoinc.php
 msgid "Excluding tax (net)"
 msgstr ""
 
@@ -755,10 +775,6 @@ msgstr ""
 
 #: class/WC_Twoinc.php
 msgid "Payment terms and offset pricing"
-msgstr ""
-
-#: class/WC_Twoinc.php
-msgid "Per payment term: a fixed amount, a percentage of the order, and an optional cap on the percentage portion. Leave a cell blank for zero. Fixed amounts and caps are in the store currency and are not converted for multi-currency stores."
 msgstr ""
 
 #: class/WC_Twoinc.php
