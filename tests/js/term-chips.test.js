@@ -110,6 +110,13 @@ describe("payment terms chips", () => {
   });
 
   describe("more than one offered term", () => {
+    test("no label copy at all leaves every chip bare, never English", () => {
+      const chips = mount({ enabled: true, terms: [30, 60], selected: 30 });
+      chips.render([30, 60], 30);
+
+      expect(chipDayLabels()).toEqual(["30", "60"]);
+    });
+
     test("puts the heading above bare day-labelled chips", () => {
       const chips = mount(Object.assign({ enabled: true, terms: [30, 60], selected: 30 }, COPY));
       chips.render([30, 60], 30);

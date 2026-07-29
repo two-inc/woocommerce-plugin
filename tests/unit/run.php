@@ -4038,12 +4038,20 @@ final class BrandConfigSpec
             'compiled nl_NL catalogue carries no tagline translation — '
                 . 'a Dutch shop would render English (recompile with msgfmt?)'
         );
+        // The msgid has to match the source literal too, or the lookup
+        // misses and WordPress renders English however good the msgstr is.
+        // A msgid typo is otherwise undetectable here: __() is stubbed to
+        // identity, so the render assertion above cannot see it.
+        TinyAssert::true(
+            strpos($nl_mo, 'For all companies, %1$sread more%2$s.') !== false,
+            'compiled nl_NL msgid has drifted from the source literal'
+        );
         // Both placeholders are pinned by that same match, which carries
         // them verbatim — a msgstr that dropped %2$s would sprintf an
         // unclosed <a>, and wp_kses_post does not balance tags, so the
         // anchor would swallow the payment box. Asserting %1$s/%2$s
-        // anywhere in the .mo separately would be vacuous: 21 other
-        // entries in this catalogue carry them.
+        // anywhere in the .mo separately would be vacuous: nine other
+        // msgstrs in this catalogue carry both.
     }
 
     /**
@@ -4062,10 +4070,13 @@ final class BrandConfigSpec
     }
 
     /**
-     * A non-string FAQ URL yields no tagline rather than a TypeError out of
-     * esc_url taking the checkout page down. The sibling case — a scheme
-     * esc_url rejects, which it returns as '' and the same guard drops —
-     * cannot be exercised here: the harness stubs esc_url as identity.
+     * A non-string FAQ URL yields no tagline rather than reaching esc_url,
+     * which fatals on an array under PHP 8 and would take the checkout page
+     * down. What this pins is the guard, not the fatal: the harness stubs
+     * esc_url as identity (so dropping is_string fails here on the rendered
+     * href, not on a TypeError), and for the same reason the sibling case —
+     * a scheme real esc_url rejects, returning '' for the same guard to
+     * drop — cannot be exercised at all.
      */
     private static function testNonStringBrandFaqUrlEmitsNoTagline(): void
     {
