@@ -179,6 +179,14 @@ final class BrandConfigSpec
         WC_Twoinc_Brand::reset();
         putenv('TWO_BRAND_CODE');
         unset($GLOBALS['__twoinc_test_currency']);
+        // The STORE currency is a separate global from the ACTIVE one
+        // (bootstrap.php stubs get_option('woocommerce_currency') and
+        // get_woocommerce_currency() independently), and it was never reset
+        // here. The whole suite runs in one process, so a test that set it
+        // and then failed an assertion before its own unset leaked a
+        // non-default store currency into every test after it — turning one
+        // failure into a cascade in unrelated specs. Reset both together.
+        unset($GLOBALS['__twoinc_test_store_currency']);
         unset($GLOBALS['test_home_url']);
         $GLOBALS['__twoinc_test_options'] = [];
         unset($_POST[WC_Twoinc_Payment_Terms::SESSION_KEY]);
