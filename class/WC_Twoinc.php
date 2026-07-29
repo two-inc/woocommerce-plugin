@@ -1191,7 +1191,15 @@ if (!class_exists('WC_Twoinc')) {
             // backend enforces instead. Omitted entirely when no cap
             // exists or on a currency mismatch.
             $fixed_limit = $this->get_merchant_surcharge_limit(true);
-            $currency_code = strtoupper((string) get_woocommerce_currency());
+            // The grid's values are denominated in the STORE currency — the
+            // saved woocommerce_currency option, which is what
+            // WC_Twoinc_Payment_Terms::build_buyer_fee_share() converts FROM.
+            // Deliberately NOT get_woocommerce_currency(), which is the
+            // ACTIVE currency of the current request: under a multicurrency
+            // plugin an admin browsing in a non-default currency would be
+            // told the grid is denominated in a currency the plugin never
+            // reads it as.
+            $currency_code = strtoupper((string) get_option('woocommerce_currency'));
             $fixed_limit_label = $fixed_limit && $fixed_limit['currency'] === $currency_code
                 ? $this->format_surcharge_limit_label($fixed_limit)
                 : '';
@@ -1306,9 +1314,14 @@ if (!class_exists('WC_Twoinc')) {
             // Only enforceable when the cap's currency matches the store
             // currency — Woo does no FX conversion (unlike Magento), so on
             // a mismatch the cap is skipped here and the backend enforces.
+            // The posted amounts are STORE-denominated, so the comparison is
+            // against the saved woocommerce_currency option and NOT against
+            // get_woocommerce_currency() (the active request currency), which
+            // would let an admin session in a non-default currency skip the
+            // cap entirely (TWO-25268).
             $max_fixed = null;
             $limit = $this->get_merchant_surcharge_limit(true);
-            if ($limit && $limit['currency'] === strtoupper((string) get_woocommerce_currency())) {
+            if ($limit && $limit['currency'] === strtoupper((string) get_option('woocommerce_currency'))) {
                 $max_fixed = (float) $limit['amount'];
             }
 
