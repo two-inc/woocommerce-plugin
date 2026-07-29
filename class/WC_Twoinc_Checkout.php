@@ -129,7 +129,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             // invoice email, purchase order number, project, department. The order
             // note is WooCommerce core's own `order_comments` and stays where core
             // puts it (the "Additional information" block, after billing). TWO-25263.
-            if ($this->wc_twoinc->get_option('add_field_invoice_email') == 'yes') {
+            if ($this->wc_twoinc->get_option('add_field_invoice_email') === 'yes') {
                 $fields['billing']['invoice_email'] = [
                     'label'       => __('Invoice email address', 'twoinc-payment-gateway'),
                     'class'       => array('form-row-wide'),
