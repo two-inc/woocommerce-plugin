@@ -26,11 +26,11 @@ wp plugin install tillit-payment-gateway --activate
 
 The version is computed from the change itself, not from the branch it lands on:
 
-| Change                | What happens                                                                                      |
-| --------------------- | ------------------------------------------------------------------------------------------------- |
+| Change                | What happens                                                                                          |
+| --------------------- | ----------------------------------------------------------------------------------------------------- |
 | PR into `staging`     | The version is computed and committed onto the PR's own branch — `.github/workflows/version-bump.yml` |
-| merge into `staging`  | Nothing. The merge brings in the version its PR already computed.                                 |
-| `staging` into `main` | Nothing is computed. `main` tags the version already in the tree and cuts the Release.             |
+| merge into `staging`  | Nothing. The merge brings in the version its PR already computed.                                     |
+| `staging` into `main` | Nothing is computed. `main` tags the version already in the tree and cuts the Release.                |
 
 With `M` the version on `origin/main` and `C` the version on the PR head, the
 PR's own commits (`origin/staging..HEAD`, `--no-merges`) are classified by
