@@ -1245,8 +1245,19 @@ if (!class_exists('WC_Twoinc')) {
             <tr valign="top" class="twoinc-surcharge-grid-field">
                 <th scope="row" class="titledesc"><label><?php echo wp_kses_post($data['title']); ?></label></th>
                 <td class="forminp">
+                    <?php // Grid, notes and help text share ONE width source: the
+                    // container. The grid table is width:100% of it and the
+                    // paragraphs are its children, so the help text below the
+                    // grid wraps at exactly the grid's width and stays locked
+                    // to it if that width ever changes. Mirrors Magento's
+                    // #surcharge-grid-container, where .surcharge-grid is
+                    // width:100% and the .note paragraphs are siblings inside
+                    // the same box. Without the container the paragraphs are
+                    // laid out against the full <td class="forminp">, which in
+                    // a WooCommerce settings table runs to the page margin. ?>
+                    <div class="twoinc-surcharge-grid-container">
                     <p class="twoinc-surcharge-grid-empty"<?php echo empty($terms) ? '' : ' style="display:none"'; ?>><?php esc_html_e('No payment terms are offered yet — configure the offered terms above first.', 'twoinc-payment-gateway'); ?></p>
-                    <table class="widefat twoinc-surcharge-grid" data-field-key="<?php echo esc_attr($field_key); ?>" style="max-width:620px<?php echo empty($terms) ? ';display:none' : ''; ?>">
+                    <table class="widefat twoinc-surcharge-grid" data-field-key="<?php echo esc_attr($field_key); ?>"<?php echo empty($terms) ? ' style="display:none"' : ''; ?>>
                         <thead><tr>
                             <th><?php esc_html_e('Term (days)', 'twoinc-payment-gateway'); ?></th>
                             <th class="twoinc-col-fixed"><?php esc_html_e('Fixed', 'twoinc-payment-gateway'); ?></th>
@@ -1276,6 +1287,7 @@ if (!class_exists('WC_Twoinc')) {
                     <?php foreach ($help_text as $method => $sentence) : ?>
                         <p class="description twoinc-surcharge-grid-help twoinc-surcharge-grid-help--<?php echo esc_attr($method); ?>" style="display:none"><?php echo esc_html($sentence); ?></p>
                     <?php endforeach; ?>
+                    </div>
                 </td>
             </tr>
             <?php

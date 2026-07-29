@@ -78,6 +78,7 @@ final class BrandConfigSpec
             'testSurchargeGridEnforcesMerchantFixedCap',
             'testSurchargeCapZeroAmountFromApiMeansNoLimit',
             'testSurchargeGridHelpTextOmitsMaxOnCurrencyMismatch',
+            'testSurchargeGridNotesShareTheGridsWidthContainer',
             'testSurchargeFeeStandardModeUnchanged',
             'testSurchargeFeeCustomClassTaxedAtSelectedClassRates',
             'testSurchargeFeeAlwaysZeroNeverTaxed',
@@ -1808,6 +1809,34 @@ final class BrandConfigSpec
         TinyAssert::true(strpos($html, 'Max: 100%.') !== false, 'percentage ceiling is always claimable');
         unset($GLOBALS['__twoinc_test_currency']);
         unset($GLOBALS['test_home_url']);
+    }
+
+    /**
+     * The grid table and the notes/help paragraphs below it must sit inside
+     * ONE width container (.twoinc-surcharge-grid-container, max-width in
+     * admin.css) so the help text wraps at the grid's width rather than the
+     * full width of the WooCommerce settings cell. The table therefore
+     * carries no width of its own — admin.css makes it 100% of the
+     * container. Mirrors Magento's #surcharge-grid-container (ABN-476).
+     */
+    private static function testSurchargeGridNotesShareTheGridsWidthContainer(): void
+    {
+        $gateway = self::validationGateway(['payment_terms_days' => [30]], [30]);
+        $html = $gateway->generate_two_surcharge_grid_html('surcharge_grid', []);
+
+        $open = strpos($html, '<div class="twoinc-surcharge-grid-container">');
+        TinyAssert::true($open !== false, 'expected a single width container around the grid');
+        $close = strrpos($html, '</div>');
+        TinyAssert::true($close !== false && $close > $open, 'container must be closed after its contents');
+
+        // Grid and every note/help paragraph live inside that container.
+        foreach (['<table class="widefat twoinc-surcharge-grid"', 'twoinc-surcharge-grid-currency-note', 'twoinc-surcharge-grid-help--percentage', 'twoinc-surcharge-grid-empty'] as $needle) {
+            $at = strpos($html, $needle);
+            TinyAssert::true($at !== false && $at > $open && $at < $close, $needle . ' must render inside the width container');
+        }
+
+        // No competing width on the table itself — the container owns it.
+        TinyAssert::true(strpos($html, 'max-width:620px') === false, 'the table must not carry its own width');
     }
 
     // ── Surcharge tax treatment (TWO-25070) ────────────────────────────
