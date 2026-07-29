@@ -1200,8 +1200,7 @@ if (!class_exists('WC_Twoinc')) {
             // told the grid is denominated in a currency the plugin never
             // reads it as.
             $currency_code = strtoupper((string) get_option('woocommerce_currency'));
-            $active_currency_code = strtoupper((string) get_woocommerce_currency());
-            $fixed_limit_label = $fixed_limit && $fixed_limit['currency'] === $active_currency_code
+            $fixed_limit_label = $fixed_limit && $fixed_limit['currency'] === $currency_code
                 ? $this->format_surcharge_limit_label($fixed_limit)
                 : '';
             // Percentage ceiling. Mirrors Magento's
@@ -1315,9 +1314,14 @@ if (!class_exists('WC_Twoinc')) {
             // Only enforceable when the cap's currency matches the store
             // currency — Woo does no FX conversion (unlike Magento), so on
             // a mismatch the cap is skipped here and the backend enforces.
+            // The posted amounts are STORE-denominated, so the comparison is
+            // against the saved woocommerce_currency option and NOT against
+            // get_woocommerce_currency() (the active request currency), which
+            // would let an admin session in a non-default currency skip the
+            // cap entirely (TWO-25268).
             $max_fixed = null;
             $limit = $this->get_merchant_surcharge_limit(true);
-            if ($limit && $limit['currency'] === strtoupper((string) get_woocommerce_currency())) {
+            if ($limit && $limit['currency'] === strtoupper((string) get_option('woocommerce_currency'))) {
                 $max_fixed = (float) $limit['amount'];
             }
 

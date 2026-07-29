@@ -1723,9 +1723,25 @@ final class BrandConfigSpec
 
         // Store currency differs from the cap's: Woo does no FX conversion,
         // so the cap is skipped here (the backend still enforces).
-        $GLOBALS['__twoinc_test_currency'] = 'NOK';
+        $GLOBALS['__twoinc_test_store_currency'] = 'NOK';
         $clean = $gateway->validate_two_surcharge_grid_field('surcharge_grid', [30 => ['fixed' => '9999']]);
         TinyAssert::same([30 => ['fixed' => '9999']], $clean);
+        unset($GLOBALS['__twoinc_test_store_currency']);
+
+        // Only the ACTIVE currency diverges (multicurrency admin session).
+        // The posted amounts are still store-denominated, so the cap binds
+        // exactly as it does in a single-currency session (TWO-25268).
+        $GLOBALS['__twoinc_test_currency'] = 'NOK';
+        $message = '';
+        try {
+            $gateway->validate_two_surcharge_grid_field('surcharge_grid', [30 => ['fixed' => '9999']]);
+        } catch (Exception $e) {
+            $message = $e->getMessage();
+        }
+        TinyAssert::true(
+            strpos($message, 'EUR 25') !== false,
+            "the cap must not be skipped when only the active currency differs, got: $message"
+        );
         unset($GLOBALS['__twoinc_test_currency']);
         unset($GLOBALS['test_home_url']);
 
@@ -1825,7 +1841,7 @@ final class BrandConfigSpec
         $GLOBALS['__twoinc_test_options'][$limit_option] = json_encode(['amount' => 25.0, 'currency' => 'EUR']);
 
         // Matching store currency: the grid claims the enforced maximum.
-        $GLOBALS['__twoinc_test_currency'] = 'EUR';
+        $GLOBALS['__twoinc_test_store_currency'] = 'EUR';
         $gateway = self::validationGateway(['payment_terms_days' => [30]], [30]);
         $html = $gateway->generate_two_surcharge_grid_html('surcharge_grid', []);
         TinyAssert::true(strpos($html, 'Max EUR 25.') !== false, 'expected Max sentence for matching currency');
@@ -1836,7 +1852,7 @@ final class BrandConfigSpec
         // paragraph disappears entirely and the combined variant degrades
         // to the percentage-only wording (ABN-476) — the percentage
         // ceiling itself is always enforced, so "Max: 100%" stays.
-        $GLOBALS['__twoinc_test_currency'] = 'NOK';
+        $GLOBALS['__twoinc_test_store_currency'] = 'NOK';
         $html = $gateway->generate_two_surcharge_grid_html('surcharge_grid', []);
         TinyAssert::true(strpos($html, 'Max EUR') === false, 'fixed Max sentence must be omitted on currency mismatch');
         TinyAssert::true(strpos($html, 'Max NOK') === false, 'no fixed maximum may be claimed on currency mismatch');
@@ -1845,6 +1861,17 @@ final class BrandConfigSpec
             'the fixed-only help paragraph must not render without an enforceable cap'
         );
         TinyAssert::true(strpos($html, 'Max: 100%.') !== false, 'percentage ceiling is always claimable');
+        unset($GLOBALS['__twoinc_test_store_currency']);
+
+        // An active-currency-only divergence is NOT a mismatch: the cap is
+        // enforced against store-denominated amounts, so the Max sentence
+        // must still be claimed (TWO-25268).
+        $GLOBALS['__twoinc_test_currency'] = 'NOK';
+        $html = $gateway->generate_two_surcharge_grid_html('surcharge_grid', []);
+        TinyAssert::true(
+            strpos($html, 'Max EUR 25.') !== false,
+            'the Max sentence must survive an active-currency-only divergence'
+        );
         unset($GLOBALS['__twoinc_test_currency']);
         unset($GLOBALS['test_home_url']);
     }
