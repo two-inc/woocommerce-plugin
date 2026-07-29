@@ -77,6 +77,7 @@ final class BrandConfigSpec
             'testSurchargeGridValidationNormalisesAndRejects',
             'testSurchargeGridEnforcesMerchantFixedCap',
             'testSurchargeCapZeroAmountFromApiMeansNoLimit',
+            'testSurchargeGridCurrencyNoteNamesTheStoreCurrency',
             'testSurchargeGridHelpTextOmitsMaxOnCurrencyMismatch',
             'testSurchargeGridNotesShareTheGridsWidthContainer',
             'testSurchargeFeeStandardModeUnchanged',
@@ -1779,6 +1780,43 @@ final class BrandConfigSpec
         // ...and save-validation applies no cap.
         $clean = $gateway->validate_two_surcharge_grid_field('surcharge_grid', [30 => ['fixed' => '9999']]);
         TinyAssert::same([30 => ['fixed' => '9999']], $clean);
+    }
+
+    /**
+     * The grid's amounts are denominated in the STORE currency, so the note
+     * that states the denomination — and the symbol in the limit sentence —
+     * must come from the saved woocommerce_currency option, never from the
+     * ACTIVE currency of the request. Under a multicurrency plugin an admin
+     * browsing in USD was told "Amounts are shown in USD" for numbers the
+     * plugin reads as EUR (TWO-25268).
+     */
+    private static function testSurchargeGridCurrencyNoteNamesTheStoreCurrency(): void
+    {
+        // Active currency diverges from the store currency, as a
+        // multicurrency admin session does.
+        $GLOBALS['__twoinc_test_store_currency'] = 'EUR';
+        $GLOBALS['__twoinc_test_currency'] = 'USD';
+        $gateway = self::validationGateway(['payment_terms_days' => [30]], [30]);
+        $html = $gateway->generate_two_surcharge_grid_html('surcharge_grid', []);
+
+        TinyAssert::true(
+            strpos($html, 'Amounts are shown in EUR.') !== false,
+            'the currency note must name the store currency'
+        );
+        TinyAssert::true(
+            strpos($html, 'Amounts are shown in USD.') === false,
+            'the currency note must not name the active currency'
+        );
+        // Same source for the symbol in the limit sentence. The stub
+        // get_woocommerce_currency_symbol() echoes the code back.
+        TinyAssert::true(
+            strpos($html, 'Enter a limit amount (in EUR )') !== false,
+            'the limit sentence symbol must derive from the store currency'
+        );
+
+        unset($GLOBALS['__twoinc_test_store_currency']);
+        unset($GLOBALS['__twoinc_test_currency']);
+        unset($GLOBALS['test_home_url']);
     }
 
     private static function testSurchargeGridHelpTextOmitsMaxOnCurrencyMismatch(): void

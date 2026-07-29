@@ -1191,8 +1191,17 @@ if (!class_exists('WC_Twoinc')) {
             // backend enforces instead. Omitted entirely when no cap
             // exists or on a currency mismatch.
             $fixed_limit = $this->get_merchant_surcharge_limit(true);
-            $currency_code = strtoupper((string) get_woocommerce_currency());
-            $fixed_limit_label = $fixed_limit && $fixed_limit['currency'] === $currency_code
+            // The grid's values are denominated in the STORE currency — the
+            // saved woocommerce_currency option, which is what
+            // WC_Twoinc_Payment_Terms::build_buyer_fee_share() converts FROM.
+            // Deliberately NOT get_woocommerce_currency(), which is the
+            // ACTIVE currency of the current request: under a multicurrency
+            // plugin an admin browsing in a non-default currency would be
+            // told the grid is denominated in a currency the plugin never
+            // reads it as.
+            $currency_code = strtoupper((string) get_option('woocommerce_currency'));
+            $active_currency_code = strtoupper((string) get_woocommerce_currency());
+            $fixed_limit_label = $fixed_limit && $fixed_limit['currency'] === $active_currency_code
                 ? $this->format_surcharge_limit_label($fixed_limit)
                 : '';
             // Percentage ceiling. Mirrors Magento's
