@@ -57,6 +57,10 @@ a GitHub tarball pinned to a commit SHA — which npm records in `package-lock.j
 real integrity hash, unlike a `git+` dependency (npm rewrites those to `git+ssh://` and
 skips the integrity check, which would break `npm ci` on a runner with no SSH key).
 
+The cost of that choice: `npm ci` — and therefore the CI job — reaches
+`codeload.github.com` as well as the npm registry. Both are pinned and integrity-checked, but
+it is one more host the gate depends on.
+
 That pin is selectWoo **1.0.11**, the tip of the fork's default branch; the repo publishes
 no tag for it. WooCommerce core currently bundles 1.0.9. Nothing this suite touches differs
 between the two — the plugin uses the standard ajax adapter (`transport`, `url`, `data`,

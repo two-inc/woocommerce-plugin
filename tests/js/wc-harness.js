@@ -128,7 +128,7 @@ function loadPluginSource() {
  * bootstrap is left to no-op and `window.twoinc` is installed afterwards.
  *
  * @param {Object} [twoinc] value for `window.twoinc`, installed post-load
- * @returns {{helper: Object, util: Object, $: Function, twoinc: Object}}
+ * @returns {{helper: Object, util: Object, dom: Object, $: Function, twoinc: Object}}
  */
 function loadTwoinc(twoinc) {
   const $ = installJQuery();
@@ -147,8 +147,11 @@ function loadTwoinc(twoinc) {
   );
   global.twoinc = settings;
   global.window.twoinc = settings;
-  // The sequence counter is module-level state on a shared helper object. It
-  // survives instances by design; it must not survive TESTS.
+  // Belt and braces. Every call re-evaluates the source and so yields a fresh
+  // helper object, which is what actually keeps the sequence counter from
+  // leaking between tests — and what the "advances once per search" test
+  // asserts. This line is here so that memoising the eval later (2300 lines,
+  // once per test) cannot silently turn that counter into shared state.
   exported.twoincSelectWooHelper.companySearchSeq = 0;
   return {
     helper: exported.twoincSelectWooHelper,

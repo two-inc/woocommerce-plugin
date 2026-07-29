@@ -84,6 +84,22 @@ describe("company search ajax transport", () => {
       expect(harness.resultsText(ctx.$)).not.toContain("temporarily unavailable");
     });
 
+    test("select2 cancelling the request through the returned jqXHR stays silent", () => {
+      // The route an abort actually arrives by: select2 aborts the in-flight
+      // search on every keystroke by calling abort() on the jqXHR the
+      // transport returned. Driven through that here rather than through the
+      // failure handler directly, so the returned handle is proven to be the
+      // one select2 can cancel.
+      const run = search();
+
+      run.jqXHR.abort();
+
+      expect(run.request.aborted).toBe(true);
+      expect(run.success.calls).toHaveLength(0);
+      expect(harness.resultsText(ctx.$)).not.toContain("temporarily unavailable");
+      expect(spinnerVisible()).toBe(false);
+    });
+
     test("a transport error raises the unavailable message", () => {
       const run = search();
 

@@ -15,8 +15,9 @@ module.exports = {
   rootDir: "../..",
   testMatch: ["<rootDir>/tests/js/**/*.test.js"],
   testEnvironment: "jsdom",
-  // The suite restores its own stubs by hand; these are the net for the next
-  // test that forgets to, since a leaked spy on a shared helper fails
+  // The suite uses no jest mocks today — it stubs jQuery.ajax by hand and
+  // restores it in afterEach. These are the net for the first test that
+  // reaches for jest.spyOn, since a leaked spy on a shared helper object fails
   // somewhere other than where it was created.
   restoreMocks: true,
   resetMocks: true
