@@ -78,6 +78,26 @@ describe("payment terms chips", () => {
       expect(headingText()).toBe("");
     });
 
+    // The chip templates are translated PHP-side. A fallback that spelled
+    // out English would render as plausible copy on a non-English shop and
+    // hide the fact that the label never arrived — the same failure that
+    // made a Dutch tagline look intentional on an English shop (TWO-25270).
+    test("a missing single_label degrades to the plain day label, not English", () => {
+      const chips = mount(
+        Object.assign({ enabled: true, terms: [30], selected: 30 }, COPY, { single_label: "" })
+      );
+      chips.render([30], 30);
+
+      expect(chipDayLabels()).toEqual(["30 days"]);
+    });
+
+    test("no label copy at all leaves the chip visibly bare, never English", () => {
+      const chips = mount({ enabled: true, terms: [30], selected: 30 });
+      chips.render([30], 30);
+
+      expect(chipDayLabels()).toEqual(["30"]);
+    });
+
     test("the lone chip is not clickable", () => {
       const chips = mount(Object.assign({ enabled: true, terms: [30], selected: 30 }, COPY));
       chips.render([30], 30);
