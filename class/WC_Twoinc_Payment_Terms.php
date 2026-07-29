@@ -53,16 +53,6 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         }
 
         /**
-         * Whether the buyer sees a term chooser: only when more than one term is
-         * offered. A single offered term is applied silently (no chip selector),
-         * so selection is implicitly disabled when just one term is configured.
-         */
-        public static function is_selector_visible($gateway): bool
-        {
-            return count(self::get_available_terms($gateway)) > 1;
-        }
-
-        /**
          * The terms offered at checkout, ascending. THE availability seam —
          * see the file header before adding another term-list read.
          *

@@ -235,8 +235,8 @@ if (!class_exists('WC_Twoinc_Checkout')) {
 
             // Checkout render is the sanctioned refresh point for the
             // backend term list (TWO-24812) — refresh once here; the
-            // cache-only seam reads below (is_selector_visible,
-            // get_selected_term, …) then see the fresh list.
+            // cache-only seam reads below (is_enabled, get_selected_term,
+            // …) then see the fresh list.
             $offered_terms = WC_Twoinc_Payment_Terms::get_available_terms($this->wc_twoinc, true);
 
             // TODO: Make this dynamic based on active merchant payee accounts
