@@ -68,6 +68,7 @@ final class BrandConfigSpec
             'testPaymentTermsValidationNonDestructiveOnUnresolvedOrNarrowedList',
             'testSurchargeGridPreservesRowsNotOnTheForm',
             'testPaymentTermsSelectorVisibleOnlyWithMultiple',
+            'testChipFeeAmountCarriesCurrencySymbolNotCode',
             'testPaymentTermsDefaultFallsBackToShortest',
             'testBuyerFeeShareShapes',
             'testBuyerFeeShareRounding',
@@ -1422,6 +1423,24 @@ final class BrandConfigSpec
         $gateway = self::termsGateway([]);
         TinyAssert::same(false, WC_Twoinc_Payment_Terms::is_enabled($gateway));
         TinyAssert::same(false, WC_Twoinc_Payment_Terms::is_selector_visible($gateway));
+    }
+
+    /**
+     * ABN-468: the chip fee label goes out already formatted by the store's
+     * own price format, so the buyer sees the currency SYMBOL — Magento's
+     * priceUtils.formatPrice behaviour, not the currency code the pricing
+     * API echoes back. Tags stripped and entities decoded, because the chip
+     * is rendered with jQuery `text`.
+     */
+    private static function testChipFeeAmountCarriesCurrencySymbolNotCode(): void
+    {
+        TinyAssert::same('€12.50', WC_Twoinc_Payment_Terms::format_fee_amount(12.5, 'EUR'));
+        TinyAssert::same('£7.00', WC_Twoinc_Payment_Terms::format_fee_amount(7.0, 'gbp'));
+        // A currency with no symbol of its own still formats, and still
+        // carries no bare code-after-amount layout.
+        TinyAssert::same('kr99.00', WC_Twoinc_Payment_Terms::format_fee_amount(99.0, 'NOK'));
+        TinyAssert::true(strpos(WC_Twoinc_Payment_Terms::format_fee_amount(12.5, 'EUR'), 'EUR') === false);
+        TinyAssert::true(strpos(WC_Twoinc_Payment_Terms::format_fee_amount(12.5, 'EUR'), '<') === false);
     }
 
     private static function testPaymentTermsDefaultFallsBackToShortest(): void

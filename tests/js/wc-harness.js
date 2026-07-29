@@ -157,6 +157,7 @@ function loadTwoinc(twoinc) {
     helper: exported.twoincSelectWooHelper,
     util: exported.twoincUtilHelper,
     dom: exported.twoincDomHelper,
+    termChips: exported.twoincTermChips,
     $: $,
     twoinc: settings
   };

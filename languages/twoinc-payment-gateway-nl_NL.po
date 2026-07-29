@@ -650,6 +650,15 @@ msgstr "%1$s | WooCommerce: %2$s | WordPress: %3$s"
 msgid "%s days"
 msgstr "%s dagen"
 
+#: class/WC_Twoinc_Checkout.php
+#, php-format
+msgid "Payment Terms %s days"
+msgstr "Betaaltermijn %s dagen"
+
+#: class/WC_Twoinc_Checkout.php
+msgid "Selected payment terms"
+msgstr "Gewenste betaaltermijn"
+
 #: class/WC_Twoinc.php
 msgid "API key for the sandbox environment is available on your merchant portal (however please reach out to %s for access to production keys)."
 msgstr "De API-sleutel voor de sandboxomgeving is beschikbaar in uw verkopersportaal (neem contact op met %s voor toegang tot productiesleutels)."

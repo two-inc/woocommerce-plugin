@@ -909,6 +909,7 @@ if (!class_exists('WC_Twoinc')) {
             return sprintf(
                 '<div>
                     %s
+                    <label class="twoinc-term-chips-heading hidden"></label>
                     <div class="twoinc-term-chips hidden" role="radiogroup"></div>
                     <div class="twoinc-sole-trader-toggle hidden" role="radiogroup"></div>
                     %s
