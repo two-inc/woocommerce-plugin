@@ -14,13 +14,25 @@ let twoincUtilHelper = {
   },
 
   /**
-   * Construct url to Twoinc checkout api
+   * Construct url to Twoinc checkout api.
+   *
+   * `client` / `client_v` identify this plugin and its version to the API, and
+   * are the only attribution the company-search endpoint can get: the widget
+   * runs in the buyer's browser, so the user-agent is the shopper's. They go
+   * in the query string rather than a header on purpose — a custom header
+   * makes the request non-simple and buys a CORS preflight per keystroke.
+   *
+   * `params` may be a plain object or a URLSearchParams. It used to be
+   * assigned to as an object either way, which silently dropped both fields
+   * for every URLSearchParams caller (the company search): `new
+   * URLSearchParams(existing)` copies entries, not JS properties. Normalising
+   * first, and going through set(), covers both shapes and mutates neither.
    */
   constructTwoincUrl: function (path, params) {
-    if (!params) params = {};
-    params["client"] = window.twoinc.client_name;
-    params["client_v"] = window.twoinc.client_version;
-    return window.twoinc.twoinc_checkout_host + path + "?" + new URLSearchParams(params).toString();
+    const searchParams = new URLSearchParams(params || {});
+    searchParams.set("client", window.twoinc.client_name);
+    searchParams.set("client_v", window.twoinc.client_version);
+    return window.twoinc.twoinc_checkout_host + path + "?" + searchParams.toString();
   },
 
   /**
@@ -227,11 +239,26 @@ let twoincSelectWooHelper = {
           const rawItems = response && Array.isArray(response.items) ? response.items : [];
           for (let i = 0; i < rawItems.length; i++) {
             const item = rawItems[i];
+            // `national_identifier` is optional in the search response — the
+            // company may have none in its home registry, and its `id` may be
+            // null or empty. Reading it unguarded threw here, and a throw in
+            // this callback happens inside select2's query pipeline: it kills
+            // the whole result list, not just this hit, leaving the dropdown
+            // stuck on "Searching…". So render the company with whatever it
+            // has: the identifier is the buyer's disambiguator between two
+            // similarly-named companies, but dropping the hit entirely would
+            // remove a selectable company. Without one the buyer sees the
+            // company name alone and types the organisation number into the
+            // (still required) company_id field themselves.
+            const identifier =
+              item.national_identifier && item.national_identifier.id
+                ? String(item.national_identifier.id)
+                : "";
             items.push({
               id: item.name,
               text: item.name,
-              html: item.highlight + " (" + item.national_identifier.id + ")",
-              company_id: item.national_identifier.id,
+              html: identifier ? item.highlight + " (" + identifier + ")" : item.highlight,
+              company_id: identifier,
               lookup_id: item.lookup_id,
               approved: false
             });

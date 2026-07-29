@@ -120,9 +120,12 @@ about the company-search helper, so the bootstrap is left to no-op.
   body, and `items` as null/object/string/number, each yield no results and do not throw.
   A throw here would not surface as an error message — it happens inside select2's query
   pipeline, leaving the dropdown stuck on "Searching…".
+- a hit whose `national_identifier` is absent, null, or carries a null/empty `id` renders as
+  the company name alone with an empty `company_id`, and does not cost the buyer the other
+  hits in the same response.
 - request url: the configured host and `/companies/v2/company` path, the country from the
-  checkout form, `limit`/`offset` bounding and paging by that same bound, and the term
-  decoded exactly once.
+  checkout form, `limit`/`offset` bounding and paging by that same bound, the term decoded
+  exactly once, and `client`/`client_v` alongside the search params rather than replacing them.
 - the country is captured when `genSelectWooParams()` runs, not per keystroke — which is
   why a country change has to re-run `selectWoo()` with fresh params.
 - widget params: the 3-character minimum, the 300ms debounce shared with the other plugin
@@ -130,19 +133,25 @@ about the company-search helper, so the bootstrap is left to no-op.
   `templateSelection` uses plain text, and the non-error messages borrowing WooCommerce
   core's own copy.
 
-### Two characterisation tests, marked as such
+### Two defects these tests found, now fixed
 
-These pin current behaviour that is arguably wrong. They are recorded so that changing it is
-a deliberate decision with a test that flips, not a silent drift — neither is endorsed here,
-and neither is fixed in this test-only PR:
+Both were pinned as characterisation tests when this suite landed, and both were fixed
+immediately afterwards; the tests now assert the corrected behaviour:
 
-- **`processResults` throws on an item with no `national_identifier`.** `item.national_identifier.id`
-  is read unguarded. The body-level guard above it stops a malformed _body_, not a malformed
-  _hit_.
-- **`client` / `client_v` never reach the company-search query string.** `constructTwoincUrl()`
-  sets them as properties on the object it is handed; the search's `url()` callback hands it
-  a `URLSearchParams`, and `new URLSearchParams(params)` copies entries, not properties, so
-  both are dropped. Other call sites pass a plain object and do send them.
+- **a hit with no usable `national_identifier` no longer throws.** `item.national_identifier.id`
+  was read unguarded, and the body-level guard above it stops a malformed _body_, not a
+  malformed _hit_. `national_identifier` is optional in the search response, so a throw inside
+  select2's query pipeline took the whole result list down and left the dropdown on
+  "Searching…". Such a hit now renders as the company name with no identifier suffix and an
+  empty `company_id`, so the company stays selectable and the other hits survive.
+- **`client` / `client_v` reach the company-search query string.** `constructTwoincUrl()` set
+  them as properties on the object it was handed; the search's `url()` callback hands it a
+  `URLSearchParams`, and `new URLSearchParams(params)` copies entries, not properties, so both
+  were dropped for that one caller. They now go through `set()` on a normalised
+  `URLSearchParams`, which covers both shapes. Query string rather than a header on purpose —
+  a custom header makes the request non-simple and costs a CORS preflight per keystroke, and
+  this is the only platform attribution the endpoint can get, since the widget is client-side
+  and the user-agent is the shopper's browser.
 
 ## Known gaps
 
@@ -172,7 +181,8 @@ through `stubAjax()`. Out-of-order responses, aborts and timeouts are the subjec
 here, so controlling the timing is the point rather than a shortcut.
 
 Before trusting a new test, break the line it is supposed to pin and watch it fail. Every
-assertion in this suite was checked that way; seven separate mutations of
+assertion in this suite was checked that way; nine separate mutations of
 `assets/js/twoinc.js` (silencing the abort branch, dropping either supersession guard,
 dropping the `always` guard, weakening `degraded === true` to truthiness, removing the
-`Array.isArray` guard, removing the request timeout) each fail at least one test.
+`Array.isArray` guard, removing the request timeout, dropping the `national_identifier`
+guard, reverting `constructTwoincUrl()` to property assignment) each fail at least one test.

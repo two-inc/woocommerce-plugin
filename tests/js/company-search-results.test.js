@@ -105,14 +105,61 @@ describe("company search results", () => {
     });
   });
 
-  describe("malformed items", () => {
-    test("an item missing national_identifier throws", () => {
-      // Characterisation, not endorsement. `item.national_identifier.id`
-      // is read unguarded, so a hit without that object throws inside
-      // select2's query pipeline and the dropdown stays on "Searching…"
-      // rather than showing an error. Pinned so that a future guard
-      // (or its absence) is a deliberate decision — see README gaps.
-      expect(() => processResults()({ items: [{ name: "Example Co" }] }, {})).toThrow();
+  describe("a hit with no usable national_identifier", () => {
+    // `national_identifier` is optional in the search response and its `id`
+    // may be null or empty, so every one of these shapes is reachable. A
+    // throw here happens inside select2's query pipeline, which would take
+    // the whole result list down with it and leave the dropdown on
+    // "Searching…" — so the hit renders with whatever it has instead.
+    test.each([
+      ["national_identifier absent", { name: "Example Co", highlight: "<em>Example Co</em>" }],
+      [
+        "national_identifier null",
+        { name: "Example Co", highlight: "<em>Example Co</em>", national_identifier: null }
+      ],
+      [
+        "id null",
+        {
+          name: "Example Co",
+          highlight: "<em>Example Co</em>",
+          national_identifier: { id: null }
+        }
+      ],
+      [
+        "id empty",
+        { name: "Example Co", highlight: "<em>Example Co</em>", national_identifier: { id: "" } }
+      ]
+    ])("%s renders the company without an identifier suffix", (_label, item) => {
+      const run = () => processResults()({ items: [item] }, {});
+
+      expect(run).not.toThrow();
+      expect(run().results).toEqual([
+        {
+          id: "Example Co",
+          text: "Example Co",
+          html: "<em>Example Co</em>",
+          company_id: "",
+          lookup_id: undefined,
+          approved: false
+        }
+      ]);
+    });
+
+    test("does not take the rest of the result list down with it", () => {
+      // The point of the guard: one unusable hit must not cost the buyer
+      // every other company that matched.
+      const out = processResults()(
+        {
+          items: [
+            { name: "Example Co", highlight: "<em>Example Co</em>" },
+            hit("Other Example Co", "22222222")
+          ]
+        },
+        {}
+      );
+
+      expect(out.results.map((r) => r.text)).toEqual(["Example Co", "Other Example Co"]);
+      expect(out.results.map((r) => r.company_id)).toEqual(["", "22222222"]);
     });
   });
 
@@ -166,17 +213,27 @@ describe("company search results", () => {
       expect(new URL(url({ term: "exampleco" })).searchParams.get("country")).toBe("GB");
     });
 
-    test("client identification does not reach the query string", () => {
-      // Characterisation, not endorsement. constructTwoincUrl() sets
-      // `client` / `client_v` as PROPERTIES on the object it is handed;
-      // the caller here hands it a URLSearchParams, whose entries are
-      // what `new URLSearchParams(params)` copies — so both are dropped.
-      // Other callers pass a plain object and do send them. Pinned so
-      // that fixing it is a deliberate change with a test that flips.
+    test("identifies the plugin and its version to the API", () => {
+      // The only attribution this endpoint can get: the widget runs in the
+      // buyer's browser, so the user-agent is the shopper's. In the query
+      // string rather than a header on purpose — a custom header would make
+      // the request non-simple and cost a CORS preflight per keystroke.
+      // This caller hands constructTwoincUrl() a URLSearchParams, which is
+      // the shape that used to lose both fields.
       const url = urlFor();
 
-      expect(url.searchParams.get("client")).toBeNull();
-      expect(url.searchParams.get("client_v")).toBeNull();
+      expect(url.searchParams.get("client")).toBe("woocommerce");
+      expect(url.searchParams.get("client_v")).toBe("0.0.0-test");
+    });
+
+    test("keeps the search params it was given alongside them", () => {
+      // Guards against a fix that replaces the params instead of adding to
+      // them, which would lose the query itself.
+      const url = urlFor({ term: "exampleco" });
+
+      expect(url.searchParams.get("q")).toBe("exampleco");
+      expect(url.searchParams.get("country")).toBe("GB");
+      expect(url.searchParams.get("client")).toBe("woocommerce");
     });
   });
 
