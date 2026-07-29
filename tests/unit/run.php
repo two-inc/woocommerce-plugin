@@ -155,6 +155,7 @@ final class BrandConfigSpec
             'testPaymentBoxOrdersTaglineChipsThenSoleTrader',
             'testSelectedTermInputPrecedesChipsContainer',
             'testBrandWithoutTaglineEmitsNoTaglineBlock',
+            'testTaglineSentenceIsPlatformCopyWithBrandFaqLink',
             'testIntentApprovedNoticeDisabledBrandEmitsNoBlock',
             'testIntentApprovedNoticeDefaultBrandCarriesBothVariants',
             'testIntentApprovedNoticeBrandTemplateUsedVerbatim',
@@ -257,8 +258,8 @@ final class BrandConfigSpec
         TinyAssert::same('https://portal.two.inc/auth/merchant/signup', WC_Twoinc_Brand::get('sign_up_url'));
         TinyAssert::same(WC_TWOINC_PLUGIN_URL . 'assets/images/two-logo.svg', WC_Twoinc_Brand::get('logo_url'));
         TinyAssert::same('Business invoice - %s days', WC_Twoinc_Brand::get('title_default'));
-        // Two ships no checkout subtitle; an overlay supplies one.
-        TinyAssert::same('', WC_Twoinc_Brand::get('checkout_subtitle'));
+        // Two ships no checkout tagline; an overlay supplies its FAQ URL.
+        TinyAssert::same(null, WC_Twoinc_Brand::get('checkout_subtitle_faq_url'));
         TinyAssert::same('integration@two.inc', WC_Twoinc_Brand::get('production_key_contact_email'));
         TinyAssert::same(null, WC_Twoinc_Brand::get('not_a_key'));
     }
@@ -3980,17 +3981,45 @@ final class BrandConfigSpec
     }
 
     /**
-     * A brand leaving checkout_subtitle empty (the Two default) emits no
-     * tagline wrapper at all — the reorder must not introduce an empty div
-     * into vanilla checkout.
+     * A brand leaving checkout_subtitle_faq_url unset (the Two default)
+     * emits no tagline wrapper at all — the reorder must not introduce an
+     * empty div into vanilla checkout.
      */
     private static function testBrandWithoutTaglineEmitsNoTaglineBlock(): void
     {
         $html = self::gateway()->build_payment_description();
-        TinyAssert::same('', WC_Twoinc_Brand::get('checkout_subtitle'));
+        TinyAssert::same(null, WC_Twoinc_Brand::get('checkout_subtitle_faq_url'));
         TinyAssert::true(
             strpos($html, 'twoinc-payment-subtitle') === false,
             'a brand with no tagline must emit no tagline block'
+        );
+    }
+
+    /**
+     * The tagline sentence is platform copy (a literal msgid gettext can
+     * extract) and the brand contributes only the FAQ link target. Pinned
+     * because the previous shape handed the whole sentence to __() as a
+     * variable msgid, which no catalogue can ever carry (TWO-25270): a
+     * brand's source-language tagline then rendered on every locale.
+     */
+    private static function testTaglineSentenceIsPlatformCopyWithBrandFaqLink(): void
+    {
+        self::useTaglineBrand();
+        $html = self::gateway()->get_pay_subtitle();
+
+        TinyAssert::same(
+            '<div class="twoinc-payment-subtitle">For all companies, '
+                . '<a href="https://taglinebrand.example/faq" target="_blank" rel="noopener">'
+                . 'read more</a>.</div>',
+            $html
+        );
+
+        // The literal passed to __() must appear verbatim in the catalogues,
+        // or the string is unreachable for translators however it renders.
+        $pot = file_get_contents(dirname(__DIR__, 2) . '/languages/twoinc-payment-gateway.pot');
+        TinyAssert::true(
+            strpos($pot, 'msgid "For all companies, %1$sread more%2$s."') !== false,
+            'tagline msgid missing from the .pot — it would be untranslatable'
         );
     }
 
