@@ -4038,13 +4038,12 @@ final class BrandConfigSpec
             'compiled nl_NL catalogue carries no tagline translation — '
                 . 'a Dutch shop would render English (recompile with msgfmt?)'
         );
-        // Both placeholders must survive translation. sprintf on a msgstr
-        // that dropped %2$s emits an unclosed <a>, and wp_kses_post does
-        // not balance tags, so the anchor would swallow the payment box.
-        TinyAssert::true(
-            strpos($nl_mo, '%1$s') !== false && strpos($nl_mo, '%2$s') !== false,
-            'nl_NL tagline translation lost a link placeholder'
-        );
+        // Both placeholders are pinned by that same match, which carries
+        // them verbatim — a msgstr that dropped %2$s would sprintf an
+        // unclosed <a>, and wp_kses_post does not balance tags, so the
+        // anchor would swallow the payment box. Asserting %1$s/%2$s
+        // anywhere in the .mo separately would be vacuous: 21 other
+        // entries in this catalogue carry them.
     }
 
     /**
