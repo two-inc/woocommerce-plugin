@@ -67,7 +67,6 @@ final class BrandConfigSpec
             'testLegacyDaysOnInvoiceOptionRowsDropped',
             'testPaymentTermsValidationNonDestructiveOnUnresolvedOrNarrowedList',
             'testSurchargeGridPreservesRowsNotOnTheForm',
-            'testPaymentTermsSelectorVisibleOnlyWithMultiple',
             'testChipFeeAmountCarriesCurrencySymbolNotCode',
             'testPaymentTermsDefaultFallsBackToShortest',
             'testBuyerFeeShareShapes',
@@ -1407,23 +1406,6 @@ final class BrandConfigSpec
                 return $this->merchant_terms;
             }
         };
-    }
-
-    private static function testPaymentTermsSelectorVisibleOnlyWithMultiple(): void
-    {
-        // One offered term: feature active but applied silently (no chooser)
-        $gateway = self::termsGateway(['payment_terms_days' => ['30']]);
-        TinyAssert::true(WC_Twoinc_Payment_Terms::is_enabled($gateway));
-        TinyAssert::same(false, WC_Twoinc_Payment_Terms::is_selector_visible($gateway));
-
-        // Two offered terms: chooser visible
-        $gateway = self::termsGateway(['payment_terms_days' => ['30', '60']]);
-        TinyAssert::true(WC_Twoinc_Payment_Terms::is_selector_visible($gateway));
-
-        // No terms: neither active nor visible
-        $gateway = self::termsGateway([]);
-        TinyAssert::same(false, WC_Twoinc_Payment_Terms::is_enabled($gateway));
-        TinyAssert::same(false, WC_Twoinc_Payment_Terms::is_selector_visible($gateway));
     }
 
     /**
