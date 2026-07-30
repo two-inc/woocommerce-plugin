@@ -1047,6 +1047,47 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
+         * Admin option list for the surcharge tax treatment.
+         *
+         * The 'always_zero' ("Never taxed") mode is NOT offered for a new
+         * selection (TWO-25279). It is a plugin-supplied never-taxed mode
+         * rather than a tax rule the merchant set up, and choosing it
+         * silently means "the fee is untaxed for every destination" — a tax
+         * decision made by picking an option we handed them. A merchant who
+         * wants an untaxed fee creates a 0%-rate WooCommerce tax class and
+         * selects it under "Specific tax class", so the treatment is visible
+         * and auditable under WooCommerce → Settings → Tax. Same rule across
+         * the WooCommerce / PrestaShop / Magento plugins.
+         *
+         * It IS re-offered to a shop that already stores it, and that
+         * carve-out is load-bearing rather than cosmetic: a <select> cannot
+         * render a value absent from its options, so the browser posts the
+         * leading '' placeholder on the next settings save, and both
+         * validate_surcharge_tax_treatment_field and
+         * validate_surcharge_type_field then throw while surcharges are
+         * enabled. WooCommerce keeps the previous value for a field whose
+         * validator threw, so the shop would be stuck on a permanent admin
+         * error it has no way to clear from the dropdown.
+         *
+         * @return array<string, string> stored value => display name
+         */
+        public function get_surcharge_tax_treatment_options(): array
+        {
+            $options = [
+                ''             => __('-- Select surcharge tax treatment --', 'twoinc-payment-gateway'),
+                'standard'     => __('Standard (store default tax rules)', 'twoinc-payment-gateway'),
+                'custom_class' => __('Specific tax class', 'twoinc-payment-gateway'),
+            ];
+            // get_option() falls back to the field's '' default, so a shop
+            // that never saved this field can never match here.
+            $stored = $this->get_option('surcharge_tax_treatment');
+            if (is_scalar($stored) && trim((string) $stored) === 'always_zero') {
+                $options['always_zero'] = __('Never taxed', 'twoinc-payment-gateway');
+            }
+            return $options;
+        }
+
+        /**
          * Visible warning for the surcharge tax class field when the stored
          * selection no longer matches a live tax class (the merchant deleted
          * it). Without this the failure is silent twice over: core's
@@ -3637,15 +3678,12 @@ if (!class_exists('WC_Twoinc')) {
                 ],
                 'surcharge_tax_treatment' => [
                     'title'       => __('Surcharge Tax Treatment', 'twoinc-payment-gateway'),
-                    'description' => __('How the surcharge line is taxed. Standard applies your store\'s default tax rules to the fee. Specific tax class taxes the fee under a WooCommerce tax class you select below. Never taxed adds the fee as non-taxable, regardless of the customer\'s destination.', 'twoinc-payment-gateway'),
+                    'description' => __('How the surcharge line is taxed. Standard applies your store\'s default tax rules to the fee. Specific tax class taxes the fee under a WooCommerce tax class you select below — to leave the fee untaxed, create a tax class with a 0% rate and select it here.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'type'        => 'select',
-                    'options'     => [
-                        ''             => __('-- Select surcharge tax treatment --', 'twoinc-payment-gateway'),
-                        'standard'     => __('Standard (store default tax rules)', 'twoinc-payment-gateway'),
-                        'custom_class' => __('Specific tax class', 'twoinc-payment-gateway'),
-                        'always_zero'  => __('Never taxed', 'twoinc-payment-gateway'),
-                    ],
+                    // Built at render time, not inline: the never-taxed mode
+                    // is only offered to a shop that already stores it.
+                    'options'     => $this->get_surcharge_tax_treatment_options(),
                     // Deliberately NO pre-selected default (unified rule
                     // across the WC/PS/Magento plugins): how a fee is taxed
                     // must be an explicit merchant decision, so the field

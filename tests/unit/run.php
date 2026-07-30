@@ -84,6 +84,7 @@ final class BrandConfigSpec
             'testSurchargeFeeAlwaysZeroNeverTaxed',
             'testSurchargeFeeCustomClassFallsBackWhenClassDeleted',
             'testSurchargeTaxSettingsValidationAndStaleNotice',
+            'testNeverTaxedTreatmentSuppressedUnlessAlreadyStored',
             'testSurchargeTaxTreatmentRequiresExplicitSelection',
             'testPaymentTermsValidationRequiresSelection',
             'testDefaultTermCoercedToOfferedSet',
@@ -2129,6 +2130,87 @@ final class BrandConfigSpec
         TinyAssert::same('', $standard->get_surcharge_tax_class_stale_notice(), 'no notice outside custom_class mode');
     }
 
+    /**
+     * TWO-25279: "Never taxed" (always_zero) is a plugin-supplied never-taxed
+     * mode, not a tax rule the merchant set up, so it is not offered for a
+     * NEW selection — an untaxed fee is a 0%-rate tax class under "Specific
+     * tax class".
+     *
+     * It IS re-offered to a shop that already stores it, and that is what
+     * keeps such a shop able to save: with the option gone the <select> falls
+     * back to the '' placeholder, and both treatment and surcharge-type
+     * validators then throw while surcharges are enabled. WooCommerce retains
+     * the previous value for a field whose validator threw, so the shop would
+     * sit on a permanent admin error with no way to clear it from the
+     * dropdown. This walks that whole round trip.
+     */
+    private static function testNeverTaxedTreatmentSuppressedUnlessAlreadyStored(): void
+    {
+        $GLOBALS['__twoinc_test_tax_classes'] = ['B2B Levy'];
+
+        // Never configured -> not offered.
+        $fresh = self::surchargeFeeGateway([]);
+        TinyAssert::same(
+            ['', 'standard', 'custom_class'],
+            array_keys($fresh->get_surcharge_tax_treatment_options()),
+            'a shop that never chose is not offered the never-taxed mode'
+        );
+
+        // On another mode -> still not offered.
+        $standard = self::surchargeFeeGateway(['surcharge_tax_treatment' => 'standard']);
+        TinyAssert::same(
+            ['', 'standard', 'custom_class'],
+            array_keys($standard->get_surcharge_tax_treatment_options()),
+            'a shop on another mode is not offered the never-taxed mode'
+        );
+
+        // Already stored -> re-offered, labelled, and wired into the field.
+        $legacy = self::surchargeFeeGateway([
+            'surcharge_type' => 'percentage',
+            'surcharge_tax_treatment' => 'always_zero',
+        ]);
+        $options = $legacy->get_surcharge_tax_treatment_options();
+        TinyAssert::same(['', 'standard', 'custom_class', 'always_zero'], array_keys($options));
+        TinyAssert::same('Never taxed', $options['always_zero'], 'the re-offered mode keeps its label');
+        $legacy->init_form_fields();
+        TinyAssert::same(
+            array_keys($options),
+            array_keys($legacy->form_fields['surcharge_tax_treatment']['options']),
+            'the settings field must render the scope-aware list, not a hardcoded one'
+        );
+
+        // ...and the value that select posts back still validates, on both
+        // the treatment field and the surcharge-type field that gates it.
+        TinyAssert::same(
+            'always_zero',
+            $legacy->validate_surcharge_tax_treatment_field('surcharge_tax_treatment', 'always_zero'),
+            'resubmitting the stored mode must not be rejected'
+        );
+        TinyAssert::same(
+            'percentage',
+            $legacy->validate_surcharge_type_field('surcharge_type', 'percentage'),
+            'the surcharge-type gate must accept the stored never-taxed mode'
+        );
+
+        // The lockout the carve-out prevents: the placeholder the select
+        // would post if the option were absent is rejected on both fields.
+        $threw = false;
+        try {
+            $legacy->validate_surcharge_tax_treatment_field('surcharge_tax_treatment', '');
+        } catch (Exception $e) {
+            $threw = true;
+        }
+        TinyAssert::true($threw, 'a blank treatment is rejected while surcharges are enabled');
+        $blanked = self::surchargeFeeGateway(['surcharge_type' => 'percentage', 'surcharge_tax_treatment' => '']);
+        $threw = false;
+        try {
+            $blanked->validate_surcharge_type_field('surcharge_type', 'percentage');
+        } catch (Exception $e) {
+            $threw = true;
+        }
+        TinyAssert::true($threw, 'the surcharge-type gate also rejects a blanked treatment');
+    }
+
     private static function testSurchargeTaxTreatmentRequiresExplicitSelection(): void
     {
         $GLOBALS['__twoinc_test_tax_classes'] = ['B2B Levy'];
@@ -2139,7 +2221,11 @@ final class BrandConfigSpec
         $gateway->init_form_fields();
         $field = $gateway->form_fields['surcharge_tax_treatment'];
         TinyAssert::same('', $field['default'], 'treatment must not default to any mode');
-        TinyAssert::same(['', 'standard', 'custom_class', 'always_zero'], array_keys($field['options']));
+        TinyAssert::true(
+            strpos($field['description'], 'Never taxed') === false,
+            'the help text must not offer the never-taxed mode as a choice'
+        );
+        TinyAssert::same(['', 'standard', 'custom_class'], array_keys($field['options']));
         TinyAssert::same('-- Select surcharge tax treatment --', $field['options']['']);
 
         // The '' placeholder is storable while surcharges stay disabled.
