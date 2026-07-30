@@ -206,7 +206,11 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          */
         public static function resolve_surcharge_tax_treatment($gateway): array
         {
-            $treatment = (string) $gateway->get_option('surcharge_tax_treatment');
+            // Trimmed: a settings row written outside the dropdown may carry
+            // stray whitespace, and the admin select now renders such a row as
+            // its stored treatment (TWO-25279). Without the trim the admin
+            // would claim a treatment the cart does not apply.
+            $treatment = trim((string) $gateway->get_option('surcharge_tax_treatment'));
             if (!in_array($treatment, ['standard', 'custom_class', 'always_zero'], true)) {
                 $treatment = 'standard';
             }

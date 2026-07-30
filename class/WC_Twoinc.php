@@ -1091,12 +1091,21 @@ if (!class_exists('WC_Twoinc')) {
             $stored = is_array($saved) && isset($saved['surcharge_tax_treatment'])
                 ? (string) $saved['surcharge_tax_treatment']
                 : '';
-            // Keyed on the RAW stored value, not on the literal
-            // 'always_zero': a row written outside the dropdown (direct DB or
-            // API edit) may carry stray whitespace, and a select can only
-            // render an option whose key is byte-identical to its value.
             if (trim($stored) === 'always_zero') {
-                $options[$stored] = __('Never taxed', 'twoinc-payment-gateway');
+                $label = __('Never taxed', 'twoinc-payment-gateway');
+                // The canonical key is what every validator and the runtime
+                // resolver compare against, so it is always registered.
+                $options['always_zero'] = $label;
+                // A row written outside the dropdown (direct DB or API edit)
+                // may carry stray whitespace, and a select can only render an
+                // option whose key is byte-identical to its value — so the raw
+                // form is registered too, or that shop's select falls back to
+                // the placeholder and cannot be saved at all. Both keys pass
+                // validation, and because the validator returns the TRIMMED
+                // value the row is normalised on the next save.
+                if ($stored !== 'always_zero') {
+                    $options[$stored] = $label;
+                }
             }
             return $options;
         }
@@ -1167,11 +1176,25 @@ if (!class_exists('WC_Twoinc')) {
             // Same enabled-set the runtime uses (get_surcharge_settings
             // coerces anything else to 'none'), so the gate matches what
             // will actually surcharge.
+            // Selectable modes come from the same source the treatment
+            // validator uses, minus the '' placeholder. When the two lists
+            // diverged, a POST of surcharge_type=percentage +
+            // surcharge_tax_treatment=always_zero on a shop that never stored
+            // the never-taxed mode passed THIS gate and threw on the treatment
+            // field — and since WooCommerce keeps the old value for a throwing
+            // field, the shop was left with surcharges enabled and no
+            // treatment, the exact invariant this gate exists to enforce.
+            $selectable = array_values(array_filter(
+                array_keys($this->get_surcharge_tax_treatment_options()),
+                function ($mode) {
+                    return $mode !== '';
+                }
+            ));
             if (
                 in_array($value, ['percentage', 'fixed', 'fixed_and_percentage'], true)
                 && !in_array(
                     $this->get_sibling_field_save_value('surcharge_tax_treatment'),
-                    ['standard', 'custom_class', 'always_zero'],
+                    $selectable,
                     true
                 )
             ) {
@@ -1181,8 +1204,8 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * Enforce that a saved surcharge tax treatment is one of the three
-         * supported modes (WooCommerce's default select validation sanitises
+         * Enforce that a saved surcharge tax treatment is one of the modes
+         * actually OFFERED (WooCommerce's default select validation sanitises
          * but does not enforce option-list membership). The '' placeholder
          * is only storable while surcharges are (staying) disabled — with
          * surcharges enabled a real treatment must be selected; there is no

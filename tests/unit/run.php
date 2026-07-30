@@ -2266,13 +2266,45 @@ final class BrandConfigSpec
         // A row carrying stray whitespace still renders: the option is keyed
         // on the RAW stored value, because a select can only render an option
         // whose key is byte-identical to the value.
-        $padded = self::surchargeFeeGateway(['surcharge_type' => 'percentage']);
+        $padded = self::surchargeFeeGateway([
+            'surcharge_type' => 'percentage',
+            'surcharge_tax_treatment' => ' always_zero ',
+        ]);
         $GLOBALS['__twoinc_test_options'][$padded->get_option_key()] = [
+            'surcharge_type' => 'percentage',
             'surcharge_tax_treatment' => ' always_zero ',
         ];
+        $paddedOptions = $padded->get_surcharge_tax_treatment_options();
         TinyAssert::true(
-            array_key_exists(' always_zero ', $padded->get_surcharge_tax_treatment_options()),
+            array_key_exists(' always_zero ', $paddedOptions),
             'the option must be keyed on the raw stored value, whitespace included'
+        );
+        TinyAssert::true(
+            array_key_exists('always_zero', $paddedOptions),
+            'the canonical key must be registered too, or nothing can validate'
+        );
+        // Round trip, not just render: the value that select posts must save,
+        // and must come back NORMALISED so the odd row self-heals.
+        TinyAssert::same(
+            'always_zero',
+            $padded->validate_surcharge_tax_treatment_field('surcharge_tax_treatment', ' always_zero '),
+            'the raw padded value the select posts must be accepted'
+        );
+        TinyAssert::same(
+            'always_zero',
+            $padded->validate_surcharge_tax_treatment_field('surcharge_tax_treatment', 'always_zero'),
+            'the canonical value must be accepted too'
+        );
+        TinyAssert::same(
+            'percentage',
+            $padded->validate_surcharge_type_field('surcharge_type', 'percentage'),
+            'the type gate must accept a padded legacy row'
+        );
+        // ...and the runtime must apply what the admin displays.
+        TinyAssert::same(
+            'always_zero',
+            WC_Twoinc_Payment_Terms::resolve_surcharge_tax_treatment($padded)['treatment'],
+            'a padded row must resolve to the treatment the select shows, not standard'
         );
         unset($GLOBALS['__twoinc_test_options']);
 
@@ -2343,8 +2375,22 @@ final class BrandConfigSpec
         TinyAssert::true($threw, 'enabling surcharges with no treatment must be blocked');
 
         // Enabling and picking a treatment in the same save passes.
-        $fresh->test_post_data = [$fresh->get_field_key('surcharge_tax_treatment') => 'always_zero'];
+        $fresh->test_post_data = [$fresh->get_field_key('surcharge_tax_treatment') => 'standard'];
         TinyAssert::same('percentage', $fresh->validate_surcharge_type_field('surcharge_type', 'percentage'));
+
+        // ...but not with a mode the shop is not offered. Both validators must
+        // agree, or the type gate passes, the treatment field throws, WC keeps
+        // the old (blank) treatment, and the shop ends up with surcharges
+        // enabled and no treatment — the very state this gate exists to
+        // prevent (TWO-25279).
+        $fresh->test_post_data = [$fresh->get_field_key('surcharge_tax_treatment') => 'always_zero'];
+        $threw = false;
+        try {
+            $fresh->validate_surcharge_type_field('surcharge_type', 'percentage');
+        } catch (Exception $e) {
+            $threw = true;
+        }
+        TinyAssert::true($threw, 'the type gate must refuse a treatment the shop is not offered');
 
         // Disabling never needs a treatment.
         TinyAssert::same('none', self::surchargeFeeGateway([])->validate_surcharge_type_field('surcharge_type', 'none'));
