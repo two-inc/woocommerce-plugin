@@ -1007,3 +1007,12 @@ msgstr "De bevestigingscallback accepteren zonder geldige WordPress-nonce"
 #: class/WC_Twoinc.php
 msgid "The confirmation callback always checks the order's unique 64-character order reference; this option skips only the additional WordPress nonce, which typically expires 12 to 24 hours after the order was placed — and, for a signed-in customer, when their session changes — so a buyer who comes back to a legitimately authorised order can be rejected. The order reference must still match, so the callback is not left open, but the nonce's protection against a cross-site request is gone; leave this off unless you are seeing those false rejections."
 msgstr "De bevestigingscallback controleert altijd de unieke orderreferentie van 64 tekens; deze optie slaat alleen de aanvullende WordPress-nonce over, die normaal gesproken 12 tot 24 uur na het plaatsen van de order verloopt — en bij een ingelogde klant zodra hun sessie verandert — waardoor een koper die terugkomt op een order die wel degelijk is goedgekeurd, kan worden afgewezen. De orderreferentie moet nog steeds kloppen, dus de callback staat niet open, maar de bescherming van de nonce tegen een verzoek vanaf een andere site is weg; laat dit uit staan tenzij je die onterechte afwijzingen ziet."
+
+#: class/WC_Twoinc_Checkout.php
+msgid "Enter company name to search"
+msgstr "Voer bedrijfsnaam in om te zoeken"
+
+#: class/WC_Twoinc_Checkout.php
+#, php-format
+msgid "Please enter %d or more characters"
+msgstr "Voer %d of meer tekens in"
