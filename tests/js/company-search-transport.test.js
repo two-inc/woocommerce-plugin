@@ -357,6 +357,27 @@ describe("company search ajax transport", () => {
       expect($spinner.text()).toBe("");
     });
 
+    test("the spinner lands inside the widget's own search box", () => {
+      // Every other assertion here selects the spinner document-wide, which
+      // would pass just as happily if the helper appended it to <body>. The
+      // spinner is positioned absolutely against the search container, so
+      // landing in the wrong parent means it renders in the wrong place —
+      // or nowhere visible at all — with the whole suite still green.
+      //
+      // The container is created by the widget library when the dropdown
+      // opens, not by any template in this repo, so this pins the one
+      // binding that could actually be got wrong.
+      search();
+
+      const $searchBox = ctx
+        .$('input[aria-owns="select2-billing_company_display-results"]')
+        .parent();
+      expect($searchBox).toHaveLength(1);
+      expect($searchBox.hasClass("select2-search--dropdown")).toBe(true);
+      expect($searchBox.children(".twoinc-search-spinner")).toHaveLength(1);
+      expect(ctx.$(".twoinc-search-spinner").parent().is($searchBox)).toBe(true);
+    });
+
     test("the spinner is hidden from the accessibility tree", () => {
       // Decoration only: select2 announces search state through the
       // results list, so an exposed spinner would double up on it.
