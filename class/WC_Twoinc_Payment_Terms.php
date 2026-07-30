@@ -241,13 +241,15 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          * arithmetic. Mirrors Magento's SurchargeCalculator::buildBuyerFeeShare:
          * percentage (0.0 when fixed-only, so the API default of 100% is never
          * silently applied), surcharge_basis, the fixed surcharge (fixed/both
-         * types), a cap on the percentage portion, rounding (only with a
-         * percentage component) and, in differential mode, the default term as
-         * reference_terms.
+         * types), a cap on the whole fee line item (percentage passthrough
+         * plus fixed surcharge, post-gross-up — NOT a cap on the percentage
+         * portion alone), rounding (only with a percentage component) and, in
+         * differential mode, the default term as reference_terms.
          *
          * @return array|null null when no surcharge is configured (type none),
-         *                    or when a monetary component cannot be relayed
-         *                    safely in the checkout currency (TWO-25269)
+         *                    or when no FX rate is available to express the
+         *                    configured monetary components in the checkout
+         *                    currency (TWO-25269)
          */
         public static function build_buyer_fee_share($gateway, int $days): ?array
         {
@@ -300,24 +302,41 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                     }
                     $converted_fixed = $fixed !== null ? (float) WC_Twoinc_Helper::round_amt($fixed * $rate) : null;
                     $converted_cap = $cap !== null ? (float) WC_Twoinc_Helper::round_amt($cap * $rate) : null;
-                    // A configured CAP that rounds to 0.00 in a much
-                    // stronger checkout currency fails CLOSED: a zero cap
-                    // is indistinguishable from *no* cap downstream, so
-                    // relaying it would send an UNCAPPED percentage — an
-                    // overcharge, the opposite of what the merchant
-                    // configured. An ABSENT cap is a wholly legitimate
-                    // configuration and is never a failure (see
-                    // surcharge_monetary_components).
-                    if ($cap !== null && $converted_cap <= 0) {
-                        self::log_surcharge_fx_failure(sprintf(
-                            'configured %s cap rounds to 0.00 in checkout'
-                            . ' currency %s, which would relay an UNCAPPED'
-                            . ' percentage (term %d days)',
-                            $store_currency,
-                            $active_currency,
-                            $days
-                        ));
-                        return null;
+                    // A configured CAP that rounds to 0.00 is relayed AS
+                    // 0.00 — it is NOT a failure and must not be dropped,
+                    // withheld or turned into "no cap". The pricing API
+                    // distinguishes an absent cap from a zero one: its
+                    // clamp tests the cap for PRESENCE, not truthiness, so
+                    // a cap of 0 forces the fee to zero, and the API's own
+                    // tests pin that (verified under TWO-25269).
+                    // Because the cap bounds the WHOLE line item, not the
+                    // percentage portion, that zeroes any fixed surcharge
+                    // configured alongside it too — which is why it is
+                    // reported, at info, for the same reason as the fixed
+                    // case below. It is still the right outcome: the
+                    // merchant configured a cap worth nothing in this
+                    // currency, and "charge no fee" is what that says. An
+                    // ABSENT cap is separately legitimate and means
+                    // uncapped (see surcharge_monetary_components).
+                    //
+                    // An earlier revision of this code failed CLOSED here
+                    // on the premise that a zero cap read downstream as
+                    // *no* cap and would relay an uncapped percentage. That
+                    // premise was wrong — see the note in
+                    // docs/surcharge-fx.md — and the guard was reverted.
+                    if ($cap !== null && $converted_cap <= 0 && function_exists('wc_get_logger')) {
+                        wc_get_logger()->info(
+                            sprintf(
+                                'Surcharge cap of %s %s rounds to 0.00 in'
+                                . ' checkout currency %s; the whole fee is'
+                                . ' capped at 0.00 (term %d days)',
+                                $cap,
+                                $store_currency,
+                                $active_currency,
+                                $days
+                            ),
+                            ['source' => 'twoinc-payment-gateway']
+                        );
                     }
                     // A FIXED amount that rounds to 0.00 is NOT a failure:
                     // a legitimately tiny configured fee can be genuinely
@@ -368,13 +387,15 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         /**
          * The two STORE-currency monetary components of one term's grid
          * row: the fixed surcharge (fixed/both types) and the cap on the
-         * percentage portion (percentage/both types). Either may be null.
+         * whole fee line item (percentage/both types). Either may be null.
          *
          * A null CAP means "no cap configured", which is a completely
          * legitimate configuration: the percentage surcharge is then
          * charged uncapped, exactly as the merchant asked. Absence must
-         * never be treated as a failure anywhere — only a cap that IS
-         * configured and cannot be relayed faithfully fails closed.
+         * never be treated as a failure anywhere, and neither is a cap
+         * that converts to 0.00 — the pricing API treats cap 0 as "clamp
+         * the fee to zero", so it is relayed as 0.00 (docs/surcharge-fx.md).
+         * The only fail-closed condition is no FX rate at all.
          *
          * @param array{type: string, grid: array<int,array>} $settings
          * @return array{fixed: float|null, cap: float|null}

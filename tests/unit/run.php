@@ -146,7 +146,7 @@ final class BrandConfigSpec
             'testGateKeepsMethodWhenSurchargeIsPercentageOnly',
             'testGateFxCheckAppliesOnOrderPayEndpoint',
             'testBuyerFeeShareSameCurrencyNeverTouchesFx',
-            'testBuyerFeeShareCapRoundingToZeroFailsClosed',
+            'testBuyerFeeShareCapRoundingToZeroRelaysZeroCap',
             'testBuyerFeeShareFixedRoundingToZeroChargesZero',
             'testBuyerFeeShareAbsentCapChargesUncappedPercentage',
             'testCartFeeSkippedOnQuoteCurrencyMismatch',
@@ -3810,23 +3810,44 @@ final class BrandConfigSpec
         TinyAssert::same(0, $gateway->fx_requests);
     }
 
-    private static function testBuyerFeeShareCapRoundingToZeroFailsClosed(): void
+    private static function testBuyerFeeShareCapRoundingToZeroRelaysZeroCap(): void
     {
-        // A CONFIGURED cap that rounds to 0.00 once converted fails closed:
-        // a zero cap is indistinguishable from *no* cap downstream, so
-        // relaying it would send the percentage fee UNCAPPED — an
-        // overcharge, the opposite of the merchant's configuration. Now
-        // reported at ERROR level (TWO-25269) instead of silently.
+        // A CONFIGURED cap that rounds to 0.00 once converted is relayed AS
+        // 0.00. It is NOT a failure and must never be dropped, withheld or
+        // turned into "no cap": the pricing API's clamp tests the cap for
+        // PRESENCE, not truthiness, so cap 0 forces the fee to zero, and
+        // the API's own tests pin that (verified under TWO-25269, which
+        // holds the source references — not repeated here, this repo is
+        // public). The cap bounds the WHOLE line item, so this zeroes
+        // any fixed surcharge alongside it too — reported at info, never as
+        // a failure. Charging nothing is what a cap worth nothing in this
+        // currency says. An earlier revision failed closed here on the
+        // false premise that 0 read downstream as "uncapped"; see
+        // docs/surcharge-fx.md.
         $GLOBALS['__twoinc_test_currency'] = 'JPY';
         $gateway = self::fxGateway(null, [self::fxOk(['JPY' => 1000000.0])], [
             // Store currency EUR (default in these tests). The fixture
             // makes 1 JPY worth 1000000 EUR, i.e. an absurdly weak
             // EUR->JPY rate, so a 0.001 EUR cap rounds away entirely.
+            'payment_terms_days' => [30],
             'surcharge_type' => 'fixed_and_percentage',
             'surcharge_grid' => [30 => ['percentage' => 1.5, 'limit' => 0.001]],
         ]);
-        TinyAssert::same(null, WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway, 30));
-        self::assertLogged('error', 'cap rounds to 0.00 in checkout currency JPY, which would relay an UNCAPPED');
+        $share = WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway, 30);
+        TinyAssert::true(is_array($share), 'a cap rounding to zero must still produce a fee block');
+        TinyAssert::same(0.0, $share['cap'], 'the zero cap is relayed, not dropped');
+        TinyAssert::same(1.5, $share['percentage']);
+        TinyAssert::true($gateway->fx_requests > 0, 'the cross-currency conversion path must really have run');
+        self::assertLogged('info', 'rounds to 0.00 in checkout currency JPY; the whole fee is capped at 0.00');
+        // Exactly one line: the cap log must not fire per term per render,
+        // and no second line may creep in beside it.
+        TinyAssert::same(1, count($GLOBALS['__twoinc_test_logs']), 'exactly one info line, not repeated');
+        foreach ($GLOBALS['__twoinc_test_logs'] as $entry) {
+            TinyAssert::true(
+                !in_array($entry['level'], ['error', 'warning'], true),
+                'a zero cap is not a failure: nothing may be logged at error or warning'
+            );
+        }
     }
 
     private static function testBuyerFeeShareFixedRoundingToZeroChargesZero(): void
@@ -3856,10 +3877,10 @@ final class BrandConfigSpec
     {
         // THE regression pin for TWO-25269 item 4: "no cap defined" is a
         // completely legitimate configuration and must keep charging a
-        // non-zero surcharge, uncapped, with the method offered. Only a cap
-        // that IS configured and rounds away fails closed; absence never
-        // does. Cross-currency so the conversion path really runs with
-        // $cap === null.
+        // non-zero surcharge, uncapped, with the method offered. Absence is
+        // not the same as a cap of 0: absence means uncapped, 0 clamps the
+        // fee to zero, and neither is a failure. Cross-currency so the
+        // conversion path really runs with $cap === null.
         $GLOBALS['__twoinc_test_currency'] = 'NOK';
         $gateway = self::fxGateway(null, [self::fxOk(self::FX_TABLE)], [
             'payment_terms_days' => [30],
