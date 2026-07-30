@@ -60,11 +60,24 @@ return [
     // Buyer-facing label for the offset-pricing fee line; null uses the
     // translated "Service charge" default.
     'fee_line_label' => null,
-    // Short tagline rendered under the payment-method title at checkout,
-    // above the about block. '' renders nothing (the Two default).
-    // WC_Twoinc::get_pay_subtitle is the only reader. Mirrors the
-    // Magento brand descriptor's checkout_subtitle.
-    'checkout_subtitle' => '',
+    // Target of the "read more" link in the short tagline rendered under
+    // the payment-method title at checkout, above the about block. The
+    // tagline SENTENCE is not brand config: it is a literal, extractable
+    // msgid in WC_Twoinc::get_pay_subtitle (the only reader), so it can be
+    // translated per locale from languages/*.po. A brand owns only its own
+    // FAQ URL. null or '' renders no tagline at all (the Two default).
+    // Replaces the former free-form 'checkout_subtitle' string, which was
+    // untranslatable by construction — see TWO-25270. This is a DELIBERATE
+    // divergence from the Magento brand descriptor, which still carries the
+    // whole sentence in <checkout_subtitle>. Magento's translator resolves
+    // a runtime key, so a variable string is translatable there; gettext
+    // extracts statically and cannot.
+    // Accepted constraint of that inversion: every brand setting this key
+    // gets the SAME sentence, because the sentence is now platform copy. A
+    // brand needing different wording needs a new msgid in
+    // get_pay_subtitle, not a value here — brand config cannot carry
+    // translatable prose at all.
+    'checkout_subtitle_faq_url' => null,
     // Contact address shown in the admin API-key field help for
     // obtaining production keys. WC_Twoinc::init_form_fields is the only
     // reader. A brand overlay substitutes its own support address.

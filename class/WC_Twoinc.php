@@ -1634,19 +1634,39 @@ if (!class_exists('WC_Twoinc')) {
          * payment box; the tagline now leads the box and the about block
          * still trails it (see get_about_block_html and the description
          * assembly in the constructor).
+         *
+         * The SENTENCE lives here as a literal msgid; the brand supplies only
+         * the FAQ link TARGET ('checkout_subtitle_faq_url'). It used to be the
+         * other way round — the brand owned the whole sentence and it was
+         * passed to __() as a *variable* msgid. gettext extraction is static,
+         * so such a string never reaches languages/*.po and could not be
+         * translated at all: a brand's source-language tagline rendered
+         * verbatim on every locale (TWO-25270).
          */
         public function get_pay_subtitle()
         {
-            $subtitle = WC_Twoinc_Brand::get('checkout_subtitle');
-            if (!$subtitle) {
+            // Escape first, then test: esc_url returns '' for a disallowed
+            // scheme, and a tagline whose "read more" points at the current
+            // page is worse than no tagline. is_string guards a brand
+            // declaring an array, which esc_url would fatal on.
+            $faq_url = WC_Twoinc_Brand::get('checkout_subtitle_faq_url');
+            $faq_url = is_string($faq_url) ? esc_url($faq_url) : '';
+            if (!$faq_url) {
                 return '';
             }
 
-            // wp_kses_post, not esc_html: a brand's subtitle may carry an
-            // inline link (e.g. a brand FAQ "read more") — esc_html stripped it.
+            $subtitle = sprintf(
+                /* translators: %1$s opens and %2$s closes a link to the brand's FAQ page. */
+                __('For all companies, %1$sread more%2$s.', 'twoinc-payment-gateway'),
+                sprintf('<a href="%s" target="_blank" rel="noopener">', $faq_url),
+                '</a>'
+            );
+
+            // wp_kses_post, not esc_html: the tagline carries an inline link
+            // (the brand FAQ "read more") — esc_html stripped it.
             return sprintf(
                 '<div class="twoinc-payment-subtitle">%s</div>',
-                wp_kses_post(__($subtitle, 'twoinc-payment-gateway'))
+                wp_kses_post($subtitle)
             );
         }
 

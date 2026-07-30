@@ -1144,9 +1144,15 @@ let twoincTermChips = {
       // A lone chip is not a choice, so it names what it is: Magento's
       // singleTermLabel ("Payment Terms N days") rather than the bare
       // "N days" used when the buyer is picking between chips.
+      // Both templates come from PHP, already translated. The fallbacks
+      // degrade to the SHORTER localised form rather than to an English
+      // sentence: an English literal here renders as plausible copy on a
+      // non-English shop and hides the fact that the label never arrived,
+      // which is the failure class TWO-25270 was (heading does the same,
+      // falling back to '' rather than to English).
       const labelTemplate = single
-        ? cfg.single_label || "Payment Terms %s days"
-        : cfg.days_label || "%s days";
+        ? cfg.single_label || cfg.days_label || "%s"
+        : cfg.days_label || "%s";
       const daysLabel = labelTemplate.replace("%s", days);
       $chip.append(jQuery("<span>", { class: "twoinc-term-chip__days", text: daysLabel }));
 

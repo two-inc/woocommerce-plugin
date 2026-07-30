@@ -161,6 +161,9 @@ final class BrandConfigSpec
             'testPaymentBoxOrdersTaglineChipsThenSoleTrader',
             'testSelectedTermInputPrecedesChipsContainer',
             'testBrandWithoutTaglineEmitsNoTaglineBlock',
+            'testTaglineSentenceIsPlatformCopyWithBrandFaqLink',
+            'testRetiredFreeFormSubtitleKeyIsInert',
+            'testNonStringBrandFaqUrlEmitsNoTagline',
             'testIntentApprovedNoticeDisabledBrandEmitsNoBlock',
             'testIntentApprovedNoticeDefaultBrandCarriesBothVariants',
             'testIntentApprovedNoticeBrandTemplateUsedVerbatim',
@@ -271,8 +274,8 @@ final class BrandConfigSpec
         TinyAssert::same('https://portal.two.inc/auth/merchant/signup', WC_Twoinc_Brand::get('sign_up_url'));
         TinyAssert::same(WC_TWOINC_PLUGIN_URL . 'assets/images/two-logo.svg', WC_Twoinc_Brand::get('logo_url'));
         TinyAssert::same('Business invoice - %s days', WC_Twoinc_Brand::get('title_default'));
-        // Two ships no checkout subtitle; an overlay supplies one.
-        TinyAssert::same('', WC_Twoinc_Brand::get('checkout_subtitle'));
+        // Two ships no checkout tagline; an overlay supplies its FAQ URL.
+        TinyAssert::same(null, WC_Twoinc_Brand::get('checkout_subtitle_faq_url'));
         TinyAssert::same('integration@two.inc', WC_Twoinc_Brand::get('production_key_contact_email'));
         TinyAssert::same(null, WC_Twoinc_Brand::get('not_a_key'));
     }
@@ -4183,18 +4186,116 @@ final class BrandConfigSpec
     }
 
     /**
-     * A brand leaving checkout_subtitle empty (the Two default) emits no
-     * tagline wrapper at all — the reorder must not introduce an empty div
-     * into vanilla checkout.
+     * A brand leaving checkout_subtitle_faq_url unset (the Two default)
+     * emits no tagline wrapper at all — the reorder must not introduce an
+     * empty div into vanilla checkout.
      */
     private static function testBrandWithoutTaglineEmitsNoTaglineBlock(): void
     {
         $html = self::gateway()->build_payment_description();
-        TinyAssert::same('', WC_Twoinc_Brand::get('checkout_subtitle'));
+        TinyAssert::same(null, WC_Twoinc_Brand::get('checkout_subtitle_faq_url'));
         TinyAssert::true(
             strpos($html, 'twoinc-payment-subtitle') === false,
             'a brand with no tagline must emit no tagline block'
         );
+    }
+
+    /**
+     * The tagline sentence is platform copy (a literal msgid gettext can
+     * extract) and the brand contributes only the FAQ link target. Pinned
+     * because the previous shape handed the whole sentence to __() as a
+     * variable msgid, which no catalogue can ever carry (TWO-25270): a
+     * brand's source-language tagline then rendered on every locale.
+     */
+    private static function testTaglineSentenceIsPlatformCopyWithBrandFaqLink(): void
+    {
+        self::useTaglineBrand();
+        $html = self::gateway()->get_pay_subtitle();
+
+        TinyAssert::same(
+            '<div class="twoinc-payment-subtitle">For all companies, '
+                . '<a href="https://taglinebrand.example/faq" target="_blank" rel="noopener">'
+                . 'read more</a>.</div>',
+            $html
+        );
+
+        // The literal passed to __() must appear verbatim in the catalogues,
+        // or the string is unreachable for translators however it renders.
+        $languages = dirname(__DIR__, 2) . '/languages/';
+        $pot = file_get_contents($languages . 'twoinc-payment-gateway.pot');
+        TinyAssert::true(
+            strpos($pot, 'msgid "For all companies, %1$sread more%2$s."') !== false,
+            'tagline msgid missing from the .pot — it would be untranslatable'
+        );
+
+        // And every locale that ships a tagline translation must still
+        // carry it. Asserted against the COMPILED .mo, not the .po:
+        // WordPress reads only the .mo, the pair is hand-maintained, and
+        // the two ways this silently reverts to English on a Dutch shop —
+        // a forgotten msgfmt, or a fuzzy marker (which msgfmt drops) — are
+        // both invisible in the .po text. Binary strpos is enough: msgstrs
+        // are stored verbatim in the .mo string table.
+        $translated = [
+            'nl_NL' => 'Voor alle bedrijven, %1$slees meer%2$s.',
+            'nb_NO' => 'For alle bedrifter, %1$sles mer%2$s.',
+            'sv_SE' => 'För alla företag, %1$släs mer%2$s.',
+        ];
+        foreach ($translated as $locale => $msgstr) {
+            $mo = file_get_contents($languages . 'twoinc-payment-gateway-' . $locale . '.mo');
+            TinyAssert::true(
+                strpos($mo, $msgstr) !== false,
+                "compiled $locale catalogue carries no tagline translation — that shop "
+                    . 'would render English (recompile with msgfmt?)'
+            );
+            // The msgid has to match the source literal too, or the lookup
+            // misses and WordPress renders English however good the msgstr
+            // is. A msgid typo is otherwise undetectable here: __() is
+            // stubbed to identity, so the render assertion above cannot see
+            // it.
+            TinyAssert::true(
+                strpos($mo, 'For all companies, %1$sread more%2$s.') !== false,
+                "compiled $locale msgid has drifted from the source literal"
+            );
+        }
+        // Both placeholders are pinned by that same match, which carries
+        // them verbatim — a msgstr that dropped %2$s would sprintf an
+        // unclosed <a>, and wp_kses_post does not balance tags, so the
+        // anchor would swallow the payment box. Asserting %1$s/%2$s
+        // anywhere in a .mo separately would be vacuous: other msgstrs in
+        // these catalogues carry both.
+    }
+
+    /**
+     * The retired 'checkout_subtitle' key is inert: a brand declaring a
+     * whole sentence there gets no tagline at all, never that sentence.
+     * Pinned so a "legacy support" path cannot quietly restore the
+     * variable-msgid render that made the tagline untranslatable.
+     */
+    private static function testRetiredFreeFormSubtitleKeyIsInert(): void
+    {
+        add_filter('twoinc_brand_file', static function () {
+            return __DIR__ . '/fixtures/legacysubtitlebrand.php';
+        });
+
+        TinyAssert::same('', self::gateway()->get_pay_subtitle());
+    }
+
+    /**
+     * A non-string FAQ URL yields no tagline rather than reaching esc_url,
+     * which fatals on an array under PHP 8 and would take the checkout page
+     * down. What this pins is the guard, not the fatal: the harness stubs
+     * esc_url as identity (so dropping is_string fails here on the rendered
+     * href, not on a TypeError), and for the same reason the sibling case —
+     * a scheme real esc_url rejects, returning '' for the same guard to
+     * drop — cannot be exercised at all.
+     */
+    private static function testNonStringBrandFaqUrlEmitsNoTagline(): void
+    {
+        add_filter('twoinc_brand_file', static function () {
+            return __DIR__ . '/fixtures/badfaqurlbrand.php';
+        });
+
+        TinyAssert::same('', self::gateway()->get_pay_subtitle());
     }
 
     /**
