@@ -141,9 +141,14 @@ final class BrandConfigSpec
             'testFxGateUsesLastKnownGoodOnApiFailure',
             'testFxMerchantMinimumJudgedAcrossCurrencies',
             'testBuyerFeeShareConvertsFixedAndCapAcrossCurrencies',
-            'testBuyerFeeShareWithheldWhenNoRateAvailable',
+            'testBuyerFeeShareFailsClosedWhenNoRateAvailable',
+            'testGateWithholdsMethodWhenSurchargeCurrencyUnquotable',
+            'testGateKeepsMethodWhenSurchargeIsPercentageOnly',
+            'testGateFxCheckAppliesOnOrderPayEndpoint',
             'testBuyerFeeShareSameCurrencyNeverTouchesFx',
-            'testBuyerFeeShareCapRoundingToZeroWithholdsWholeSurcharge',
+            'testBuyerFeeShareCapRoundingToZeroFailsClosed',
+            'testBuyerFeeShareFixedRoundingToZeroChargesZero',
+            'testBuyerFeeShareAbsentCapChargesUncappedPercentage',
             'testCartFeeSkippedOnQuoteCurrencyMismatch',
             'testMinimumDescriptionShowsConvertedFloorWhenRateAvailable',
             'testDeployedCommitGitlinkWinsOverSidecar',
@@ -3358,6 +3363,25 @@ final class BrandConfigSpec
         $GLOBALS['__twoinc_test_options'][WC_Twoinc_FX::option_key()] = json_encode($table);
     }
 
+    /**
+     * Assert the StubWcLogger recorded a message at $level containing
+     * $needle. Withholding a payment method (or a surcharge) is invisible
+     * to the merchant, so the LEVEL is part of the contract, not decoration
+     * — an error condition reported at warning is a missed signal.
+     */
+    private static function assertLogged(string $level, string $needle): void
+    {
+        foreach ($GLOBALS['__twoinc_test_logs'] as $entry) {
+            if ($entry['level'] === $level && strpos($entry['message'], $needle) !== false) {
+                return;
+            }
+        }
+        throw new RuntimeException(
+            'Expected a ' . $level . '-level log containing ' . var_export($needle, true)
+            . '; got ' . var_export($GLOBALS['__twoinc_test_logs'], true)
+        );
+    }
+
     private static function assertClose(float $expected, $actual, string $message = ''): void
     {
         TinyAssert::true(
@@ -3698,17 +3722,75 @@ final class BrandConfigSpec
         TinyAssert::same(1.5, $share['percentage']);
     }
 
-    private static function testBuyerFeeShareWithheldWhenNoRateAvailable(): void
+    private static function testBuyerFeeShareFailsClosedWhenNoRateAvailable(): void
     {
-        // No rate ever fetched: a wrong-currency amount must never be
-        // sent, so the whole surcharge is withheld for the quote (fail
-        // soft to no fee — checkout is never blocked).
+        // No rate ever fetched: a wrong-currency amount must never be sent,
+        // so no fee block is produced. This is the defence-in-depth
+        // backstop — TWO-25269's real answer is the availability gate
+        // withholding the method (see the gate tests below) — and it is
+        // reported at ERROR level, because a silently dropped surcharge
+        // charges the buyer nothing and tells nobody.
         $GLOBALS['__twoinc_test_currency'] = 'NOK';
         $gateway = self::fxGateway(null, [new WP_Error()], [
             'surcharge_type' => 'fixed_and_percentage',
             'surcharge_grid' => [30 => ['fixed' => 2.5, 'percentage' => 1.5, 'limit' => 10.0]],
         ]);
         TinyAssert::same(null, WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway, 30));
+        self::assertLogged('error', 'no FX rate to convert configured EUR amounts to checkout currency NOK');
+    }
+
+    private static function testGateWithholdsMethodWhenSurchargeCurrencyUnquotable(): void
+    {
+        // TWO-25269: the fail-CLOSED answer. Surcharge enabled, store
+        // currency (EUR) diverges from checkout (NOK), a term carries a
+        // monetary component, and no rate exists -> the payment method is
+        // withheld outright rather than the surcharge silently vanishing.
+        $GLOBALS['__twoinc_test_currency'] = 'NOK';
+        $gateway = self::fxGateway(null, [new WP_Error()], [
+            'payment_terms_days' => [30],
+            'surcharge_type' => 'fixed_and_percentage',
+            'surcharge_grid' => [30 => ['fixed' => 2.5, 'percentage' => 1.5, 'limit' => 10.0]],
+        ]);
+        $result = $gateway->apply_brand_availability_gate(['woocommerce-gateway-tillit' => 'gw']);
+        TinyAssert::true(!isset($result['woocommerce-gateway-tillit']), 'unquotable surcharge withholds the method');
+        self::assertLogged('error', 'no FX rate for the configured EUR surcharge amounts in checkout currency NOK');
+    }
+
+    private static function testGateKeepsMethodWhenSurchargeIsPercentageOnly(): void
+    {
+        // The FX gate must not over-reject: a percentage-only surcharge is
+        // currency-agnostic, so an unavailable rate is irrelevant to it and
+        // the method stays offered even across currencies.
+        $GLOBALS['__twoinc_test_currency'] = 'NOK';
+        $gateway = self::fxGateway(null, [new WP_Error()], [
+            'payment_terms_days' => [30],
+            'surcharge_type' => 'percentage',
+            'surcharge_grid' => [30 => ['percentage' => 1.5]],
+        ]);
+        $result = $gateway->apply_brand_availability_gate(['woocommerce-gateway-tillit' => 'gw']);
+        TinyAssert::same('gw', $result['woocommerce-gateway-tillit']);
+        TinyAssert::same(0, $gateway->fx_requests, 'a percentage-only grid must never consult the FX layer');
+    }
+
+    private static function testGateFxCheckAppliesOnOrderPayEndpoint(): void
+    {
+        // The minimums skip the order-pay endpoint (the session cart is not
+        // the basket being paid for), but FX resolvability does not depend
+        // on a basket and order-pay is exactly a place a surcharge still
+        // gets applied — so the FX check sits OUTSIDE that guard.
+        $GLOBALS['__twoinc_test_currency'] = 'NOK';
+        $GLOBALS['__twoinc_test_is_order_pay'] = true;
+        try {
+            $gateway = self::fxGateway(null, [new WP_Error()], [
+                'payment_terms_days' => [30],
+                'surcharge_type' => 'fixed',
+                'surcharge_grid' => [30 => ['fixed' => 2.5]],
+            ]);
+            $result = $gateway->apply_brand_availability_gate(['woocommerce-gateway-tillit' => 'gw']);
+            TinyAssert::true(!isset($result['woocommerce-gateway-tillit']), 'order-pay must still be FX-gated');
+        } finally {
+            unset($GLOBALS['__twoinc_test_is_order_pay']);
+        }
     }
 
     private static function testBuyerFeeShareSameCurrencyNeverTouchesFx(): void
@@ -3725,23 +3807,71 @@ final class BrandConfigSpec
         TinyAssert::same(0, $gateway->fx_requests);
     }
 
-    private static function testBuyerFeeShareCapRoundingToZeroWithholdsWholeSurcharge(): void
+    private static function testBuyerFeeShareCapRoundingToZeroFailsClosed(): void
     {
-        // A cap configured in a strong store currency can round to 0.00
-        // once converted into a much weaker checkout currency. Dropping
-        // only the cap (as an earlier version of this code did) would
-        // send the percentage fee UNCAPPED — the opposite of the
-        // merchant's configuration — so the whole surcharge is withheld
-        // instead, same as the no-rate-available case.
+        // A CONFIGURED cap that rounds to 0.00 once converted fails closed:
+        // a zero cap is indistinguishable from *no* cap downstream, so
+        // relaying it would send the percentage fee UNCAPPED — an
+        // overcharge, the opposite of the merchant's configuration. Now
+        // reported at ERROR level (TWO-25269) instead of silently.
         $GLOBALS['__twoinc_test_currency'] = 'JPY';
         $gateway = self::fxGateway(null, [self::fxOk(['JPY' => 1000000.0])], [
-            // Store currency EUR (default in these tests): a cap of 0.001
-            // EUR converts to 1000000 * 0.001 = 1000 JPY... use an
-            // absurdly weak rate the other way so the cap rounds to 0.
+            // Store currency EUR (default in these tests). The fixture
+            // makes 1 JPY worth 1000000 EUR, i.e. an absurdly weak
+            // EUR->JPY rate, so a 0.001 EUR cap rounds away entirely.
             'surcharge_type' => 'fixed_and_percentage',
-            'surcharge_grid' => [30 => ['fixed' => 0.001, 'percentage' => 1.5, 'limit' => 0.001]],
+            'surcharge_grid' => [30 => ['percentage' => 1.5, 'limit' => 0.001]],
         ]);
         TinyAssert::same(null, WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway, 30));
+        self::assertLogged('error', 'cap rounds to 0.00 in checkout currency JPY, which would relay an UNCAPPED');
+    }
+
+    private static function testBuyerFeeShareFixedRoundingToZeroChargesZero(): void
+    {
+        // A FIXED amount rounding to 0.00 is NOT a failure: a legitimately
+        // tiny configured fee can be genuinely negligible in a stronger
+        // currency, and 0.00 is arithmetically correct. Rejecting the
+        // method because a merchant configured 0.001 would be a WRONG
+        // rejection — so the quote proceeds at 0.00, logged at info, and
+        // the method stays offered.
+        $GLOBALS['__twoinc_test_currency'] = 'JPY';
+        $gateway = self::fxGateway(null, [self::fxOk(['JPY' => 1000000.0])], [
+            'payment_terms_days' => [30],
+            'surcharge_type' => 'fixed',
+            'surcharge_grid' => [30 => ['fixed' => 0.001]],
+        ]);
+        $share = WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway, 30);
+        TinyAssert::true(is_array($share), 'a fixed amount rounding to zero must still produce a fee block');
+        TinyAssert::same(0.0, $share['surcharge']);
+        self::assertLogged('info', 'rounds to 0.00 in checkout currency JPY; charging 0.00');
+
+        $result = $gateway->apply_brand_availability_gate(['woocommerce-gateway-tillit' => 'gw']);
+        TinyAssert::same('gw', $result['woocommerce-gateway-tillit'], 'a zero-rounding fixed fee keeps the method');
+    }
+
+    private static function testBuyerFeeShareAbsentCapChargesUncappedPercentage(): void
+    {
+        // THE regression pin for TWO-25269 item 4: "no cap defined" is a
+        // completely legitimate configuration and must keep charging a
+        // non-zero surcharge, uncapped, with the method offered. Only a cap
+        // that IS configured and rounds away fails closed; absence never
+        // does. Cross-currency so the conversion path really runs with
+        // $cap === null.
+        $GLOBALS['__twoinc_test_currency'] = 'NOK';
+        $gateway = self::fxGateway(null, [self::fxOk(self::FX_TABLE)], [
+            'payment_terms_days' => [30],
+            'surcharge_type' => 'fixed_and_percentage',
+            'surcharge_grid' => [30 => ['fixed' => 2.5, 'percentage' => 1.5]],
+        ]);
+        $share = WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway, 30);
+        TinyAssert::true(is_array($share), 'an absent cap must not withhold the surcharge');
+        TinyAssert::same(29.41, $share['surcharge'], 'fixed 2.50 EUR at 1/0.085 is 29.41 NOK');
+        TinyAssert::same(1.5, $share['percentage']);
+        TinyAssert::true(!isset($share['cap']), 'no cap configured means no cap key — the percentage is uncapped');
+        TinyAssert::same(0, count($GLOBALS['__twoinc_test_logs']), 'an absent cap must not be logged as a failure');
+
+        $result = $gateway->apply_brand_availability_gate(['woocommerce-gateway-tillit' => 'gw']);
+        TinyAssert::same('gw', $result['woocommerce-gateway-tillit'], 'an absent cap must keep the method offered');
     }
 
     private static function testCartFeeSkippedOnQuoteCurrencyMismatch(): void

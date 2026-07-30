@@ -45,13 +45,17 @@
  * bug). A failed fetch arms a short retry-throttle transient so a
  * flapping API cannot be hammered once per conversion.
  *
- * Fail semantics (per TWO-25104):
+ * Fail semantics (per TWO-25104; charge semantics revised by TWO-25269):
  *  - Gate conversions (minimum-order availability) use last-known-good and
  *    fail CLOSED only when no table has ever been fetched: get_rate()
  *    returns null and the caller must treat null as "cannot be proven".
  *  - Display conversions fail SOFT: callers fall back to the native value.
- *  - Charge conversions (fixed surcharge/cap) fail SOFT to *no* surcharge:
- *    a wrong-currency amount must never be sent to the pricing API.
+ *  - Charge conversions (fixed surcharge/cap) fail CLOSED. A wrong-currency
+ *    amount must never be sent to the pricing API, but dropping the
+ *    surcharge instead charges the buyer nothing and tells nobody, so an
+ *    unconvertible pair withholds the payment method for the whole
+ *    checkout (WC_Twoinc::apply_brand_availability_gate) rather than
+ *    quietly changing what is charged.
  *
  * The response's as_of date (the staleness floor of the rates used) is
  * stored alongside the table for observability and tests; freshness is
@@ -352,8 +356,8 @@ if (!class_exists('WC_Twoinc_FX')) {
          * in an uncached currency" path) before concluding it is
          * unsupported.
          *
-         * Null means "cannot convert": gate callers must fail closed on
-         * it, display and charge callers fail soft (see the class header).
+         * Null means "cannot convert": gate AND charge callers must fail
+         * closed on it, display callers fail soft (see the class header).
          */
         public static function get_rate($gateway, string $from, string $to): ?float
         {

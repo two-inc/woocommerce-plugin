@@ -2570,9 +2570,11 @@ if (!class_exists('WC_Twoinc')) {
          * Remove the gateway from checkout when the platform minimum
          * (API-resolved, see get_platform_minimum_order()), the brand's
          * billing-country restriction (availability_gate in the brand
-         * config), or the merchant's own minimum is unmet. Mirrors the
-         * brand availability gate semantics: front-end only, minimum is
-         * inclusive (an exactly-minimum basket passes).
+         * config), the merchant's own minimum is unmet, or the configured
+         * surcharge cannot be quoted in the checkout currency at all
+         * (TWO-25269). Mirrors the brand availability gate semantics:
+         * front-end only, minimum is inclusive (an exactly-minimum basket
+         * passes).
          *
          * @param array $available_gateways
          *
@@ -2581,6 +2583,22 @@ if (!class_exists('WC_Twoinc')) {
         public function apply_brand_availability_gate($available_gateways)
         {
             if (is_admin() || !isset($available_gateways[$this->id])) {
+                return $available_gateways;
+            }
+
+            // Surcharge FX resolvability is judged FIRST, and deliberately
+            // OUTSIDE the $basket_is_judgeable guard further down. That
+            // guard exists because the minimums judge a basket; whether the
+            // store→checkout currency pair has a rate does not depend on
+            // the basket at all, and the order-pay endpoint the guard
+            // excludes is precisely a place a surcharge still gets applied.
+            // It also precedes the "no gate and no minimums configured"
+            // early return below: a shop with neither still charges
+            // surcharges. Fail CLOSED, the same shape as the minimums' own
+            // FX handling — better no Two payment method than a buyer
+            // silently charged no surcharge with nobody told (TWO-25269).
+            if (WC_Twoinc_Payment_Terms::surcharge_currency_unquotable($this)) {
+                unset($available_gateways[$this->id]);
                 return $available_gateways;
             }
             $gate = WC_Twoinc_Brand::get('availability_gate');

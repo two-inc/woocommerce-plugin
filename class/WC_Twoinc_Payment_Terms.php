@@ -42,6 +42,14 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         private static $fee_cache = [];
 
         /**
+         * @var bool one fail-CLOSED surcharge-FX report per request. The
+         * gate filter and the per-term quote path can both hit the same
+         * condition several times while rendering one checkout; the
+         * merchant needs to be told once, not once per term.
+         */
+        private static $fx_failure_logged = false;
+
+        /**
          * Whether the term feature is active: at least one term is offered. When
          * true a term is sent on the order and any configured surcharge applies.
          * There is no merchant on/off toggle — the offered-term set is the single
@@ -237,7 +245,9 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          * percentage component) and, in differential mode, the default term as
          * reference_terms.
          *
-         * @return array|null null when no surcharge is configured (type none)
+         * @return array|null null when no surcharge is configured (type none),
+         *                    or when a monetary component cannot be relayed
+         *                    safely in the checkout currency (TWO-25269)
          */
         public static function build_buyer_fee_share($gateway, int $days): ?array
         {
@@ -260,45 +270,75 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
             // multi-currency setup has them diverge the monetary
             // components are converted via the Two FX layer (TWO-25104 —
             // Magento parity, which converts via the store's own rates).
-            // A wrong-currency amount must never be sent: if the pair
-            // cannot be converted (no rate ever fetched, or an unsupported
-            // currency) the whole surcharge is withheld for this quote —
-            // fail soft to no fee, matching the quote path's
-            // never-block-checkout posture. Same-currency stores never
-            // reach the FX layer. Percentage-based surcharge is
-            // currency-agnostic and unaffected.
-            $fixed = $has_fixed && isset($row['fixed']) && (float) $row['fixed'] > 0 ? (float) $row['fixed'] : null;
-            $cap = $has_percentage && isset($row['limit']) && (float) $row['limit'] > 0 ? (float) $row['limit'] : null;
+            // A wrong-currency amount must never be sent, and neither may
+            // the surcharge silently vanish: an unconvertible pair is
+            // caught EARLIER, by the availability gate, which withholds
+            // the payment method for the whole checkout (TWO-25269 —
+            // surcharge_currency_unquotable(), called from
+            // WC_Twoinc::apply_brand_availability_gate). Returning null
+            // here is the defence-in-depth backstop for the paths the
+            // gate does not run on. Same-currency stores never reach the
+            // FX layer. Percentage-based surcharge is currency-agnostic
+            // and unaffected.
+            $components = self::surcharge_monetary_components($settings, $days);
+            $fixed = $components['fixed'];
+            $cap = $components['cap'];
             if ($fixed !== null || $cap !== null) {
                 $store_currency = strval(get_option('woocommerce_currency'));
                 $active_currency = get_woocommerce_currency();
                 if ($store_currency !== $active_currency) {
                     $rate = WC_Twoinc_FX::get_rate($gateway, $store_currency, $active_currency);
                     if ($rate === null) {
-                        if (function_exists('wc_get_logger')) {
-                            wc_get_logger()->warning(
-                                sprintf(
-                                    'Surcharge withheld: no FX rate to convert configured %s amounts to checkout currency %s',
-                                    $store_currency,
-                                    $active_currency
-                                ),
-                                ['source' => 'twoinc-payment-gateway']
-                            );
-                        }
+                        self::log_surcharge_fx_failure(sprintf(
+                            'no FX rate to convert configured %s amounts'
+                            . ' to checkout currency %s (term %d days)',
+                            $store_currency,
+                            $active_currency,
+                            $days
+                        ));
                         return null;
                     }
                     $converted_fixed = $fixed !== null ? (float) WC_Twoinc_Helper::round_amt($fixed * $rate) : null;
                     $converted_cap = $cap !== null ? (float) WC_Twoinc_Helper::round_amt($cap * $rate) : null;
-                    // A tiny configured amount can round to 0.00 in a much
-                    // stronger currency. Dropping only the cap while
-                    // leaving the percentage component in place would
-                    // send an UNCAPPED fee — the opposite of what the
-                    // merchant configured — so a component that rounds
-                    // away withholds the whole surcharge, same as no rate
-                    // being available at all, rather than silently
-                    // changing what is charged.
-                    if (($fixed !== null && $converted_fixed <= 0) || ($cap !== null && $converted_cap <= 0)) {
+                    // A configured CAP that rounds to 0.00 in a much
+                    // stronger checkout currency fails CLOSED: a zero cap
+                    // is indistinguishable from *no* cap downstream, so
+                    // relaying it would send an UNCAPPED percentage — an
+                    // overcharge, the opposite of what the merchant
+                    // configured. An ABSENT cap is a wholly legitimate
+                    // configuration and is never a failure (see
+                    // surcharge_monetary_components).
+                    if ($cap !== null && $converted_cap <= 0) {
+                        self::log_surcharge_fx_failure(sprintf(
+                            'configured %s cap rounds to 0.00 in checkout'
+                            . ' currency %s, which would relay an UNCAPPED'
+                            . ' percentage (term %d days)',
+                            $store_currency,
+                            $active_currency,
+                            $days
+                        ));
                         return null;
+                    }
+                    // A FIXED amount that rounds to 0.00 is NOT a failure:
+                    // a legitimately tiny configured fee can be genuinely
+                    // negligible in a stronger currency, and 0.00 is the
+                    // arithmetically correct answer. Proceed with it —
+                    // rejecting a 0.001 configured fee would be a wrong
+                    // rejection — but say so, because a surcharge line
+                    // quietly reading 0.00 otherwise looks like a bug.
+                    if ($fixed !== null && $converted_fixed <= 0 && function_exists('wc_get_logger')) {
+                        wc_get_logger()->info(
+                            sprintf(
+                                'Fixed surcharge of %s %s rounds to 0.00 in'
+                                . ' checkout currency %s; charging 0.00'
+                                . ' (term %d days)',
+                                $fixed,
+                                $store_currency,
+                                $active_currency,
+                                $days
+                            ),
+                            ['source' => 'twoinc-payment-gateway']
+                        );
                     }
                     $fixed = $converted_fixed;
                     $cap = $converted_cap;
@@ -323,6 +363,107 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                 }
             }
             return $buyer_fee_share;
+        }
+
+        /**
+         * The two STORE-currency monetary components of one term's grid
+         * row: the fixed surcharge (fixed/both types) and the cap on the
+         * percentage portion (percentage/both types). Either may be null.
+         *
+         * A null CAP means "no cap configured", which is a completely
+         * legitimate configuration: the percentage surcharge is then
+         * charged uncapped, exactly as the merchant asked. Absence must
+         * never be treated as a failure anywhere — only a cap that IS
+         * configured and cannot be relayed faithfully fails closed.
+         *
+         * @param array{type: string, grid: array<int,array>} $settings
+         * @return array{fixed: float|null, cap: float|null}
+         */
+        private static function surcharge_monetary_components(array $settings, int $days): array
+        {
+            $has_percentage = in_array($settings['type'], ['percentage', 'fixed_and_percentage'], true);
+            $has_fixed = in_array($settings['type'], ['fixed', 'fixed_and_percentage'], true);
+            $row = isset($settings['grid'][$days]) && is_array($settings['grid'][$days]) ? $settings['grid'][$days] : [];
+            return [
+                'fixed' => $has_fixed && isset($row['fixed']) && (float) $row['fixed'] > 0 ? (float) $row['fixed'] : null,
+                'cap' => $has_percentage && isset($row['limit']) && (float) $row['limit'] > 0 ? (float) $row['limit'] : null,
+            ];
+        }
+
+        /**
+         * Whether the configured surcharge cannot be quoted at all in the
+         * active checkout currency, i.e. the fail-CLOSED condition for the
+         * availability gate (TWO-25269). True means: withhold the payment
+         * method rather than let the buyer be charged no surcharge with
+         * nobody told.
+         *
+         * The condition is deliberately TERM-INDEPENDENT. No term is
+         * selected when gateway availability is decided, and it does not
+         * need to be: WC_Twoinc_FX::get_rate() resolves (or fails to
+         * resolve) the store→checkout pair identically for every term, so
+         * "no rate at all" is a property of the currency pair. Gating on
+         * "some offered term is unquotable" instead would over-reject a
+         * shop with one misconfigured term.
+         *
+         * Ordering matters for cost: the cheap local checks (surcharge
+         * enabled, currencies diverge, at least one term actually carries
+         * a monetary component) come before the FX lookup, so a
+         * single-currency or percentage-only shop never touches the FX
+         * layer from the gate.
+         */
+        public static function surcharge_currency_unquotable($gateway): bool
+        {
+            $settings = self::get_surcharge_settings($gateway);
+            if (!$settings['enabled']) {
+                return false;
+            }
+            $store_currency = strval(get_option('woocommerce_currency'));
+            $active_currency = get_woocommerce_currency();
+            if ($store_currency === $active_currency) {
+                return false;
+            }
+            $monetary_term = null;
+            foreach (self::get_available_terms($gateway) as $days) {
+                $components = self::surcharge_monetary_components($settings, $days);
+                if ($components['fixed'] !== null || $components['cap'] !== null) {
+                    $monetary_term = $days;
+                    break;
+                }
+            }
+            if ($monetary_term === null) {
+                // Percentage-only (or empty) grid: currency-agnostic,
+                // nothing to convert, nothing to fail on.
+                return false;
+            }
+            if (WC_Twoinc_FX::get_rate($gateway, $store_currency, $active_currency) !== null) {
+                return false;
+            }
+            self::log_surcharge_fx_failure(sprintf(
+                'no FX rate for the configured %s surcharge amounts in checkout currency %s (e.g. term %d days)',
+                $store_currency,
+                $active_currency,
+                $monetary_term
+            ));
+            return true;
+        }
+
+        /**
+         * Report a fail-CLOSED surcharge FX condition at error level, once
+         * per request. Error, not warning: the outcome is either a
+         * withheld payment method or a withheld surcharge, and both are
+         * invisible to the merchant unless the log says so (the same
+         * rationale as the availability gate's own log).
+         */
+        private static function log_surcharge_fx_failure(string $reason): void
+        {
+            if (self::$fx_failure_logged || !function_exists('wc_get_logger')) {
+                return;
+            }
+            self::$fx_failure_logged = true;
+            wc_get_logger()->error(
+                'Surcharge cannot be quoted in the checkout currency: ' . $reason,
+                ['source' => 'twoinc-payment-gateway']
+            );
         }
 
         /**
@@ -365,8 +506,12 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
 
         /**
          * Quote the buyer's fee share for one term via the pricing endpoint.
-         * Fail-soft: returns null on any error (chip renders without a fee
-         * label; checkout is never blocked on a quote).
+         * A failed or malformed HTTP quote is fail-soft: returns null and
+         * the chip renders without a fee label. That covers transport
+         * errors only — it is NOT a licence to drop a surcharge the
+         * merchant configured. An unquotable currency pair is a
+         * fail-CLOSED condition handled upstream by the availability gate
+         * (TWO-25269), which withholds the payment method outright.
          *
          * @return array{buyer_fee_share: string, total_fee_tax_rate: string|null, currency: string}|null
          */
@@ -381,9 +526,9 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                 return self::$fee_cache[$days] = null;
             }
 
-            // This quote sits on the checkout render path and is fail-soft, so
-            // cap it well under make_request's 30s default to avoid stalling
-            // checkout on a slow pricing call.
+            // This quote sits on the checkout render path and is fail-soft on
+            // transport errors, so cap it well under make_request's 30s
+            // default to avoid stalling checkout on a slow pricing call.
             $response = $gateway->make_request('/v1/pricing/order/fee', [
                 'currency' => get_woocommerce_currency(),
                 'gross_amount' => strval(WC_Twoinc_Helper::round_amt($gross_amount)),
@@ -729,6 +874,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         public static function reset_fee_cache(): void
         {
             self::$fee_cache = [];
+            self::$fx_failure_logged = false;
         }
     }
 }
