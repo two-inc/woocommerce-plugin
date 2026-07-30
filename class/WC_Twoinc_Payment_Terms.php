@@ -471,7 +471,19 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                 // The old `(float) $row['limit'] > 0` test cast it silently.
                 return null;
             }
-            $raw = trim((string) $row['limit']);
+            // Comma decimals are NORMALISED here, not treated as junk. The
+            // save path applies exactly this replacement before it validates,
+            // and so does the merchant-minimum validator, so "1,50" is the
+            // plugin's own accepted spelling of 1.50 — it reaches the stored
+            // option through a hand edit, an import, or an option written
+            // before that normalisation existed, the same arrival routes that
+            // justify relaying a stored zero at all. Reading it as junk would
+            // make it ABSENT, and absent means NO CAP: the percentage would
+            // relay uncapped, so the failure direction of dropping it is an
+            // OVERCHARGE. Normalising can only ever cap lower (a thousands
+            // separator, "1,500", reads as 1.5), which is the safe direction
+            // and is identical to what the save path would have stored.
+            $raw = trim(str_replace(',', '.', (string) $row['limit']));
             if ($raw === '' || !is_numeric($raw) || (float) $raw < 0) {
                 return null;
             }

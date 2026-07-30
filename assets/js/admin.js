@@ -343,12 +343,23 @@ jQuery(function ($) {
       // silently clear a stored term's surcharge on untick+retick.
       const stored = (twoinc_admin.surcharge_grid || {})[days] || {};
       const cell = function (col) {
+        // PRESENCE, not truthiness — the same test the PHP renderer makes
+        // with isset(). `stored[col] || ""` blanked a stored NUMERIC 0,
+        // because 0 is falsy in JS but a perfectly real stored value: the
+        // option is written as canonical numeric strings on save, yet it
+        // reaches here through wp_localize_script, which JSON-encodes and
+        // can hand back a number. Blanking a cap of 0 on untick+retick made
+        // the save drop the cell, and an absent cap means NO cap, so the
+        // percentage then relayed UNCAPPED — the overcharge this ticket
+        // exists to prevent, reintroduced through the JS path while the PHP
+        // path was correct. The two renderers must agree.
+        const raw = stored[col];
         return $("<td></td>")
           .addClass("twoinc-col-" + col)
           .append(
             $('<input type="text" style="width:90px" />')
               .attr("name", fieldKey + "[" + days + "][" + col + "]")
-              .val(stored[col] || "")
+              .val(raw === undefined || raw === null ? "" : String(raw))
           );
       };
       return $("<tr></tr>")

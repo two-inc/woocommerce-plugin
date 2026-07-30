@@ -988,5 +988,10 @@ msgid "A cap of 0 is not allowed. To charge nothing on a term, set the percentag
 msgstr ""
 
 #: class/WC_Twoinc.php
+#, php-format
+msgid "Clear or correct the surcharge cap of 0 on these terms before enabling a percentage surcharge: %s. A cap of 0 charges nothing at all; to charge nothing on a term, set its percentage and fixed fee to 0 and leave the cap empty."
+msgstr ""
+
+#: class/WC_Twoinc.php
 msgid "The cap applies to the whole fee: the percentage and the fixed fee together, not the percentage alone."
 msgstr ""

@@ -1217,6 +1217,73 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
+         * Whether one cap cell is a cap of zero, i.e. the value the grid
+         * refuses (TWO-25289).
+         *
+         * Rounds to the money precision FIRST rather than testing `=== 0.0`:
+         * the cap is rounded to 2dp before it goes on the wire, so a sub-cent
+         * cap would pass an exact-zero test and then arrive as a hard cap of
+         * 0.00 — the refused outcome, one step later.
+         *
+         * An empty cell is NOT zero. It is the legitimate "no cap", and
+         * absence must stay distinguishable from zero on every path.
+         *
+         * @param mixed $raw one posted or stored cap cell
+         */
+        private static function is_zero_cap($raw): bool
+        {
+            if (!is_scalar($raw)) {
+                return false;
+            }
+            $raw = trim(str_replace(',', '.', (string) $raw));
+            if ($raw === '' || !is_numeric($raw)) {
+                return false;
+            }
+            return round((float) $raw, WC_Twoinc_Payment_Terms::MONEY_DECIMALS) === 0.0;
+        }
+
+        /**
+         * The term days in the POSTED surcharge grid whose cap cell is a cap
+         * of zero — the caps validate_two_surcharge_grid_field() refuses.
+         *
+         * Exists to close a partial-save asymmetry. WooCommerce skips only
+         * the field that threw, so refusing the zero on the GRID alone still
+         * saved surcharge_type: `none -> percentage` on a shop carrying a
+         * legacy stored zero enabled surcharges and rejected the grid,
+         * leaving the shop live with a cap of zero, which clamps the entire
+         * fee line to nothing. The merchant saw an error, the surcharge was
+         * on, and no surcharge was ever charged. Refusing on BOTH fields is
+         * what makes the save all-or-nothing for this invariant.
+         *
+         * Keyed on the POSTED rows, and only those — the same "was this row
+         * actually on the form" signal the grid validator's preservation loop
+         * uses, and for the same two reasons. It is the honest rendered
+         * signal (a rendered row always posts its three inputs, even blank),
+         * so the merchant can always see and clear the cell this refuses
+         * over; and it does not depend on the offered-term set, which is read
+         * from an option a sibling validator may already have rewritten
+         * earlier in the same save loop.
+         *
+         * @return int[] term days
+         */
+        private function posted_zero_cap_term_days(): array
+        {
+            $post_data = $this->get_post_data();
+            $grid_key = $this->get_field_key('surcharge_grid');
+            if (!is_array($post_data) || !isset($post_data[$grid_key]) || !is_array($post_data[$grid_key])) {
+                return [];
+            }
+            $offending = [];
+            foreach ($post_data[$grid_key] as $days => $row) {
+                if ((int) $days > 0 && is_array($row) && isset($row['limit']) && self::is_zero_cap($row['limit'])) {
+                    $offending[] = (int) $days;
+                }
+            }
+            sort($offending);
+            return $offending;
+        }
+
+        /**
          * Block ENABLING surcharges while no valid surcharge tax treatment
          * is selected (server-side — the treatment field has no default, so
          * a never-configured shop posts the '' placeholder). Enforced on
@@ -1255,6 +1322,21 @@ if (!class_exists('WC_Twoinc')) {
                 )
             ) {
                 throw new Exception(__('Select a surcharge tax treatment before enabling surcharges.', 'twoinc-payment-gateway'));
+            }
+            // A cap only applies alongside a percentage, so only the
+            // percentage-bearing methods can be blocked by one. 'fixed' and
+            // 'none' save freely — the cap is inert under them, and refusing
+            // there would stop a merchant DISABLING surcharges to get out of
+            // the very state being refused.
+            if (in_array($value, ['percentage', 'fixed_and_percentage'], true)) {
+                $zero_cap_days = $this->posted_zero_cap_term_days();
+                if (!empty($zero_cap_days)) {
+                    throw new Exception(sprintf(
+                        /* translators: %s: comma-separated term days, e.g. "14, 30" */
+                        __('Clear or correct the surcharge cap of 0 on these terms before enabling a percentage surcharge: %s. A cap of 0 charges nothing at all; to charge nothing on a term, set its percentage and fixed fee to 0 and leave the cap empty.', 'twoinc-payment-gateway'),
+                        implode(', ', $zero_cap_days)
+                    ));
+                }
             }
             return $value;
         }
@@ -1550,15 +1632,13 @@ if (!class_exists('WC_Twoinc')) {
                     // configuration meaning "no cap" and never reaches here
                     // — the blank-cell `continue` above returns first, so
                     // absence and zero stay distinguishable.
-                    // round() first, not `=== 0.0`: the cap is rounded to 2dp
-                    // before it goes on the wire, so a sub-cent cap (0.001)
-                    // would pass an exact-zero check and then arrive as a hard
-                    // cap of 0.00 — the very outcome being refused, one step
-                    // later. Refusing everything that rounds away is what makes
-                    // "the rounding direction cannot decide whether a
-                    // configured cap survives" true rather than aspirational.
-                    $cap_rounds_away = $col === 'limit'
-                        && round((float) $raw, WC_Twoinc_Payment_Terms::MONEY_DECIMALS) === 0.0;
+                    // Shared with validate_surcharge_type_field via is_zero_cap
+                    // so both fields refuse the same save on the same rule —
+                    // see saved_zero_cap_term_days() for why one field alone
+                    // was not enough. The helper rounds to the money precision
+                    // rather than testing `=== 0.0`, so a sub-cent cap cannot
+                    // pass here and then arrive as a hard cap of 0.00.
+                    $cap_rounds_away = $col === 'limit' && self::is_zero_cap($raw);
                     if ($cap_rounds_away && $cap_column_live) {
                         throw new Exception(sprintf(
                             /* translators: %s: term days */
@@ -3126,9 +3206,10 @@ if (!class_exists('WC_Twoinc')) {
             $invoice_email = array_key_exists('invoice_email', $_POST) ? sanitize_text_field($_POST['invoice_email']) : '';
             $invoice_emails = $invoice_email ? array_map('sanitize_text_field', explode(',', $invoice_email)) : [];
 
-            // A company (organization number) is mandatory: the order API's
-            // CreateOrderRequestSchema requires buyer.company.organization_number
-            // and rejects an empty value with a 400 SCHEMA_ERROR. Fail fast with
+            // A company (organization number) is mandatory: the order-creation
+            // endpoint treats the buyer company's organization number as a
+            // required field and rejects an empty one with a 400 schema error.
+            // Fail fast with
             // a clear checkout error instead of letting that raw 400 surface as a
             // silent failure when no company has been selected (e.g. the company
             // search result was never picked, or the selection was cleared by a
@@ -4505,6 +4586,22 @@ if (!class_exists('WC_Twoinc')) {
          */
         public function admin_options()
         {
+            // Surface the per-field validation failures. WooCommerce validates
+            // each settings field independently and, when a validate_*_field
+            // method throws, records the message with WC_Settings_API::add_error
+            // and moves on: the field simply does not assign, everything else
+            // saves, and the page re-renders. Nothing in core PRINTS that
+            // bucket — display_errors() is the gateway's job, and this plugin
+            // never called it. So every per-field refusal was invisible: a
+            // merchant who typed a cap of 0 (the exact mistake TWO-25289
+            // exists to catch) saw their whole grid edit revert with no notice
+            // and a page that looked like it had saved. This is a DIFFERENT
+            // bucket from WC_Admin_Settings::add_error used in
+            // process_admin_options, which the settings page prints itself.
+            //
+            // Printed BEFORE the fields so the notice sits above the form
+            // rather than below the grid the merchant has to scroll back to.
+            $this->display_errors();
             parent::admin_options();
             $components = [sprintf(
                 /* translators: 1: base plugin provenance, e.g. "2.23.9 (eb7bf92cec07, deployed 2026-07-08 11:35 UTC)" */

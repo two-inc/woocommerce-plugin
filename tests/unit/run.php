@@ -76,6 +76,9 @@ final class BrandConfigSpec
             'testRoundingStepValidationEnforcesBrandOptions',
             'testSurchargeGridValidationNormalisesAndRejects',
             'testSurchargeGridEnforcesMerchantFixedCap',
+            'testSurchargeRefusalIsVisibleAndNothingPartiallySaves',
+            'testZeroCapOnAnUnrenderedRowDoesNotBlockEnabling',
+            'testDisablingSurchargesIsNeverBlockedByAZeroCap',
             'testSurchargeCapZeroAmountFromApiMeansNoLimit',
             'testSurchargeGridCurrencyNoteNamesTheStoreCurrency',
             'testSurchargeGridHelpTextOmitsMaxOnCurrencyMismatch',
@@ -159,6 +162,7 @@ final class BrandConfigSpec
             'testBuyerFeeShareCapRoundingToZeroRelaysZeroCap',
             'testBuyerFeeShareFixedRoundingToZeroChargesZero',
             'testBuyerFeeShareAbsentCapChargesUncappedPercentage',
+            'testStoredCommaDecimalCapIsNormalisedNotDropped',
             'testCartFeeSkippedOnQuoteCurrencyMismatch',
             'testMinimumDescriptionShowsConvertedFloorWhenRateAvailable',
             'testDeployedCommitGitlinkWinsOverSidecar',
@@ -1815,6 +1819,187 @@ final class BrandConfigSpec
                 sprintf('a valid cap must survive a "%s" save, not be discarded', $type_without_percentage)
             );
         }
+    }
+
+    /**
+     * TWO-25289 round 3. Two defects in one flow, both invisible from a
+     * validator called in isolation, so this test drives the REAL
+     * WooCommerce save loop (process_admin_options) and the REAL settings
+     * render (admin_options).
+     *
+     * 1. The refusal was SILENT. WooCommerce records a throwing validator's
+     *    message with WC_Settings_API::add_error and nothing in core prints
+     *    that bucket — display_errors() is the gateway's job and this plugin
+     *    never called it. A merchant who typed a cap of 0 saw the grid edit
+     *    revert with no notice on a page that looked like it saved.
+     *
+     * 2. The save was PARTIAL. Core skips only the field that threw, so
+     *    refusing the grid still saved surcharge_type: switching a shop with
+     *    a stored zero from none to percentage enabled surcharges and
+     *    rejected the grid, leaving the shop live at a cap of 0 — which
+     *    clamps the whole fee line to nothing.
+     */
+    private static function testSurchargeRefusalIsVisibleAndNothingPartiallySaves(): void
+    {
+        $gateway = self::gateway();
+        $gateway->init_form_fields();
+        $option_key = $gateway->get_option_key();
+        // The state a pre-TWO-25289 grid could legitimately have saved:
+        // surcharges off, and a cap of 0 sitting on an offered term.
+        $GLOBALS['__twoinc_test_options'][$option_key] = [
+            'surcharge_type' => 'none',
+            'surcharge_tax_treatment' => 'standard',
+            'payment_terms_days' => ['30'],
+            'surcharge_grid' => [30 => ['percentage' => '2.5', 'limit' => '0']],
+        ];
+        // The merchant switches the method to percentage. The grid row posts
+        // the stored zero straight back, because that is what is in the cell.
+        $gateway->test_post_data = [
+            $gateway->get_field_key('surcharge_type') => 'percentage',
+            $gateway->get_field_key('surcharge_tax_treatment') => 'standard',
+            $gateway->get_field_key('payment_terms_days') => ['30'],
+            $gateway->get_field_key('surcharge_grid') => [
+                30 => ['fixed' => '', 'percentage' => '2.5', 'limit' => '0'],
+            ],
+        ];
+        $gateway->process_admin_options();
+        $saved = get_option($option_key, []);
+
+        // Neither field lands. Before the fix surcharge_type was 'percentage'
+        // here while the grid still held the zero — surcharges live, fee
+        // clamped to nothing, nobody told.
+        TinyAssert::same('none', $saved['surcharge_type'], 'enabling must not survive a refused grid');
+        TinyAssert::same(
+            [30 => ['percentage' => '2.5', 'limit' => '0']],
+            $saved['surcharge_grid'],
+            'the refused grid must keep its stored value, not a half-applied edit'
+        );
+
+        // Both refusals were recorded, and BOTH name the cap of 0 rather than
+        // some generic failure — the merchant has to know which cell to fix.
+        $errors = implode("\n", $gateway->get_errors());
+        TinyAssert::true(strpos($errors, 'cannot be 0') !== false, 'the grid must refuse the cap of 0');
+        TinyAssert::true(
+            strpos($errors, 'before enabling a percentage surcharge') !== false,
+            'the type field must refuse the enable for the same reason'
+        );
+
+        // And the refusal is now VISIBLE: admin_options() prints the notice,
+        // above the settings form rather than below the grid.
+        ob_start();
+        $gateway->admin_options();
+        $html = ob_get_clean();
+        TinyAssert::true(strpos($html, 'woocommerce_errors') !== false, 'the settings page must print the error notice');
+        TinyAssert::true(strpos($html, 'cannot be 0') !== false, 'the cap refusal must reach the page');
+        TinyAssert::true(
+            strpos($html, 'woocommerce_errors') < strpos($html, '<table class="form-table"'),
+            'the notice must precede the settings form'
+        );
+
+        // A clean save prints NO notice — the call is unconditional, so an
+        // empty error bucket must stay silent.
+        $clean = self::gateway();
+        $clean->init_form_fields();
+        ob_start();
+        $clean->admin_options();
+        $clean_html = ob_get_clean();
+        TinyAssert::same(false, strpos($clean_html, 'woocommerce_errors'), 'no notice without errors');
+    }
+
+    /**
+     * The mitigation that keeps the symmetric refusal from becoming a dead
+     * end. A rendered row always posts its three inputs, so a stored zero on
+     * a row that was NOT rendered is absent from the POST — and refusing over
+     * a cell the merchant can neither see nor clear would lock them out of
+     * enabling surcharges entirely. It surfaces instead when the term comes
+     * back into view, which is where the grid's own rule fires with the row
+     * on screen. Same principle as the grid validator's preservation loop.
+     */
+    private static function testZeroCapOnAnUnrenderedRowDoesNotBlockEnabling(): void
+    {
+        $gateway = self::gateway();
+        $gateway->test_post_data = [
+            $gateway->get_field_key('surcharge_tax_treatment') => 'standard',
+            // Only the 30-day row was on the form, and its cap is fine. The
+            // stored zero lives on 60, whose row was never rendered.
+            $gateway->get_field_key('surcharge_grid') => [
+                30 => ['fixed' => '', 'percentage' => '2.5', 'limit' => ''],
+            ],
+        ];
+        TinyAssert::same(
+            'percentage',
+            $gateway->validate_surcharge_type_field('surcharge_type', 'percentage'),
+            'an unrendered legacy zero must not block enabling'
+        );
+
+        // No grid in the POST at all (no rows rendered) is the same case.
+        $gateway = self::gateway();
+        $gateway->test_post_data = [
+            $gateway->get_field_key('surcharge_tax_treatment') => 'standard',
+        ];
+        TinyAssert::same(
+            'percentage',
+            $gateway->validate_surcharge_type_field('surcharge_type', 'percentage')
+        );
+    }
+
+    /**
+     * The escape hatch. A cap is inert without a percentage, so only the
+     * percentage-bearing methods can be blocked by one — otherwise a shop
+     * that had somehow reached the refused state could not turn surcharges
+     * OFF to get out of it.
+     */
+    private static function testDisablingSurchargesIsNeverBlockedByAZeroCap(): void
+    {
+        foreach (['none', 'fixed'] as $type_without_percentage) {
+            $gateway = self::gateway();
+            $gateway->test_post_data = [
+                $gateway->get_field_key('surcharge_tax_treatment') => 'standard',
+                $gateway->get_field_key('surcharge_grid') => [
+                    30 => ['fixed' => '5', 'percentage' => '', 'limit' => '0'],
+                ],
+            ];
+            TinyAssert::same(
+                $type_without_percentage,
+                $gateway->validate_surcharge_type_field('surcharge_type', $type_without_percentage),
+                sprintf('a zero cap must never block a "%s" save', $type_without_percentage)
+            );
+        }
+
+        // A cap that is NOT zero never blocks anything, and neither does an
+        // empty one — absence is the legitimate "no cap".
+        foreach (['50', '0.01', ''] as $fine) {
+            $gateway = self::gateway();
+            $gateway->test_post_data = [
+                $gateway->get_field_key('surcharge_tax_treatment') => 'standard',
+                $gateway->get_field_key('surcharge_grid') => [
+                    30 => ['percentage' => '2.5', 'limit' => $fine],
+                ],
+            ];
+            TinyAssert::same(
+                'fixed_and_percentage',
+                $gateway->validate_surcharge_type_field('surcharge_type', 'fixed_and_percentage'),
+                sprintf('a cap of "%s" must not block enabling', $fine)
+            );
+        }
+
+        // A SUB-CENT cap does block: it rounds to 0.00 on the wire, so it is
+        // the refused value spelled differently, and the two fields must
+        // agree about that.
+        $gateway = self::gateway();
+        $gateway->test_post_data = [
+            $gateway->get_field_key('surcharge_tax_treatment') => 'standard',
+            $gateway->get_field_key('surcharge_grid') => [
+                30 => ['percentage' => '2.5', 'limit' => '0,004'],
+            ],
+        ];
+        $threw = false;
+        try {
+            $gateway->validate_surcharge_type_field('surcharge_type', 'percentage');
+        } catch (Exception $e) {
+            $threw = true;
+        }
+        TinyAssert::true($threw, 'a sub-cent cap must block enabling, as it blocks the grid');
     }
 
     private static function testSurchargeGridEnforcesMerchantFixedCap(): void
@@ -4567,6 +4752,56 @@ final class BrandConfigSpec
 
         $result = $gateway->apply_brand_availability_gate(['woocommerce-gateway-tillit' => 'gw']);
         TinyAssert::same('gw', $result['woocommerce-gateway-tillit'], 'an absent cap must keep the method offered');
+    }
+
+    /**
+     * TWO-25289 round 3. Round 2 added an is_numeric gate to the cap READ
+     * path, which turned a comma-formatted stored cap into an absent one —
+     * and absent means UNCAPPED, so the failure direction was an overcharge
+     * where the pre-TWO-25289 code capped correctly.
+     *
+     * A comma decimal is the plugin's own accepted spelling: the save path
+     * and the merchant-minimum validator both normalise it before they
+     * validate, so "1,50" reaches the stored option from a hand edit, an
+     * import, or an option written before that normalisation existed. It is
+     * normalised on read too, not dropped.
+     */
+    private static function testStoredCommaDecimalCapIsNormalisedNotDropped(): void
+    {
+        $gateway = self::termsGateway([
+            'surcharge_type' => 'percentage',
+            'surcharge_grid' => [30 => ['percentage' => '3', 'limit' => '1,50']],
+        ]);
+        TinyAssert::same(
+            ['percentage' => 3.0, 'surcharge_basis' => 'buyer_pays', 'cap' => 1.5],
+            WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway, 30),
+            'a comma-decimal cap must cap at 1.50, not relay an uncapped percentage'
+        );
+
+        // A comma-spelled ZERO is still a zero cap, relayed verbatim — the
+        // normalisation must not make absence and zero converge either way.
+        $gateway = self::termsGateway([
+            'surcharge_type' => 'percentage',
+            'surcharge_grid' => [30 => ['percentage' => '3', 'limit' => '0,00']],
+        ]);
+        $share = WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway, 30);
+        TinyAssert::true(array_key_exists('cap', $share), 'a comma-spelled zero cap must still be a cap');
+        TinyAssert::same(0.0, $share['cap']);
+
+        // Genuinely non-numeric junk stays absent, and so does a negative —
+        // normalising commas must not weaken either guard.
+        foreach (['abc', '', '-10', '-1,5'] as $junk) {
+            $gateway = self::termsGateway([
+                'surcharge_type' => 'percentage',
+                'surcharge_grid' => [30 => ['percentage' => '3', 'limit' => $junk]],
+            ]);
+            $share = WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway, 30);
+            TinyAssert::same(
+                false,
+                array_key_exists('cap', $share),
+                sprintf('a cap of "%s" must be absent, not relayed', $junk)
+            );
+        }
     }
 
     private static function testCartFeeSkippedOnQuoteCurrencyMismatch(): void
