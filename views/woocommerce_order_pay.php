@@ -35,7 +35,16 @@
             <label for="billing_company_display"><?php esc_html_e('Company name', 'twoinc-payment-gateway'); ?> <abbr class="required" title="required">*</abbr></label>
             <br>
             <select name="billing_company_display" class="billing_company_selectwoo" id="billing_company_display">
-                <option>&nbsp;</option>
+            <?php
+            /*
+             * value="" is load-bearing: the widget only paints its empty-field
+             * hint while the current selection's value matches the
+             * placeholder's, and an <option> with no value attribute takes its
+             * own text — a non-breaking space — as its value. Without it this
+             * page silently lost the hint the checkout page shows (TWO-25288).
+             */
+            ?>
+                <option value="">&nbsp;</option>
             </select>
         </div>
     </div>

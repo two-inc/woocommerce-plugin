@@ -65,6 +65,17 @@ let twoincSelectWooHelper = {
   companySearchTimeoutMs: 30000,
 
   /**
+   * Characters the buyer must type before the company search runs
+   * (TWO-25288). THE single source of this threshold in the plugin: the
+   * widget's minimumInputLength reads it, the "not in the list" button's
+   * visibility rule reads it, and the min-chars hint is interpolated from it.
+   * The hint's PHP string keeps its %d placeholder unresolved for exactly
+   * that reason — the number the buyer is told and the number enforced are
+   * the same value, so they cannot drift apart.
+   */
+  companySearchMinLength: 3,
+
+  /**
    * Text for a company search that could not be completed. Read lazily
    * because window.twoinc is populated by the checkout render; the literal
    * is the last-resort fallback for a page where the localised string is
@@ -85,6 +96,33 @@ let twoincSelectWooHelper = {
       (window.twoinc && window.twoinc.text && window.twoinc.text.company_search_unavailable) ||
       "Company search is temporarily unavailable. Please try again."
     );
+  },
+
+  /**
+   * Hint shown in the empty company-search field (TWO-25288). Read lazily for
+   * the same reason as the message above.
+   */
+  companySearchPlaceholderText: function () {
+    return (
+      (window.twoinc && window.twoinc.text && window.twoinc.text.company_search_placeholder) ||
+      "Enter company name to search"
+    );
+  },
+
+  /**
+   * Hint shown while the typed term is below the search threshold
+   * (TWO-25288).
+   *
+   * Deliberately a FIXED number rather than select2's own "N more characters"
+   * countdown: the buyer is told what the field needs, not how far off they
+   * currently are. The template carries an unresolved %d, interpolated here
+   * from companySearchMinLength, so the claimed minimum is the enforced one.
+   */
+  companySearchTooShortText: function () {
+    const template =
+      (window.twoinc && window.twoinc.text && window.twoinc.text.company_search_too_short) ||
+      "Please enter %d or more characters";
+    return template.replace("%d", twoincSelectWooHelper.companySearchMinLength);
   },
 
   /**
@@ -133,7 +171,12 @@ let twoincSelectWooHelper = {
 
     let twoincSearchLimit = 50;
     return {
-      minimumInputLength: 3,
+      minimumInputLength: twoincSelectWooHelper.companySearchMinLength,
+      // Empty-field hint (TWO-25288). select2 renders this through
+      // templateSelection below, and only while the current selection's id
+      // matches the placeholder's — which is why the field's empty option has
+      // to carry value="" rather than only a non-breaking space.
+      placeholder: twoincSelectWooHelper.companySearchPlaceholderText(),
       width: "100%",
       escapeMarkup: function (markup) {
         return markup;
@@ -152,11 +195,12 @@ let twoincSelectWooHelper = {
           // only for a timeout, a transport error, or a degraded response.
           return twoincSelectWooHelper.companySearchUnavailableText();
         },
-        inputTooShort: function (t) {
-          t = t.minimum - t.input.length;
-          return 1 == t
-            ? wc_country_select_params.i18n_input_too_short_1
-            : wc_country_select_params.i18n_input_too_short_n.replace("%qty%", t);
+        inputTooShort: function () {
+          // No argument read on purpose: WooCommerce core's own copy counts
+          // down the REMAINING characters, so the same field said "2 or more"
+          // after one keystroke and "3 or more" before any. This hint is
+          // plugin-owned and states the threshold itself (TWO-25288).
+          return twoincSelectWooHelper.companySearchTooShortText();
         },
         noResults: function () {
           return wc_country_select_params.i18n_no_matches;
