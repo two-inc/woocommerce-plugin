@@ -323,11 +323,7 @@
   color: var(--two-spinner-color, currentColor);
 
   /* 12 spokes: 30deg period, 10deg of ink each. */
-  background: repeating-conic-gradient(
-    from 0deg,
-    currentColor 0deg 10deg,
-    transparent 10deg 30deg
-  );
+  background: repeating-conic-gradient(from 0deg, currentColor 0deg 10deg, transparent 10deg 30deg);
 
   /* Punch out the middle so the spokes read as spokes, not a pie. */
   -webkit-mask: radial-gradient(farthest-side, transparent 38%, #000 40%);
