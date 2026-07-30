@@ -516,6 +516,114 @@ describe("company-search manual-entry affordance", () => {
       jest.useRealTimers();
     });
 
+    /**
+     * Add the address inputs `setAddress` writes to, prefilled the way an
+     * address lookup for a picked company leaves them.
+     *
+     * They are created here rather than in the shared form because `.val()` on
+     * an empty set is a silent no-op: if the fields were absent, a "cleared"
+     * assertion would read undefined and could never fail.
+     *
+     * @returns {void}
+     */
+    function givenLookedUpAddress() {
+      $("form[name='checkout']").append(
+        [
+          "<input type='text' id='billing_address_1' value='Registry Street 1' />",
+          "<input type='text' id='billing_address_2' value='' />",
+          "<input type='text' id='billing_city' value='Registryville' />",
+          "<input type='text' id='billing_postcode' value='0001' />"
+        ].join("\n")
+      );
+      // The precondition, asserted rather than assumed — see above.
+      expect($("#billing_address_1").val()).toBe("Registry Street 1");
+      expect($("#billing_city").val()).toBe("Registryville");
+      expect($("#billing_postcode").val()).toBe("0001");
+    }
+
+    test("the disowned company's registry address does not survive into the order", () => {
+      ctx.twoinc.enable_address_lookup = "yes";
+      jest.useFakeTimers();
+      const $select = openWithAffordance();
+      const picker = $select.data("select2");
+      givenLookedUpAddress();
+
+      type("abc");
+      row().trigger("mouseenter");
+      picker.trigger("results:select", {});
+      jest.advanceTimersByTime(1);
+
+      // Otherwise the order ships to the address of the company the buyer has
+      // just said is not theirs, in fields they never visibly touched.
+      expect($("#billing_address_1").val()).toBe("");
+      expect($("#billing_city").val()).toBe("");
+      expect($("#billing_postcode").val()).toBe("");
+      jest.useRealTimers();
+    });
+
+    test("the address is left alone when address lookup is off", () => {
+      // Nothing filled those fields on our behalf, so clearing them would be
+      // wiping the buyer's own typing. Same condition clearSelectedCompany uses.
+      ctx.twoinc.enable_address_lookup = "no";
+      jest.useFakeTimers();
+      const $select = openWithAffordance();
+      const picker = $select.data("select2");
+      givenLookedUpAddress();
+
+      type("abc");
+      row().trigger("mouseenter");
+      picker.trigger("results:select", {});
+      jest.advanceTimersByTime(1);
+
+      expect($("#billing_address_1").val()).toBe("Registry Street 1");
+      expect($("#billing_city").val()).toBe("Registryville");
+      expect($("#billing_postcode").val()).toBe("0001");
+      jest.useRealTimers();
+    });
+
+    test("the display select's own value is cleared, not just hidden", () => {
+      jest.useFakeTimers();
+      // A completed pick leaves the picked option selected on the underlying
+      // <select>, and select2("destroy") does not touch it. Left behind, the
+      // combobox re-appears showing the company the buyer just disowned.
+      $("#billing_company_display").append(
+        '<option value="ACME Widgets Ltd" selected>ACME Widgets Ltd</option>'
+      );
+      const $select = openWithAffordance();
+      const picker = $select.data("select2");
+      expect($("#billing_company_display").val()).toBe("ACME Widgets Ltd");
+
+      type("abc");
+      row().trigger("mouseenter");
+      picker.trigger("results:select", {});
+      jest.advanceTimersByTime(1);
+
+      expect($("#billing_company_display").val()).toBe("");
+      jest.useRealTimers();
+    });
+
+    test("leaving manual entry clears the hand-typed company and org number", () => {
+      jest.useFakeTimers();
+      openWithAffordance();
+
+      type("abc");
+      activate();
+      jest.advanceTimersByTime(1);
+
+      // What the buyer typed by hand while in manual entry.
+      $("#billing_company").val("Hand Typed Ltd");
+      $("#company_id").val("99999999");
+
+      ctx.dom.exitManualCompanyEntry();
+
+      // Left behind, the org number sits on a field the buyer can no longer
+      // see, passes the non-empty guard on the PHP side, and reaches the order
+      // while the combobox shows nothing selected.
+      expect($("#billing_company").val()).toBe("");
+      expect($("#company_id").val()).toBe("");
+      jest.useRealTimers();
+    });
+
     test("the way back out is built hidden, before manual entry is entered", () => {
       openWithAffordance();
 
@@ -654,6 +762,29 @@ describe("company-search manual-entry affordance", () => {
       // Both callers run on a surface that may not render the field. A bare
       // .focus() on an empty jQuery set is a silent no-op that reads as success.
       expect(ctx.dom.focusVisibleCompanyField("#no_such_field_at_all")).toBe(false);
+      expect(ctx.dom.focusVisibleCompanyField("#billing_company")).toBe(true);
+    });
+
+    test("a disabled field reports failure rather than lying", () => {
+      // A disabled input cannot take focus, so `.focus()` on it is the same
+      // silent no-op as an empty set. The caller uses the return value to
+      // decide whether to try its fallback target, so the distinction has to
+      // be real.
+      //
+      // What this pins is the CONTRACT, not one line of it. The `disabled`
+      // clause and the activeElement check are two independent mechanisms that
+      // both produce `false` here, so removing either one alone leaves this
+      // green (verified by mutation); removing both turns it red. The clause is
+      // kept as the explicit one because it also stops `.trigger("focus")`
+      // running focus handlers on a field the buyer cannot reach.
+      $("#billing_company").prop("disabled", true);
+
+      expect(ctx.dom.focusVisibleCompanyField("#billing_company")).toBe(false);
+      expect(document.activeElement).not.toBe($("#billing_company")[0]);
+
+      // Live probe: the same call on the same field succeeds once enabled, so
+      // the false above is the guard firing and not a broken selector.
+      $("#billing_company").prop("disabled", false);
       expect(ctx.dom.focusVisibleCompanyField("#billing_company")).toBe(true);
     });
   });
@@ -866,19 +997,27 @@ describe("company-search manual-entry affordance", () => {
       jest.useRealTimers();
     });
 
-    test("a company field's wrapper follows the field's own visibility", () => {
-      // The pay-for-order page wraps each company input in a container with its
-      // own hidden state. Revealing the field alone leaves manual entry with
-      // nothing visible, so the wrapper has to follow.
-      $("#billing_company_field").wrap('<div class="twoinc-inp-container hidden"></div>');
-      $("#billing_company_field").addClass("hidden");
+    // All three, not just one: dropping #company_id_field from the selector
+    // leaves the buyer a name box and nowhere to type the org number — the
+    // exact failure the function exists to prevent — and dropping
+    // #billing_company_display_field strands the way back to the picker.
+    test.each([
+      ["#billing_company_display_field"],
+      ["#billing_company_field"],
+      ["#company_id_field"]
+    ])("%s's wrapper follows the field's own visibility", (fieldSelector) => {
+      // The pay-for-order page wraps each company input in a container with
+      // its own hidden state. Revealing the field alone leaves manual entry
+      // with nothing visible, so the wrapper has to follow.
+      $(fieldSelector).wrap('<div class="twoinc-inp-container hidden"></div>');
+      $(fieldSelector).addClass("hidden");
 
       ctx.dom.syncCompanyFieldWrappers();
-      expect($("#billing_company_field").parent().hasClass("hidden")).toBe(true);
+      expect($(fieldSelector).parent().hasClass("hidden")).toBe(true);
 
-      $("#billing_company_field").removeClass("hidden");
+      $(fieldSelector).removeClass("hidden");
       ctx.dom.syncCompanyFieldWrappers();
-      expect($("#billing_company_field").parent().hasClass("hidden")).toBe(false);
+      expect($(fieldSelector).parent().hasClass("hidden")).toBe(false);
     });
   });
 });

@@ -1133,6 +1133,19 @@ let twoincDomHelper = {
     // would be asymmetric on top of wrong.
     jQuery("#billing_company").val("");
     jQuery("#company_id").val("");
+
+    // The registry address too, mirroring clearSelectedCompany. The buyer has
+    // just said the looked-up company is not theirs; leaving its registered
+    // address behind ships the order to it, in fields the buyer never visibly
+    // touched and would have no reason to check.
+    if (window.twoinc.enable_address_lookup === "yes") {
+      Twoinc.getInstance().setAddress({
+        street_address: "",
+        city: "",
+        postal_code: ""
+      });
+    }
+
     Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData();
 
     // Looked up from the DOM rather than through the cached
