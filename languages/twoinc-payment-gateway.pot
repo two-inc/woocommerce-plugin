@@ -958,3 +958,11 @@ msgstr ""
 #: class/WC_Twoinc.php
 msgid "The invoice for this order is still being prepared. Please try again later."
 msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "Accept the confirmation callback without a WordPress nonce"
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "The order-confirmation callback always verifies the order's unique order reference; this option skips only the additional WordPress nonce check. That nonce is tied to the buyer's browser session and expires after about a day, so a buyer returning from an email link, in a different browser, or after their session changed can be shown a security error on a genuinely authorised order. Enabling this drops the nonce's cross-site-request and session binding, leaving the order reference as the only secret guarding the callback, so leave it off unless you are seeing those false failures."
+msgstr ""

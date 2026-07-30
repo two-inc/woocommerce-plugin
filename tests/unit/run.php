@@ -95,6 +95,8 @@ final class BrandConfigSpec
             'testSoleTraderTokensRefusedForNonCapableCountry',
             'testSoleTraderTokensMintedForCapableCountry',
             'testSoleTraderHasNoMerchantToggleSetting',
+            'testSkipConfirmAuthRendersUnderDebugOptions',
+            'testSkipConfirmAuthStoredValueSurvivesSectionMove',
             'testSoleTraderHiddenWhenRegistryOmitsIt',
             'testSoleTraderRegistryErrorFallsBackToNoSoleTrader',
             'testSoleTraderRegistryRejectsMalformedCountry',
@@ -2462,6 +2464,85 @@ final class BrandConfigSpec
             'https://checkout.two.inc/soletrader/signup',
             $response['data']['signup_url']
         );
+    }
+
+    /**
+     * WooCommerce renders form_fields in array order, and a `type => title`
+     * entry opens a section that runs until the next one. So "which section
+     * is this field in" is answered by walking the array and taking the last
+     * title seen before the field — assert that, not just key presence
+     * (TWO-25283).
+     */
+    private static function testSkipConfirmAuthRendersUnderDebugOptions(): void
+    {
+        $gateway = new class () extends WC_Twoinc {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+        };
+        $gateway->init_form_fields();
+
+        $section = null;
+        $sections = [];
+        foreach ($gateway->form_fields as $name => $field) {
+            if (isset($field['type']) && $field['type'] === 'title') {
+                $section = $name;
+                continue;
+            }
+            $sections[$name] = $section;
+        }
+
+        TinyAssert::same(
+            'section_debug',
+            $sections['skip_confirm_auth'] ?? null,
+            'skip_confirm_auth must render under the Debug Options heading'
+        );
+        // Sanity: the walker really does distinguish sections — the field it
+        // used to sit next to is still in the checkout group.
+        TinyAssert::same('section_checkout_options', $sections['display_tooltips'] ?? null);
+        // And the option stays off by default wherever it is rendered.
+        TinyAssert::same('no', $gateway->form_fields['skip_confirm_auth']['default']);
+    }
+
+    /**
+     * Moving a field between sections must not orphan a merchant's stored
+     * value: WC_Settings_API keeps every field in ONE serialised option row
+     * keyed by field name, with section headings storing nothing at all. Seed
+     * that row the way an upgraded install has it and read it back through
+     * the settings API (TWO-25283).
+     */
+    private static function testSkipConfirmAuthStoredValueSurvivesSectionMove(): void
+    {
+        $gateway = new class () extends WC_Twoinc {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+        };
+        $gateway->init_form_fields();
+        $key = $gateway->get_option_key();
+
+        // Section headings are pure presentation: they define no stored value,
+        // so which one a field sits under cannot be part of the stored row.
+        TinyAssert::same('title', $gateway->form_fields['section_debug']['type']);
+        TinyAssert::same(false, array_key_exists('default', $gateway->form_fields['section_debug']));
+
+        $GLOBALS['__twoinc_test_options'][$key] = ['skip_confirm_auth' => 'yes', 'api_key' => 'keep-me'];
+        $gateway->init_settings();
+        TinyAssert::same('yes', $gateway->settings['skip_confirm_auth']);
+
+        // ...and the dead-key sweeper does not treat the moved field as
+        // removed, which is the one way a section move could orphan it.
+        $drop = new ReflectionMethod(WC_Twoinc::class, 'drop_removed_settings');
+        $drop->setAccessible(true);
+        $drop->invoke($gateway);
+        TinyAssert::same(
+            ['skip_confirm_auth' => 'yes', 'api_key' => 'keep-me'],
+            $GLOBALS['__twoinc_test_options'][$key]
+        );
+
+        unset($GLOBALS['__twoinc_test_options'][$key]);
     }
 
     private static function testSoleTraderHasNoMerchantToggleSetting(): void
