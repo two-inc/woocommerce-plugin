@@ -1481,6 +1481,23 @@ if (!class_exists('WC_Twoinc')) {
                 $max_fixed = (float) $limit['amount'];
             }
 
+            // Whether the Cap column is live at all for the surcharge type
+            // being saved. It is offered only alongside a percentage, and
+            // admin.js HIDES it otherwise — but a hidden input still posts, so
+            // a cap stored while the type was percentage keeps arriving after
+            // the merchant switches to fixed-only. Refusing a zero there would
+            // fail the whole save over a cell the admin can neither see nor
+            // clear, which is the dead end the funding-partner cap note below
+            // already warns about. An inapplicable cap is DROPPED instead,
+            // which also retires the legacy row rather than leaving it to
+            // resurface. Read from the POST, not the stored option: type and
+            // grid are saved in the same request (TWO-25289).
+            $cap_column_live = in_array(
+                $this->get_sibling_field_save_value('surcharge_type'),
+                ['percentage', 'fixed_and_percentage'],
+                true
+            );
+
             $clean = [];
             // A non-array POST means NO grid rows were rendered (empty term
             // list at render time) — fall through to the preservation loop
@@ -1494,7 +1511,7 @@ if (!class_exists('WC_Twoinc')) {
                 $row = [];
                 foreach (['fixed', 'percentage', 'limit'] as $col) {
                     $raw = isset($cols[$col]) ? trim(str_replace(',', '.', (string) $cols[$col])) : '';
-                    if ($raw === '') {
+                    if ($raw === '' || ($col === 'limit' && !$cap_column_live)) {
                         continue;
                     }
                     if (!is_numeric($raw) || (float) $raw < 0) {
@@ -1524,7 +1541,15 @@ if (!class_exists('WC_Twoinc')) {
                     // configuration meaning "no cap" and never reaches here
                     // — the blank-cell `continue` above returns first, so
                     // absence and zero stay distinguishable.
-                    if ($col === 'limit' && (float) $raw === 0.0) {
+                    // round() first, not `=== 0.0`: the cap is rounded to 2dp
+                    // before it goes on the wire, so a sub-cent cap (0.001)
+                    // would pass an exact-zero check and then arrive as a hard
+                    // cap of 0.00 — the very outcome being refused, one step
+                    // later. Refusing everything that rounds away is what makes
+                    // "the rounding direction cannot decide whether a
+                    // configured cap survives" true rather than aspirational.
+                    $rounded_cap = round((float) $raw, WC_Twoinc_Payment_Terms::MONEY_DECIMALS);
+                    if ($col === 'limit' && $rounded_cap === 0.0) {
                         throw new Exception(sprintf(
                             /* translators: %s: term days */
                             __('Surcharge cap for the %s-day term cannot be 0. To charge nothing on this term, set the percentage and the fixed fee to 0 instead, and leave the cap empty.', 'twoinc-payment-gateway'),

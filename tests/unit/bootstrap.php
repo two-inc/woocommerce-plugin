@@ -129,7 +129,11 @@ function wp_specialchars_decode($string, $quote_style = ENT_NOQUOTES)
 
 function wc_get_price_decimals()
 {
-    return 2;
+    // Overridable so a test can exercise a store configured for more price
+    // precision than the pricing API accepts (TWO-25289).
+    return isset($GLOBALS['__twoinc_test_price_decimals'])
+        ? (int) $GLOBALS['__twoinc_test_price_decimals']
+        : 2;
 }
 
 function determine_locale()

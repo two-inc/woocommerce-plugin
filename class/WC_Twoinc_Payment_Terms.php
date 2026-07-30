@@ -34,7 +34,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          * a store configured for 3 or 4 price decimals would have its
          * surcharge request rejected outright (TWO-25289).
          */
-        private const MONEY_DECIMALS = 2;
+        public const MONEY_DECIMALS = 2;
 
         /**
          * Stored surcharge-rounding basis → pricing-API basis. "none" (and
@@ -295,7 +295,10 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
             $components = self::surcharge_monetary_components($settings, $days);
             $fixed = $components['fixed'];
             $cap = $components['cap'];
-            if ($fixed !== null || $cap !== null) {
+            // Same zero exemption as the gate: a zero component is zero in
+            // every currency, so it must not drag the request into a
+            // fail-closed FX lookup (TWO-25289).
+            if (self::needs_fx($fixed) || self::needs_fx($cap)) {
                 $store_currency = strval(get_option('woocommerce_currency'));
                 $active_currency = get_woocommerce_currency();
                 if ($store_currency !== $active_currency) {
@@ -333,7 +336,11 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                     // was wrong (TWO-25269) and the guard was reverted. It
                     // withheld the fee block, not the payment method, so
                     // its effect was the same zero fee reached silently.
-                    if ($cap !== null && $converted_cap <= 0 && function_exists('wc_get_logger')) {
+                    // (float) $cap !== 0.0 so the message stays true: a cap
+                    // that was ALREADY zero did not "round to" anything, and
+                    // it cannot reach the conversion branch anyway now that a
+                    // zero component is exempt from the FX requirement.
+                    if ($cap !== null && (float) $cap !== 0.0 && $converted_cap <= 0 && function_exists('wc_get_logger')) {
                         wc_get_logger()->info(
                             sprintf(
                                 'Surcharge cap of %s %s rounds to 0.00 in'
@@ -428,6 +435,46 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          * @param array{type: string, grid: array<int,array>} $settings
          * @return array{fixed: float|null, cap: float|null}
          */
+        /**
+         * Whether a monetary component actually requires an FX rate. Absent
+         * needs nothing; ZERO needs nothing either, because zero is zero in
+         * every currency. Everything else does.
+         *
+         * @param float|null $amount
+         */
+        private static function needs_fx($amount): bool
+        {
+            return $amount !== null && (float) $amount !== 0.0;
+        }
+
+        /**
+         * The cap configured on one grid row, or null when there is none.
+         *
+         * Emptiness is the only thing that means "no cap"; a cap of 0 is a
+         * real instruction and is relayed as one (TWO-25289). A NEGATIVE cap
+         * is neither: it is nonsense the admin grid rejects, so it can only
+         * arrive by a hand edit or an import, and relaying it would be refused
+         * upstream. Treated as absent, which is what this boundary did for
+         * every non-positive value before TWO-25289 and must keep doing for
+         * negatives — dropping the `> 0` filter wholesale would have started
+         * relaying `cap => -10.0`.
+         *
+         * @param array<string,mixed> $row
+         * @return float|null
+         */
+        private static function configured_cap_amount(array $row)
+        {
+            if (!isset($row['limit'])) {
+                return null;
+            }
+            $raw = trim((string) $row['limit']);
+            if ($raw === '' || !is_numeric($raw) || (float) $raw < 0) {
+                return null;
+            }
+
+            return (float) $raw;
+        }
+
         private static function surcharge_monetary_components(array $settings, int $days): array
         {
             $has_percentage = in_array($settings['type'], ['percentage', 'fixed_and_percentage'], true);
@@ -435,8 +482,8 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
             $row = isset($settings['grid'][$days]) && is_array($settings['grid'][$days]) ? $settings['grid'][$days] : [];
             return [
                 'fixed' => $has_fixed && isset($row['fixed']) && (float) $row['fixed'] > 0 ? (float) $row['fixed'] : null,
-                'cap' => $has_percentage && isset($row['limit']) && trim((string) $row['limit']) !== ''
-                    ? (float) $row['limit']
+                'cap' => $has_percentage && self::configured_cap_amount($row) !== null
+                    ? self::configured_cap_amount($row)
                     : null,
             ];
         }
@@ -476,7 +523,14 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
             $monetary_term = null;
             foreach (self::get_available_terms($gateway) as $days) {
                 $components = self::surcharge_monetary_components($settings, $days);
-                if ($components['fixed'] !== null || $components['cap'] !== null) {
+                // ZERO needs no rate: it is zero in every currency. This
+                // matters because this gate WITHHOLDS the payment method, and
+                // a term whose only monetary component is a zero cap would
+                // otherwise take Two offline for the whole checkout over a
+                // conversion with no work to do (TWO-25289). A stored zero cap
+                // is relayed rather than dropped now, so it reaches here where
+                // it never used to.
+                if (self::needs_fx($components['fixed']) || self::needs_fx($components['cap'])) {
                     $monetary_term = $days;
                     break;
                 }
@@ -582,7 +636,13 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
             // default to avoid stalling checkout on a slow pricing call.
             $response = $gateway->make_request('/v1/pricing/order/fee', [
                 'currency' => get_woocommerce_currency(),
-                'gross_amount' => strval(WC_Twoinc_Helper::round_amt($gross_amount)),
+                // MONEY_DECIMALS, not round_amt(): round_amt() uses
+                // wc_get_price_decimals(), so a store configured for 3 or 4
+                // price decimals sent an over-precise value here and the API
+                // refused the whole request — the same failure the cap and
+                // surcharge rounding fixes, on the sibling field in the same
+                // payload (TWO-25289).
+                'gross_amount' => number_format(round($gross_amount, self::MONEY_DECIMALS), self::MONEY_DECIMALS, '.', ''),
                 'buyer_country_code' => $buyer_country,
                 // Required by the pricing request. Hardcoded false for
                 // parity with Magento (SurchargeCalculator) — there is no

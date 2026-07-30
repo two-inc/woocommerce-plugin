@@ -417,8 +417,11 @@ if (!class_exists('WC_Twoinc_FX')) {
         /**
          * $amount converted from $from to $to, unrounded, or null when no
          * rate is available (callers apply their own fail semantics and
-         * rounding — a gate comparison must not round, a charged amount
-         * rounds via WC_Twoinc_Helper::round_amt).
+         * rounding — a gate comparison must not round; a display amount
+         * rounds via WC_Twoinc_Helper::round_amt, while anything bound for
+         * the pricing request rounds to WC_Twoinc_Payment_Terms::
+         * MONEY_DECIMALS, which is fixed at 2 rather than following the
+         * store's price precision (TWO-25289).
          */
         public static function convert($gateway, float $amount, string $from, string $to): ?float
         {
