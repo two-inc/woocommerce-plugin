@@ -241,10 +241,11 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          * arithmetic. Mirrors Magento's SurchargeCalculator::buildBuyerFeeShare:
          * percentage (0.0 when fixed-only, so the API default of 100% is never
          * silently applied), surcharge_basis, the fixed surcharge (fixed/both
-         * types), a cap on the whole fee line item (percentage passthrough
-         * plus fixed surcharge, post-gross-up — NOT a cap on the percentage
-         * portion alone), rounding (only with a percentage component) and, in
-         * differential mode, the default term as reference_terms.
+         * types), a cap on the whole fee line item (the grossed-up percentage
+         * passthrough plus the fixed surcharge as sent — NOT a cap on the
+         * percentage portion alone), rounding (only with a percentage
+         * component) and, in differential mode, the default term as
+         * reference_terms.
          *
          * @return array|null null when no surcharge is configured (type none),
          *                    or when no FX rate is available to express the

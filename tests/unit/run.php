@@ -3839,9 +3839,11 @@ final class BrandConfigSpec
         TinyAssert::same(1.5, $share['percentage']);
         TinyAssert::true($gateway->fx_requests > 0, 'the cross-currency conversion path must really have run');
         self::assertLogged('info', 'rounds to 0.00 in checkout currency JPY; the whole fee is capped at 0.00');
-        // Exactly one line: the cap log must not fire per term per render,
-        // and no second line may creep in beside it.
-        TinyAssert::same(1, count($GLOBALS['__twoinc_test_logs']), 'exactly one info line, not repeated');
+        // One line per call, and no second line beside it. (Not a
+        // per-request latch: like the fixed->0.00 log next to it, this fires
+        // once per term quoted, which is deliberate — a per-request latch is
+        // the ERROR channel, and this is not a failure.)
+        TinyAssert::same(1, count($GLOBALS['__twoinc_test_logs']), 'one info line per call, nothing beside it');
         foreach ($GLOBALS['__twoinc_test_logs'] as $entry) {
             TinyAssert::true(
                 !in_array($entry['level'], ['error', 'warning'], true),

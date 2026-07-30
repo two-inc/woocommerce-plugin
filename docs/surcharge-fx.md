@@ -102,8 +102,10 @@ decimal places and rejects any value carrying more precision than that, so a
 sub-cent amount is a validation error, not a silently-rounded one. Removing
 the rounding would turn a converted amount like `0.0008` into an HTTP 422.
 
-Scope that claim precisely: `round_amt()` is applied only inside the
-`$store_currency !== $active_currency` branch. On a **same-currency** store a
+Scope that claim precisely: `round_amt()` **on the surcharge and the cap** is
+applied only inside the `$store_currency !== $active_currency` branch (the
+request's `gross_amount` is rounded unconditionally, elsewhere). On a
+**same-currency** store a
 configured sub-cent value is relayed raw, and grid validation does not
 enforce two decimal places either — so a merchant who types `0.001` there
 gets the same 422 by a path this rounding does not cover. Pre-existing, out
