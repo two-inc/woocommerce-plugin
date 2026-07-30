@@ -507,7 +507,7 @@ msgid "Project"
 msgstr "Projekt"
 
 #: class/WC_Twoinc_Checkout.php:123
-msgid "Purchase order number"
+msgid "PO Number"
 msgstr "PO-nummer"
 
 #: class/WC_Twoinc.php:628 class/WC_Twoinc.php:699 class/WC_Twoinc.php:1339
@@ -566,7 +566,7 @@ msgid "Show Project field"
 msgstr "Visa fältet för projekt"
 
 #: class/WC_Twoinc.php:3430
-msgid "Show Purchase order number field"
+msgid "Show PO Number field"
 msgstr "Visa fältet för PO-nummer"
 
 #: class/WC_Twoinc.php:1716

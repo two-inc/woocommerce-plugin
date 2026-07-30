@@ -3495,7 +3495,7 @@ if (!class_exists('WC_Twoinc')) {
                     'default'     => 'yes'
                 ],
                 'add_field_purchase_order_number' => [
-                    'title'       => __('Show Purchase order number field', 'twoinc-payment-gateway'),
+                    'title'       => __('Show PO Number field', 'twoinc-payment-gateway'),
                     'description' => __('Adds an input field where buyers can input their purchase order number to display on the invoice.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'label'       => ' ',
