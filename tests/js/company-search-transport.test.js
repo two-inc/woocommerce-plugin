@@ -370,6 +370,12 @@ describe("company search ajax transport", () => {
       // the asset, and the existence check proves the asset is actually in
       // the tree. A correct url() aimed at a missing file satisfies the
       // first on its own.
+      // The existence check resolves the URL the stylesheet actually
+      // declares, relative to the stylesheet's own directory, exactly as a
+      // browser would — deliberately not a path spelled out here. A
+      // hardcoded path checks that *some* asset exists somewhere, which
+      // stays green when the rule is repointed at a directory that holds
+      // nothing.
       harness.injectStylesheet();
       search();
 
@@ -378,8 +384,29 @@ describe("company search ajax transport", () => {
       expect(painted.backgroundImage).toContain("loader.gif");
       expect(painted.backgroundRepeat).toBe("no-repeat");
 
-      const assetPath = path.join(harness.REPO_ROOT, "assets", "images", "loader.gif");
+      const declared = /url\(\s*["']?([^"')]+)["']?\s*\)/.exec(painted.backgroundImage);
+      expect(declared).not.toBeNull();
+
+      const stylesheetDir = path.dirname(path.join(harness.REPO_ROOT, harness.STYLESHEET_PATH));
+      const assetPath = path.resolve(stylesheetDir, declared[1]);
       expect(fs.existsSync(assetPath)).toBe(true);
+
+      // And that the file found there is the animated 16x16 figure the rule
+      // is sized for. A still image would be a spinner that never spins, and
+      // no CSS assertion can tell the two apart — jsdom evaluates no
+      // animation at all.
+      const bytes = fs.readFileSync(assetPath);
+      expect(bytes.slice(0, 6).toString("latin1")).toBe("GIF89a");
+      expect(bytes.readUInt16LE(6)).toBe(16);
+      expect(bytes.readUInt16LE(8)).toBe(16);
+
+      // Each frame opens with an image-descriptor byte, so a single one means
+      // a static picture.
+      let frames = 0;
+      for (let i = 0; i < bytes.length; i += 1) {
+        if (bytes[i] === 0x2c) frames += 1;
+      }
+      expect(frames).toBeGreaterThan(1);
     });
 
     test("the spinner lands inside the widget's own search box", () => {

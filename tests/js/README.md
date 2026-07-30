@@ -117,7 +117,11 @@ about the company-search helper, so the bootstrap is left to no-op.
 - spinner paint (TWO-25288): the real stylesheet is injected with `injectStylesheet()` and
   the computed `background-image` is read back, so the rule is proven to point at the asset;
   paired with an on-disk existence check, because a correct URL aimed at a missing file
-  would satisfy the computed style on its own.
+  would satisfy the computed style on its own. The existence check resolves the URL the
+  stylesheet declares against the stylesheet's own directory rather than a path written into
+  the test, so repointing the rule at a directory that holds nothing fails here. The file it
+  lands on is then checked to be a 16x16 `GIF89a` with more than one frame — a still image
+  would be a spinner that never spins, and jsdom evaluates no animation.
 - message copy: the built-in fallback, the localised override, and that the widget renders
   ours rather than select2's own "The results could not be loaded."
 
@@ -189,7 +193,8 @@ document and jsdom's cascade resolves enough of it to prove the rule points at t
 GIF. What jsdom cannot tell you is whether the result is _visible_ — box geometry, stacking,
 and whether the image animates are all beyond it, and the multi-value `background-position`
 shorthand does not resolve at all (it reads back empty however the rule is written, so do
-not assert on it).
+not assert on it). The asset's own bytes are checked instead — dimensions and frame count —
+which pins that the file could animate, not that the browser animates it.
 
 Treat a change to the spinner's appearance as needing a real browser. This gap has bitten
 once already: an earlier attempt on TWO-25288 drew the figure in CSS and shipped for one
@@ -211,3 +216,9 @@ assertion in this suite was checked that way; nine separate mutations of
 dropping the `always` guard, weakening `degraded === true` to truthiness, removing the
 `Array.isArray` guard, removing the request timeout, dropping the `national_identifier`
 guard, reverting `constructTwoincUrl()` to property assignment) each fail at least one test.
+
+Three further mutations of `assets/css/twoinc.css` and its asset were checked the same way,
+all against the spinner-paint test: repointing the spinner's `url()` at a directory that does
+not exist, deleting its `background-image` declaration, and deleting
+`assets/images/loader.gif`. The first of those used to pass, because the existence check
+looked at a path written into the test rather than the one the stylesheet declares.
