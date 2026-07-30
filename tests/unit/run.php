@@ -85,7 +85,7 @@ final class BrandConfigSpec
             'testSurchargeFeeAlwaysZeroNeverTaxed',
             'testSurchargeFeeCustomClassFallsBackWhenClassDeleted',
             'testSurchargeTaxSettingsValidationAndStaleNotice',
-            'testNeverTaxedTreatmentSuppressedUnlessAlreadyStored',
+            'testNeverTaxedTreatmentSuppressedUnconditionally',
             'testSurchargeTaxTreatmentRequiresExplicitSelection',
             'testPaymentTermsValidationRequiresSelection',
             'testDefaultTermCoercedToOfferedSet',
@@ -2175,20 +2175,17 @@ final class BrandConfigSpec
     }
 
     /**
-     * TWO-25279: "Never taxed" (always_zero) is a plugin-supplied never-taxed
-     * mode, not a tax rule the merchant set up, so it is not offered for a
-     * NEW selection — an untaxed fee is a 0%-rate tax class under "Specific
-     * tax class".
+     * TWO-25279: the never-taxed treatment is a plugin-supplied mode, not a
+     * tax rule the merchant set up, so it is never offered — an untaxed fee is
+     * a 0%-rate tax class under "Specific tax class".
      *
-     * It IS re-offered to a shop that already stores it, and that is what
-     * keeps such a shop able to save: with the option gone the <select> falls
-     * back to the '' placeholder, and both treatment and surcharge-type
-     * validators then throw while surcharges are enabled. WooCommerce retains
-     * the previous value for a field whose validator threw, so the shop would
-     * sit on a permanent admin error with no way to clear it from the
-     * dropdown. This walks that whole round trip.
+     * Enforce-only, with NO grandfathering: a shop that already stores the
+     * mode does not get the option back, is refused at save, and is told so
+     * loudly on the settings page. Its stored value is never silently
+     * rewritten, so the fee stays untaxed at checkout until the merchant
+     * chooses — which is exactly why the notice has to be visible.
      */
-    private static function testNeverTaxedTreatmentSuppressedUnlessAlreadyStored(): void
+    private static function testNeverTaxedTreatmentSuppressedUnconditionally(): void
     {
         $GLOBALS['__twoinc_test_tax_classes'] = ['B2B Levy'];
 
@@ -2201,8 +2198,9 @@ final class BrandConfigSpec
             array_keys($fresh->get_surcharge_tax_treatment_options()),
             'a shop that never chose is not offered the never-taxed mode'
         );
+        TinyAssert::same('', $fresh->get_surcharge_never_taxed_notice(), 'nothing to report on a fresh install');
 
-        // On another mode -> still not offered.
+        // On another mode -> still not offered, still nothing to report.
         $standard = self::surchargeFeeGateway(['surcharge_tax_treatment' => 'standard']);
         $GLOBALS['__twoinc_test_options'][$standard->get_option_key()] = [
             'surcharge_tax_treatment' => 'standard',
@@ -2212,60 +2210,119 @@ final class BrandConfigSpec
             array_keys($standard->get_surcharge_tax_treatment_options()),
             'a shop on another mode is not offered the never-taxed mode'
         );
+        TinyAssert::same('', $standard->get_surcharge_never_taxed_notice(), 'a real treatment is not reported');
 
-        // Already stored -> re-offered, labelled, and wired into the field.
+        // Already stored -> STILL not offered (no grandfathering), and the
+        // settings field renders the same suppressed list.
+        //
         // Driven off the RAW settings row, which is what the production code
         // reads: $this->settings is still empty while init_form_fields() runs,
-        // so a test that only injects a settings array would not exercise the
-        // real path.
-        // The harness's get_option() reads an injected array while the
-        // production code reads the raw row, so both are set from the same
-        // values here — in a real install they ARE the same row, populated
-        // into $this->settings by init_settings().
+        // so a test that only injected the harness option array would pass
+        // with the source reverted.
         $legacy = self::surchargeFeeGateway([
             'surcharge_type' => 'percentage',
-            'surcharge_tax_treatment' => 'always_zero',
+            'surcharge_tax_treatment' => WC_Twoinc::NEVER_TAXED_SURCHARGE_TREATMENT,
         ]);
         $GLOBALS['__twoinc_test_options'][$legacy->get_option_key()] = [
             'surcharge_type' => 'percentage',
-            'surcharge_tax_treatment' => 'always_zero',
+            'surcharge_tax_treatment' => WC_Twoinc::NEVER_TAXED_SURCHARGE_TREATMENT,
         ];
-        $options = $legacy->get_surcharge_tax_treatment_options();
-        TinyAssert::same(['', 'standard', 'custom_class', 'always_zero'], array_keys($options));
-        TinyAssert::same('Never taxed', $options['always_zero'], 'the re-offered mode keeps its label');
+        TinyAssert::same(
+            ['', 'standard', 'custom_class'],
+            array_keys($legacy->get_surcharge_tax_treatment_options()),
+            'a shop already storing the mode does NOT get the option back'
+        );
         $legacy->init_form_fields();
         TinyAssert::same(
-            array_keys($options),
+            ['', 'standard', 'custom_class'],
             array_keys($legacy->form_fields['surcharge_tax_treatment']['options']),
-            'the settings field must render the scope-aware list, not a hardcoded one'
+            'the settings field must render the suppressed list, not a hardcoded one'
         );
 
-        // ...and the value that select posts back still validates, on both
-        // the treatment field and the surcharge-type field that gates it.
+        // Fail loud: the field carries a VISIBLE error (not a tooltip), and it
+        // names the consequence rather than merely saying "invalid".
+        $notice = $legacy->get_surcharge_never_taxed_notice();
+        TinyAssert::true($notice !== '', 'a shop storing the mode must be told');
+        TinyAssert::true(strpos($notice, 'UNTAXED') !== false, 'the notice spells out the consequence');
         TinyAssert::same(
-            'always_zero',
-            $legacy->validate_surcharge_tax_treatment_field('surcharge_tax_treatment', 'always_zero'),
-            'resubmitting the stored mode must not be rejected'
+            $notice,
+            $legacy->form_fields['surcharge_tax_treatment']['description'],
+            'the notice must be the visible field description, not the tooltip'
         );
-        TinyAssert::same(
-            'percentage',
-            $legacy->validate_surcharge_type_field('surcharge_type', 'percentage'),
-            'the surcharge-type gate must accept the stored never-taxed mode'
+        TinyAssert::true(
+            is_string($legacy->form_fields['surcharge_tax_treatment']['desc_tip'])
+            && strpos($legacy->form_fields['surcharge_tax_treatment']['desc_tip'], 'Standard applies') !== false,
+            'the help text moves to the tooltip so the error can occupy the visible slot'
         );
 
-        // The lockout the carve-out prevents: the placeholder the select
-        // would post if the option were absent is rejected on both fields.
+        // The notice must read the RAW settings row, not $this->get_option():
+        // it is called from init_form_fields(), which the constructor runs
+        // BEFORE init_settings(), so $this->settings is still empty and
+        // get_option() would silently report no stored treatment — dropping
+        // the one warning this exists to raise. A gateway whose injected
+        // option layer is empty but whose raw row holds the mode must still be
+        // warned, which a test that only injected the option layer could not
+        // tell apart.
+        $rawOnly = self::surchargeFeeGateway([]);
+        $GLOBALS['__twoinc_test_options'][$rawOnly->get_option_key()] = [
+            'surcharge_tax_treatment' => WC_Twoinc::NEVER_TAXED_SURCHARGE_TREATMENT,
+        ];
+        TinyAssert::same('', $rawOnly->get_option('surcharge_tax_treatment'), 'pin: the injected option layer is empty for this gateway');
+        TinyAssert::true(
+            $rawOnly->get_surcharge_never_taxed_notice() !== '',
+            'the notice must read the raw settings row, not $this->settings'
+        );
+
+        // Refused at save, on BOTH fields, with no already-stored exemption.
+        $threw = false;
+        $message = '';
+        try {
+            $legacy->validate_surcharge_tax_treatment_field(
+                'surcharge_tax_treatment',
+                WC_Twoinc::NEVER_TAXED_SURCHARGE_TREATMENT
+            );
+        } catch (Exception $e) {
+            $threw = true;
+            $message = $e->getMessage();
+        }
+        TinyAssert::true($threw, 'resubmitting the stored mode is refused — there is no grandfathering');
+        TinyAssert::true(
+            strpos($message, 'untaxed for every destination') !== false,
+            'the refusal names the consequence, not just "one of the offered modes"'
+        );
         $threw = false;
         try {
-            $legacy->validate_surcharge_tax_treatment_field('surcharge_tax_treatment', '');
+            $legacy->validate_surcharge_type_field('surcharge_type', 'percentage');
         } catch (Exception $e) {
             $threw = true;
         }
-        TinyAssert::true($threw, 'a blank treatment is rejected while surcharges are enabled');
+        TinyAssert::true($threw, 'the surcharge-type gate refuses to keep surcharges enabled against it');
 
-        // A row carrying stray whitespace still renders: the option is keyed
-        // on the RAW stored value, because a select can only render an option
-        // whose key is byte-identical to the value.
+        // The merchant tax configuration is NOT rewritten by any of the above
+        // — the fee really is still untaxed at checkout, which is what the
+        // notice exists to surface.
+        TinyAssert::same(
+            WC_Twoinc::NEVER_TAXED_SURCHARGE_TREATMENT,
+            $GLOBALS['__twoinc_test_options'][$legacy->get_option_key()]['surcharge_tax_treatment'],
+            'reading and reporting must not silently rewrite the stored treatment'
+        );
+        TinyAssert::same(
+            WC_Twoinc::NEVER_TAXED_SURCHARGE_TREATMENT,
+            WC_Twoinc_Payment_Terms::resolve_surcharge_tax_treatment($legacy)['treatment'],
+            'the runtime still applies the stored treatment — no silent migration'
+        );
+
+        // The shared predicate: exact match only. A padded row resolves to
+        // Standard at checkout, so it must NOT be reported as never-taxed —
+        // it is refused as unoffered instead.
+        TinyAssert::true($fresh->is_never_taxed_surcharge_treatment('always_zero'));
+        foreach (['', ' always_zero ', 'always_zero ', 'standard', 'custom_class', null, false, 0, []] as $other) {
+            TinyAssert::same(
+                false,
+                $fresh->is_never_taxed_surcharge_treatment($other),
+                'must NOT read as never-taxed: ' . var_export($other, true)
+            );
+        }
         $padded = self::surchargeFeeGateway([
             'surcharge_type' => 'percentage',
             'surcharge_tax_treatment' => ' always_zero ',
@@ -2274,37 +2331,15 @@ final class BrandConfigSpec
             'surcharge_type' => 'percentage',
             'surcharge_tax_treatment' => ' always_zero ',
         ];
-        $paddedOptions = $padded->get_surcharge_tax_treatment_options();
-        TinyAssert::true(
-            array_key_exists(' always_zero ', $paddedOptions),
-            'the option must be keyed on the raw stored value, whitespace included'
-        );
-        TinyAssert::true(
-            array_key_exists('always_zero', $paddedOptions),
-            'the canonical key must be registered too, or nothing can validate'
-        );
-        // Round trip, not just render: the value that select posts must save,
-        // and must come back NORMALISED so the odd row self-heals.
         TinyAssert::same(
-            'always_zero',
-            $padded->validate_surcharge_tax_treatment_field('surcharge_tax_treatment', ' always_zero '),
-            'the raw padded value the select posts must be accepted'
+            '',
+            $padded->get_surcharge_never_taxed_notice(),
+            'a padded row resolves to Standard at checkout, so claiming it is untaxed would be false'
         );
         TinyAssert::same(
-            'always_zero',
-            $padded->validate_surcharge_tax_treatment_field('surcharge_tax_treatment', 'always_zero'),
-            'the canonical value must be accepted too'
-        );
-        TinyAssert::same(
-            'percentage',
-            $padded->validate_surcharge_type_field('surcharge_type', 'percentage'),
-            'the type gate must accept a padded legacy row'
-        );
-        // ...and the runtime must apply what the admin displays.
-        TinyAssert::same(
-            'always_zero',
+            'standard',
             WC_Twoinc_Payment_Terms::resolve_surcharge_tax_treatment($padded)['treatment'],
-            'a padded row must resolve to the treatment the select shows, not standard'
+            'pin the resolver behaviour the notice is calibrated against'
         );
         unset($GLOBALS['__twoinc_test_options']);
 
@@ -2329,9 +2364,10 @@ final class BrandConfigSpec
         $field = $gateway->form_fields['surcharge_tax_treatment'];
         TinyAssert::same('', $field['default'], 'treatment must not default to any mode');
         TinyAssert::true(
-            strpos($field['description'], 'Never taxed') === false,
+            strpos($field['desc_tip'], 'Never taxed') === false,
             'the help text must not offer the never-taxed mode as a choice'
         );
+        TinyAssert::same('', $field['description'], 'the visible slot is empty until there is an error to report');
         TinyAssert::same(['', 'standard', 'custom_class'], array_keys($field['options']));
         TinyAssert::same('-- Select surcharge tax treatment --', $field['options']['']);
 
