@@ -433,11 +433,6 @@ msgstr "Bedrijfs-ID ontbreekt."
 msgid "My company is not on the list"
 msgstr "Mijn bedrijf staat niet op de lijst"
 
-#: class/WC_Twoinc_Checkout.php:136
-#, php-format
-msgid "Only for invoices being sent by %s"
-msgstr "Alleen voor facturen die door %s worden verzonden"
-
 #: class/WC_Twoinc.php:1656
 msgid "Optional vendor name if there are multiple sites"
 msgstr "Optionele leveranciersnaam als er meerdere sites zijn"

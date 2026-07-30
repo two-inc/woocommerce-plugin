@@ -398,11 +398,6 @@ msgstr ""
 msgid "My company is not on the list"
 msgstr ""
 
-#: class/WC_Twoinc_Checkout.php:136
-#, php-format
-msgid "Only for invoices being sent by %s"
-msgstr ""
-
 #: class/WC_Twoinc.php:1656
 msgid "Optional vendor name if there are multiple sites"
 msgstr ""
