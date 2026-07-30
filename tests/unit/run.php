@@ -2557,6 +2557,12 @@ final class BrandConfigSpec
         $GLOBALS['__twoinc_test_options'][$key] = ['skip_confirm_auth' => 'yes', 'api_key' => 'keep-me'];
         $gateway->init_settings();
         $drop = new ReflectionMethod(WC_Twoinc::class, 'drop_removed_settings');
+        // Required below 8.1, where reflection still honours visibility; a
+        // no-op since, and deprecated from 8.5, so keep it version-gated
+        // rather than unconditional (the suite runs 7.4 through 8.4 in CI).
+        if (PHP_VERSION_ID < 80100) {
+            $drop->setAccessible(true);
+        }
         $drop->invoke($gateway);
         TinyAssert::same(
             ['skip_confirm_auth' => 'yes', 'api_key' => 'keep-me'],
@@ -2577,16 +2583,37 @@ final class BrandConfigSpec
     private static function testSkipConfirmAuthCopyIsTranslatedInEveryLocale(): void
     {
         $languages = dirname(__DIR__, 2) . '/languages/';
-        $msgids = [
-            'Accept the confirmation callback without a valid WordPress nonce',
-            'The confirmation callback always checks the order\'s unique 64-character order '
-                . 'reference; this option skips only the additional WordPress nonce, which expires '
-                . '12 to 24 hours after the order was placed and can therefore reject a buyer who '
-                . 'comes back to a legitimately authorised order later. The order reference must '
-                . 'still match, so the callback is not left open, but the nonce\'s protection '
-                . 'against a cross-site request is gone — leave this off unless you are seeing '
-                . 'those expiry failures.',
-        ];
+
+        // Read the msgids off the live field rather than retyping them: the
+        // regression this exists to catch is the source copy being edited
+        // without the catalogues being regenerated, and a hardcoded copy of
+        // the literal cannot see that. __() is stubbed to identity here, so
+        // form_fields carries the untranslated source string.
+        $gateway = new class () extends WC_Twoinc {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+        };
+        $gateway->init_form_fields();
+        $field = $gateway->form_fields['skip_confirm_auth'];
+        $msgids = [$field['label'], $field['description']];
+        foreach ($msgids as $msgid) {
+            TinyAssert::true(
+                is_string($msgid) && strlen($msgid) > 20,
+                'skip_confirm_auth must carry both a label and a description to translate'
+            );
+        }
+
+        // A msgid absent from the template is untranslatable for whoever
+        // maintains the catalogues next, and nothing else would report it.
+        $pot = file_get_contents($languages . 'twoinc-payment-gateway.pot');
+        foreach ($msgids as $msgid) {
+            TinyAssert::true(
+                strpos($pot, $msgid) !== false,
+                'the .pot is missing a skip_confirm_auth msgid — regenerate it'
+            );
+        }
         // One recognisable fragment per locale is enough: the msgid assertion
         // below is what pins the lookup, and a fragment survives any later
         // rewording of the rest of the sentence.
