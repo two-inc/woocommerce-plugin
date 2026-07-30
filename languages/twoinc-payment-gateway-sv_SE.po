@@ -659,3 +659,15 @@ msgstr "Ange företagsnamn för att söka"
 #: class/WC_Twoinc_Checkout.php
 msgid "Please enter %d or more characters"
 msgstr "Ange %d eller fler tecken"
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Surcharge cap for the %s-day term cannot be 0. To charge nothing on this term, set the percentage and the fixed fee to 0 instead, and leave the cap empty."
+msgstr "Maxbeloppet för tillägget på terminen med %s dagar får inte vara 0. Om du inte vill debitera något för denna termin sätter du procenten och den fasta avgiften till 0 i stället och lämnar maxbeloppet tomt."
+
+#: class/WC_Twoinc.php
+msgid "A cap of 0 is not allowed. To charge nothing on a term, set that term's percentage and fixed fee to 0 instead."
+msgstr "Ett maxbelopp på 0 är inte tillåtet. Om du inte vill debitera något för en termin sätter du terminens procent och fasta avgift till 0 i stället."
+
+#: class/WC_Twoinc.php
+msgid "The cap applies to the whole fee: the percentage and the fixed fee together, not the percentage alone."
+msgstr "Maxbeloppet gäller hela avgiften: procenten och den fasta avgiften tillsammans, inte bara procenten."
