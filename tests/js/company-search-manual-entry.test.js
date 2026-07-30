@@ -530,13 +530,14 @@ describe("company-search manual-entry affordance", () => {
       $("form[name='checkout']").append(
         [
           "<input type='text' id='billing_address_1' value='Registry Street 1' />",
-          "<input type='text' id='billing_address_2' value='' />",
+          "<input type='text' id='billing_address_2' value='Flat 2' />",
           "<input type='text' id='billing_city' value='Registryville' />",
           "<input type='text' id='billing_postcode' value='0001' />"
         ].join("\n")
       );
       // The precondition, asserted rather than assumed — see above.
       expect($("#billing_address_1").val()).toBe("Registry Street 1");
+      expect($("#billing_address_2").val()).toBe("Flat 2");
       expect($("#billing_city").val()).toBe("Registryville");
       expect($("#billing_postcode").val()).toBe("0001");
     }
@@ -548,6 +549,14 @@ describe("company-search manual-entry affordance", () => {
       const picker = $select.data("select2");
       givenLookedUpAddress();
 
+      // A pick has to actually happen for a lookup to have run — reaching the
+      // manual-entry row alone (typing to the threshold) never triggers one.
+      // Without this the test cannot distinguish "the fix clears a looked-up
+      // address" from "the fix always clears these fields", and the latter was
+      // a real bug the mutation harness caught: it wipes a logged-in buyer's
+      // own account-prefilled address on the ordinary no-pick path.
+      $("#company_id").val("11111111");
+
       type("abc");
       row().trigger("mouseenter");
       picker.trigger("results:select", {});
@@ -556,6 +565,7 @@ describe("company-search manual-entry affordance", () => {
       // Otherwise the order ships to the address of the company the buyer has
       // just said is not theirs, in fields they never visibly touched.
       expect($("#billing_address_1").val()).toBe("");
+      expect($("#billing_address_2").val()).toBe("");
       expect($("#billing_city").val()).toBe("");
       expect($("#billing_postcode").val()).toBe("");
       jest.useRealTimers();
@@ -569,6 +579,7 @@ describe("company-search manual-entry affordance", () => {
       const $select = openWithAffordance();
       const picker = $select.data("select2");
       givenLookedUpAddress();
+      $("#company_id").val("11111111");
 
       type("abc");
       row().trigger("mouseenter");
@@ -576,6 +587,32 @@ describe("company-search manual-entry affordance", () => {
       jest.advanceTimersByTime(1);
 
       expect($("#billing_address_1").val()).toBe("Registry Street 1");
+      expect($("#billing_address_2").val()).toBe("Flat 2");
+      expect($("#billing_city").val()).toBe("Registryville");
+      expect($("#billing_postcode").val()).toBe("0001");
+      jest.useRealTimers();
+    });
+
+    test("the address is left alone when the row is reached without ever picking a company", () => {
+      // The ordinary path: type to the threshold, see nothing you like, click
+      // "not on the list". No pick, so no lookup ever ran — clearing the
+      // address here would wipe the buyer's own account-prefilled address for
+      // no reason. This is the scenario the un-gated version of the fix
+      // (mirroring clearSelectedCompany verbatim) got wrong.
+      ctx.twoinc.enable_address_lookup = "yes";
+      jest.useFakeTimers();
+      const $select = openWithAffordance();
+      const picker = $select.data("select2");
+      givenLookedUpAddress();
+      // #company_id is deliberately left empty — no pick happened.
+
+      type("abc");
+      row().trigger("mouseenter");
+      picker.trigger("results:select", {});
+      jest.advanceTimersByTime(1);
+
+      expect($("#billing_address_1").val()).toBe("Registry Street 1");
+      expect($("#billing_address_2").val()).toBe("Flat 2");
       expect($("#billing_city").val()).toBe("Registryville");
       expect($("#billing_postcode").val()).toBe("0001");
       jest.useRealTimers();

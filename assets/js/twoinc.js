@@ -1125,6 +1125,12 @@ let twoincDomHelper = {
   enterManualCompanyEntry: function () {
     window.twoinc.enable_company_search = "no";
 
+    // Read BEFORE the field below is blanked: this is the only evidence that a
+    // company was actually picked (and its address therefore possibly looked
+    // up), as opposed to the row being reached by typing straight to the
+    // threshold and never selecting anything — the ordinary path.
+    const hadPickedCompany = !!jQuery("#company_id").val();
+
     jQuery("#billing_company_display").val("");
     // The real company field too, not just the display one. Without this the
     // manual field the buyer is about to be shown is pre-filled with the
@@ -1134,11 +1140,14 @@ let twoincDomHelper = {
     jQuery("#billing_company").val("");
     jQuery("#company_id").val("");
 
-    // The registry address too, mirroring clearSelectedCompany. The buyer has
-    // just said the looked-up company is not theirs; leaving its registered
-    // address behind ships the order to it, in fields the buyer never visibly
-    // touched and would have no reason to check.
-    if (window.twoinc.enable_address_lookup === "yes") {
+    // The registry address too, mirroring clearSelectedCompany — but ONLY when
+    // a pick actually happened. Reaching manual entry does not imply a lookup
+    // ran: the row is live from the first keystroke, before any request goes
+    // out, and clicking it unconditionally would blank a logged-in buyer's own
+    // account-prefilled address for no reason. When a pick DID happen, leaving
+    // its registered address behind ships the order to it, in fields the buyer
+    // never visibly touched and would have no reason to check.
+    if (hadPickedCompany && window.twoinc.enable_address_lookup === "yes") {
       Twoinc.getInstance().setAddress({
         street_address: "",
         city: "",
