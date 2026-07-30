@@ -731,7 +731,15 @@ describe("company-search manual-entry affordance", () => {
 
         helper.bindManualEntryAffordance();
         helper.bindManualEntryAffordance();
+        // Several keystrokes, not one. The watcher is installed from the
+        // per-keystroke sync — that is what makes a re-created widget heal
+        // itself — so a single keystroke cannot tell "installed once" from
+        // "re-installed on every character". Without the per-node guard this
+        // churns one observer per keystroke.
         type("abc");
+        type("abcd");
+        type("abcde");
+        type("abcdef");
 
         const mine = spy.on(list);
         expect(mine.length).toBe(1);
