@@ -1022,6 +1022,21 @@ describe("company-search manual-entry affordance", () => {
         expect(resultsList().children().last().attr("id")).toBe(helper.manualEntryRowId);
       });
     });
+
+    test("clearing the selected company resets the registry-address flag", () => {
+      // Without this, the × button leaves the flag stale true after already
+      // blanking the address: pick a company (flag true, address written),
+      // click ×, type your OWN address into the now-empty fields, then click
+      // "not on the list" — enterManualCompanyEntry sees the stale flag and
+      // wipes what you just typed. The same false-positive round 2 fixed,
+      // resurfacing through this path if the reset here ever regresses.
+      const twoinc = ctx.Twoinc.getInstance();
+      twoinc.registryAddressApplied = true;
+
+      ctx.dom.clearSelectedCompany();
+
+      expect(twoinc.registryAddressApplied).toBe(false);
+    });
   });
 
   describe("the sole-trader round trip", () => {
