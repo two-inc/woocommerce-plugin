@@ -160,6 +160,7 @@ function loadTwoinc(twoinc) {
     util: exported.twoincUtilHelper,
     dom: exported.twoincDomHelper,
     termChips: exported.twoincTermChips,
+    soleTrader: exported.twoincSoleTrader,
     // The Twoinc class itself, for the code paths that reach the singleton.
     // Safe to construct here: the constructor only initialises fields, and
     // every call re-evaluates the source, so the `instance` a test creates

@@ -113,6 +113,15 @@ describe("company-search manual-entry affordance", () => {
     test("absent below the threshold", () => {
       openWithAffordance();
 
+      // Reach the threshold FIRST, so the mechanism is demonstrably live in
+      // this test before the absence is asserted. Without this the assertion
+      // below is a precondition dressed as a check: the row was never in the
+      // list, so "it is not there" holds no matter what the code does, and no
+      // mutation could turn this test red. It was in fact the one test in this
+      // file that survived all 25.
+      type("a".repeat(helper.companySearchMinLength));
+      expect(row().length).toBe(1);
+
       type("a".repeat(helper.companySearchMinLength - 1));
 
       expect(row().length).toBe(0);
@@ -195,6 +204,48 @@ describe("company-search manual-entry affordance", () => {
       expect($row.attr("id")).toBeTruthy();
       expect($row.hasClass("select2-results__option")).toBe(true);
       expect($row.hasClass("select2-results__option--selectable")).toBe(true);
+      // Programmatically focusable, which is what lets the picker's own
+      // focus-the-highlighted-row call actually land.
+      expect($row.attr("tabindex")).toBe("-1");
+    });
+
+    test("it carries the same attributes the picker gives a real option", () => {
+      // Rather than restate a list of attributes this test could drift from,
+      // compare against what the widget itself produces. If the library ever
+      // adds a navigation-relevant attribute, this fails instead of the row
+      // silently falling out of the navigable set.
+      const $select = openWithAffordance();
+      const picker = $select.data("select2");
+      const real = picker.results.option({ id: "Real Co", text: "Real Co", _resultId: "real-co" });
+
+      type("abc");
+      const $row = row();
+
+      ["role", "data-selected", "tabindex"].forEach((attr) => {
+        expect($row.attr(attr)).toBe($(real).attr(attr));
+      });
+    });
+
+    test("real DOM focus follows the highlight — the picker's own routine", () => {
+      const $select = openWithAffordance();
+      const picker = $select.data("select2");
+      const $list = resultsList();
+      $list.append(
+        $('<li class="select2-results__option" data-selected="false" tabindex="-1">A company</li>')
+          .attr("id", "a-company-row")
+          .data("data", { id: "A company", text: "A company", _resultId: "a-company-row" })
+      );
+
+      type("abc");
+
+      picker.trigger("results:next", {});
+      picker.trigger("results:next", {});
+      // What the picker calls on every arrow keypress. Its own source says this
+      // is required for screen readers; on a row with no tabindex it is a
+      // silent no-op and focus stays on the previous row.
+      picker.focusOnActiveElement();
+
+      expect(document.activeElement).toBe(row()[0]);
     });
 
     test("it carries a payload with an id and a matching _resultId", () => {
@@ -243,6 +294,11 @@ describe("company-search manual-entry affordance", () => {
       expect(picker.selection.$selection.attr("aria-activedescendant")).toBe(
         helper.manualEntryRowId
       );
+      // The dropdown's own search field carries it too, and that is the element
+      // the field's aria-owns points FROM — so it is the one an AT client
+      // following the combobox pattern reads. Both are fed from the payload's
+      // _resultId; asserting only one left the other free to be wrong.
+      expect(searchInput().attr("aria-activedescendant")).toBe(helper.manualEntryRowId);
     });
 
     test("the label is the localised msgid, not a hard-coded English literal", () => {
@@ -398,7 +454,65 @@ describe("company-search manual-entry affordance", () => {
       // selector matches everything and could never fail. The inline display
       // this code actually sets is the assertable thing.
       expect($back[0].style.display).not.toBe("none");
-      expect($back.text()).toBe(TEXT.search_company);
+      jest.useRealTimers();
+    });
+
+    test("the way back out is localised, not a hard-coded English literal", () => {
+      // Asserting against TEXT.search_company would prove nothing: that value is
+      // byte-identical to the built-in fallback, so deleting the text-map lookup
+      // entirely leaves the assertion passing. Inject a DIFFERENT string, the
+      // way the row's own label test does.
+      ctx.twoinc.text.search_company = "Søk etter selskap";
+      openWithAffordance();
+
+      expect(ctx.dom.getSearchCompanyBtnNode().text()).toBe("Søk etter selskap");
+    });
+
+    test("repeating the activation in one tick switches once, not once per press", () => {
+      jest.useFakeTimers();
+      const $select = openWithAffordance();
+      const picker = $select.data("select2");
+      let entered = 0;
+      const realEnter = ctx.dom.enterManualCompanyEntry;
+      ctx.dom.enterManualCompanyEntry = function () {
+        entered++;
+        return realEnter.apply(this, arguments);
+      };
+
+      try {
+        type("abc");
+        // The selection is prevented, so the dropdown does NOT close and the row
+        // is still there to be hit again in the same tick.
+        row().trigger("mouseenter");
+        picker.trigger("results:select", {});
+        picker.trigger("results:select", {});
+        picker.trigger("results:select", {});
+        jest.advanceTimersByTime(1);
+
+        expect(entered).toBe(1);
+      } finally {
+        ctx.dom.enterManualCompanyEntry = realEnter;
+        jest.useRealTimers();
+      }
+    });
+
+    test("the real company field is cleared, not just the display one", () => {
+      jest.useFakeTimers();
+      const $select = openWithAffordance();
+      const picker = $select.data("select2");
+      // What a completed pick leaves behind.
+      $("#billing_company").val("Previously Picked Ltd");
+      $("#company_id").val("11111111");
+
+      type("abc");
+      row().trigger("mouseenter");
+      picker.trigger("results:select", {});
+      jest.advanceTimersByTime(1);
+
+      // Otherwise the manual field the buyer is about to see is pre-filled with
+      // the company they just said is not theirs, next to an empty org number.
+      expect($("#billing_company").val()).toBe("");
+      expect($("#company_id").val()).toBe("");
       jest.useRealTimers();
     });
 
@@ -494,6 +608,230 @@ describe("company-search manual-entry affordance", () => {
       type("abc");
 
       expect(row().length).toBe(1);
+    });
+  });
+
+  describe("focus is not dropped when switching modes", () => {
+    beforeEach(() => {
+      ctx.Twoinc.getInstance();
+    });
+
+    test("entering manual entry focuses the field the buyer asked for", () => {
+      jest.useFakeTimers();
+      const $select = openWithAffordance();
+      const picker = $select.data("select2");
+
+      type("abc");
+      row().trigger("mouseenter");
+      picker.trigger("results:select", {});
+      jest.advanceTimersByTime(1);
+
+      // Destroying the widget leaves activeElement on <body>, which means a
+      // keyboard user has to tab in from the top of the document again.
+      expect(document.activeElement).toBe($("#billing_company")[0]);
+      jest.useRealTimers();
+    });
+
+    test("leaving manual entry does not strand focus on the hidden button", () => {
+      jest.useFakeTimers();
+      const $select = openWithAffordance();
+      const picker = $select.data("select2");
+      type("abc");
+      row().trigger("mouseenter");
+      picker.trigger("results:select", {});
+      jest.advanceTimersByTime(1);
+      jest.useRealTimers();
+
+      ctx.dom.exitManualCompanyEntry();
+
+      // Whatever it lands on, it must not be the button that was just hidden,
+      // and it must not be nothing.
+      expect(document.activeElement).not.toBe($("#" + helper.searchCompanyBtnId)[0]);
+      expect(document.activeElement).not.toBe(document.body);
+    });
+
+    test("focusing a field that is not there reports failure rather than lying", () => {
+      // Both callers run on a surface that may not render the field. A bare
+      // .focus() on an empty jQuery set is a silent no-op that reads as success.
+      expect(ctx.dom.focusVisibleCompanyField("#no_such_field_at_all")).toBe(false);
+      expect(ctx.dom.focusVisibleCompanyField("#billing_company")).toBe(true);
+    });
+  });
+
+  describe("one handler and one observer, across every re-bind", () => {
+    /** @returns {number} namespaced pre-select handlers on the select */
+    function selectingHandlerCount($select) {
+      const events = $._data($select[0], "events");
+      const bucket = events && events["select2:selecting"];
+      if (!bucket) return 0;
+      return bucket.filter((h) => h.namespace === "twoincManualEntry").length;
+    }
+
+    test("still one pre-select handler after several re-binds", () => {
+      // A duplicate here fires the whole manual-entry switch twice per
+      // activation. The body-input counter next door does not see this handler
+      // at all — it lives on the select.
+      const $select = openWithAffordance();
+
+      expect(selectingHandlerCount($select)).toBe(1);
+
+      helper.bindManualEntryAffordance($select);
+      helper.bindManualEntryAffordance($select);
+      helper.bindManualEntryAffordance($select);
+
+      expect(selectingHandlerCount($select)).toBe(1);
+    });
+
+    /**
+     * Record every MutationObserver, keyed on what it ends up observing.
+     *
+     * Filtering by target is not tidying: the widget constructs a
+     * MutationObserver of its OWN inside `_registerDomEvents`, one per widget.
+     * A test that merely counts constructions counts the library's too, so it
+     * reads 2 when the plugin made 1 and 3 when it made 1 — it fails for a
+     * reason that has nothing to do with this code.
+     *
+     * @returns {{on: Function, restore: Function}}
+     */
+    function observerSpy() {
+      const real = global.MutationObserver;
+      const records = [];
+      global.MutationObserver = function (cb) {
+        const observer = new real(cb);
+        const record = { target: null, disconnected: false };
+        const observe = observer.observe.bind(observer);
+        const disconnect = observer.disconnect.bind(observer);
+        observer.observe = function (node, opts) {
+          record.target = node;
+          return observe(node, opts);
+        };
+        observer.disconnect = function () {
+          record.disconnected = true;
+          return disconnect();
+        };
+        records.push(record);
+        return observer;
+      };
+      return {
+        /** @returns {Array} records whose observed node is `node` */
+        on: function (node) {
+          return records.filter((r) => r.target === node);
+        },
+        restore: function () {
+          global.MutationObserver = real;
+        }
+      };
+    }
+
+    test("still one observer on the results list after several re-binds", () => {
+      const spy = observerSpy();
+      try {
+        const $select = openWithAffordance();
+        const list = resultsList()[0];
+
+        helper.bindManualEntryAffordance($select);
+        helper.bindManualEntryAffordance($select);
+        type("abc");
+
+        const mine = spy.on(list);
+        expect(mine.length).toBe(1);
+        expect(mine.filter((o) => !o.disconnected).length).toBe(1);
+      } finally {
+        spy.restore();
+      }
+    });
+
+    test("a replacement results list gets the observer, the old one is released", () => {
+      const spy = observerSpy();
+      try {
+        const $select = openWithAffordance();
+        const firstList = resultsList()[0];
+        type("abc");
+        expect(spy.on(firstList).length).toBe(1);
+
+        // What clearing the selected company does: a brand-new widget, and so a
+        // brand-new results list.
+        $select.select2("destroy");
+        $select.html("");
+        $select.selectWoo(helper.genSelectWooParams());
+        $select.select2("open");
+        type("abc");
+
+        const secondList = resultsList()[0];
+        expect(secondList).not.toBe(firstList);
+        expect(spy.on(secondList).length).toBe(1);
+        // The old one was let go rather than left watching a detached node for
+        // the life of the page.
+        expect(spy.on(firstList)[0].disconnected).toBe(true);
+      } finally {
+        spy.restore();
+      }
+    });
+  });
+
+  describe("a re-created widget heals itself", () => {
+    beforeEach(() => {
+      ctx.Twoinc.getInstance();
+    });
+
+    test("the row survives clearing the selected company", () => {
+      const $select = openWithAffordance();
+      type("abc");
+      expect(row().length).toBe(1);
+
+      // The real gesture: the × on the floating company id. It re-creates the
+      // widget and knows nothing about this affordance, so nothing re-binds.
+      ctx.dom.clearSelectedCompany();
+      $select.select2("open");
+
+      type("abc");
+      expect(row().length).toBe(1);
+
+      // And it must SURVIVE the next render, which is the part that used to
+      // break: the delegated input handler still appended the row, then the
+      // first result set wiped it and no observer put it back.
+      const picker = $("#billing_company_display").data("select2");
+      picker.trigger("results:all", {
+        data: { results: [{ id: "A company", text: "A company", html: "A company" }] },
+        query: { term: "abc" }
+      });
+
+      return Promise.resolve().then(() => {
+        expect(row().length).toBe(1);
+        expect(resultsList().children().last().attr("id")).toBe(helper.manualEntryRowId);
+      });
+    });
+  });
+
+  describe("the sole-trader round trip", () => {
+    beforeEach(() => {
+      ctx.Twoinc.getInstance();
+    });
+
+    test("manual entry survives a trip through sole trader and back", () => {
+      jest.useFakeTimers();
+      const $select = openWithAffordance();
+      const picker = $select.data("select2");
+
+      type("abc");
+      row().trigger("mouseenter");
+      picker.trigger("results:select", {});
+      jest.advanceTimersByTime(1);
+      jest.useRealTimers();
+      expect(ctx.twoinc.enable_company_search).toBe("no");
+
+      // Sole trader snapshots the CURRENT setting — which manual entry has just
+      // written as "no" — and business mode restores that snapshot, so the
+      // re-enable path early-returns and the picker never comes back.
+      ctx.soleTrader.setMode("sole_trader");
+      expect($("#" + helper.searchCompanyBtnId)[0].style.display).toBe("none");
+
+      ctx.soleTrader.setMode("business");
+
+      // Without a route back the buyer is stranded in manual entry with no way
+      // to reach the picker again.
+      expect(ctx.twoinc.enable_company_search).toBe("no");
+      expect($("#" + helper.searchCompanyBtnId)[0].style.display).not.toBe("none");
     });
   });
 
