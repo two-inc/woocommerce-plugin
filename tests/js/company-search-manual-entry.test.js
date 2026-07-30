@@ -1071,6 +1071,122 @@ describe("company-search manual-entry affordance", () => {
     });
   });
 
+  describe("returning to search lands the buyer IN the search box", () => {
+    beforeEach(() => {
+      ctx.Twoinc.getInstance();
+    });
+
+    /** @returns {Object} the picker's container element, or an empty set */
+    function container() {
+      const picker = $("#billing_company_display").data("select2");
+      return picker ? picker.$container : $();
+    }
+
+    /**
+     * Enter manual entry through the row, the way a buyer does.
+     *
+     * @returns {void}
+     */
+    function enterManualEntry() {
+      jest.useFakeTimers();
+      const $select = openWithAffordance();
+      const picker = $select.data("select2");
+      type("abc");
+      row().trigger("mouseenter");
+      picker.trigger("results:select", {});
+      jest.advanceTimersByTime(1);
+      jest.useRealTimers();
+      // Guard: the widget really is gone, so "open" below cannot be the
+      // dropdown that was already open before the round trip.
+      expect($("#billing_company_display").data("select2")).toBeUndefined();
+    }
+
+    test("the dropdown is open, not just re-attached", () => {
+      enterManualEntry();
+
+      ctx.dom.exitManualCompanyEntry();
+
+      // The picker's own open state, read off the DOM it renders — a closed
+      // picker carries neither.
+      expect(container().hasClass("select2-container--open")).toBe(true);
+      expect($("#select2-billing_company_display-results").length).toBe(1);
+    });
+
+    test("the caret is in the dropdown's search box, not on the closed combobox", () => {
+      enterManualEntry();
+
+      ctx.dom.exitManualCompanyEntry();
+
+      const input = searchInput();
+      expect(input.length).toBe(1);
+      expect(document.activeElement).toBe(input[0]);
+      // The pre-fix behaviour: focus parked on the combobox, so the buyer had
+      // to click a second time to get a search box at all.
+      expect(document.activeElement).not.toBe(
+        $("#billing_company_display_field .select2-selection")[0]
+      );
+      expect(document.activeElement).not.toBe(document.body);
+    });
+
+    test("the buyer can type straight away and the row comes back", () => {
+      enterManualEntry();
+
+      ctx.dom.exitManualCompanyEntry();
+
+      // No second click anywhere: type into whatever now has focus.
+      $(document.activeElement).val("abc").trigger("input");
+
+      expect(row().length).toBe(1);
+    });
+
+    test("opening an already-open dropdown is a no-op, not a second dropdown", () => {
+      enterManualEntry();
+      ctx.dom.exitManualCompanyEntry();
+
+      expect(ctx.dom.openCompanySearchDropdown()).toBe(true);
+
+      expect(container().hasClass("select2-container--open")).toBe(true);
+      expect($("#select2-billing_company_display-results").length).toBe(1);
+      expect(document.activeElement).toBe(searchInput()[0]);
+    });
+
+    test("a focus that fails does not drag focus back onto the collapsed combobox", () => {
+      // The mixed state: dropdown expanded, focus parked on the collapsed
+      // combobox in front of it, so the buyer's keystrokes go nowhere the open
+      // list can see. The fallback chain must be reachable ONLY when no
+      // dropdown was opened, which is why the helper reports "opened" rather
+      // than "focused".
+      enterManualEntry();
+      const realFocus = ctx.dom.focusVisibleCompanyField;
+      jest.spyOn(ctx.dom, "focusVisibleCompanyField").mockImplementation((selector) => {
+        if (selector === helper.companySearchInputSelector) return false;
+        return realFocus.call(ctx.dom, selector);
+      });
+
+      ctx.dom.exitManualCompanyEntry();
+
+      expect(container().hasClass("select2-container--open")).toBe(true);
+      expect(document.activeElement).not.toBe(
+        $("#billing_company_display_field .select2-selection")[0]
+      );
+    });
+
+    test("no picker attached reports failure rather than lying", () => {
+      // The guard the fallback path depends on. A bare select2("open") on a
+      // select with no widget throws, and reporting success would skip the
+      // fallback focus entirely.
+      harness.releaseWidgets($);
+
+      expect(ctx.dom.openCompanySearchDropdown()).toBe(false);
+    });
+
+    test("a surface with no company select at all still reports failure", () => {
+      document.body.innerHTML = "";
+
+      expect(ctx.dom.openCompanySearchDropdown()).toBe(false);
+    });
+  });
+
   describe("the pay-for-order surface", () => {
     test("the affordance needs no template markup on the page", () => {
       // The billing-form view that used to carry these two nodes is rendered on

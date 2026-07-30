@@ -190,6 +190,13 @@ about the company-search helper, so the bootstrap is left to no-op.
   library's too and fails for an unrelated reason.
 - focus is not dropped on either mode switch, and `focusVisibleCompanyField` reports failure
   rather than claiming success when the field is absent.
+- **returning to search opens the dropdown and takes the caret**, so the way back costs one
+  gesture rather than two. Asserted on the picker's own rendered state — the open class on its
+  container and `document.activeElement` being the dropdown's search field — then proved end to
+  end by typing into whatever holds focus and watching the manual-entry row reappear. Both halves
+  are pinned independently: dropping the call leaves the dropdown closed, and dropping only the
+  explicit focus leaves it open with the caret nowhere, because the picker's own focus does not
+  land synchronously.
 - the sole-trader round trip does not strand a buyer in manual entry.
 
 ### Two defects these tests found, now fixed
