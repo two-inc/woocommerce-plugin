@@ -382,14 +382,31 @@ class WC_Payment_Gateway
     // injectable per test for cross-field save validation.
     public $test_post_data = [];
 
+    // Declared rather than left dynamic: get_option() below reads it for the
+    // field defaults, and WC_Twoinc::init_form_fields() assigns it.
+    public $form_fields = [];
+
     public function get_post_data()
     {
         return $this->test_post_data;
     }
 
+    // Mirrors WC_Settings_API::get_option: the stored row wins, an absent
+    // key falls back to the field's declared default (and is memoised into
+    // $settings, as core does), and $empty_value substitutes for ''. Faithful
+    // enough that a test can assert what a merchant's shop actually reads —
+    // the earlier shim ignored $settings entirely, which made any assertion
+    // about a stored value a restatement of what the test had just seeded.
     public function get_option($key, $empty_value = null)
     {
-        return $empty_value ?? '';
+        if (!array_key_exists($key, $this->settings)) {
+            $this->settings[$key] = $this->form_fields[$key]['default'] ?? '';
+        }
+        $value = $this->settings[$key];
+        if ($value === '' && !is_null($empty_value)) {
+            return $empty_value;
+        }
+        return $value;
     }
 
     public function get_field_key($key)

@@ -97,6 +97,7 @@ final class BrandConfigSpec
             'testSoleTraderHasNoMerchantToggleSetting',
             'testSkipConfirmAuthRendersUnderDebugOptions',
             'testSkipConfirmAuthStoredValueSurvivesSectionMove',
+            'testSkipConfirmAuthCopyIsTranslatedInEveryLocale',
             'testSoleTraderHiddenWhenRegistryOmitsIt',
             'testSoleTraderRegistryErrorFallsBackToNoSoleTrader',
             'testSoleTraderRegistryRejectsMalformedCountry',
@@ -2498,19 +2499,34 @@ final class BrandConfigSpec
             $sections['skip_confirm_auth'] ?? null,
             'skip_confirm_auth must render under the Debug Options heading'
         );
-        // Sanity: the walker really does distinguish sections — the field it
-        // used to sit next to is still in the checkout group.
-        TinyAssert::same('section_checkout_options', $sections['display_tooltips'] ?? null);
+        // Sanity on the walker itself, not on this field: if it reported
+        // 'section_debug' for everything the assertion above would pass
+        // vacuously, so pin one field known to live in another section.
+        TinyAssert::same(
+            'section_checkout_options',
+            $sections['display_tooltips'] ?? null,
+            'walker sanity check: display_tooltips is expected in the checkout '
+                . 'group — if that field was deliberately moved, repoint this '
+                . 'assertion at another non-debug field'
+        );
         // And the option stays off by default wherever it is rendered.
         TinyAssert::same('no', $gateway->form_fields['skip_confirm_auth']['default']);
     }
 
     /**
-     * Moving a field between sections must not orphan a merchant's stored
-     * value: WC_Settings_API keeps every field in ONE serialised option row
-     * keyed by field name, with section headings storing nothing at all. Seed
-     * that row the way an upgraded install has it and read it back through
-     * the settings API (TWO-25283).
+     * A merchant who enabled the option keeps it after the section move.
+     * WC_Settings_API keeps every field in ONE serialised option row keyed by
+     * field name and stores nothing for `title` fields, so section membership
+     * is presentation only — this seeds the row the way an upgraded install
+     * has it and reads it back through the same get_option() call the
+     * confirmation callback makes (TWO-25283).
+     *
+     * What it pins is the read: the stored 'yes' reaches the caller, and a
+     * shop that never touched the key still gets the 'no' default, which only
+     * resolves while the field is declared. It cannot prove the section move
+     * is what preserved the value — no code path stores or reads the section —
+     * so a rename or an accidental drop of the field is the failure it
+     * actually catches.
      */
     private static function testSkipConfirmAuthStoredValueSurvivesSectionMove(): void
     {
@@ -2523,19 +2539,24 @@ final class BrandConfigSpec
         $gateway->init_form_fields();
         $key = $gateway->get_option_key();
 
-        // Section headings are pure presentation: they define no stored value,
-        // so which one a field sits under cannot be part of the stored row.
+        // Section headings are pure presentation: they declare no stored
+        // value, so which one a field sits under cannot reach the row.
         TinyAssert::same('title', $gateway->form_fields['section_debug']['type']);
         TinyAssert::same(false, array_key_exists('default', $gateway->form_fields['section_debug']));
 
         $GLOBALS['__twoinc_test_options'][$key] = ['skip_confirm_auth' => 'yes', 'api_key' => 'keep-me'];
         $gateway->init_settings();
-        TinyAssert::same('yes', $gateway->settings['skip_confirm_auth']);
+        TinyAssert::same('yes', $gateway->get_option('skip_confirm_auth'));
 
-        // ...and the dead-key sweeper does not treat the moved field as
-        // removed, which is the one way a section move could orphan it.
+        // A shop that never touched it resolves the field default instead.
+        $GLOBALS['__twoinc_test_options'][$key] = ['api_key' => 'keep-me'];
+        $gateway->init_settings();
+        TinyAssert::same('no', $gateway->get_option('skip_confirm_auth'));
+
+        // And the dead-key sweeper must not start treating it as removed.
+        $GLOBALS['__twoinc_test_options'][$key] = ['skip_confirm_auth' => 'yes', 'api_key' => 'keep-me'];
+        $gateway->init_settings();
         $drop = new ReflectionMethod(WC_Twoinc::class, 'drop_removed_settings');
-        $drop->setAccessible(true);
         $drop->invoke($gateway);
         TinyAssert::same(
             ['skip_confirm_auth' => 'yes', 'api_key' => 'keep-me'],
@@ -2543,6 +2564,58 @@ final class BrandConfigSpec
         );
 
         unset($GLOBALS['__twoinc_test_options'][$key]);
+    }
+
+    /**
+     * The new label and description ship translated in every locale the repo
+     * carries. Asserted against the COMPILED .mo, not the .po, for the reason
+     * the tagline test spells out: WordPress reads only the .mo, and both ways
+     * this silently reverts to English on a translated shop — a forgotten
+     * msgfmt, or a fuzzy marker, which msgfmt drops — are invisible in the .po
+     * text (TWO-25283).
+     */
+    private static function testSkipConfirmAuthCopyIsTranslatedInEveryLocale(): void
+    {
+        $languages = dirname(__DIR__, 2) . '/languages/';
+        $msgids = [
+            'Accept the confirmation callback without a valid WordPress nonce',
+            'The confirmation callback always checks the order\'s unique 64-character order '
+                . 'reference; this option skips only the additional WordPress nonce, which expires '
+                . '12 to 24 hours after the order was placed and can therefore reject a buyer who '
+                . 'comes back to a legitimately authorised order later. The order reference must '
+                . 'still match, so the callback is not left open, but the nonce\'s protection '
+                . 'against a cross-site request is gone — leave this off unless you are seeing '
+                . 'those expiry failures.',
+        ];
+        // One recognisable fragment per locale is enough: the msgid assertion
+        // below is what pins the lookup, and a fragment survives any later
+        // rewording of the rest of the sentence.
+        $fragments = [
+            'nl_NL' => ['zonder geldige WordPress-nonce', 'de aanvullende WordPress-nonce'],
+            'nb_NO' => ['uten gyldig WordPress-nonce', 'bare over den ekstra WordPress-noncen'],
+            'sv_SE' => ['utan giltig WordPress-nonce', 'bara över den extra WordPress-noncen'],
+        ];
+
+        foreach ($fragments as $locale => $expected) {
+            $mo = file_get_contents($languages . 'twoinc-payment-gateway-' . $locale . '.mo');
+            foreach ($msgids as $msgid) {
+                // A msgid that has drifted from the source literal misses the
+                // lookup and renders English however good the msgstr is. __()
+                // is stubbed to identity here, so nothing else can see that.
+                TinyAssert::true(
+                    strpos($mo, $msgid) !== false,
+                    "compiled $locale msgid has drifted from the source literal "
+                        . '(recompile with msgfmt after editing the .po?)'
+                );
+            }
+            foreach ($expected as $fragment) {
+                TinyAssert::true(
+                    strpos($mo, $fragment) !== false,
+                    "compiled $locale catalogue is missing the skip_confirm_auth copy — "
+                        . 'that shop would render English'
+                );
+            }
+        }
     }
 
     private static function testSoleTraderHasNoMerchantToggleSetting(): void

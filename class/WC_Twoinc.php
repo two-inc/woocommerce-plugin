@@ -3712,9 +3712,9 @@ if (!class_exists('WC_Twoinc')) {
                 ],
                 'skip_confirm_auth' => [
                     'title'       => __('Skip user validation at order confirmation', 'twoinc-payment-gateway'),
-                    'label'       => __('Accept the confirmation callback without a WordPress nonce', 'twoinc-payment-gateway'),
+                    'label'       => __('Accept the confirmation callback without a valid WordPress nonce', 'twoinc-payment-gateway'),
                     'type'        => 'checkbox',
-                    'description' => __('The order-confirmation callback always verifies the order\'s unique order reference; this option skips only the additional WordPress nonce check. That nonce is tied to the buyer\'s browser session and expires after about a day, so a buyer returning from an email link, in a different browser, or after their session changed can be shown a security error on a genuinely authorised order. Enabling this drops the nonce\'s cross-site-request and session binding, leaving the order reference as the only secret guarding the callback, so leave it off unless you are seeing those false failures.', 'twoinc-payment-gateway'),
+                    'description' => __('The confirmation callback always checks the order\'s unique 64-character order reference; this option skips only the additional WordPress nonce, which expires 12 to 24 hours after the order was placed and can therefore reject a buyer who comes back to a legitimately authorised order later. The order reference must still match, so the callback is not left open, but the nonce\'s protection against a cross-site request is gone — leave this off unless you are seeing those expiry failures.', 'twoinc-payment-gateway'),
                     'default'     => 'no'
                 ],
             ];
