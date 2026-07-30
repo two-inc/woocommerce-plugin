@@ -1150,6 +1150,27 @@ describe("company-search manual-entry affordance", () => {
       expect(document.activeElement).toBe(searchInput()[0]);
     });
 
+    test("a focus that fails does not drag focus back onto the collapsed combobox", () => {
+      // The mixed state: dropdown expanded, focus parked on the collapsed
+      // combobox in front of it, so the buyer's keystrokes go nowhere the open
+      // list can see. The fallback chain must be reachable ONLY when no
+      // dropdown was opened, which is why the helper reports "opened" rather
+      // than "focused".
+      enterManualEntry();
+      const realFocus = ctx.dom.focusVisibleCompanyField;
+      jest.spyOn(ctx.dom, "focusVisibleCompanyField").mockImplementation((selector) => {
+        if (selector === helper.companySearchInputSelector) return false;
+        return realFocus.call(ctx.dom, selector);
+      });
+
+      ctx.dom.exitManualCompanyEntry();
+
+      expect(container().hasClass("select2-container--open")).toBe(true);
+      expect(document.activeElement).not.toBe(
+        $("#billing_company_display_field .select2-selection")[0]
+      );
+    });
+
     test("no picker attached reports failure rather than lying", () => {
       // The guard the fallback path depends on. A bare select2("open") on a
       // select with no widget throws, and reporting success would skip the

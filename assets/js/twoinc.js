@@ -1199,20 +1199,27 @@ let twoincDomHelper = {
     // After toggleBusinessFields, deliberately. Opening the dropdown positions
     // it against its container, and that container is only laid out once the
     // business fields have been shown.
-    if (twoincDomHelper.openCompanySearchDropdown()) return;
-
-    // Fallback for a surface with no picker attached (the pay-for-order page
-    // renders a different set of fields). Mirrors the enter path: the button
-    // that had focus is now hidden, so without this focus is stranded on a
-    // display:none element.
-    //
-    // NOT #billing_company_display — the picker hides that <select> and moves
-    // its accessible role onto the rendered combobox, which is the element
-    // carrying tabindex and the one a buyer can actually see.
-    if (
-      !twoincDomHelper.focusVisibleCompanyField("#billing_company_display_field .select2-selection")
-    ) {
-      twoincDomHelper.focusVisibleCompanyField("#billing_company_display");
+    if (!twoincDomHelper.openCompanySearchDropdown()) {
+      // Fallback for a surface with no picker attached (the pay-for-order page
+      // renders a different set of fields). Mirrors the enter path: the button
+      // that had focus is now hidden, so without this focus is stranded on a
+      // display:none element.
+      //
+      // Reached ONLY when no dropdown was opened. Running it alongside an open
+      // dropdown would park focus on the collapsed combobox while the picker is
+      // expanded behind it — a worse state than either outcome on its own,
+      // because the buyer's keystrokes would go nowhere the open list can see.
+      //
+      // NOT #billing_company_display — the picker hides that <select> and moves
+      // its accessible role onto the rendered combobox, which is the element
+      // carrying tabindex and the one a buyer can actually see.
+      if (
+        !twoincDomHelper.focusVisibleCompanyField(
+          "#billing_company_display_field .select2-selection"
+        )
+      ) {
+        twoincDomHelper.focusVisibleCompanyField("#billing_company_display");
+      }
     }
   },
 
@@ -1232,7 +1239,13 @@ let twoincDomHelper = {
    * the buyer's click instead of dependent on a poll that may take up to
    * ~2.4s, and the poll then finds the field already focused and no-ops.
    *
-   * @returns {boolean} whether the dropdown was opened AND took focus
+   * Reports whether the DROPDOWN was opened, deliberately — not whether focus
+   * landed. The caller uses it to decide whether to fall back to focusing the
+   * collapsed combobox, and that fallback is only ever right when there is no
+   * open dropdown to be inside. A focus that failed with the dropdown open is
+   * left to the `select2:open` poll to repair.
+   *
+   * @returns {boolean} whether the search dropdown was opened
    */
   openCompanySearchDropdown: function () {
     const $display = jQuery("#billing_company_display");
@@ -1241,10 +1254,11 @@ let twoincDomHelper = {
     $display.select2("open");
 
     // Looked up after opening, never cached: the picker tears the dropdown
-    // down and rebuilds the search field on every open.
-    return twoincDomHelper.focusVisibleCompanyField(
-      twoincSelectWooHelper.companySearchInputSelector
-    );
+    // down and rebuilds the search field on every open, so the node focused
+    // here is the one this open just created.
+    twoincDomHelper.focusVisibleCompanyField(twoincSelectWooHelper.companySearchInputSelector);
+
+    return true;
   },
 
   /**
