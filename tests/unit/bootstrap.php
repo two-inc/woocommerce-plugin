@@ -382,14 +382,47 @@ class WC_Payment_Gateway
     // injectable per test for cross-field save validation.
     public $test_post_data = [];
 
+    // Declared rather than left dynamic: get_option() below reads it for the
+    // field defaults, and WC_Twoinc::init_form_fields() assigns it.
+    public $form_fields = [];
+
     public function get_post_data()
     {
         return $this->test_post_data;
     }
 
+    // Mirrors WC_Settings_API::get_option: the stored row wins, an absent key
+    // falls back to the field's declared default via core's get_field_default
+    // semantics (empty() => ''), and $empty_value substitutes for '' — every
+    // resolution memoised into $settings, as core does. Faithful enough that a
+    // test can assert what a merchant's shop actually reads; the earlier shim
+    // ignored $settings entirely, which made any assertion about a stored
+    // value a restatement of what the test had just seeded.
+    //
+    // Three deliberate divergences from core, all in the default-resolution
+    // path rather than the read itself:
+    //  - core lazily calls init_settings() when $settings is empty. Not
+    //    copied: a test that seeds $GLOBALS['__twoinc_test_options'] and never
+    //    calls init_settings() should fail loudly on the field default rather
+    //    than silently work.
+    //  - core resolves defaults through get_form_fields(), which runs
+    //    set_defaults() and the woocommerce_settings_api_form_fields_<id>
+    //    filter. This reads $form_fields raw, so a suppression filter an
+    //    overlay registers is not applied.
+    //  - core's init_settings() preserves a falsy-but-non-empty default (it
+    //    plucks 'default' rather than testing empty()), whereas the empty()
+    //    test below collapses '0' to ''. Only surcharge_differential declares
+    //    such a default today, and its one consumer compares against '1'.
     public function get_option($key, $empty_value = null)
     {
-        return $empty_value ?? '';
+        if (!isset($this->settings[$key])) {
+            $default = $this->form_fields[$key]['default'] ?? '';
+            $this->settings[$key] = empty($default) ? '' : $default;
+        }
+        if ($this->settings[$key] === '' && !is_null($empty_value)) {
+            $this->settings[$key] = $empty_value;
+        }
+        return $this->settings[$key];
     }
 
     public function get_field_key($key)

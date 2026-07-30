@@ -640,3 +640,11 @@ msgstr ""
 #: class/WC_Twoinc.php
 msgid "The invoice for this order is still being prepared. Please try again later."
 msgstr "Fakturan för denna order håller fortfarande på att förberedas. Försök igen senare."
+
+#: class/WC_Twoinc.php
+msgid "Accept the confirmation callback without a valid WordPress nonce"
+msgstr "Godkänn bekräftelseanropet utan giltig WordPress-nonce"
+
+#: class/WC_Twoinc.php
+msgid "The confirmation callback always checks the order's unique 64-character order reference; this option skips only the additional WordPress nonce, which typically expires 12 to 24 hours after the order was placed — and, for a signed-in customer, when their session changes — so a buyer who comes back to a legitimately authorised order can be rejected. The order reference must still match, so the callback is not left open, but the nonce's protection against a cross-site request is gone; leave this off unless you are seeing those false rejections."
+msgstr "Bekräftelseanropet kontrollerar alltid orderns unika orderreferens på 64 tecken; det här alternativet hoppar bara över den extra WordPress-noncen, som vanligtvis upphör att gälla 12 till 24 timmar efter att ordern lades – och för en inloggad kund så snart sessionen ändras – vilket gör att en köpare som återvänder till en order som faktiskt har godkänts kan avvisas. Orderreferensen måste fortfarande stämma, så anropet står inte öppet, men noncens skydd mot en förfrågan över webbplatsgränser är borta; lämna detta av om du inte ser sådana felaktiga avvisningar."

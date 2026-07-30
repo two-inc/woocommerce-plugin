@@ -95,6 +95,9 @@ final class BrandConfigSpec
             'testSoleTraderTokensRefusedForNonCapableCountry',
             'testSoleTraderTokensMintedForCapableCountry',
             'testSoleTraderHasNoMerchantToggleSetting',
+            'testSkipConfirmAuthRendersUnderDebugOptions',
+            'testSkipConfirmAuthStoredValueSurvivesSectionMove',
+            'testSkipConfirmAuthCopyIsTranslatedInEveryLocale',
             'testSoleTraderHiddenWhenRegistryOmitsIt',
             'testSoleTraderRegistryErrorFallsBackToNoSoleTrader',
             'testSoleTraderRegistryRejectsMalformedCountry',
@@ -2462,6 +2465,190 @@ final class BrandConfigSpec
             'https://checkout.two.inc/soletrader/signup',
             $response['data']['signup_url']
         );
+    }
+
+    /**
+     * WooCommerce renders form_fields in array order, and a `type => title`
+     * entry opens a section that runs until the next one. So "which section
+     * is this field in" is answered by walking the array and taking the last
+     * title seen before the field — assert that, not just key presence
+     * (TWO-25283).
+     */
+    private static function testSkipConfirmAuthRendersUnderDebugOptions(): void
+    {
+        $gateway = new class () extends WC_Twoinc {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+        };
+        $gateway->init_form_fields();
+
+        $section = null;
+        $sections = [];
+        foreach ($gateway->form_fields as $name => $field) {
+            if (isset($field['type']) && $field['type'] === 'title') {
+                $section = $name;
+                continue;
+            }
+            $sections[$name] = $section;
+        }
+
+        TinyAssert::same(
+            'section_debug',
+            $sections['skip_confirm_auth'] ?? null,
+            'skip_confirm_auth must render under the Debug Options heading'
+        );
+        // Sanity on the walker itself, not on this field: if it reported
+        // 'section_debug' for everything the assertion above would pass
+        // vacuously, so pin one field known to live in another section.
+        TinyAssert::same(
+            'section_checkout_options',
+            $sections['display_tooltips'] ?? null,
+            'walker sanity check: display_tooltips is expected in the checkout '
+                . 'group — if that field was deliberately moved, repoint this '
+                . 'assertion at another non-debug field'
+        );
+        // And the option stays off by default wherever it is rendered.
+        TinyAssert::same('no', $gateway->form_fields['skip_confirm_auth']['default']);
+    }
+
+    /**
+     * A merchant who enabled the option keeps it after the section move.
+     * WC_Settings_API keeps every field in ONE serialised option row keyed by
+     * field name and stores nothing for `title` fields, so section membership
+     * is presentation only — this seeds the row the way an upgraded install
+     * has it and reads it back through the same get_option() call the
+     * confirmation callback makes (TWO-25283).
+     *
+     * What it pins is the read: the stored 'yes' reaches the caller, and a
+     * shop that never touched the key still gets the 'no' default, which only
+     * resolves while the field is declared. It cannot prove the section move
+     * is what preserved the value — no code path stores or reads the section —
+     * so a rename or an accidental drop of the field is the failure it
+     * actually catches.
+     */
+    private static function testSkipConfirmAuthStoredValueSurvivesSectionMove(): void
+    {
+        $gateway = new class () extends WC_Twoinc {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+        };
+        $gateway->init_form_fields();
+        $key = $gateway->get_option_key();
+
+        // Section headings are pure presentation: they declare no stored
+        // value, so which one a field sits under cannot reach the row.
+        TinyAssert::same('title', $gateway->form_fields['section_debug']['type']);
+        TinyAssert::same(false, array_key_exists('default', $gateway->form_fields['section_debug']));
+
+        $GLOBALS['__twoinc_test_options'][$key] = ['skip_confirm_auth' => 'yes', 'api_key' => 'keep-me'];
+        $gateway->init_settings();
+        TinyAssert::same('yes', $gateway->get_option('skip_confirm_auth'));
+
+        // A shop that never touched it resolves the field default instead.
+        $GLOBALS['__twoinc_test_options'][$key] = ['api_key' => 'keep-me'];
+        $gateway->init_settings();
+        TinyAssert::same('no', $gateway->get_option('skip_confirm_auth'));
+
+        // And the dead-key sweeper must not start treating it as removed.
+        $GLOBALS['__twoinc_test_options'][$key] = ['skip_confirm_auth' => 'yes', 'api_key' => 'keep-me'];
+        $gateway->init_settings();
+        $drop = new ReflectionMethod(WC_Twoinc::class, 'drop_removed_settings');
+        // Required below 8.1, where reflection still honours visibility.
+        // Unconditional to match the file's ten other call sites: gating only
+        // this one would not make the suite deprecation-clean on 8.5 and would
+        // read as if it did. CI's top rung is 8.4.
+        $drop->setAccessible(true);
+        $drop->invoke($gateway);
+        TinyAssert::same(
+            ['skip_confirm_auth' => 'yes', 'api_key' => 'keep-me'],
+            $GLOBALS['__twoinc_test_options'][$key]
+        );
+
+        unset($GLOBALS['__twoinc_test_options'][$key]);
+    }
+
+    /**
+     * The new label and description ship translated in every locale the repo
+     * carries. Asserted against the COMPILED .mo, not the .po, for the reason
+     * the tagline test spells out: WordPress reads only the .mo, and both ways
+     * this silently reverts to English on a translated shop — a forgotten
+     * msgfmt, or a fuzzy marker, which msgfmt drops — are invisible in the .po
+     * text (TWO-25283).
+     */
+    private static function testSkipConfirmAuthCopyIsTranslatedInEveryLocale(): void
+    {
+        $languages = dirname(__DIR__, 2) . '/languages/';
+
+        // Read the msgids off the live field rather than retyping them: the
+        // regression this exists to catch is the source copy being edited
+        // without the catalogues being regenerated, and a hardcoded copy of
+        // the literal cannot see that. __() is stubbed to identity here, so
+        // form_fields carries the untranslated source string.
+        $gateway = new class () extends WC_Twoinc {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+        };
+        $gateway->init_form_fields();
+        //
+        // The cost of reading them rather than retyping them: the pair moving
+        // together in the WRONG direction is now invisible here — a clause
+        // dropped from the source and from all three msgstrs still passes.
+        // Nothing pins the copy's content; that is a review job.
+        $field = $gateway->form_fields['skip_confirm_auth'] ?? [];
+        $msgids = [$field['label'] ?? null, $field['description'] ?? null];
+        foreach ($msgids as $msgid) {
+            // The length floor is load-bearing: a degenerate short msgid would
+            // make every strpos() below vacuously true.
+            TinyAssert::true(
+                is_string($msgid) && strlen($msgid) > 20,
+                'skip_confirm_auth must carry both a label and a description to translate'
+            );
+        }
+
+        // A msgid absent from the template is untranslatable for whoever
+        // maintains the catalogues next, and nothing else would report it.
+        $pot = file_get_contents($languages . 'twoinc-payment-gateway.pot');
+        foreach ($msgids as $msgid) {
+            TinyAssert::true(
+                strpos($pot, $msgid) !== false,
+                'the .pot is missing a skip_confirm_auth msgid — regenerate it'
+            );
+        }
+        // One recognisable fragment per locale is enough: the msgid assertion
+        // below is what pins the lookup, and a fragment survives any later
+        // rewording of the rest of the sentence.
+        $fragments = [
+            'nl_NL' => ['zonder geldige WordPress-nonce', 'de aanvullende WordPress-nonce'],
+            'nb_NO' => ['uten gyldig WordPress-nonce', 'bare over den ekstra WordPress-noncen'],
+            'sv_SE' => ['utan giltig WordPress-nonce', 'bara över den extra WordPress-noncen'],
+        ];
+
+        foreach ($fragments as $locale => $expected) {
+            $mo = file_get_contents($languages . 'twoinc-payment-gateway-' . $locale . '.mo');
+            foreach ($msgids as $msgid) {
+                // A msgid that has drifted from the source literal misses the
+                // lookup and renders English however good the msgstr is. __()
+                // is stubbed to identity here, so nothing else can see that.
+                TinyAssert::true(
+                    strpos($mo, $msgid) !== false,
+                    "compiled $locale msgid has drifted from the source literal "
+                        . '(recompile with msgfmt after editing the .po?)'
+                );
+            }
+            foreach ($expected as $fragment) {
+                TinyAssert::true(
+                    strpos($mo, $fragment) !== false,
+                    "compiled $locale catalogue is missing the skip_confirm_auth copy — "
+                        . 'that shop would render English'
+                );
+            }
+        }
     }
 
     private static function testSoleTraderHasNoMerchantToggleSetting(): void

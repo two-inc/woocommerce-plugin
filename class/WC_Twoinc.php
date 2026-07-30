@@ -3530,12 +3530,6 @@ if (!class_exists('WC_Twoinc')) {
                     'type'        => 'checkbox',
                     'default'     => 'no'
                 ],
-                'skip_confirm_auth' => [
-                    'title'       => __('Skip user validation at order confirmation', 'twoinc-payment-gateway'),
-                    'label'       => ' ',
-                    'type'        => 'checkbox',
-                    'default'     => 'no'
-                ],
                 'section_auto_complete_settings' => [
                     'type'        => 'title',
                     'title'       => __('Auto-complete settings', 'twoinc-payment-gateway')
@@ -3715,6 +3709,13 @@ if (!class_exists('WC_Twoinc')) {
                         admin_url('admin.php?page=wc-status&tab=logs&source=twoinc-payment-gateway')
                     ),
                     'default'     => 'yes',
+                ],
+                'skip_confirm_auth' => [
+                    'title'       => __('Skip user validation at order confirmation', 'twoinc-payment-gateway'),
+                    'label'       => __('Accept the confirmation callback without a valid WordPress nonce', 'twoinc-payment-gateway'),
+                    'type'        => 'checkbox',
+                    'description' => __('The confirmation callback always checks the order\'s unique 64-character order reference; this option skips only the additional WordPress nonce, which typically expires 12 to 24 hours after the order was placed — and, for a signed-in customer, when their session changes — so a buyer who comes back to a legitimately authorised order can be rejected. The order reference must still match, so the callback is not left open, but the nonce\'s protection against a cross-site request is gone; leave this off unless you are seeing those false rejections.', 'twoinc-payment-gateway'),
+                    'default'     => 'no'
                 ],
             ];
 
