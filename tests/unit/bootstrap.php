@@ -399,10 +399,20 @@ class WC_Payment_Gateway
     // ignored $settings entirely, which made any assertion about a stored
     // value a restatement of what the test had just seeded.
     //
-    // One deliberate divergence: core lazily calls init_settings() when
-    // $settings is empty. Not copied, because a test that seeds
-    // $GLOBALS['__twoinc_test_options'] and never calls init_settings() should
-    // fail loudly on the field default rather than silently work.
+    // Three deliberate divergences from core, all in the default-resolution
+    // path rather than the read itself:
+    //  - core lazily calls init_settings() when $settings is empty. Not
+    //    copied: a test that seeds $GLOBALS['__twoinc_test_options'] and never
+    //    calls init_settings() should fail loudly on the field default rather
+    //    than silently work.
+    //  - core resolves defaults through get_form_fields(), which runs
+    //    set_defaults() and the woocommerce_settings_api_form_fields_<id>
+    //    filter. This reads $form_fields raw, so a suppression filter an
+    //    overlay registers is not applied.
+    //  - core's init_settings() preserves a falsy-but-non-empty default (it
+    //    plucks 'default' rather than testing empty()), whereas the empty()
+    //    test below collapses '0' to ''. Only surcharge_differential declares
+    //    such a default today, and its one consumer compares against '1'.
     public function get_option($key, $empty_value = null)
     {
         if (!isset($this->settings[$key])) {

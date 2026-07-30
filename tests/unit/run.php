@@ -2557,12 +2557,11 @@ final class BrandConfigSpec
         $GLOBALS['__twoinc_test_options'][$key] = ['skip_confirm_auth' => 'yes', 'api_key' => 'keep-me'];
         $gateway->init_settings();
         $drop = new ReflectionMethod(WC_Twoinc::class, 'drop_removed_settings');
-        // Required below 8.1, where reflection still honours visibility; a
-        // no-op since, and deprecated from 8.5, so keep it version-gated
-        // rather than unconditional (the suite runs 7.4 through 8.4 in CI).
-        if (PHP_VERSION_ID < 80100) {
-            $drop->setAccessible(true);
-        }
+        // Required below 8.1, where reflection still honours visibility.
+        // Unconditional to match the file's ten other call sites: gating only
+        // this one would not make the suite deprecation-clean on 8.5 and would
+        // read as if it did. CI's top rung is 8.4.
+        $drop->setAccessible(true);
         $drop->invoke($gateway);
         TinyAssert::same(
             ['skip_confirm_auth' => 'yes', 'api_key' => 'keep-me'],
@@ -2596,9 +2595,16 @@ final class BrandConfigSpec
             }
         };
         $gateway->init_form_fields();
-        $field = $gateway->form_fields['skip_confirm_auth'];
-        $msgids = [$field['label'], $field['description']];
+        //
+        // The cost of reading them rather than retyping them: the pair moving
+        // together in the WRONG direction is now invisible here — a clause
+        // dropped from the source and from all three msgstrs still passes.
+        // Nothing pins the copy's content; that is a review job.
+        $field = $gateway->form_fields['skip_confirm_auth'] ?? [];
+        $msgids = [$field['label'] ?? null, $field['description'] ?? null];
         foreach ($msgids as $msgid) {
+            // The length floor is load-bearing: a degenerate short msgid would
+            // make every strpos() below vacuously true.
             TinyAssert::true(
                 is_string($msgid) && strlen($msgid) > 20,
                 'skip_confirm_auth must carry both a label and a description to translate'
