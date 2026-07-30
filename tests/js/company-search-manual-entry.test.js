@@ -338,6 +338,7 @@ describe("company-search manual-entry affordance", () => {
     test("no company value is written — the selection is prevented", () => {
       const selected = [];
       const $select = openWithAffordance();
+      const picker = $select.data("select2");
       $select.on("select2:select", (e) => selected.push(e.params.data));
 
       type("abc");
@@ -346,6 +347,22 @@ describe("company-search manual-entry affordance", () => {
       expect(selected).toEqual([]);
       expect($("#billing_company").val()).toBe("");
       expect($("#company_id").val()).toBe("");
+
+      // The three assertions above are all "nothing happened", and a recorder
+      // that was never wired up — or a widget that stopped emitting at all —
+      // satisfies every one of them. They would pass for the wrong reason and
+      // could not fail. So prove the recorder is LIVE on the same widget, in
+      // the same test: an ordinary row selected the ordinary way IS recorded,
+      // and the sentinel is still absent.
+      const $company = $(
+        '<li id="live-probe-row" class="select2-results__option" data-selected="false">Probe Co</li>'
+      ).data("data", { id: "Probe Co", text: "Probe Co", _resultId: "live-probe-row" });
+      resultsList().prepend($company);
+      $company.trigger("mouseenter");
+      picker.trigger("results:select", {});
+
+      expect(selected.map((d) => d.id)).toEqual(["Probe Co"]);
+      expect(selected.map((d) => d.id)).not.toContain(helper.manualEntrySentinelId);
     });
 
     test("it enters manual entry", () => {
