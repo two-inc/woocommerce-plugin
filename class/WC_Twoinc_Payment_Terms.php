@@ -305,26 +305,25 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                     $converted_cap = $cap !== null ? (float) WC_Twoinc_Helper::round_amt($cap * $rate) : null;
                     // A configured CAP that rounds to 0.00 is relayed AS
                     // 0.00 — it is NOT a failure and must not be dropped,
-                    // withheld or turned into "no cap". The pricing API
-                    // distinguishes an absent cap from a zero one: its
-                    // clamp tests the cap for PRESENCE, not truthiness, so
-                    // a cap of 0 forces the fee to zero, and the API's own
-                    // tests pin that (verified under TWO-25269).
-                    // Because the cap bounds the WHOLE line item, not the
-                    // percentage portion, that zeroes any fixed surcharge
-                    // configured alongside it too — which is why it is
-                    // reported, at info, for the same reason as the fixed
-                    // case below. It is still the right outcome: the
+                    // withheld or turned into "no cap". Per the pricing
+                    // API's contract a cap of zero clamps the fee to zero,
+                    // which is a different instruction from an ABSENT cap;
+                    // absence is what means uncapped (see
+                    // surcharge_monetary_components). Because the cap
+                    // bounds the WHOLE fee line item and not the
+                    // percentage portion, a zero cap also zeroes any fixed
+                    // surcharge configured alongside it — which is why it
+                    // is reported, at info, for the same reason as the
+                    // fixed case below. It is still the right outcome: the
                     // merchant configured a cap worth nothing in this
-                    // currency, and "charge no fee" is what that says. An
-                    // ABSENT cap is separately legitimate and means
-                    // uncapped (see surcharge_monetary_components).
+                    // currency, and "charge no fee" is what that says.
                     //
-                    // An earlier revision of this code failed CLOSED here
-                    // on the premise that a zero cap read downstream as
-                    // *no* cap and would relay an uncapped percentage. That
-                    // premise was wrong — see the note in
-                    // docs/surcharge-fx.md — and the guard was reverted.
+                    // An earlier revision failed CLOSED here on the
+                    // premise that a zero cap read downstream as *no* cap
+                    // and would relay an uncapped percentage. That premise
+                    // was wrong (TWO-25269) and the guard was reverted. It
+                    // withheld the fee block, not the payment method, so
+                    // its effect was the same zero fee reached silently.
                     if ($cap !== null && $converted_cap <= 0 && function_exists('wc_get_logger')) {
                         wc_get_logger()->info(
                             sprintf(
@@ -394,16 +393,18 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          * legitimate configuration: the percentage surcharge is then
          * charged uncapped, exactly as the merchant asked. Absence must
          * never be treated as a failure anywhere, and neither is a cap
-         * that converts to 0.00 — the pricing API treats cap 0 as "clamp
-         * the fee to zero", so it is relayed as 0.00 (docs/surcharge-fx.md).
+         * that converts to 0.00 — per the API's contract a cap of zero
+         * clamps the fee to zero, so it is relayed as 0.00 (TWO-25269).
          * The only fail-closed condition is no FX rate at all.
          *
          * Note the `> 0` filter: a cap typed as exactly 0 in the STORE
          * currency is normalised to ABSENT here, i.e. relayed as uncapped,
          * NOT as cap 0. Only an FX-converted 0.00 reaches the API as
-         * cap => 0. The two are therefore not interchangeable at this
-         * boundary even though the API distinguishes them — see
-         * docs/surcharge-fx.md.
+         * cap => 0. So although the API distinguishes a zero cap from an
+         * absent one, this boundary does not, and a merchant who types 0
+         * gets an uncapped percentage rather than no fee. Pre-existing and
+         * deliberately unchanged under TWO-25269; needs its own ticket if
+         * relaying a configured 0 verbatim is wanted.
          *
          * @param array{type: string, grid: array<int,array>} $settings
          * @return array{fixed: float|null, cap: float|null}

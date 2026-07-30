@@ -3814,16 +3814,14 @@ final class BrandConfigSpec
     {
         // A CONFIGURED cap that rounds to 0.00 once converted is relayed AS
         // 0.00. It is NOT a failure and must never be dropped, withheld or
-        // turned into "no cap": the pricing API's clamp tests the cap for
-        // PRESENCE, not truthiness, so cap 0 forces the fee to zero, and
-        // the API's own tests pin that (verified under TWO-25269, which
-        // holds the source references — not repeated here, this repo is
-        // public). The cap bounds the WHOLE line item, so this zeroes
-        // any fixed surcharge alongside it too — reported at info, never as
-        // a failure. Charging nothing is what a cap worth nothing in this
-        // currency says. An earlier revision failed closed here on the
-        // false premise that 0 read downstream as "uncapped"; see
-        // docs/surcharge-fx.md.
+        // turned into "no cap": per the pricing API's contract a cap of
+        // zero clamps the fee to zero, which is a different instruction
+        // from an absent cap. The cap bounds the WHOLE fee line item, so
+        // this zeroes any fixed surcharge alongside it too — reported at
+        // info, never as a failure. Charging nothing is what a cap worth
+        // nothing in this currency says. An earlier revision failed closed
+        // here on the false premise that 0 read downstream as "uncapped"
+        // (TWO-25269).
         $GLOBALS['__twoinc_test_currency'] = 'JPY';
         $gateway = self::fxGateway(null, [self::fxOk(['JPY' => 1000000.0])], [
             // Store currency EUR (default in these tests). The fixture
