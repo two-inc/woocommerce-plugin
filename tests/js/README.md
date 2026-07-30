@@ -149,6 +149,33 @@ about the company-search helper, so the bootstrap is left to no-op.
   `templateSelection` uses plain text, and the non-error messages borrowing WooCommerce
   core's own copy.
 
+`company-search-manual-entry.test.js` — the "my company is not on the list" row (TWO-25288):
+
+- the row is the **last child of the results list**, not a sibling beside it, and carries
+  everything the picker navigates by: `role="option"`, `data-selected="false"`, a stable id,
+  the `--selectable` class, and a payload with an id sentinel and a `_resultId` matching the
+  li. Reachability is asserted through the widget's own navigation — arrow twice and check
+  which row ended up highlighted — rather than by inspecting markup and hoping.
+- `data-selected="true"` is specifically pinned as wrong: the picker routes activation of an
+  already-selected row to closing the dropdown, so the row would look reachable and do
+  nothing. The mutation that flips it takes the activation tests down.
+- visibility is the search threshold and nothing else. The row is present at the threshold
+  with **zero** requests made, which is what rules out a "has a search run" gate, and the
+  threshold assertion injects a different number so a leftover literal `3` cannot pass.
+- activation prevents the selection: no `select2:select`, no company name, no company id. A
+  normal company row still selects, which is what stops the interception from being a
+  blanket one.
+- the handler that shows the row is bound **once** across five opens and repeated re-binds,
+  and exists before the dropdown's search field does. Both are regression pins: the previous
+  implementation bound it inside a polling callback, per open, with no `.off()`.
+- the row survives the picker emptying the list, and is not churned by its own observer —
+  asserted as the same DOM node across many observer turns, since the sync runs from a
+  MutationObserver on the list it appends to.
+- the label follows the localised text map rather than an English literal.
+- the affordance needs no template markup on the page, which is what makes it work on the
+  pay-for-order surface; and a company field's wrapper follows the field's own visibility,
+  which is what keeps manual entry usable there.
+
 ### Two defects these tests found, now fixed
 
 Both were pinned as characterisation tests when this suite landed, and both were fixed
@@ -182,7 +209,8 @@ suite green:
   and heading placement, and the currency-symbol fee label (ABN-468);
 - the selection side of company search — `onCompanySelected`-equivalent handling in
   `Twoinc.initialize`'s `select2:select` binding, `clearSelectedCompany()`, the
-  company-not-found button, the address autofill;
+  the address autofill. The manual-entry row is no longer among these — see its own suite
+  above;
 - `twoincDomHelper`'s field moving/reverting and validation cues;
 - `fixSelectWooPositionCompanyName`, `waitToFocus` and `addSelectWooFocusFixHandler` — DOM
   position and focus workarounds whose observable effect is layout.
