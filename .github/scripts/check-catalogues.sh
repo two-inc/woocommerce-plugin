@@ -56,7 +56,7 @@ shopt -u nullglob
 
 echo "checking ${#po_files[@]} catalogue(s)"
 
-tmp=$(mktemp -d)
+tmp=$(mktemp -d) || fail "could not create a temporary directory"
 trap 'rm -rf "$tmp"' EXIT
 
 status=0
@@ -97,8 +97,22 @@ for po in "${po_files[@]}"; do
         continue
     fi
 
-    if diff -u --label "$mo (committed)" --label "$po (recompiled)" \
-        "$tmp/committed.po" "$tmp/generated.po" >"$tmp/diff.txt"; then
+    # diff exits 0 for identical, 1 for differing, 2 for trouble. Folding 2
+    # into 1 would report a broken diff as a catalogue mismatch and send the
+    # developer to recompile a catalogue that was fine.
+    diff_status=0
+    diff -u --label "$mo (committed)" --label "$po (recompiled)" \
+        "$tmp/committed.po" "$tmp/generated.po" >"$tmp/diff.txt" 2>"$tmp/diff.err" ||
+        diff_status=$?
+
+    if [ "$diff_status" -gt 1 ]; then
+        echo "::error file=$mo::could not diff this catalogue against its source"
+        sed 's/^/  /' "$tmp/diff.err"
+        status=1
+        continue
+    fi
+
+    if [ "$diff_status" -eq 0 ]; then
         # Byte equality is not required, but its loss is the only warning that
         # the runner's gettext has started encoding differently, so say so.
         if cmp -s "$mo" "$tmp/generated.mo"; then
