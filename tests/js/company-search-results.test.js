@@ -344,6 +344,16 @@ describe("company search hints", () => {
       expect(ctx.helper.genSelectWooParams().language.inputTooShort({})).toBe("minst 4 tegn");
     });
 
+    test("interpolates gettext's positional placeholder too", () => {
+      // `#, php-format` legitimises `%1$d`, and a translator reordering
+      // arguments is entitled to use it. A literal "%d" replace leaves that
+      // token raw in the buyer's face. The msgid stays `%d`; only what the
+      // browser accepts widens.
+      ctx = harness.loadTwoinc({ text: { company_search_too_short: "Skriv %1$d tegn" } });
+
+      expect(ctx.helper.genSelectWooParams().language.inputTooShort({})).toBe("Skriv 3 tegn");
+    });
+
     test("renders into the real dropdown once the buyer starts typing", () => {
       ctx = harness.loadTwoinc();
       harness.buildCheckoutForm();
@@ -422,6 +432,124 @@ describe("company search hints", () => {
     });
   });
 
+  /**
+   * The empty-field hint is a rendered widget node, and `saveCheckoutInputs()`
+   * snapshots the widget's rendered container as the buyer's company name.
+   *
+   * Before this hint existed the container's only child was a text node
+   * holding a non-breaking space, which trimmed to empty — so the "did the
+   * buyer choose a company" guard was falsy for an untouched field. The hint
+   * is an ELEMENT child, so that guard stopped firing and the snapshot became
+   * the hint's own text. From there it reaches `getCompanyName()`,
+   * `Twoinc.customerCompany`, the sole-trader signup prefill, the
+   * intent-approved sentence, and — worst — `#billing_company`, which is
+   * POSTED WITH THE ORDER.
+   */
+  describe("the empty-field hint and the saved-input snapshot", () => {
+    afterEach(() => {
+      sessionStorage.clear();
+      jest.useRealTimers();
+    });
+
+    /**
+     * Attach the real widget to the real form so the hint is rendered, then
+     * snapshot the form the way the plugin does at page load.
+     *
+     * @returns {Object} the snapshot entry for the rendered company container
+     */
+    function snapshotUntouchedField() {
+      ctx = harness.loadTwoinc();
+      harness.buildCheckoutForm();
+      ctx.$("#billing_company_display").selectWoo(ctx.helper.genSelectWooParams());
+
+      // Guard: no rendered hint means the rest of this asserts nothing.
+      expect(
+        ctx.$("#select2-billing_company_display-container .select2-selection__placeholder").length
+      ).toBe(1);
+
+      ctx.dom.saveCheckoutInputs();
+      const saved = JSON.parse(sessionStorage.getItem("checkoutInputs"));
+
+      // Guard: the snapshot has to have found the checkout form at all. It
+      // looks the form up by `form[name="checkout"]`, so a harness form
+      // missing that attribute would take the early return and leave every
+      // assertion below vacuously true.
+      expect(saved).not.toHaveLength(0);
+
+      return saved.find((inp) => inp.id === "select2-billing_company_display-container");
+    }
+
+    test("is not snapshotted as the buyer's company name", () => {
+      const entry = snapshotUntouchedField();
+
+      expect(entry).toBeDefined();
+      expect(entry.val).toBe("");
+    });
+
+    test("is not carried in the sub-nodes the restore path re-appends", () => {
+      // Kept out of `subs` because it is not a selection, and because
+      // loadStorageInputs() re-appends every sub onto a container whose
+      // restored html already carries the hint.
+      const entry = snapshotUntouchedField();
+
+      expect(entry.subs).toEqual([]);
+    });
+
+    test("survives a restore from storage without doubling", () => {
+      snapshotUntouchedField();
+      jest.useFakeTimers();
+      ctx.dom.loadStorageInputs();
+      // The sub-node re-append is deferred a second by the plugin.
+      jest.advanceTimersByTime(2000);
+
+      expect(
+        ctx.$("#select2-billing_company_display-container .select2-selection__placeholder").length
+      ).toBe(1);
+      expect(ctx.$("#select2-billing_company_display-container").text()).toBe(
+        "Enter company name to search"
+      );
+    });
+
+    test("is not what getCompanyName and getCompanyData report", () => {
+      snapshotUntouchedField();
+
+      expect(ctx.dom.getCompanyName()).toBe("");
+      expect(ctx.dom.getCompanyData().company_name).toBe("");
+    });
+
+    test("is not written into the company field posted with the order", async () => {
+      // The assertion that matters, and driven through the plugin's own
+      // page-load bootstrap rather than a copy of its logic: that bootstrap's
+      // deferred "init the hidden Company name field" step is what reads the
+      // snapshot and writes #billing_company.
+      //
+      // Real timers, and awaited rather than advanced. jQuery runs its ready
+      // callbacks — the bootstrap among them — on a macrotask, so installing
+      // fake timers before yielding freezes the bootstrap before it has
+      // registered anything for a fake clock to advance. The wait covers that
+      // macrotask plus the bootstrap's own one-second defer.
+      snapshotUntouchedField();
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+
+      expect(ctx.$("#billing_company").val()).toBe("");
+      expect(ctx.$("#billing_company").val()).not.toContain("Enter company name");
+    });
+
+    test("gives way to a real selection once the buyer picks a company", () => {
+      // The mirror image: the fix must not blank a container that legitimately
+      // holds a chosen company, which is the snapshot's whole purpose.
+      ctx = harness.loadTwoinc();
+      harness.buildCheckoutForm({
+        companyOptions:
+          '<option value=""></option><option value="Example Trading Co" selected>Example Trading Co</option>'
+      });
+      ctx.$("#billing_company_display").selectWoo(ctx.helper.genSelectWooParams());
+      ctx.dom.saveCheckoutInputs();
+
+      expect(ctx.dom.getCompanyName()).toBe("Example Trading Co");
+    });
+  });
+
   describe("the strings PHP registers", () => {
     // The keys are the contract between the checkout's localisation array and
     // the helper functions above, and nothing else in the suite can see both
@@ -446,7 +574,18 @@ describe("company search hints", () => {
     test("leaves the min-chars placeholder for the browser to resolve", () => {
       // A %d resolved in PHP would put the claimed minimum out of reach of
       // the constant the widget enforces — the drift this design prevents.
+      //
+      // The negative below is not enough on its own: it also passes if PHP
+      // grows a sprintf() around the string, since the literal in the source
+      // would still read "%d". So assert positively that the value PHP
+      // registers into the `text` array still carries an unresolved
+      // placeholder by the time it is emitted.
       expect(checkout).not.toMatch(/'company_search_too_short' *=> *__\('Please enter \d/);
+      const emitted = checkout.match(/'company_search_too_short' *=> *([^\n]*),\n/);
+
+      expect(emitted).not.toBeNull();
+      expect(emitted[1]).toContain("%d");
+      expect(emitted[1]).not.toMatch(/sprintf|number_format|str_replace/);
     });
   });
 });
