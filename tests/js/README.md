@@ -181,6 +181,13 @@ its rendered effect, which is CSS. Likewise the spinner's own appearance: the te
 node's class, emptiness and `aria-hidden`, while the spokes geometry and animation live
 wholly in the stylesheet and are not asserted here.
 
+That gap has already bitten once. The spinner shipped for one commit with a stepped timing
+function whose 30deg increment exactly matched the spoke pattern's 30deg period, so every
+step mapped the gradient onto itself and the spinner rendered motionless. Nothing failed —
+jsdom does not evaluate the animation, and asserting the animation _name_ would have passed
+it too. If you change the spoke period or the timing function, check it in a real browser;
+the suite cannot tell you.
+
 ## Adding tests
 
 Prefer driving behaviour through the real widget — open it with `openCompanyWidget()` and

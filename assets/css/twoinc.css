@@ -329,8 +329,11 @@
   -webkit-mask: radial-gradient(farthest-side, transparent 38%, #000 40%);
   mask: radial-gradient(farthest-side, transparent 38%, #000 40%);
 
-  /* steps() gives the classic mechanical spoke-stepping tick. */
-  animation: two-spinner-spin 1s steps(12, end) infinite;
+  /* Must stay `linear`. A stepped timing function whose increment is a
+     multiple of the 30deg spoke period above maps the pattern onto itself at
+     every step, so the spinner renders completely motionless — steps(12) is
+     exactly 30deg a step and does this. Nothing in CI catches it. */
+  animation: two-spinner-spin 1s linear infinite;
 }
 @keyframes two-spinner-spin {
   to {
