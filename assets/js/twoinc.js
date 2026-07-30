@@ -122,7 +122,11 @@ let twoincSelectWooHelper = {
     const template =
       (window.twoinc && window.twoinc.text && window.twoinc.text.company_search_too_short) ||
       "Please enter %d or more characters";
-    return template.replace("%d", twoincSelectWooHelper.companySearchMinLength);
+    // Matches gettext's positional form (`%1$d`) as well as the bare `%d` the
+    // msgid carries: a translator is entitled to reorder arguments, and the
+    // `#, php-format` family of placeholders is what they would reach for. The
+    // msgid itself stays `%d` — changing it would invalidate the catalogues.
+    return template.replace(/%(\d+\$)?d/, twoincSelectWooHelper.companySearchMinLength);
   },
 
   /**
@@ -901,14 +905,34 @@ let twoincDomHelper = {
     for (let inp of checkoutForm.querySelectorAll('span[id$="-container"]')) {
       if (inp.getAttribute("id")) {
         let textOnly = inp.textContent;
+        let hasPlaceholder = false;
         let subs = [];
         inp.childNodes.forEach(function (val) {
           if (val.nodeType === Node.TEXT_NODE) {
             textOnly = val.nodeValue.trim();
           } else if (val.nodeType === Node.ELEMENT_NODE) {
+            if (val.classList.contains("select2-selection__placeholder")) {
+              // The empty-field hint (TWO-25288) is an ELEMENT child, unlike
+              // the non-breaking space the empty option used to render as a
+              // text node — so neither the textContent seed above nor the
+              // TEXT_NODE branch would treat this container as empty, and the
+              // hint would be snapshotted as though the buyer had chosen a
+              // company of that name. getCompanyName() reads this value, and
+              // it is written into the posted #billing_company field.
+              //
+              // Excluded from `subs` for the same reason it is not a
+              // selection: loadStorageInputs() re-appends every sub onto a
+              // container whose restored html already carries the hint, so
+              // keeping it here rendered the hint twice.
+              hasPlaceholder = true;
+              return;
+            }
             subs.push(val.outerHTML);
           }
         });
+        // A rendered placeholder means, by definition, that the widget has no
+        // selection.
+        if (hasPlaceholder) textOnly = "";
         checkoutInputs.push({
           htmlTag: inp.tagName,
           id: inp.getAttribute("id"),
