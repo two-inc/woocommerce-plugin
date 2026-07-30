@@ -11,6 +11,9 @@
 
 "use strict";
 
+const fs = require("fs");
+const path = require("path");
+
 const harness = require("./wc-harness");
 
 describe("company search ajax transport", () => {
@@ -333,9 +336,9 @@ describe("company search ajax transport", () => {
     });
 
     test("the spinner node is removed once the search ends", () => {
-      // Removed, not merely hidden: a hidden node would leave the spokes
-      // animation running behind a closed dropdown, and it is the removal
-      // that guarantees the single-node property above.
+      // Removed, not merely hidden: a hidden node would leave the animated
+      // loading image decoding behind a closed dropdown, and it is the
+      // removal that guarantees the single-node property above.
       const run = search();
       expect(ctx.$(".twoinc-search-spinner").length).toBe(1);
 
@@ -345,16 +348,38 @@ describe("company search ajax transport", () => {
     });
 
     test("the spinner is a single childless element carrying the styling hook", () => {
-      // The radial-spokes figure (TWO-25288) is drawn entirely in CSS on
-      // this one node. Any inner markup would be dead weight the
-      // stylesheet no longer styles, so pin the emptiness as well as the
-      // class.
+      // The figure (TWO-25288) is a background-image on this one node, which
+      // needs the node to stay empty: any inner markup would sit on top of
+      // the painted background as dead weight the stylesheet does not style.
+      // So pin the emptiness as well as the class.
       search();
 
       const $spinner = ctx.$(".twoinc-search-spinner");
       expect($spinner).toHaveLength(1);
       expect($spinner.children()).toHaveLength(0);
       expect($spinner.text()).toBe("");
+    });
+
+    test("the spinner is painted with the animated loading image", () => {
+      // Everything else here pins markup, which stays green whether the
+      // spinner paints anything at all — the earlier attempt on this ticket
+      // shipped a node that rendered nothing visible with the suite green.
+      // So resolve the real stylesheet and read back what the node paints.
+      //
+      // Two halves, both needed: the computed rule proves the CSS points at
+      // the asset, and the existence check proves the asset is actually in
+      // the tree. A correct url() aimed at a missing file satisfies the
+      // first on its own.
+      harness.injectStylesheet();
+      search();
+
+      const spinner = ctx.$(".twoinc-search-spinner")[0];
+      const painted = window.getComputedStyle(spinner);
+      expect(painted.backgroundImage).toContain("loader.gif");
+      expect(painted.backgroundRepeat).toBe("no-repeat");
+
+      const assetPath = path.join(harness.REPO_ROOT, "assets", "images", "loader.gif");
+      expect(fs.existsSync(assetPath)).toBe(true);
     });
 
     test("the spinner lands inside the widget's own search box", () => {

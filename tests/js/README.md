@@ -111,8 +111,13 @@ about the company-search helper, so the bootstrap is left to no-op.
   removed rather than merely hidden once a search ends, and no throw when there is no open
   dropdown to hang it on.
 - spinner shape (TWO-25288): a single childless element carrying the styling hook class and
-  `aria-hidden="true"`. The radial-spokes figure is drawn entirely in CSS on that one node,
-  so inner markup would be dead weight — the childlessness is pinned deliberately.
+  `aria-hidden="true"`, landing inside the widget's own search box. The stylesheet paints an
+  animated loading GIF onto that one node as a background-image, so inner markup would be
+  dead weight — the childlessness is pinned deliberately.
+- spinner paint (TWO-25288): the real stylesheet is injected with `injectStylesheet()` and
+  the computed `background-image` is read back, so the rule is proven to point at the asset;
+  paired with an on-disk existence check, because a correct URL aimed at a missing file
+  would satisfy the computed style on its own.
 - message copy: the built-in fallback, the localised override, and that the widget renders
   ours rather than select2's own "The results could not be loaded."
 
@@ -177,16 +182,21 @@ suite green:
 
 `toggleCompanySearchSpinner()`'s `$search.length === 0` early return is covered (via the
 closed-dropdown test), but the `.twoinc-searching` class it toggles is asserted rather than
-its rendered effect, which is CSS. Likewise the spinner's own appearance: the tests pin the
-node's class, emptiness and `aria-hidden`, while the spokes geometry and animation live
-wholly in the stylesheet and are not asserted here.
+its rendered effect, which is CSS.
 
-That gap has already bitten once. The spinner shipped for one commit with a stepped timing
-function whose 30deg increment exactly matched the spoke pattern's 30deg period, so every
-step mapped the gradient onto itself and the spinner rendered motionless. Nothing failed —
-jsdom does not evaluate the animation, and asserting the animation _name_ would have passed
-it too. If you change the spoke period or the timing function, check it in a real browser;
-the suite cannot tell you.
+The spinner's paint is partly covered: `injectStylesheet()` puts the real stylesheet in the
+document and jsdom's cascade resolves enough of it to prove the rule points at the loading
+GIF. What jsdom cannot tell you is whether the result is _visible_ — box geometry, stacking,
+and whether the image animates are all beyond it, and the multi-value `background-position`
+shorthand does not resolve at all (it reads back empty however the rule is written, so do
+not assert on it).
+
+Treat a change to the spinner's appearance as needing a real browser. This gap has bitten
+once already: an earlier attempt on TWO-25288 drew the figure in CSS and shipped for one
+commit rendering completely motionless, with the whole suite green — nothing in jsdom
+evaluates an animation, and asserting an animation's _name_ would have passed too. Moving to
+an animated image asset is what made the paint assertable at all, but "assertable" stops at
+the URL.
 
 ## Adding tests
 

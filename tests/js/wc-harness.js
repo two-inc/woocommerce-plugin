@@ -40,6 +40,8 @@ const REPO_ROOT = path.resolve(__dirname, "..", "..");
 
 const SOURCE_PATH = "assets/js/twoinc.js";
 
+const STYLESHEET_PATH = "assets/css/twoinc.css";
+
 /**
  * Put the real jQuery + the real selectWoo widget on the jsdom window.
  *
@@ -327,9 +329,38 @@ function releaseWidgets($) {
   }
 }
 
+/**
+ * Inject the plugin's real stylesheet into the jsdom document.
+ *
+ * Read from disk and inlined as a `<style>` element rather than linked: jsdom
+ * does not fetch `<link rel=stylesheet>` hrefs, so a link would leave
+ * `getComputedStyle` returning nothing. Inlining means the assertions run
+ * against the same bytes the plugin ships.
+ *
+ * jsdom's cascade is real but partial. It resolves `background-image`,
+ * `background-repeat` and `background-size`, so a rule's asset URL can be
+ * asserted on. It does NOT resolve the multi-value `background-position`
+ * shorthand — that reads back as an empty string whatever the stylesheet
+ * says, so do not assert on it.
+ *
+ * Call once per test that needs computed style, after the DOM is built. The
+ * element goes in `<head>`, so a test that clears `document.body` keeps it.
+ *
+ * @returns {HTMLStyleElement} the injected style element
+ */
+function injectStylesheet() {
+  const css = fs.readFileSync(path.join(REPO_ROOT, STYLESHEET_PATH), "utf8");
+  const style = document.createElement("style");
+  style.textContent = css;
+  document.head.appendChild(style);
+  return style;
+}
+
 module.exports = {
   REPO_ROOT: REPO_ROOT,
   SOURCE_PATH: SOURCE_PATH,
+  STYLESHEET_PATH: STYLESHEET_PATH,
+  injectStylesheet: injectStylesheet,
   loadTwoinc: loadTwoinc,
   buildCheckoutForm: buildCheckoutForm,
   openCompanyWidget: openCompanyWidget,
