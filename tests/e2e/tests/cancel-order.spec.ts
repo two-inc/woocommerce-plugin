@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 
-import { getOrderState, waitForOrderState } from "../checkout-api.js";
+import { getOrderState, waitForOrderState } from "../two-api.js";
 import * as checkout from "../pages/checkout.js";
 import * as store from "../pages/store.js";
 import * as wpAdmin from "../pages/wp-admin.js";

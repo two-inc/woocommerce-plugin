@@ -563,7 +563,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                 'currency' => get_woocommerce_currency(),
                 'gross_amount' => strval(WC_Twoinc_Helper::round_amt($gross_amount)),
                 'buyer_country_code' => $buyer_country,
-                // Required by OrderFeeRequestSchema. Hardcoded false for
+                // Required by the pricing request. Hardcoded false for
                 // parity with Magento (SurchargeCalculator) — there is no
                 // admin recourse-pricing config on either plugin yet.
                 'approved_on_recourse' => false,
