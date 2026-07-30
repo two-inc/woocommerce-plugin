@@ -1043,6 +1043,7 @@ let twoincDomHelper = {
         postal_code: ""
       });
     }
+    Twoinc.getInstance().registryAddressApplied = false;
 
     jQuery("#select2-billing_company_display-container")
       .parent()
@@ -1125,12 +1126,6 @@ let twoincDomHelper = {
   enterManualCompanyEntry: function () {
     window.twoinc.enable_company_search = "no";
 
-    // Read BEFORE the field below is blanked: this is the only evidence that a
-    // company was actually picked (and its address therefore possibly looked
-    // up), as opposed to the row being reached by typing straight to the
-    // threshold and never selecting anything — the ordinary path.
-    const hadPickedCompany = !!jQuery("#company_id").val();
-
     jQuery("#billing_company_display").val("");
     // The real company field too, not just the display one. Without this the
     // manual field the buyer is about to be shown is pre-filled with the
@@ -1141,18 +1136,22 @@ let twoincDomHelper = {
     jQuery("#company_id").val("");
 
     // The registry address too, mirroring clearSelectedCompany — but ONLY when
-    // a pick actually happened. Reaching manual entry does not imply a lookup
-    // ran: the row is live from the first keystroke, before any request goes
-    // out, and clicking it unconditionally would blank a logged-in buyer's own
-    // account-prefilled address for no reason. When a pick DID happen, leaving
-    // its registered address behind ships the order to it, in fields the buyer
-    // never visibly touched and would have no reason to check.
-    if (hadPickedCompany && window.twoinc.enable_address_lookup === "yes") {
+    // a registry lookup actually wrote it. Reaching manual entry does not
+    // imply one ran: the row is live from the first keystroke, before any
+    // request goes out, and clearing unconditionally would blank a logged-in
+    // buyer's own account-prefilled address for no reason. `#company_id` is
+    // NOT that signal — it is written by account-restore and sole-trader code
+    // with no lookup behind it, and stays empty for a picked company that
+    // simply carries no organisation number even though its lookup DID run —
+    // so this reads `registryAddressApplied` instead, which is set only on
+    // the branch that actually writes looked-up data.
+    if (Twoinc.getInstance().registryAddressApplied) {
       Twoinc.getInstance().setAddress({
         street_address: "",
         city: "",
         postal_code: ""
       });
+      Twoinc.getInstance().registryAddressApplied = false;
     }
 
     Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData();
@@ -2192,6 +2191,12 @@ class Twoinc {
 
     this.isInitialized = false;
     this.isTwoincApproved = null;
+    // Whether the address fields currently hold a registry lookup's result,
+    // as opposed to the buyer's own (typed or account-prefilled) address.
+    // Set only where `setAddress` is actually called with looked-up data
+    // (TWO-25288); read by `enterManualCompanyEntry` to decide whether
+    // disowning the company should clear the address behind it.
+    this.registryAddressApplied = false;
     this.orderIntentCheck = {
       interval: null,
       pendingCheck: false,
@@ -2623,6 +2628,14 @@ class Twoinc {
       // Use new address lookup by default
       if (response.addresses) {
         self.setAddress(response.addresses[0]);
+        // Only here, on the branch that actually writes registry data. A
+        // buyer's own address (account-prefilled, or typed by hand) never
+        // goes through this path, so this flag distinguishes the two —
+        // `#company_id` being non-empty does not: it is also written by
+        // account-restore and sole-trader code with no lookup behind it, and
+        // is empty for company hits that carry no organisation number even
+        // though a lookup DID run for them.
+        self.registryAddressApplied = true;
       }
     });
   }

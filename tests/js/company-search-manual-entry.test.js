@@ -543,19 +543,19 @@ describe("company-search manual-entry affordance", () => {
     }
 
     test("the disowned company's registry address does not survive into the order", () => {
-      ctx.twoinc.enable_address_lookup = "yes";
       jest.useFakeTimers();
       const $select = openWithAffordance();
       const picker = $select.data("select2");
       givenLookedUpAddress();
 
-      // A pick has to actually happen for a lookup to have run — reaching the
-      // manual-entry row alone (typing to the threshold) never triggers one.
-      // Without this the test cannot distinguish "the fix clears a looked-up
-      // address" from "the fix always clears these fields", and the latter was
-      // a real bug the mutation harness caught: it wipes a logged-in buyer's
-      // own account-prefilled address on the ordinary no-pick path.
-      $("#company_id").val("11111111");
+      // The gate reads this flag, not `#company_id` (see the comment at the
+      // clear site): `#company_id` is also written by account-restore and
+      // sole-trader code with no lookup behind it, and stays empty for a
+      // picked company with no organisation number even though its lookup DID
+      // run — so faking a pick via `#company_id` would prove the wrong thing.
+      // The flag's own producer (`addressLookup`'s success branch) is
+      // exercised separately below.
+      ctx.Twoinc.getInstance().registryAddressApplied = true;
 
       type("abc");
       row().trigger("mouseenter");
@@ -568,28 +568,8 @@ describe("company-search manual-entry affordance", () => {
       expect($("#billing_address_2").val()).toBe("");
       expect($("#billing_city").val()).toBe("");
       expect($("#billing_postcode").val()).toBe("");
-      jest.useRealTimers();
-    });
-
-    test("the address is left alone when address lookup is off", () => {
-      // Nothing filled those fields on our behalf, so clearing them would be
-      // wiping the buyer's own typing. Same condition clearSelectedCompany uses.
-      ctx.twoinc.enable_address_lookup = "no";
-      jest.useFakeTimers();
-      const $select = openWithAffordance();
-      const picker = $select.data("select2");
-      givenLookedUpAddress();
-      $("#company_id").val("11111111");
-
-      type("abc");
-      row().trigger("mouseenter");
-      picker.trigger("results:select", {});
-      jest.advanceTimersByTime(1);
-
-      expect($("#billing_address_1").val()).toBe("Registry Street 1");
-      expect($("#billing_address_2").val()).toBe("Flat 2");
-      expect($("#billing_city").val()).toBe("Registryville");
-      expect($("#billing_postcode").val()).toBe("0001");
+      // And the flag itself is consumed, not left set for the next entry.
+      expect(ctx.Twoinc.getInstance().registryAddressApplied).toBe(false);
       jest.useRealTimers();
     });
 
@@ -597,14 +577,15 @@ describe("company-search manual-entry affordance", () => {
       // The ordinary path: type to the threshold, see nothing you like, click
       // "not on the list". No pick, so no lookup ever ran — clearing the
       // address here would wipe the buyer's own account-prefilled address for
-      // no reason. This is the scenario the un-gated version of the fix
-      // (mirroring clearSelectedCompany verbatim) got wrong.
-      ctx.twoinc.enable_address_lookup = "yes";
+      // no reason. This is the scenario an unconditional clear, or a clear
+      // gated on `#company_id` alone, gets wrong: a logged-in buyer can have
+      // `#company_id` prefilled by account-restore with no lookup behind it.
       jest.useFakeTimers();
       const $select = openWithAffordance();
       const picker = $select.data("select2");
       givenLookedUpAddress();
-      // #company_id is deliberately left empty — no pick happened.
+      $("#company_id").val("11111111"); // account-restored, not a fresh pick
+      // registryAddressApplied deliberately left false — no lookup ran.
 
       type("abc");
       row().trigger("mouseenter");
@@ -616,6 +597,70 @@ describe("company-search manual-entry affordance", () => {
       expect($("#billing_city").val()).toBe("Registryville");
       expect($("#billing_postcode").val()).toBe("0001");
       jest.useRealTimers();
+    });
+
+    test("a picked company with no organisation number still has its looked-up address cleared", () => {
+      // A company hit can carry no organisation number at all (optional
+      // field) and still have had a real address lookup run for it — the
+      // lookup is keyed off `lookup_id`, not the org number. Gating on
+      // `#company_id` being non-empty would let this case through; gating on
+      // the flag does not.
+      jest.useFakeTimers();
+      const $select = openWithAffordance();
+      const picker = $select.data("select2");
+      givenLookedUpAddress();
+      $("#company_id").val(""); // the org-number-less pick, as it lands in the DOM
+      ctx.Twoinc.getInstance().registryAddressApplied = true;
+
+      type("abc");
+      row().trigger("mouseenter");
+      picker.trigger("results:select", {});
+      jest.advanceTimersByTime(1);
+
+      expect($("#billing_address_1").val()).toBe("");
+      expect($("#billing_address_2").val()).toBe("");
+      expect($("#billing_city").val()).toBe("");
+      expect($("#billing_postcode").val()).toBe("");
+      jest.useRealTimers();
+    });
+
+    test("addressLookup sets the flag only on a successful response with addresses", () => {
+      // Closes the coupling gap: everything above sets/reads the flag
+      // directly, so nothing proves `addressLookup` itself is the flag's real
+      // producer. Drive it through a picked select2:select the way
+      // `enableCompanySearch` wires it, with a stubbed ajax response.
+      $("form[name='checkout']").append(
+        [
+          "<input type='text' id='billing_address_1' />",
+          "<input type='text' id='billing_address_2' />",
+          "<input type='text' id='billing_city' />",
+          "<input type='text' id='billing_postcode' />"
+        ].join("\n")
+      );
+      const ajax = harness.stubAjax($);
+      const twoinc = ctx.Twoinc.getInstance();
+      expect(twoinc.registryAddressApplied).toBe(false);
+
+      twoinc.addressLookup({ lookup_id: "lookup-1" });
+      expect(twoinc.registryAddressApplied).toBe(false); // not yet — pending
+
+      ajax.calls[0].succeed({
+        addresses: [
+          { street_address: "Registry Street 1", city: "Registryville", postal_code: "0001" }
+        ]
+      });
+
+      expect(twoinc.registryAddressApplied).toBe(true);
+      expect($("#billing_address_1").val()).toBe("Registry Street 1");
+
+      // A response carrying no `addresses` key at all (the lookup found
+      // nothing) must not falsely arm the flag.
+      twoinc.registryAddressApplied = false;
+      twoinc.addressLookup({ lookup_id: "lookup-2" });
+      ajax.calls[1].succeed({});
+      expect(twoinc.registryAddressApplied).toBe(false);
+
+      ajax.restore();
     });
 
     test("the display select's own value is cleared, not just hidden", () => {
