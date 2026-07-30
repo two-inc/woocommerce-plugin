@@ -665,7 +665,7 @@ msgid "Surcharge cap for the %s-day term cannot be 0. To charge nothing on this 
 msgstr "Maxbeloppet för tillägget på terminen med %s dagar får inte vara 0. Om du inte vill debitera något för denna termin sätter du procenten och den fasta avgiften till 0 i stället och lämnar maxbeloppet tomt."
 
 #: class/WC_Twoinc.php
-msgid "A cap of 0 is not allowed. To charge nothing on a term, set that term's percentage and fixed fee to 0 instead."
+msgid "A cap of 0 is not allowed. To charge nothing on a term, set the percentage and the fixed fee for that term to 0 instead."
 msgstr "Ett maxbelopp på 0 är inte tillåtet. Om du inte vill debitera något för en termin sätter du terminens procent och fasta avgift till 0 i stället."
 
 #: class/WC_Twoinc.php

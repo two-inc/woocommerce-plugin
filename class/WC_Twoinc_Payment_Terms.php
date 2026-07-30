@@ -464,7 +464,11 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          */
         private static function configured_cap_amount(array $row)
         {
-            if (!isset($row['limit'])) {
+            if (!isset($row['limit']) || !is_scalar($row['limit'])) {
+                // is_scalar: a hand-edited or imported option can store an
+                // array here — the same arrival routes that justify relaying a
+                // stored zero — and casting one to string is a PHP warning.
+                // The old `(float) $row['limit'] > 0` test cast it silently.
                 return null;
             }
             $raw = trim((string) $row['limit']);
@@ -482,9 +486,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
             $row = isset($settings['grid'][$days]) && is_array($settings['grid'][$days]) ? $settings['grid'][$days] : [];
             return [
                 'fixed' => $has_fixed && isset($row['fixed']) && (float) $row['fixed'] > 0 ? (float) $row['fixed'] : null,
-                'cap' => $has_percentage && self::configured_cap_amount($row) !== null
-                    ? self::configured_cap_amount($row)
-                    : null,
+                'cap' => $has_percentage ? self::configured_cap_amount($row) : null,
             ];
         }
 

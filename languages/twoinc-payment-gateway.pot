@@ -984,7 +984,7 @@ msgid "Surcharge cap for the %s-day term cannot be 0. To charge nothing on this 
 msgstr ""
 
 #: class/WC_Twoinc.php
-msgid "A cap of 0 is not allowed. To charge nothing on a term, set that term's percentage and fixed fee to 0 instead."
+msgid "A cap of 0 is not allowed. To charge nothing on a term, set the percentage and the fixed fee for that term to 0 instead."
 msgstr ""
 
 #: class/WC_Twoinc.php

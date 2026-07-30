@@ -1024,7 +1024,7 @@ msgid "Surcharge cap for the %s-day term cannot be 0. To charge nothing on this 
 msgstr "Het maximum voor de toeslag voor de termijn van %s dagen mag niet 0 zijn. Als je voor deze termijn niets in rekening wilt brengen, stel dan het percentage en het vaste bedrag in op 0 en laat het maximum leeg."
 
 #: class/WC_Twoinc.php
-msgid "A cap of 0 is not allowed. To charge nothing on a term, set that term's percentage and fixed fee to 0 instead."
+msgid "A cap of 0 is not allowed. To charge nothing on a term, set the percentage and the fixed fee for that term to 0 instead."
 msgstr "Een maximum van 0 is niet toegestaan. Als je voor een termijn niets in rekening wilt brengen, stel dan het percentage en het vaste bedrag van die termijn in op 0."
 
 #: class/WC_Twoinc.php

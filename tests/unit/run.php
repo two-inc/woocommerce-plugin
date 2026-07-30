@@ -196,6 +196,7 @@ final class BrandConfigSpec
         WC_Twoinc_Brand::reset();
         putenv('TWO_BRAND_CODE');
         unset($GLOBALS['__twoinc_test_currency']);
+        unset($GLOBALS['__twoinc_test_price_decimals']);
         // The STORE currency is a separate global from the ACTIVE one
         // (bootstrap.php stubs get_option('woocommerce_currency') and
         // get_woocommerce_currency() independently), and it was never reset
@@ -1786,20 +1787,34 @@ final class BrandConfigSpec
         // Non-array input → empty grid
         TinyAssert::same([], $gateway->validate_two_surcharge_grid_field('surcharge_grid', ''));
 
-        // FIXED-ONLY: the Cap column is not live, admin.js hides it, and a
-        // hidden input still posts. A cap stored while the type was percentage
-        // therefore keeps arriving; refusing it would fail the whole save over
-        // a cell the merchant can neither see nor clear. Dropped instead, which
-        // also retires the legacy row.
-        $fixed_only = self::gateway();
-        $fixed_only->test_post_data = [$fixed_only->get_field_key('surcharge_type') => 'fixed'];
-        TinyAssert::same(
-            [30 => ['fixed' => '5']],
-            $fixed_only->validate_two_surcharge_grid_field('surcharge_grid', [
-                30 => ['fixed' => '5', 'percentage' => '', 'limit' => '0'],
-            ]),
-            'a legacy zero cap must never block a fixed-only save; it is dropped'
-        );
+        // The Cap column is HIDDEN for a type without a percentage, but a
+        // hidden input still posts, so a cap stored while the type was
+        // percentage keeps arriving. Refusing it would fail the whole save
+        // over a cell the merchant can neither see nor clear, so the zero rule
+        // is skipped while the column is hidden — for every such type,
+        // 'none' included, because disabling surcharges is a normal save.
+        foreach (['fixed', 'none'] as $type_without_percentage) {
+            $hidden = self::gateway();
+            $hidden->test_post_data = [$hidden->get_field_key('surcharge_type') => $type_without_percentage];
+            TinyAssert::same(
+                [30 => ['fixed' => '5', 'limit' => '0']],
+                $hidden->validate_two_surcharge_grid_field('surcharge_grid', [
+                    30 => ['fixed' => '5', 'percentage' => '', 'limit' => '0'],
+                ]),
+                sprintf('a legacy zero cap must never block a "%s" save', $type_without_percentage)
+            );
+            // SKIPPED, not dropped. A valid cap must survive a round trip
+            // through a type that hides the column, exactly as the equally
+            // inapplicable percentage cell does — otherwise disabling and
+            // re-enabling surcharges silently discards every configured cap.
+            TinyAssert::same(
+                [30 => ['percentage' => '2.5', 'limit' => '50']],
+                $hidden->validate_two_surcharge_grid_field('surcharge_grid', [
+                    30 => ['percentage' => '2.5', 'limit' => '50'],
+                ]),
+                sprintf('a valid cap must survive a "%s" save, not be discarded', $type_without_percentage)
+            );
+        }
     }
 
     private static function testSurchargeGridEnforcesMerchantFixedCap(): void
