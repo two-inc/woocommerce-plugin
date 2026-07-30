@@ -251,7 +251,7 @@
   opacity: 0.85;
 }
 /*
- * The one loading idiom in this plugin: a 1.4s staggered three-dot opacity
+ * The dot-pulse loading idiom: a 1.4s staggered three-dot opacity
  * pulse, timing mirroring the Magento checkout's .two-term-chip__loading.
  * Shared by the term-chip fee quote and the order-intent check
  * (.twoinc-loader) — one element, one keyframes block, no duplication.
@@ -286,26 +286,70 @@
 }
 
 /*
- * Company-search spinner (TWO-25232). Sits inside the select2 search field
- * itself, not in the results list, so it reads as "this field is working"
- * and does not fight the results message it would otherwise replace. Same
- * .twoinc-dots pulse as every other loading state here. Only laid out while
- * .twoinc-searching is set, so the reserved right-hand gutter appears with
- * the spinner instead of permanently narrowing the input.
+ * Company-search spinner (TWO-25232, respun TWO-25288). Sits inside the
+ * select2 search field itself, not in the results list, so it reads as "this
+ * field is working" and does not fight the results message it would otherwise
+ * replace. The reserved right-hand gutter is only laid out while
+ * .twoinc-searching is set, so it appears with the spinner instead of
+ * permanently narrowing the input.
+ *
+ * Radial spokes, drawn purely in CSS on one childless node — no image asset
+ * and no inner markup for the stylesheet to stay in step with.
+ *
+ * THE SPINNER SELECTOR MUST STAY A SINGLE FLAT CLASS. A brand overlay
+ * recolours it with a flat single-class rule and wins on stylesheet load
+ * order; raising specificity here (e.g. by scoping under
+ * .select2-search--dropdown) would silently break branded recolouring with
+ * nothing failing in CI. Note the spokes rotate via transform, so the
+ * vertical centring uses top/height arithmetic rather than a translate that
+ * the animation would immediately overwrite.
  */
 .select2-search--dropdown.twoinc-searching {
   position: relative;
 }
 .twoinc-search-spinner {
-  display: none;
-}
-.select2-search--dropdown.twoinc-searching .twoinc-search-spinner {
   display: inline-block;
   position: absolute;
-  top: 50%;
   right: 14px;
-  transform: translateY(-50%);
+  top: calc(50% - 0.5em);
+  width: 1em;
+  height: 1em;
+  vertical-align: middle;
+  border-radius: 50%;
   pointer-events: none;
+
+  /* Colour: an overlay sets --two-spinner-color once and is done. Falls back
+     to the inherited text colour, which is what the existing overlay `color:`
+     overrides already set. */
+  color: var(--two-spinner-color, currentColor);
+
+  /* 12 spokes: 30deg period, 10deg of ink each. */
+  background: repeating-conic-gradient(
+    from 0deg,
+    currentColor 0deg 10deg,
+    transparent 10deg 30deg
+  );
+
+  /* Punch out the middle so the spokes read as spokes, not a pie. */
+  -webkit-mask: radial-gradient(farthest-side, transparent 38%, #000 40%);
+  mask: radial-gradient(farthest-side, transparent 38%, #000 40%);
+
+  /* steps() gives the classic mechanical spoke-stepping tick. */
+  animation: two-spinner-spin 1s steps(12, end) infinite;
+}
+@keyframes two-spinner-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+/*
+ * A loading indicator must keep indicating, so slow it rather than stopping
+ * it — a frozen spinner reads as a hung page.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .twoinc-search-spinner {
+    animation-duration: 3s;
+  }
 }
 .select2-search--dropdown.twoinc-searching .select2-search__field {
   padding-right: 30px;

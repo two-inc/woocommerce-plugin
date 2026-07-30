@@ -108,7 +108,11 @@ about the company-search helper, so the bootstrap is left to no-op.
   request that _is_ current still does the work.
 - spinner lifecycle: raised per search, cleared on success and on every failure including
   the silent one, exactly one spinner node however many searches run in one open dropdown,
-  and no throw when there is no open dropdown to hang it on.
+  removed rather than merely hidden once a search ends, and no throw when there is no open
+  dropdown to hang it on.
+- spinner shape (TWO-25288): a single childless element carrying the styling hook class and
+  `aria-hidden="true"`. The radial-spokes figure is drawn entirely in CSS on that one node,
+  so inner markup would be dead weight — the childlessness is pinned deliberately.
 - message copy: the built-in fallback, the localised override, and that the widget renders
   ours rather than select2's own "The results could not be loaded."
 
@@ -173,7 +177,9 @@ suite green:
 
 `toggleCompanySearchSpinner()`'s `$search.length === 0` early return is covered (via the
 closed-dropdown test), but the `.twoinc-searching` class it toggles is asserted rather than
-its rendered effect, which is CSS.
+its rendered effect, which is CSS. Likewise the spinner's own appearance: the tests pin the
+node's class, emptiness and `aria-hidden`, while the spokes geometry and animation live
+wholly in the stylesheet and are not asserted here.
 
 ## Adding tests
 

@@ -88,23 +88,25 @@ let twoincSelectWooHelper = {
   },
 
   /**
-   * Toggle the in-field search spinner. Reuses the one loading idiom in
-   * this plugin (.twoinc-dots — shared with the order-intent check and the
-   * term-chip fee quote) rather than introducing a second one.
+   * Toggle the in-field search spinner (TWO-25288).
    *
-   * The search input lives inside the dropdown, which select2 tears down
-   * and rebuilds on every open, so the spinner node is created lazily on
-   * each search rather than once at init.
+   * The spinner is a single childless element: the radial-spokes figure is
+   * drawn entirely by CSS on that one node, so there is no inner markup to
+   * keep in step with the stylesheet. aria-hidden keeps it out of the
+   * accessibility tree — it is decoration, and select2 already announces
+   * search state through the results list.
+   *
+   * Removed rather than hidden when the search ends. The search input lives
+   * inside the dropdown, which select2 tears down and rebuilds on every
+   * open, so add-then-remove keeps at most one node alive and leaves no
+   * animating element running behind a closed dropdown.
    */
   toggleCompanySearchSpinner: function (isSearching) {
     const $search = jQuery('input[aria-owns="select2-billing_company_display-results"]').parent();
     if ($search.length === 0) return;
-    if ($search.find(".twoinc-search-spinner").length === 0) {
-      $search.append(
-        '<span class="twoinc-search-spinner" aria-hidden="true">' +
-          '<span class="twoinc-dots"><span>.</span><span>.</span><span>.</span></span>' +
-          "</span>"
-      );
+    $search.find(".twoinc-search-spinner").remove();
+    if (isSearching) {
+      $search.append('<span class="twoinc-search-spinner" aria-hidden="true"></span>');
     }
     $search.toggleClass("twoinc-searching", !!isSearching);
   },

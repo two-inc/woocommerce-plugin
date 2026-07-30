@@ -319,16 +319,50 @@ describe("company search ajax transport", () => {
       expect(spinnerVisible()).toBe(false);
     });
 
-    test("creates exactly one spinner node however many searches run", () => {
+    test("keeps exactly one spinner node however many searches run", () => {
       // The search input lives inside the dropdown, which select2 tears
       // down and rebuilds on every open, so the node is created lazily
       // per search — that must not accumulate duplicates within one open
-      // dropdown.
+      // dropdown, including while several searches overlap.
       search().request.succeed({ items: [] });
       search().request.succeed({ items: [] });
-      search().request.fail("timeout");
+      search();
+      search();
 
       expect(ctx.$(".twoinc-search-spinner").length).toBe(1);
+    });
+
+    test("the spinner node is removed once the search ends", () => {
+      // Removed, not merely hidden: a hidden node would leave the spokes
+      // animation running behind a closed dropdown, and it is the removal
+      // that guarantees the single-node property above.
+      const run = search();
+      expect(ctx.$(".twoinc-search-spinner").length).toBe(1);
+
+      run.request.succeed({ items: [] });
+
+      expect(ctx.$(".twoinc-search-spinner").length).toBe(0);
+    });
+
+    test("the spinner is a single childless element carrying the styling hook", () => {
+      // The radial-spokes figure (TWO-25288) is drawn entirely in CSS on
+      // this one node. Any inner markup would be dead weight the
+      // stylesheet no longer styles, so pin the emptiness as well as the
+      // class.
+      search();
+
+      const $spinner = ctx.$(".twoinc-search-spinner");
+      expect($spinner).toHaveLength(1);
+      expect($spinner.children()).toHaveLength(0);
+      expect($spinner.text()).toBe("");
+    });
+
+    test("the spinner is hidden from the accessibility tree", () => {
+      // Decoration only: select2 announces search state through the
+      // results list, so an exposed spinner would double up on it.
+      search();
+
+      expect(ctx.$(".twoinc-search-spinner").attr("aria-hidden")).toBe("true");
     });
 
     test("does not throw when the dropdown is closed", () => {
