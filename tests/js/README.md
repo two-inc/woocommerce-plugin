@@ -175,6 +175,22 @@ about the company-search helper, so the bootstrap is left to no-op.
 - the affordance needs no template markup on the page, which is what makes it work on the
   pay-for-order surface; and a company field's wrapper follows the field's own visibility,
   which is what keeps manual entry usable there.
+- **real DOM focus follows the highlight.** The picker `.focus()`es the highlighted row on
+  every arrow keypress and its own source says that is required for screen readers, so the
+  row needs `tabindex="-1"` to be able to take focus at all. Asserted via `document.activeElement`
+  after driving the picker's own navigation and focus routine — not by inspecting the attribute
+  alone, which would not notice the focus call being a no-op.
+- the row's attributes are compared against **an option the widget itself builds**, rather than
+  against a hand-written list. If the library adds a navigation-relevant attribute, that test
+  fails instead of the row quietly falling out of the navigable set.
+- **the row survives a widget re-creation** — clearing the selected company builds a new picker
+  and a new results list, and nothing in that path knows this affordance exists. Also that at
+  most one render watcher is live, keyed on the node it observes: the widget constructs a
+  MutationObserver of its own, so counting constructions without checking the target counts the
+  library's too and fails for an unrelated reason.
+- focus is not dropped on either mode switch, and `focusVisibleCompanyField` reports failure
+  rather than claiming success when the field is absent.
+- the sole-trader round trip does not strand a buyer in manual entry.
 
 ### Two defects these tests found, now fixed
 
