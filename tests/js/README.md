@@ -121,7 +121,10 @@ about the company-search helper, so the bootstrap is left to no-op.
   stylesheet declares against the stylesheet's own directory rather than a path written into
   the test, so repointing the rule at a directory that holds nothing fails here. The file it
   lands on is then checked to be a 16x16 `GIF89a` with more than one frame — a still image
-  would be a spinner that never spins, and jsdom evaluates no animation.
+  would be a spinner that never spins, and jsdom evaluates no animation. The frame count
+  comes from `countGifFrames()`, which walks the GIF block structure; counting raw `0x2C`
+  bytes across the file does not work, because that value also occurs inside the colour
+  table and the compressed pixel data, so a single-frame file passes such a scan.
 - message copy: the built-in fallback, the localised override, and that the widget renders
   ours rather than select2's own "The results could not be loaded."
 
@@ -217,8 +220,10 @@ dropping the `always` guard, weakening `degraded === true` to truthiness, removi
 `Array.isArray` guard, removing the request timeout, dropping the `national_identifier`
 guard, reverting `constructTwoincUrl()` to property assignment) each fail at least one test.
 
-Three further mutations of `assets/css/twoinc.css` and its asset were checked the same way,
+Four further mutations of `assets/css/twoinc.css` and its asset were checked the same way,
 all against the spinner-paint test: repointing the spinner's `url()` at a directory that does
-not exist, deleting its `background-image` declaration, and deleting
-`assets/images/loader.gif`. The first of those used to pass, because the existence check
-looked at a path written into the test rather than the one the stylesheet declares.
+not exist, deleting its `background-image` declaration, deleting `assets/images/loader.gif`,
+and replacing that asset with a valid single-frame 16x16 `GIF89a` built from its own header,
+colour table and first frame. Two of those used to pass: the repointed `url()`, because the
+existence check looked at a path written into the test rather than the one the stylesheet
+declares, and the single-frame GIF, because the frame count was a raw byte scan.
