@@ -314,7 +314,6 @@
   top: calc(50% - 0.5em);
   width: 1em;
   height: 1em;
-  vertical-align: middle;
   border-radius: 50%;
   pointer-events: none;
 
