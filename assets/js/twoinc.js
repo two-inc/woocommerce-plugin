@@ -90,11 +90,12 @@ let twoincSelectWooHelper = {
   /**
    * Toggle the in-field search spinner (TWO-25288).
    *
-   * The spinner is a single childless element: the radial-spokes figure is
-   * drawn entirely by CSS on that one node, so there is no inner markup to
-   * keep in step with the stylesheet. aria-hidden keeps it out of the
-   * accessibility tree — it is decoration, and select2 already announces
-   * search state through the results list.
+   * The spinner is a single childless element: the stylesheet paints an
+   * animated loading GIF onto it as a background-image, so there is no inner
+   * markup and no asset URL for this function to keep in step with the
+   * stylesheet. aria-hidden keeps it out of the accessibility tree — it is
+   * decoration, and select2 already announces search state through the
+   * results list.
    *
    * Removed rather than hidden when the search ends. The search input lives
    * inside the dropdown, which select2 tears down and rebuilds on every

@@ -293,16 +293,15 @@
  * .twoinc-searching is set, so it appears with the spinner instead of
  * permanently narrowing the input.
  *
- * Radial spokes, drawn purely in CSS on one childless node — no image asset
- * and no inner markup for the stylesheet to stay in step with.
+ * The motion comes from an animated GIF — the same loading GIF the PrestaShop
+ * plugin already ships — painted as a background-image on one childless node.
+ * A background-image, not an <img>: the URL then resolves relative to this
+ * stylesheet, so no asset URL has to be plumbed through the platform's asset
+ * helper and into the markup. No inner markup either, so there is nothing for
+ * the stylesheet to stay in step with.
  *
- * THE SPINNER SELECTOR MUST STAY A SINGLE FLAT CLASS. A brand overlay
- * recolours it with a flat single-class rule and wins on stylesheet load
- * order; raising specificity here (e.g. by scoping under
- * .select2-search--dropdown) would silently break branded recolouring with
- * nothing failing in CI. Note the spokes rotate via transform, so the
- * vertical centring uses top/height arithmetic rather than a translate that
- * the animation would immediately overwrite.
+ * Sized at a fixed 16px because the asset is natively 16x16; scaling it with
+ * an em-relative box would blur it.
  */
 .select2-search--dropdown.twoinc-searching {
   position: relative;
@@ -311,43 +310,14 @@
   display: inline-block;
   position: absolute;
   right: 14px;
-  top: calc(50% - 0.5em);
-  width: 1em;
-  height: 1em;
-  border-radius: 50%;
+  top: calc(50% - 8px);
+  width: 16px;
+  height: 16px;
   pointer-events: none;
-
-  /* Colour: an overlay sets --two-spinner-color once and is done. Falls back
-     to the inherited text colour, which is what the existing overlay `color:`
-     overrides already set. */
-  color: var(--two-spinner-color, currentColor);
-
-  /* 12 spokes: 30deg period, 10deg of ink each. */
-  background: repeating-conic-gradient(from 0deg, currentColor 0deg 10deg, transparent 10deg 30deg);
-
-  /* Punch out the middle so the spokes read as spokes, not a pie. */
-  -webkit-mask: radial-gradient(farthest-side, transparent 38%, #000 40%);
-  mask: radial-gradient(farthest-side, transparent 38%, #000 40%);
-
-  /* Must stay `linear`. A stepped timing function whose increment is a
-     multiple of the 30deg spoke period above maps the pattern onto itself at
-     every step, so the spinner renders completely motionless — steps(12) is
-     exactly 30deg a step and does this. Nothing in CI catches it. */
-  animation: two-spinner-spin 1s linear infinite;
-}
-@keyframes two-spinner-spin {
-  to {
-    transform: rotate(1turn);
-  }
-}
-/*
- * A loading indicator must keep indicating, so slow it rather than stopping
- * it — a frozen spinner reads as a hung page.
- */
-@media (prefers-reduced-motion: reduce) {
-  .twoinc-search-spinner {
-    animation-duration: 3s;
-  }
+  background-image: url("../images/loader.gif");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 16px 16px;
 }
 .select2-search--dropdown.twoinc-searching .select2-search__field {
   padding-right: 30px;
