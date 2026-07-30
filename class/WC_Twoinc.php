@@ -1217,6 +1217,73 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
+         * Whether one cap cell is a cap of zero, i.e. the value the grid
+         * refuses (TWO-25289).
+         *
+         * Rounds to the money precision FIRST rather than testing `=== 0.0`:
+         * the cap is rounded to 2dp before it goes on the wire, so a sub-cent
+         * cap would pass an exact-zero test and then arrive as a hard cap of
+         * 0.00 — the refused outcome, one step later.
+         *
+         * An empty cell is NOT zero. It is the legitimate "no cap", and
+         * absence must stay distinguishable from zero on every path.
+         *
+         * @param mixed $raw one posted or stored cap cell
+         */
+        private static function is_zero_cap($raw): bool
+        {
+            if (!is_scalar($raw)) {
+                return false;
+            }
+            $raw = trim(str_replace(',', '.', (string) $raw));
+            if ($raw === '' || !is_numeric($raw)) {
+                return false;
+            }
+            return round((float) $raw, WC_Twoinc_Payment_Terms::MONEY_DECIMALS) === 0.0;
+        }
+
+        /**
+         * The term days in the POSTED surcharge grid whose cap cell is a cap
+         * of zero — the caps validate_two_surcharge_grid_field() refuses.
+         *
+         * Exists to close a partial-save asymmetry. WooCommerce skips only
+         * the field that threw, so refusing the zero on the GRID alone still
+         * saved surcharge_type: `none -> percentage` on a shop carrying a
+         * legacy stored zero enabled surcharges and rejected the grid,
+         * leaving the shop live with a cap of zero, which clamps the entire
+         * fee line to nothing. The merchant saw an error, the surcharge was
+         * on, and no surcharge was ever charged. Refusing on BOTH fields is
+         * what makes the save all-or-nothing for this invariant.
+         *
+         * Keyed on the POSTED rows, and only those — the same "was this row
+         * actually on the form" signal the grid validator's preservation loop
+         * uses, and for the same two reasons. It is the honest rendered
+         * signal (a rendered row always posts its three inputs, even blank),
+         * so the merchant can always see and clear the cell this refuses
+         * over; and it does not depend on the offered-term set, which is read
+         * from an option a sibling validator may already have rewritten
+         * earlier in the same save loop.
+         *
+         * @return int[] term days
+         */
+        private function posted_zero_cap_term_days(): array
+        {
+            $post_data = $this->get_post_data();
+            $grid_key = $this->get_field_key('surcharge_grid');
+            if (!is_array($post_data) || !isset($post_data[$grid_key]) || !is_array($post_data[$grid_key])) {
+                return [];
+            }
+            $offending = [];
+            foreach ($post_data[$grid_key] as $days => $row) {
+                if ((int) $days > 0 && is_array($row) && isset($row['limit']) && self::is_zero_cap($row['limit'])) {
+                    $offending[] = (int) $days;
+                }
+            }
+            sort($offending);
+            return $offending;
+        }
+
+        /**
          * Block ENABLING surcharges while no valid surcharge tax treatment
          * is selected (server-side — the treatment field has no default, so
          * a never-configured shop posts the '' placeholder). Enforced on
@@ -1255,6 +1322,21 @@ if (!class_exists('WC_Twoinc')) {
                 )
             ) {
                 throw new Exception(__('Select a surcharge tax treatment before enabling surcharges.', 'twoinc-payment-gateway'));
+            }
+            // A cap only applies alongside a percentage, so only the
+            // percentage-bearing methods can be blocked by one. 'fixed' and
+            // 'none' save freely — the cap is inert under them, and refusing
+            // there would stop a merchant DISABLING surcharges to get out of
+            // the very state being refused.
+            if (in_array($value, ['percentage', 'fixed_and_percentage'], true)) {
+                $zero_cap_days = $this->posted_zero_cap_term_days();
+                if (!empty($zero_cap_days)) {
+                    throw new Exception(sprintf(
+                        /* translators: %s: comma-separated term days, e.g. "14, 30" */
+                        __('Clear or correct the surcharge cap of 0 on these terms before enabling a percentage surcharge: %s. A cap of 0 charges nothing at all; to charge nothing on a term, set its percentage and fixed fee to 0 and leave the cap empty.', 'twoinc-payment-gateway'),
+                        implode(', ', $zero_cap_days)
+                    ));
+                }
             }
             return $value;
         }
@@ -1363,6 +1445,14 @@ if (!class_exists('WC_Twoinc')) {
                 __('Enter a limit amount (in %s) if you do not want to charge your customer more than a specific amount. Leave the limit field empty if you don\'t want to impose a limit amount.', 'twoinc-payment-gateway'),
                 html_entity_decode(get_woocommerce_currency_symbol($currency_code), ENT_QUOTES, 'UTF-8')
             );
+            // Zero is NOT the way to express "no fee on this term" — the
+            // grid refuses it on save. Say so next to the instruction that
+            // otherwise invites it (TWO-25289).
+            $cap_zero_sentence = __('A cap of 0 is not allowed. To charge nothing on a term, set the percentage and the fixed fee for that term to 0 instead.', 'twoinc-payment-gateway');
+            // Stated only for fixed_and_percentage, the one method where the
+            // distinction is load-bearing: the cap is applied to the summed
+            // fee, so it can wipe the fixed fee as well as the percentage.
+            $cap_whole_fee_sentence = __('The cap applies to the whole fee: the percentage and the fixed fee together, not the percentage alone.', 'twoinc-payment-gateway');
             // One help paragraph per surcharge method, keyed by the method
             // slug so admin.js can switch between them. Composed here rather
             // than inline in the markup below so the template stays readable.
@@ -1379,7 +1469,7 @@ if (!class_exists('WC_Twoinc')) {
                     $fixed_limit_label
                 );
             }
-            $help_text['percentage'] = $percentage_sentence . ' ' . $limit_sentence;
+            $help_text['percentage'] = $percentage_sentence . ' ' . $limit_sentence . ' ' . $cap_zero_sentence;
             // No enforceable fixed maximum → degrade to the percentage-only
             // wording rather than claim a maximum that is not applied.
             $help_text['fixed_and_percentage'] = ($fixed_limit_label !== '' ? sprintf(
@@ -1387,7 +1477,8 @@ if (!class_exists('WC_Twoinc')) {
                 __('Enter the amount and percentage of the fee you want to charge your customer. Max %1$s / %2$s.', 'twoinc-payment-gateway'),
                 $fixed_limit_label,
                 $percentage_limit_label
-            ) : $percentage_sentence) . ' ' . $limit_sentence;
+            ) : $percentage_sentence) . ' ' . $limit_sentence
+                . ' ' . $cap_whole_fee_sentence . ' ' . $cap_zero_sentence;
 
             ob_start();
             // Rendered rows mirror the SAVED offered set; admin.js keeps the
@@ -1472,6 +1563,32 @@ if (!class_exists('WC_Twoinc')) {
                 $max_fixed = (float) $limit['amount'];
             }
 
+            // Whether the Cap column is VISIBLE for the surcharge type being
+            // saved. It is shown only alongside a percentage, and admin.js
+            // hides it otherwise — but a hidden input still posts, so a cap
+            // stored while the type was percentage keeps arriving after the
+            // merchant switches away. Refusing a zero there would fail the
+            // whole save over a cell they can neither see nor clear, which is
+            // the dead end the funding-partner cap note below already warns
+            // about, so the zero rule is SKIPPED while the column is hidden.
+            //
+            // Skipped, not dropped: the cell's value is still stored, exactly
+            // as the equally-inapplicable percentage cell's is. Deleting it
+            // would silently discard a valid configured cap on any save made
+            // while surcharges are disabled or fixed-only — a normal round
+            // trip, and one that keeps percentages but would lose caps. A
+            // legacy zero simply surfaces again when the column comes back
+            // into view, which is where the merchant can act on it.
+            //
+            // Read from the POST, not the stored option: type and grid are
+            // saved in the same request (TWO-25289).
+            $cap_column_live = in_array(
+                $this->get_sibling_field_save_value('surcharge_type'),
+                ['percentage', 'fixed_and_percentage'],
+                true
+            );
+
+
             $clean = [];
             // A non-array POST means NO grid rows were rendered (empty term
             // list at render time) — fall through to the preservation loop
@@ -1500,6 +1617,32 @@ if (!class_exists('WC_Twoinc')) {
                         throw new Exception(sprintf(
                             /* translators: %s: term days */
                             __('Surcharge percentage for the %s-day term must be between 0 and 100.', 'twoinc-payment-gateway'),
+                            $days
+                        ));
+                    }
+                    // A cap of exactly 0 is refused (TWO-25289). It is never
+                    // what a merchant means by it: the cap bounds the WHOLE
+                    // fee line — the percentage part and the fixed fee
+                    // together, not the percentage alone — so a cap of 0
+                    // silently wipes a configured fixed fee as well, and
+                    // nothing in the grid says so. The intent it gets
+                    // mistaken for ("charge nothing on this term") is
+                    // expressible directly, by entering 0 in the percentage
+                    // and fixed cells. An EMPTY cap is a wholly legitimate
+                    // configuration meaning "no cap" and never reaches here
+                    // — the blank-cell `continue` above returns first, so
+                    // absence and zero stay distinguishable.
+                    // Shared with validate_surcharge_type_field via is_zero_cap
+                    // so both fields refuse the same save on the same rule —
+                    // see saved_zero_cap_term_days() for why one field alone
+                    // was not enough. The helper rounds to the money precision
+                    // rather than testing `=== 0.0`, so a sub-cent cap cannot
+                    // pass here and then arrive as a hard cap of 0.00.
+                    $cap_rounds_away = $col === 'limit' && self::is_zero_cap($raw);
+                    if ($cap_rounds_away && $cap_column_live) {
+                        throw new Exception(sprintf(
+                            /* translators: %s: term days */
+                            __('Surcharge cap for the %s-day term cannot be 0. To charge nothing on this term, set the percentage and the fixed fee to 0 instead, and leave the cap empty.', 'twoinc-payment-gateway'),
                             $days
                         ));
                     }
@@ -3063,9 +3206,10 @@ if (!class_exists('WC_Twoinc')) {
             $invoice_email = array_key_exists('invoice_email', $_POST) ? sanitize_text_field($_POST['invoice_email']) : '';
             $invoice_emails = $invoice_email ? array_map('sanitize_text_field', explode(',', $invoice_email)) : [];
 
-            // A company (organization number) is mandatory: the order API's
-            // CreateOrderRequestSchema requires buyer.company.organization_number
-            // and rejects an empty value with a 400 SCHEMA_ERROR. Fail fast with
+            // A company (organization number) is mandatory: the order-creation
+            // endpoint treats the buyer company's organization number as a
+            // required field and rejects an empty one with a 400 schema error.
+            // Fail fast with
             // a clear checkout error instead of letting that raw 400 surface as a
             // silent failure when no company has been selected (e.g. the company
             // search result was never picked, or the selection was cleared by a
@@ -4442,6 +4586,22 @@ if (!class_exists('WC_Twoinc')) {
          */
         public function admin_options()
         {
+            // Surface the per-field validation failures. WooCommerce validates
+            // each settings field independently and, when a validate_*_field
+            // method throws, records the message with WC_Settings_API::add_error
+            // and moves on: the field simply does not assign, everything else
+            // saves, and the page re-renders. Nothing in core PRINTS that
+            // bucket — display_errors() is the gateway's job, and this plugin
+            // never called it. So every per-field refusal was invisible: a
+            // merchant who typed a cap of 0 (the exact mistake TWO-25289
+            // exists to catch) saw their whole grid edit revert with no notice
+            // and a page that looked like it had saved. This is a DIFFERENT
+            // bucket from WC_Admin_Settings::add_error used in
+            // process_admin_options, which the settings page prints itself.
+            //
+            // Printed BEFORE the fields so the notice sits above the form
+            // rather than below the grid the merchant has to scroll back to.
+            $this->display_errors();
             parent::admin_options();
             $components = [sprintf(
                 /* translators: 1: base plugin provenance, e.g. "2.23.9 (eb7bf92cec07, deployed 2026-07-08 11:35 UTC)" */

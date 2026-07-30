@@ -129,7 +129,11 @@ function wp_specialchars_decode($string, $quote_style = ENT_NOQUOTES)
 
 function wc_get_price_decimals()
 {
-    return 2;
+    // Overridable so a test can exercise a store configured for more price
+    // precision than the pricing API accepts (TWO-25289).
+    return isset($GLOBALS['__twoinc_test_price_decimals'])
+        ? (int) $GLOBALS['__twoinc_test_price_decimals']
+        : 2;
 }
 
 function determine_locale()
@@ -446,6 +450,105 @@ class WC_Payment_Gateway
     {
         $stored = get_option($this->get_option_key(), []);
         $this->settings = is_array($stored) ? $stored : [];
+    }
+
+    // ── WC_Settings_API save + error surface ─────────────────────────
+    //
+    // Mirrors WC_Settings_API::$errors / add_error() / get_errors() /
+    // display_errors() / get_field_value() / process_admin_options(), because
+    // the behaviour under test is a property OF that machinery rather than of
+    // any one validator: WooCommerce validates each field independently, and a
+    // validator that throws only skips ITS OWN assignment. Everything else in
+    // the same submission still saves, and the message lands in a bucket that
+    // core never prints. Both halves of that — the partial save and the silent
+    // error — are what TWO-25289's tests assert, so a stub that just called
+    // one validator directly could not see either.
+
+    /** @var string[] */
+    public $errors = [];
+
+    public function add_error($error)
+    {
+        $this->errors[] = $error;
+    }
+
+    public function get_errors()
+    {
+        return $this->errors;
+    }
+
+    // Core wraps the messages in <div id="woocommerce_errors" class="error
+    // notice is-dismissible"> and one <p> per message, and prints NOTHING when
+    // the bucket is empty. The empty case is load-bearing: it is why a gateway
+    // can call this unconditionally on every settings pageload.
+    public function display_errors()
+    {
+        if (!$this->get_errors()) {
+            return;
+        }
+        echo '<div id="woocommerce_errors" class="error notice is-dismissible">';
+        foreach ($this->get_errors() as $error) {
+            echo '<p>' . wp_kses_post($error) . '</p>';
+        }
+        echo '</div>';
+    }
+
+    public function get_form_fields()
+    {
+        return $this->form_fields;
+    }
+
+    public function get_field_type($field)
+    {
+        return empty($field['type']) ? 'text' : $field['type'];
+    }
+
+    // Core's resolution order: sanitize_callback, then validate_<KEY>_field,
+    // then validate_<TYPE>_field, then validate_text_field. Only the two the
+    // plugin actually declares are reproduced; anything else passes the raw
+    // posted value through, which is enough for the fields these tests post.
+    public function get_field_value($key, $field, $post_data = [])
+    {
+        $field_key = $this->get_field_key($key);
+        $value = array_key_exists($field_key, $post_data) ? $post_data[$field_key] : null;
+        $by_key = 'validate_' . $key . '_field';
+        if (is_callable([$this, $by_key])) {
+            return $this->{$by_key}($key, $value);
+        }
+        $by_type = 'validate_' . $this->get_field_type($field) . '_field';
+        if (is_callable([$this, $by_type])) {
+            return $this->{$by_type}($key, $value);
+        }
+        return is_null($value) ? '' : $value;
+    }
+
+    // The loop that produces the partial save. Note what happens on a throw:
+    // $this->settings[$key] is NOT assigned, so it keeps whatever
+    // init_settings() read from the stored option, while every non-throwing
+    // sibling assigns its new value — and the whole blob is then written.
+    public function process_admin_options()
+    {
+        $this->init_settings();
+        $post_data = $this->get_post_data();
+        foreach ($this->get_form_fields() as $key => $field) {
+            if ($this->get_field_type($field) === 'title') {
+                continue;
+            }
+            try {
+                $this->settings[$key] = $this->get_field_value($key, $field, $post_data);
+            } catch (Exception $e) {
+                $this->add_error($e->getMessage());
+            }
+        }
+        return update_option($this->get_option_key(), $this->settings, 'yes');
+    }
+
+    // Core renders the gateway heading, description and the settings table.
+    // Reduced to the table marker: these tests only need to know WHERE the
+    // error notice lands relative to the form, not what the form looks like.
+    public function admin_options()
+    {
+        echo '<table class="form-table"></table>';
     }
 }
 
@@ -903,6 +1006,13 @@ function get_twoinc_plugin_version()
     return isset($GLOBALS['__twoinc_test_plugin_version'])
         ? $GLOBALS['__twoinc_test_plugin_version']
         : '2.23.9';
+}
+
+// Read by admin_options() for the provenance footer. Only 'version' is asked
+// for; anything else returns '' rather than guessing at WordPress semantics.
+function get_bloginfo($show = '', $filter = 'raw')
+{
+    return $show === 'version' ? '6.8' : '';
 }
 
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Brand.php';
