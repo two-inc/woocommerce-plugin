@@ -12,6 +12,9 @@
 
 "use strict";
 
+const fs = require("fs");
+const path = require("path");
+
 const harness = require("./wc-harness");
 
 describe("company search results", () => {
@@ -242,6 +245,16 @@ describe("company search results", () => {
       expect(ctx.helper.genSelectWooParams().minimumInputLength).toBe(3);
     });
 
+    test("takes the threshold from the helper's constant, not a literal", () => {
+      // The enforced minimum and the minimum the buyer is told about have to
+      // be one value (TWO-25288), so this asserts the wiring rather than the
+      // number: a second literal 3 anywhere in the widget params would
+      // survive the number changing, and this test would not.
+      ctx.helper.companySearchMinLength = 7;
+
+      expect(ctx.helper.genSelectWooParams().minimumInputLength).toBe(7);
+    });
+
     test("debounces at 300ms, matching the other plugin checkouts", () => {
       expect(ctx.helper.genSelectWooParams().ajax.delay).toBe(300);
     });
@@ -266,12 +279,146 @@ describe("company search results", () => {
 
       expect(language.noResults()).toBe("No matches found");
       expect(language.searching()).toBe("Searching…");
+    });
+  });
+});
+
+/**
+ * TWO-25288, elements 3 and 4. The two hints the company-search field shows
+ * before it can search: one in the empty closed field, one while the typed
+ * term is below the threshold.
+ *
+ * Both strings are plugin-owned and translatable. The min-chars one used to be
+ * borrowed from WooCommerce core's `wc_country_select_params`, whose copy
+ * counts down the REMAINING characters — so the same field told the buyer "1
+ * or more" after two keystrokes. These tests pin the fixed-number behaviour
+ * and the single-source-of-truth wiring, not just the wording.
+ */
+describe("company search hints", () => {
+  let ctx;
+
+  afterEach(() => {
+    if (ctx) harness.releaseWidgets(ctx.$);
+    document.body.innerHTML = "";
+  });
+
+  describe("the min-chars hint", () => {
+    test("states the threshold, ignoring how much is still missing", () => {
+      // `text` left empty on purpose: the assertion is then against the
+      // plugin's own English source string — the msgid PHP registers — and
+      // not against a wording the harness invented.
+      ctx = harness.loadTwoinc();
+      const language = ctx.helper.genSelectWooParams().language;
+
+      // Both of these produced DIFFERENT copy under the core strings: "1 or
+      // more" for two characters typed, "3 or more" for none.
       expect(language.inputTooShort({ minimum: 3, input: "ab" })).toBe(
-        "Please enter 1 or more characters"
+        "Please enter 3 or more characters"
       );
       expect(language.inputTooShort({ minimum: 3, input: "" })).toBe(
         "Please enter 3 or more characters"
       );
+    });
+
+    test("does not read WooCommerce core's countdown strings any more", () => {
+      // The borrow is what element 4 removes. Blanking core's strings must
+      // not change the hint; if it does, something still reads them.
+      ctx = harness.loadTwoinc();
+      global.wc_country_select_params.i18n_input_too_short_1 = "CORE ONE";
+      global.wc_country_select_params.i18n_input_too_short_n = "CORE %qty%";
+      const language = ctx.helper.genSelectWooParams().language;
+
+      expect(language.inputTooShort({ minimum: 3, input: "ab" })).toBe(
+        "Please enter 3 or more characters"
+      );
+    });
+
+    test("interpolates the localised template with the enforced threshold", () => {
+      // The %d reaches the browser unresolved so that PHP cannot state a
+      // number the widget does not enforce. Translation-shaped template plus
+      // a non-default threshold: only code that interpolates one from the
+      // other can satisfy both at once.
+      ctx = harness.loadTwoinc({ text: { company_search_too_short: "minst %d tegn" } });
+      ctx.helper.companySearchMinLength = 4;
+
+      expect(ctx.helper.genSelectWooParams().language.inputTooShort({})).toBe("minst 4 tegn");
+    });
+
+    test("renders into the real dropdown once the buyer starts typing", () => {
+      ctx = harness.loadTwoinc();
+      harness.buildCheckoutForm();
+      const $select = harness.openCompanyWidget(ctx.$, ctx.helper);
+      const $search = ctx.$('input[aria-owns="select2-billing_company_display-results"]');
+
+      // Guard: the widget has to be open and its search input present, or
+      // every assertion below is vacuous.
+      expect($search.length).toBe(1);
+
+      $search.val("ab").trigger("input");
+
+      expect(harness.resultsText(ctx.$)).toContain("Please enter 3 or more characters");
+      expect(harness.resultsText(ctx.$)).not.toContain("1 or more");
+      expect($select.data("select2")).toBeTruthy();
+    });
+  });
+
+  describe("the empty-field hint", () => {
+    test("is passed to the widget as its placeholder", () => {
+      ctx = harness.loadTwoinc();
+
+      expect(ctx.helper.genSelectWooParams().placeholder).toBe("Enter company name to search");
+    });
+
+    test("uses the localised string when PHP supplies one", () => {
+      ctx = harness.loadTwoinc({ text: { company_search_placeholder: "Zoek een bedrijf" } });
+
+      expect(ctx.helper.genSelectWooParams().placeholder).toBe("Zoek een bedrijf");
+    });
+
+    test("is what the closed field actually renders", () => {
+      // Against the real widget and the real empty-option markup: the
+      // non-breaking-space label must not defeat the placeholder.
+      ctx = harness.loadTwoinc();
+      harness.buildCheckoutForm();
+      const $select = ctx.$("#billing_company_display");
+      $select.selectWoo(ctx.helper.genSelectWooParams());
+
+      const $rendered = ctx.$("#select2-billing_company_display-container");
+
+      // Guard: no rendered container means the widget never attached.
+      expect($rendered.length).toBe(1);
+      expect($rendered.find(".select2-selection__placeholder").text()).toBe(
+        "Enter company name to search"
+      );
+    });
+
+    test("would be suppressed by an empty option carrying a value", () => {
+      // Pins WHY the shipped markup needs value="": with the option's value
+      // defaulting to its own label, the widget treats the field as having a
+      // selection and paints that label instead of the hint. This is the
+      // regression the pay-for-order template had.
+      ctx = harness.loadTwoinc();
+      harness.buildCheckoutForm({ companyOptions: "<option>&nbsp;</option>" });
+      ctx.$("#billing_company_display").selectWoo(ctx.helper.genSelectWooParams());
+
+      expect(
+        ctx.$("#select2-billing_company_display-container").find(".select2-selection__placeholder")
+          .length
+      ).toBe(0);
+    });
+
+    test("the pay-for-order template's empty option carries an empty value", () => {
+      // That page renders the company select from its own template rather
+      // than through WooCommerce's field API, so it needs the attribute in
+      // its own markup. Asserted against the shipped file.
+      const markup = fs.readFileSync(
+        path.join(harness.REPO_ROOT, "views/woocommerce_order_pay.php"),
+        "utf8"
+      );
+      const select = markup.match(/<select[^>]*id="billing_company_display"[\s\S]*?<\/select>/);
+
+      expect(select).not.toBeNull();
+      expect(select[0]).toMatch(/<option value="">/);
     });
   });
 });
