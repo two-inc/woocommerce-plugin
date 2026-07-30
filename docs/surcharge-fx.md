@@ -47,9 +47,10 @@ stronger checkout currency. Neither is a failure; both are relayed as
 
   It is still the right outcome. The merchant configured a cap that is worth
   nothing in the checkout currency, and "charge no fee" is what that cap
-  says. The alternative the guard below chose — withholding the Two payment
-  method for the entire checkout — is a far larger consequence for the same
-  configuration.
+  says. Note that the guard below reached the _same_ zero-fee outcome — it
+  withheld the fee block, so the surcharge silently vanished while the
+  payment method stayed on offer. Relaying `cap => 0` gets there explicitly,
+  as the merchant's own instruction, and says so in the log.
 
 ### Correction: the reverted zero-cap guard (TWO-25269)
 
