@@ -32,6 +32,7 @@ final class BrandConfigSpec
             'testBrandFileFilterMergesOverDefaults',
             'testEnvVarCannotEscapeBrandsDirectory',
             'testCheckoutFieldsHookFires',
+            'testInvoiceEmailFieldHasNoPlaceholder',
             'testConfirmationUrlHookReceivesUrlAndOrderId',
             'testOrderPayloadHookAugmentsBody',
             'testPaymentTermsLineHookAdjustsLineItems',
@@ -332,6 +333,40 @@ final class BrandConfigSpec
         $fields = $checkout->apply_brand_checkout_fields(['billing' => []]);
 
         TinyAssert::true(isset($fields['billing']['billing_vendor_name']));
+    }
+
+    /**
+     * The optional invoice-email field must carry no hint of its own
+     * (TWO-25287) — the "only for invoices sent by <brand>" copy was never
+     * asked for, and the sibling optional fields (PO number, project,
+     * department) have never had one. Same removal as the PrestaShop
+     * counterpart, TWO-25281.
+     */
+    private static function testInvoiceEmailFieldHasNoPlaceholder(): void
+    {
+        $gateway = new class () extends WC_Twoinc {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                return $key === 'add_field_invoice_email' ? 'yes' : '';
+            }
+        };
+
+        $checkout = new WC_Twoinc_Checkout($gateway);
+        $fields = $checkout->update_company_fields(['billing' => []]);
+
+        TinyAssert::true(
+            isset($fields['billing']['invoice_email']),
+            'invoice_email field must still be added when the option is on'
+        );
+        TinyAssert::true(
+            !array_key_exists('placeholder', $fields['billing']['invoice_email']),
+            'invoice_email must not define a placeholder'
+        );
     }
 
     private static function testConfirmationUrlHookReceivesUrlAndOrderId(): void
