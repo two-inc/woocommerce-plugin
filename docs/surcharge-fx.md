@@ -74,14 +74,37 @@ So a zero cap is not an uncapped percentage and there is no overcharge. A
 cap that converts to zero simply means the surcharge is not applied — which
 is already the API's behaviour, so the plugin must not guard against it.
 
+### Caveat: the plugin's own `> 0` filter
+
+The API distinguishes an absent cap from a zero one. **The plugin does not,
+on the way in.** `surcharge_monetary_components()` keeps a cap only when the
+configured store-currency value is `> 0`, so a cap typed as exactly `0` is
+normalised to _absent_ and relayed as **uncapped** — the opposite of what a
+`cap => 0` would do. Only an FX-converted `0.00` reaches the API as
+`cap => 0`.
+
+That filter predates this work and is not changed here, so the two paths are
+genuinely asymmetric today. It is defensible — the merchant-facing help text
+tells merchants to leave the limit field empty for "no cap", making a typed
+`0` a misuse rather than a configuration — but it should not be mistaken for
+the API's semantics. Worth a follow-up if relaying a configured `0` verbatim
+is wanted.
+
 See TWO-25269 for the verbatim source references; they are deliberately not
 reproduced here, because this repository is public and the pricing service's
 is not.
 
 ## Rounding stays
 
-Plugin-side rounding of converted amounts (`WC_Twoinc_Helper::round_amt`)
-is **required**, not incidental. The pricing API's money type is fixed at two
+Rounding of **FX-converted** amounts (`WC_Twoinc_Helper::round_amt`) is
+**required**, not incidental. The pricing API's money type is fixed at two
 decimal places and rejects any value carrying more precision than that, so a
 sub-cent amount is a validation error, not a silently-rounded one. Removing
 the rounding would turn a converted amount like `0.0008` into an HTTP 422.
+
+Scope that claim precisely: `round_amt()` is applied only inside the
+`$store_currency !== $active_currency` branch. On a **same-currency** store a
+configured sub-cent value is relayed raw, and grid validation does not
+enforce two decimal places either — so a merchant who types `0.001` there
+gets the same 422 by a path this rounding does not cover. Pre-existing, out
+of scope for TWO-25269, and worth its own ticket.

@@ -397,6 +397,13 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          * the fee to zero", so it is relayed as 0.00 (docs/surcharge-fx.md).
          * The only fail-closed condition is no FX rate at all.
          *
+         * Note the `> 0` filter: a cap typed as exactly 0 in the STORE
+         * currency is normalised to ABSENT here, i.e. relayed as uncapped,
+         * NOT as cap 0. Only an FX-converted 0.00 reaches the API as
+         * cap => 0. The two are therefore not interchangeable at this
+         * boundary even though the API distinguishes them — see
+         * docs/surcharge-fx.md.
+         *
          * @param array{type: string, grid: array<int,array>} $settings
          * @return array{fixed: float|null, cap: float|null}
          */

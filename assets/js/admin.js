@@ -400,7 +400,9 @@ jQuery(function ($) {
       const showPct = type === "percentage" || type === "fixed_and_percentage";
       $grid.find(".twoinc-col-fixed").toggle(showFixed);
       $grid.find(".twoinc-col-percentage").toggle(showPct);
-      // Cap bounds the percentage portion — follows the percentage column.
+      // The cap bounds the WHOLE fee line item, not the percentage portion
+      // (TWO-25269). The column is nonetheless offered only alongside a
+      // percentage method, which is where a cap is actually useful.
       $grid.find(".twoinc-col-limit").toggle(showPct);
       // No surcharge method: the whole grid row is noise.
       $(".twoinc-surcharge-grid-field").toggle(type !== "none");
