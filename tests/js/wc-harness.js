@@ -160,6 +160,11 @@ function loadTwoinc(twoinc) {
     util: exported.twoincUtilHelper,
     dom: exported.twoincDomHelper,
     termChips: exported.twoincTermChips,
+    // The Twoinc class itself, for the code paths that reach the singleton.
+    // Safe to construct here: the constructor only initialises fields, and
+    // every call re-evaluates the source, so the `instance` a test creates
+    // cannot leak into the next one.
+    Twoinc: exported.Twoinc,
     $: $,
     twoinc: settings
   };
@@ -208,6 +213,12 @@ function buildCheckoutForm(options) {
     "  </p>",
     '  <p id="billing_company_field">',
     "    <input type='text' id='billing_company' name='billing_company' value='' />",
+    "  </p>",
+    // The real checkout declares this alongside billing_company (both hidden
+    // behind the search field). Manual entry writes to it, and the link back
+    // out of manual entry is appended into #billing_company_field.
+    '  <p id="company_id_field">',
+    "    <input type='text' id='company_id' name='company_id' value='' />",
     "  </p>",
     "</form>"
   ].join("\n");

@@ -76,6 +76,35 @@ let twoincSelectWooHelper = {
   companySearchMinLength: 3,
 
   /**
+   * The dropdown's own search field. select2 tears the dropdown down and
+   * rebuilds it on every open, so this node is never the same one twice and
+   * nothing may hold a reference to it — every use is a fresh lookup, and
+   * every handler on it is delegated.
+   */
+  companySearchInputSelector: 'input[aria-owns="select2-billing_company_display-results"]',
+
+  /**
+   * DOM id of the manual-entry pseudo-option (TWO-25288). Unchanged from when
+   * this was a cloned <div> so the stylesheet rule and the brand overlays that
+   * match it keep working.
+   */
+  manualEntryRowId: "company_not_in_btn",
+
+  /** DOM id of the link back out of manual entry and into search. */
+  searchCompanyBtnId: "search_company_btn",
+
+  /**
+   * The `id` on the manual-entry row's payload object (TWO-25288).
+   *
+   * It has to be an id and not a flag: the picker stringifies every navigable
+   * row's `data.id` when it recomputes selected state, so a row without one
+   * throws and takes the whole results render with it. And it must not be
+   * mistakable for a company: `processResults` below maps each hit's id to the
+   * company NAME, so the sentinel is deliberately not a plausible one.
+   */
+  manualEntrySentinelId: "__twoinc_manual_entry__",
+
+  /**
    * Text for a company search that could not be completed. Read lazily
    * because window.twoinc is populated by the checkout render; the literal
    * is the last-resort fallback for a page where the localised string is
@@ -127,6 +156,180 @@ let twoincSelectWooHelper = {
     // `#, php-format` family of placeholders is what they would reach for. The
     // msgid itself stays `%d` — changing it would invalidate the catalogues.
     return template.replace(/%(\d+\$)?d/, twoincSelectWooHelper.companySearchMinLength);
+  },
+
+  /**
+   * Label of the manual-entry row (TWO-25288). Read lazily for the same
+   * reason as the hints above.
+   */
+  companyNotInListText: function () {
+    return (
+      (window.twoinc && window.twoinc.text && window.twoinc.text.company_not_in_list) ||
+      "My company is not on the list"
+    );
+  },
+
+  /** Label of the link back out of manual entry and into search. */
+  searchCompanyText: function () {
+    return (
+      (window.twoinc && window.twoinc.text && window.twoinc.text.search_company) ||
+      "Search for company"
+    );
+  },
+
+  /**
+   * Build the manual-entry row as a real pseudo-option (TWO-25288).
+   *
+   * This used to be a cloned <div> appended to the results list's PARENT, i.e.
+   * outside the subtree the field's aria-owns points at — so it had no role,
+   * no id, no payload, and was not reachable by keyboard at all. It is a
+   * genuine option row now, which is what makes it arrow-reachable and
+   * announced without a bespoke keydown bridge.
+   *
+   * Every attribute here is load-bearing:
+   *
+   *  - the bundled picker's navigable set is the rows carrying a
+   *    `data-selected` attribute, while select2 4.1 keys off the
+   *    `--selectable` class instead. A host theme may supply either, so the
+   *    row carries both and is reachable under both.
+   *  - `data-selected` must stay "false". "true" means "already picked", and
+   *    the picker routes activation of an already-picked row to closing the
+   *    dropdown instead of selecting it — the row would look reachable and do
+   *    nothing.
+   *  - the payload goes on with jQuery `data`, which is where the picker reads
+   *    each row's data from, and it must carry `_resultId` matching the li's
+   *    id: that is what the picker copies into aria-activedescendant when the
+   *    row is highlighted. Without it the row is reachable but silent.
+   *
+   * @returns {Object} jQuery-wrapped <li>
+   */
+  buildManualEntryRow: function () {
+    const helper = twoincSelectWooHelper;
+    const label = helper.companyNotInListText();
+
+    const $row = jQuery("<li></li>")
+      .attr({
+        id: helper.manualEntryRowId,
+        role: "option",
+        "aria-selected": "false",
+        "data-selected": "false"
+      })
+      .addClass("select2-results__option select2-results__option--selectable")
+      .text(label);
+
+    $row.data("data", {
+      id: helper.manualEntrySentinelId,
+      text: label,
+      _resultId: helper.manualEntryRowId
+    });
+
+    return $row;
+  },
+
+  /**
+   * Put the manual-entry row at the end of the results list, or take it away
+   * (TWO-25288).
+   *
+   * Visibility rule is the search threshold and nothing else — no
+   * "has a search completed" gate. The row appears the moment the buyer has
+   * typed enough for a search to be worth running, which is BEFORE the
+   * debounced request goes out, so a buyer who already knows their company is
+   * not in the registry never has to wait for a round trip to find that out.
+   *
+   * @returns {void}
+   */
+  syncManualEntryRow: function () {
+    const helper = twoincSelectWooHelper;
+
+    const picker = jQuery("#billing_company_display").data("select2");
+    if (!picker || !picker.$results || !picker.$results.length) return;
+
+    const $list = picker.$results;
+    const $existing = $list.children("#" + helper.manualEntryRowId);
+    const term = jQuery(helper.companySearchInputSelector).val() || "";
+
+    if (term.length < helper.companySearchMinLength) {
+      $existing.remove();
+      return;
+    }
+
+    // Already the last row: do nothing. This early return is load-bearing,
+    // not an optimisation — this function is also called from a
+    // MutationObserver watching the same list, so an unconditional append
+    // would re-enter itself forever.
+    if ($existing.length && $list.children().last().is($existing)) return;
+
+    $existing.remove();
+    $list.append(helper.buildManualEntryRow());
+  },
+
+  /**
+   * Wire the manual-entry affordance to a company-search widget (TWO-25288).
+   *
+   * Idempotent by construction. Every handler is namespaced and every bind is
+   * preceded by the matching `.off()`, so calling this again — and it IS
+   * called again, from the 800ms re-run of enableCompanySearch and from every
+   * return out of manual entry — leaves exactly one handler of each kind.
+   * The previous implementation bound its input handler inside a polling
+   * callback on every dropdown open with no `.off()`, which both accumulated
+   * duplicates and missed the first keystrokes of anyone typing faster than
+   * the poll interval.
+   *
+   * @param {Object} $select jQuery-wrapped company-search <select>
+   * @returns {void}
+   */
+  bindManualEntryAffordance: function ($select) {
+    const helper = twoincSelectWooHelper;
+
+    // Delegated on <body> rather than bound to the search field: that field
+    // is destroyed and rebuilt on every open, and delegation means the
+    // handler exists before the buyer's first keystroke rather than after a
+    // poll notices the field appeared.
+    jQuery(document.body)
+      .off("input.twoincManualEntry")
+      .on("input.twoincManualEntry", helper.companySearchInputSelector, function () {
+        helper.syncManualEntryRow();
+      });
+
+    // The picker empties the whole results list on every render — a new
+    // result set, the "searching" state, a message — so the row has to be put
+    // back after each one. Watching the list covers all of those without
+    // guessing at which internal events fire.
+    const picker = $select.data("select2");
+    if (
+      picker &&
+      picker.$results &&
+      picker.$results.length &&
+      !picker.$results.data("twoincManualEntryObserved") &&
+      typeof MutationObserver === "function"
+    ) {
+      picker.$results.data("twoincManualEntryObserved", true);
+      new MutationObserver(function () {
+        helper.syncManualEntryRow();
+      }).observe(picker.$results[0], { childList: true });
+    }
+
+    // Activation, keyboard and mouse through one path. The picker turns both
+    // Enter on the highlighted row and a click on it into the same internal
+    // select, and fires a preventable pre-event first — so intercepting that
+    // one event covers both inputs, and there is no separate click handler
+    // that could double-fire or drift out of step with the keyboard one.
+    $select
+      .off("select2:selecting.twoincManualEntry")
+      .on("select2:selecting.twoincManualEntry", function (e) {
+        const data = e.params && e.params.args && e.params.args.data;
+        if (!data || data.id !== helper.manualEntrySentinelId) return;
+
+        // Prevented, so the selection is never written: no company name, no
+        // company id, no approval call, no address lookup.
+        e.preventDefault();
+
+        // Deferred out of the picker's own event dispatch. Entering manual
+        // entry destroys this widget, and destroying it from inside its own
+        // trigger would pull the DOM out from under the code that is still
+        // unwinding.
+        setTimeout(twoincDomHelper.enterManualCompanyEntry, 0);
+      });
   },
 
   /**
@@ -601,6 +804,34 @@ let twoincDomHelper = {
     // Toggle the required fields based on the account type
     twoincDomHelper.toggleRequiredCues(allTargets, false);
     twoincDomHelper.toggleRequiredCues(requiredTargets, isTwoincSelected);
+
+    twoincDomHelper.syncCompanyFieldWrappers();
+  },
+
+  /**
+   * Mirror each company field's visibility onto its enclosing wrapper
+   * (TWO-25288).
+   *
+   * The pay-for-order page lays its copy of the company inputs out in
+   * per-field wrappers, each carrying its own hidden state that the function
+   * above does not touch — so hiding or revealing the field inside one has no
+   * visible effect there. Manual entry was unreachable on that page until now,
+   * which is the only reason that has not shown up: switching to it would have
+   * revealed a company field still inside a hidden wrapper, leaving the buyer
+   * with nowhere to type. The checkout page has no such wrappers and this is a
+   * no-op there.
+   *
+   * @returns {void}
+   */
+  syncCompanyFieldWrappers: function () {
+    jQuery("#billing_company_display_field, #billing_company_field, #company_id_field").each(
+      function () {
+        const $field = jQuery(this);
+        const $wrapper = $field.closest(".twoinc-inp-container");
+        if (!$wrapper.length) return;
+        $wrapper.toggleClass("hidden", $field.hasClass("hidden"));
+      }
+    );
   },
 
   /**
@@ -787,15 +1018,73 @@ let twoincDomHelper = {
   },
 
   /**
-   * Get the company-not-in-btn, generate if not found
+   * Get the link back out of manual entry and into company search, building it
+   * hidden on first use (TWO-25288).
+   *
+   * A real <button> rather than the <div> this used to be. The div had no
+   * href, no role and no tabindex, so the only way out of manual entry was a
+   * mouse click; type="button" is what keeps a button inside the checkout form
+   * from submitting it.
+   *
+   * @returns {Object} jQuery-wrapped button
    */
-  getCompanyNotInBtnNode: function () {
-    if (jQuery("#company_not_in_btn").length) return jQuery("#company_not_in_btn");
+  getSearchCompanyBtnNode: function () {
+    const id = twoincSelectWooHelper.searchCompanyBtnId;
 
-    let companyNotInBtn = jQuery(".company_not_in_btn").clone();
-    companyNotInBtn.attr("id", "company_not_in_btn");
-    companyNotInBtn.removeClass("company_not_in_btn");
-    return companyNotInBtn;
+    let $btn = jQuery("#" + id);
+    if ($btn.length) return $btn;
+
+    $btn = jQuery("<button></button>")
+      .attr({ id: id, type: "button" })
+      .text(twoincSelectWooHelper.searchCompanyText())
+      .hide();
+    jQuery("#billing_company_field").append($btn);
+    return $btn;
+  },
+
+  /**
+   * Switch the company field from search to manual entry (TWO-25288).
+   *
+   * Reached only from the manual-entry row's activation, keyboard or mouse.
+   *
+   * @returns {void}
+   */
+  enterManualCompanyEntry: function () {
+    window.twoinc.enable_company_search = "no";
+
+    jQuery("#billing_company_display").val("");
+    jQuery("#company_id").val("");
+    Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData();
+
+    // Looked up from the DOM rather than through the cached
+    // billingCompanySelect: enableCompanySearch can have re-attached the
+    // widget since that reference was taken, and the one to tear down is
+    // whichever one is currently attached.
+    const $display = jQuery("#billing_company_display");
+    if ($display.data("select2")) $display.select2("destroy");
+
+    jQuery("#" + twoincSelectWooHelper.manualEntryRowId).remove();
+    twoincDomHelper.getSearchCompanyBtnNode().show();
+
+    twoincDomHelper.toggleBusinessFields();
+  },
+
+  /**
+   * Switch the company field back from manual entry to search (TWO-25288).
+   *
+   * @returns {void}
+   */
+  exitManualCompanyEntry: function () {
+    window.twoinc.enable_company_search = "yes";
+
+    Twoinc.getInstance().enableCompanySearch();
+
+    jQuery("#billing_company").val("");
+    jQuery("#company_id").val("");
+    Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData();
+
+    twoincDomHelper.getSearchCompanyBtnNode().hide();
+    twoincDomHelper.toggleBusinessFields();
   },
 
   /**
@@ -1836,25 +2125,17 @@ class Twoinc {
 
     twoincSelectWooHelper.fixSelectWooPositionCompanyName();
 
+    // Manual-entry affordance (TWO-25288). Bound here, once per widget, rather
+    // than on every dropdown open: the handlers it installs are delegated and
+    // outlive the dropdown, so re-binding them per open only ever accumulated
+    // duplicates.
+    twoincSelectWooHelper.bindManualEntryAffordance(self.billingCompanySelect);
+
     self.billingCompanySelect.on("select2:open", function (e) {
-      let companyNotInBtn = twoincDomHelper.getCompanyNotInBtnNode();
-      jQuery("#select2-billing_company_display-results").parent().append(companyNotInBtn);
-      twoincSelectWooHelper.waitToFocus("billing_company_display", null, null, function () {
-        jQuery('input[aria-owns="select2-billing_company_display-results"]').on(
-          "input",
-          function (e) {
-            let selectWooParams = twoincSelectWooHelper.genSelectWooParams();
-            if (
-              jQuery(this).val() &&
-              jQuery(this).val().length >= selectWooParams.minimumInputLength
-            ) {
-              jQuery("#company_not_in_btn").show();
-            } else {
-              jQuery("#company_not_in_btn").hide();
-            }
-          }
-        );
-      });
+      // Arguments kept verbatim: waitToFocus treats an explicit null as a
+      // value rather than a default, so dropping them would change the poll
+      // timing of the focus fix, which is not what this change is about.
+      twoincSelectWooHelper.waitToFocus("billing_company_display", null, null);
       twoincSelectWooHelper.addSelectWooFocusFixHandler("billing_company_display");
     });
   }
@@ -1903,30 +2184,13 @@ class Twoinc {
     // Disable or enable actions based on the account type
     $body.on("updated_checkout", Twoinc.getInstance().onUpdatedCheckout);
 
-    $body.on("click", "#company_not_in_btn", function () {
-      window.twoinc.enable_company_search = "no";
-
-      jQuery("#billing_company_display").val("");
-      jQuery("#company_id").val("");
-      Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData();
-      jQuery("#company_not_in_btn").hide();
-      jQuery("#search_company_btn").show();
-      Twoinc.getInstance().billingCompanySelect.select2("destroy");
-
-      twoincDomHelper.toggleBusinessFields();
-    });
-
-    $body.on("click", "#search_company_btn", function () {
-      window.twoinc.enable_company_search = "yes";
-
-      self.enableCompanySearch();
-
-      jQuery("#billing_company").val("");
-      jQuery("#company_id").val("");
-      Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData();
-
-      jQuery("#search_company_btn").hide();
-      twoincDomHelper.toggleBusinessFields();
+    // No click handler for the manual-entry row (TWO-25288). It is a pseudo-
+    // option inside the results list now, so the picker already turns a click
+    // on it into the same internal select that Enter does, and
+    // bindManualEntryAffordance intercepts that one event for both. A second,
+    // click-only path here would fire alongside it on every mouse activation.
+    $body.on("click", "#" + twoincSelectWooHelper.searchCompanyBtnId, function () {
+      twoincDomHelper.exitManualCompanyEntry();
     });
 
     // Handle the representative inputs blur event
@@ -2442,10 +2706,9 @@ jQuery(function () {
       // Otherwise do not run Twoinc code
     }
 
-    // I can not find my company button
-    jQuery("#billing_company_field").append(jQuery("#search_company_btn"));
-    jQuery("#company_not_in_btn").hide();
-    jQuery("#search_company_btn").hide();
+    // Nothing to relocate or hide here any more (TWO-25288): the manual-entry
+    // row is created inside the results list only while it should be visible,
+    // and the link back to search is created hidden, in place, on first use.
 
     setTimeout(function () {
       // Init the hidden Company name field

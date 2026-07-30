@@ -429,7 +429,7 @@ msgstr "Verkoper-ID:"
 msgid "Missing company ID."
 msgstr "Bedrijfs-ID ontbreekt."
 
-#: views/woocommerce_after_checkout_billing_form.php:11
+#: class/WC_Twoinc_Checkout.php:278
 msgid "My company is not on the list"
 msgstr "Mijn bedrijf staat niet op de lijst"
 
@@ -526,7 +526,7 @@ msgstr "Antwoordcode van %s : %d"
 msgid "Response: %s"
 msgstr "Antwoord: %s"
 
-#: views/woocommerce_after_checkout_billing_form.php:15
+#: class/WC_Twoinc_Checkout.php:279
 msgid "Search for company"
 msgstr "Zoek naar bedrijf"
 

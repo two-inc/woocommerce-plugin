@@ -424,7 +424,7 @@ msgstr "Selger-ID:"
 msgid "Missing company ID."
 msgstr "Manglende firma-ID."
 
-#: views/woocommerce_after_checkout_billing_form.php:11
+#: class/WC_Twoinc_Checkout.php:278
 msgid "My company is not on the list"
 msgstr "Selskapet mitt er ikke på listen"
 
@@ -522,7 +522,7 @@ msgstr "Svarkode fra %s : %d"
 msgid "Response: %s"
 msgstr "Svar: %s"
 
-#: views/woocommerce_after_checkout_billing_form.php:15
+#: class/WC_Twoinc_Checkout.php:279
 msgid "Search for company"
 msgstr "Søk etter selskap"
 

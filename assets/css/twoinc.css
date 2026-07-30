@@ -167,19 +167,35 @@
   white-space: nowrap;
 }
 
+/*
+ * Manual-entry row inside the company-search results list (TWO-25288).
+ *
+ * It is an option row now rather than a floating div beside the list, so the
+ * hand-rolled margin is gone: the row inherits the picker's own option padding
+ * and highlight, which is what keeps it in step with the company rows above it
+ * when arrowed onto. Kept as a flat single-id selector so brand overlays that
+ * recolour it keep matching without raising their own specificity.
+ */
 #company_not_in_btn {
   cursor: pointer;
   color: #3043d1;
-  margin: 4px 12px;
 }
 
+/*
+ * The link back out of manual entry. A <button> now, for keyboard
+ * reachability, so the browser's button chrome has to be reset for it to look
+ * like the link it did before.
+ */
 #search_company_btn {
   text-align: right;
   cursor: pointer;
-  padding-top: 5px;
+  padding: 5px 0 0;
   color: #3043d1;
   position: absolute;
   right: 4px;
+  background: none;
+  border: 0;
+  font: inherit;
 }
 
 /* Payment terms chip selector (TWO-24751) */
