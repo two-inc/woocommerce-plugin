@@ -251,7 +251,7 @@
   opacity: 0.85;
 }
 /*
- * The one loading idiom in this plugin: a 1.4s staggered three-dot opacity
+ * The dot-pulse loading idiom: a 1.4s staggered three-dot opacity
  * pulse, timing mirroring the Magento checkout's .two-term-chip__loading.
  * Shared by the term-chip fee quote and the order-intent check
  * (.twoinc-loader) — one element, one keyframes block, no duplication.
@@ -286,26 +286,38 @@
 }
 
 /*
- * Company-search spinner (TWO-25232). Sits inside the select2 search field
- * itself, not in the results list, so it reads as "this field is working"
- * and does not fight the results message it would otherwise replace. Same
- * .twoinc-dots pulse as every other loading state here. Only laid out while
- * .twoinc-searching is set, so the reserved right-hand gutter appears with
- * the spinner instead of permanently narrowing the input.
+ * Company-search spinner (TWO-25232, respun TWO-25288). Sits inside the
+ * select2 search field itself, not in the results list, so it reads as "this
+ * field is working" and does not fight the results message it would otherwise
+ * replace. The reserved right-hand gutter is only laid out while
+ * .twoinc-searching is set, so it appears with the spinner instead of
+ * permanently narrowing the input.
+ *
+ * The motion comes from an animated GIF — the same loading GIF the PrestaShop
+ * plugin already ships — painted as a background-image on one childless node.
+ * A background-image, not an <img>: the URL then resolves relative to this
+ * stylesheet, so no asset URL has to be plumbed through the platform's asset
+ * helper and into the markup. No inner markup either, so there is nothing for
+ * the stylesheet to stay in step with.
+ *
+ * Sized at a fixed 16px because the asset is natively 16x16; scaling it with
+ * an em-relative box would blur it.
  */
 .select2-search--dropdown.twoinc-searching {
   position: relative;
 }
 .twoinc-search-spinner {
-  display: none;
-}
-.select2-search--dropdown.twoinc-searching .twoinc-search-spinner {
   display: inline-block;
   position: absolute;
-  top: 50%;
   right: 14px;
-  transform: translateY(-50%);
+  top: calc(50% - 8px);
+  width: 16px;
+  height: 16px;
   pointer-events: none;
+  background-image: url("../images/loader.gif");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 16px 16px;
 }
 .select2-search--dropdown.twoinc-searching .select2-search__field {
   padding-right: 30px;

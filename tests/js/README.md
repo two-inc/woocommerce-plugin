@@ -108,7 +108,23 @@ about the company-search helper, so the bootstrap is left to no-op.
   request that _is_ current still does the work.
 - spinner lifecycle: raised per search, cleared on success and on every failure including
   the silent one, exactly one spinner node however many searches run in one open dropdown,
-  and no throw when there is no open dropdown to hang it on.
+  removed rather than merely hidden once a search ends, and no throw when there is no open
+  dropdown to hang it on.
+- spinner shape (TWO-25288): a single childless element carrying the styling hook class and
+  `aria-hidden="true"`, landing inside the widget's own search box. The stylesheet paints an
+  animated loading GIF onto that one node as a background-image, so inner markup would be
+  dead weight — the childlessness is pinned deliberately.
+- spinner paint (TWO-25288): the real stylesheet is injected with `injectStylesheet()` and
+  the computed `background-image` is read back, so the rule is proven to point at the asset;
+  paired with an on-disk existence check, because a correct URL aimed at a missing file
+  would satisfy the computed style on its own. The existence check resolves the URL the
+  stylesheet declares against the stylesheet's own directory rather than a path written into
+  the test, so repointing the rule at a directory that holds nothing fails here. The file it
+  lands on is then checked to be a 16x16 `GIF89a` with more than one frame — a still image
+  would be a spinner that never spins, and jsdom evaluates no animation. The frame count
+  comes from `countGifFrames()`, which walks the GIF block structure; counting raw `0x2C`
+  bytes across the file does not work, because that value also occurs inside the colour
+  table and the compressed pixel data, so a single-frame file passes such a scan.
 - message copy: the built-in fallback, the localised override, and that the widget renders
   ours rather than select2's own "The results could not be loaded."
 
@@ -175,6 +191,21 @@ suite green:
 closed-dropdown test), but the `.twoinc-searching` class it toggles is asserted rather than
 its rendered effect, which is CSS.
 
+The spinner's paint is partly covered: `injectStylesheet()` puts the real stylesheet in the
+document and jsdom's cascade resolves enough of it to prove the rule points at the loading
+GIF. What jsdom cannot tell you is whether the result is _visible_ — box geometry, stacking,
+and whether the image animates are all beyond it, and the multi-value `background-position`
+shorthand does not resolve at all (it reads back empty however the rule is written, so do
+not assert on it). The asset's own bytes are checked instead — dimensions and frame count —
+which pins that the file could animate, not that the browser animates it.
+
+Treat a change to the spinner's appearance as needing a real browser. This gap has bitten
+once already: an earlier attempt on TWO-25288 drew the figure in CSS and shipped for one
+commit rendering completely motionless, with the whole suite green — nothing in jsdom
+evaluates an animation, and asserting an animation's _name_ would have passed too. Moving to
+an animated image asset is what made the paint assertable at all, but "assertable" stops at
+the URL.
+
 ## Adding tests
 
 Prefer driving behaviour through the real widget — open it with `openCompanyWidget()` and
@@ -188,3 +219,11 @@ assertion in this suite was checked that way; nine separate mutations of
 dropping the `always` guard, weakening `degraded === true` to truthiness, removing the
 `Array.isArray` guard, removing the request timeout, dropping the `national_identifier`
 guard, reverting `constructTwoincUrl()` to property assignment) each fail at least one test.
+
+Four further mutations of `assets/css/twoinc.css` and its asset were checked the same way,
+all against the spinner-paint test: repointing the spinner's `url()` at a directory that does
+not exist, deleting its `background-image` declaration, deleting `assets/images/loader.gif`,
+and replacing that asset with a valid single-frame 16x16 `GIF89a` built from its own header,
+colour table and first frame. Two of those used to pass: the repointed `url()`, because the
+existence check looked at a path written into the test rather than the one the stylesheet
+declares, and the single-frame GIF, because the frame count was a raw byte scan.

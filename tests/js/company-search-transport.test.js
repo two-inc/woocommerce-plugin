@@ -11,6 +11,9 @@
 
 "use strict";
 
+const fs = require("fs");
+const path = require("path");
+
 const harness = require("./wc-harness");
 
 describe("company search ajax transport", () => {
@@ -319,16 +322,119 @@ describe("company search ajax transport", () => {
       expect(spinnerVisible()).toBe(false);
     });
 
-    test("creates exactly one spinner node however many searches run", () => {
+    test("keeps exactly one spinner node however many searches run", () => {
       // The search input lives inside the dropdown, which select2 tears
       // down and rebuilds on every open, so the node is created lazily
       // per search — that must not accumulate duplicates within one open
-      // dropdown.
+      // dropdown, including while several searches overlap.
       search().request.succeed({ items: [] });
       search().request.succeed({ items: [] });
-      search().request.fail("timeout");
+      search();
+      search();
 
       expect(ctx.$(".twoinc-search-spinner").length).toBe(1);
+    });
+
+    test("the spinner node is removed once the search ends", () => {
+      // Removed, not merely hidden: a hidden node would leave the animated
+      // loading image decoding behind a closed dropdown, and it is the
+      // removal that guarantees the single-node property above.
+      const run = search();
+      expect(ctx.$(".twoinc-search-spinner").length).toBe(1);
+
+      run.request.succeed({ items: [] });
+
+      expect(ctx.$(".twoinc-search-spinner").length).toBe(0);
+    });
+
+    test("the spinner is a single childless element carrying the styling hook", () => {
+      // The figure (TWO-25288) is a background-image on this one node, which
+      // needs the node to stay empty: any inner markup would sit on top of
+      // the painted background as dead weight the stylesheet does not style.
+      // So pin the emptiness as well as the class.
+      search();
+
+      const $spinner = ctx.$(".twoinc-search-spinner");
+      expect($spinner).toHaveLength(1);
+      expect($spinner.children()).toHaveLength(0);
+      expect($spinner.text()).toBe("");
+    });
+
+    test("the spinner is painted with the animated loading image", () => {
+      // Everything else here pins markup, which stays green whether the
+      // spinner paints anything at all — the earlier attempt on this ticket
+      // shipped a node that rendered nothing visible with the suite green.
+      // So resolve the real stylesheet and read back what the node paints.
+      //
+      // Two halves, both needed: the computed rule proves the CSS points at
+      // the asset, and the existence check proves the asset is actually in
+      // the tree. A correct url() aimed at a missing file satisfies the
+      // first on its own.
+      // The existence check resolves the URL the stylesheet actually
+      // declares, relative to the stylesheet's own directory, exactly as a
+      // browser would — deliberately not a path spelled out here. A
+      // hardcoded path checks that *some* asset exists somewhere, which
+      // stays green when the rule is repointed at a directory that holds
+      // nothing.
+      harness.injectStylesheet();
+      search();
+
+      const spinner = ctx.$(".twoinc-search-spinner")[0];
+      const painted = window.getComputedStyle(spinner);
+      expect(painted.backgroundImage).toContain("loader.gif");
+      expect(painted.backgroundRepeat).toBe("no-repeat");
+
+      const declared = /url\(\s*["']?([^"')]+)["']?\s*\)/.exec(painted.backgroundImage);
+      expect(declared).not.toBeNull();
+
+      const stylesheetDir = path.dirname(path.join(harness.REPO_ROOT, harness.STYLESHEET_PATH));
+      const assetPath = path.resolve(stylesheetDir, declared[1]);
+      expect(fs.existsSync(assetPath)).toBe(true);
+
+      // And that the file found there is the animated 16x16 figure the rule
+      // is sized for. A still image would be a spinner that never spins, and
+      // no CSS assertion can tell the two apart — jsdom evaluates no
+      // animation at all.
+      const bytes = fs.readFileSync(assetPath);
+      expect(bytes.slice(0, 6).toString("latin1")).toBe("GIF89a");
+      expect(bytes.readUInt16LE(6)).toBe(16);
+      expect(bytes.readUInt16LE(8)).toBe(16);
+
+      // One image descriptor means a static picture. The count comes from
+      // walking the block structure, not from scanning for the descriptor
+      // byte: that byte also occurs inside colour tables and compressed
+      // pixel data, so a scan reports frames in a single-frame file and the
+      // assertion below could never fail.
+      expect(harness.countGifFrames(bytes)).toBeGreaterThan(1);
+    });
+
+    test("the spinner lands inside the widget's own search box", () => {
+      // Every other assertion here selects the spinner document-wide, which
+      // would pass just as happily if the helper appended it to <body>. The
+      // spinner is positioned absolutely against the search container, so
+      // landing in the wrong parent means it renders in the wrong place —
+      // or nowhere visible at all — with the whole suite still green.
+      //
+      // The container is created by the widget library when the dropdown
+      // opens, not by any template in this repo, so this pins the one
+      // binding that could actually be got wrong.
+      search();
+
+      const $searchBox = ctx
+        .$('input[aria-owns="select2-billing_company_display-results"]')
+        .parent();
+      expect($searchBox).toHaveLength(1);
+      expect($searchBox.hasClass("select2-search--dropdown")).toBe(true);
+      expect($searchBox.children(".twoinc-search-spinner")).toHaveLength(1);
+      expect(ctx.$(".twoinc-search-spinner").parent().is($searchBox)).toBe(true);
+    });
+
+    test("the spinner is hidden from the accessibility tree", () => {
+      // Decoration only: select2 announces search state through the
+      // results list, so an exposed spinner would double up on it.
+      search();
+
+      expect(ctx.$(".twoinc-search-spinner").attr("aria-hidden")).toBe("true");
     });
 
     test("does not throw when the dropdown is closed", () => {
