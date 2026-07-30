@@ -362,12 +362,12 @@ let twoincSelectWooHelper = {
         helper.syncManualEntryRow();
       });
 
-    // Install the render watcher eagerly too, so a dropdown opened and
-    // re-rendered before the buyer types anything is already covered. The sync
-    // installs it as well, which is what makes a widget re-created elsewhere
-    // heal itself; both routes go through the same one-at-a-time guard.
-    const picker = $select.data("select2");
-    if (picker) helper.observeResultsList(picker.$results);
+    // No eager render-watcher install here. It was tried and removed: the row
+    // cannot exist before the buyer has typed to the threshold, and typing is
+    // what runs the sync, which installs the watcher against whatever results
+    // list is live. Removing the eager copy left the suite green, i.e. nothing
+    // depended on it — and one install point that heals every widget
+    // re-creation is easier to reason about than two.
 
     // Activation, keyboard and mouse through one path. The picker turns both
     // Enter on the highlighted row and a click on it into the same internal
