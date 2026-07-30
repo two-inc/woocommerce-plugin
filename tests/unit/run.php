@@ -151,6 +151,8 @@ final class BrandConfigSpec
             'testGateKeepsMethodWhenSurchargeIsPercentageOnly',
             'testGateFxCheckAppliesOnOrderPayEndpoint',
             'testBuyerFeeShareSameCurrencyNeverTouchesFx',
+            'testBuyerFeeShareRelaysAConfiguredZeroCapVerbatim',
+            'testBuyerFeeShareRoundsMonetaryValuesToTwoDecimalPlaces',
             'testBuyerFeeShareCapRoundingToZeroRelaysZeroCap',
             'testBuyerFeeShareFixedRoundingToZeroChargesZero',
             'testBuyerFeeShareAbsentCapChargesUncappedPercentage',
@@ -1717,6 +1719,43 @@ final class BrandConfigSpec
             $threw = true;
         }
         TinyAssert::true($threw);
+
+        // A cap of exactly 0 is rejected (TWO-25289) — it bounds the whole
+        // fee line, so it silently wipes the fixed fee too, and the intent
+        // it is mistaken for is expressible with 0% and 0 fixed instead.
+        $threw = false;
+        $message = '';
+        try {
+            $gateway->validate_two_surcharge_grid_field('surcharge_grid', [30 => ['percentage' => '2.5', 'limit' => '0']]);
+        } catch (Exception $e) {
+            $threw = true;
+            $message = $e->getMessage();
+        }
+        TinyAssert::true($threw, 'a cap of 0 must be rejected');
+        TinyAssert::true(strpos($message, 'cannot be 0') !== false, 'the error must say a cap of 0 is the problem');
+        // '0.00' and '0,00' are the same value typed differently and are
+        // rejected the same way — a decimal-formatted zero must not slip past.
+        foreach (['0.00', '0,00', '00'] as $zero) {
+            $threw = false;
+            try {
+                $gateway->validate_two_surcharge_grid_field('surcharge_grid', [30 => ['limit' => $zero]]);
+            } catch (Exception $e) {
+                $threw = true;
+            }
+            TinyAssert::true($threw, sprintf('a cap typed as "%s" must be rejected', $zero));
+        }
+
+        // An EMPTY cap stays valid and still means "no cap" — absence and
+        // zero are different values and only the explicit zero is refused.
+        // A zero PERCENTAGE and a zero FIXED fee also stay valid: that pair
+        // is exactly what the rejection message tells the merchant to use.
+        TinyAssert::same(
+            [30 => ['fixed' => '0', 'percentage' => '0']],
+            $gateway->validate_two_surcharge_grid_field('surcharge_grid', [
+                30 => ['fixed' => '0', 'percentage' => '0', 'limit' => ''],
+            ]),
+            'zero percentage + zero fixed with an empty cap is the sanctioned "no fee" row'
+        );
 
         // Non-array input → empty grid
         TinyAssert::same([], $gateway->validate_two_surcharge_grid_field('surcharge_grid', ''));
@@ -4238,6 +4277,58 @@ final class BrandConfigSpec
         TinyAssert::same(2.5, $share['surcharge']);
         TinyAssert::same(10.0, $share['cap']);
         TinyAssert::same(0, $gateway->fx_requests);
+    }
+
+    private static function testBuyerFeeShareRelaysAConfiguredZeroCapVerbatim(): void
+    {
+        // A cap of exactly 0 STORED against a term is relayed as cap => 0.0,
+        // not normalised to absent (TWO-25289). This boundary used to apply a
+        // `> 0` filter, so a stored 0 became "no cap" and the percentage went
+        // out UNCAPPED — an overcharge, and the opposite of the merchant's
+        // instruction. The admin grid now refuses a zero cap, but a 0 can
+        // still arrive by a route the grid does not police (a row stored
+        // before that validation existed, `wp option update`, an import), and
+        // those must not be relayed uncapped either.
+        $gateway = self::fxGateway(null, [], [
+            'surcharge_type' => 'fixed_and_percentage',
+            'surcharge_grid' => [30 => ['fixed' => 2.5, 'percentage' => 1.5, 'limit' => '0']],
+        ]);
+        $share = WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway, 30);
+        TinyAssert::true(array_key_exists('cap', $share), 'a stored zero cap must not be dropped from the payload');
+        TinyAssert::same(0.0, $share['cap'], 'a stored zero cap is relayed as 0, never as "no cap"');
+        TinyAssert::same(0, $gateway->fx_requests, 'same-currency stores never reach the FX layer');
+    }
+
+    private static function testBuyerFeeShareRoundsMonetaryValuesToTwoDecimalPlaces(): void
+    {
+        // The pricing API refuses a monetary value finer than two decimal
+        // places rather than rounding it, so an over-precise configured
+        // amount was rejected upstream and surfaced to the buyer as a
+        // generic error (TWO-25289). Two decimals fixed, deliberately NOT
+        // wc_get_price_decimals(): a store configured for 3 or 4 price
+        // decimals would otherwise have its surcharge request refused.
+        $gateway = self::fxGateway(null, [], [
+            'surcharge_type' => 'fixed_and_percentage',
+            'surcharge_grid' => [30 => ['fixed' => 10.999, 'percentage' => 1.5, 'limit' => 20.005]],
+        ]);
+        $share = WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway, 30);
+        TinyAssert::same(11.0, $share['surcharge'], 'the fixed fee is rounded to 2dp before the request');
+        TinyAssert::same(20.01, $share['cap'], 'the cap is rounded to 2dp before the request');
+        TinyAssert::same(0, $gateway->fx_requests, 'no conversion involved: this is the same-currency path');
+
+        // And on the converted path, where the arithmetic itself produces
+        // more precision than the API accepts: 10.00 EUR at 1/0.085 is
+        // 117.6470... NOK.
+        $GLOBALS['__twoinc_test_currency'] = 'NOK';
+        $converting = self::fxGateway(null, [self::fxOk(['NOK' => 0.085])], [
+            'payment_terms_days' => [30],
+            'surcharge_type' => 'fixed_and_percentage',
+            'surcharge_grid' => [30 => ['fixed' => 10.0, 'percentage' => 1.5, 'limit' => 10.0]],
+        ]);
+        $converted = WC_Twoinc_Payment_Terms::build_buyer_fee_share($converting, 30);
+        TinyAssert::same(117.65, $converted['cap'], 'the converted cap is rounded to 2dp');
+        TinyAssert::same(117.65, $converted['surcharge'], 'the converted fixed fee is rounded to 2dp');
+        TinyAssert::true($converting->fx_requests > 0, 'the conversion path must really have run');
     }
 
     private static function testBuyerFeeShareCapRoundingToZeroRelaysZeroCap(): void

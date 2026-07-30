@@ -28,6 +28,15 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         public const SESSION_KEY = 'two_selected_term';
 
         /**
+         * Decimal places every monetary value in the pricing request is
+         * rounded to. Deliberately NOT wc_get_price_decimals(): the API
+         * refuses a value finer than two places rather than rounding it, so
+         * a store configured for 3 or 4 price decimals would have its
+         * surcharge request rejected outright (TWO-25289).
+         */
+        private const MONEY_DECIMALS = 2;
+
+        /**
          * Stored surcharge-rounding basis → pricing-API basis. "none" (and
          * any unmapped value) omits the rounding block. Mirrors Magento's
          * SurchargeCalculator::ROUNDING_BASIS_TO_API.
@@ -301,8 +310,8 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                         ));
                         return null;
                     }
-                    $converted_fixed = $fixed !== null ? (float) WC_Twoinc_Helper::round_amt($fixed * $rate) : null;
-                    $converted_cap = $cap !== null ? (float) WC_Twoinc_Helper::round_amt($cap * $rate) : null;
+                    $converted_fixed = $fixed !== null ? round($fixed * $rate, self::MONEY_DECIMALS) : null;
+                    $converted_cap = $cap !== null ? round($cap * $rate, self::MONEY_DECIMALS) : null;
                     // A configured CAP that rounds to 0.00 is relayed AS
                     // 0.00 — it is NOT a failure and must not be dropped,
                     // withheld or turned into "no cap". Per the pricing
@@ -363,11 +372,14 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                     $cap = $converted_cap;
                 }
             }
+            // Rounded here as well as after conversion, because the
+            // same-currency path never touches the FX branch and a merchant
+            // can type more precision than the API accepts (TWO-25289).
             if ($fixed !== null) {
-                $buyer_fee_share['surcharge'] = $fixed;
+                $buyer_fee_share['surcharge'] = round($fixed, self::MONEY_DECIMALS);
             }
             if ($cap !== null) {
-                $buyer_fee_share['cap'] = $cap;
+                $buyer_fee_share['cap'] = round($cap, self::MONEY_DECIMALS);
             }
             if ($has_percentage) {
                 $rounding = self::build_rounding($settings);
@@ -397,14 +409,21 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          * clamps the fee to zero, so it is relayed as 0.00 (TWO-25269).
          * The only fail-closed condition is no FX rate at all.
          *
-         * Note the `> 0` filter: a cap typed as exactly 0 in the STORE
-         * currency is normalised to ABSENT here, i.e. relayed as uncapped,
-         * NOT as cap 0. Only an FX-converted 0.00 reaches the API as
-         * cap => 0. So although the API distinguishes a zero cap from an
-         * absent one, this boundary does not, and a merchant who types 0
-         * gets an uncapped percentage rather than no fee. Pre-existing and
-         * deliberately unchanged under TWO-25269; needs its own ticket if
-         * relaying a configured 0 verbatim is wanted.
+         * A cap of exactly 0 is relayed AS 0, not normalised to absent
+         * (TWO-25289). This boundary used to apply a `> 0` filter, so a cap
+         * typed as 0 became "no cap" and the percentage went out UNCAPPED —
+         * an overcharge, and the exact opposite of what the merchant asked
+         * for. The admin grid now refuses a zero cap outright
+         * (WC_Twoinc::validate_two_surcharge_grid_field), but the filter had
+         * to go with it: a 0 arriving by any route the grid does not police —
+         * a row stored before that validation existed, `wp option update`, an
+         * import — would otherwise still be relayed uncapped. Emptiness is
+         * the only thing that means "no cap" here, and it is tested for
+         * explicitly.
+         *
+         * The `fixed` component keeps its `> 0` filter deliberately: an
+         * absent fixed surcharge and one of 0.00 are the same instruction
+         * (charge nothing extra), so nothing is lost by conflating them.
          *
          * @param array{type: string, grid: array<int,array>} $settings
          * @return array{fixed: float|null, cap: float|null}
@@ -416,7 +435,9 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
             $row = isset($settings['grid'][$days]) && is_array($settings['grid'][$days]) ? $settings['grid'][$days] : [];
             return [
                 'fixed' => $has_fixed && isset($row['fixed']) && (float) $row['fixed'] > 0 ? (float) $row['fixed'] : null,
-                'cap' => $has_percentage && isset($row['limit']) && (float) $row['limit'] > 0 ? (float) $row['limit'] : null,
+                'cap' => $has_percentage && isset($row['limit']) && trim((string) $row['limit']) !== ''
+                    ? (float) $row['limit']
+                    : null,
             ];
         }
 

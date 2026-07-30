@@ -57,3 +57,13 @@ a.setting-dropdown {
 .twoinc-surcharge-grid-container .twoinc-surcharge-grid {
   width: 100%;
 }
+
+/*
+ * WordPress core's .widefat gives row cells 10px of horizontal padding
+ * but not header cells, so every column heading sat 10px left of the
+ * inputs beneath it. Match the row cells so the header lines up.
+ */
+.twoinc-surcharge-grid-container .twoinc-surcharge-grid th {
+  padding-left: 10px;
+  padding-right: 10px;
+}

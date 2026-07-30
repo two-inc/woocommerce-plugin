@@ -1363,6 +1363,14 @@ if (!class_exists('WC_Twoinc')) {
                 __('Enter a limit amount (in %s) if you do not want to charge your customer more than a specific amount. Leave the limit field empty if you don\'t want to impose a limit amount.', 'twoinc-payment-gateway'),
                 html_entity_decode(get_woocommerce_currency_symbol($currency_code), ENT_QUOTES, 'UTF-8')
             );
+            // Zero is NOT the way to express "no fee on this term" — the
+            // grid refuses it on save. Say so next to the instruction that
+            // otherwise invites it (TWO-25289).
+            $cap_zero_sentence = __('A cap of 0 is not allowed. To charge nothing on a term, set that term\'s percentage and fixed fee to 0 instead.', 'twoinc-payment-gateway');
+            // Stated only for fixed_and_percentage, the one method where the
+            // distinction is load-bearing: the cap is applied to the summed
+            // fee, so it can wipe the fixed fee as well as the percentage.
+            $cap_whole_fee_sentence = __('The cap applies to the whole fee: the percentage and the fixed fee together, not the percentage alone.', 'twoinc-payment-gateway');
             // One help paragraph per surcharge method, keyed by the method
             // slug so admin.js can switch between them. Composed here rather
             // than inline in the markup below so the template stays readable.
@@ -1379,7 +1387,7 @@ if (!class_exists('WC_Twoinc')) {
                     $fixed_limit_label
                 );
             }
-            $help_text['percentage'] = $percentage_sentence . ' ' . $limit_sentence;
+            $help_text['percentage'] = $percentage_sentence . ' ' . $limit_sentence . ' ' . $cap_zero_sentence;
             // No enforceable fixed maximum → degrade to the percentage-only
             // wording rather than claim a maximum that is not applied.
             $help_text['fixed_and_percentage'] = ($fixed_limit_label !== '' ? sprintf(
@@ -1387,7 +1395,8 @@ if (!class_exists('WC_Twoinc')) {
                 __('Enter the amount and percentage of the fee you want to charge your customer. Max %1$s / %2$s.', 'twoinc-payment-gateway'),
                 $fixed_limit_label,
                 $percentage_limit_label
-            ) : $percentage_sentence) . ' ' . $limit_sentence;
+            ) : $percentage_sentence) . ' ' . $limit_sentence
+                . ' ' . $cap_whole_fee_sentence . ' ' . $cap_zero_sentence;
 
             ob_start();
             // Rendered rows mirror the SAVED offered set; admin.js keeps the
@@ -1500,6 +1509,25 @@ if (!class_exists('WC_Twoinc')) {
                         throw new Exception(sprintf(
                             /* translators: %s: term days */
                             __('Surcharge percentage for the %s-day term must be between 0 and 100.', 'twoinc-payment-gateway'),
+                            $days
+                        ));
+                    }
+                    // A cap of exactly 0 is refused (TWO-25289). It is never
+                    // what a merchant means by it: the cap bounds the WHOLE
+                    // fee line — the percentage part and the fixed fee
+                    // together, not the percentage alone — so a cap of 0
+                    // silently wipes a configured fixed fee as well, and
+                    // nothing in the grid says so. The intent it gets
+                    // mistaken for ("charge nothing on this term") is
+                    // expressible directly, by entering 0 in the percentage
+                    // and fixed cells. An EMPTY cap is a wholly legitimate
+                    // configuration meaning "no cap" and never reaches here
+                    // — the blank-cell `continue` above returns first, so
+                    // absence and zero stay distinguishable.
+                    if ($col === 'limit' && (float) $raw === 0.0) {
+                        throw new Exception(sprintf(
+                            /* translators: %s: term days */
+                            __('Surcharge cap for the %s-day term cannot be 0. To charge nothing on this term, set the percentage and the fixed fee to 0 instead, and leave the cap empty.', 'twoinc-payment-gateway'),
                             $days
                         ));
                     }
