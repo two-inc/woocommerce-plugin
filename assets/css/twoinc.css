@@ -167,19 +167,53 @@
   white-space: nowrap;
 }
 
+/*
+ * Manual-entry row inside the company-search results list (TWO-25288).
+ *
+ * It is an option row now rather than a floating div beside the list, so the
+ * hand-rolled margin is gone: the row inherits the picker's own option padding
+ * and highlight, which is what keeps it in step with the company rows above it
+ * when arrowed onto. Kept as a flat single-id selector so brand overlays that
+ * recolour it keep matching without raising their own specificity.
+ */
 #company_not_in_btn {
   cursor: pointer;
   color: #3043d1;
-  margin: 4px 12px;
 }
 
+/*
+ * Highlighted state (TWO-25288). NOT cosmetic — a contrast fix.
+ *
+ * The picker paints its highlighted row white-on-blue, but its own rule is a
+ * class selector (specificity 0,3,1) and the id rule above is 1,0,0, so the
+ * brand blue above wins on the text while the blue background still applies:
+ * roughly 2.5:1, under the 4.5:1 floor, where every real company row in the
+ * same list goes white-on-blue. Restated at the same id specificity so this row
+ * matches its neighbours instead of going unreadable the moment it is arrowed
+ * onto. Both theme prefixes, because which one is present depends on the host
+ * theme's picker build.
+ */
+#company_not_in_btn.select2-results__option--highlighted,
+.select2-container--default #company_not_in_btn.select2-results__option--highlighted,
+.select2-container--classic #company_not_in_btn.select2-results__option--highlighted {
+  color: #ffffff;
+}
+
+/*
+ * The link back out of manual entry. A <button> now, for keyboard
+ * reachability, so the browser's button chrome has to be reset for it to look
+ * like the link it did before.
+ */
 #search_company_btn {
   text-align: right;
   cursor: pointer;
-  padding-top: 5px;
+  padding: 5px 0 0;
   color: #3043d1;
   position: absolute;
   right: 4px;
+  background: none;
+  border: 0;
+  font: inherit;
 }
 
 /* Payment terms chip selector (TWO-24751) */
