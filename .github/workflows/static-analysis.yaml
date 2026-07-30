@@ -8,7 +8,9 @@ concurrency:
   group: static-analysis-${{ github.ref_name }}
   cancel-in-progress: true
 
-# phpcs (PSR-12, phpcs.xml) + phpstan (level 2, phpstan.neon) — TWO-25108.
+# phpcs (PSR-12, phpcs.xml) + phpstan (level 2, phpstan.neon) — TWO-25108 —
+# and the gettext catalogue agreement check (TWO-25292), whose job is at the
+# bottom of this file.
 # The repo has no Composer, so both tools are installed as standalone phars
 # via shivammathur/setup-php `tools:` (same action the unit-test matrix
 # already uses). Tool versions are pinned to the releases the committed
@@ -57,3 +59,22 @@ jobs:
 
       - name: Run phpstan
         run: phpstan analyse --no-progress --memory-limit=4G
+
+  catalogues:
+    name: Gettext catalogues
+    runs-on: ${{ vars.RUNNER_STANDARD }}
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      # gettext is not pinned, and does not need to be: the check decodes the
+      # committed .mo and a freshly compiled one with the same binary and
+      # compares the decoded catalogues, so a runner-image toolchain bump
+      # cannot make it fail on its own. See the script header (TWO-25292).
+      - name: Install gettext if the runner image lacks it
+        run: command -v msgfmt >/dev/null || (sudo apt-get update && sudo apt-get install -y gettext)
+
+      - name: Compiled .mo agrees with its .po
+        run: .github/scripts/check-catalogues.sh

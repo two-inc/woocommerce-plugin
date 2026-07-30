@@ -70,6 +70,9 @@ WordPress and WooCommerce Best Practices
 - Check for WooCommerce activation and version compatibility.
 - Gracefully disable functionality if requirements aren't met.
 - Use WooCommerce's translation functions for text strings.
+- After editing any `languages/*.po`, recompile its `.mo` — WordPress reads only
+  the compiled catalogue: `for po in languages/*.po; do msgfmt -o "${po%.po}.mo" "$po"; done`.
+  CI fails when a `.mo` disagrees with its `.po` (`.github/scripts/check-catalogues.sh`).
 - Support RTL languages in your plugin's CSS.
 - Utilize WooCommerce's logging system for debugging.
 - Example: `wc_get_logger()->debug('Your debug message', array('source' => 'your-plugin'));`
