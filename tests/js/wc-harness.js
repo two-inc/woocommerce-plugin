@@ -191,7 +191,11 @@ function buildCheckoutForm(options) {
   const companyOptions =
     opts.companyOptions === undefined ? '<option value="">&nbsp;</option>' : opts.companyOptions;
   document.body.innerHTML = [
-    '<form class="checkout woocommerce-checkout">',
+    // `name="checkout"` is what WooCommerce's own checkout form carries, and
+    // it is the selector `saveCheckoutInputs()` looks the form up by. Without
+    // it every test here silently exercised that function's no-form early
+    // return instead of the snapshotting code (TWO-25288).
+    '<form name="checkout" class="checkout woocommerce-checkout">',
     '  <p id="billing_country_field">',
     '    <select id="billing_country" name="billing_country">',
     '      <option value="' + country + '" selected>Selected country</option>',
