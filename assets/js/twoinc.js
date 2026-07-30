@@ -2098,7 +2098,7 @@ class Twoinc {
       // Display error messages
       displayMsgId = "errored|.twoinc-err-payment-default";
       if (response.status >= 400) {
-        // @TODO: use code in checkout-api
+        // @TODO: use the error code returned by the API
         let errMsg = response.responseJSON;
         if (typeof response.responseJSON !== "string") {
           if ("error_details" in response.responseJSON && response.responseJSON["error_details"]) {

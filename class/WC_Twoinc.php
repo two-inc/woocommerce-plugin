@@ -358,7 +358,7 @@ if (!class_exists('WC_Twoinc')) {
          * The platform's minimum order value for this merchant, resolved
          * from the Two API (min_order_amount/min_order_currency/
          * min_order_basis on GET /v1/merchant/{id} - the funding-partner
-         * default with merchant override, the same value checkout-api
+         * default with merchant override, the same value the API
          * enforces at order create/intent), as
          * ['amount', 'currency', 'basis'] or null when none is configured.
          *
