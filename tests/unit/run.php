@@ -2125,8 +2125,17 @@ final class BrandConfigSpec
         }
         TinyAssert::true($threw, 'a non-live tax class must be rejected at save');
 
-        // Treatment validation enforces the three modes.
-        TinyAssert::same('always_zero', $gateway->validate_surcharge_tax_treatment_field('surcharge_tax_treatment', 'always_zero'));
+        // Treatment validation enforces the OFFERED modes. 'always_zero' is
+        // no longer offered to a shop that does not already store it, so it is
+        // rejected here too — the rule is not UI-only (TWO-25279).
+        TinyAssert::same('standard', $gateway->validate_surcharge_tax_treatment_field('surcharge_tax_treatment', 'standard'));
+        $threw = false;
+        try {
+            $gateway->validate_surcharge_tax_treatment_field('surcharge_tax_treatment', 'always_zero');
+        } catch (Exception $e) {
+            $threw = true;
+        }
+        TinyAssert::true($threw, 'a shop that never stored the never-taxed mode cannot newly post it');
         $threw = false;
         try {
             $gateway->validate_surcharge_tax_treatment_field('surcharge_tax_treatment', 'zero_rate_class');
@@ -2183,7 +2192,9 @@ final class BrandConfigSpec
     {
         $GLOBALS['__twoinc_test_tax_classes'] = ['B2B Levy'];
 
-        // Never configured -> not offered.
+        // Never configured -> not offered. No raw settings row at all, which
+        // is the fresh-install shape.
+        unset($GLOBALS['__twoinc_test_options']);
         $fresh = self::surchargeFeeGateway([]);
         TinyAssert::same(
             ['', 'standard', 'custom_class'],
@@ -2193,6 +2204,9 @@ final class BrandConfigSpec
 
         // On another mode -> still not offered.
         $standard = self::surchargeFeeGateway(['surcharge_tax_treatment' => 'standard']);
+        $GLOBALS['__twoinc_test_options'][$standard->get_option_key()] = [
+            'surcharge_tax_treatment' => 'standard',
+        ];
         TinyAssert::same(
             ['', 'standard', 'custom_class'],
             array_keys($standard->get_surcharge_tax_treatment_options()),
@@ -2200,10 +2214,22 @@ final class BrandConfigSpec
         );
 
         // Already stored -> re-offered, labelled, and wired into the field.
+        // Driven off the RAW settings row, which is what the production code
+        // reads: $this->settings is still empty while init_form_fields() runs,
+        // so a test that only injects a settings array would not exercise the
+        // real path.
+        // The harness's get_option() reads an injected array while the
+        // production code reads the raw row, so both are set from the same
+        // values here — in a real install they ARE the same row, populated
+        // into $this->settings by init_settings().
         $legacy = self::surchargeFeeGateway([
             'surcharge_type' => 'percentage',
             'surcharge_tax_treatment' => 'always_zero',
         ]);
+        $GLOBALS['__twoinc_test_options'][$legacy->get_option_key()] = [
+            'surcharge_type' => 'percentage',
+            'surcharge_tax_treatment' => 'always_zero',
+        ];
         $options = $legacy->get_surcharge_tax_treatment_options();
         TinyAssert::same(['', 'standard', 'custom_class', 'always_zero'], array_keys($options));
         TinyAssert::same('Never taxed', $options['always_zero'], 'the re-offered mode keeps its label');
@@ -2236,6 +2262,20 @@ final class BrandConfigSpec
             $threw = true;
         }
         TinyAssert::true($threw, 'a blank treatment is rejected while surcharges are enabled');
+
+        // A row carrying stray whitespace still renders: the option is keyed
+        // on the RAW stored value, because a select can only render an option
+        // whose key is byte-identical to the value.
+        $padded = self::surchargeFeeGateway(['surcharge_type' => 'percentage']);
+        $GLOBALS['__twoinc_test_options'][$padded->get_option_key()] = [
+            'surcharge_tax_treatment' => ' always_zero ',
+        ];
+        TinyAssert::true(
+            array_key_exists(' always_zero ', $padded->get_surcharge_tax_treatment_options()),
+            'the option must be keyed on the raw stored value, whitespace included'
+        );
+        unset($GLOBALS['__twoinc_test_options']);
+
         $blanked = self::surchargeFeeGateway(['surcharge_type' => 'percentage', 'surcharge_tax_treatment' => '']);
         $threw = false;
         try {

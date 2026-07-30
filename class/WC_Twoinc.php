@@ -1078,11 +1078,25 @@ if (!class_exists('WC_Twoinc')) {
                 'standard'     => __('Standard (store default tax rules)', 'twoinc-payment-gateway'),
                 'custom_class' => __('Specific tax class', 'twoinc-payment-gateway'),
             ];
-            // get_option() falls back to the field's '' default, so a shop
-            // that never saved this field can never match here.
-            $stored = $this->get_option('surcharge_tax_treatment');
-            if (is_scalar($stored) && trim((string) $stored) === 'always_zero') {
-                $options['always_zero'] = __('Never taxed', 'twoinc-payment-gateway');
+            // Raw settings row, NOT $this->get_option(), for the same reason
+            // get_checkout_env_options() reads raw: this runs inside
+            // init_form_fields(), which the constructor calls BEFORE
+            // init_settings(), and WC_Settings_API::get_option() lazily
+            // re-enters get_form_fields() when $this->settings is empty. The
+            // raw row is also the only thing that can be trusted here — a
+            // half-primed $this->settings would report no stored treatment
+            // and drop the option, which is precisely the lockout this
+            // carve-out exists to prevent.
+            $saved = get_option($this->get_option_key(), null);
+            $stored = is_array($saved) && isset($saved['surcharge_tax_treatment'])
+                ? (string) $saved['surcharge_tax_treatment']
+                : '';
+            // Keyed on the RAW stored value, not on the literal
+            // 'always_zero': a row written outside the dropdown (direct DB or
+            // API edit) may carry stray whitespace, and a select can only
+            // render an option whose key is byte-identical to its value.
+            if (trim($stored) === 'always_zero') {
+                $options[$stored] = __('Never taxed', 'twoinc-payment-gateway');
             }
             return $options;
         }
@@ -1184,7 +1198,15 @@ if (!class_exists('WC_Twoinc')) {
                 }
                 return '';
             }
-            if (!in_array($value, ['standard', 'custom_class', 'always_zero'], true)) {
+            // Against the OFFERED list, not a hardcoded three-mode list, so
+            // the "never taxed is not available for a new selection" rule is
+            // enforced server-side rather than being a UI convention a
+            // crafted POST can walk past (TWO-25279). The list is built from
+            // the pre-save stored value, so a shop that already stores the
+            // never-taxed mode can still resubmit it and any other shop
+            // cannot newly pick it. Mirrors
+            // validate_surcharge_tax_class_field below.
+            if (!array_key_exists($value, $this->get_surcharge_tax_treatment_options())) {
                 throw new Exception(__('Surcharge tax treatment must be one of the offered modes.', 'twoinc-payment-gateway'));
             }
             return $value;
