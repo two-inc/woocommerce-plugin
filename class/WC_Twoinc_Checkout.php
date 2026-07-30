@@ -265,6 +265,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     // minimum-length constant, which is also what the widget
                     // enforces, so the number the buyer is told cannot drift
                     // from the number required.
+                    /* translators: %d: minimum number of characters the buyer must type before the company search runs. Left unresolved here and interpolated in JS from the threshold the widget enforces, so the two cannot disagree. */
                     'company_search_too_short' => __('Please enter %d or more characters', 'twoinc-payment-gateway'),
                 ],
                 'twoinc_checkout_host' => $this->wc_twoinc->get_twoinc_checkout_host(),

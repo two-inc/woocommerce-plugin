@@ -653,7 +653,9 @@ msgstr "Bekreftelseskallet kontrollerer alltid ordrens unike ordrereferanse på 
 msgid "Enter company name to search"
 msgstr "Skriv inn firmanavn for å søke"
 
+#. translators: %d: minimum number of characters the buyer must type
+#. before the company search runs. Left unresolved by PHP and
+#. interpolated in JS from the threshold the widget enforces.
 #: class/WC_Twoinc_Checkout.php
-#, php-format
 msgid "Please enter %d or more characters"
 msgstr "Vennligst skriv inn %d eller flere tegn"
