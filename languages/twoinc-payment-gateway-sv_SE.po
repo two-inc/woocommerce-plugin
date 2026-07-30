@@ -428,11 +428,6 @@ msgstr "Företags-ID saknas."
 msgid "My company is not on the list"
 msgstr "Mitt företag finns inte med i listan"
 
-#: class/WC_Twoinc_Checkout.php:136
-#, php-format
-msgid "Only for invoices being sent by %s"
-msgstr "Endast för fakturor som skickas av %s"
-
 #: class/WC_Twoinc.php:1656
 msgid "Optional vendor name if there are multiple sites"
 msgstr "Valfritt leverantörsnamn om det finns flera webbplatser"
