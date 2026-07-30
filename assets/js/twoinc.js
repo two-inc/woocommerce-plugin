@@ -297,12 +297,6 @@ let twoincSelectWooHelper = {
   manualEntryObserver: null,
 
   /**
-   * Latched between activating the manual-entry row and the deferred switch
-   * actually running (TWO-25288). Cleared by that switch.
-   */
-  manualEntryPending: false,
-
-  /**
    * Watch a results list so the row can be put back after every render
    * (TWO-25288).
    *
@@ -345,11 +339,18 @@ let twoincSelectWooHelper = {
    * duplicates and missed the first keystrokes of anyone typing faster than
    * the poll interval.
    *
-   * @param {Object} $select jQuery-wrapped company-search <select>
+   * Takes no widget argument on purpose. Everything below is specific to the
+   * company-search field — the delegated selector and the sync both name it —
+   * so a parameter would have to be that one element every time. A probe
+   * mutation confirmed it: reassigning the argument to a fresh lookup of that
+   * same field changed nothing and no test noticed, which is a signature
+   * claiming generality the body does not have.
+   *
    * @returns {void}
    */
-  bindManualEntryAffordance: function ($select) {
+  bindManualEntryAffordance: function () {
     const helper = twoincSelectWooHelper;
+    const $select = jQuery("#billing_company_display");
 
     // Delegated on <body> rather than bound to the search field: that field
     // is destroyed and rebuilt on every open, and delegation means the
@@ -384,11 +385,16 @@ let twoincSelectWooHelper = {
         e.preventDefault();
 
         // Because the selection is prevented the dropdown does NOT close, so
-        // the row is still sitting in the list and still activatable. Drop it
-        // and latch, or a repeated activation inside the same tick queues one
-        // deferred entry per activation.
-        if (helper.manualEntryPending) return;
-        helper.manualEntryPending = true;
+        // the row would otherwise still be sitting in the list and still
+        // activatable — and a repeated activation in the same tick would queue
+        // one deferred switch per press. Removing the row up front is what
+        // prevents that: the picker resolves an activation through the
+        // highlighted row, and there is no longer one.
+        //
+        // A `pending` latch was tried here as well and removed: with the row
+        // already gone it could not be reached by any path, so it was
+        // untestable defensive code. One mechanism that a test can fail is
+        // worth more than two where neither is exercised alone.
         jQuery("#" + helper.manualEntryRowId).remove();
 
         // Deferred out of the picker's own event dispatch. Entering manual
@@ -1146,8 +1152,6 @@ let twoincDomHelper = {
     // has to tab in from the top of the document. Hand focus to the field they
     // asked to be given.
     twoincDomHelper.focusVisibleCompanyField("#billing_company");
-
-    twoincSelectWooHelper.manualEntryPending = false;
   },
 
   /**
@@ -2248,7 +2252,7 @@ class Twoinc {
     // than on every dropdown open: the handlers it installs are delegated and
     // outlive the dropdown, so re-binding them per open only ever accumulated
     // duplicates.
-    twoincSelectWooHelper.bindManualEntryAffordance(self.billingCompanySelect);
+    twoincSelectWooHelper.bindManualEntryAffordance();
 
     self.billingCompanySelect.on("select2:open", function (e) {
       // Arguments kept verbatim: waitToFocus treats an explicit null as a

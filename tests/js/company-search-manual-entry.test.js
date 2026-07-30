@@ -58,7 +58,7 @@ describe("company-search manual-entry affordance", () => {
    */
   function openWithAffordance() {
     const $select = harness.openCompanyWidget($, helper);
-    helper.bindManualEntryAffordance($select);
+    helper.bindManualEntryAffordance();
     return $select;
   }
 
@@ -576,7 +576,7 @@ describe("company-search manual-entry affordance", () => {
         $select.select2("open");
         // enableCompanySearch re-runs on a timer and on every return out of
         // manual entry, so re-binding is the normal case, not an edge one.
-        helper.bindManualEntryAffordance($select);
+        helper.bindManualEntryAffordance();
       }
 
       expect(inputHandlerCount()).toBe(1);
@@ -584,8 +584,8 @@ describe("company-search manual-entry affordance", () => {
 
     test("one keystroke appends one row, not one per bind", () => {
       const $select = openWithAffordance();
-      helper.bindManualEntryAffordance($select);
-      helper.bindManualEntryAffordance($select);
+      helper.bindManualEntryAffordance();
+      helper.bindManualEntryAffordance();
 
       type("abc");
 
@@ -600,7 +600,7 @@ describe("company-search manual-entry affordance", () => {
       // in place with no widget attached at all.
       const $select = $("#billing_company_display");
       $select.selectWoo(helper.genSelectWooParams());
-      helper.bindManualEntryAffordance($select);
+      helper.bindManualEntryAffordance();
 
       expect(inputHandlerCount()).toBe(1);
 
@@ -675,9 +675,9 @@ describe("company-search manual-entry affordance", () => {
 
       expect(selectingHandlerCount($select)).toBe(1);
 
-      helper.bindManualEntryAffordance($select);
-      helper.bindManualEntryAffordance($select);
-      helper.bindManualEntryAffordance($select);
+      helper.bindManualEntryAffordance();
+      helper.bindManualEntryAffordance();
+      helper.bindManualEntryAffordance();
 
       expect(selectingHandlerCount($select)).toBe(1);
     });
@@ -729,8 +729,8 @@ describe("company-search manual-entry affordance", () => {
         const $select = openWithAffordance();
         const list = resultsList()[0];
 
-        helper.bindManualEntryAffordance($select);
-        helper.bindManualEntryAffordance($select);
+        helper.bindManualEntryAffordance();
+        helper.bindManualEntryAffordance();
         type("abc");
 
         const mine = spy.on(list);
