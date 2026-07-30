@@ -421,4 +421,32 @@ describe("company search hints", () => {
       expect(select[0]).toMatch(/<option value="">/);
     });
   });
+
+  describe("the strings PHP registers", () => {
+    // The keys are the contract between the checkout's localisation array and
+    // the helper functions above, and nothing else in the suite can see both
+    // sides: a renamed key would leave the browser silently falling back to
+    // the untranslated English and every other test here still passing.
+    const checkout = fs.readFileSync(
+      path.join(harness.REPO_ROOT, "class/WC_Twoinc_Checkout.php"),
+      "utf8"
+    );
+
+    test.each([
+      ["company_search_placeholder", "Enter company name to search"],
+      ["company_search_too_short", "Please enter %d or more characters"]
+    ])("%s is registered as a translatable string", (key, source) => {
+      const entry = new RegExp(
+        "'" + key + "' *=> *__\\('" + source.replace(/[$()*+.?[\\\]^{|}]/g, "\\$&") + "'"
+      );
+
+      expect(checkout).toMatch(entry);
+    });
+
+    test("leaves the min-chars placeholder for the browser to resolve", () => {
+      // A %d resolved in PHP would put the claimed minimum out of reach of
+      // the constant the widget enforces — the drift this design prevents.
+      expect(checkout).not.toMatch(/'company_search_too_short' *=> *__\('Please enter \d/);
+    });
+  });
 });
