@@ -102,11 +102,23 @@ decimal places and rejects any value carrying more precision than that, so a
 sub-cent amount is a validation error, not a silently-rounded one. Removing
 the rounding would turn a converted amount like `0.0008` into an HTTP 422.
 
-Scope that claim precisely: `round_amt()` **on the surcharge and the cap** is
-applied only inside the `$store_currency !== $active_currency` branch (the
-request's `gross_amount` is rounded unconditionally, elsewhere). On a
-**same-currency** store a
-configured sub-cent value is relayed raw, and grid validation does not
-enforce two decimal places either — so a merchant who types `0.001` there
-gets the same 422 by a path this rounding does not cover. Pre-existing, out
-of scope for TWO-25269, and worth its own ticket.
+Scope that claim precisely. It holds on a two-decimal store, on the
+cross-currency path, and nowhere else. Two gaps, both pre-existing, both out
+of scope for TWO-25269 and both worth their own ticket:
+
+- **Same-currency stores.** `round_amt()` is applied to the surcharge and the
+  cap only inside the `$store_currency !== $active_currency` branch (the
+  request's `gross_amount` is rounded unconditionally, elsewhere). So a
+  same-currency store relays a configured sub-cent value raw, and grid
+  validation does not enforce two decimal places either — a merchant who
+  types `0.001` gets the same 422 by a path this rounding does not cover.
+- **Stores whose decimal precision is not 2.** `round_amt()` rounds to
+  `wc_get_price_decimals()`, a merchant-facing WooCommerce setting, **not** a
+  hardcoded 2. At 3 or more it does not satisfy the API's two-decimal limit
+  at all, so a converted sub-cent amount still 422s. At 0 — a normal choice
+  for JPY or HUF — every converted cap below 0.5 collapses to `cap => 0` and
+  zeroes the whole fee, which makes the zero-cap path above far easier to hit
+  than "a much stronger checkout currency" suggests. For the same reason the
+  two info-log strings say `0.00` regardless of the store's actual precision.
+  The unit-test harness stubs `wc_get_price_decimals()` at 2, so no test
+  currently exercises any of this.
