@@ -65,6 +65,17 @@ let twoincSelectWooHelper = {
   companySearchTimeoutMs: 30000,
 
   /**
+   * Characters the buyer must type before the company search runs
+   * (TWO-25288). THE single source of this threshold in the plugin: the
+   * widget's minimumInputLength reads it, the "not in the list" button's
+   * visibility rule reads it, and the min-chars hint is interpolated from it.
+   * The hint's PHP string keeps its %d placeholder unresolved for exactly
+   * that reason — the number the buyer is told and the number enforced are
+   * the same value, so they cannot drift apart.
+   */
+  companySearchMinLength: 3,
+
+  /**
    * Text for a company search that could not be completed. Read lazily
    * because window.twoinc is populated by the checkout render; the literal
    * is the last-resort fallback for a page where the localised string is
@@ -85,6 +96,37 @@ let twoincSelectWooHelper = {
       (window.twoinc && window.twoinc.text && window.twoinc.text.company_search_unavailable) ||
       "Company search is temporarily unavailable. Please try again."
     );
+  },
+
+  /**
+   * Hint shown in the empty company-search field (TWO-25288). Read lazily for
+   * the same reason as the message above.
+   */
+  companySearchPlaceholderText: function () {
+    return (
+      (window.twoinc && window.twoinc.text && window.twoinc.text.company_search_placeholder) ||
+      "Enter company name to search"
+    );
+  },
+
+  /**
+   * Hint shown while the typed term is below the search threshold
+   * (TWO-25288).
+   *
+   * Deliberately a FIXED number rather than select2's own "N more characters"
+   * countdown: the buyer is told what the field needs, not how far off they
+   * currently are. The template carries an unresolved %d, interpolated here
+   * from companySearchMinLength, so the claimed minimum is the enforced one.
+   */
+  companySearchTooShortText: function () {
+    const template =
+      (window.twoinc && window.twoinc.text && window.twoinc.text.company_search_too_short) ||
+      "Please enter %d or more characters";
+    // Matches gettext's positional form (`%1$d`) as well as the bare `%d` the
+    // msgid carries: a translator is entitled to reorder arguments, and the
+    // `#, php-format` family of placeholders is what they would reach for. The
+    // msgid itself stays `%d` — changing it would invalidate the catalogues.
+    return template.replace(/%(\d+\$)?d/, twoincSelectWooHelper.companySearchMinLength);
   },
 
   /**
@@ -133,7 +175,12 @@ let twoincSelectWooHelper = {
 
     let twoincSearchLimit = 50;
     return {
-      minimumInputLength: 3,
+      minimumInputLength: twoincSelectWooHelper.companySearchMinLength,
+      // Empty-field hint (TWO-25288). select2 renders this through
+      // templateSelection below, and only while the current selection's id
+      // matches the placeholder's — which is why the field's empty option has
+      // to carry value="" rather than only a non-breaking space.
+      placeholder: twoincSelectWooHelper.companySearchPlaceholderText(),
       width: "100%",
       escapeMarkup: function (markup) {
         return markup;
@@ -152,11 +199,12 @@ let twoincSelectWooHelper = {
           // only for a timeout, a transport error, or a degraded response.
           return twoincSelectWooHelper.companySearchUnavailableText();
         },
-        inputTooShort: function (t) {
-          t = t.minimum - t.input.length;
-          return 1 == t
-            ? wc_country_select_params.i18n_input_too_short_1
-            : wc_country_select_params.i18n_input_too_short_n.replace("%qty%", t);
+        inputTooShort: function () {
+          // No argument read on purpose: WooCommerce core's own copy counts
+          // down the REMAINING characters, so the same field said "2 or more"
+          // after one keystroke and "3 or more" before any. This hint is
+          // plugin-owned and states the threshold itself (TWO-25288).
+          return twoincSelectWooHelper.companySearchTooShortText();
         },
         noResults: function () {
           return wc_country_select_params.i18n_no_matches;
@@ -857,14 +905,34 @@ let twoincDomHelper = {
     for (let inp of checkoutForm.querySelectorAll('span[id$="-container"]')) {
       if (inp.getAttribute("id")) {
         let textOnly = inp.textContent;
+        let hasPlaceholder = false;
         let subs = [];
         inp.childNodes.forEach(function (val) {
           if (val.nodeType === Node.TEXT_NODE) {
             textOnly = val.nodeValue.trim();
           } else if (val.nodeType === Node.ELEMENT_NODE) {
+            if (val.classList.contains("select2-selection__placeholder")) {
+              // The empty-field hint (TWO-25288) is an ELEMENT child, unlike
+              // the non-breaking space the empty option used to render as a
+              // text node — so neither the textContent seed above nor the
+              // TEXT_NODE branch would treat this container as empty, and the
+              // hint would be snapshotted as though the buyer had chosen a
+              // company of that name. getCompanyName() reads this value, and
+              // it is written into the posted #billing_company field.
+              //
+              // Excluded from `subs` for the same reason it is not a
+              // selection: loadStorageInputs() re-appends every sub onto a
+              // container whose restored html already carries the hint, so
+              // keeping it here rendered the hint twice.
+              hasPlaceholder = true;
+              return;
+            }
             subs.push(val.outerHTML);
           }
         });
+        // A rendered placeholder means, by definition, that the widget has no
+        // selection.
+        if (hasPlaceholder) textOnly = "";
         checkoutInputs.push({
           htmlTag: inp.tagName,
           id: inp.getAttribute("id"),

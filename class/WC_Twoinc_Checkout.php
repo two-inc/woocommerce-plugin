@@ -257,6 +257,16 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     // times out or comes back degraded (TWO-25232) — never
                     // for a search that simply matched nothing.
                     'company_search_unavailable' => __('Company search is temporarily unavailable. Please try again.', 'twoinc-payment-gateway'),
+                    // Hint inside the empty company-search field (TWO-25288).
+                    'company_search_placeholder' => __('Enter company name to search', 'twoinc-payment-gateway'),
+                    // Hint while the typed term is too short to search
+                    // (TWO-25288). The %d is deliberately LEFT UNRESOLVED
+                    // here: the JS interpolates it from its own
+                    // minimum-length constant, which is also what the widget
+                    // enforces, so the number the buyer is told cannot drift
+                    // from the number required.
+                    /* translators: %d: minimum number of characters the buyer must type before the company search runs. Left unresolved here and interpolated in JS from the threshold the widget enforces, so the two cannot disagree. */
+                    'company_search_too_short' => __('Please enter %d or more characters', 'twoinc-payment-gateway'),
                 ],
                 'twoinc_checkout_host' => $this->wc_twoinc->get_twoinc_checkout_host(),
                 'enable_company_search' => $this->wc_twoinc->get_enable_company_search(),

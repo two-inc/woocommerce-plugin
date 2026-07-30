@@ -172,22 +172,39 @@ function loadTwoinc(twoinc) {
  * `#billing_country` is where the search's country parameter comes from;
  * `#billing_company` is the real (hidden) company field.
  *
+ * The company select carries the same empty first option WooCommerce renders
+ * for it from WC_Twoinc_Checkout's `options` array — `value=""` with a
+ * non-breaking space for its label. That pairing is load-bearing for the
+ * empty-field hint (the widget only paints a placeholder while the current
+ * selection's value matches the placeholder's), so the harness ships the real
+ * markup rather than a bare `<select>`.
+ *
  * @param {Object} [options]
  * @param {string} [options.country] ISO code for the selected country option
+ * @param {string} [options.companyOptions] override the company select's inner
+ *   HTML, for a test that needs the option markup to differ from production
  * @returns {void}
  */
 function buildCheckoutForm(options) {
   const opts = options || {};
   const country = opts.country || "GB";
+  const companyOptions =
+    opts.companyOptions === undefined ? '<option value="">&nbsp;</option>' : opts.companyOptions;
   document.body.innerHTML = [
-    '<form class="checkout woocommerce-checkout">',
+    // `name="checkout"` is what WooCommerce's own checkout form carries, and
+    // it is the selector `saveCheckoutInputs()` looks the form up by. Without
+    // it every test here silently exercised that function's no-form early
+    // return instead of the snapshotting code (TWO-25288).
+    '<form name="checkout" class="checkout woocommerce-checkout">',
     '  <p id="billing_country_field">',
     '    <select id="billing_country" name="billing_country">',
     '      <option value="' + country + '" selected>Selected country</option>',
     "    </select>",
     "  </p>",
     '  <p id="billing_company_display_field">',
-    '    <select id="billing_company_display" name="billing_company_display"></select>',
+    '    <select id="billing_company_display" name="billing_company_display">' +
+      companyOptions +
+      "</select>",
     "  </p>",
     '  <p id="billing_company_field">',
     "    <input type='text' id='billing_company' name='billing_company' value='' />",
