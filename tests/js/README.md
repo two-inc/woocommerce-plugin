@@ -199,6 +199,31 @@ about the company-search helper, so the bootstrap is left to no-op.
   land synchronously.
 - the sole-trader round trip does not strand a buyer in manual entry.
 
+`company-summary.test.js` — the read-only captured-company summary (TWO-25288):
+
+- all three capture modes render the right pair of values: the picked company's name and
+  organisation number in search mode, the name and number Two holds for a sole trader, and in
+  manual entry the typed name with **no** number, because entering manual entry clears the
+  number of the company the buyer has just disowned. A hit that carries no organisation number
+  at all renders its name alone.
+- search-mode rendering is driven through `enableCompanySearch`'s own `select2:select` binding
+  rather than by calling the render function, so unwiring the two fails the test.
+- the display is genuinely read-only: no `input`, `select`, `textarea` or `contenteditable`
+  inside it, both values in `span`s, nothing tabbable, and — the affordance this reversal
+  removes — no button, link, image, `onclick` or bound handler that would let the buyer delete
+  a captured company. The overlay this replaces shipped an `<img>` with an inline `onclick`.
+- submission is unaffected. `#billing_company` and `#company_id` still carry the values
+  WooCommerce serialises, re-rendering does not disturb them, and nothing inside the summary
+  carries a `name` attribute of its own — asserted against the form's real `serialize()`
+  output, since the summary sits inside the checkout form.
+- visibility: shown only for a Two purchase with something captured, hidden when the buyer
+  switches to another payment method (with the fields still posting), and cleared by
+  `clearSelectedCompany()`.
+- the picker's empty option is a non-breaking space — truthy, invisible, and untouched by
+  `trim()` on its own — so a summary that only checked for `""` would render an empty name
+  box. Pinned, along with the user-meta restore path, which passes both values explicitly
+  because `loadUserMetaInputs` writes `#company_id` _after_ it renders.
+
 ### Two defects these tests found, now fixed
 
 Both were pinned as characterisation tests when this suite landed, and both were fixed
@@ -232,8 +257,10 @@ suite green:
   and heading placement, and the currency-symbol fee label (ABN-468);
 - the selection side of company search — `onCompanySelected`-equivalent handling in
   `Twoinc.initialize`'s `select2:select` binding, `clearSelectedCompany()`, the
-  the address autofill. The manual-entry row is no longer among these — see its own suite
-  above;
+  the address autofill. Neither the manual-entry row nor the captured-company summary is among
+  these any more — see their own suites above. The `select2:select` binding and
+  `clearSelectedCompany()` are covered only for what they do to that summary; everything else
+  they do still is not;
 - `twoincDomHelper`'s field moving/reverting and validation cues;
 - `fixSelectWooPositionCompanyName`, `waitToFocus` and `addSelectWooFocusFixHandler` — DOM
   position and focus workarounds whose observable effect is layout.
