@@ -400,13 +400,12 @@ describe("company search ajax transport", () => {
       expect(bytes.readUInt16LE(6)).toBe(16);
       expect(bytes.readUInt16LE(8)).toBe(16);
 
-      // Each frame opens with an image-descriptor byte, so a single one means
-      // a static picture.
-      let frames = 0;
-      for (let i = 0; i < bytes.length; i += 1) {
-        if (bytes[i] === 0x2c) frames += 1;
-      }
-      expect(frames).toBeGreaterThan(1);
+      // One image descriptor means a static picture. The count comes from
+      // walking the block structure, not from scanning for the descriptor
+      // byte: that byte also occurs inside colour tables and compressed
+      // pixel data, so a scan reports frames in a single-frame file and the
+      // assertion below could never fail.
+      expect(harness.countGifFrames(bytes)).toBeGreaterThan(1);
     });
 
     test("the spinner lands inside the widget's own search box", () => {
