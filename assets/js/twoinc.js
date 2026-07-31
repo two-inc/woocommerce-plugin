@@ -84,30 +84,14 @@ let twoincSelectWooHelper = {
   companySearchInputSelector: 'input[aria-owns="select2-billing_company_display-results"]',
 
   /**
-   * DOM id of the manual-entry pseudo-option (TWO-25288). Unchanged from when
-   * this was a cloned <div> so the stylesheet rule and the brand overlays that
-   * match it keep working.
+   * DOM id of the manual-entry button. Unchanged across TWO-25288 (the
+   * cloned-<div> version) and the button rework below, so the stylesheet
+   * rule and any brand overlays that match it keep working.
    */
   manualEntryRowId: "company_not_in_btn",
 
   /** DOM id of the link back out of manual entry and into search. */
   searchCompanyBtnId: "search_company_btn",
-
-  /**
-   * The `id` on the manual-entry row's payload object (TWO-25288).
-   *
-   * It has to be an id and not a flag: the picker stringifies every navigable
-   * row's `data.id` when it recomputes selected state, so a row without one
-   * throws and takes the whole results render with it.
-   *
-   * `processResults` below maps each hit's id to the company NAME, so this
-   * value shares a namespace with company names and the underscores are there
-   * to keep it out of the way. That is a convention, NOT an enforced
-   * invariant — nothing rejects a registry name that happened to equal it, and
-   * no test claims otherwise. If that ever needs to be a guarantee, the
-   * discriminator has to move off `id` onto a field of its own.
-   */
-  manualEntrySentinelId: "__twoinc_manual_entry__",
 
   /**
    * Text for a company search that could not be completed. Read lazily
@@ -183,97 +167,88 @@ let twoincSelectWooHelper = {
   },
 
   /**
-   * Build the manual-entry row as a real pseudo-option (TWO-25288).
+   * Build the manual-entry affordance as a real, focusable button (#30.x.1,
+   * #30.x.2, #30.x.3).
    *
-   * This used to be a cloned <div> appended to the results list's PARENT, i.e.
-   * outside the subtree the field's aria-owns points at — so it had no role,
-   * no id, no payload, and was not reachable by keyboard at all. It is a
-   * genuine option row now, which is what makes it arrow-reachable and
-   * announced without a bespoke keydown bridge.
+   * TWO-25288 made this a pseudo-option `<li role="option">` living INSIDE
+   * `.select2-results__options` so it would be arrow-reachable and announced.
+   * That traded one accessibility gap for two others:
    *
-   * This mirrors, attribute for attribute, what the picker's own option
-   * factory produces for a real result row. Three of them are load-bearing:
+   *  - `.select2-results__options` is exactly the element select2/selectWoo
+   *    apply their own scroll-and-clip to, so the row was only visible if the
+   *    buyer scrolled past however many results came back, and the ONLY way
+   *    to reach it by keyboard was arrowing down through every one of them —
+   *    it carried `tabindex="-1"`, deliberately excluded from the normal Tab
+   *    sequence, on purpose, to match the listbox pattern.
+   *  - selectWoo's own result-row activation binds on plain `mouseup` with no
+   *    button check at all (`Results.prototype.bind`), so a RIGHT click
+   *    activated the row exactly like a left click — true of every real
+   *    result row too, but only this one was ours to fix.
    *
-   *  - `data-selected` is how the picker derives its navigable set, and it must
-   *    stay "false". "true" means "already picked", and the picker routes
-   *    activation of an already-picked row to closing the dropdown instead of
-   *    selecting it — the row would look reachable and do nothing.
-   *  - `tabindex="-1"` makes the row programmatically focusable. On every arrow
-   *    keypress the picker calls `.focus()` on the highlighted row, and its own
-   *    source says that is required for screen readers to work. An <li> with no
-   *    tabindex cannot take focus, so that call is a silent no-op and focus
-   *    stays stranded on the PREVIOUS row while this one is visually
-   *    highlighted — the reader keeps announcing the wrong thing.
-   *  - the payload goes on with jQuery `data`, which is where the picker reads
-   *    each row's data from, and it must carry `_resultId` matching the li's
-   *    id: that is what the picker copies into `aria-activedescendant`, on both
-   *    the dropdown's search field and the selection container. Without it the
-   *    row is reachable but silent.
+   * A real `<button>` fixes both: native Tab order, native Enter/Space
+   * activation, and a native `click` event that only ever fires for the
+   * primary mouse button — no bespoke keydown bridge and no button check to
+   * hand-roll.
    *
-   * `select2-results__option--selectable` is belt-and-braces only. The bundle
-   * pinned here never reads it — it is a select2 4.1 concept, and that string
-   * does not occur anywhere in this build. It costs nothing and keeps the row
-   * navigable if a host platform ever swaps the picker for one that keys off
-   * the class instead of the attribute. Do not describe it as required.
-   *
-   * @returns {Object} jQuery-wrapped <li>
+   * @returns {Object} jQuery-wrapped <button>
    */
-  buildManualEntryRow: function () {
+  buildManualEntryButton: function () {
     const helper = twoincSelectWooHelper;
-    const label = helper.companyNotInListText();
 
-    const $row = jQuery("<li></li>")
-      .attr({
-        id: helper.manualEntryRowId,
-        role: "option",
-        "aria-selected": "false",
-        "data-selected": "false",
-        tabindex: -1
-      })
-      .addClass("select2-results__option select2-results__option--selectable")
-      .text(label);
-
-    $row.data("data", {
-      id: helper.manualEntrySentinelId,
-      text: label,
-      _resultId: helper.manualEntryRowId
-    });
-
-    return $row;
+    return jQuery("<button></button>")
+      .attr({ id: helper.manualEntryRowId, type: "button" })
+      .text(helper.companyNotInListText())
+      .on("click", function () {
+        helper.activateManualEntry();
+      });
   },
 
   /**
-   * Put the manual-entry row at the end of the results list, or take it away
-   * (TWO-25288).
+   * Switch out of company search into manual entry, from the button's own
+   * click handler (#30.x.3).
    *
-   * Visibility rule is the search threshold and nothing else — no
-   * "has a search completed" gate. The row appears the moment the buyer has
-   * typed enough for a search to be worth running, which is BEFORE the
-   * debounced request goes out, so a buyer who already knows their company is
-   * not in the registry never has to wait for a round trip to find that out.
+   * Removes the button before deferring, same reason as before: a second
+   * click in the same tick must not queue a second switch. Deferred out of
+   * the click dispatch because entering manual entry destroys this widget,
+   * and destroying it from inside the event that is still unwinding on it
+   * would pull the DOM out from under that unwind.
    *
    * @returns {void}
    */
-  syncManualEntryRow: function () {
+  activateManualEntry: function () {
+    const helper = twoincSelectWooHelper;
+    jQuery("#" + helper.manualEntryRowId).remove();
+    setTimeout(twoincDomHelper.enterManualCompanyEntry, 0);
+  },
+
+  /**
+   * Put the manual-entry button right after the results list, or take it
+   * away (#30.x.1).
+   *
+   * A SIBLING of `.select2-results__options`, not a child of it, so it sits
+   * outside the part of the dropdown that scrolls: always visible the moment
+   * it should be, regardless of how many results came back. Still inside the
+   * dropdown itself — appended into `.select2-results`, the same wrapper the
+   * results list lives in — so it reads as part of the same panel, just
+   * beneath the scrollable area rather than the last row inside it.
+   *
+   * Visibility rule unchanged from the pseudo-option version: the search
+   * threshold and nothing else — no "has a search completed" gate. The
+   * button appears the moment the buyer has typed enough for a search to be
+   * worth running, which is BEFORE the debounced request goes out, so a
+   * buyer who already knows their company is not in the registry never has
+   * to wait for a round trip to find that out.
+   *
+   * @returns {void}
+   */
+  syncManualEntryButton: function () {
     const helper = twoincSelectWooHelper;
 
     const picker = jQuery("#billing_company_display").data("select2");
     if (!picker || !picker.$results || !picker.$results.length) return;
 
-    // Self-healing, and deliberately here rather than in the bind function.
-    // The widget is re-created in places that have no reason to know this
-    // affordance exists — clearing the selected company does it, which is the
-    // "un-pick that company, let me search again" gesture that most often
-    // precedes needing this row. A new widget means a NEW results node, so a
-    // flag set on the old one says nothing, and the observer would simply never
-    // be installed again: the row would appear on a keystroke and then be wiped
-    // by the first render, permanently. Installing from the per-keystroke sync
-    // covers every re-creation, including future ones, without a third bind
-    // site to keep in step.
-    helper.observeResultsList(picker.$results);
-
     const $list = picker.$results;
-    const $existing = $list.children("#" + helper.manualEntryRowId);
+    const $existing = jQuery("#" + helper.manualEntryRowId);
     const term = jQuery(helper.companySearchInputSelector).val() || "";
 
     if (term.length < helper.companySearchMinLength) {
@@ -281,76 +256,38 @@ let twoincSelectWooHelper = {
       return;
     }
 
-    // Already the last row: do nothing. This early return is load-bearing,
-    // not an optimisation — this function is also called from a
-    // MutationObserver watching the same list, so an unconditional append
-    // would re-enter itself forever.
-    if ($existing.length && $list.children().last().is($existing)) return;
+    // Already there, immediately after the current results list: nothing to
+    // do. Load-bearing rather than an optimisation for the same reason it was
+    // before: an unconditional re-append on every keystroke would tear down
+    // and rebuild the same node for no reason.
+    if ($existing.length && $existing.prev().is($list)) return;
 
     $existing.remove();
-    $list.append(helper.buildManualEntryRow());
+    $list.after(helper.buildManualEntryButton());
   },
 
   /**
-   * The live MutationObserver watching the results list, if any (TWO-25288).
-   */
-  manualEntryObserver: null,
-
-  /**
-   * Watch a results list so the row can be put back after every render
-   * (TWO-25288).
+   * Wire the manual-entry affordance to a company-search widget (TWO-25288,
+   * reworked #30.x.1-3).
    *
-   * The picker empties the whole list on each render — a new result set, the
-   * "searching" state, a message — so watching the list covers all of them
-   * without guessing at which internal events fire.
-   *
-   * At most ONE observer exists at a time. The previous one is disconnected
-   * before a new list is observed, so the enter/exit and clear-company cycles
-   * cannot accumulate one orphan per widget for the life of the page.
-   *
-   * @param {Object} $list jQuery-wrapped results <ul>
-   * @returns {void}
-   */
-  observeResultsList: function ($list) {
-    const helper = twoincSelectWooHelper;
-
-    if (!$list || !$list.length || typeof MutationObserver !== "function") return;
-    // Already watching this exact node.
-    if ($list.data("twoincManualEntryObserved")) return;
-
-    if (helper.manualEntryObserver) helper.manualEntryObserver.disconnect();
-
-    $list.data("twoincManualEntryObserved", true);
-    helper.manualEntryObserver = new MutationObserver(function () {
-      helper.syncManualEntryRow();
-    });
-    helper.manualEntryObserver.observe($list[0], { childList: true });
-  },
-
-  /**
-   * Wire the manual-entry affordance to a company-search widget (TWO-25288).
-   *
-   * Idempotent by construction. Every handler is namespaced and every bind is
+   * Idempotent by construction. The handler is namespaced and every bind is
    * preceded by the matching `.off()`, so calling this again — and it IS
    * called again, from the 800ms re-run of enableCompanySearch and from every
-   * return out of manual entry — leaves exactly one handler of each kind.
-   * The previous implementation bound its input handler inside a polling
+   * return out of manual entry — leaves exactly one handler bound. The
+   * previous implementation bound its input handler inside a polling
    * callback on every dropdown open with no `.off()`, which both accumulated
    * duplicates and missed the first keystrokes of anyone typing faster than
    * the poll interval.
    *
-   * Takes no widget argument on purpose. Everything below is specific to the
-   * company-search field — the delegated selector and the sync both name it —
-   * so a parameter would have to be that one element every time. A probe
-   * mutation confirmed it: reassigning the argument to a fresh lookup of that
-   * same field changed nothing and no test noticed, which is a signature
-   * claiming generality the body does not have.
+   * No separate activation binding here any more: the button built by
+   * `syncManualEntryButton` owns its own click handler directly, since it is
+   * a real element outside the results list rather than a pseudo-option the
+   * picker's `select2:selecting` event had to be intercepted for.
    *
    * @returns {void}
    */
   bindManualEntryAffordance: function () {
     const helper = twoincSelectWooHelper;
-    const $select = jQuery("#billing_company_display");
 
     // Delegated on <body> rather than bound to the search field: that field
     // is destroyed and rebuilt on every open, and delegation means the
@@ -359,49 +296,7 @@ let twoincSelectWooHelper = {
     jQuery(document.body)
       .off("input.twoincManualEntry")
       .on("input.twoincManualEntry", helper.companySearchInputSelector, function () {
-        helper.syncManualEntryRow();
-      });
-
-    // No eager render-watcher install here. It was tried and removed: the row
-    // cannot exist before the buyer has typed to the threshold, and typing is
-    // what runs the sync, which installs the watcher against whatever results
-    // list is live. Removing the eager copy left the suite green, i.e. nothing
-    // depended on it — and one install point that heals every widget
-    // re-creation is easier to reason about than two.
-
-    // Activation, keyboard and mouse through one path. The picker turns both
-    // Enter on the highlighted row and a click on it into the same internal
-    // select, and fires a preventable pre-event first — so intercepting that
-    // one event covers both inputs, and there is no separate click handler
-    // that could double-fire or drift out of step with the keyboard one.
-    $select
-      .off("select2:selecting.twoincManualEntry")
-      .on("select2:selecting.twoincManualEntry", function (e) {
-        const data = e.params && e.params.args && e.params.args.data;
-        if (!data || data.id !== helper.manualEntrySentinelId) return;
-
-        // Prevented, so the selection is never written: no company name, no
-        // company id, no approval call, no address lookup.
-        e.preventDefault();
-
-        // Because the selection is prevented the dropdown does NOT close, so
-        // the row would otherwise still be sitting in the list and still
-        // activatable — and a repeated activation in the same tick would queue
-        // one deferred switch per press. Removing the row up front is what
-        // prevents that: the picker resolves an activation through the
-        // highlighted row, and there is no longer one.
-        //
-        // A `pending` latch was tried here as well and removed: with the row
-        // already gone it could not be reached by any path, so it was
-        // untestable defensive code. One mechanism that a test can fail is
-        // worth more than two where neither is exercised alone.
-        jQuery("#" + helper.manualEntryRowId).remove();
-
-        // Deferred out of the picker's own event dispatch. Entering manual
-        // entry destroys this widget, and destroying it from inside its own
-        // trigger would pull the DOM out from under the code that is still
-        // unwinding.
-        setTimeout(twoincDomHelper.enterManualCompanyEntry, 0);
+        helper.syncManualEntryButton();
       });
   },
 
@@ -624,6 +519,43 @@ let twoincSelectWooHelper = {
   },
 
   /**
+   * Whether focus is still somewhere this poll is allowed to touch.
+   *
+   * `waitToFocus` exists because the picker's own focus-on-open does not land
+   * reliably on every host theme, so it polls to nudge focus into the search
+   * field. Left unchecked, that poll kept nudging for its whole window (up to
+   * ~4.8s from `select2:open`, ~12.8s per re-render from
+   * `addSelectWooFocusFixHandler`) with no regard for what happened after it
+   * was scheduled — including the buyer deliberately Tabbing to a completely
+   * different field, which got yanked back into the dropdown until the poll's
+   * hit count ran out or the buyer hit Esc (which tears the dropdown down,
+   * so the search-field selector this poll uses stops matching anything).
+   *
+   * "Still allowed" covers every state the poll's job actually needs to work
+   * through: nothing focused yet (`<body>`, select2's own state before its
+   * first focus attempt), the search field itself, an option row inside the
+   * open results list (the picker focuses those on arrow-key navigation), or
+   * the still-collapsed combobox trigger. Anything else means the buyer's own
+   * navigation has taken them elsewhere, and that must win.
+   *
+   * @param {string} selectWooElemId the select's element id
+   * @returns {boolean}
+   */
+  focusStillWithinCompanySearch: function (selectWooElemId) {
+    const active = document.activeElement;
+    if (!active || active === document.body) return true;
+
+    const $active = jQuery(active);
+    if ($active.is('input[aria-owns="select2-' + selectWooElemId + '-results"]')) return true;
+
+    return (
+      $active.closest(
+        "#select2-" + selectWooElemId + "-results, #select2-" + selectWooElemId + "-container"
+      ).length > 0
+    );
+  },
+
+  /**
    * Wait until element appear and focus
    */
   waitToFocus: function (selectWooElemId, hitsRequired, intervalDuration, callbackFunc) {
@@ -632,6 +564,12 @@ let twoincSelectWooHelper = {
     let attemptsLeft = hitsRequired * 8;
 
     let focusInterval = setInterval(function () {
+      // The buyer's own navigation always wins over this poll's nudging.
+      if (!twoincSelectWooHelper.focusStillWithinCompanySearch(selectWooElemId)) {
+        clearInterval(focusInterval);
+        return;
+      }
+
       let inpElem = jQuery('input[aria-owns="select2-' + selectWooElemId + '-results"]').get(0);
       if (inpElem) {
         // Focus on the element if not already focused
