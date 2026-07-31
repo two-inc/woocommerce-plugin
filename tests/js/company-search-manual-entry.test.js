@@ -953,12 +953,17 @@ describe("company-search manual-entry affordance", () => {
       // this button is ever shown — see enterManualCompanyEntry) and is
       // therefore some other, unenumerable external script (most likely
       // WooCommerce core's own checkout.js guarding the whole form against a
-      // premature submit on Enter, which matches a <button> just as it
-      // matches any other `:input`). getSearchCompanyBtnNode now binds a
-      // keydown handler directly on the element itself, which the DOM's own
-      // target-then-bubble dispatch order guarantees runs before any
-      // ancestor-bound handler regardless of where that handler lives or
-      // when it was registered.
+      // premature submit on Enter — UNCONFIRMED, see the production comment
+      // in getSearchCompanyBtnNode for the caveat). getSearchCompanyBtnNode
+      // now binds a keydown handler directly on the element itself, which
+      // the DOM's own target-then-bubble dispatch order guarantees runs
+      // before any bubble-phase ancestor handler regardless of where that
+      // handler lives or when it was registered.
+      //
+      // The production handler doesn't gate on focus at all (it's bound
+      // unconditionally on the element), so `.focus()` below isn't
+      // load-bearing for this assertion — it's here to mirror how a buyer
+      // actually reaches this keydown (Tab lands them here first).
       jest.useFakeTimers();
       openWithAffordance();
       type("abc");
@@ -994,7 +999,12 @@ describe("company-search manual-entry affordance", () => {
       jest.useRealTimers();
     });
 
-    test("other keys do not activate it", () => {
+    test("other keys do not activate it (selectivity guard, not proof of the fix on its own)", () => {
+      // This asserts the handler is selective (which === 13/32 only) — it
+      // would pass identically even with the whole round-4 handler deleted,
+      // so it's a guard against an over-broad handler, not evidence the
+      // Enter/Space fix exists. The two tests above are what actually break
+      // on a revert.
       jest.useFakeTimers();
       openWithAffordance();
       type("abc");
