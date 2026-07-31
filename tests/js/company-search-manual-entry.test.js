@@ -281,11 +281,19 @@ describe("company-search manual-entry affordance", () => {
      * would, and return the event so its `defaultPrevented` state can be
      * asserted.
      *
+     * `which: 9` because the production handler reads `e.which` (matching
+     * the vendored selectWoo bundle's own convention), not `e.key` — a test
+     * built on `.key` alone would keep passing against a handler that no
+     * longer reads it.
+     *
      * @param {Object} opts e.g. { shiftKey: true }
      * @returns {Object} the jQuery.Event dispatched
      */
     function tabAt($el, opts) {
-      const e = jQuery.Event("keydown", Object.assign({ key: "Tab" }, opts || {}));
+      const e = jQuery.Event(
+        "keydown",
+        Object.assign({ key: "Tab", which: 9 }, opts || {})
+      );
       $el.trigger(e);
       return e;
     }
@@ -302,46 +310,114 @@ describe("company-search manual-entry affordance", () => {
       expect(document.activeElement).toBe(btn().get(0));
     });
 
-    test("Shift+Tab is left alone — ordinary reverse-tab behaviour is not hijacked", () => {
+    test("Shift+Tab is left alone — our handler does not touch the button", () => {
+      // Not asserting `isDefaultPrevented()` here: selectWoo's own vendored
+      // document-level handler (see the comment above the production code)
+      // treats Tab as Enter whenever the dropdown is open regardless of
+      // Shift — confirmed directly against the real library, not this
+      // plugin's code — so `preventDefault` already happens independent of
+      // this feature and is not a contract this handler owns. What IS this
+      // handler's contract is the early return on `e.shiftKey`: mutate it
+      // away and this test fails, because the button would then receive an
+      // explicit `.focus()` call this code makes directly (which jsdom does
+      // perform, unlike native Tab traversal it never simulates).
       openWithAffordance();
       type("a".repeat(helper.companySearchMinLength));
       expect(btn().length).toBe(1);
 
       searchInput().get(0).focus();
-      const e = tabAt(searchInput(), { shiftKey: true });
+      tabAt(searchInput(), { shiftKey: true });
 
-      expect(e.isDefaultPrevented()).toBe(false);
-      // Focus is left where the browser's own default handling would move
-      // it — i.e. NOT hijacked onto the button.
       expect(document.activeElement).not.toBe(btn().get(0));
     });
 
     test("below the threshold (button absent) Tab is not intercepted", () => {
+      // Same reasoning as the Shift+Tab test above re: not asserting
+      // `isDefaultPrevented()` — that reflects selectWoo's own document-level
+      // Tab-as-Enter handling, not this feature. The contract under test is
+      // the `!btn` early return: nothing gets created or focused when the
+      // button doesn't exist yet.
       openWithAffordance();
-      // Below companySearchMinLength: no button exists yet.
       type("a".repeat(helper.companySearchMinLength - 1));
       expect(btn().length).toBe(0);
 
       searchInput().get(0).focus();
-      const e = tabAt(searchInput());
+      tabAt(searchInput());
 
-      expect(e.isDefaultPrevented()).toBe(false);
+      expect(btn().length).toBe(0);
     });
 
-    test("no-trap regression check: with the dropdown CLOSED, Tab elsewhere on the page is plain default browser behaviour", () => {
+    test("no-trap regression check: closing the dropdown removes this handler's own hook, not just the button", () => {
       // This is the #30.x.4 regression this change must not reintroduce.
-      // Nothing about the delegated selector should ever fire outside the
-      // company-search field, open or closed.
+      // Rather than asserting on a DIFFERENT field never in scope for this
+      // selector (which would pass even if the selector were broadened to
+      // match anything, since #billing_company never matched it either way),
+      // prove the actual mechanism: selectWoo's own `close` handling strips
+      // `aria-owns` off the search field it belongs to — which is exactly
+      // what `companySearchInputSelector` keys on — so once the dropdown is
+      // closed this handler's delegated selector provably cannot match
+      // ANYTHING any more, regardless of what element Tab is pressed on.
       openWithAffordance();
+      expect(searchInput().length).toBe(1);
+
       $("#billing_company_display").select2("close");
 
+      expect(jQuery(helper.companySearchInputSelector).length).toBe(0);
+
+      // And, separately: Tab on a genuinely unrelated field is untouched.
       const $other = $("#billing_company");
       $other.get(0).focus();
-      const e = tabAt($other);
+      tabAt($other);
 
-      expect(e.isDefaultPrevented()).toBe(false);
-      // Focus was never moved by our handler.
       expect(document.activeElement).toBe($other.get(0));
+    });
+
+    test("survives selectWoo's own stale focusOnActiveElement() timer stealing focus back", () => {
+      // selectWoo's vendored document-level keydown handler schedules a
+      // `focusOnActiveElement()` call 1000ms after EVERY typing keystroke
+      // (not just Tab), which refocuses whatever result row is currently
+      // `.select2-results__option--highlighted` — and every fresh result
+      // render auto-highlights the first row. That timer is scheduled from
+      // the buyer's PREVIOUS keystroke, before Tab is ever pressed, so
+      // `stopPropagation` on the Tab event itself cannot reach it. A buyer
+      // who types and then hits Tab within that ~1s window — the normal case
+      // for a fast typer — would otherwise see focus land on the button and
+      // then get yanked back onto the highlighted company row shortly after.
+      jest.useFakeTimers();
+      const $select = openWithAffordance();
+      const picker = $select.data("select2");
+
+      // Real keydown events, not just `.trigger("input")` — selectWoo's own
+      // handler listens for keydown specifically, and this is the mechanism
+      // under test.
+      "abc".split("").forEach((ch) => {
+        searchInput().val(searchInput().val() + ch);
+        searchInput().trigger($.Event("keydown", { key: ch, which: ch.charCodeAt(0) }));
+        searchInput().trigger("input");
+      });
+
+      // A fresh result render, which selectWoo auto-highlights the first row
+      // of (Results.prototype.bind's `results:all` handler).
+      picker.trigger("results:all", {
+        data: { results: [{ id: "Real Co", text: "Real Co", html: "Real Co" }] },
+        query: { term: "abc" }
+      });
+      expect(
+        $("#select2-billing_company_display-results").find(
+          ".select2-results__option--highlighted"
+        ).length
+      ).toBe(1);
+      expect(btn().length).toBe(1);
+
+      searchInput().get(0).focus();
+      tabAt(searchInput());
+      expect(document.activeElement).toBe(btn().get(0));
+
+      // Run past selectWoo's own 1000ms timer.
+      jest.advanceTimersByTime(1100);
+
+      expect(document.activeElement).toBe(btn().get(0));
+      jest.useRealTimers();
     });
   });
 

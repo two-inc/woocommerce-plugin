@@ -322,6 +322,13 @@ let twoincSelectWooHelper = {
     // once a target to focus is confirmed, so a buyer who has not typed
     // enough yet still gets plain browser Tab.
     //
+    // `e.which` rather than `e.key`, matching the vendored selectWoo bundle's
+    // own convention (its `KEYS` module and every keydown branch in
+    // selectWoo.full.js read `evt.which`) — one key-reading convention on
+    // this shared event chain rather than two, and immune to the (rare) cases
+    // where `.key` comes back blank/"Unidentified" on a real keydown while
+    // `.which` still resolves.
+    //
     // `stopPropagation` is load-bearing, not belt-and-braces. selectWoo's own
     // core binds a `$(document).on('keydown', ...)` handler (see
     // select2/core.js `bindContainerEvents`) that treats a bare Tab exactly
@@ -333,18 +340,56 @@ let twoincSelectWooHelper = {
     // and yanks focus straight back onto the search field — `preventDefault`
     // alone was proven insufficient (it does not stop the bubble, only the
     // browser's own native Tab action, which select2's handler does not
-    // consult).
+    // consult). A side effect, and an intentional one: this also means Tab no
+    // longer doubles as "accept the highlighted result" the way selectWoo's
+    // own Tab-as-Enter branch otherwise would. That is the point of this
+    // change — Doug asked for Tab to be a dedicated shortcut to the button,
+    // not a second Enter — and Enter itself is untouched.
+    //
+    // One more of selectWoo's own timers has to be defended against
+    // separately, and `stopPropagation` cannot reach it: the SAME document
+    // handler also runs on every ordinary typing keystroke (not just Tab) and
+    // schedules `focusOnActiveElement()` — which refocuses whatever result
+    // row is currently marked `.select2-results__option--highlighted`, and
+    // every fresh result render auto-highlights the first row — 1000ms later.
+    // That timer is scheduled from the buyer's PREVIOUS keystroke, before
+    // this Tab handler ever runs, so stopping propagation on the Tab event
+    // itself does nothing to it. A buyer who types quickly and then hits Tab
+    // within that ~1s window (the normal case — fast typers are exactly who
+    // this shortcut is for) gets focus yanked back onto the highlighted
+    // company row shortly after landing on the button. Confirmed
+    // reproducible with fake timers before this comment was written.
+    // Re-assert focus on the button once, just past that window, but ONLY if
+    // selectWoo's timer actually won (`document.activeElement` is a
+    // highlighted result row) and the button is still there — so a buyer who
+    // has since moved on deliberately (closed the dropdown, tabbed away,
+    // clicked the button) is never fought.
     jQuery(document.body)
       .off("keydown.twoincManualEntry")
       .on("keydown.twoincManualEntry", helper.companySearchInputSelector, function (e) {
-        if (e.key !== "Tab" || e.shiftKey) return;
+        if (e.which !== 9 || e.shiftKey) return;
 
         const btn = jQuery("#" + helper.manualEntryRowId).get(0);
         if (!btn) return;
 
+        // Accepted risk, not handled: if the button happens to be hidden or
+        // mid-transition at this exact moment, `.focus()` on a real browser
+        // silently no-ops per the HTML spec (unlike jsdom, which does not
+        // reliably enforce this, so no test here can catch it either way).
+        // The buyer is left with focus stuck on the search field — no worse
+        // than before this feature existed, just not the "Tab reaches the
+        // button" this comment otherwise promises.
         e.preventDefault();
         e.stopPropagation();
         btn.focus();
+
+        setTimeout(function () {
+          const stillThere = jQuery("#" + helper.manualEntryRowId).get(0);
+          const stolenByHighlightedRow = jQuery(document.activeElement).is(
+            ".select2-results__option--highlighted"
+          );
+          if (stillThere && stolenByHighlightedRow) stillThere.focus();
+        }, 1100);
       });
   },
 

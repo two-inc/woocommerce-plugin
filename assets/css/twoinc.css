@@ -391,6 +391,16 @@
  *    container in its own right too, with `height: 100%` so it always fills
  *    whatever height the parent (and by extension the theme) gives it,
  *    instead of assuming a fixed line-height.
+ *
+ * Known limitation, not fixed here: `height: 100%` only resolves against a
+ * PARENT with a definite (fixed or otherwise resolved) height. A theme that
+ * gives `.select2-selection--single` only a `min-height` (content-driven auto
+ * height, no fixed value) leaves this `100%` computing to `auto`, and this
+ * fix quietly does nothing extra for that theme — the parent-level
+ * flex-centring above still applies regardless, so the box itself still
+ * centres; only the "fill whatever height the theme gives it" refinement for
+ * a taller-than-content rendered span is theme-dependent. No way to verify
+ * this against every host theme from here; flag if it recurs.
  */
 #billing_company_display_field .select2-selection--single {
   display: flex;
