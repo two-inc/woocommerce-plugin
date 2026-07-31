@@ -419,6 +419,29 @@ let twoincSelectWooHelper = {
     // the next real tab-stop is, in either direction (this button carries no
     // special Shift+Tab behaviour, so both directions get the same
     // protection).
+    //
+    // A known, DELIBERATELY UNFIXED gap this surfaces rather than causes,
+    // found under adversarial review: selectWoo never actually clears
+    // `isOpen()` on keyboard-only focus-away — nothing but Escape, a result
+    // pick, or a `mousedown` anywhere outside the widget closes it
+    // (`_attachCloseHandler` in the vendored bundle). A buyer who reaches
+    // this button by keyboard and then keeps tabbing onward, without ever
+    // clicking anything, leaves the dropdown "open" indefinitely — every
+    // later Tab/Enter/Escape ANYWHERE on the page, including Enter on the
+    // checkout submit button, still gets caught by selectWoo's unscoped
+    // document handler until a stray click finally closes it. This predates
+    // this feature; this fix just makes it reachable for the first time
+    // (Tab could never actually escape the open dropdown at all before this
+    // PR, so nobody could reach "focus outside + still open" via keyboard).
+    // Deliberately NOT calling `.select2('close')` here to plug it: that
+    // triggers selectWoo's own `container.on('close', ...)` handler, which
+    // schedules `self.$selection.focus()` 1ms later UNCONDITIONALLY — which
+    // would yank focus straight back from wherever the buyer just legitimately
+    // tabbed to, reintroducing the exact keyboard trap #416 (#30.x.4) was
+    // written to fix, just one level further out. A real fix needs
+    // selectWoo's own close-on-blur gap addressed generally, not patched
+    // per-field here — flagged to Doug as a candidate follow-up ticket rather
+    // than attempted blind.
     jQuery(document.body)
       .off("keydown.twoincManualEntryButton")
       .on("keydown.twoincManualEntryButton", "#" + helper.manualEntryRowId, function (e) {
