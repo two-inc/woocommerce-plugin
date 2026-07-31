@@ -168,35 +168,34 @@
 }
 
 /*
- * Manual-entry row inside the company-search results list (TWO-25288).
+ * Manual-entry button, a sibling of the results list rather than a row
+ * inside it (#30.x.1-3, superseding the TWO-25288 pseudo-option).
  *
- * It is an option row now rather than a floating div beside the list, so the
- * hand-rolled margin is gone: the row inherits the picker's own option padding
- * and highlight, which is what keeps it in step with the company rows above it
- * when arrowed onto. Kept as a flat single-id selector so brand overlays that
- * recolour it keep matching without raising their own specificity.
+ * A real <button> now, so its native chrome has to be reset to read as the
+ * link it visually is — the same treatment #search_company_btn already gets
+ * below. `display: block` + full width keeps it filling the dropdown the way
+ * the old option row did; the padding roughly matches selectWoo's own option
+ * row padding so it doesn't look like a foreign element bolted underneath.
+ * Kept as a flat single-id selector so brand overlays that recolour it keep
+ * matching without raising their own specificity.
  */
 #company_not_in_btn {
+  display: block;
+  width: 100%;
+  text-align: left;
   cursor: pointer;
   color: #3043d1;
+  background: none;
+  border: 0;
+  border-top: 1px solid #eeeeee;
+  font: inherit;
+  padding: 6px 12px;
 }
 
-/*
- * Highlighted state (TWO-25288). NOT cosmetic — a contrast fix.
- *
- * The picker paints its highlighted row white-on-blue, but its own rule is a
- * class selector (specificity 0,3,1) and the id rule above is 1,0,0, so the
- * brand blue above wins on the text while the blue background still applies:
- * roughly 2.5:1, under the 4.5:1 floor, where every real company row in the
- * same list goes white-on-blue. Restated at the same id specificity so this row
- * matches its neighbours instead of going unreadable the moment it is arrowed
- * onto. Both theme prefixes, because which one is present depends on the host
- * theme's picker build.
- */
-#company_not_in_btn.select2-results__option--highlighted,
-.select2-container--default #company_not_in_btn.select2-results__option--highlighted,
-.select2-container--classic #company_not_in_btn.select2-results__option--highlighted {
-  color: #ffffff;
+#company_not_in_btn:hover,
+#company_not_in_btn:focus {
+  background-color: #f2f4fd;
+  outline-offset: -2px;
 }
 
 /*
@@ -355,6 +354,27 @@
 }
 .select2-search--dropdown.twoinc-searching .select2-search__field {
   padding-right: 30px;
+}
+
+/*
+ * Company-search placeholder / selected-value text (#30.x.5).
+ *
+ * Some host themes apply a blanket `text-transform: uppercase` broad enough
+ * to catch select2's own rendered span, and give the selection box a custom
+ * height with no matching `.select2-selection__rendered` line-height —
+ * leaving the placeholder text a few pixels above true vertical centre.
+ * Scoped to this one field's combobox so it never touches an unrelated
+ * select2 instance a theme already renders correctly. Flex centring rather
+ * than a fixed line-height: it self-adjusts to whatever height a host theme
+ * gives the selection box instead of assuming one.
+ */
+#billing_company_display_field .select2-selection--single {
+  display: flex;
+  align-items: center;
+}
+#billing_company_display_field .select2-selection__rendered {
+  text-transform: none;
+  line-height: normal;
 }
 
 /* Sole trader toggle (TWO-24754) */
