@@ -17,14 +17,15 @@ let twoincUtilHelper = {
    * Normalise a checkout value read out of the DOM to displayable text
    * (TWO-25288).
    *
-   * The case that matters is the company picker's empty option, whose label is
-   * a non-breaking space — so an unselected picker reads back as a
-   * one-character string that is truthy and invisible, and anything checking
-   * only for `""` renders it as a company. `String.trim()` is enough on its
-   * own: its whitespace definition includes U+00A0. An explicit
-   * `.replace(/\u00a0/g, " ")` sat in front of it until review pointed out it
-   * could never change an outcome. Null and undefined become empty too, so
-   * callers need no guard of their own.
+   * Null, undefined and whitespace-only all become `""`, so callers can treat
+   * "is there a value" as a plain truthiness check without a guard of their own.
+   *
+   * Whitespace-only is the case worth having: the company picker's empty option
+   * carries a non-breaking space as its LABEL (its value is `""`), and that
+   * label does reach code — `getCompanyName()` reads the picker's rendered
+   * selection text out of the checkout snapshot — where it is a one-character
+   * string that is truthy and invisible. `trim()` covers it without special
+   * handling, since its whitespace definition includes U+00A0.
    *
    * @param {*} value
    * @returns {string}
@@ -1087,11 +1088,11 @@ let twoincDomHelper = {
     Twoinc.getInstance().registryAddressApplied = false;
 
     Twoinc.getInstance().customerCompany = {};
-    // Nothing captured any more, so nothing to show. Passed explicitly: the
-    // picker is re-attached above and reads back as the empty option, and the
-    // 3s re-read at the end of this function would otherwise be the first
-    // thing to clear the summary.
-    twoincDomHelper.renderCompanySummary("", "");
+    // Re-read rather than forced empty. Forcing it disagreed with the gated
+    // clear above: in manual entry the buyer's typed company is deliberately
+    // kept, so the summary vanished here and reappeared 3s later when the
+    // re-read below ran.
+    twoincDomHelper.renderCompanySummary();
     twoincDomHelper.togglePaySubtitleDesc();
 
     // Update again after all elements are updated
@@ -1213,21 +1214,25 @@ let twoincDomHelper = {
    * toggleBusinessFields, which would have blanked the name of a company that
    * was still very much picked, while the number — read live — stayed.
    *
-   * `#billing_company` is the live mirror in every capture mode: the picker's
-   * select handler writes it on each pick, manual entry writes it, sole-trader
-   * autofill writes it, and the user-meta restore writes it. The display
-   * select's own value is the fallback, since its options carry the company
-   * name as their value.
+   * `#billing_company` and `#company_id`, and ONLY those two. They are the
+   * fields WooCommerce posts, and they are written by every capture mode: the
+   * picker's select handler on each pick, manual entry, sole-trader autofill,
+   * and the user-meta restore.
+   *
+   * The display select's value was briefly a fallback here, on the reasoning
+   * that its options carry the company name as their value. It had to go: the
+   * picker appends an <option> for every pick and neither select2("destroy")
+   * nor twoincSoleTrader.setCompany("", "") removes it, so leaving search mode
+   * left a company on that select which no longer existed in either posted
+   * field — and the fallback read it back, showing a company the order did not
+   * carry. Reading only what is posted is what keeps the display and the order
+   * unable to disagree.
    *
    * @returns {{company_name: string, organization_number: string}}
    */
   readCapturedCompany: function () {
-    let name = twoincUtilHelper.blankToEmpty(jQuery("#billing_company").val());
-    if (!name) {
-      name = twoincUtilHelper.blankToEmpty(jQuery("#billing_company_display").val());
-    }
     return {
-      company_name: name,
+      company_name: twoincUtilHelper.blankToEmpty(jQuery("#billing_company").val()),
       organization_number: twoincUtilHelper.blankToEmpty(jQuery("#company_id").val())
     };
   },
@@ -2233,14 +2238,20 @@ let twoincSoleTrader = {
   setCompany: function (companyId, companyName) {
     jQuery("#company_id").val(companyId);
     jQuery("#billing_company").val(companyName);
+    // The display select too, when this is the clearing call setMode("business")
+    // makes. The picker appends an <option> per pick and select2("destroy")
+    // leaves it selected, so without this a company picked before the sole-trader
+    // detour stayed on that select after being cleared from both posted fields
+    // (TWO-25288).
+    if (!companyName) {
+      jQuery("#billing_company_display").val("");
+    }
     const instance = Twoinc.getInstance();
     instance.customerCompany.organization_number = companyId;
     instance.customerCompany.company_name = companyName;
-    // Explicit rather than DOM-read: sole-trader mode leaves
-    // enable_company_search at "no", so getCompanyName() would read
-    // #billing_company — correct today, but this function is the authority on
-    // what was just captured and the summary should not depend on the order
-    // the two mirrors are written in (TWO-25288).
+    // Explicit rather than DOM-read: this function is the authority on what was
+    // just captured, so the summary should not depend on the order the mirrors
+    // above are written in (TWO-25288).
     twoincDomHelper.renderCompanySummary(companyName, companyId);
     if (companyId) {
       instance.getApproval();

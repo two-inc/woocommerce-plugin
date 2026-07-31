@@ -219,10 +219,18 @@ about the company-search helper, so the bootstrap is left to no-op.
 - visibility: shown only for a Two purchase with something captured, hidden when the buyer
   switches to another payment method (with the fields still posting), and cleared by
   `clearSelectedCompany()`.
-- the picker's empty option is a non-breaking space — truthy, invisible, and untouched by
-  `trim()` on its own — so a summary that only checked for `""` would render an empty name
-  box. Pinned, along with the user-meta restore path, which passes both values explicitly
-  because `loadUserMetaInputs` writes `#company_id` _after_ it renders.
+- the picker's empty option carries a non-breaking space as its **label**, not its value —
+  truthy and invisible, so anything checking only for `""` renders it as a company. The live
+  read cannot see one (the value is `""`, asserted), so the normalisation is defensive
+  against the label reaching code the other way, through the checkout snapshot.
+- **a company that is no longer captured stays off screen.** The picker appends an `<option>`
+  per pick and neither `select2("destroy")` nor the clearing `setCompany("", "")` removes it,
+  so a search → sole trader → back-to-business round trip left a company on that select with
+  both posted fields empty. Pinned twice: the round trip itself, and the invariant behind it —
+  what is displayed is what `#billing_company` holds, with a deliberately stale option still
+  on the select.
+- the user-meta restore path, which passes both values explicitly because `loadUserMetaInputs`
+  writes `#company_id` _after_ it renders.
 
 ### Two defects these tests found, now fixed
 
