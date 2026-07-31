@@ -187,6 +187,8 @@ final class BrandConfigSpec
             'testIntentApprovedNoticeInvalidSwitchReportsAndDefaultsOn',
             'testIntentLoaderRendersTheOneSharedDotPulse',
             'testIntentLoaderSuppressedWithTheNoticeButErrorBoxesSurvive',
+            'testAssetVersionTracksFileMtimeNotPluginVersion',
+            'testAssetVersionFallsBackToPluginVersionWhenFileMissing',
         ];
         foreach ($tests as $test) {
             self::reset();
@@ -5491,6 +5493,46 @@ final class BrandConfigSpec
             strpos($html, 'twoinc-pay-box twoinc-err-phone-number hidden') !== false,
             'the phone-number error box must survive the notice being off'
         );
+    }
+
+    /**
+     * Enqueued asset versions must key off the asset file's own mtime, not
+     * the static plugin version — a CDN/browser cache-busting fix. Two real
+     * files with different mtimes must resolve to different versions, and
+     * touching one file must not change the other's version.
+     */
+    private static function testAssetVersionTracksFileMtimeNotPluginVersion(): void
+    {
+        $js = WC_TWOINC_PLUGIN_PATH . 'assets/js/twoinc.js';
+        $css = WC_TWOINC_PLUGIN_PATH . 'assets/css/twoinc.css';
+
+        TinyAssert::same((string) filemtime($js), twoinc_get_asset_version('assets/js/twoinc.js'));
+        TinyAssert::same((string) filemtime($css), twoinc_get_asset_version('assets/css/twoinc.css'));
+
+        // Bumping one file's mtime changes only that file's resolved version.
+        $original_js_mtime = filemtime($js);
+        $css_version_before = twoinc_get_asset_version('assets/css/twoinc.css');
+        try {
+            touch($js, $original_js_mtime + 3600);
+            TinyAssert::same((string) ($original_js_mtime + 3600), twoinc_get_asset_version('assets/js/twoinc.js'));
+            TinyAssert::same($css_version_before, twoinc_get_asset_version('assets/css/twoinc.css'));
+        } finally {
+            touch($js, $original_js_mtime);
+        }
+    }
+
+    /**
+     * A missing/renamed asset must fall back to the plugin version string,
+     * not emit a PHP warning or an empty `?ver=` argument.
+     */
+    private static function testAssetVersionFallsBackToPluginVersionWhenFileMissing(): void
+    {
+        $GLOBALS['__twoinc_test_plugin_version'] = '9.9.9-test';
+        try {
+            TinyAssert::same('9.9.9-test', twoinc_get_asset_version('assets/js/does-not-exist.js'));
+        } finally {
+            unset($GLOBALS['__twoinc_test_plugin_version']);
+        }
     }
 }
 

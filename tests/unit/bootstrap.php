@@ -1008,6 +1008,17 @@ function get_twoinc_plugin_version()
         : '2.23.9';
 }
 
+// The real one lives in tillit-payment-gateway.php (not loaded, see above);
+// this mirrors its filemtime-with-fallback logic exactly so the asset-cache
+// -busting tests exercise the real behaviour against the real files on disk.
+function twoinc_get_asset_version($relative_path)
+{
+    $path = WC_TWOINC_PLUGIN_PATH . ltrim($relative_path, '/');
+    $mtime = file_exists($path) ? @filemtime($path) : false;
+
+    return $mtime !== false ? (string) $mtime : get_twoinc_plugin_version();
+}
+
 // Read by admin_options() for the provenance footer. Only 'version' is asked
 // for; anything else returns '' rather than guessing at WordPress semantics.
 function get_bloginfo($show = '', $filter = 'raw')
