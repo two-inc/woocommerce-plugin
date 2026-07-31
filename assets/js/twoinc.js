@@ -298,6 +298,54 @@ let twoincSelectWooHelper = {
       .on("input.twoincManualEntry", helper.companySearchInputSelector, function () {
         helper.syncManualEntryButton();
       });
+
+    // Tab-to-button shortcut (#30.x.6).
+    //
+    // Delegated the same way and for the same reason as the input handler
+    // above, which is also what scopes this correctly: a delegated handler on
+    // the search-field selector only ever fires while THAT field is the
+    // keydown target, i.e. while the dropdown is open and the search field
+    // itself has focus. That is deliberately narrower than #416's
+    // `focusStillWithinCompanySearch` (which also had to cover option rows and
+    // the collapsed combobox for a poll running on a timer regardless of
+    // focus) — a keydown listener only ever runs when its target already has
+    // focus, so there is nothing to check beyond "is this Tab".
+    //
+    // Only plain Tab is hijacked. Doug asked for Tab to reach the "not on the
+    // list" button directly instead of arrowing down through every result;
+    // Shift+Tab is left alone on purpose so reverse-tab keeps its ordinary
+    // browser behaviour (move to the previous natural tab-stop) rather than
+    // also being routed somewhere non-standard.
+    //
+    // No-op, not a fallback to default Tab, when the button is not currently
+    // in the DOM (below the search threshold): `preventDefault` only fires
+    // once a target to focus is confirmed, so a buyer who has not typed
+    // enough yet still gets plain browser Tab.
+    //
+    // `stopPropagation` is load-bearing, not belt-and-braces. selectWoo's own
+    // core binds a `$(document).on('keydown', ...)` handler (see
+    // select2/core.js `bindContainerEvents`) that treats a bare Tab exactly
+    // like Enter while the dropdown is open: it fires `results:select` on the
+    // highlighted row, THEN unconditionally calls `$searchField.focus()` in
+    // the same handler, with no check of `evt.isDefaultPrevented()` first.
+    // `document` is above `document.body` in the bubble chain, so without
+    // stopping propagation here that handler still runs right after this one
+    // and yanks focus straight back onto the search field — `preventDefault`
+    // alone was proven insufficient (it does not stop the bubble, only the
+    // browser's own native Tab action, which select2's handler does not
+    // consult).
+    jQuery(document.body)
+      .off("keydown.twoincManualEntry")
+      .on("keydown.twoincManualEntry", helper.companySearchInputSelector, function (e) {
+        if (e.key !== "Tab" || e.shiftKey) return;
+
+        const btn = jQuery("#" + helper.manualEntryRowId).get(0);
+        if (!btn) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+        btn.focus();
+      });
   },
 
   /**

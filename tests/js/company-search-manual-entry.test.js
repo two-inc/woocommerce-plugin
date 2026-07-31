@@ -58,6 +58,7 @@ describe("company-search manual-entry affordance", () => {
   afterEach(() => {
     harness.releaseWidgets($);
     $(document.body).off("input.twoincManualEntry");
+    $(document.body).off("keydown.twoincManualEntry");
     document.body.innerHTML = "";
   });
 
@@ -271,6 +272,76 @@ describe("company-search manual-entry affordance", () => {
       type("abc");
 
       expect(btn().text()).toBe("Selskapet mitt er ikke på listen");
+    });
+  });
+
+  describe("Tab-to-button shortcut (#30.x.6)", () => {
+    /**
+     * Dispatch a real Tab keydown at the search field, the way the browser
+     * would, and return the event so its `defaultPrevented` state can be
+     * asserted.
+     *
+     * @param {Object} opts e.g. { shiftKey: true }
+     * @returns {Object} the jQuery.Event dispatched
+     */
+    function tabAt($el, opts) {
+      const e = jQuery.Event("keydown", Object.assign({ key: "Tab" }, opts || {}));
+      $el.trigger(e);
+      return e;
+    }
+
+    test("Tab while the dropdown is open moves focus straight to the button", () => {
+      openWithAffordance();
+      type("a".repeat(helper.companySearchMinLength));
+      expect(btn().length).toBe(1);
+
+      searchInput().get(0).focus();
+      const e = tabAt(searchInput());
+
+      expect(e.isDefaultPrevented()).toBe(true);
+      expect(document.activeElement).toBe(btn().get(0));
+    });
+
+    test("Shift+Tab is left alone — ordinary reverse-tab behaviour is not hijacked", () => {
+      openWithAffordance();
+      type("a".repeat(helper.companySearchMinLength));
+      expect(btn().length).toBe(1);
+
+      searchInput().get(0).focus();
+      const e = tabAt(searchInput(), { shiftKey: true });
+
+      expect(e.isDefaultPrevented()).toBe(false);
+      // Focus is left where the browser's own default handling would move
+      // it — i.e. NOT hijacked onto the button.
+      expect(document.activeElement).not.toBe(btn().get(0));
+    });
+
+    test("below the threshold (button absent) Tab is not intercepted", () => {
+      openWithAffordance();
+      // Below companySearchMinLength: no button exists yet.
+      type("a".repeat(helper.companySearchMinLength - 1));
+      expect(btn().length).toBe(0);
+
+      searchInput().get(0).focus();
+      const e = tabAt(searchInput());
+
+      expect(e.isDefaultPrevented()).toBe(false);
+    });
+
+    test("no-trap regression check: with the dropdown CLOSED, Tab elsewhere on the page is plain default browser behaviour", () => {
+      // This is the #30.x.4 regression this change must not reintroduce.
+      // Nothing about the delegated selector should ever fire outside the
+      // company-search field, open or closed.
+      openWithAffordance();
+      $("#billing_company_display").select2("close");
+
+      const $other = $("#billing_company");
+      $other.get(0).focus();
+      const e = tabAt($other);
+
+      expect(e.isDefaultPrevented()).toBe(false);
+      // Focus was never moved by our handler.
+      expect(document.activeElement).toBe($other.get(0));
     });
   });
 

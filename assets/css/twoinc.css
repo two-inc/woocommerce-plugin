@@ -178,6 +178,15 @@
  * row padding so it doesn't look like a foreign element bolted underneath.
  * Kept as a flat single-id selector so brand overlays that recolour it keep
  * matching without raising their own specificity.
+ *
+ * `text-transform: none` is new (round 2, #30.x.5). It was never needed while
+ * this was an `<li>` — this <button> tag is what makes it a target for a host
+ * theme's generic `button { text-transform: uppercase; }` styling, which
+ * plenty of themes apply for CTA-style buttons. An `<li role="option">` never
+ * matched that selector; a real `<button>` always will. `!important` because
+ * that kind of theme rule is routinely `!important` itself (buttons are a
+ * common place themes fight plugins for the last word), and this element has
+ * no reason to ever want the theme's button casing.
  */
 #company_not_in_btn {
   display: block;
@@ -187,6 +196,7 @@
   color: #3043d1;
   background: none;
   border: 0;
+  text-transform: none !important;
   border-top: 1px solid #eeeeee;
   font: inherit;
   padding: 6px 12px;
@@ -357,24 +367,42 @@
 }
 
 /*
- * Company-search placeholder / selected-value text (#30.x.5).
+ * Company-search placeholder / selected-value text (#30.x.5, round 2).
  *
  * Some host themes apply a blanket `text-transform: uppercase` broad enough
  * to catch select2's own rendered span, and give the selection box a custom
  * height with no matching `.select2-selection__rendered` line-height —
  * leaving the placeholder text a few pixels above true vertical centre.
  * Scoped to this one field's combobox so it never touches an unrelated
- * select2 instance a theme already renders correctly. Flex centring rather
- * than a fixed line-height: it self-adjusts to whatever height a host theme
- * gives the selection box instead of assuming one.
+ * select2 instance a theme already renders correctly.
+ *
+ * Round 1 (first #30.x.5) set `text-transform: none` and `line-height:
+ * normal` here, plus `display: flex; align-items: center` on the PARENT
+ * `.select2-selection--single`. Two gaps, reported back live:
+ *
+ *  - `text-transform: none` with no `!important` loses to any host theme rule
+ *    that is itself `!important` — routine for theme form-control styling.
+ *    Escalated deliberately rather than hoping a bare declaration outranks a
+ *    rule this stylesheet never sees.
+ *  - Flex-centring the PARENT only centres the `.select2-selection__rendered`
+ *    BOX within it; it does nothing for text sitting off-centre WITHIN that
+ *    box, which is what a theme-supplied height + mismatched line-height on
+ *    the rendered span itself produces. The rendered span is now a flex
+ *    container in its own right too, with `height: 100%` so it always fills
+ *    whatever height the parent (and by extension the theme) gives it,
+ *    instead of assuming a fixed line-height.
  */
 #billing_company_display_field .select2-selection--single {
   display: flex;
   align-items: center;
 }
 #billing_company_display_field .select2-selection__rendered {
-  text-transform: none;
+  display: flex;
+  align-items: center;
+  height: 100%;
+  text-transform: none !important;
   line-height: normal;
+  padding-right: 3px;
 }
 
 /* Sole trader toggle (TWO-24754) */
