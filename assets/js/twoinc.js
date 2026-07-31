@@ -1166,7 +1166,7 @@ let twoincDomHelper = {
 
     const data =
       companyName === undefined && companyId === undefined
-        ? twoincDomHelper.getCompanyData()
+        ? twoincDomHelper.readCapturedCompany()
         : { company_name: companyName, organization_number: companyId };
 
     // The empty selectWoo option's label is a non-breaking space, so an
@@ -1185,6 +1185,38 @@ let twoincDomHelper = {
       (name || number) && twoincDomHelper.isTwoincVisible() && twoincDomHelper.isTwoincSelected()
     );
     $node.toggleClass("hidden", !visible);
+  },
+
+  /**
+   * Read the captured company straight out of the live inputs (TWO-25288).
+   *
+   * Deliberately NOT getCompanyData(), which is what this used to call. In
+   * search mode that reaches getCompanyName(), and getCompanyName() reads the
+   * company name out of the `checkoutInputs` sessionStorage snapshot rather
+   * than the document — a snapshot saveCheckoutInputs() refreshes on a 3-second
+   * interval. So a summary rendered from it in search mode showed whatever the
+   * name was up to three seconds ago, or nothing at all before the first save:
+   * switching payment method away and back re-renders through
+   * toggleBusinessFields, which would have blanked the name of a company that
+   * was still very much picked, while the number — read live — stayed.
+   *
+   * `#billing_company` is the live mirror in every capture mode: the picker's
+   * select handler writes it on each pick, manual entry writes it, sole-trader
+   * autofill writes it, and the user-meta restore writes it. The display
+   * select's own value is the fallback, since its options carry the company
+   * name as their value.
+   *
+   * @returns {{company_name: string, organization_number: string}}
+   */
+  readCapturedCompany: function () {
+    let name = twoincUtilHelper.blankToEmpty(jQuery("#billing_company").val());
+    if (!name) {
+      name = twoincUtilHelper.blankToEmpty(jQuery("#billing_company_display").val());
+    }
+    return {
+      company_name: name,
+      organization_number: twoincUtilHelper.blankToEmpty(jQuery("#company_id").val())
+    };
   },
 
   /**

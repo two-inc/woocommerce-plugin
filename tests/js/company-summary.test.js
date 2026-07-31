@@ -114,6 +114,24 @@ describe("read-only captured-company summary", () => {
       expect(renderedNumber()).toBe("12345678");
     });
 
+    test("survives a re-render with no sessionStorage snapshot behind it", () => {
+      // The summary's no-argument path used to go through getCompanyData(),
+      // which in search mode reads the company name out of the `checkoutInputs`
+      // sessionStorage snapshot — refreshed on a 3-second interval, and absent
+      // entirely until the first save. So a re-render showed the name as it was
+      // up to three seconds ago, or blanked it and hid the summary, while the
+      // number (read live) stayed. Switching payment method away and back is
+      // enough to trigger one, via toggleBusinessFields.
+      pickCompany("ACME Widgets Ltd", "12345678");
+      sessionStorage.removeItem("checkoutInputs");
+
+      dom.toggleBusinessFields();
+
+      expect(isShown()).toBe(true);
+      expect(renderedName()).toBe("ACME Widgets Ltd");
+      expect(renderedNumber()).toBe("12345678");
+    });
+
     test("the picked values are still the posted ones", () => {
       // The summary is a display beside the fields, not instead of them. If it
       // ever became the only carrier of the identity, the order would reach
