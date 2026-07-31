@@ -14,6 +14,28 @@ let twoincUtilHelper = {
   },
 
   /**
+   * Normalise a checkout value read out of the DOM to displayable text
+   * (TWO-25288).
+   *
+   * Null, undefined and whitespace-only all become `""`, so callers can treat
+   * "is there a value" as a plain truthiness check without a guard of their own.
+   *
+   * Whitespace-only is the case worth having: the company picker's empty option
+   * carries a non-breaking space as its LABEL (its value is `""`), and that
+   * label does reach code — `getCompanyName()` reads the picker's rendered
+   * selection text out of the checkout snapshot — where it is a one-character
+   * string that is truthy and invisible. `trim()` covers it without special
+   * handling, since its whitespace definition includes U+00A0.
+   *
+   * @param {*} value
+   * @returns {string}
+   */
+  blankToEmpty: function (value) {
+    if (value === null || value === undefined) return "";
+    return String(value).trim();
+  },
+
+  /**
    * Construct url to Twoinc checkout api.
    *
    * `client` / `client_v` identify this plugin and its version to the API, and
@@ -1007,6 +1029,12 @@ let twoincDomHelper = {
     twoincDomHelper.toggleRequiredCues(requiredTargets, isTwoincSelected);
 
     twoincDomHelper.syncCompanyFieldWrappers();
+
+    // Last, and unconditionally: this function runs on every payment-method,
+    // country and capture-mode switch, which is exactly when the summary's own
+    // visibility gate needs re-evaluating. It reads the current inputs and
+    // calls nothing that re-enters here.
+    twoincDomHelper.renderCompanySummary();
   },
 
   /**
@@ -1162,6 +1190,20 @@ let twoincDomHelper = {
     );
     twoincSelectWooHelper.fixSelectWooPositionCompanyName();
     jQuery("#company_id").val("");
+    // The real company field too, matching what enterManualCompanyEntry does.
+    // Without this the cleared company survives in #billing_company: it is the
+    // field WooCommerce posts, so the order carried a company the buyer had
+    // just been shown as cleared, and — since #billing_company is also the live
+    // mirror the read-only summary reads — the summary reappeared showing it on
+    // the next re-render (TWO-25288).
+    //
+    // Gated on the picker being the capture mode, which is what this function
+    // is about clearing. In manual entry #billing_company is the buyer's own
+    // typed input, and this runs on every country change: clearing
+    // unconditionally would wipe a name they typed for reasons of their own.
+    if (window.twoinc.enable_company_search === "yes") {
+      jQuery("#billing_company").val("");
+    }
 
     // Clear the addresses, in case address get request fails
     if (window.twoinc.enable_address_lookup === "yes") {
@@ -1173,50 +1215,154 @@ let twoincDomHelper = {
     }
     Twoinc.getInstance().registryAddressApplied = false;
 
-    jQuery("#select2-billing_company_display-container")
-      .parent()
-      .find(".select2-selection__arrow")
-      .show();
     Twoinc.getInstance().customerCompany = {};
+    // Re-read rather than forced empty. Forcing it disagreed with the gated
+    // clear above: in manual entry the buyer's typed company is deliberately
+    // kept, so the summary vanished here and reappeared 3s later when the
+    // re-read below ran.
+    twoincDomHelper.renderCompanySummary();
     twoincDomHelper.togglePaySubtitleDesc();
 
     // Update again after all elements are updated
     setTimeout(function () {
       Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData();
+      twoincDomHelper.renderCompanySummary();
       twoincDomHelper.togglePaySubtitleDesc();
     }, 3000);
   },
 
+  /** DOM id of the read-only captured-company summary (TWO-25288). */
+  companySummaryId: "twoinc_company_summary",
+
   /**
-   * Insert the floating company id and closing button
+   * The read-only summary of the captured company, built hidden on first use
+   * (TWO-25288).
+   *
+   * Two <span>s and no <input>: the captured identity is a value the buyer is
+   * shown, not a field they fill in, so there is deliberately nothing here to
+   * type into and no control that removes it. `readonly` inputs are this
+   * plugin's convention for a field that still carries a value the buyer must
+   * not change (sole-trader mode readonly-locks #billing_company and
+   * #company_id) — but those are the SUBMITTED fields, and they keep that job
+   * untouched. This is a display beside them, so spans are the right shape.
+   *
+   * Anchored after the company-id field's enclosing `.twoinc-inp-container`
+   * where there is one, NOT inside it. The pay-for-order page wraps every
+   * company input in such a container and hides the container, not just the
+   * field (see syncCompanyFieldWrappers) — so a summary placed inside would be
+   * invisible on that page in exactly the search mode it matters most for. The
+   * checkout page has no wrappers and the anchor falls through to the field.
+   *
+   * @returns {Object} jQuery-wrapped summary, or an empty set on a page with
+   *   no company fields at all
    */
-  insertFloatingCompany: function (companyId, delayInSecs) {
-    if (!companyId) return;
+  getCompanySummaryNode: function () {
+    let $node = jQuery("#" + twoincDomHelper.companySummaryId);
+    if ($node.length) return $node;
 
-    // Remove if exist
-    jQuery(".floating-company").remove();
+    let $field = jQuery("#company_id_field");
+    if (!$field.length) $field = jQuery("#billing_company_field");
+    if (!$field.length) return jQuery();
 
-    let floatingCompany = jQuery(
-      '<span class="floating-company">' +
-        '  <span class="floating-company-id">' +
-        companyId +
-        "</span>" +
-        '  <img src="' +
-        window.twoinc.twoinc_plugin_url +
-        'assets/images/x-button.svg" onclick="twoincDomHelper.clearSelectedCompany()"></img>' +
-        "</span>"
+    $node = jQuery(
+      '<div id="' +
+        twoincDomHelper.companySummaryId +
+        '" class="twoinc-company-summary hidden">' +
+        '<span class="twoinc-company-summary-name"></span>' +
+        '<span class="twoinc-company-summary-id"></span>' +
+        "</div>"
     );
-    floatingCompany.hide();
-    floatingCompany.insertBefore("#billing_company_display");
-    setTimeout(function () {
-      let floatingCompany = jQuery(".floating-company");
-      floatingCompany.insertBefore("#select2-billing_company_display-container");
-      floatingCompany.show();
-      jQuery("#select2-billing_company_display-container")
-        .parent()
-        .find(".select2-selection__arrow")
-        .hide();
-    }, delayInSecs);
+    const $wrapper = $field.closest(".twoinc-inp-container");
+    $node.insertAfter($wrapper.length ? $wrapper : $field);
+    return $node;
+  },
+
+  /**
+   * Render the captured company's name and number, read-only (TWO-25288).
+   *
+   * Supersedes the floating company-id overlay this used to be. That showed
+   * the number only, and shipped an x-button that let the buyer delete a
+   * registry identity from the checkout — which is the affordance this
+   * reversal removes. Both values now render as text, in one place, for all
+   * three capture modes:
+   *
+   *   - company search: name and number as picked from the registry;
+   *   - sole trader: name and number as held by Two for the buyer;
+   *   - manual entry: whatever name the buyer typed, and NO number — manual
+   *     entry clears #company_id, so the number renders empty until the buyer
+   *     supplies one in the field of its own.
+   *
+   * Both arguments are optional. Callers that already hold the values pass
+   * them (the picker's select handler, sole-trader autofill, the user-meta
+   * restore — which writes #company_id AFTER this runs, so reading the DOM
+   * there would render an empty number). Everyone else omits them and the
+   * current inputs are read.
+   *
+   * @param {string} [companyName]
+   * @param {string} [companyId]
+   * @returns {void}
+   */
+  renderCompanySummary: function (companyName, companyId) {
+    const $node = twoincDomHelper.getCompanySummaryNode();
+    if (!$node.length) return;
+
+    const data =
+      companyName === undefined && companyId === undefined
+        ? twoincDomHelper.readCapturedCompany()
+        : { company_name: companyName, organization_number: companyId };
+
+    // The empty selectWoo option's label is a non-breaking space, so an
+    // unselected picker reads back as " " rather than "" — which would
+    // render as a summary with an invisible name in it.
+    const name = twoincUtilHelper.blankToEmpty(data.company_name);
+    const number = twoincUtilHelper.blankToEmpty(data.organization_number);
+
+    $node.find(".twoinc-company-summary-name").text(name);
+    $node.find(".twoinc-company-summary-id").text(number);
+
+    // Shown only for a Two purchase with something captured. A buyer paying by
+    // another method may well have typed a company name into WooCommerce's own
+    // field, and echoing it back at them under Two's styling is noise.
+    const visible = Boolean(
+      (name || number) && twoincDomHelper.isTwoincVisible() && twoincDomHelper.isTwoincSelected()
+    );
+    $node.toggleClass("hidden", !visible);
+  },
+
+  /**
+   * Read the captured company straight out of the live inputs (TWO-25288).
+   *
+   * Deliberately NOT getCompanyData(), which is what this used to call. In
+   * search mode that reaches getCompanyName(), and getCompanyName() reads the
+   * company name out of the `checkoutInputs` sessionStorage snapshot rather
+   * than the document — a snapshot saveCheckoutInputs() refreshes on a 3-second
+   * interval. So a summary rendered from it in search mode showed whatever the
+   * name was up to three seconds ago, or nothing at all before the first save:
+   * switching payment method away and back re-renders through
+   * toggleBusinessFields, which would have blanked the name of a company that
+   * was still very much picked, while the number — read live — stayed.
+   *
+   * `#billing_company` and `#company_id`, and ONLY those two. They are the
+   * fields WooCommerce posts, and they are written by every capture mode: the
+   * picker's select handler on each pick, manual entry, sole-trader autofill,
+   * and the user-meta restore.
+   *
+   * The display select's value was briefly a fallback here, on the reasoning
+   * that its options carry the company name as their value. It had to go: the
+   * picker appends an <option> for every pick and neither select2("destroy")
+   * nor twoincSoleTrader.setCompany("", "") removes it, so leaving search mode
+   * left a company on that select which no longer existed in either posted
+   * field — and the fallback read it back, showing a company the order did not
+   * carry. Reading only what is posted is what keeps the display and the order
+   * unable to disagree.
+   *
+   * @returns {{company_name: string, organization_number: string}}
+   */
+  readCapturedCompany: function () {
+    return {
+      company_name: twoincUtilHelper.blankToEmpty(jQuery("#billing_company").val()),
+      organization_number: twoincUtilHelper.blankToEmpty(jQuery("#company_id").val())
+    };
   },
 
   /**
@@ -1743,9 +1889,14 @@ let twoincDomHelper = {
         }
         selectElem.value = window.twoinc.billing_company;
 
-        // Append company id to company name select box
+        // Show the restored company read-only beside the field. Both values
+        // are passed explicitly: `#company_id` is written further down this
+        // function, so reading the DOM here would render an empty number.
         if (window.twoinc.user_meta_exists) {
-          twoincDomHelper.insertFloatingCompany(window.twoinc.company_id, 2000);
+          twoincDomHelper.renderCompanySummary(
+            window.twoinc.billing_company,
+            window.twoinc.company_id
+          );
         }
       }
     }
@@ -2290,9 +2441,21 @@ let twoincSoleTrader = {
   setCompany: function (companyId, companyName) {
     jQuery("#company_id").val(companyId);
     jQuery("#billing_company").val(companyName);
+    // The display select too, when this is the clearing call setMode("business")
+    // makes. The picker appends an <option> per pick and select2("destroy")
+    // leaves it selected, so without this a company picked before the sole-trader
+    // detour stayed on that select after being cleared from both posted fields
+    // (TWO-25288).
+    if (!companyName) {
+      jQuery("#billing_company_display").val("");
+    }
     const instance = Twoinc.getInstance();
     instance.customerCompany.organization_number = companyId;
     instance.customerCompany.company_name = companyName;
+    // Explicit rather than DOM-read: this function is the authority on what was
+    // just captured, so the summary should not depend on the order the mirrors
+    // above are written in (TWO-25288).
+    twoincDomHelper.renderCompanySummary(companyName, companyId);
     if (companyId) {
       instance.getApproval();
     }
@@ -2514,10 +2677,11 @@ class Twoinc {
       // Set the company name to HTML DOM
       $billingCompany.val(data.id);
 
-      // Display company ID on the right of selected company name
-      setTimeout(function () {
-        twoincDomHelper.insertFloatingCompany(data.company_id, 0);
-      }, 0);
+      // Display the picked company read-only. Synchronous, unlike the
+      // overlay this replaces: that had to wait for select2 to rebuild its
+      // selection container because it was positioned against it, and this is
+      // anchored to a field that is already in the document.
+      twoincDomHelper.renderCompanySummary(data.id, data.company_id);
 
       // Update the company name in agreement sentence and text in subtitle/description
       twoincDomHelper.togglePaySubtitleDesc();
@@ -2620,6 +2784,7 @@ class Twoinc {
     );
     $body.on("change", "#billing_company", function () {
       Twoinc.getInstance().customerCompany.company_name = twoincDomHelper.getCompanyName();
+      twoincDomHelper.renderCompanySummary();
       twoincDomHelper.togglePaySubtitleDesc();
     });
 
@@ -2659,10 +2824,7 @@ class Twoinc {
       twoincDomHelper.saveCheckoutInputs();
       Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData();
       Twoinc.getInstance().customerRepresentative = twoincDomHelper.getRepresentativeData();
-      twoincDomHelper.insertFloatingCompany(
-        Twoinc.getInstance().customerCompany.organization_number,
-        0
-      );
+      twoincDomHelper.renderCompanySummary();
       Twoinc.getInstance().getApproval();
     }, 1000);
     this.updateElements();
@@ -2990,6 +3152,7 @@ class Twoinc {
       Twoinc.getInstance().customerCompany.company_name = $input.val();
     }
 
+    twoincDomHelper.renderCompanySummary();
     Twoinc.getInstance().getApproval();
   }
 
