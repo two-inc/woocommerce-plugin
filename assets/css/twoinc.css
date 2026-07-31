@@ -180,6 +180,15 @@
 }
 
 /*
+ * The pay-for-order page lays its copy of the company fields out as wrapping
+ * flex items, so the summary lands as an item on the same row rather than
+ * underneath them. Give it the full row there.
+ */
+.custom-checkout .twoinc-company-summary {
+  flex-basis: 100%;
+}
+
+/*
  * Manual-entry row inside the company-search results list (TWO-25288).
  *
  * It is an option row now rather than a floating div beside the list, so the

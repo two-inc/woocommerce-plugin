@@ -1,3 +1,13 @@
-.twoinc-company-summary {
-  margin-right: 8px;
-}
+/*
+ * Kava theme overrides — intentionally empty (TWO-25288).
+ *
+ * The one rule this file held nudged the floating company-id overlay clear of
+ * the select2 arrow with a `margin-right`. That overlay is gone, replaced by a
+ * block-level read-only summary in normal flow, where the margin cannot change
+ * anything.
+ *
+ * The file itself has to stay: insertCustomCss() builds
+ * `assets/css/c-<theme>.css` from the detected theme and appends the <link>
+ * unconditionally, so removing it would turn a supported theme into a 404
+ * rather than a no-op.
+ */

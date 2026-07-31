@@ -17,22 +17,21 @@ let twoincUtilHelper = {
    * Normalise a checkout value read out of the DOM to displayable text
    * (TWO-25288).
    *
-   * Whitespace-only becomes empty, and the non-breaking space specifically:
-   * the company picker's empty option carries `&nbsp;` as its label, so an
-   * unselected picker reads back as a one-character string that is truthy and
-   * invisible. The escape is written out rather than the character pasted in,
-   * so nothing here depends on a reader — or an editor — telling the two space
-   * characters apart. Null and undefined become empty too, so callers need no
-   * guard of their own.
+   * The case that matters is the company picker's empty option, whose label is
+   * a non-breaking space — so an unselected picker reads back as a
+   * one-character string that is truthy and invisible, and anything checking
+   * only for `""` renders it as a company. `String.trim()` is enough on its
+   * own: its whitespace definition includes U+00A0. An explicit
+   * `.replace(/\u00a0/g, " ")` sat in front of it until review pointed out it
+   * could never change an outcome. Null and undefined become empty too, so
+   * callers need no guard of their own.
    *
    * @param {*} value
    * @returns {string}
    */
   blankToEmpty: function (value) {
     if (value === null || value === undefined) return "";
-    return String(value)
-      .replace(/\u00a0/g, " ")
-      .trim();
+    return String(value).trim();
   },
 
   /**
@@ -1062,6 +1061,20 @@ let twoincDomHelper = {
     );
     twoincSelectWooHelper.fixSelectWooPositionCompanyName();
     jQuery("#company_id").val("");
+    // The real company field too, matching what enterManualCompanyEntry does.
+    // Without this the cleared company survives in #billing_company: it is the
+    // field WooCommerce posts, so the order carried a company the buyer had
+    // just been shown as cleared, and — since #billing_company is also the live
+    // mirror the read-only summary reads — the summary reappeared showing it on
+    // the next re-render (TWO-25288).
+    //
+    // Gated on the picker being the capture mode, which is what this function
+    // is about clearing. In manual entry #billing_company is the buyer's own
+    // typed input, and this runs on every country change: clearing
+    // unconditionally would wipe a name they typed for reasons of their own.
+    if (window.twoinc.enable_company_search === "yes") {
+      jQuery("#billing_company").val("");
+    }
 
     // Clear the addresses, in case address get request fails
     if (window.twoinc.enable_address_lookup === "yes") {

@@ -202,18 +202,28 @@ describe("read-only captured-company summary", () => {
       expect($("#company_id").val()).toBe("");
     });
 
-    test("the typed name is what gets posted", () => {
+    test("what is displayed is what gets posted", () => {
       dom.enterManualCompanyEntry();
       typeCompanyName("Sole Proprietor Bakery");
 
-      expect($("#billing_company").val()).toBe("Sole Proprietor Bakery");
+      // The posted field on its own would be vacuous here — typeCompanyName is
+      // what set it. The pairing is the assertion: the summary renders the same
+      // string the checkout will post, not a copy that can drift from it.
+      expect(renderedName()).toBe("Sole Proprietor Bakery");
+      expect($("#billing_company").val()).toBe(renderedName());
     });
 
-    test("a number the buyer supplies themselves is picked up on blur", () => {
+    test("the blur handler picks up a number the buyer supplies themselves", () => {
       // On this platform manual entry keeps its own organisation-number field
       // (toggleBusinessFields reveals and requires `#company_id_field`), so
       // "blank" above means "not carried over from the abandoned pick", not
-      // "unobtainable". Driven through the real blur handler.
+      // "unobtainable".
+      //
+      // The handler is invoked directly rather than by dispatching a blur: the
+      // `$body.on("blur", "#company_id", …)` delegation is installed by
+      // Twoinc.initialize, whose bootstrap this suite does not stand up. So
+      // this covers the handler's body, NOT that it is wired to the event —
+      // hence the test name.
       const ajax = harness.stubAjax($);
       dom.enterManualCompanyEntry();
       typeCompanyName("Sole Proprietor Bakery");
@@ -269,6 +279,9 @@ describe("read-only captured-company summary", () => {
     test("nothing in it can be tabbed to", () => {
       pickCompany("ACME Widgets Ltd", "12345678");
 
+      // Guard: `.find()` on an empty set is empty, so without this the
+      // assertion below holds just as well on a page with no summary at all.
+      expect(summary().length).toBe(1);
       const focusable = summary()
         .find("[tabindex]")
         .filter(function () {
@@ -301,7 +314,7 @@ describe("read-only captured-company summary", () => {
       expect($("#billing_company").val()).toBe("ACME Widgets Ltd");
     });
 
-    test("cleared when the captured company is cleared", () => {
+    test("cleared when the captured company is cleared, and stays cleared", () => {
       jest.useFakeTimers();
       pickCompany("ACME Widgets Ltd", "12345678");
       expect(isShown()).toBe(true);
@@ -311,13 +324,41 @@ describe("read-only captured-company summary", () => {
       expect(isShown()).toBe(false);
       expect(renderedName()).toBe("");
       expect(renderedNumber()).toBe("");
+
+      // clearSelectedCompany re-reads the inputs 3s later and re-renders, and
+      // every later payment-method or country switch re-renders too. Both used
+      // to bring the cleared company back on screen, because #billing_company
+      // still held it — the field WooCommerce posts. Asserting only the
+      // synchronous clear is what let that through.
+      jest.advanceTimersByTime(3500);
+      expect(isShown()).toBe(false);
+      expect(renderedName()).toBe("");
+
+      dom.toggleBusinessFields();
+      expect(isShown()).toBe(false);
+      expect(renderedName()).toBe("");
+      // And the cleared company is not posted either.
+      expect($("#billing_company").val()).toBe("");
+      expect($("#company_id").val()).toBe("");
       jest.useRealTimers();
     });
 
     test("the picker's empty placeholder is not rendered as a name", () => {
-      // The empty option's label is a non-breaking space: truthy, invisible,
-      // and rendered by anything that only checks for "".
-      dom.renderCompanySummary(" ", "");
+      // The empty option's label is U+00A0, not a plain space: truthy,
+      // invisible, and rendered as a company by anything that only checks for
+      // "". Written as the escape rather than pasted in, so neither a reader
+      // nor an editor has to tell the two space characters apart — pasted, it
+      // was mistaken for U+0020 in review.
+      dom.renderCompanySummary("\u00a0", "");
+
+      expect(renderedName()).toBe("");
+      expect(isShown()).toBe(false);
+
+      // Through the live read too, which is the path a real unselected picker
+      // takes: the display select's value is that same non-breaking space.
+      $("#billing_company").val("");
+      $("#billing_company_display").append('<option value="\u00a0" selected></option>');
+      dom.renderCompanySummary();
 
       expect(renderedName()).toBe("");
       expect(isShown()).toBe(false);
