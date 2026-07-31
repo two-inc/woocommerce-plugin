@@ -29,6 +29,8 @@
 
 "use strict";
 
+const fs = require("fs");
+const path = require("path");
 const harness = require("./wc-harness");
 
 /** The strings the affordance reads out of the localised text map. */
@@ -451,6 +453,205 @@ describe("company-search manual-entry affordance", () => {
       expect(selected).toEqual([]);
       expect($("#billing_company").val()).toBe("");
     });
+
+    /**
+     * Dispatch a real Enter or Space keydown directly at the button, and
+     * return the event so its `defaultPrevented` state can be asserted.
+     *
+     * `which` matches the vendored selectWoo bundle's own convention, same
+     * reasoning as `tabAt` above.
+     *
+     * @param {number} which 13 (Enter) or 32 (Space)
+     * @returns {Object} the jQuery.Event dispatched
+     */
+    function keyAtButton(which) {
+      const e = jQuery.Event("keydown", { which: which });
+      btn().trigger(e);
+      return e;
+    }
+
+    test.each([
+      ["Enter", 13],
+      ["Space", 32]
+    ])(
+      "%s, with the button focused, does not get hijacked by selectWoo's document-level handler (#30.x.6 round 3)",
+      (name, which) => {
+        // Found live: Doug reported both Enter and Space, pressed while the
+        // button has focus, routing to the search field instead of
+        // activating the button. Root cause: this button's own
+        // keydown.twoincManualEntryButton handler only ever intercepted Tab
+        // (which === 9) — Enter and Space kept bubbling straight past it to
+        // selectWoo's document-level handler, which is gated purely on
+        // isOpen() (a CSS class), not on focus. That handler does NOT treat
+        // Enter and Space identically, though (checked directly against the
+        // vendored bundle): only Enter (like Tab) hits the results:select
+        // branch, silently selecting whatever row is highlighted; plain
+        // Space matches none of that handler's branches and only inherits
+        // its unconditional fallthrough — $searchField.focus() immediately,
+        // then focusOnActiveElement() ~1s later. Both keys still end up
+        // routing focus back to the search field, just via different
+        // mechanisms, which is why both need the same stopPropagation guard
+        // regardless of which internal branch they'd otherwise have hit.
+        //
+        // jsdom does not simulate the browser's native "Enter/Space
+        // activates a focused <button>" default action, so this cannot
+        // prove the button's own click handler fires from these keys — only
+        // that selectWoo's handler is kept from stealing the keydown first.
+        // Native activation dispatches the same `click` event a mouse click
+        // does, which the "mouse-button semantics" suite already covers.
+        const $select = openWithAffordance();
+        const picker = $select.data("select2");
+
+        type("abc");
+        picker.trigger("results:all", {
+          data: { results: [{ id: "Real Co", text: "Real Co", html: "Real Co" }] },
+          query: { term: "abc" }
+        });
+        expect(btn().length).toBe(1);
+
+        searchInput().get(0).focus();
+        tabAt(searchInput());
+        expect(document.activeElement).toBe(btn().get(0));
+
+        const selected = [];
+        $select.on("select2:select", (ev) => selected.push(ev.params.data));
+
+        const e = keyAtButton(which);
+
+        // Not preventDefault'd: the browser's own native button-activation
+        // default action for Enter/Space must still be free to run.
+        expect(e.isDefaultPrevented()).toBe(false);
+        // But selectWoo's document handler must never have seen this event:
+        // no row silently selected, no value written, focus untouched.
+        expect(selected).toEqual([]);
+        expect($("#billing_company").val()).toBe("");
+        expect(document.activeElement).toBe(btn().get(0));
+      }
+    );
+  });
+
+  describe("CSS overrides survive a host theme's own styling (#30.x.5, round 3)", () => {
+    /**
+     * The stylesheet source, read fresh per test rather than cached at
+     * module scope: cheap, and keeps each test's failure message pointing at
+     * the actual file on disk.
+     *
+     * jsdom's cascade does not reliably resolve `!important` + specificity
+     * across two separate `<style>` sheets (confirmed directly: injecting a
+     * synthetic `button { text-transform: uppercase !important; }` theme
+     * sheet made jsdom report "uppercase" for #company_not_in_btn too, even
+     * though round 2's `!important` fix for that element is already merged
+     * and working live — a false failure on code that isn't broken, not a
+     * real one). So the proof here is textual, against the shipped rule
+     * itself, which is deterministic and matches this repo's existing
+     * convention for CSS facts jsdom cannot render (see the spinner GIF byte
+     * assertions in company-search-transport.test.js).
+     *
+     * @returns {string} the raw CSS
+     */
+    function stylesheetSource() {
+      return fs.readFileSync(path.join(harness.REPO_ROOT, harness.STYLESHEET_PATH), "utf8");
+    }
+
+    /**
+     * Extract a single-id-selector rule's declaration block by name.
+     *
+     * @param {string} css the stylesheet source
+     * @param {string} id e.g. "search_company_btn" (no leading #)
+     * @returns {string} the rule's declaration block, or "" if not found
+     */
+    function ruleBodyFor(css, id) {
+      const re = new RegExp("#" + id + "\\s*\\{([^}]*)\\}", "m");
+      const m = re.exec(css);
+      return m ? m[1] : "";
+    }
+
+    test("#search_company_btn declares text-transform: none !important", () => {
+      // Round 2 added `text-transform: none !important` to #company_not_in_btn
+      // only, on the (correct) reasoning that becoming a real <button> (since
+      // #416) made it a target for a host theme's own
+      // `button { text-transform: uppercase }` styling — the real Astra
+      // selector list Doug found via devtools includes the bare `button`
+      // element selector itself, `!important`, which is exactly the shape a
+      // non-!important override cannot beat regardless of specificity
+      // (importance is compared before specificity in the cascade). That
+      // reasoning applies exactly as much to #search_company_btn — it has
+      // been a real <button> since the same PR — but the override was never
+      // added here, so the theme kept winning on THIS button while the
+      // other one was already fixed. Same escalation, same reason, applied
+      // to the button that was missed.
+      const body = ruleBodyFor(stylesheetSource(), "search_company_btn");
+      expect(body).toMatch(/text-transform:\s*none\s*!important/);
+    });
+
+    test("#company_not_in_btn still declares it too (round 2 regression guard)", () => {
+      const body = ruleBodyFor(stylesheetSource(), "company_not_in_btn");
+      expect(body).toMatch(/text-transform:\s*none\s*!important/);
+    });
+  });
+
+  describe("vertical alignment against the visible field, not the field+label (#30.x.5.3, round 3)", () => {
+    test("#search_company_btn is appended into .woocommerce-input-wrapper, not #billing_company_field directly", () => {
+      // See the rule comment above `#billing_company_field
+      // .woocommerce-input-wrapper` in twoinc.css for why this containing
+      // block matters (label-height vs. visible-field centring).
+      jest.useFakeTimers();
+      openWithAffordance();
+      type("abc");
+      activate();
+      jest.advanceTimersByTime(1);
+      jest.useRealTimers();
+
+      const $searchBtn = ctx.dom.getSearchCompanyBtnNode();
+      const $parent = $searchBtn.parent();
+      expect($parent.hasClass("woocommerce-input-wrapper")).toBe(true);
+      expect($searchBtn.closest("#billing_company_field").length).toBe(1);
+    });
+
+    test("the containing wrapper is positioned and the button centres against it, not the field", () => {
+      harness.injectStylesheet();
+
+      jest.useFakeTimers();
+      openWithAffordance();
+      type("abc");
+      activate();
+      jest.advanceTimersByTime(1);
+      jest.useRealTimers();
+
+      const $searchBtn = ctx.dom.getSearchCompanyBtnNode();
+      const wrapper = $searchBtn.parent()[0];
+
+      expect(window.getComputedStyle(wrapper).position).toBe("relative");
+      const btnStyle = window.getComputedStyle($searchBtn[0]);
+      expect(btnStyle.position).toBe("absolute");
+      expect(btnStyle.top).toBe("50%");
+      // jsdom reports the declared transform function verbatim rather than
+      // resolving it to a matrix() (no layout engine to resolve it against),
+      // so this asserts the declaration itself rather than a computed value.
+      expect(btnStyle.transform).toContain("translateY(-50%)");
+    });
+
+    test("self-heals a missing .woocommerce-input-wrapper instead of silently falling back to the unpositioned field (found under adversarial review)", () => {
+      // A host template that renders #billing_company_field without
+      // WooCommerce core's own .woocommerce-input-wrapper span around the
+      // input would otherwise leave this button falling back to appending
+      // directly onto #billing_company_field — which already carries
+      // `position: relative` from BEFORE this round (see twoinc.css), so the
+      // button would still centre with top:50%/translateY(-50%) against
+      // label+input COMBINED, silently reproducing the exact bug this round
+      // exists to fix, with nothing to signal the fallback path was taken.
+      // getSearchCompanyBtnNode must instead build an equivalent wrapper
+      // around the bare input rather than degrade.
+      $("#billing_company").unwrap();
+      expect($("#billing_company_field .woocommerce-input-wrapper").length).toBe(0);
+
+      const $searchBtn = ctx.dom.getSearchCompanyBtnNode();
+
+      const $parent = $searchBtn.parent();
+      expect($parent.hasClass("woocommerce-input-wrapper")).toBe(true);
+      expect($parent.get(0)).toBe($("#billing_company").parent().get(0));
+      expect($searchBtn.closest("#billing_company_field").length).toBe(1);
+    });
   });
 
   describe("mouse-button semantics (#30.x.3)", () => {
@@ -671,8 +872,12 @@ describe("company-search manual-entry affordance", () => {
       const $back = ctx.dom.getSearchCompanyBtnNode();
 
       expect($back[0].style.display).toBe("none");
-      // In place, not floating: it belongs beside the manual company field.
-      expect($back.parent().attr("id")).toBe("billing_company_field");
+      // In place, not floating: it belongs beside the manual company field —
+      // specifically inside .woocommerce-input-wrapper (round 3, #30.x.5.3),
+      // not directly on #billing_company_field, so CSS can centre it against
+      // the visible input box rather than the field's label+input combined.
+      expect($back.parent().hasClass("woocommerce-input-wrapper")).toBe(true);
+      expect($back.closest("#billing_company_field").length).toBe(1);
     });
 
     test("leaving manual entry hides the way back out again", () => {
