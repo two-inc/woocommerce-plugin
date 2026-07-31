@@ -480,6 +480,14 @@ let twoincSelectWooHelper = {
         if (e.which !== 9 && e.which !== 13 && e.which !== 32) return;
         e.stopPropagation();
       });
+    // NOTE: #search_company_btn's equivalent Enter/Space fix (round 4,
+    // #30.x.7, in getSearchCompanyBtnNode) looks different on purpose — it
+    // binds directly on the element and calls preventDefault() +
+    // exitManualCompanyEntry() rather than stopPropagation()-and-let-native-
+    // activation-proceed like this one does. The two buttons have different
+    // interferers (selectWoo's document handler here; something unconfirmed
+    // and external there, since selectWoo isn't even alive at that point),
+    // so the fix shape differs — see that function's own comment.
   },
 
   /**
@@ -1240,7 +1248,46 @@ let twoincDomHelper = {
     $btn = jQuery("<button></button>")
       .attr({ id: id, type: "button" })
       .text(twoincSelectWooHelper.searchCompanyText())
-      .hide();
+      .hide()
+      // Enter/Space must activate this button directly, not rely on the
+      // browser's native "activate a focused <button>" default action
+      // (#30.x.7). Reported live: Tab reaches this button fine (it is a
+      // real, focusable <button>), but pressing Enter or Space while it has
+      // focus does nothing. Unlike #company_not_in_btn's equivalent fix
+      // (round 3, #30.x.6), the interference here cannot be a document-level
+      // selectWoo handler — selectWoo's widget is destroyed the moment
+      // manual entry is entered (see enterManualCompanyEntry), long before
+      // this button is ever shown. UNCONFIRMED (no live-browser access from
+      // here, and this repo does not vendor WooCommerce core or the host
+      // theme to check directly) — one plausible culprit: WooCommerce core's
+      // checkout.js and various host themes commonly bind a keydown/keypress
+      // guard on the whole checkout form to stop Enter from submitting it
+      // prematurely while any form control has focus. That said, such guards
+      // are typically delegated against specific input selectors, which a
+      // <button> may not even match — so this may not be the actual
+      // mechanism. This fix does not depend on the theory being right: it
+      // owns activation on a node it exclusively creates, rather than
+      // chasing whichever interferer turns out to be real.
+      //
+      // Bound directly on this element (not delegated from document.body)
+      // so it is the first listener to see the keydown — a directly-bound
+      // bubble-phase listener always runs before any bubble-phase listener
+      // on an ancestor, regardless of registration order or where that
+      // ancestor handler lives. (Not overridable by any bubble-phase
+      // handler we know of; the one theoretical exception is a capture-phase
+      // listener somewhere in the ancestor chain, which jQuery never
+      // installs and nothing vendored in this repo uses either.) Driving the
+      // switch back to search directly, rather than depending on native
+      // activation reaching the existing `$body.on("click", "#" +
+      // searchCompanyBtnId, ...)` handler below, means this works regardless
+      // of whether some ancestor handler already called `preventDefault()`
+      // by the time this runs.
+      .on("keydown", function (e) {
+        if (e.which !== 13 && e.which !== 32) return;
+        e.preventDefault();
+        e.stopPropagation();
+        twoincDomHelper.exitManualCompanyEntry();
+      });
 
     let $wrapper = jQuery("#billing_company_field .woocommerce-input-wrapper");
 
