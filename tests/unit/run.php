@@ -34,6 +34,7 @@ final class BrandConfigSpec
             'testCheckoutFieldsHookFires',
             'testInvoiceEmailFieldHasNoPlaceholder',
             'testFieldPrioritiesMatchDesiredCheckoutOrder',
+            'testCompanyPriorityClampPreventsInversionAboveOptionals',
             'testConfirmationUrlHookReceivesUrlAndOrderId',
             'testOrderPayloadHookAugmentsBody',
             'testPaymentTermsLineHookAdjustsLineItems',
@@ -459,6 +460,50 @@ final class BrandConfigSpec
         TinyAssert::true($p('invoice_email') < $p('purchase_order_number'));
         TinyAssert::true($p('purchase_order_number') < $p('project'));
         TinyAssert::true($p('project') < $p('department'));
+    }
+
+    /**
+     * #33 review (Vader) — if a future brand overlay ever pushes
+     * billing_company's own priority unusually high, company/company_id/
+     * country must not invert above the fixed optional-fields baseline
+     * (200). Both move_country_field() and update_company_fields() clamp
+     * their read of company's priority at 190 to guarantee this.
+     */
+    private static function testCompanyPriorityClampPreventsInversionAboveOptionals(): void
+    {
+        $gateway = new class () extends WC_Twoinc {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                return $key === 'add_field_invoice_email' ? 'yes' : '';
+            }
+
+            public function get_enable_company_search()
+            {
+                return 'yes';
+            }
+        };
+
+        $checkout = new WC_Twoinc_Checkout($gateway);
+
+        // A brand overlay pushing billing_company's priority far above the
+        // optional baseline — this used to be safe (optionals rode this
+        // same value), now it must stay safe via the clamp.
+        $fields = ['billing' => ['billing_company' => ['priority' => 1000]]];
+
+        $fields = $checkout->move_country_field($fields);
+        $fields = $checkout->update_company_fields($fields);
+
+        $billing = $fields['billing'];
+
+        TinyAssert::true($billing['billing_country']['priority'] < 200, 'country must stay below the optional baseline');
+        TinyAssert::true($billing['billing_company_display']['priority'] < 200, 'company must stay below the optional baseline');
+        TinyAssert::true($billing['company_id']['priority'] < 200, 'company_id must stay below the optional baseline');
+        TinyAssert::true($billing['company_id']['priority'] < $billing['invoice_email']['priority'], 'company_id must sort before the optional fields');
     }
 
     private static function testConfirmationUrlHookReceivesUrlAndOrderId(): void
