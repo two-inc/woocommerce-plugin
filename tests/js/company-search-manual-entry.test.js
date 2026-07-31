@@ -720,8 +720,10 @@ describe("company-search manual-entry affordance", () => {
 
       const $back = $("#" + helper.searchCompanyBtnId);
       expect($back.length).toBe(1);
-      // A <button> rather than the unreachable <div> this used to be: focusable
-      // and Enter/Space-activatable with no keydown bridge of our own.
+      // A <button> rather than the unreachable <div> this used to be:
+      // focusable by Tab. Enter/Space activation is NOT native-only, though
+      // (round 4, #30.x.7) — see the "Enter/Space activation" describe block
+      // below for why this button carries its own keydown bridge.
       expect($back.prop("tagName")).toBe("BUTTON");
       expect($back.attr("type")).toBe("button");
       // Not `:hidden`: jsdom reports zero dimensions for every element, so that
@@ -911,6 +913,103 @@ describe("company-search manual-entry affordance", () => {
       picker.trigger("results:select", {});
 
       expect(selected.map((d) => d.id)).toEqual(["A company"]);
+    });
+  });
+
+  describe("focus visibility and Enter/Space activation on the way back out (#30.x.7, round 4)", () => {
+    /**
+     * The stylesheet source, read fresh per test. Textual assertion against
+     * the shipped rule, not a jsdom-rendered one — same reasoning as the
+     * uppercase-override tests above: jsdom does not reliably resolve
+     * `!important` + specificity across separate `<style>` sheets, and this
+     * repo's own harness only ever loads one stylesheet at a time anyway
+     * (nothing here would exercise a real host-theme collision).
+     *
+     * @returns {string} the raw CSS
+     */
+    function stylesheetSource() {
+      return fs.readFileSync(path.join(harness.REPO_ROOT, harness.STYLESHEET_PATH), "utf8");
+    }
+
+    test("#search_company_btn:focus declares an explicit, !important outline", () => {
+      // Reported live: tabbing out of the manual-entry "Company name" field
+      // lands focus on this button with nothing visible marking it. The
+      // button carried no host-supplied focus styling of its own, and a
+      // host theme's own button-focus reset (Astra strips the native ring
+      // as part of the same reset that uppercases button text — #30.x.5.1)
+      // can silently remove the browser default with nothing in this
+      // stylesheet to fall back on.
+      const m = /#search_company_btn:focus\s*\{([^}]*)\}/m.exec(stylesheetSource());
+      expect(m).not.toBeNull();
+      expect(m[1]).toMatch(/outline:\s*[^;]+!important/);
+    });
+
+    test("Enter activates the button and switches back to search", () => {
+      // Found live: Tab reaches this real <button> fine, but Enter/Space,
+      // pressed while it has focus, did nothing — it never relies on the
+      // browser's native "activate a focused <button>" default action here,
+      // unlike #company_not_in_btn's Tab handling (round 3, #30.x.6), because
+      // the interference cannot be selectWoo (its widget is destroyed before
+      // this button is ever shown — see enterManualCompanyEntry) and is
+      // therefore some other, unenumerable external script (most likely
+      // WooCommerce core's own checkout.js guarding the whole form against a
+      // premature submit on Enter, which matches a <button> just as it
+      // matches any other `:input`). getSearchCompanyBtnNode now binds a
+      // keydown handler directly on the element itself, which the DOM's own
+      // target-then-bubble dispatch order guarantees runs before any
+      // ancestor-bound handler regardless of where that handler lives or
+      // when it was registered.
+      jest.useFakeTimers();
+      openWithAffordance();
+      type("abc");
+      activate();
+      jest.advanceTimersByTime(1);
+
+      const $searchBtn = ctx.dom.getSearchCompanyBtnNode();
+      $searchBtn.get(0).focus();
+
+      const e = jQuery.Event("keydown", { which: 13 });
+      $searchBtn.trigger(e);
+
+      expect(e.isDefaultPrevented()).toBe(true);
+      expect(ctx.twoinc.enable_company_search).toBe("yes");
+      jest.useRealTimers();
+    });
+
+    test("Space activates the button and switches back to search", () => {
+      jest.useFakeTimers();
+      openWithAffordance();
+      type("abc");
+      activate();
+      jest.advanceTimersByTime(1);
+
+      const $searchBtn = ctx.dom.getSearchCompanyBtnNode();
+      $searchBtn.get(0).focus();
+
+      const e = jQuery.Event("keydown", { which: 32 });
+      $searchBtn.trigger(e);
+
+      expect(e.isDefaultPrevented()).toBe(true);
+      expect(ctx.twoinc.enable_company_search).toBe("yes");
+      jest.useRealTimers();
+    });
+
+    test("other keys do not activate it", () => {
+      jest.useFakeTimers();
+      openWithAffordance();
+      type("abc");
+      activate();
+      jest.advanceTimersByTime(1);
+
+      const $searchBtn = ctx.dom.getSearchCompanyBtnNode();
+      $searchBtn.get(0).focus();
+
+      const e = jQuery.Event("keydown", { which: 65 }); // "A"
+      $searchBtn.trigger(e);
+
+      expect(e.isDefaultPrevented()).toBe(false);
+      expect(ctx.twoinc.enable_company_search).toBe("no");
+      jest.useRealTimers();
     });
   });
 

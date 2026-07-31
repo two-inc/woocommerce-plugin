@@ -254,6 +254,22 @@
   text-transform: none !important;
 }
 
+/*
+ * Explicit focus indicator (#30.x.7, round 4). Reported live: tabbing out of
+ * the manual-entry name field lands focus here with no visible sign of it.
+ * The button carries no host-supplied focus styling of its own — same class
+ * of problem as the uppercase fix above (#30.x.5.1): a real <button> is a
+ * target for a host theme's own button chrome (Astra strips the native
+ * focus ring from buttons as part of the same reset that uppercases them),
+ * where the <div> this used to be never was. `!important` for the same
+ * reason the text-transform override needs it — a theme's own button-focus
+ * reset is routinely `!important` itself.
+ */
+#search_company_btn:focus {
+  outline: 2px solid #3043d1 !important;
+  outline-offset: 2px;
+}
+
 /* Payment terms chip selector (TWO-24751) */
 /*
  * Heading above the chips, shown only when more than one term is offered

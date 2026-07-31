@@ -1240,7 +1240,41 @@ let twoincDomHelper = {
     $btn = jQuery("<button></button>")
       .attr({ id: id, type: "button" })
       .text(twoincSelectWooHelper.searchCompanyText())
-      .hide();
+      .hide()
+      // Enter/Space must activate this button directly, not rely on the
+      // browser's native "activate a focused <button>" default action
+      // (#30.x.7). Reported live: Tab reaches this button fine (it is a
+      // real, focusable <button>), but pressing Enter or Space while it has
+      // focus does nothing. Unlike #company_not_in_btn's equivalent fix
+      // (round 3, #30.x.6), the interference here cannot be a document-level
+      // selectWoo handler — selectWoo's widget is destroyed the moment
+      // manual entry is entered (see enterManualCompanyEntry), long before
+      // this button is ever shown. The likely culprit is generic, external,
+      // and NOT something this plugin owns or can enumerate: WooCommerce
+      // core's own checkout.js (and various host themes) commonly bind a
+      // keydown/keypress guard on the whole checkout form to stop Enter from
+      // submitting it prematurely while any form control has focus — a
+      // <button> matches jQuery's `:input` just as a text field does, so a
+      // guard scoped that broadly swallows Enter here as a side effect,
+      // whatever line number it lives at in code this plugin doesn't ship.
+      //
+      // Bound directly on this element (not delegated from document.body)
+      // so it is the FIRST listener to see the keydown, structurally
+      // guaranteed by the DOM's own target-then-bubble dispatch order —
+      // unlike the selectWoo case, there is no ancestor node
+      // (document/document.body) whose relative position in the chain can
+      // be relied on here, since the interferer's own binding point is
+      // unknown and may vary by theme. Driving the switch back to search
+      // directly, rather than depending on native activation reaching the
+      // existing `$body.on("click", "#" + searchCompanyBtnId, ...)` handler
+      // below, means this works regardless of whether some ancestor
+      // handler already called `preventDefault()` by the time this runs.
+      .on("keydown", function (e) {
+        if (e.which !== 13 && e.which !== 32) return;
+        e.preventDefault();
+        e.stopPropagation();
+        twoincDomHelper.exitManualCompanyEntry();
+      });
 
     let $wrapper = jQuery("#billing_company_field .woocommerce-input-wrapper");
 
