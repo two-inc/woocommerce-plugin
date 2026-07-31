@@ -1221,15 +1221,13 @@ let twoincDomHelper = {
    * from submitting it.
    *
    * Appended into `.woocommerce-input-wrapper`, not directly into
-   * `#billing_company_field` (round 3, #30.x.5.3). `#billing_company_field`
-   * wraps BOTH the "Company name" <label> and the input; only the input has a
-   * visible border. `.woocommerce-input-wrapper` is WooCommerce core's own
-   * wrapper around just the <input> (see twoinc.css for how this button
-   * centres against it), so appending here is what lets the CSS vertically
-   * centre the button on the visible field itself rather than on label+input
-   * combined. Falls back to `#billing_company_field` itself if a host
-   * template does not carry the standard wrapper — additive rather than
-   * fragile on markup this plugin does not control.
+   * `#billing_company_field` (round 3, #30.x.5.3) — see the rule comment
+   * above `#billing_company_field .woocommerce-input-wrapper` in twoinc.css
+   * for why (label-height vs. visible-field centring). If that wrapper is
+   * missing (a host template not using WooCommerce core's own field markup),
+   * one is built around `#billing_company` directly rather than falling back
+   * to `#billing_company_field` itself, which would silently reintroduce the
+   * bug this fixes (see below).
    *
    * @returns {Object} jQuery-wrapped button
    */

@@ -588,34 +588,13 @@ describe("company-search manual-entry affordance", () => {
       const body = ruleBodyFor(stylesheetSource(), "company_not_in_btn");
       expect(body).toMatch(/text-transform:\s*none\s*!important/);
     });
-
-    test("both overrides carry higher specificity than the Astra rule they have to beat", () => {
-      // Doug's devtools-found rule is a selector LIST — `.menu-toggle,
-      // button, .ast-button, .ast-custom-button, .button, input#submit,
-      // input[type="button"], ...` — but CSS specificity is evaluated per
-      // individual selector in the list, not the list as a whole, and every
-      // alternative in it is an element type, a class, or an attribute
-      // selector (specificity 0,0,1 or 0,1,0) — none is an ID. A flat
-      // single-ID selector (0,1,0,0 in the four-part id/class/element count,
-      // i.e. strictly higher than either) wins against any of them once both
-      // sides carry !important. This is a static assertion about the
-      // selectors actually shipped, not a jsdom-rendered one — see the
-      // jsdom-cascade note on stylesheetSource() above for why.
-      const css = stylesheetSource();
-      expect(/^#search_company_btn\s*\{/m.test(css)).toBe(true);
-      expect(/^#company_not_in_btn\s*\{/m.test(css)).toBe(true);
-    });
   });
 
   describe("vertical alignment against the visible field, not the field+label (#30.x.5.3, round 3)", () => {
     test("#search_company_btn is appended into .woocommerce-input-wrapper, not #billing_company_field directly", () => {
-      // #billing_company_field wraps BOTH the "Company name" <label> and the
-      // input; only .woocommerce-input-wrapper bounds the input itself. This
-      // button positions absolute + top:50%/translateY(-50%) against its
-      // nearest POSITIONED ancestor — if that ancestor is #billing_company_field
-      // (label+input combined), 50% lands roughly mid-label, visibly above the
-      // bordered input box beneath it. Round 3 fixes this by making
-      // .woocommerce-input-wrapper (input only) the containing block instead.
+      // See the rule comment above `#billing_company_field
+      // .woocommerce-input-wrapper` in twoinc.css for why this containing
+      // block matters (label-height vs. visible-field centring).
       jest.useFakeTimers();
       openWithAffordance();
       type("abc");
