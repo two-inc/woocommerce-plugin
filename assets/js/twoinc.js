@@ -298,6 +298,156 @@ let twoincSelectWooHelper = {
       .on("input.twoincManualEntry", helper.companySearchInputSelector, function () {
         helper.syncManualEntryButton();
       });
+
+    // Tab-to-button shortcut (#30.x.6).
+    //
+    // Delegated the same way and for the same reason as the input handler
+    // above, which is also what scopes this correctly: a delegated handler on
+    // the search-field selector only ever fires while THAT field is the
+    // keydown target, i.e. while the dropdown is open and the search field
+    // itself has focus. That is deliberately narrower than #416's
+    // `focusStillWithinCompanySearch` (which also had to cover option rows and
+    // the collapsed combobox for a poll running on a timer regardless of
+    // focus) — a keydown listener only ever runs when its target already has
+    // focus, so there is nothing to check beyond "is this Tab".
+    //
+    // Only plain Tab is hijacked. Doug asked for Tab to reach the "not on the
+    // list" button directly instead of arrowing down through every result;
+    // Shift+Tab is left alone on purpose so reverse-tab keeps its ordinary
+    // browser behaviour (move to the previous natural tab-stop) rather than
+    // also being routed somewhere non-standard.
+    //
+    // No-op, not a fallback to default Tab, when the button is not currently
+    // in the DOM (below the search threshold): `preventDefault` only fires
+    // once a target to focus is confirmed, so a buyer who has not typed
+    // enough yet still gets plain browser Tab.
+    //
+    // `e.which` rather than `e.key`, matching the vendored selectWoo bundle's
+    // own convention (its `KEYS` module and every keydown branch in
+    // selectWoo.full.js read `evt.which`) — one key-reading convention on
+    // this shared event chain rather than two, and immune to the (rare) cases
+    // where `.key` comes back blank/"Unidentified" on a real keydown while
+    // `.which` still resolves.
+    //
+    // `stopPropagation` is load-bearing, not belt-and-braces. selectWoo's own
+    // core binds a `$(document).on('keydown', ...)` handler (see
+    // select2/core.js `bindContainerEvents`) that treats a bare Tab exactly
+    // like Enter while the dropdown is open: it fires `results:select` on the
+    // highlighted row, THEN unconditionally calls `$searchField.focus()` in
+    // the same handler, with no check of `evt.isDefaultPrevented()` first.
+    // `document` is above `document.body` in the bubble chain, so without
+    // stopping propagation here that handler still runs right after this one
+    // and yanks focus straight back onto the search field — `preventDefault`
+    // alone was proven insufficient (it does not stop the bubble, only the
+    // browser's own native Tab action, which select2's handler does not
+    // consult). A side effect, and an intentional one: this also means Tab no
+    // longer doubles as "accept the highlighted result" the way selectWoo's
+    // own Tab-as-Enter branch otherwise would. That is the point of this
+    // change — Doug asked for Tab to be a dedicated shortcut to the button,
+    // not a second Enter — and Enter itself is untouched.
+    //
+    // One more of selectWoo's own timers has to be defended against
+    // separately, and `stopPropagation` cannot reach it: the SAME document
+    // handler also runs on every ordinary typing keystroke (not just Tab) and
+    // schedules `focusOnActiveElement()` — which refocuses whatever result
+    // row is currently marked `.select2-results__option--highlighted`, and
+    // every fresh result render auto-highlights the first row — 1000ms later.
+    // That timer is scheduled from the buyer's PREVIOUS keystroke, before
+    // this Tab handler ever runs, so stopping propagation on the Tab event
+    // itself does nothing to it. A buyer who types quickly and then hits Tab
+    // within that ~1s window (the normal case — fast typers are exactly who
+    // this shortcut is for) gets focus yanked back onto the highlighted
+    // company row shortly after landing on the button. Confirmed
+    // reproducible with fake timers before this comment was written.
+    // Re-assert focus on the button once, just past that window, but ONLY if
+    // selectWoo's timer actually won (`document.activeElement` is a
+    // highlighted result row) and the button is still there — so a buyer who
+    // has since moved on deliberately (closed the dropdown, tabbed away,
+    // clicked the button) is never fought.
+    jQuery(document.body)
+      .off("keydown.twoincManualEntry")
+      .on("keydown.twoincManualEntry", helper.companySearchInputSelector, function (e) {
+        if (e.which !== 9 || e.shiftKey) return;
+
+        const btn = jQuery("#" + helper.manualEntryRowId).get(0);
+        if (!btn) return;
+
+        // Accepted risk, not handled: if the button happens to be hidden or
+        // mid-transition at this exact moment, `.focus()` on a real browser
+        // silently no-ops per the HTML spec (unlike jsdom, which does not
+        // reliably enforce this, so no test here can catch it either way).
+        // The buyer is left with focus stuck on the search field — no worse
+        // than before this feature existed, just not the "Tab reaches the
+        // button" this comment otherwise promises.
+        e.preventDefault();
+        e.stopPropagation();
+        btn.focus();
+
+        setTimeout(function () {
+          const stillThere = jQuery("#" + helper.manualEntryRowId).get(0);
+          const stolenByHighlightedRow = jQuery(document.activeElement).is(
+            ".select2-results__option--highlighted"
+          );
+          if (stillThere && stolenByHighlightedRow) stillThere.focus();
+        }, 1100);
+      });
+
+    // Second Tab press, this time FROM the button (#30.x.6 follow-up, found
+    // under adversarial review before merge — reproduced with a real
+    // `select2:select` listener before this fix was written).
+    //
+    // selectWoo's `isOpen()` (the gate its own document-level Tab-as-Enter
+    // handler checks) is purely a CSS class on the container — entirely
+    // independent of where DOM focus actually is. Moving focus onto the
+    // button above does not close the dropdown or clear that class. So a
+    // buyer who lands on the button via the shortcut above and then presses
+    // Tab AGAIN — the entirely ordinary next step, trying to move on to the
+    // next real page field — has that keydown bubble straight past the
+    // button (our other handler is scoped to the search field, not this
+    // button) to selectWoo's still-live document handler, which still sees
+    // `isOpen() === true` and treats this Tab exactly like Enter: silently
+    // fires `results:select` on whatever row is currently highlighted (a
+    // company the buyer never chose), `preventDefault`s the buyer's actual
+    // Tab-away, then unconditionally refocuses the search field. Net effect:
+    // the buyer is trapped AND a wrong company gets silently selected
+    // underneath them.
+    //
+    // Fixed the same way as the shortcut above — `stopPropagation` to keep
+    // selectWoo's document handler from ever seeing this keydown — but
+    // deliberately WITHOUT `preventDefault` this time: the whole point here
+    // is to let the browser's own native Tab traversal proceed to whatever
+    // the next real tab-stop is, in either direction (this button carries no
+    // special Shift+Tab behaviour, so both directions get the same
+    // protection).
+    //
+    // A known, DELIBERATELY UNFIXED gap this surfaces rather than causes,
+    // found under adversarial review: selectWoo never actually clears
+    // `isOpen()` on keyboard-only focus-away — nothing but Escape, a result
+    // pick, or a `mousedown` anywhere outside the widget closes it
+    // (`_attachCloseHandler` in the vendored bundle). A buyer who reaches
+    // this button by keyboard and then keeps tabbing onward, without ever
+    // clicking anything, leaves the dropdown "open" indefinitely — every
+    // later Tab/Enter/Escape ANYWHERE on the page, including Enter on the
+    // checkout submit button, still gets caught by selectWoo's unscoped
+    // document handler until a stray click finally closes it. This predates
+    // this feature; this fix just makes it reachable for the first time
+    // (Tab could never actually escape the open dropdown at all before this
+    // PR, so nobody could reach "focus outside + still open" via keyboard).
+    // Deliberately NOT calling `.select2('close')` here to plug it: that
+    // triggers selectWoo's own `container.on('close', ...)` handler, which
+    // schedules `self.$selection.focus()` 1ms later UNCONDITIONALLY — which
+    // would yank focus straight back from wherever the buyer just legitimately
+    // tabbed to, reintroducing the exact keyboard trap #416 (#30.x.4) was
+    // written to fix, just one level further out. A real fix needs
+    // selectWoo's own close-on-blur gap addressed generally, not patched
+    // per-field here — flagged to Doug as a candidate follow-up ticket rather
+    // than attempted blind.
+    jQuery(document.body)
+      .off("keydown.twoincManualEntryButton")
+      .on("keydown.twoincManualEntryButton", "#" + helper.manualEntryRowId, function (e) {
+        if (e.which !== 9) return;
+        e.stopPropagation();
+      });
   },
 
   /**
