@@ -415,6 +415,42 @@ describe("company-search manual-entry affordance", () => {
       expect(document.activeElement).toBe(btn().get(0));
       jest.useRealTimers();
     });
+
+    test("a second Tab press FROM the button does not silently select the highlighted row", () => {
+      // Found under adversarial review, reproduced against the real widget
+      // before this fix was written. selectWoo's `isOpen()` — the gate its
+      // own document-level Tab-as-Enter handler checks — is purely a CSS
+      // class on the container, entirely independent of where DOM focus
+      // actually is. Landing on the button via the shortcut does not close
+      // the dropdown, so a buyer pressing Tab AGAIN from the button — trying
+      // to move on to the next real page field, the ordinary next step —
+      // used to have that keydown bubble straight to selectWoo's still-live
+      // document handler, which silently fired `results:select` on whatever
+      // row was highlighted (a company the buyer never chose) and yanked
+      // focus back into the search field.
+      const $select = openWithAffordance();
+      const picker = $select.data("select2");
+
+      type("abc");
+      picker.trigger("results:all", {
+        data: { results: [{ id: "Real Co", text: "Real Co", html: "Real Co" }] },
+        query: { term: "abc" }
+      });
+      expect(btn().length).toBe(1);
+
+      searchInput().get(0).focus();
+      tabAt(searchInput());
+      expect(document.activeElement).toBe(btn().get(0));
+
+      const selected = [];
+      $select.on("select2:select", (ev) => selected.push(ev.params.data));
+
+      const e2 = tabAt(btn());
+
+      expect(e2.isDefaultPrevented()).toBe(false);
+      expect(selected).toEqual([]);
+      expect($("#billing_company").val()).toBe("");
+    });
   });
 
   describe("mouse-button semantics (#30.x.3)", () => {

@@ -391,6 +391,40 @@ let twoincSelectWooHelper = {
           if (stillThere && stolenByHighlightedRow) stillThere.focus();
         }, 1100);
       });
+
+    // Second Tab press, this time FROM the button (#30.x.6 follow-up, found
+    // under adversarial review before merge — reproduced with a real
+    // `select2:select` listener before this fix was written).
+    //
+    // selectWoo's `isOpen()` (the gate its own document-level Tab-as-Enter
+    // handler checks) is purely a CSS class on the container — entirely
+    // independent of where DOM focus actually is. Moving focus onto the
+    // button above does not close the dropdown or clear that class. So a
+    // buyer who lands on the button via the shortcut above and then presses
+    // Tab AGAIN — the entirely ordinary next step, trying to move on to the
+    // next real page field — has that keydown bubble straight past the
+    // button (our other handler is scoped to the search field, not this
+    // button) to selectWoo's still-live document handler, which still sees
+    // `isOpen() === true` and treats this Tab exactly like Enter: silently
+    // fires `results:select` on whatever row is currently highlighted (a
+    // company the buyer never chose), `preventDefault`s the buyer's actual
+    // Tab-away, then unconditionally refocuses the search field. Net effect:
+    // the buyer is trapped AND a wrong company gets silently selected
+    // underneath them.
+    //
+    // Fixed the same way as the shortcut above — `stopPropagation` to keep
+    // selectWoo's document handler from ever seeing this keydown — but
+    // deliberately WITHOUT `preventDefault` this time: the whole point here
+    // is to let the browser's own native Tab traversal proceed to whatever
+    // the next real tab-stop is, in either direction (this button carries no
+    // special Shift+Tab behaviour, so both directions get the same
+    // protection).
+    jQuery(document.body)
+      .off("keydown.twoincManualEntryButton")
+      .on("keydown.twoincManualEntryButton", "#" + helper.manualEntryRowId, function (e) {
+        if (e.which !== 9) return;
+        e.stopPropagation();
+      });
   },
 
   /**
