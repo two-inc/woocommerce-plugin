@@ -564,6 +564,13 @@ final class BrandConfigSpec
         // its intended band either.
         $clamped = $checkout->sync_locale_country_priority(['company' => ['priority' => 1000]]);
         TinyAssert::true($clamped['country']['priority'] < 200, 'locale-default country priority must stay below the optional baseline even if company priority is huge');
+
+        // Review finding (Vader) — if 'country' is ever absent from the
+        // locale-default array, this must be a no-op, not an auto-vivified
+        // ['priority' => X] entry with no type/label/class that would then
+        // be treated as the field's real definition downstream.
+        $no_country = $checkout->sync_locale_country_priority(['company' => ['priority' => 30]]);
+        TinyAssert::true(!isset($no_country['country']), 'must not fabricate a country entry when WC did not provide one');
     }
 
     private static function testConfirmationUrlHookReceivesUrlAndOrderId(): void

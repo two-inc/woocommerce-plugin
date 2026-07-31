@@ -138,6 +138,30 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             // WC_Countries::get_default_address_fields()'s own shape, not
             // the 'billing_'-prefixed $checkout->get_checkout_fields() shape
             // that move_country_field()/update_company_fields() operate on.
+            //
+            // Guard on 'country' actually being present (review finding):
+            // every WC core version we've checked includes it, but blind-
+            // writing $fields['country']['priority'] would auto-vivify a
+            // bare ['priority' => X] entry with no type/label/class if some
+            // future version ever omitted it — and that malformed entry
+            // would then be treated as the field's real locale definition
+            // downstream. Absence is a no-op, not a fallback construction:
+            // there is nothing sane to build here without WC's own field
+            // shape.
+            if (!isset($fields['country'])) {
+                return $fields;
+            }
+
+            // Reads WC core's own hardcoded 'company' default here (this
+            // array is never customized by a brand overlay — brands only
+            // hook woocommerce_checkout_fields, not
+            // woocommerce_get_country_locale_default), so it can drift from
+            // billing_company's real, possibly brand-adjusted priority in
+            // move_country_field()/update_company_fields(). No brand
+            // currently touches billing_company's priority (#33 review —
+            // Han), so this is a documented latent gap, not an active bug:
+            // if one ever does, this filter would need to read the live
+            // checkout-fields priority instead of the static default here.
             $company_priority = self::clamp_company_priority($fields['company']['priority'] ?? 30);
             $fields['country']['priority'] = $company_priority - 1;
 
