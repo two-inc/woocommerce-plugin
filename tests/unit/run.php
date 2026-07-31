@@ -33,6 +33,7 @@ final class BrandConfigSpec
             'testEnvVarCannotEscapeBrandsDirectory',
             'testCheckoutFieldsHookFires',
             'testInvoiceEmailFieldHasNoPlaceholder',
+            'testFieldPrioritiesMatchDesiredCheckoutOrder',
             'testConfirmationUrlHookReceivesUrlAndOrderId',
             'testOrderPayloadHookAugmentsBody',
             'testPaymentTermsLineHookAdjustsLineItems',
@@ -383,6 +384,81 @@ final class BrandConfigSpec
             !array_key_exists('placeholder', $fields['billing']['invoice_email']),
             'invoice_email must not define a placeholder'
         );
+    }
+
+    /**
+     * #33 — Doug's desired checkout field order: name -> country -> company
+     * -> native address fields -> phone/email -> every optional field at the
+     * bottom. The optional fields must land after phone/email (WC's native
+     * priorities 100/110) regardless of company's own priority, so they
+     * can't drift back up if company's position ever changes.
+     */
+    private static function testFieldPrioritiesMatchDesiredCheckoutOrder(): void
+    {
+        $gateway = new class () extends WC_Twoinc {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                $enabled = [
+                    'add_field_invoice_email',
+                    'add_field_purchase_order_number',
+                    'add_field_project',
+                    'add_field_department',
+                ];
+                return in_array($key, $enabled, true) ? 'yes' : '';
+            }
+
+            public function get_enable_company_search()
+            {
+                return 'yes';
+            }
+        };
+
+        $checkout = new WC_Twoinc_Checkout($gateway);
+
+        $fields = [
+            'billing' => [
+                'billing_first_name' => ['priority' => 10],
+                'billing_last_name' => ['priority' => 20],
+                'billing_company' => ['priority' => 30],
+                'billing_address_1' => ['priority' => 50],
+                'billing_address_2' => ['priority' => 60],
+                'billing_city' => ['priority' => 70],
+                'billing_postcode' => ['priority' => 90],
+                'billing_phone' => ['priority' => 100],
+                'billing_email' => ['priority' => 110],
+            ],
+        ];
+
+        $fields = $checkout->move_country_field($fields);
+        $fields = $checkout->update_company_fields($fields);
+
+        $billing = $fields['billing'];
+        $p = static function (string $key) use ($billing) {
+            return $billing[$key]['priority'];
+        };
+
+        // Country lands right after last name, before company.
+        TinyAssert::true($p('billing_last_name') < $p('billing_country'), 'country must be after last name');
+        TinyAssert::true($p('billing_country') < $p('billing_company_display'), 'country must be before company');
+
+        // Every optional field sits after native phone/email, i.e. at the
+        // very bottom, regardless of company's own priority.
+        foreach (['invoice_email', 'purchase_order_number', 'project', 'department'] as $optional) {
+            TinyAssert::true(
+                $p('billing_email') < $p($optional),
+                $optional . ' must sit after billing_email (native priority 110)'
+            );
+        }
+
+        // And they preserve their own documented mutual order.
+        TinyAssert::true($p('invoice_email') < $p('purchase_order_number'));
+        TinyAssert::true($p('purchase_order_number') < $p('project'));
+        TinyAssert::true($p('project') < $p('department'));
     }
 
     private static function testConfirmationUrlHookReceivesUrlAndOrderId(): void

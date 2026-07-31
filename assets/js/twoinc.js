@@ -888,7 +888,15 @@ let twoincDomHelper = {
   },
 
   /**
-   * Move the fields to their original or Twoinc template location
+   * Move the fields to their original or Twoinc template location.
+   *
+   * Phone and email used to be pulled up here too (into the pre-billing
+   * "representative" wrapper, alongside first/last name), so a buyer would
+   * see one field order on first paint and a different one ~1s later once
+   * this fired. That grouping's own visual cue (an h3 heading) was commented
+   * out back in 2021 and never replaced with CSS, so nothing distinguishes
+   * the wrapper today — it was pure reorder with no remaining display
+   * purpose. Phone/email now stay in their native WC position (#33).
    */
   positionFields: function () {
     setTimeout(function () {
@@ -896,13 +904,9 @@ let twoincDomHelper = {
       if (twoincDomHelper.isTwoincSelected()) {
         twoincDomHelper.moveField("billing_first_name_field", "fn");
         twoincDomHelper.moveField("billing_last_name_field", "ln");
-        twoincDomHelper.moveField("billing_phone_field", "ph");
-        twoincDomHelper.moveField("billing_email_field", "em");
       } else {
         twoincDomHelper.revertField("billing_first_name_field", "fn");
         twoincDomHelper.revertField("billing_last_name_field", "ln");
-        twoincDomHelper.revertField("billing_phone_field", "ph");
-        twoincDomHelper.revertField("billing_email_field", "em");
       }
 
       twoincDomHelper.toggleTooltip(

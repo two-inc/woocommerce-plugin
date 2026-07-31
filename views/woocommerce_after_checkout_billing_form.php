@@ -3,8 +3,15 @@
     <div class="woocommerce-billing-fields__field-wrapper">
         <div id="twoinc-fn-target" class="twoinc-target"></div>
         <div id="twoinc-ln-target" class="twoinc-target"></div>
-        <div id="twoinc-em-target" class="twoinc-target"></div>
-        <div id="twoinc-ph-target" class="twoinc-target"></div>
+        <?php
+        /*
+         * Phone/email used to have targets here too (twoinc-em-target,
+         * twoinc-ph-target), moved up by positionFields() in twoinc.js.
+         * Removed for #33 — that pull-up produced a visible ~1s field
+         * reorder Doug did not want; phone/email now stay in their native
+         * WC position after town/city.
+         */
+        ?>
     </div>
     <?php
     /*

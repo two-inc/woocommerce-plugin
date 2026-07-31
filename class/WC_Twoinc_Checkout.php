@@ -129,6 +129,15 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             // invoice email, purchase order number, project, department. The order
             // note is WooCommerce core's own `order_comments` and stays where core
             // puts it (the "Additional information" block, after billing). TWO-25263.
+            //
+            // These sit BELOW every native address/contact field (city/postcode
+            // 70-90, phone 100, email 110 — see WC_Countries default priorities)
+            // rather than riding on company's priority, so they land at the very
+            // bottom of the form regardless of whether company search/company
+            // name is on, off, or absent (#33 — Doug: optionals belong below
+            // town/city, not interleaved near the top).
+            $optional_field_priority = 200;
+
             if ($this->wc_twoinc->get_option('add_field_invoice_email') === 'yes') {
                 $fields['billing']['invoice_email'] = [
                     'label'       => __('Invoice email address', 'twoinc-payment-gateway'),
@@ -136,7 +145,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     'type'        => 'email',
                     'validate'    => array('email'),
                     'required'    => false,
-                    'priority'    => $company_name_priority + 2
+                    'priority'    => $optional_field_priority + 1
                 ];
             }
 
@@ -145,7 +154,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     'label' => __('PO Number', 'twoinc-payment-gateway'),
                     'class' => array('hidden'),
                     'required' => false,
-                    'priority' => $company_name_priority + 3
+                    'priority' => $optional_field_priority + 2
                 ];
             }
 
@@ -154,7 +163,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     'label' => __('Project', 'twoinc-payment-gateway'),
                     'class' => array('hidden'),
                     'required' => false,
-                    'priority' => $company_name_priority + 4
+                    'priority' => $optional_field_priority + 3
                 ];
             }
 
@@ -163,7 +172,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     'label' => __('Department', 'twoinc-payment-gateway'),
                     'class' => array('hidden'),
                     'required' => false,
-                    'priority' => $company_name_priority + 5
+                    'priority' => $optional_field_priority + 4
                 ];
             }
 
