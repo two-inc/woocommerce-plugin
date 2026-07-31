@@ -442,10 +442,36 @@ let twoincSelectWooHelper = {
     // selectWoo's own close-on-blur gap addressed generally, not patched
     // per-field here — flagged to Doug as a candidate follow-up ticket rather
     // than attempted blind.
+    // Enter and Space, pressed while the button itself has focus, need the
+    // exact same protection as Tab above and for the exact same reason
+    // (#30.x.6, round 3) — found live: Doug reported Enter and Space both
+    // routing to the search field instead of activating the button.
+    //
+    // selectWoo's document-level handler (see the long comment above) is
+    // gated purely on `isOpen()` — a CSS class on the container, entirely
+    // independent of which element currently has focus. Landing on this
+    // button via the Tab shortcut does not close the dropdown, so with the
+    // dropdown still "open" that SAME handler treats Enter (and, on the
+    // vendored bundle's own key table, Space) arriving ANYWHERE on the page —
+    // including on this button — exactly like it treats Tab: it fires
+    // `results:select` on whatever result row is currently highlighted (a
+    // company the buyer never chose) and unconditionally refocuses the
+    // search field. That is precisely "Enter/Space routes to the search
+    // field" — this button's own `keydown.twoincManualEntryButton` handler
+    // only ever intercepted Tab, so Enter and Space kept bubbling straight
+    // past it to selectWoo's handler unhindered.
+    //
+    // `stopPropagation`, deliberately WITHOUT `preventDefault`, for Enter and
+    // Space too — same reasoning as Tab: the browser's own native "activate a
+    // focused <button>" default action for both keys must still run so this
+    // button's own `click` handler (bound in `buildManualEntryButton`) fires.
+    // Calling `preventDefault` here would suppress that native activation
+    // right alongside selectWoo's handler, trading one broken key for
+    // another rather than fixing it.
     jQuery(document.body)
       .off("keydown.twoincManualEntryButton")
       .on("keydown.twoincManualEntryButton", "#" + helper.manualEntryRowId, function (e) {
-        if (e.which !== 9) return;
+        if (e.which !== 9 && e.which !== 13 && e.which !== 32) return;
         e.stopPropagation();
       });
   },
@@ -1188,6 +1214,17 @@ let twoincDomHelper = {
    * mouse click; type="button" is what keeps a button inside the checkout form
    * from submitting it.
    *
+   * Appended into `.woocommerce-input-wrapper`, not directly into
+   * `#billing_company_field` (round 3, #30.x.5.3). `#billing_company_field`
+   * wraps BOTH the "Company name" <label> and the input; only the input has a
+   * visible border. `.woocommerce-input-wrapper` is WooCommerce core's own
+   * wrapper around just the <input> (see twoinc.css for how this button
+   * centres against it), so appending here is what lets the CSS vertically
+   * centre the button on the visible field itself rather than on label+input
+   * combined. Falls back to `#billing_company_field` itself if a host
+   * template does not carry the standard wrapper — additive rather than
+   * fragile on markup this plugin does not control.
+   *
    * @returns {Object} jQuery-wrapped button
    */
   getSearchCompanyBtnNode: function () {
@@ -1200,7 +1237,9 @@ let twoincDomHelper = {
       .attr({ id: id, type: "button" })
       .text(twoincSelectWooHelper.searchCompanyText())
       .hide();
-    jQuery("#billing_company_field").append($btn);
+
+    const $wrapper = jQuery("#billing_company_field .woocommerce-input-wrapper");
+    ($wrapper.length ? $wrapper : jQuery("#billing_company_field")).append($btn);
     return $btn;
   },
 

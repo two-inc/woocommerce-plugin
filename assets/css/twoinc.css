@@ -212,17 +212,46 @@
  * The link back out of manual entry. A <button> now, for keyboard
  * reachability, so the browser's button chrome has to be reset for it to look
  * like the link it did before.
+ *
+ * `text-transform: none !important` is new (round 3, #30.x.5.1). Round 2 only
+ * added this to #company_not_in_btn, on the reasoning that becoming a real
+ * `<button>` (since #416) made it a target for a host theme's own
+ * `button { text-transform: uppercase }` styling. That reasoning applies
+ * exactly as much to THIS button — it has been a real `<button>` since the
+ * same PR — but the override was never added here, so a theme's `!important`
+ * button rule kept winning on this element specifically while the other one
+ * was already fixed. Same fix, same reason, just missed the first time.
+ *
+ * Vertical centring against `.woocommerce-input-wrapper`, not against this
+ * button's own containing `#billing_company_field` (round 3, #30.x.5.3).
+ * `#billing_company_field` wraps BOTH the "Company name" <label> and the
+ * input, but only the input carries a visible border — the label sits above
+ * it with no box of its own. This button used to be positioned with no
+ * explicit `top` at all, so its vertical position fell back to its "static
+ * position" (roughly where it would render in normal flow, i.e. after the
+ * label+input together) rather than to the middle of the bordered input box
+ * beneath the label. `.woocommerce-input-wrapper` is WooCommerce core's own
+ * wrapper around just the <input> — no label inside it — so this button is
+ * now appended there (see `getSearchCompanyBtnNode` in twoinc.js) and
+ * centred with `top: 50%; transform: translateY(-50%)` against THAT box,
+ * which lines it up with the visible field regardless of label height or how
+ * many lines it wraps to on a narrow viewport.
  */
+#billing_company_field .woocommerce-input-wrapper {
+  position: relative;
+}
 #search_company_btn {
   text-align: right;
   cursor: pointer;
-  padding: 5px 0 0;
   color: #3043d1;
   position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
   right: 4px;
   background: none;
   border: 0;
   font: inherit;
+  text-transform: none !important;
 }
 
 /* Payment terms chip selector (TWO-24751) */
