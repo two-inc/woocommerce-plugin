@@ -474,7 +474,7 @@ describe("company-search manual-entry affordance", () => {
       ["Enter", 13],
       ["Space", 32]
     ])(
-      "%s, with the button focused, does not get hijacked into selecting the highlighted row (#30.x.6 round 3)",
+      "%s, with the button focused, does not get hijacked by selectWoo's document-level handler (#30.x.6 round 3)",
       (name, which) => {
         // Found live: Doug reported both Enter and Space, pressed while the
         // button has focus, routing to the search field instead of
@@ -482,11 +482,16 @@ describe("company-search manual-entry affordance", () => {
         // keydown.twoincManualEntryButton handler only ever intercepted Tab
         // (which === 9) — Enter and Space kept bubbling straight past it to
         // selectWoo's document-level handler, which is gated purely on
-        // isOpen() (a CSS class), not on focus, and treats these keys
-        // arriving ANYWHERE on the page — including on this button — as
-        // "accept the highlighted result": it fires results:select on
-        // whatever row is highlighted and unconditionally refocuses the
-        // search field.
+        // isOpen() (a CSS class), not on focus. That handler does NOT treat
+        // Enter and Space identically, though (checked directly against the
+        // vendored bundle): only Enter (like Tab) hits the results:select
+        // branch, silently selecting whatever row is highlighted; plain
+        // Space matches none of that handler's branches and only inherits
+        // its unconditional fallthrough — $searchField.focus() immediately,
+        // then focusOnActiveElement() ~1s later. Both keys still end up
+        // routing focus back to the search field, just via different
+        // mechanisms, which is why both need the same stopPropagation guard
+        // regardless of which internal branch they'd otherwise have hit.
         //
         // jsdom does not simulate the browser's native "Enter/Space
         // activates a focused <button>" default action, so this cannot
@@ -645,6 +650,28 @@ describe("company-search manual-entry affordance", () => {
       // resolving it to a matrix() (no layout engine to resolve it against),
       // so this asserts the declaration itself rather than a computed value.
       expect(btnStyle.transform).toContain("translateY(-50%)");
+    });
+
+    test("self-heals a missing .woocommerce-input-wrapper instead of silently falling back to the unpositioned field (found under adversarial review)", () => {
+      // A host template that renders #billing_company_field without
+      // WooCommerce core's own .woocommerce-input-wrapper span around the
+      // input would otherwise leave this button falling back to appending
+      // directly onto #billing_company_field — which already carries
+      // `position: relative` from BEFORE this round (see twoinc.css), so the
+      // button would still centre with top:50%/translateY(-50%) against
+      // label+input COMBINED, silently reproducing the exact bug this round
+      // exists to fix, with nothing to signal the fallback path was taken.
+      // getSearchCompanyBtnNode must instead build an equivalent wrapper
+      // around the bare input rather than degrade.
+      $("#billing_company").unwrap();
+      expect($("#billing_company_field .woocommerce-input-wrapper").length).toBe(0);
+
+      const $searchBtn = ctx.dom.getSearchCompanyBtnNode();
+
+      const $parent = $searchBtn.parent();
+      expect($parent.hasClass("woocommerce-input-wrapper")).toBe(true);
+      expect($parent.get(0)).toBe($("#billing_company").parent().get(0));
+      expect($searchBtn.closest("#billing_company_field").length).toBe(1);
     });
   });
 

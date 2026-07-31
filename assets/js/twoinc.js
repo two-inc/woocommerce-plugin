@@ -451,15 +451,21 @@ let twoincSelectWooHelper = {
     // gated purely on `isOpen()` — a CSS class on the container, entirely
     // independent of which element currently has focus. Landing on this
     // button via the Tab shortcut does not close the dropdown, so with the
-    // dropdown still "open" that SAME handler treats Enter (and, on the
-    // vendored bundle's own key table, Space) arriving ANYWHERE on the page —
-    // including on this button — exactly like it treats Tab: it fires
-    // `results:select` on whatever result row is currently highlighted (a
-    // company the buyer never chose) and unconditionally refocuses the
-    // search field. That is precisely "Enter/Space routes to the search
-    // field" — this button's own `keydown.twoincManualEntryButton` handler
-    // only ever intercepted Tab, so Enter and Space kept bubbling straight
-    // past it to selectWoo's handler unhindered.
+    // dropdown still "open" that SAME handler still sees Enter and Space
+    // arriving ANYWHERE on the page, including on this button — but NOT
+    // identically to Tab. Checked directly against the vendored bundle
+    // (`Select2.prototype._registerEvents`): only Enter and Tab hit the
+    // `results:select` branch (silently selecting whatever row is currently
+    // highlighted, a company the buyer never chose); plain Space (without
+    // Ctrl) matches none of that handler's `if`/`else if` branches at all.
+    // Every one of these keys — selected branch or not — falls through to
+    // the SAME unconditional tail, though: `$searchField.focus()`
+    // immediately, then `focusOnActiveElement()` ~1s later. That fallthrough
+    // is what "Enter/Space routes to the search field" actually is for
+    // Space; for Enter it is both the silent wrong-row selection AND the
+    // same refocus. This button's own `keydown.twoincManualEntryButton`
+    // handler only ever intercepted Tab, so Enter and Space kept bubbling
+    // straight past it to selectWoo's handler unhindered either way.
     //
     // `stopPropagation`, deliberately WITHOUT `preventDefault`, for Enter and
     // Space too — same reasoning as Tab: the browser's own native "activate a
@@ -1238,7 +1244,32 @@ let twoincDomHelper = {
       .text(twoincSelectWooHelper.searchCompanyText())
       .hide();
 
-    const $wrapper = jQuery("#billing_company_field .woocommerce-input-wrapper");
+    let $wrapper = jQuery("#billing_company_field .woocommerce-input-wrapper");
+
+    // Self-heal rather than silently degrade (found under adversarial
+    // review before merge, round 3): a plain "fall back to
+    // #billing_company_field" here would still centre the button with
+    // `top: 50%; transform: translateY(-50%)` (see twoinc.css) against
+    // #billing_company_field itself — which ALREADY carries `position:
+    // relative` from before this fix — so on any host template that
+    // doesn't render the standard WooCommerce wrapper, this button would
+    // silently reproduce the exact label-height centring bug this round
+    // exists to fix, with nothing to signal that the fallback path was
+    // even taken. Instead, build an equivalent wrapper around just the
+    // <input> ourselves: same DOM shape WooCommerce core's own
+    // woocommerce_form_field() would have produced, so the CSS centring
+    // rule has a consistent structure to hook onto regardless of which
+    // path got here. Falls through to #billing_company_field only if
+    // #billing_company itself is missing — a field this whole feature
+    // already depends on existing.
+    if (!$wrapper.length) {
+      const $input = jQuery("#billing_company");
+      if ($input.length) {
+        $input.wrap('<span class="woocommerce-input-wrapper"></span>');
+        $wrapper = jQuery("#billing_company_field .woocommerce-input-wrapper");
+      }
+    }
+
     ($wrapper.length ? $wrapper : jQuery("#billing_company_field")).append($btn);
     return $btn;
   },
