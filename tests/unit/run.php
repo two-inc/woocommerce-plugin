@@ -35,6 +35,7 @@ final class BrandConfigSpec
             'testInvoiceEmailFieldHasNoPlaceholder',
             'testFieldPrioritiesMatchDesiredCheckoutOrder',
             'testCompanyPriorityClampPreventsInversionAboveOptionals',
+            'testLocaleDefaultCountryPriorityStaysBelowCompany',
             'testConfirmationUrlHookReceivesUrlAndOrderId',
             'testOrderPayloadHookAugmentsBody',
             'testPaymentTermsLineHookAdjustsLineItems',
@@ -443,9 +444,16 @@ final class BrandConfigSpec
             return $billing[$key]['priority'];
         };
 
-        // Country lands right after last name, before company.
+        // Country lands right after last name, before company — checked
+        // against BOTH the native (possibly-hidden) billing_company field
+        // and the visible billing_company_display select, not just one:
+        // the two are set independently (update_company_fields() derives
+        // company_display's priority from billing_company's, but nothing
+        // enforces they stay linked at every call site), so a regression
+        // that only re-inverts one of them must still fail this test (#33).
         TinyAssert::true($p('billing_last_name') < $p('billing_country'), 'country must be after last name');
-        TinyAssert::true($p('billing_country') < $p('billing_company_display'), 'country must be before company');
+        TinyAssert::true($p('billing_country') < $p('billing_company'), 'country must be before native billing_company');
+        TinyAssert::true($p('billing_country') < $p('billing_company_display'), 'country must be before billing_company_display');
 
         // Every optional field sits after native phone/email, i.e. at the
         // very bottom, regardless of company's own priority.
@@ -504,6 +512,65 @@ final class BrandConfigSpec
         TinyAssert::true($billing['billing_company_display']['priority'] < 200, 'company must stay below the optional baseline');
         TinyAssert::true($billing['company_id']['priority'] < 200, 'company_id must stay below the optional baseline');
         TinyAssert::true($billing['company_id']['priority'] < $billing['invoice_email']['priority'], 'company_id must sort before the optional fields');
+    }
+
+    /**
+     * #33 (live-staging regression, 2026-07-31) — WooCommerce's own
+     * address-i18n.js re-derives #billing_country_field's client-side
+     * priority from WC_Countries::get_country_locale()'s 'default' entry on
+     * EVERY checkout load (not only when the buyer changes country), then
+     * physically re-sorts the billing form's DOM by that priority —
+     * entirely independent of the woocommerce_checkout_fields chain that
+     * move_country_field()/update_company_fields() hook into. Confirmed
+     * live against the real woocom-dev.staging.two.inc pod: server-rendered
+     * HTML had country correctly above company, but the browser's own JS
+     * silently re-inverted them a few hundred ms after load, using the
+     * hardcoded core defaults (company priority 30, country priority 40)
+     * from that locale array — values this plugin never touched before.
+     * This never reproduced against a local fixture because it depends on
+     * WooCommerce's bundled JS reading server-localized JSON, not on
+     * anything this plugin's own tests exercised.
+     *
+     * sync_locale_country_priority() closes that second, independent path.
+     */
+    private static function testLocaleDefaultCountryPriorityStaysBelowCompany(): void
+    {
+        $gateway = new class () extends WC_Twoinc {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+        };
+
+        $checkout = new WC_Twoinc_Checkout($gateway);
+
+        // Shape mirrors WC_Countries::get_default_address_fields(): bare
+        // keys ('company', 'country'), not the 'billing_'-prefixed shape
+        // move_country_field()/update_company_fields() operate on.
+        $locale_default = [
+            'company' => ['priority' => 30],
+            'country' => ['priority' => 40],
+        ];
+
+        $fixed = $checkout->sync_locale_country_priority($locale_default);
+
+        TinyAssert::true(
+            $fixed['country']['priority'] < $fixed['company']['priority'],
+            'locale-default country priority must stay below company, or address-i18n.js re-inverts them client-side'
+        );
+
+        // Same clamp ceiling as the server-side fix: an unusually high
+        // company priority must not push country's derived value out of
+        // its intended band either.
+        $clamped = $checkout->sync_locale_country_priority(['company' => ['priority' => 1000]]);
+        TinyAssert::true($clamped['country']['priority'] < 200, 'locale-default country priority must stay below the optional baseline even if company priority is huge');
+
+        // Review finding (Vader) — if 'country' is ever absent from the
+        // locale-default array, this must be a no-op, not an auto-vivified
+        // ['priority' => X] entry with no type/label/class that would then
+        // be treated as the field's real definition downstream.
+        $no_country = $checkout->sync_locale_country_priority(['company' => ['priority' => 30]]);
+        TinyAssert::true(!isset($no_country['country']), 'must not fabricate a country entry when WC did not provide one');
     }
 
     private static function testConfirmationUrlHookReceivesUrlAndOrderId(): void

@@ -27,6 +27,20 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             add_filter('woocommerce_checkout_fields', [$this, 'add_tracking_fields'], 21);
             add_filter('woocommerce_checkout_fields', [$this, 'update_company_fields'], 23);
 
+            // WooCommerce's own address-i18n.js re-derives #billing_country's
+            // client-side priority from THIS locale default array on every
+            // checkout load (fired via country_to_state_changing at init, not
+            // only on country change) and then re-sorts the DOM — entirely
+            // independent of the woocommerce_checkout_fields chain above.
+            // Without this mirror, move_country_field()'s server-side fix is
+            // silently undone a few hundred ms after page load: JS resorts
+            // .form-row elements using the hardcoded core default
+            // (country priority 40) against company's 30, putting company
+            // back above country (#33 — live-staging-only regression, never
+            // reproduced against a local fixture because it depends on
+            // WooCommerce's own bundled JS, not this plugin's).
+            add_filter('woocommerce_get_country_locale_default', [$this, 'sync_locale_country_priority']);
+
             // Brand overlays add/modify checkout fields after the base set
             // is complete (priority 25 > the base mutations above)
             add_filter('woocommerce_checkout_fields', [$this, 'apply_brand_checkout_fields'], 25);
@@ -70,10 +84,87 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             // than warning on an undefined array key. Clamped below 190: see
             // the matching clamp in update_company_fields() — country must
             // never be pushed at/above the optional-fields baseline (200).
-            $company_priority = min($fields['billing']['billing_company']['priority'] ?? 30, 190);
+            $company_priority = self::clamp_company_priority($fields['billing']['billing_company']['priority'] ?? 30);
             $fields['billing']['billing_country']['priority'] = $company_priority - 1;
 
             // Return the fields list
+            return $fields;
+        }
+
+        /**
+         * Shared clamp: never let a company-name priority (whatever its
+         * source — billing_company's own field, or WooCommerce's country
+         * locale defaults) push country/optionals out of their intended
+         * band. See move_country_field(), update_company_fields() and
+         * sync_locale_country_priority() — all three must agree on this
+         * number or the three field-order mechanisms drift apart (#33).
+         *
+         * @param $priority
+         *
+         * @return int
+         */
+        private static function clamp_company_priority($priority)
+        {
+            return min($priority, 190);
+        }
+
+        /**
+         * Keep WooCommerce's country-locale defaults in sync with the
+         * country/company priority clamp above.
+         *
+         * WooCommerce's address-i18n.js reads wc_address_i18n_params.locale
+         * (built from this exact filtered array — see
+         * WC_Countries::get_country_locale(), the 'default' entry) and,
+         * on EVERY checkout load — not only when the buyer changes country —
+         * resets #billing_country_field's client-side `data-priority` to
+         * whatever this array says, then physically re-sorts every
+         * `.form-row` in the billing wrapper by that priority
+         * (`rows.detach().appendTo(wrapper)` in address-i18n.js). Company/
+         * company_display are NOT in that JS's locale_fields list, so their
+         * priority is left alone at whatever the server rendered — only
+         * country gets overwritten. Left unfixed, this silently reverts
+         * move_country_field()'s server-side fix a few hundred ms after
+         * load, on every locale, because address-i18n.js always falls back
+         * to `locale.default` for any country without its own 'country'
+         * override (none of WooCommerce's built-in locales define one).
+         *
+         * @param $fields
+         *
+         * @return mixed
+         */
+        public function sync_locale_country_priority($fields)
+        {
+            // Keys here are unprefixed ('company', 'country') — this is
+            // WC_Countries::get_default_address_fields()'s own shape, not
+            // the 'billing_'-prefixed $checkout->get_checkout_fields() shape
+            // that move_country_field()/update_company_fields() operate on.
+            //
+            // Guard on 'country' actually being present (review finding):
+            // every WC core version we've checked includes it, but blind-
+            // writing $fields['country']['priority'] would auto-vivify a
+            // bare ['priority' => X] entry with no type/label/class if some
+            // future version ever omitted it — and that malformed entry
+            // would then be treated as the field's real locale definition
+            // downstream. Absence is a no-op, not a fallback construction:
+            // there is nothing sane to build here without WC's own field
+            // shape.
+            if (!isset($fields['country'])) {
+                return $fields;
+            }
+
+            // Reads WC core's own hardcoded 'company' default here (this
+            // array is never customized by a brand overlay — brands only
+            // hook woocommerce_checkout_fields, not
+            // woocommerce_get_country_locale_default), so it can drift from
+            // billing_company's real, possibly brand-adjusted priority in
+            // move_country_field()/update_company_fields(). No brand
+            // currently touches billing_company's priority (#33 review —
+            // Han), so this is a documented latent gap, not an active bug:
+            // if one ever does, this filter would need to read the live
+            // checkout-fields priority instead of the static default here.
+            $company_priority = self::clamp_company_priority($fields['company']['priority'] ?? 30);
+            $fields['country']['priority'] = $company_priority - 1;
+
             return $fields;
         }
 
@@ -96,7 +187,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             // Vader: this used to be a non-issue because the optionals rode
             // company's own priority; now they're fixed, so company's own
             // priority needs its own ceiling).
-            $company_name_priority = min($fields['billing']['billing_company']['priority'] ?? 30, 190);
+            $company_name_priority = self::clamp_company_priority($fields['billing']['billing_company']['priority'] ?? 30);
 
             if ($this->wc_twoinc->get_enable_company_search() === 'yes') {
                 $fields['billing']['billing_company_display'] = [
