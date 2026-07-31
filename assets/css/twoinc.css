@@ -249,29 +249,47 @@
   transform: translateY(-50%);
   right: 4px;
   background: none;
-  border: 0;
+  border: 1px dotted transparent;
+  padding: 0 2px;
   font: inherit;
   text-transform: none !important;
 }
 
 /*
- * Explicit focus indicator (#30.x.7, round 4). Reported live: tabbing out of
- * the manual-entry name field lands focus here with no visible sign of it.
- * The button carries no host-supplied focus styling of its own — same class
- * of problem as the uppercase fix above (#30.x.5.1): a real <button> is a
- * target for a host theme's own button chrome, where the <div> this used to
- * be never was. Assumed, not confirmed live in devtools the way the
- * uppercase fix's Astra rule was (#30.x.5.1's comment quotes the actual
- * selector list found) — plausible that Astra's same button reset also
- * strips the native focus ring, but that specific rule hasn't been checked.
- * `!important` regardless, on the same defensive logic as the text-transform
- * override: a theme's own button-focus reset, if one exists, is routinely
- * `!important` itself, and a bare declaration here would lose to it either
- * way.
+ * Explicit focus indicator (#30.x.7, round 4; restyled round 5). Reported
+ * live: tabbing out of the manual-entry name field lands focus here with no
+ * visible sign of it. The button carries no host-supplied focus styling of
+ * its own — same class of problem as the uppercase fix above (#30.x.5.1): a
+ * real <button> is a target for a host theme's own button chrome, where the
+ * <div> this used to be never was.
+ *
+ * Round 4 used an outline, which Doug found too large (~4px wider than the
+ * button's own padding) and visually inconsistent with this checkout's other
+ * focus states (a plain dotted rectangle with square corners). A dotted
+ * BORDER matches that instead — sized to the button's own box rather than
+ * offset outside it — and the explicit `padding: 0 2px` above (replacing
+ * whatever padding the browser's own button default supplied) is what gives
+ * the border room to sit close against the text without the two fighting
+ * for the same few pixels. The non-focus state above sets a `border: 1px
+ * dotted transparent` (same width as the focus border, colour only)
+ * deliberately, rather than `border: 0` — a border occupies box space
+ * (unlike outline, which doesn't), so drawing it only on `:focus` would grow
+ * the button by 2px the moment focus lands and shrink it back on blur,
+ * nudging its (unfixed-width, right-pinned) box and its text sideways by
+ * ~1px each way. Reserving the same width up front, invisible until
+ * `:focus` recolours it, means the box never changes size — only colour.
+ *
+ * `!important` for the same defensive reason as the text-transform override:
+ * a theme's own button-focus reset, if one exists, is routinely `!important`
+ * itself, and this checkout only ever wants ITS OWN plain dotted rectangle
+ * here — not whatever the theme would otherwise draw (or not draw).
+ *
+ * `#808080` rather than the `grey`/`gray` keyword: every other colour in
+ * this stylesheet is hex, and this is the only rule that would otherwise be
+ * the one exception.
  */
 #search_company_btn:focus {
-  outline: 2px solid #3043d1 !important;
-  outline-offset: 2px;
+  border-color: #808080 !important;
 }
 
 /* Payment terms chip selector (TWO-24751) */

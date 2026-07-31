@@ -931,17 +931,43 @@ describe("company-search manual-entry affordance", () => {
       return fs.readFileSync(path.join(harness.REPO_ROOT, harness.STYLESHEET_PATH), "utf8");
     }
 
-    test("#search_company_btn:focus declares an explicit, !important outline", () => {
+    test("#search_company_btn reserves a dotted border up front, transparent until focused", () => {
       // Reported live: tabbing out of the manual-entry "Company name" field
       // lands focus on this button with nothing visible marking it. The
       // button carried no host-supplied focus styling of its own, and a
-      // host theme's own button-focus reset (Astra strips the native ring
-      // as part of the same reset that uppercases button text — #30.x.5.1)
-      // can silently remove the browser default with nothing in this
-      // stylesheet to fall back on.
+      // host theme's own button-focus reset can silently remove the browser
+      // default with nothing in this stylesheet to fall back on.
+      //
+      // Round 4 shipped an outline here; Doug found it ~4px wider than the
+      // button's own padding and inconsistent with this checkout's other
+      // focus states, and asked for a plain dotted rectangle with square
+      // corners instead — a border, not an outline. Round 5. The border's
+      // WIDTH and STYLE are reserved in the base (non-focus) rule, not just
+      // on :focus, specifically so gaining/losing focus never changes the
+      // button's box size (a border occupies box space, unlike outline) —
+      // :focus only ever flips the colour.
+      const base = /^#search_company_btn\s*\{([^}]*)\}/m.exec(stylesheetSource());
+      expect(base).not.toBeNull();
+      expect(base[1]).toMatch(/border:\s*1px\s+dotted\s+transparent/);
+    });
+
+    test("#search_company_btn:focus declares an explicit, !important border colour", () => {
       const m = /#search_company_btn:focus\s*\{([^}]*)\}/m.exec(stylesheetSource());
       expect(m).not.toBeNull();
-      expect(m[1]).toMatch(/outline:\s*[^;]+!important/);
+      expect(m[1]).toMatch(/border-color:\s*#808080\s*!important/);
+    });
+
+    test("#search_company_btn declares explicit, tight padding (round 5)", () => {
+      // The button previously relied on the browser's own default <button>
+      // padding, which is what made round 4's outline read as oversized
+      // relative to the visible text — the outline sat `outline-offset`
+      // away from a box that was already bigger than the text needed. The
+      // round-5 border sits flush against the box instead, so the box
+      // itself has to be sized close to the text for the border to look
+      // right — hence the explicit, tight `0 2px`.
+      const m = /^#search_company_btn\s*\{([^}]*)\}/m.exec(stylesheetSource());
+      expect(m).not.toBeNull();
+      expect(m[1]).toMatch(/padding:\s*0\s+2px/);
     });
 
     test("Enter activates the button and switches back to search", () => {
