@@ -191,50 +191,125 @@
 /*
  * Manual-entry row inside the company-search results list (TWO-25288).
  *
- * It is an option row now rather than a floating div beside the list, so the
- * hand-rolled margin is gone: the row inherits the picker's own option padding
- * and highlight, which is what keeps it in step with the company rows above it
- * when arrowed onto. Kept as a flat single-id selector so brand overlays that
- * recolour it keep matching without raising their own specificity.
+ * A real <button> now, so its native chrome has to be reset to read as the
+ * link it visually is — the same treatment #search_company_btn already gets
+ * below. `display: block` + full width keeps it filling the dropdown the way
+ * the old option row did; the padding roughly matches selectWoo's own option
+ * row padding so it doesn't look like a foreign element bolted underneath.
+ * Kept as a flat single-id selector so brand overlays that recolour it keep
+ * matching without raising their own specificity.
+ *
+ * `text-transform: none` is new (round 2, #30.x.5). It was never needed while
+ * this was an `<li>` — this <button> tag is what makes it a target for a host
+ * theme's generic `button { text-transform: uppercase; }` styling, which
+ * plenty of themes apply for CTA-style buttons. An `<li role="option">` never
+ * matched that selector; a real `<button>` always will. `!important` because
+ * that kind of theme rule is routinely `!important` itself (buttons are a
+ * common place themes fight plugins for the last word), and this element has
+ * no reason to ever want the theme's button casing.
  */
 #company_not_in_btn {
+  display: block;
+  width: 100%;
+  text-align: left;
   cursor: pointer;
   color: #3043d1;
+  background: none;
+  border: 0;
+  text-transform: none !important;
+  border-top: 1px solid #eeeeee;
+  font: inherit;
+  padding: 6px 12px;
 }
 
-/*
- * Highlighted state (TWO-25288). NOT cosmetic — a contrast fix.
- *
- * The picker paints its highlighted row white-on-blue, but its own rule is a
- * class selector (specificity 0,3,1) and the id rule above is 1,0,0, so the
- * brand blue above wins on the text while the blue background still applies:
- * roughly 2.5:1, under the 4.5:1 floor, where every real company row in the
- * same list goes white-on-blue. Restated at the same id specificity so this row
- * matches its neighbours instead of going unreadable the moment it is arrowed
- * onto. Both theme prefixes, because which one is present depends on the host
- * theme's picker build.
- */
-#company_not_in_btn.select2-results__option--highlighted,
-.select2-container--default #company_not_in_btn.select2-results__option--highlighted,
-.select2-container--classic #company_not_in_btn.select2-results__option--highlighted {
-  color: #ffffff;
+#company_not_in_btn:hover,
+#company_not_in_btn:focus {
+  background-color: #f2f4fd;
+  outline-offset: -2px;
 }
 
 /*
  * The link back out of manual entry. A <button> now, for keyboard
  * reachability, so the browser's button chrome has to be reset for it to look
  * like the link it did before.
+ *
+ * `text-transform: none !important` is new (round 3, #30.x.5.1). Round 2 only
+ * added this to #company_not_in_btn, on the reasoning that becoming a real
+ * `<button>` (since #416) made it a target for a host theme's own
+ * `button { text-transform: uppercase }` styling. That reasoning applies
+ * exactly as much to THIS button — it has been a real `<button>` since the
+ * same PR — but the override was never added here, so a theme's `!important`
+ * button rule kept winning on this element specifically while the other one
+ * was already fixed. Same fix, same reason, just missed the first time.
+ *
+ * Vertical centring against `.woocommerce-input-wrapper`, not against this
+ * button's own containing `#billing_company_field` (round 3, #30.x.5.3).
+ * `#billing_company_field` wraps BOTH the "Company name" <label> and the
+ * input, but only the input carries a visible border — the label sits above
+ * it with no box of its own. This button used to be positioned with no
+ * explicit `top` at all, so its vertical position fell back to its "static
+ * position" (roughly where it would render in normal flow, i.e. after the
+ * label+input together) rather than to the middle of the bordered input box
+ * beneath the label. `.woocommerce-input-wrapper` is WooCommerce core's own
+ * wrapper around just the <input> — no label inside it — so this button is
+ * now appended there (see `getSearchCompanyBtnNode` in twoinc.js) and
+ * centred with `top: 50%; transform: translateY(-50%)` against THAT box,
+ * which lines it up with the visible field regardless of label height or how
+ * many lines it wraps to on a narrow viewport.
  */
+#billing_company_field .woocommerce-input-wrapper {
+  position: relative;
+}
 #search_company_btn {
   text-align: right;
   cursor: pointer;
-  padding: 5px 0 0;
   color: #3043d1;
   position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
   right: 4px;
   background: none;
-  border: 0;
+  border: 1px dotted transparent;
+  padding: 0 2px;
   font: inherit;
+  text-transform: none !important;
+}
+
+/*
+ * Explicit focus indicator (#30.x.7, round 4; restyled round 5). Reported
+ * live: tabbing out of the manual-entry name field lands focus here with no
+ * visible sign of it. The button carries no host-supplied focus styling of
+ * its own — same class of problem as the uppercase fix above (#30.x.5.1): a
+ * real <button> is a target for a host theme's own button chrome, where the
+ * <div> this used to be never was.
+ *
+ * Round 4 used an outline, which Doug found too large (~4px wider than the
+ * button's own padding) and visually inconsistent with this checkout's other
+ * focus states (a plain dotted rectangle with square corners). A dotted
+ * BORDER matches that instead — sized to the button's own box rather than
+ * offset outside it — and the explicit `padding: 0 2px` above (replacing
+ * whatever padding the browser's own button default supplied) is what gives
+ * the border room to sit close against the text without the two fighting
+ * for the same few pixels. The non-focus state above sets a `border: 1px
+ * dotted transparent` (same width as the focus border, colour only)
+ * deliberately, rather than `border: 0` — a border occupies box space
+ * (unlike outline, which doesn't), so drawing it only on `:focus` would grow
+ * the button by 2px the moment focus lands and shrink it back on blur,
+ * nudging its (unfixed-width, right-pinned) box and its text sideways by
+ * ~1px each way. Reserving the same width up front, invisible until
+ * `:focus` recolours it, means the box never changes size — only colour.
+ *
+ * `!important` for the same defensive reason as the text-transform override:
+ * a theme's own button-focus reset, if one exists, is routinely `!important`
+ * itself, and this checkout only ever wants ITS OWN plain dotted rectangle
+ * here — not whatever the theme would otherwise draw (or not draw).
+ *
+ * `#808080` rather than the `grey`/`gray` keyword: every other colour in
+ * this stylesheet is hex, and this is the only rule that would otherwise be
+ * the one exception.
+ */
+#search_company_btn:focus {
+  border-color: #808080 !important;
 }
 
 /* Payment terms chip selector (TWO-24751) */
@@ -376,6 +451,55 @@
 }
 .select2-search--dropdown.twoinc-searching .select2-search__field {
   padding-right: 30px;
+}
+
+/*
+ * Company-search placeholder / selected-value text (#30.x.5, round 2).
+ *
+ * Some host themes apply a blanket `text-transform: uppercase` broad enough
+ * to catch select2's own rendered span, and give the selection box a custom
+ * height with no matching `.select2-selection__rendered` line-height —
+ * leaving the placeholder text a few pixels above true vertical centre.
+ * Scoped to this one field's combobox so it never touches an unrelated
+ * select2 instance a theme already renders correctly.
+ *
+ * Round 1 (first #30.x.5) set `text-transform: none` and `line-height:
+ * normal` here, plus `display: flex; align-items: center` on the PARENT
+ * `.select2-selection--single`. Two gaps, reported back live:
+ *
+ *  - `text-transform: none` with no `!important` loses to any host theme rule
+ *    that is itself `!important` — routine for theme form-control styling.
+ *    Escalated deliberately rather than hoping a bare declaration outranks a
+ *    rule this stylesheet never sees.
+ *  - Flex-centring the PARENT only centres the `.select2-selection__rendered`
+ *    BOX within it; it does nothing for text sitting off-centre WITHIN that
+ *    box, which is what a theme-supplied height + mismatched line-height on
+ *    the rendered span itself produces. The rendered span is now a flex
+ *    container in its own right too, with `height: 100%` so it always fills
+ *    whatever height the parent (and by extension the theme) gives it,
+ *    instead of assuming a fixed line-height.
+ *
+ * Known limitation, not fixed here: `height: 100%` only resolves against a
+ * PARENT with a definite (fixed or otherwise resolved) height. A theme that
+ * gives `.select2-selection--single` only a `min-height` (content-driven auto
+ * height, no fixed value) leaves this `100%` computing to `auto`, and this
+ * fix quietly does nothing extra for that theme — the parent-level
+ * flex-centring above still applies regardless, so the box itself still
+ * centres; only the "fill whatever height the theme gives it" refinement for
+ * a taller-than-content rendered span is theme-dependent. No way to verify
+ * this against every host theme from here; flag if it recurs.
+ */
+#billing_company_display_field .select2-selection--single {
+  display: flex;
+  align-items: center;
+}
+#billing_company_display_field .select2-selection__rendered {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  text-transform: none !important;
+  line-height: normal;
+  padding-right: 3px;
 }
 
 /* Sole trader toggle (TWO-24754) */

@@ -2406,8 +2406,8 @@ if (!class_exists('WC_Twoinc')) {
                 wp_enqueue_media();
             }
 
-            wp_enqueue_script('twoinc.admin', WC_TWOINC_PLUGIN_URL . '/assets/js/admin.js', ['jquery']);
-            wp_enqueue_style('twoinc.admin', WC_TWOINC_PLUGIN_URL . '/assets/css/admin.css');
+            wp_enqueue_script('twoinc.admin', WC_TWOINC_PLUGIN_URL . '/assets/js/admin.js', ['jquery'], twoinc_get_asset_version('assets/js/admin.js'));
+            wp_enqueue_style('twoinc.admin', WC_TWOINC_PLUGIN_URL . '/assets/css/admin.css', false, twoinc_get_asset_version('assets/css/admin.css'));
 
             // Localize script for AJAX
             wp_localize_script('twoinc.admin', 'twoinc_admin', [

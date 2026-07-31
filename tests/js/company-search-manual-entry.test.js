@@ -1,23 +1,36 @@
 /**
- * TWO-25288. The manual-entry affordance inside the company-search dropdown.
+ * TWO-25288, reworked #30.x.1-3. The manual-entry affordance beside the
+ * company-search dropdown.
  *
- * The row is a pseudo-option injected into a results list the picker owns and
- * empties on every render, so almost everything worth asserting here is about
- * the seam between the plugin and the widget rather than about a pure function:
- * whether the row is where the picker's keyboard navigation looks for it,
- * whether it survives a re-render, whether activating it is intercepted before
- * a company value is written, and whether the handlers that show it are bound
- * once rather than once per dropdown open.
+ * TWO-25288 made this a pseudo-option `<li role="option">` living INSIDE
+ * `.select2-results__options` (the results list), reachable by arrowing down
+ * through every result and activated via the picker's own `select2:selecting`
+ * event. That traded one accessibility gap for two others, both reported
+ * directly off the live checkout:
+ *
+ *  - `.select2-results__options` is exactly the element select2/selectWoo
+ *    apply their own scroll-and-clip to, so the row was only visible if the
+ *    buyer scrolled past however many results came back, and it was NOT in
+ *    the normal Tab sequence at all (by design — a listbox option pattern).
+ *  - selectWoo's own result-row activation binds on plain `mouseup` with no
+ *    mouse-button check, so a right click fired the same activation a left
+ *    click did.
+ *
+ * The button now lives as a sibling of the results list — outside the part
+ * that scrolls, in the normal Tab sequence, and owning a plain `click`
+ * handler that only ever fires for the primary mouse button.
  *
  * The real widget is used throughout, for the same reason the rest of this
- * suite uses it: the row's reachability IS a property of the widget's own
- * navigation code, and a mock would have to reproduce that code correctly to
- * catch a regression in it — which is exactly the assumption that let the
- * previous, unreachable implementation ship.
+ * suite uses it: the button's actual DOM position relative to the results
+ * list, and select2's own scroll/tab behaviour, are properties of the
+ * widget's own code — a mock would have to reproduce that correctly to catch
+ * a regression in it.
  */
 
 "use strict";
 
+const fs = require("fs");
+const path = require("path");
 const harness = require("./wc-harness");
 
 /** The strings the affordance reads out of the localised text map. */
@@ -47,6 +60,7 @@ describe("company-search manual-entry affordance", () => {
   afterEach(() => {
     harness.releaseWidgets($);
     $(document.body).off("input.twoincManualEntry");
+    $(document.body).off("keydown.twoincManualEntry");
     document.body.innerHTML = "";
   });
 
@@ -70,7 +84,7 @@ describe("company-search manual-entry affordance", () => {
   /**
    * Type into the dropdown's search field and fire the event the affordance
    * listens on. Deliberately NOT `.trigger("keyup")` or a debounce flush: the
-   * row is specified to appear on input, before any request goes out.
+   * button is specified to appear on input, before any request goes out.
    *
    * @param {string} term what the buyer has typed
    * @returns {void}
@@ -84,17 +98,22 @@ describe("company-search manual-entry affordance", () => {
     return $("#billing_company_display").data("select2").$results;
   }
 
-  /** @returns {Object} the manual-entry row, or an empty set */
-  function row() {
-    return resultsList().children("#" + helper.manualEntryRowId);
+  /** @returns {Object} the manual-entry button, or an empty set */
+  function btn() {
+    return $("#" + helper.manualEntryRowId);
+  }
+
+  /** Activate the button the way a buyer's click or Enter/Space does. */
+  function activate() {
+    btn().trigger("click");
   }
 
   /**
    * Guard against a harness that returns before the code under test ran.
    *
    * Every assertion below is about DOM the affordance is supposed to have
-   * created. If `bindManualEntryAffordance` silently did nothing — no handler,
-   * no observer — an "is absent" assertion still passes and a "is present" one
+   * created. If `bindManualEntryAffordance` silently did nothing — no handler
+   * at all — an "is absent" assertion still passes and a "is present" one
    * fails for the wrong reason. This asserts the binding itself happened, so
    * the suite fails loudly at the seam rather than misattributing.
    */
@@ -115,16 +134,14 @@ describe("company-search manual-entry affordance", () => {
 
       // Reach the threshold FIRST, so the mechanism is demonstrably live in
       // this test before the absence is asserted. Without this the assertion
-      // below is a precondition dressed as a check: the row was never in the
-      // list, so "it is not there" holds no matter what the code does, and no
-      // mutation could turn this test red. It was in fact the one test in this
-      // file that survived all 25.
+      // below is a precondition dressed as a check: the button was never
+      // there, so "it is not there" holds no matter what the code does.
       type("a".repeat(helper.companySearchMinLength));
-      expect(row().length).toBe(1);
+      expect(btn().length).toBe(1);
 
       type("a".repeat(helper.companySearchMinLength - 1));
 
-      expect(row().length).toBe(0);
+      expect(btn().length).toBe(0);
     });
 
     test("present at the threshold, before any request has been made", () => {
@@ -133,9 +150,9 @@ describe("company-search manual-entry affordance", () => {
 
       type("a".repeat(helper.companySearchMinLength));
 
-      expect(row().length).toBe(1);
-      // The point of the timing rule: no round trip has happened, and the row
-      // is already there. A `hasSearched` gate would fail this.
+      expect(btn().length).toBe(1);
+      // The point of the timing rule: no round trip has happened, and the
+      // button is already there. A `hasSearched` gate would fail this.
       expect(ajax.calls.length).toBe(0);
       ajax.restore();
     });
@@ -145,17 +162,17 @@ describe("company-search manual-entry affordance", () => {
 
       type("a".repeat(helper.companySearchMinLength + 4));
 
-      expect(row().length).toBe(1);
+      expect(btn().length).toBe(1);
     });
 
     test("removed again when the buyer deletes back below the threshold", () => {
       openWithAffordance();
 
       type("a".repeat(helper.companySearchMinLength));
-      expect(row().length).toBe(1);
+      expect(btn().length).toBe(1);
 
       type("a".repeat(helper.companySearchMinLength - 1));
-      expect(row().length).toBe(0);
+      expect(btn().length).toBe(0);
     });
 
     test("the threshold is read from the shared constant, not hard-coded", () => {
@@ -166,259 +183,516 @@ describe("company-search manual-entry affordance", () => {
       openWithAffordance();
 
       type("abcd");
-      expect(row().length).toBe(0);
+      expect(btn().length).toBe(0);
 
       type("abcde");
-      expect(row().length).toBe(1);
+      expect(btn().length).toBe(1);
     });
   });
 
-  describe("the row is where the picker's keyboard navigation looks", () => {
-    test("it is the LAST child of the results list", () => {
+  describe("where the button lives (#30.x.1, #30.x.2)", () => {
+    test("it is OUTSIDE the results list, not a row inside it", () => {
+      openWithAffordance();
+
+      type("abc");
+
+      // Not a child of the scrollable results list...
+      expect(resultsList().children("#" + helper.manualEntryRowId).length).toBe(0);
+      // ...but its own element still exists, and is a sibling of that list.
+      expect(btn().length).toBe(1);
+      expect(btn().prev().is(resultsList())).toBe(true);
+    });
+
+    test("it is a real <button>, not a styled row", () => {
+      openWithAffordance();
+
+      type("abc");
+
+      expect(btn().prop("tagName")).toBe("BUTTON");
+      expect(btn().attr("type")).toBe("button");
+    });
+
+    test("it stays visible however many results are already in the (scrollable) list", () => {
       openWithAffordance();
       const $list = resultsList();
-      $list.append('<li class="select2-results__option" data-selected="false">A company</li>');
+      for (let i = 0; i < 30; i++) {
+        $list.append(
+          '<li class="select2-results__option" data-selected="false">Company ' + i + "</li>"
+        );
+      }
 
       type("abc");
 
-      expect($list.children().last().attr("id")).toBe(helper.manualEntryRowId);
+      // Still reachable as a plain DOM element regardless of how long the
+      // (scrollable) results list got — nothing about finding it depends on
+      // scroll position.
+      expect(btn().length).toBe(1);
+      expect(btn().prev().is($list)).toBe(true);
     });
 
-    test("it is inside the list, not beside it", () => {
+    test("Tab from the search field reaches it directly, without visiting any option row", () => {
+      // select2/selectWoo option rows carry tabindex="-1" — deliberately
+      // excluded from the normal Tab sequence (the listbox pattern), reached
+      // only by arrow-key navigation. A real <button> with no explicit
+      // tabindex participates in the ordinary sequence, so it is the very
+      // next tabbable node after the search field once any option rows
+      // (all tabindex="-1") are skipped.
       openWithAffordance();
+      const $list = resultsList();
+      $list.append(
+        '<li class="select2-results__option" data-selected="false" tabindex="-1">A company</li>'
+      );
 
       type("abc");
 
-      expect(row().parent().is(resultsList())).toBe(true);
-    });
-
-    test("it carries the attributes the picker navigates by", () => {
-      openWithAffordance();
-
-      type("abc");
-      const $row = row();
-
-      expect($row.attr("role")).toBe("option");
-      expect($row.attr("data-selected")).toBe("false");
-      expect($row.attr("aria-selected")).toBe("false");
-      expect($row.attr("id")).toBeTruthy();
-      expect($row.hasClass("select2-results__option")).toBe(true);
-      expect($row.hasClass("select2-results__option--selectable")).toBe(true);
-      // Programmatically focusable, which is what lets the picker's own
-      // focus-the-highlighted-row call actually land.
-      expect($row.attr("tabindex")).toBe("-1");
-    });
-
-    test("it carries the same attributes the picker gives a real option", () => {
-      // Rather than restate a list of attributes this test could drift from,
-      // compare against what the widget itself produces. If the library ever
-      // adds a navigation-relevant attribute, this fails instead of the row
-      // silently falling out of the navigable set.
-      const $select = openWithAffordance();
-      const picker = $select.data("select2");
-      const real = picker.results.option({ id: "Real Co", text: "Real Co", _resultId: "real-co" });
-
-      type("abc");
-      const $row = row();
-
-      ["role", "data-selected", "tabindex"].forEach((attr) => {
-        expect($row.attr(attr)).toBe($(real).attr(attr));
+      expect(searchInput().attr("tabindex")).not.toBe("-1");
+      expect(btn().attr("tabindex")).not.toBe("-1");
+      $list.find("li").each(function () {
+        expect($(this).attr("tabindex")).toBe("-1");
       });
     });
 
-    test("real DOM focus follows the highlight — the picker's own routine", () => {
-      const $select = openWithAffordance();
-      const picker = $select.data("select2");
-      const $list = resultsList();
-      $list.append(
-        $('<li class="select2-results__option" data-selected="false" tabindex="-1">A company</li>')
-          .attr("id", "a-company-row")
-          .data("data", { id: "A company", text: "A company", _resultId: "a-company-row" })
-      );
-
-      type("abc");
-
-      picker.trigger("results:next", {});
-      picker.trigger("results:next", {});
-      // What the picker calls on every arrow keypress. Its own source says this
-      // is required for screen readers; on a row with no tabindex it is a
-      // silent no-op and focus stays on the previous row.
-      picker.focusOnActiveElement();
-
-      expect(document.activeElement).toBe(row()[0]);
-    });
-
-    test("it carries a payload with an id and a matching _resultId", () => {
+    test("it is not churned by repeated syncs on the same keystroke state", () => {
       openWithAffordance();
 
       type("abc");
-      const data = row().data("data");
-
-      expect(data).toBeTruthy();
-      expect(data.id).toBe(helper.manualEntrySentinelId);
-      // aria-activedescendant is set from _resultId, so a mismatch makes the
-      // row reachable but never announced.
-      expect(data._resultId).toBe(row().attr("id"));
-      expect(data.text).toBe(TEXT.company_not_in_list);
-    });
-
-    test("the picker's own navigation reaches it — a real reachability check", () => {
-      openWithAffordance();
-      const $select = $("#billing_company_display");
-      const picker = $select.data("select2");
-      const $list = resultsList();
-      // A payload with a _resultId, because the widget's own focus handler
-      // reads one off every row it highlights — including the company row it
-      // passes through on the way to ours.
-      $list.append(
-        $('<li class="select2-results__option" data-selected="false">A company</li>')
-          .attr("id", "a-company-row")
-          .data("data", { id: "A company", text: "A company", _resultId: "a-company-row" })
-      );
-
+      const node = btn()[0];
+      type("abc"); // same term again — must not tear down and rebuild
       type("abc");
 
-      // Arrow down twice from nothing highlighted: once onto the company row,
-      // once onto ours. This is the widget's own handler doing the walking, so
-      // it passes only if the row is genuinely in the navigable set.
-      picker.trigger("results:next", {});
-      picker.trigger("results:next", {});
-
-      const $highlighted = $list.find(".select2-results__option--highlighted");
-      expect($highlighted.attr("id")).toBe(helper.manualEntryRowId);
-      // And it is announced. Two independent places have to agree for a screen
-      // reader to name the row: the list's own aria-activedescendant, taken
-      // from the highlighted element's id, and the combobox's, taken from the
-      // highlighted row's payload `_resultId`.
-      expect($list.attr("aria-activedescendant")).toBe(helper.manualEntryRowId);
-      expect(picker.selection.$selection.attr("aria-activedescendant")).toBe(
-        helper.manualEntryRowId
-      );
-      // The dropdown's own search field carries it too, and that is the element
-      // the field's aria-owns points FROM — so it is the one an AT client
-      // following the combobox pattern reads. Both are fed from the payload's
-      // _resultId; asserting only one left the other free to be wrong.
-      expect(searchInput().attr("aria-activedescendant")).toBe(helper.manualEntryRowId);
+      expect(btn()[0]).toBe(node);
+      expect(btn().length).toBe(1);
     });
 
     test("the label is the localised msgid, not a hard-coded English literal", () => {
       // Asserting on the English string would pass against a literal in the
-      // source. Change what the text map says and require the row to follow.
+      // source. Change what the text map says and require the button to
+      // follow.
       ctx.twoinc.text.company_not_in_list = "Selskapet mitt er ikke på listen";
       openWithAffordance();
 
       type("abc");
 
-      expect(row().text()).toBe("Selskapet mitt er ikke på listen");
+      expect(btn().text()).toBe("Selskapet mitt er ikke på listen");
     });
   });
 
-  describe("it survives the picker emptying the list", () => {
-    test("re-appended after a fresh result set is rendered", () => {
+  describe("Tab-to-button shortcut (#30.x.6)", () => {
+    /**
+     * Dispatch a real Tab keydown at the search field, the way the browser
+     * would, and return the event so its `defaultPrevented` state can be
+     * asserted.
+     *
+     * `which: 9` because the production handler reads `e.which` (matching
+     * the vendored selectWoo bundle's own convention), not `e.key` — a test
+     * built on `.key` alone would keep passing against a handler that no
+     * longer reads it.
+     *
+     * @param {Object} opts e.g. { shiftKey: true }
+     * @returns {Object} the jQuery.Event dispatched
+     */
+    function tabAt($el, opts) {
+      const e = jQuery.Event("keydown", Object.assign({ key: "Tab", which: 9 }, opts || {}));
+      $el.trigger(e);
+      return e;
+    }
+
+    test("Tab while the dropdown is open moves focus straight to the button", () => {
       openWithAffordance();
-      const $select = $("#billing_company_display");
+      type("a".repeat(helper.companySearchMinLength));
+      expect(btn().length).toBe(1);
+
+      searchInput().get(0).focus();
+      const e = tabAt(searchInput());
+
+      expect(e.isDefaultPrevented()).toBe(true);
+      expect(document.activeElement).toBe(btn().get(0));
+    });
+
+    test("Shift+Tab is left alone — our handler does not touch the button", () => {
+      // Not asserting `isDefaultPrevented()` here: selectWoo's own vendored
+      // document-level handler (see the comment above the production code)
+      // treats Tab as Enter whenever the dropdown is open regardless of
+      // Shift — confirmed directly against the real library, not this
+      // plugin's code — so `preventDefault` already happens independent of
+      // this feature and is not a contract this handler owns. What IS this
+      // handler's contract is the early return on `e.shiftKey`: mutate it
+      // away and this test fails, because the button would then receive an
+      // explicit `.focus()` call this code makes directly (which jsdom does
+      // perform, unlike native Tab traversal it never simulates).
+      openWithAffordance();
+      type("a".repeat(helper.companySearchMinLength));
+      expect(btn().length).toBe(1);
+
+      searchInput().get(0).focus();
+      tabAt(searchInput(), { shiftKey: true });
+
+      expect(document.activeElement).not.toBe(btn().get(0));
+    });
+
+    test("below the threshold (button absent) Tab is not intercepted", () => {
+      // Same reasoning as the Shift+Tab test above re: not asserting
+      // `isDefaultPrevented()` — that reflects selectWoo's own document-level
+      // Tab-as-Enter handling, not this feature. The contract under test is
+      // the `!btn` early return: nothing gets created or focused when the
+      // button doesn't exist yet.
+      openWithAffordance();
+      type("a".repeat(helper.companySearchMinLength - 1));
+      expect(btn().length).toBe(0);
+
+      searchInput().get(0).focus();
+      tabAt(searchInput());
+
+      expect(btn().length).toBe(0);
+    });
+
+    test("no-trap regression check: closing the dropdown removes this handler's own hook, not just the button", () => {
+      // This is the #30.x.4 regression this change must not reintroduce.
+      // Rather than asserting on a DIFFERENT field never in scope for this
+      // selector (which would pass even if the selector were broadened to
+      // match anything, since #billing_company never matched it either way),
+      // prove the actual mechanism: selectWoo's own `close` handling strips
+      // `aria-owns` off the search field it belongs to — which is exactly
+      // what `companySearchInputSelector` keys on — so once the dropdown is
+      // closed this handler's delegated selector provably cannot match
+      // ANYTHING any more, regardless of what element Tab is pressed on.
+      openWithAffordance();
+      expect(searchInput().length).toBe(1);
+
+      $("#billing_company_display").select2("close");
+
+      expect(jQuery(helper.companySearchInputSelector).length).toBe(0);
+
+      // And, separately: Tab on a genuinely unrelated field is untouched.
+      const $other = $("#billing_company");
+      $other.get(0).focus();
+      tabAt($other);
+
+      expect(document.activeElement).toBe($other.get(0));
+    });
+
+    test("survives selectWoo's own stale focusOnActiveElement() timer stealing focus back", () => {
+      // selectWoo's vendored document-level keydown handler schedules a
+      // `focusOnActiveElement()` call 1000ms after EVERY typing keystroke
+      // (not just Tab), which refocuses whatever result row is currently
+      // `.select2-results__option--highlighted` — and every fresh result
+      // render auto-highlights the first row. That timer is scheduled from
+      // the buyer's PREVIOUS keystroke, before Tab is ever pressed, so
+      // `stopPropagation` on the Tab event itself cannot reach it. A buyer
+      // who types and then hits Tab within that ~1s window — the normal case
+      // for a fast typer — would otherwise see focus land on the button and
+      // then get yanked back onto the highlighted company row shortly after.
+      jest.useFakeTimers();
+      const $select = openWithAffordance();
+      const picker = $select.data("select2");
+
+      // Real keydown events, not just `.trigger("input")` — selectWoo's own
+      // handler listens for keydown specifically, and this is the mechanism
+      // under test.
+      "abc".split("").forEach((ch) => {
+        searchInput().val(searchInput().val() + ch);
+        searchInput().trigger($.Event("keydown", { key: ch, which: ch.charCodeAt(0) }));
+        searchInput().trigger("input");
+      });
+
+      // A fresh result render, which selectWoo auto-highlights the first row
+      // of (Results.prototype.bind's `results:all` handler).
+      picker.trigger("results:all", {
+        data: { results: [{ id: "Real Co", text: "Real Co", html: "Real Co" }] },
+        query: { term: "abc" }
+      });
+      expect(
+        $("#select2-billing_company_display-results").find(".select2-results__option--highlighted")
+          .length
+      ).toBe(1);
+      expect(btn().length).toBe(1);
+
+      searchInput().get(0).focus();
+      tabAt(searchInput());
+      expect(document.activeElement).toBe(btn().get(0));
+
+      // Run past selectWoo's own 1000ms timer.
+      jest.advanceTimersByTime(1100);
+
+      expect(document.activeElement).toBe(btn().get(0));
+      jest.useRealTimers();
+    });
+
+    test("a second Tab press FROM the button does not silently select the highlighted row", () => {
+      // Found under adversarial review, reproduced against the real widget
+      // before this fix was written. selectWoo's `isOpen()` — the gate its
+      // own document-level Tab-as-Enter handler checks — is purely a CSS
+      // class on the container, entirely independent of where DOM focus
+      // actually is. Landing on the button via the shortcut does not close
+      // the dropdown, so a buyer pressing Tab AGAIN from the button — trying
+      // to move on to the next real page field, the ordinary next step —
+      // used to have that keydown bubble straight to selectWoo's still-live
+      // document handler, which silently fired `results:select` on whatever
+      // row was highlighted (a company the buyer never chose) and yanked
+      // focus back into the search field.
+      const $select = openWithAffordance();
       const picker = $select.data("select2");
 
       type("abc");
-      expect(row().length).toBe(1);
-
-      // What the picker does on every render: wipe the list, then append.
       picker.trigger("results:all", {
-        data: { results: [{ id: "A company", text: "A company", html: "A company" }] },
+        data: { results: [{ id: "Real Co", text: "Real Co", html: "Real Co" }] },
         query: { term: "abc" }
       });
+      expect(btn().length).toBe(1);
 
-      // The observer runs as a microtask, so let the queue drain.
-      return Promise.resolve().then(() => {
-        expect(row().length).toBe(1);
-        expect(resultsList().children().last().attr("id")).toBe(helper.manualEntryRowId);
-      });
+      searchInput().get(0).focus();
+      tabAt(searchInput());
+      expect(document.activeElement).toBe(btn().get(0));
+
+      const selected = [];
+      $select.on("select2:select", (ev) => selected.push(ev.params.data));
+
+      const e2 = tabAt(btn());
+
+      expect(e2.isDefaultPrevented()).toBe(false);
+      expect(selected).toEqual([]);
+      expect($("#billing_company").val()).toBe("");
     });
 
-    test("the row is not churned by its own observer", async () => {
-      // The sync runs from a MutationObserver on the very list it appends to,
-      // so without the "already last, do nothing" early return every append
-      // re-triggers the observer and the row is torn down and rebuilt forever.
-      // The row surviving as the SAME DOM node across many observer turns is
-      // what says the guard is there.
-      openWithAffordance();
+    /**
+     * Dispatch a real Enter or Space keydown directly at the button, and
+     * return the event so its `defaultPrevented` state can be asserted.
+     *
+     * `which` matches the vendored selectWoo bundle's own convention, same
+     * reasoning as `tabAt` above.
+     *
+     * @param {number} which 13 (Enter) or 32 (Space)
+     * @returns {Object} the jQuery.Event dispatched
+     */
+    function keyAtButton(which) {
+      const e = jQuery.Event("keydown", { which: which });
+      btn().trigger(e);
+      return e;
+    }
 
-      type("abc");
-      const node = row()[0];
-      expect(node).toBeTruthy();
+    test.each([
+      ["Enter", 13],
+      ["Space", 32]
+    ])(
+      "%s, with the button focused, does not get hijacked by selectWoo's document-level handler (#30.x.6 round 3)",
+      (name, which) => {
+        // Found live: Doug reported both Enter and Space, pressed while the
+        // button has focus, routing to the search field instead of
+        // activating the button. Root cause: this button's own
+        // keydown.twoincManualEntryButton handler only ever intercepted Tab
+        // (which === 9) — Enter and Space kept bubbling straight past it to
+        // selectWoo's document-level handler, which is gated purely on
+        // isOpen() (a CSS class), not on focus. That handler does NOT treat
+        // Enter and Space identically, though (checked directly against the
+        // vendored bundle): only Enter (like Tab) hits the results:select
+        // branch, silently selecting whatever row is highlighted; plain
+        // Space matches none of that handler's branches and only inherits
+        // its unconditional fallthrough — $searchField.focus() immediately,
+        // then focusOnActiveElement() ~1s later. Both keys still end up
+        // routing focus back to the search field, just via different
+        // mechanisms, which is why both need the same stopPropagation guard
+        // regardless of which internal branch they'd otherwise have hit.
+        //
+        // jsdom does not simulate the browser's native "Enter/Space
+        // activates a focused <button>" default action, so this cannot
+        // prove the button's own click handler fires from these keys — only
+        // that selectWoo's handler is kept from stealing the keydown first.
+        // Native activation dispatches the same `click` event a mouse click
+        // does, which the "mouse-button semantics" suite already covers.
+        const $select = openWithAffordance();
+        const picker = $select.data("select2");
 
-      for (let i = 0; i < 25; i++) await Promise.resolve();
+        type("abc");
+        picker.trigger("results:all", {
+          data: { results: [{ id: "Real Co", text: "Real Co", html: "Real Co" }] },
+          query: { term: "abc" }
+        });
+        expect(btn().length).toBe(1);
 
-      expect(row()[0]).toBe(node);
-      expect(row().length).toBe(1);
+        searchInput().get(0).focus();
+        tabAt(searchInput());
+        expect(document.activeElement).toBe(btn().get(0));
+
+        const selected = [];
+        $select.on("select2:select", (ev) => selected.push(ev.params.data));
+
+        const e = keyAtButton(which);
+
+        // Not preventDefault'd: the browser's own native button-activation
+        // default action for Enter/Space must still be free to run.
+        expect(e.isDefaultPrevented()).toBe(false);
+        // But selectWoo's document handler must never have seen this event:
+        // no row silently selected, no value written, focus untouched.
+        expect(selected).toEqual([]);
+        expect($("#billing_company").val()).toBe("");
+        expect(document.activeElement).toBe(btn().get(0));
+      }
+    );
+  });
+
+  describe("CSS overrides survive a host theme's own styling (#30.x.5, round 3)", () => {
+    /**
+     * The stylesheet source, read fresh per test rather than cached at
+     * module scope: cheap, and keeps each test's failure message pointing at
+     * the actual file on disk.
+     *
+     * jsdom's cascade does not reliably resolve `!important` + specificity
+     * across two separate `<style>` sheets (confirmed directly: injecting a
+     * synthetic `button { text-transform: uppercase !important; }` theme
+     * sheet made jsdom report "uppercase" for #company_not_in_btn too, even
+     * though round 2's `!important` fix for that element is already merged
+     * and working live — a false failure on code that isn't broken, not a
+     * real one). So the proof here is textual, against the shipped rule
+     * itself, which is deterministic and matches this repo's existing
+     * convention for CSS facts jsdom cannot render (see the spinner GIF byte
+     * assertions in company-search-transport.test.js).
+     *
+     * @returns {string} the raw CSS
+     */
+    function stylesheetSource() {
+      return fs.readFileSync(path.join(harness.REPO_ROOT, harness.STYLESHEET_PATH), "utf8");
+    }
+
+    /**
+     * Extract a single-id-selector rule's declaration block by name.
+     *
+     * @param {string} css the stylesheet source
+     * @param {string} id e.g. "search_company_btn" (no leading #)
+     * @returns {string} the rule's declaration block, or "" if not found
+     */
+    function ruleBodyFor(css, id) {
+      const re = new RegExp("#" + id + "\\s*\\{([^}]*)\\}", "m");
+      const m = re.exec(css);
+      return m ? m[1] : "";
+    }
+
+    test("#search_company_btn declares text-transform: none !important", () => {
+      // Round 2 added `text-transform: none !important` to #company_not_in_btn
+      // only, on the (correct) reasoning that becoming a real <button> (since
+      // #416) made it a target for a host theme's own
+      // `button { text-transform: uppercase }` styling — the real Astra
+      // selector list Doug found via devtools includes the bare `button`
+      // element selector itself, `!important`, which is exactly the shape a
+      // non-!important override cannot beat regardless of specificity
+      // (importance is compared before specificity in the cascade). That
+      // reasoning applies exactly as much to #search_company_btn — it has
+      // been a real <button> since the same PR — but the override was never
+      // added here, so the theme kept winning on THIS button while the
+      // other one was already fixed. Same escalation, same reason, applied
+      // to the button that was missed.
+      const body = ruleBodyFor(stylesheetSource(), "search_company_btn");
+      expect(body).toMatch(/text-transform:\s*none\s*!important/);
     });
 
-    test("not re-appended when the term is back below the threshold", () => {
+    test("#company_not_in_btn still declares it too (round 2 regression guard)", () => {
+      const body = ruleBodyFor(stylesheetSource(), "company_not_in_btn");
+      expect(body).toMatch(/text-transform:\s*none\s*!important/);
+    });
+  });
+
+  describe("vertical alignment against the visible field, not the field+label (#30.x.5.3, round 3)", () => {
+    test("#search_company_btn is appended into .woocommerce-input-wrapper, not #billing_company_field directly", () => {
+      // See the rule comment above `#billing_company_field
+      // .woocommerce-input-wrapper` in twoinc.css for why this containing
+      // block matters (label-height vs. visible-field centring).
+      jest.useFakeTimers();
       openWithAffordance();
-      const picker = $("#billing_company_display").data("select2");
+      type("abc");
+      activate();
+      jest.advanceTimersByTime(1);
+      jest.useRealTimers();
+
+      const $searchBtn = ctx.dom.getSearchCompanyBtnNode();
+      const $parent = $searchBtn.parent();
+      expect($parent.hasClass("woocommerce-input-wrapper")).toBe(true);
+      expect($searchBtn.closest("#billing_company_field").length).toBe(1);
+    });
+
+    test("the containing wrapper is positioned and the button centres against it, not the field", () => {
+      harness.injectStylesheet();
+
+      jest.useFakeTimers();
+      openWithAffordance();
+      type("abc");
+      activate();
+      jest.advanceTimersByTime(1);
+      jest.useRealTimers();
+
+      const $searchBtn = ctx.dom.getSearchCompanyBtnNode();
+      const wrapper = $searchBtn.parent()[0];
+
+      expect(window.getComputedStyle(wrapper).position).toBe("relative");
+      const btnStyle = window.getComputedStyle($searchBtn[0]);
+      expect(btnStyle.position).toBe("absolute");
+      expect(btnStyle.top).toBe("50%");
+      // jsdom reports the declared transform function verbatim rather than
+      // resolving it to a matrix() (no layout engine to resolve it against),
+      // so this asserts the declaration itself rather than a computed value.
+      expect(btnStyle.transform).toContain("translateY(-50%)");
+    });
+
+    test("self-heals a missing .woocommerce-input-wrapper instead of silently falling back to the unpositioned field (found under adversarial review)", () => {
+      // A host template that renders #billing_company_field without
+      // WooCommerce core's own .woocommerce-input-wrapper span around the
+      // input would otherwise leave this button falling back to appending
+      // directly onto #billing_company_field — which already carries
+      // `position: relative` from BEFORE this round (see twoinc.css), so the
+      // button would still centre with top:50%/translateY(-50%) against
+      // label+input COMBINED, silently reproducing the exact bug this round
+      // exists to fix, with nothing to signal the fallback path was taken.
+      // getSearchCompanyBtnNode must instead build an equivalent wrapper
+      // around the bare input rather than degrade.
+      $("#billing_company").unwrap();
+      expect($("#billing_company_field .woocommerce-input-wrapper").length).toBe(0);
+
+      const $searchBtn = ctx.dom.getSearchCompanyBtnNode();
+
+      const $parent = $searchBtn.parent();
+      expect($parent.hasClass("woocommerce-input-wrapper")).toBe(true);
+      expect($parent.get(0)).toBe($("#billing_company").parent().get(0));
+      expect($searchBtn.closest("#billing_company_field").length).toBe(1);
+    });
+  });
+
+  describe("mouse-button semantics (#30.x.3)", () => {
+    test("a plain click activates it", () => {
+      jest.useFakeTimers();
+      openWithAffordance();
+      ctx.Twoinc.getInstance();
 
       type("abc");
-      expect(row().length).toBe(1);
+      btn().trigger(new $.Event("click", { button: 0 }));
+      jest.advanceTimersByTime(1);
 
-      searchInput().val("ab");
-      picker.trigger("results:all", {
-        data: { results: [] },
-        query: { term: "ab" }
-      });
+      expect(ctx.twoinc.enable_company_search).toBe("no");
+      jest.useRealTimers();
+    });
 
-      return Promise.resolve().then(() => {
-        expect(row().length).toBe(0);
-      });
+    test("a right click (mouseup, button 2) does not activate it", () => {
+      // The bug this replaces: selectWoo's own result-row `mouseup` binding
+      // has no button check, so a right click fired the same activation a
+      // left click did. A real <button>'s `click` event never fires for a
+      // non-primary button in the first place — assert directly that a
+      // right-button mouseup on this element causes no activation and no
+      // `click` bubbles from it.
+      openWithAffordance();
+      const clicked = [];
+      btn().length; // no-op to satisfy lint on unused-looking helper calls
+      type("abc");
+      $(document.body).on("click", "#" + helper.manualEntryRowId, () => clicked.push(1));
+
+      btn().trigger(new $.Event("mouseup", { button: 2, which: 3 }));
+
+      expect(clicked).toEqual([]);
+      expect(ctx.twoinc.enable_company_search).not.toBe("no");
     });
   });
 
   describe("activation", () => {
-    /**
-     * Activate the row the way the picker does for BOTH Enter and a click:
-     * highlight it, then ask the picker to select the highlighted row.
-     *
-     * @returns {void}
-     */
-    function activate() {
-      const picker = $("#billing_company_display").data("select2");
-      row().trigger("mouseenter");
-      picker.trigger("results:select", {});
-    }
-
     beforeEach(() => {
       // enterManualCompanyEntry reaches the singleton for the customer-company
-      // snapshot; give it one before anything activates the row.
+      // snapshot; give it one before anything activates the button.
       ctx.Twoinc.getInstance();
-    });
-
-    test("no company value is written — the selection is prevented", () => {
-      const selected = [];
-      const $select = openWithAffordance();
-      const picker = $select.data("select2");
-      $select.on("select2:select", (e) => selected.push(e.params.data));
-
-      type("abc");
-      activate();
-
-      expect(selected).toEqual([]);
-      expect($("#billing_company").val()).toBe("");
-      expect($("#company_id").val()).toBe("");
-
-      // The three assertions above are all "nothing happened", and a recorder
-      // that was never wired up — or a widget that stopped emitting at all —
-      // satisfies every one of them. They would pass for the wrong reason and
-      // could not fail. So prove the recorder is LIVE on the same widget, in
-      // the same test: an ordinary row selected the ordinary way IS recorded,
-      // and the sentinel is still absent.
-      const $company = $(
-        '<li id="live-probe-row" class="select2-results__option" data-selected="false">Probe Co</li>'
-      ).data("data", { id: "Probe Co", text: "Probe Co", _resultId: "live-probe-row" });
-      resultsList().prepend($company);
-      $company.trigger("mouseenter");
-      picker.trigger("results:select", {});
-
-      expect(selected.map((d) => d.id)).toEqual(["Probe Co"]);
-      expect(selected.map((d) => d.id)).not.toContain(helper.manualEntrySentinelId);
     });
 
     test("it enters manual entry", () => {
@@ -427,7 +701,7 @@ describe("company-search manual-entry affordance", () => {
 
       type("abc");
       activate();
-      // The action is deferred out of the picker's own event dispatch.
+      // The action is deferred out of the click dispatch.
       jest.advanceTimersByTime(1);
 
       expect(ctx.twoinc.enable_company_search).toBe("no");
@@ -446,8 +720,10 @@ describe("company-search manual-entry affordance", () => {
 
       const $back = $("#" + helper.searchCompanyBtnId);
       expect($back.length).toBe(1);
-      // A <button> rather than the unreachable <div> this used to be: focusable
-      // and Enter/Space-activatable with no keydown bridge of our own.
+      // A <button> rather than the unreachable <div> this used to be:
+      // focusable by Tab. Enter/Space activation is NOT native-only, though
+      // (round 4, #30.x.7) — see the "Enter/Space activation" describe block
+      // below for why this button carries its own keydown bridge.
       expect($back.prop("tagName")).toBe("BUTTON");
       expect($back.attr("type")).toBe("button");
       // Not `:hidden`: jsdom reports zero dimensions for every element, so that
@@ -458,10 +734,6 @@ describe("company-search manual-entry affordance", () => {
     });
 
     test("the way back out is localised, not a hard-coded English literal", () => {
-      // Asserting against TEXT.search_company would prove nothing: that value is
-      // byte-identical to the built-in fallback, so deleting the text-map lookup
-      // entirely leaves the assertion passing. Inject a DIFFERENT string, the
-      // way the row's own label test does.
       ctx.twoinc.text.search_company = "Søk etter selskap";
       openWithAffordance();
 
@@ -470,8 +742,7 @@ describe("company-search manual-entry affordance", () => {
 
     test("repeating the activation in one tick switches once, not once per press", () => {
       jest.useFakeTimers();
-      const $select = openWithAffordance();
-      const picker = $select.data("select2");
+      openWithAffordance();
       let entered = 0;
       const realEnter = ctx.dom.enterManualCompanyEntry;
       ctx.dom.enterManualCompanyEntry = function () {
@@ -481,12 +752,11 @@ describe("company-search manual-entry affordance", () => {
 
       try {
         type("abc");
-        // The selection is prevented, so the dropdown does NOT close and the row
-        // is still there to be hit again in the same tick.
-        row().trigger("mouseenter");
-        picker.trigger("results:select", {});
-        picker.trigger("results:select", {});
-        picker.trigger("results:select", {});
+        // The button removes itself on activation, so a second dispatch in
+        // the same tick has nothing left to hit.
+        btn().trigger("click");
+        btn().trigger("click");
+        btn().trigger("click");
         jest.advanceTimersByTime(1);
 
         expect(entered).toBe(1);
@@ -498,19 +768,14 @@ describe("company-search manual-entry affordance", () => {
 
     test("the real company field is cleared, not just the display one", () => {
       jest.useFakeTimers();
-      const $select = openWithAffordance();
-      const picker = $select.data("select2");
-      // What a completed pick leaves behind.
+      openWithAffordance();
       $("#billing_company").val("Previously Picked Ltd");
       $("#company_id").val("11111111");
 
       type("abc");
-      row().trigger("mouseenter");
-      picker.trigger("results:select", {});
+      activate();
       jest.advanceTimersByTime(1);
 
-      // Otherwise the manual field the buyer is about to see is pre-filled with
-      // the company they just said is not theirs, next to an empty org number.
       expect($("#billing_company").val()).toBe("");
       expect($("#company_id").val()).toBe("");
       jest.useRealTimers();
@@ -519,10 +784,6 @@ describe("company-search manual-entry affordance", () => {
     /**
      * Add the address inputs `setAddress` writes to, prefilled the way an
      * address lookup for a picked company leaves them.
-     *
-     * They are created here rather than in the shared form because `.val()` on
-     * an empty set is a silent no-op: if the fields were absent, a "cleared"
-     * assertion would read undefined and could never fail.
      *
      * @returns {void}
      */
@@ -535,61 +796,35 @@ describe("company-search manual-entry affordance", () => {
           "<input type='text' id='billing_postcode' value='0001' />"
         ].join("\n")
       );
-      // The precondition, asserted rather than assumed — see above.
       expect($("#billing_address_1").val()).toBe("Registry Street 1");
-      expect($("#billing_address_2").val()).toBe("Flat 2");
-      expect($("#billing_city").val()).toBe("Registryville");
-      expect($("#billing_postcode").val()).toBe("0001");
     }
 
     test("the disowned company's registry address does not survive into the order", () => {
       jest.useFakeTimers();
-      const $select = openWithAffordance();
-      const picker = $select.data("select2");
+      openWithAffordance();
       givenLookedUpAddress();
-
-      // The gate reads this flag, not `#company_id` (see the comment at the
-      // clear site): `#company_id` is also written by account-restore and
-      // sole-trader code with no lookup behind it, and stays empty for a
-      // picked company with no organisation number even though its lookup DID
-      // run — so faking a pick via `#company_id` would prove the wrong thing.
-      // The flag's own producer (`addressLookup`'s success branch) is
-      // exercised separately below.
       ctx.Twoinc.getInstance().registryAddressApplied = true;
 
       type("abc");
-      row().trigger("mouseenter");
-      picker.trigger("results:select", {});
+      activate();
       jest.advanceTimersByTime(1);
 
-      // Otherwise the order ships to the address of the company the buyer has
-      // just said is not theirs, in fields they never visibly touched.
       expect($("#billing_address_1").val()).toBe("");
       expect($("#billing_address_2").val()).toBe("");
       expect($("#billing_city").val()).toBe("");
       expect($("#billing_postcode").val()).toBe("");
-      // And the flag itself is consumed, not left set for the next entry.
       expect(ctx.Twoinc.getInstance().registryAddressApplied).toBe(false);
       jest.useRealTimers();
     });
 
-    test("the address is left alone when the row is reached without ever picking a company", () => {
-      // The ordinary path: type to the threshold, see nothing you like, click
-      // "not on the list". No pick, so no lookup ever ran — clearing the
-      // address here would wipe the buyer's own account-prefilled address for
-      // no reason. This is the scenario an unconditional clear, or a clear
-      // gated on `#company_id` alone, gets wrong: a logged-in buyer can have
-      // `#company_id` prefilled by account-restore with no lookup behind it.
+    test("the address is left alone when the button is reached without ever picking a company", () => {
       jest.useFakeTimers();
-      const $select = openWithAffordance();
-      const picker = $select.data("select2");
+      openWithAffordance();
       givenLookedUpAddress();
       $("#company_id").val("11111111"); // account-restored, not a fresh pick
-      // registryAddressApplied deliberately left false — no lookup ran.
 
       type("abc");
-      row().trigger("mouseenter");
-      picker.trigger("results:select", {});
+      activate();
       jest.advanceTimersByTime(1);
 
       expect($("#billing_address_1").val()).toBe("Registry Street 1");
@@ -599,85 +834,16 @@ describe("company-search manual-entry affordance", () => {
       jest.useRealTimers();
     });
 
-    test("a picked company with no organisation number still has its looked-up address cleared", () => {
-      // A company hit can carry no organisation number at all (optional
-      // field) and still have had a real address lookup run for it — the
-      // lookup is keyed off `lookup_id`, not the org number. Gating on
-      // `#company_id` being non-empty would let this case through; gating on
-      // the flag does not.
-      jest.useFakeTimers();
-      const $select = openWithAffordance();
-      const picker = $select.data("select2");
-      givenLookedUpAddress();
-      $("#company_id").val(""); // the org-number-less pick, as it lands in the DOM
-      ctx.Twoinc.getInstance().registryAddressApplied = true;
-
-      type("abc");
-      row().trigger("mouseenter");
-      picker.trigger("results:select", {});
-      jest.advanceTimersByTime(1);
-
-      expect($("#billing_address_1").val()).toBe("");
-      expect($("#billing_address_2").val()).toBe("");
-      expect($("#billing_city").val()).toBe("");
-      expect($("#billing_postcode").val()).toBe("");
-      jest.useRealTimers();
-    });
-
-    test("addressLookup sets the flag only on a successful response with addresses", () => {
-      // Closes the coupling gap: everything above sets/reads the flag
-      // directly, so nothing proves `addressLookup` itself is the flag's real
-      // producer. Drive it through a picked select2:select the way
-      // `enableCompanySearch` wires it, with a stubbed ajax response.
-      $("form[name='checkout']").append(
-        [
-          "<input type='text' id='billing_address_1' />",
-          "<input type='text' id='billing_address_2' />",
-          "<input type='text' id='billing_city' />",
-          "<input type='text' id='billing_postcode' />"
-        ].join("\n")
-      );
-      const ajax = harness.stubAjax($);
-      const twoinc = ctx.Twoinc.getInstance();
-      expect(twoinc.registryAddressApplied).toBe(false);
-
-      twoinc.addressLookup({ lookup_id: "lookup-1" });
-      expect(twoinc.registryAddressApplied).toBe(false); // not yet — pending
-
-      ajax.calls[0].succeed({
-        addresses: [
-          { street_address: "Registry Street 1", city: "Registryville", postal_code: "0001" }
-        ]
-      });
-
-      expect(twoinc.registryAddressApplied).toBe(true);
-      expect($("#billing_address_1").val()).toBe("Registry Street 1");
-
-      // A response carrying no `addresses` key at all (the lookup found
-      // nothing) must not falsely arm the flag.
-      twoinc.registryAddressApplied = false;
-      twoinc.addressLookup({ lookup_id: "lookup-2" });
-      ajax.calls[1].succeed({});
-      expect(twoinc.registryAddressApplied).toBe(false);
-
-      ajax.restore();
-    });
-
     test("the display select's own value is cleared, not just hidden", () => {
       jest.useFakeTimers();
-      // A completed pick leaves the picked option selected on the underlying
-      // <select>, and select2("destroy") does not touch it. Left behind, the
-      // combobox re-appears showing the company the buyer just disowned.
       $("#billing_company_display").append(
         '<option value="ACME Widgets Ltd" selected>ACME Widgets Ltd</option>'
       );
-      const $select = openWithAffordance();
-      const picker = $select.data("select2");
+      openWithAffordance();
       expect($("#billing_company_display").val()).toBe("ACME Widgets Ltd");
 
       type("abc");
-      row().trigger("mouseenter");
-      picker.trigger("results:select", {});
+      activate();
       jest.advanceTimersByTime(1);
 
       expect($("#billing_company_display").val()).toBe("");
@@ -692,15 +858,11 @@ describe("company-search manual-entry affordance", () => {
       activate();
       jest.advanceTimersByTime(1);
 
-      // What the buyer typed by hand while in manual entry.
       $("#billing_company").val("Hand Typed Ltd");
       $("#company_id").val("99999999");
 
       ctx.dom.exitManualCompanyEntry();
 
-      // Left behind, the org number sits on a field the buyer can no longer
-      // see, passes the non-empty guard on the PHP side, and reaches the order
-      // while the combobox shows nothing selected.
       expect($("#billing_company").val()).toBe("");
       expect($("#company_id").val()).toBe("");
       jest.useRealTimers();
@@ -712,8 +874,12 @@ describe("company-search manual-entry affordance", () => {
       const $back = ctx.dom.getSearchCompanyBtnNode();
 
       expect($back[0].style.display).toBe("none");
-      // In place, not floating: it belongs beside the manual company field.
-      expect($back.parent().attr("id")).toBe("billing_company_field");
+      // In place, not floating: it belongs beside the manual company field —
+      // specifically inside .woocommerce-input-wrapper (round 3, #30.x.5.3),
+      // not directly on #billing_company_field, so CSS can centre it against
+      // the visible input box rather than the field's label+input combined.
+      expect($back.parent().hasClass("woocommerce-input-wrapper")).toBe(true);
+      expect($back.closest("#billing_company_field").length).toBe(1);
     });
 
     test("leaving manual entry hides the way back out again", () => {
@@ -750,6 +916,139 @@ describe("company-search manual-entry affordance", () => {
     });
   });
 
+  describe("focus visibility and Enter/Space activation on the way back out (#30.x.7, round 4)", () => {
+    /**
+     * The stylesheet source, read fresh per test. Textual assertion against
+     * the shipped rule, not a jsdom-rendered one — same reasoning as the
+     * uppercase-override tests above: jsdom does not reliably resolve
+     * `!important` + specificity across separate `<style>` sheets, and this
+     * repo's own harness only ever loads one stylesheet at a time anyway
+     * (nothing here would exercise a real host-theme collision).
+     *
+     * @returns {string} the raw CSS
+     */
+    function stylesheetSource() {
+      return fs.readFileSync(path.join(harness.REPO_ROOT, harness.STYLESHEET_PATH), "utf8");
+    }
+
+    test("#search_company_btn reserves a dotted border up front, transparent until focused", () => {
+      // Reported live: tabbing out of the manual-entry "Company name" field
+      // lands focus on this button with nothing visible marking it. The
+      // button carried no host-supplied focus styling of its own, and a
+      // host theme's own button-focus reset can silently remove the browser
+      // default with nothing in this stylesheet to fall back on.
+      //
+      // Round 4 shipped an outline here; Doug found it ~4px wider than the
+      // button's own padding and inconsistent with this checkout's other
+      // focus states, and asked for a plain dotted rectangle with square
+      // corners instead — a border, not an outline. Round 5. The border's
+      // WIDTH and STYLE are reserved in the base (non-focus) rule, not just
+      // on :focus, specifically so gaining/losing focus never changes the
+      // button's box size (a border occupies box space, unlike outline) —
+      // :focus only ever flips the colour.
+      const base = /^#search_company_btn\s*\{([^}]*)\}/m.exec(stylesheetSource());
+      expect(base).not.toBeNull();
+      expect(base[1]).toMatch(/border:\s*1px\s+dotted\s+transparent/);
+    });
+
+    test("#search_company_btn:focus declares an explicit, !important border colour", () => {
+      const m = /#search_company_btn:focus\s*\{([^}]*)\}/m.exec(stylesheetSource());
+      expect(m).not.toBeNull();
+      expect(m[1]).toMatch(/border-color:\s*#808080\s*!important/);
+    });
+
+    test("#search_company_btn declares explicit, tight padding (round 5)", () => {
+      // The button previously relied on the browser's own default <button>
+      // padding, which is what made round 4's outline read as oversized
+      // relative to the visible text — the outline sat `outline-offset`
+      // away from a box that was already bigger than the text needed. The
+      // round-5 border sits flush against the box instead, so the box
+      // itself has to be sized close to the text for the border to look
+      // right — hence the explicit, tight `0 2px`.
+      const m = /^#search_company_btn\s*\{([^}]*)\}/m.exec(stylesheetSource());
+      expect(m).not.toBeNull();
+      expect(m[1]).toMatch(/padding:\s*0\s+2px/);
+    });
+
+    test("Enter activates the button and switches back to search", () => {
+      // Found live: Tab reaches this real <button> fine, but Enter/Space,
+      // pressed while it has focus, did nothing — it never relies on the
+      // browser's native "activate a focused <button>" default action here,
+      // unlike #company_not_in_btn's Tab handling (round 3, #30.x.6), because
+      // the interference cannot be selectWoo (its widget is destroyed before
+      // this button is ever shown — see enterManualCompanyEntry) and is
+      // therefore some other, unenumerable external script (most likely
+      // WooCommerce core's own checkout.js guarding the whole form against a
+      // premature submit on Enter — UNCONFIRMED, see the production comment
+      // in getSearchCompanyBtnNode for the caveat). getSearchCompanyBtnNode
+      // now binds a keydown handler directly on the element itself, which
+      // the DOM's own target-then-bubble dispatch order guarantees runs
+      // before any bubble-phase ancestor handler regardless of where that
+      // handler lives or when it was registered.
+      //
+      // The production handler doesn't gate on focus at all (it's bound
+      // unconditionally on the element), so `.focus()` below isn't
+      // load-bearing for this assertion — it's here to mirror how a buyer
+      // actually reaches this keydown (Tab lands them here first).
+      jest.useFakeTimers();
+      openWithAffordance();
+      type("abc");
+      activate();
+      jest.advanceTimersByTime(1);
+
+      const $searchBtn = ctx.dom.getSearchCompanyBtnNode();
+      $searchBtn.get(0).focus();
+
+      const e = jQuery.Event("keydown", { which: 13 });
+      $searchBtn.trigger(e);
+
+      expect(e.isDefaultPrevented()).toBe(true);
+      expect(ctx.twoinc.enable_company_search).toBe("yes");
+      jest.useRealTimers();
+    });
+
+    test("Space activates the button and switches back to search", () => {
+      jest.useFakeTimers();
+      openWithAffordance();
+      type("abc");
+      activate();
+      jest.advanceTimersByTime(1);
+
+      const $searchBtn = ctx.dom.getSearchCompanyBtnNode();
+      $searchBtn.get(0).focus();
+
+      const e = jQuery.Event("keydown", { which: 32 });
+      $searchBtn.trigger(e);
+
+      expect(e.isDefaultPrevented()).toBe(true);
+      expect(ctx.twoinc.enable_company_search).toBe("yes");
+      jest.useRealTimers();
+    });
+
+    test("other keys do not activate it (selectivity guard, not proof of the fix on its own)", () => {
+      // This asserts the handler is selective (which === 13/32 only) — it
+      // would pass identically even with the whole round-4 handler deleted,
+      // so it's a guard against an over-broad handler, not evidence the
+      // Enter/Space fix exists. The two tests above are what actually break
+      // on a revert.
+      jest.useFakeTimers();
+      openWithAffordance();
+      type("abc");
+      activate();
+      jest.advanceTimersByTime(1);
+
+      const $searchBtn = ctx.dom.getSearchCompanyBtnNode();
+      $searchBtn.get(0).focus();
+
+      const e = jQuery.Event("keydown", { which: 65 }); // "A"
+      $searchBtn.trigger(e);
+
+      expect(e.isDefaultPrevented()).toBe(false);
+      expect(ctx.twoinc.enable_company_search).toBe("no");
+      jest.useRealTimers();
+    });
+  });
+
   describe("handlers are bound once, not once per dropdown open", () => {
     /** @returns {number} how many namespaced input handlers <body> carries */
     function inputHandlerCount() {
@@ -772,15 +1071,14 @@ describe("company-search manual-entry affordance", () => {
       expect(inputHandlerCount()).toBe(1);
     });
 
-    test("one keystroke appends one row, not one per bind", () => {
-      const $select = openWithAffordance();
+    test("one keystroke produces one button, not one per bind", () => {
+      openWithAffordance();
       helper.bindManualEntryAffordance();
       helper.bindManualEntryAffordance();
 
       type("abc");
 
-      expect(row().length).toBe(1);
-      expect(resultsList().children("li[id]").length).toBe(1);
+      expect(btn().length).toBe(1);
     });
 
     test("the handler exists before the dropdown's field does", () => {
@@ -797,7 +1095,7 @@ describe("company-search manual-entry affordance", () => {
       $select.select2("open");
       type("abc");
 
-      expect(row().length).toBe(1);
+      expect(btn().length).toBe(1);
     });
   });
 
@@ -808,12 +1106,10 @@ describe("company-search manual-entry affordance", () => {
 
     test("entering manual entry focuses the field the buyer asked for", () => {
       jest.useFakeTimers();
-      const $select = openWithAffordance();
-      const picker = $select.data("select2");
+      openWithAffordance();
 
       type("abc");
-      row().trigger("mouseenter");
-      picker.trigger("results:select", {});
+      activate();
       jest.advanceTimersByTime(1);
 
       // Destroying the widget leaves activeElement on <body>, which means a
@@ -824,169 +1120,31 @@ describe("company-search manual-entry affordance", () => {
 
     test("leaving manual entry does not strand focus on the hidden button", () => {
       jest.useFakeTimers();
-      const $select = openWithAffordance();
-      const picker = $select.data("select2");
+      openWithAffordance();
       type("abc");
-      row().trigger("mouseenter");
-      picker.trigger("results:select", {});
+      activate();
       jest.advanceTimersByTime(1);
       jest.useRealTimers();
 
       ctx.dom.exitManualCompanyEntry();
 
-      // Whatever it lands on, it must not be the button that was just hidden,
-      // and it must not be nothing.
       expect(document.activeElement).not.toBe($("#" + helper.searchCompanyBtnId)[0]);
       expect(document.activeElement).not.toBe(document.body);
     });
 
     test("focusing a field that is not there reports failure rather than lying", () => {
-      // Both callers run on a surface that may not render the field. A bare
-      // .focus() on an empty jQuery set is a silent no-op that reads as success.
       expect(ctx.dom.focusVisibleCompanyField("#no_such_field_at_all")).toBe(false);
       expect(ctx.dom.focusVisibleCompanyField("#billing_company")).toBe(true);
     });
 
     test("a disabled field reports failure rather than lying", () => {
-      // A disabled input cannot take focus, so `.focus()` on it is the same
-      // silent no-op as an empty set. The caller uses the return value to
-      // decide whether to try its fallback target, so the distinction has to
-      // be real.
-      //
-      // What this pins is the CONTRACT, not one line of it. The `disabled`
-      // clause and the activeElement check are two independent mechanisms that
-      // both produce `false` here, so removing either one alone leaves this
-      // green (verified by mutation); removing both turns it red. The clause is
-      // kept as the explicit one because it also stops `.trigger("focus")`
-      // running focus handlers on a field the buyer cannot reach.
       $("#billing_company").prop("disabled", true);
 
       expect(ctx.dom.focusVisibleCompanyField("#billing_company")).toBe(false);
       expect(document.activeElement).not.toBe($("#billing_company")[0]);
 
-      // Live probe: the same call on the same field succeeds once enabled, so
-      // the false above is the guard firing and not a broken selector.
       $("#billing_company").prop("disabled", false);
       expect(ctx.dom.focusVisibleCompanyField("#billing_company")).toBe(true);
-    });
-  });
-
-  describe("one handler and one observer, across every re-bind", () => {
-    /** @returns {number} namespaced pre-select handlers on the select */
-    function selectingHandlerCount($select) {
-      const events = $._data($select[0], "events");
-      const bucket = events && events["select2:selecting"];
-      if (!bucket) return 0;
-      return bucket.filter((h) => h.namespace === "twoincManualEntry").length;
-    }
-
-    test("still one pre-select handler after several re-binds", () => {
-      // A duplicate here fires the whole manual-entry switch twice per
-      // activation. The body-input counter next door does not see this handler
-      // at all — it lives on the select.
-      const $select = openWithAffordance();
-
-      expect(selectingHandlerCount($select)).toBe(1);
-
-      helper.bindManualEntryAffordance();
-      helper.bindManualEntryAffordance();
-      helper.bindManualEntryAffordance();
-
-      expect(selectingHandlerCount($select)).toBe(1);
-    });
-
-    /**
-     * Record every MutationObserver, keyed on what it ends up observing.
-     *
-     * Filtering by target is not tidying: the widget constructs a
-     * MutationObserver of its OWN inside `_registerDomEvents`, one per widget.
-     * A test that merely counts constructions counts the library's too, so it
-     * reads 2 when the plugin made 1 and 3 when it made 1 — it fails for a
-     * reason that has nothing to do with this code.
-     *
-     * @returns {{on: Function, restore: Function}}
-     */
-    function observerSpy() {
-      const real = global.MutationObserver;
-      const records = [];
-      global.MutationObserver = function (cb) {
-        const observer = new real(cb);
-        const record = { target: null, disconnected: false };
-        const observe = observer.observe.bind(observer);
-        const disconnect = observer.disconnect.bind(observer);
-        observer.observe = function (node, opts) {
-          record.target = node;
-          return observe(node, opts);
-        };
-        observer.disconnect = function () {
-          record.disconnected = true;
-          return disconnect();
-        };
-        records.push(record);
-        return observer;
-      };
-      return {
-        /** @returns {Array} records whose observed node is `node` */
-        on: function (node) {
-          return records.filter((r) => r.target === node);
-        },
-        restore: function () {
-          global.MutationObserver = real;
-        }
-      };
-    }
-
-    test("still one observer on the results list after several re-binds", () => {
-      const spy = observerSpy();
-      try {
-        const $select = openWithAffordance();
-        const list = resultsList()[0];
-
-        helper.bindManualEntryAffordance();
-        helper.bindManualEntryAffordance();
-        // Several keystrokes, not one. The watcher is installed from the
-        // per-keystroke sync — that is what makes a re-created widget heal
-        // itself — so a single keystroke cannot tell "installed once" from
-        // "re-installed on every character". Without the per-node guard this
-        // churns one observer per keystroke.
-        type("abc");
-        type("abcd");
-        type("abcde");
-        type("abcdef");
-
-        const mine = spy.on(list);
-        expect(mine.length).toBe(1);
-        expect(mine.filter((o) => !o.disconnected).length).toBe(1);
-      } finally {
-        spy.restore();
-      }
-    });
-
-    test("a replacement results list gets the observer, the old one is released", () => {
-      const spy = observerSpy();
-      try {
-        const $select = openWithAffordance();
-        const firstList = resultsList()[0];
-        type("abc");
-        expect(spy.on(firstList).length).toBe(1);
-
-        // What clearing the selected company does: a brand-new widget, and so a
-        // brand-new results list.
-        $select.select2("destroy");
-        $select.html("");
-        $select.selectWoo(helper.genSelectWooParams());
-        $select.select2("open");
-        type("abc");
-
-        const secondList = resultsList()[0];
-        expect(secondList).not.toBe(firstList);
-        expect(spy.on(secondList).length).toBe(1);
-        // The old one was let go rather than left watching a detached node for
-        // the life of the page.
-        expect(spy.on(firstList)[0].disconnected).toBe(true);
-      } finally {
-        spy.restore();
-      }
     });
   });
 
@@ -995,10 +1153,10 @@ describe("company-search manual-entry affordance", () => {
       ctx.Twoinc.getInstance();
     });
 
-    test("the row survives clearing the selected company", () => {
+    test("the button survives clearing the selected company", () => {
       const $select = openWithAffordance();
       type("abc");
-      expect(row().length).toBe(1);
+      expect(btn().length).toBe(1);
 
       // The real gesture: the × on the floating company id. It re-creates the
       // widget and knows nothing about this affordance, so nothing re-binds.
@@ -1006,30 +1164,10 @@ describe("company-search manual-entry affordance", () => {
       $select.select2("open");
 
       type("abc");
-      expect(row().length).toBe(1);
-
-      // And it must SURVIVE the next render, which is the part that used to
-      // break: the delegated input handler still appended the row, then the
-      // first result set wiped it and no observer put it back.
-      const picker = $("#billing_company_display").data("select2");
-      picker.trigger("results:all", {
-        data: { results: [{ id: "A company", text: "A company", html: "A company" }] },
-        query: { term: "abc" }
-      });
-
-      return Promise.resolve().then(() => {
-        expect(row().length).toBe(1);
-        expect(resultsList().children().last().attr("id")).toBe(helper.manualEntryRowId);
-      });
+      expect(btn().length).toBe(1);
     });
 
     test("clearing the selected company resets the registry-address flag", () => {
-      // Without this, the × button leaves the flag stale true after already
-      // blanking the address: pick a company (flag true, address written),
-      // click ×, type your OWN address into the now-empty fields, then click
-      // "not on the list" — enterManualCompanyEntry sees the stale flag and
-      // wipes what you just typed. The same false-positive round 2 fixed,
-      // resurfacing through this path if the reset here ever regresses.
       const twoinc = ctx.Twoinc.getInstance();
       twoinc.registryAddressApplied = true;
 
@@ -1046,26 +1184,19 @@ describe("company-search manual-entry affordance", () => {
 
     test("manual entry survives a trip through sole trader and back", () => {
       jest.useFakeTimers();
-      const $select = openWithAffordance();
-      const picker = $select.data("select2");
+      openWithAffordance();
 
       type("abc");
-      row().trigger("mouseenter");
-      picker.trigger("results:select", {});
+      activate();
       jest.advanceTimersByTime(1);
       jest.useRealTimers();
       expect(ctx.twoinc.enable_company_search).toBe("no");
 
-      // Sole trader snapshots the CURRENT setting — which manual entry has just
-      // written as "no" — and business mode restores that snapshot, so the
-      // re-enable path early-returns and the picker never comes back.
       ctx.soleTrader.setMode("sole_trader");
       expect($("#" + helper.searchCompanyBtnId)[0].style.display).toBe("none");
 
       ctx.soleTrader.setMode("business");
 
-      // Without a route back the buyer is stranded in manual entry with no way
-      // to reach the picker again.
       expect(ctx.twoinc.enable_company_search).toBe("no");
       expect($("#" + helper.searchCompanyBtnId)[0].style.display).not.toBe("none");
     });
@@ -1083,21 +1214,17 @@ describe("company-search manual-entry affordance", () => {
     }
 
     /**
-     * Enter manual entry through the row, the way a buyer does.
+     * Enter manual entry through the button, the way a buyer does.
      *
      * @returns {void}
      */
     function enterManualEntry() {
       jest.useFakeTimers();
-      const $select = openWithAffordance();
-      const picker = $select.data("select2");
+      openWithAffordance();
       type("abc");
-      row().trigger("mouseenter");
-      picker.trigger("results:select", {});
+      activate();
       jest.advanceTimersByTime(1);
       jest.useRealTimers();
-      // Guard: the widget really is gone, so "open" below cannot be the
-      // dropdown that was already open before the round trip.
       expect($("#billing_company_display").data("select2")).toBeUndefined();
     }
 
@@ -1106,8 +1233,6 @@ describe("company-search manual-entry affordance", () => {
 
       ctx.dom.exitManualCompanyEntry();
 
-      // The picker's own open state, read off the DOM it renders — a closed
-      // picker carries neither.
       expect(container().hasClass("select2-container--open")).toBe(true);
       expect($("#select2-billing_company_display-results").length).toBe(1);
     });
@@ -1120,23 +1245,20 @@ describe("company-search manual-entry affordance", () => {
       const input = searchInput();
       expect(input.length).toBe(1);
       expect(document.activeElement).toBe(input[0]);
-      // The pre-fix behaviour: focus parked on the combobox, so the buyer had
-      // to click a second time to get a search box at all.
       expect(document.activeElement).not.toBe(
         $("#billing_company_display_field .select2-selection")[0]
       );
       expect(document.activeElement).not.toBe(document.body);
     });
 
-    test("the buyer can type straight away and the row comes back", () => {
+    test("the buyer can type straight away and the button comes back", () => {
       enterManualEntry();
 
       ctx.dom.exitManualCompanyEntry();
 
-      // No second click anywhere: type into whatever now has focus.
       $(document.activeElement).val("abc").trigger("input");
 
-      expect(row().length).toBe(1);
+      expect(btn().length).toBe(1);
     });
 
     test("opening an already-open dropdown is a no-op, not a second dropdown", () => {
@@ -1151,11 +1273,6 @@ describe("company-search manual-entry affordance", () => {
     });
 
     test("a focus that fails does not drag focus back onto the collapsed combobox", () => {
-      // The mixed state: dropdown expanded, focus parked on the collapsed
-      // combobox in front of it, so the buyer's keystrokes go nowhere the open
-      // list can see. The fallback chain must be reachable ONLY when no
-      // dropdown was opened, which is why the helper reports "opened" rather
-      // than "focused".
       enterManualEntry();
       const realFocus = ctx.dom.focusVisibleCompanyField;
       jest.spyOn(ctx.dom, "focusVisibleCompanyField").mockImplementation((selector) => {
@@ -1172,9 +1289,6 @@ describe("company-search manual-entry affordance", () => {
     });
 
     test("no picker attached reports failure rather than lying", () => {
-      // The guard the fallback path depends on. A bare select2("open") on a
-      // select with no widget throws, and reporting success would skip the
-      // fallback focus entirely.
       harness.releaseWidgets($);
 
       expect(ctx.dom.openCompanySearchDropdown()).toBe(false);
@@ -1189,39 +1303,27 @@ describe("company-search manual-entry affordance", () => {
 
   describe("the pay-for-order surface", () => {
     test("the affordance needs no template markup on the page", () => {
-      // The billing-form view that used to carry these two nodes is rendered on
-      // the checkout page only. Nothing here renders it, and the row and the
-      // link back are still built.
       jest.useFakeTimers();
       expect($(".company_not_in_btn").length).toBe(0);
       expect($("#" + helper.searchCompanyBtnId).length).toBe(0);
       ctx.Twoinc.getInstance();
 
-      const $select = openWithAffordance();
+      openWithAffordance();
       type("abc");
-      expect(row().length).toBe(1);
+      expect(btn().length).toBe(1);
 
-      const picker = $select.data("select2");
-      row().trigger("mouseenter");
-      picker.trigger("results:select", {});
+      activate();
       jest.advanceTimersByTime(1);
 
       expect($("#" + helper.searchCompanyBtnId).length).toBe(1);
       jest.useRealTimers();
     });
 
-    // All three, not just one: dropping #company_id_field from the selector
-    // leaves the buyer a name box and nowhere to type the org number — the
-    // exact failure the function exists to prevent — and dropping
-    // #billing_company_display_field strands the way back to the picker.
     test.each([
       ["#billing_company_display_field"],
       ["#billing_company_field"],
       ["#company_id_field"]
     ])("%s's wrapper follows the field's own visibility", (fieldSelector) => {
-      // The pay-for-order page wraps each company input in a container with
-      // its own hidden state. Revealing the field alone leaves manual entry
-      // with nothing visible, so the wrapper has to follow.
       $(fieldSelector).wrap('<div class="twoinc-inp-container hidden"></div>');
       $(fieldSelector).addClass("hidden");
 

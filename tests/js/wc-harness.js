@@ -212,8 +212,19 @@ function buildCheckoutForm(options) {
       companyOptions +
       "</select>",
     "  </p>",
+    // Label + .woocommerce-input-wrapper mirror WooCommerce core's own
+    // woocommerce_form_field() markup (round 3, #30.x.5.3): the field <p>
+    // wraps BOTH the label and the input, but only .woocommerce-input-wrapper
+    // bounds the input itself. getSearchCompanyBtnNode() appends the "Search
+    // for company" button into the wrapper specifically so it can be
+    // vertically centred against the visible input box rather than the
+    // label+input combined — a fixture missing this wrapper would let that
+    // regress silently back to appending on #billing_company_field directly.
     '  <p id="billing_company_field">',
-    "    <input type='text' id='billing_company' name='billing_company' value='' />",
+    '    <label for="billing_company">Company name</label>',
+    '    <span class="woocommerce-input-wrapper">',
+    "      <input type='text' id='billing_company' name='billing_company' value='' />",
+    "    </span>",
     "  </p>",
     // The real checkout declares this alongside billing_company (both hidden
     // behind the search field). Manual entry writes to it, and the link back

@@ -183,7 +183,7 @@ function wc_twoinc_add_to_gateways($gateways)
  */
 function wc_twoinc_enqueue_styles()
 {
-    wp_enqueue_style('twoinc-payment-gateway-css', WC_TWOINC_PLUGIN_URL . '/assets/css/twoinc.css', false, get_twoinc_plugin_version());
+    wp_enqueue_style('twoinc-payment-gateway-css', WC_TWOINC_PLUGIN_URL . '/assets/css/twoinc.css', false, twoinc_get_asset_version('assets/css/twoinc.css'));
 }
 
 /**
@@ -191,7 +191,7 @@ function wc_twoinc_enqueue_styles()
  */
 function wc_twoinc_enqueue_scripts()
 {
-    wp_enqueue_script('twoinc-payment-gateway-js', WC_TWOINC_PLUGIN_URL . '/assets/js/twoinc.js', ['jquery'], get_twoinc_plugin_version());
+    wp_enqueue_script('twoinc-payment-gateway-js', WC_TWOINC_PLUGIN_URL . '/assets/js/twoinc.js', ['jquery'], twoinc_get_asset_version('assets/js/twoinc.js'));
 }
 
 /**
@@ -275,6 +275,29 @@ function get_twoinc_plugin_version()
 
     $plugin_data = get_plugin_data(__FILE__);
     return $plugin_data['Version'];
+}
+
+/**
+ * Cache-busting version for a single enqueued asset.
+ *
+ * The plugin version string only changes on a deliberate version bump, so an
+ * asset deployed between bumps keeps the same `?ver=` query arg — CDNs and
+ * browsers then keep serving the stale cached file after a deploy. Keying
+ * the version to the asset's own last-modified time changes the URL on every
+ * deploy that touches that file, busting both layers of cache automatically.
+ *
+ * Falls back to the plugin version if the file can't be stat'd (moved/
+ * missing asset, restrictive filesystem) so enqueuing never emits a PHP
+ * warning or an empty version argument.
+ *
+ * @param string $relative_path Asset path relative to the plugin root, e.g. 'assets/js/twoinc.js'.
+ */
+function twoinc_get_asset_version($relative_path)
+{
+    $path = WC_TWOINC_PLUGIN_PATH . ltrim($relative_path, '/');
+    $mtime = file_exists($path) ? @filemtime($path) : false;
+
+    return $mtime !== false ? (string) $mtime : get_twoinc_plugin_version();
 }
 
 /**

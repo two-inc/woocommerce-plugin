@@ -106,30 +106,14 @@ let twoincSelectWooHelper = {
   companySearchInputSelector: 'input[aria-owns="select2-billing_company_display-results"]',
 
   /**
-   * DOM id of the manual-entry pseudo-option (TWO-25288). Unchanged from when
-   * this was a cloned <div> so the stylesheet rule and the brand overlays that
-   * match it keep working.
+   * DOM id of the manual-entry button. Unchanged across TWO-25288 (the
+   * cloned-<div> version) and the button rework below, so the stylesheet
+   * rule and any brand overlays that match it keep working.
    */
   manualEntryRowId: "company_not_in_btn",
 
   /** DOM id of the link back out of manual entry and into search. */
   searchCompanyBtnId: "search_company_btn",
-
-  /**
-   * The `id` on the manual-entry row's payload object (TWO-25288).
-   *
-   * It has to be an id and not a flag: the picker stringifies every navigable
-   * row's `data.id` when it recomputes selected state, so a row without one
-   * throws and takes the whole results render with it.
-   *
-   * `processResults` below maps each hit's id to the company NAME, so this
-   * value shares a namespace with company names and the underscores are there
-   * to keep it out of the way. That is a convention, NOT an enforced
-   * invariant — nothing rejects a registry name that happened to equal it, and
-   * no test claims otherwise. If that ever needs to be a guarantee, the
-   * discriminator has to move off `id` onto a field of its own.
-   */
-  manualEntrySentinelId: "__twoinc_manual_entry__",
 
   /**
    * Text for a company search that could not be completed. Read lazily
@@ -205,97 +189,88 @@ let twoincSelectWooHelper = {
   },
 
   /**
-   * Build the manual-entry row as a real pseudo-option (TWO-25288).
+   * Build the manual-entry affordance as a real, focusable button (#30.x.1,
+   * #30.x.2, #30.x.3).
    *
-   * This used to be a cloned <div> appended to the results list's PARENT, i.e.
-   * outside the subtree the field's aria-owns points at — so it had no role,
-   * no id, no payload, and was not reachable by keyboard at all. It is a
-   * genuine option row now, which is what makes it arrow-reachable and
-   * announced without a bespoke keydown bridge.
+   * TWO-25288 made this a pseudo-option `<li role="option">` living INSIDE
+   * `.select2-results__options` so it would be arrow-reachable and announced.
+   * That traded one accessibility gap for two others:
    *
-   * This mirrors, attribute for attribute, what the picker's own option
-   * factory produces for a real result row. Three of them are load-bearing:
+   *  - `.select2-results__options` is exactly the element select2/selectWoo
+   *    apply their own scroll-and-clip to, so the row was only visible if the
+   *    buyer scrolled past however many results came back, and the ONLY way
+   *    to reach it by keyboard was arrowing down through every one of them —
+   *    it carried `tabindex="-1"`, deliberately excluded from the normal Tab
+   *    sequence, on purpose, to match the listbox pattern.
+   *  - selectWoo's own result-row activation binds on plain `mouseup` with no
+   *    button check at all (`Results.prototype.bind`), so a RIGHT click
+   *    activated the row exactly like a left click — true of every real
+   *    result row too, but only this one was ours to fix.
    *
-   *  - `data-selected` is how the picker derives its navigable set, and it must
-   *    stay "false". "true" means "already picked", and the picker routes
-   *    activation of an already-picked row to closing the dropdown instead of
-   *    selecting it — the row would look reachable and do nothing.
-   *  - `tabindex="-1"` makes the row programmatically focusable. On every arrow
-   *    keypress the picker calls `.focus()` on the highlighted row, and its own
-   *    source says that is required for screen readers to work. An <li> with no
-   *    tabindex cannot take focus, so that call is a silent no-op and focus
-   *    stays stranded on the PREVIOUS row while this one is visually
-   *    highlighted — the reader keeps announcing the wrong thing.
-   *  - the payload goes on with jQuery `data`, which is where the picker reads
-   *    each row's data from, and it must carry `_resultId` matching the li's
-   *    id: that is what the picker copies into `aria-activedescendant`, on both
-   *    the dropdown's search field and the selection container. Without it the
-   *    row is reachable but silent.
+   * A real `<button>` fixes both: native Tab order, native Enter/Space
+   * activation, and a native `click` event that only ever fires for the
+   * primary mouse button — no bespoke keydown bridge and no button check to
+   * hand-roll.
    *
-   * `select2-results__option--selectable` is belt-and-braces only. The bundle
-   * pinned here never reads it — it is a select2 4.1 concept, and that string
-   * does not occur anywhere in this build. It costs nothing and keeps the row
-   * navigable if a host platform ever swaps the picker for one that keys off
-   * the class instead of the attribute. Do not describe it as required.
-   *
-   * @returns {Object} jQuery-wrapped <li>
+   * @returns {Object} jQuery-wrapped <button>
    */
-  buildManualEntryRow: function () {
+  buildManualEntryButton: function () {
     const helper = twoincSelectWooHelper;
-    const label = helper.companyNotInListText();
 
-    const $row = jQuery("<li></li>")
-      .attr({
-        id: helper.manualEntryRowId,
-        role: "option",
-        "aria-selected": "false",
-        "data-selected": "false",
-        tabindex: -1
-      })
-      .addClass("select2-results__option select2-results__option--selectable")
-      .text(label);
-
-    $row.data("data", {
-      id: helper.manualEntrySentinelId,
-      text: label,
-      _resultId: helper.manualEntryRowId
-    });
-
-    return $row;
+    return jQuery("<button></button>")
+      .attr({ id: helper.manualEntryRowId, type: "button" })
+      .text(helper.companyNotInListText())
+      .on("click", function () {
+        helper.activateManualEntry();
+      });
   },
 
   /**
-   * Put the manual-entry row at the end of the results list, or take it away
-   * (TWO-25288).
+   * Switch out of company search into manual entry, from the button's own
+   * click handler (#30.x.3).
    *
-   * Visibility rule is the search threshold and nothing else — no
-   * "has a search completed" gate. The row appears the moment the buyer has
-   * typed enough for a search to be worth running, which is BEFORE the
-   * debounced request goes out, so a buyer who already knows their company is
-   * not in the registry never has to wait for a round trip to find that out.
+   * Removes the button before deferring, same reason as before: a second
+   * click in the same tick must not queue a second switch. Deferred out of
+   * the click dispatch because entering manual entry destroys this widget,
+   * and destroying it from inside the event that is still unwinding on it
+   * would pull the DOM out from under that unwind.
    *
    * @returns {void}
    */
-  syncManualEntryRow: function () {
+  activateManualEntry: function () {
+    const helper = twoincSelectWooHelper;
+    jQuery("#" + helper.manualEntryRowId).remove();
+    setTimeout(twoincDomHelper.enterManualCompanyEntry, 0);
+  },
+
+  /**
+   * Put the manual-entry button right after the results list, or take it
+   * away (#30.x.1).
+   *
+   * A SIBLING of `.select2-results__options`, not a child of it, so it sits
+   * outside the part of the dropdown that scrolls: always visible the moment
+   * it should be, regardless of how many results came back. Still inside the
+   * dropdown itself — appended into `.select2-results`, the same wrapper the
+   * results list lives in — so it reads as part of the same panel, just
+   * beneath the scrollable area rather than the last row inside it.
+   *
+   * Visibility rule unchanged from the pseudo-option version: the search
+   * threshold and nothing else — no "has a search completed" gate. The
+   * button appears the moment the buyer has typed enough for a search to be
+   * worth running, which is BEFORE the debounced request goes out, so a
+   * buyer who already knows their company is not in the registry never has
+   * to wait for a round trip to find that out.
+   *
+   * @returns {void}
+   */
+  syncManualEntryButton: function () {
     const helper = twoincSelectWooHelper;
 
     const picker = jQuery("#billing_company_display").data("select2");
     if (!picker || !picker.$results || !picker.$results.length) return;
 
-    // Self-healing, and deliberately here rather than in the bind function.
-    // The widget is re-created in places that have no reason to know this
-    // affordance exists — clearing the selected company does it, which is the
-    // "un-pick that company, let me search again" gesture that most often
-    // precedes needing this row. A new widget means a NEW results node, so a
-    // flag set on the old one says nothing, and the observer would simply never
-    // be installed again: the row would appear on a keystroke and then be wiped
-    // by the first render, permanently. Installing from the per-keystroke sync
-    // covers every re-creation, including future ones, without a third bind
-    // site to keep in step.
-    helper.observeResultsList(picker.$results);
-
     const $list = picker.$results;
-    const $existing = $list.children("#" + helper.manualEntryRowId);
+    const $existing = jQuery("#" + helper.manualEntryRowId);
     const term = jQuery(helper.companySearchInputSelector).val() || "";
 
     if (term.length < helper.companySearchMinLength) {
@@ -303,76 +278,38 @@ let twoincSelectWooHelper = {
       return;
     }
 
-    // Already the last row: do nothing. This early return is load-bearing,
-    // not an optimisation — this function is also called from a
-    // MutationObserver watching the same list, so an unconditional append
-    // would re-enter itself forever.
-    if ($existing.length && $list.children().last().is($existing)) return;
+    // Already there, immediately after the current results list: nothing to
+    // do. Load-bearing rather than an optimisation for the same reason it was
+    // before: an unconditional re-append on every keystroke would tear down
+    // and rebuild the same node for no reason.
+    if ($existing.length && $existing.prev().is($list)) return;
 
     $existing.remove();
-    $list.append(helper.buildManualEntryRow());
+    $list.after(helper.buildManualEntryButton());
   },
 
   /**
-   * The live MutationObserver watching the results list, if any (TWO-25288).
-   */
-  manualEntryObserver: null,
-
-  /**
-   * Watch a results list so the row can be put back after every render
-   * (TWO-25288).
+   * Wire the manual-entry affordance to a company-search widget (TWO-25288,
+   * reworked #30.x.1-3).
    *
-   * The picker empties the whole list on each render — a new result set, the
-   * "searching" state, a message — so watching the list covers all of them
-   * without guessing at which internal events fire.
-   *
-   * At most ONE observer exists at a time. The previous one is disconnected
-   * before a new list is observed, so the enter/exit and clear-company cycles
-   * cannot accumulate one orphan per widget for the life of the page.
-   *
-   * @param {Object} $list jQuery-wrapped results <ul>
-   * @returns {void}
-   */
-  observeResultsList: function ($list) {
-    const helper = twoincSelectWooHelper;
-
-    if (!$list || !$list.length || typeof MutationObserver !== "function") return;
-    // Already watching this exact node.
-    if ($list.data("twoincManualEntryObserved")) return;
-
-    if (helper.manualEntryObserver) helper.manualEntryObserver.disconnect();
-
-    $list.data("twoincManualEntryObserved", true);
-    helper.manualEntryObserver = new MutationObserver(function () {
-      helper.syncManualEntryRow();
-    });
-    helper.manualEntryObserver.observe($list[0], { childList: true });
-  },
-
-  /**
-   * Wire the manual-entry affordance to a company-search widget (TWO-25288).
-   *
-   * Idempotent by construction. Every handler is namespaced and every bind is
+   * Idempotent by construction. The handler is namespaced and every bind is
    * preceded by the matching `.off()`, so calling this again — and it IS
    * called again, from the 800ms re-run of enableCompanySearch and from every
-   * return out of manual entry — leaves exactly one handler of each kind.
-   * The previous implementation bound its input handler inside a polling
+   * return out of manual entry — leaves exactly one handler bound. The
+   * previous implementation bound its input handler inside a polling
    * callback on every dropdown open with no `.off()`, which both accumulated
    * duplicates and missed the first keystrokes of anyone typing faster than
    * the poll interval.
    *
-   * Takes no widget argument on purpose. Everything below is specific to the
-   * company-search field — the delegated selector and the sync both name it —
-   * so a parameter would have to be that one element every time. A probe
-   * mutation confirmed it: reassigning the argument to a fresh lookup of that
-   * same field changed nothing and no test noticed, which is a signature
-   * claiming generality the body does not have.
+   * No separate activation binding here any more: the button built by
+   * `syncManualEntryButton` owns its own click handler directly, since it is
+   * a real element outside the results list rather than a pseudo-option the
+   * picker's `select2:selecting` event had to be intercepted for.
    *
    * @returns {void}
    */
   bindManualEntryAffordance: function () {
     const helper = twoincSelectWooHelper;
-    const $select = jQuery("#billing_company_display");
 
     // Delegated on <body> rather than bound to the search field: that field
     // is destroyed and rebuilt on every open, and delegation means the
@@ -381,50 +318,198 @@ let twoincSelectWooHelper = {
     jQuery(document.body)
       .off("input.twoincManualEntry")
       .on("input.twoincManualEntry", helper.companySearchInputSelector, function () {
-        helper.syncManualEntryRow();
+        helper.syncManualEntryButton();
       });
 
-    // No eager render-watcher install here. It was tried and removed: the row
-    // cannot exist before the buyer has typed to the threshold, and typing is
-    // what runs the sync, which installs the watcher against whatever results
-    // list is live. Removing the eager copy left the suite green, i.e. nothing
-    // depended on it — and one install point that heals every widget
-    // re-creation is easier to reason about than two.
+    // Tab-to-button shortcut (#30.x.6).
+    //
+    // Delegated the same way and for the same reason as the input handler
+    // above, which is also what scopes this correctly: a delegated handler on
+    // the search-field selector only ever fires while THAT field is the
+    // keydown target, i.e. while the dropdown is open and the search field
+    // itself has focus. That is deliberately narrower than #416's
+    // `focusStillWithinCompanySearch` (which also had to cover option rows and
+    // the collapsed combobox for a poll running on a timer regardless of
+    // focus) — a keydown listener only ever runs when its target already has
+    // focus, so there is nothing to check beyond "is this Tab".
+    //
+    // Only plain Tab is hijacked. Doug asked for Tab to reach the "not on the
+    // list" button directly instead of arrowing down through every result;
+    // Shift+Tab is left alone on purpose so reverse-tab keeps its ordinary
+    // browser behaviour (move to the previous natural tab-stop) rather than
+    // also being routed somewhere non-standard.
+    //
+    // No-op, not a fallback to default Tab, when the button is not currently
+    // in the DOM (below the search threshold): `preventDefault` only fires
+    // once a target to focus is confirmed, so a buyer who has not typed
+    // enough yet still gets plain browser Tab.
+    //
+    // `e.which` rather than `e.key`, matching the vendored selectWoo bundle's
+    // own convention (its `KEYS` module and every keydown branch in
+    // selectWoo.full.js read `evt.which`) — one key-reading convention on
+    // this shared event chain rather than two, and immune to the (rare) cases
+    // where `.key` comes back blank/"Unidentified" on a real keydown while
+    // `.which` still resolves.
+    //
+    // `stopPropagation` is load-bearing, not belt-and-braces. selectWoo's own
+    // core binds a `$(document).on('keydown', ...)` handler (see
+    // select2/core.js `bindContainerEvents`) that treats a bare Tab exactly
+    // like Enter while the dropdown is open: it fires `results:select` on the
+    // highlighted row, THEN unconditionally calls `$searchField.focus()` in
+    // the same handler, with no check of `evt.isDefaultPrevented()` first.
+    // `document` is above `document.body` in the bubble chain, so without
+    // stopping propagation here that handler still runs right after this one
+    // and yanks focus straight back onto the search field — `preventDefault`
+    // alone was proven insufficient (it does not stop the bubble, only the
+    // browser's own native Tab action, which select2's handler does not
+    // consult). A side effect, and an intentional one: this also means Tab no
+    // longer doubles as "accept the highlighted result" the way selectWoo's
+    // own Tab-as-Enter branch otherwise would. That is the point of this
+    // change — Doug asked for Tab to be a dedicated shortcut to the button,
+    // not a second Enter — and Enter itself is untouched.
+    //
+    // One more of selectWoo's own timers has to be defended against
+    // separately, and `stopPropagation` cannot reach it: the SAME document
+    // handler also runs on every ordinary typing keystroke (not just Tab) and
+    // schedules `focusOnActiveElement()` — which refocuses whatever result
+    // row is currently marked `.select2-results__option--highlighted`, and
+    // every fresh result render auto-highlights the first row — 1000ms later.
+    // That timer is scheduled from the buyer's PREVIOUS keystroke, before
+    // this Tab handler ever runs, so stopping propagation on the Tab event
+    // itself does nothing to it. A buyer who types quickly and then hits Tab
+    // within that ~1s window (the normal case — fast typers are exactly who
+    // this shortcut is for) gets focus yanked back onto the highlighted
+    // company row shortly after landing on the button. Confirmed
+    // reproducible with fake timers before this comment was written.
+    // Re-assert focus on the button once, just past that window, but ONLY if
+    // selectWoo's timer actually won (`document.activeElement` is a
+    // highlighted result row) and the button is still there — so a buyer who
+    // has since moved on deliberately (closed the dropdown, tabbed away,
+    // clicked the button) is never fought.
+    jQuery(document.body)
+      .off("keydown.twoincManualEntry")
+      .on("keydown.twoincManualEntry", helper.companySearchInputSelector, function (e) {
+        if (e.which !== 9 || e.shiftKey) return;
 
-    // Activation, keyboard and mouse through one path. The picker turns both
-    // Enter on the highlighted row and a click on it into the same internal
-    // select, and fires a preventable pre-event first — so intercepting that
-    // one event covers both inputs, and there is no separate click handler
-    // that could double-fire or drift out of step with the keyboard one.
-    $select
-      .off("select2:selecting.twoincManualEntry")
-      .on("select2:selecting.twoincManualEntry", function (e) {
-        const data = e.params && e.params.args && e.params.args.data;
-        if (!data || data.id !== helper.manualEntrySentinelId) return;
+        const btn = jQuery("#" + helper.manualEntryRowId).get(0);
+        if (!btn) return;
 
-        // Prevented, so the selection is never written: no company name, no
-        // company id, no approval call, no address lookup.
+        // Accepted risk, not handled: if the button happens to be hidden or
+        // mid-transition at this exact moment, `.focus()` on a real browser
+        // silently no-ops per the HTML spec (unlike jsdom, which does not
+        // reliably enforce this, so no test here can catch it either way).
+        // The buyer is left with focus stuck on the search field — no worse
+        // than before this feature existed, just not the "Tab reaches the
+        // button" this comment otherwise promises.
         e.preventDefault();
+        e.stopPropagation();
+        btn.focus();
 
-        // Because the selection is prevented the dropdown does NOT close, so
-        // the row would otherwise still be sitting in the list and still
-        // activatable — and a repeated activation in the same tick would queue
-        // one deferred switch per press. Removing the row up front is what
-        // prevents that: the picker resolves an activation through the
-        // highlighted row, and there is no longer one.
-        //
-        // A `pending` latch was tried here as well and removed: with the row
-        // already gone it could not be reached by any path, so it was
-        // untestable defensive code. One mechanism that a test can fail is
-        // worth more than two where neither is exercised alone.
-        jQuery("#" + helper.manualEntryRowId).remove();
-
-        // Deferred out of the picker's own event dispatch. Entering manual
-        // entry destroys this widget, and destroying it from inside its own
-        // trigger would pull the DOM out from under the code that is still
-        // unwinding.
-        setTimeout(twoincDomHelper.enterManualCompanyEntry, 0);
+        setTimeout(function () {
+          const stillThere = jQuery("#" + helper.manualEntryRowId).get(0);
+          const stolenByHighlightedRow = jQuery(document.activeElement).is(
+            ".select2-results__option--highlighted"
+          );
+          if (stillThere && stolenByHighlightedRow) stillThere.focus();
+        }, 1100);
       });
+
+    // Second Tab press, this time FROM the button (#30.x.6 follow-up, found
+    // under adversarial review before merge — reproduced with a real
+    // `select2:select` listener before this fix was written).
+    //
+    // selectWoo's `isOpen()` (the gate its own document-level Tab-as-Enter
+    // handler checks) is purely a CSS class on the container — entirely
+    // independent of where DOM focus actually is. Moving focus onto the
+    // button above does not close the dropdown or clear that class. So a
+    // buyer who lands on the button via the shortcut above and then presses
+    // Tab AGAIN — the entirely ordinary next step, trying to move on to the
+    // next real page field — has that keydown bubble straight past the
+    // button (our other handler is scoped to the search field, not this
+    // button) to selectWoo's still-live document handler, which still sees
+    // `isOpen() === true` and treats this Tab exactly like Enter: silently
+    // fires `results:select` on whatever row is currently highlighted (a
+    // company the buyer never chose), `preventDefault`s the buyer's actual
+    // Tab-away, then unconditionally refocuses the search field. Net effect:
+    // the buyer is trapped AND a wrong company gets silently selected
+    // underneath them.
+    //
+    // Fixed the same way as the shortcut above — `stopPropagation` to keep
+    // selectWoo's document handler from ever seeing this keydown — but
+    // deliberately WITHOUT `preventDefault` this time: the whole point here
+    // is to let the browser's own native Tab traversal proceed to whatever
+    // the next real tab-stop is, in either direction (this button carries no
+    // special Shift+Tab behaviour, so both directions get the same
+    // protection).
+    //
+    // A known, DELIBERATELY UNFIXED gap this surfaces rather than causes,
+    // found under adversarial review: selectWoo never actually clears
+    // `isOpen()` on keyboard-only focus-away — nothing but Escape, a result
+    // pick, or a `mousedown` anywhere outside the widget closes it
+    // (`_attachCloseHandler` in the vendored bundle). A buyer who reaches
+    // this button by keyboard and then keeps tabbing onward, without ever
+    // clicking anything, leaves the dropdown "open" indefinitely — every
+    // later Tab/Enter/Escape ANYWHERE on the page, including Enter on the
+    // checkout submit button, still gets caught by selectWoo's unscoped
+    // document handler until a stray click finally closes it. This predates
+    // this feature; this fix just makes it reachable for the first time
+    // (Tab could never actually escape the open dropdown at all before this
+    // PR, so nobody could reach "focus outside + still open" via keyboard).
+    // Deliberately NOT calling `.select2('close')` here to plug it: that
+    // triggers selectWoo's own `container.on('close', ...)` handler, which
+    // schedules `self.$selection.focus()` 1ms later UNCONDITIONALLY — which
+    // would yank focus straight back from wherever the buyer just legitimately
+    // tabbed to, reintroducing the exact keyboard trap #416 (#30.x.4) was
+    // written to fix, just one level further out. A real fix needs
+    // selectWoo's own close-on-blur gap addressed generally, not patched
+    // per-field here — flagged to Doug as a candidate follow-up ticket rather
+    // than attempted blind.
+    // Enter and Space, pressed while the button itself has focus, need the
+    // exact same protection as Tab above and for the exact same reason
+    // (#30.x.6, round 3) — found live: Doug reported Enter and Space both
+    // routing to the search field instead of activating the button.
+    //
+    // selectWoo's document-level handler (see the long comment above) is
+    // gated purely on `isOpen()` — a CSS class on the container, entirely
+    // independent of which element currently has focus. Landing on this
+    // button via the Tab shortcut does not close the dropdown, so with the
+    // dropdown still "open" that SAME handler still sees Enter and Space
+    // arriving ANYWHERE on the page, including on this button — but NOT
+    // identically to Tab. Checked directly against the vendored bundle
+    // (`Select2.prototype._registerEvents`): only Enter and Tab hit the
+    // `results:select` branch (silently selecting whatever row is currently
+    // highlighted, a company the buyer never chose); plain Space (without
+    // Ctrl) matches none of that handler's `if`/`else if` branches at all.
+    // Every one of these keys — selected branch or not — falls through to
+    // the SAME unconditional tail, though: `$searchField.focus()`
+    // immediately, then `focusOnActiveElement()` ~1s later. That fallthrough
+    // is what "Enter/Space routes to the search field" actually is for
+    // Space; for Enter it is both the silent wrong-row selection AND the
+    // same refocus. This button's own `keydown.twoincManualEntryButton`
+    // handler only ever intercepted Tab, so Enter and Space kept bubbling
+    // straight past it to selectWoo's handler unhindered either way.
+    //
+    // `stopPropagation`, deliberately WITHOUT `preventDefault`, for Enter and
+    // Space too — same reasoning as Tab: the browser's own native "activate a
+    // focused <button>" default action for both keys must still run so this
+    // button's own `click` handler (bound in `buildManualEntryButton`) fires.
+    // Calling `preventDefault` here would suppress that native activation
+    // right alongside selectWoo's handler, trading one broken key for
+    // another rather than fixing it.
+    jQuery(document.body)
+      .off("keydown.twoincManualEntryButton")
+      .on("keydown.twoincManualEntryButton", "#" + helper.manualEntryRowId, function (e) {
+        if (e.which !== 9 && e.which !== 13 && e.which !== 32) return;
+        e.stopPropagation();
+      });
+    // NOTE: #search_company_btn's equivalent Enter/Space fix (round 4,
+    // #30.x.7, in getSearchCompanyBtnNode) looks different on purpose — it
+    // binds directly on the element and calls preventDefault() +
+    // exitManualCompanyEntry() rather than stopPropagation()-and-let-native-
+    // activation-proceed like this one does. The two buttons have different
+    // interferers (selectWoo's document handler here; something unconfirmed
+    // and external there, since selectWoo isn't even alive at that point),
+    // so the fix shape differs — see that function's own comment.
   },
 
   /**
@@ -646,6 +731,43 @@ let twoincSelectWooHelper = {
   },
 
   /**
+   * Whether focus is still somewhere this poll is allowed to touch.
+   *
+   * `waitToFocus` exists because the picker's own focus-on-open does not land
+   * reliably on every host theme, so it polls to nudge focus into the search
+   * field. Left unchecked, that poll kept nudging for its whole window (up to
+   * ~4.8s from `select2:open`, ~12.8s per re-render from
+   * `addSelectWooFocusFixHandler`) with no regard for what happened after it
+   * was scheduled — including the buyer deliberately Tabbing to a completely
+   * different field, which got yanked back into the dropdown until the poll's
+   * hit count ran out or the buyer hit Esc (which tears the dropdown down,
+   * so the search-field selector this poll uses stops matching anything).
+   *
+   * "Still allowed" covers every state the poll's job actually needs to work
+   * through: nothing focused yet (`<body>`, select2's own state before its
+   * first focus attempt), the search field itself, an option row inside the
+   * open results list (the picker focuses those on arrow-key navigation), or
+   * the still-collapsed combobox trigger. Anything else means the buyer's own
+   * navigation has taken them elsewhere, and that must win.
+   *
+   * @param {string} selectWooElemId the select's element id
+   * @returns {boolean}
+   */
+  focusStillWithinCompanySearch: function (selectWooElemId) {
+    const active = document.activeElement;
+    if (!active || active === document.body) return true;
+
+    const $active = jQuery(active);
+    if ($active.is('input[aria-owns="select2-' + selectWooElemId + '-results"]')) return true;
+
+    return (
+      $active.closest(
+        "#select2-" + selectWooElemId + "-results, #select2-" + selectWooElemId + "-container"
+      ).length > 0
+    );
+  },
+
+  /**
    * Wait until element appear and focus
    */
   waitToFocus: function (selectWooElemId, hitsRequired, intervalDuration, callbackFunc) {
@@ -654,6 +776,12 @@ let twoincSelectWooHelper = {
     let attemptsLeft = hitsRequired * 8;
 
     let focusInterval = setInterval(function () {
+      // The buyer's own navigation always wins over this poll's nudging.
+      if (!twoincSelectWooHelper.focusStillWithinCompanySearch(selectWooElemId)) {
+        clearInterval(focusInterval);
+        return;
+      }
+
       let inpElem = jQuery('input[aria-owns="select2-' + selectWooElemId + '-results"]').get(0);
       if (inpElem) {
         // Focus on the element if not already focused
@@ -1246,6 +1374,15 @@ let twoincDomHelper = {
    * mouse click; type="button" is what keeps a button inside the checkout form
    * from submitting it.
    *
+   * Appended into `.woocommerce-input-wrapper`, not directly into
+   * `#billing_company_field` (round 3, #30.x.5.3) — see the rule comment
+   * above `#billing_company_field .woocommerce-input-wrapper` in twoinc.css
+   * for why (label-height vs. visible-field centring). If that wrapper is
+   * missing (a host template not using WooCommerce core's own field markup),
+   * one is built around `#billing_company` directly rather than falling back
+   * to `#billing_company_field` itself, which would silently reintroduce the
+   * bug this fixes (see below).
+   *
    * @returns {Object} jQuery-wrapped button
    */
   getSearchCompanyBtnNode: function () {
@@ -1257,8 +1394,74 @@ let twoincDomHelper = {
     $btn = jQuery("<button></button>")
       .attr({ id: id, type: "button" })
       .text(twoincSelectWooHelper.searchCompanyText())
-      .hide();
-    jQuery("#billing_company_field").append($btn);
+      .hide()
+      // Enter/Space must activate this button directly, not rely on the
+      // browser's native "activate a focused <button>" default action
+      // (#30.x.7). Reported live: Tab reaches this button fine (it is a
+      // real, focusable <button>), but pressing Enter or Space while it has
+      // focus does nothing. Unlike #company_not_in_btn's equivalent fix
+      // (round 3, #30.x.6), the interference here cannot be a document-level
+      // selectWoo handler — selectWoo's widget is destroyed the moment
+      // manual entry is entered (see enterManualCompanyEntry), long before
+      // this button is ever shown. UNCONFIRMED (no live-browser access from
+      // here, and this repo does not vendor WooCommerce core or the host
+      // theme to check directly) — one plausible culprit: WooCommerce core's
+      // checkout.js and various host themes commonly bind a keydown/keypress
+      // guard on the whole checkout form to stop Enter from submitting it
+      // prematurely while any form control has focus. That said, such guards
+      // are typically delegated against specific input selectors, which a
+      // <button> may not even match — so this may not be the actual
+      // mechanism. This fix does not depend on the theory being right: it
+      // owns activation on a node it exclusively creates, rather than
+      // chasing whichever interferer turns out to be real.
+      //
+      // Bound directly on this element (not delegated from document.body)
+      // so it is the first listener to see the keydown — a directly-bound
+      // bubble-phase listener always runs before any bubble-phase listener
+      // on an ancestor, regardless of registration order or where that
+      // ancestor handler lives. (Not overridable by any bubble-phase
+      // handler we know of; the one theoretical exception is a capture-phase
+      // listener somewhere in the ancestor chain, which jQuery never
+      // installs and nothing vendored in this repo uses either.) Driving the
+      // switch back to search directly, rather than depending on native
+      // activation reaching the existing `$body.on("click", "#" +
+      // searchCompanyBtnId, ...)` handler below, means this works regardless
+      // of whether some ancestor handler already called `preventDefault()`
+      // by the time this runs.
+      .on("keydown", function (e) {
+        if (e.which !== 13 && e.which !== 32) return;
+        e.preventDefault();
+        e.stopPropagation();
+        twoincDomHelper.exitManualCompanyEntry();
+      });
+
+    let $wrapper = jQuery("#billing_company_field .woocommerce-input-wrapper");
+
+    // Self-heal rather than silently degrade (found under adversarial
+    // review before merge, round 3): a plain "fall back to
+    // #billing_company_field" here would still centre the button with
+    // `top: 50%; transform: translateY(-50%)` (see twoinc.css) against
+    // #billing_company_field itself — which ALREADY carries `position:
+    // relative` from before this fix — so on any host template that
+    // doesn't render the standard WooCommerce wrapper, this button would
+    // silently reproduce the exact label-height centring bug this round
+    // exists to fix, with nothing to signal that the fallback path was
+    // even taken. Instead, build an equivalent wrapper around just the
+    // <input> ourselves: same DOM shape WooCommerce core's own
+    // woocommerce_form_field() would have produced, so the CSS centring
+    // rule has a consistent structure to hook onto regardless of which
+    // path got here. Falls through to #billing_company_field only if
+    // #billing_company itself is missing — a field this whole feature
+    // already depends on existing.
+    if (!$wrapper.length) {
+      const $input = jQuery("#billing_company");
+      if ($input.length) {
+        $input.wrap('<span class="woocommerce-input-wrapper"></span>');
+        $wrapper = jQuery("#billing_company_field .woocommerce-input-wrapper");
+      }
+    }
+
+    ($wrapper.length ? $wrapper : jQuery("#billing_company_field")).append($btn);
     return $btn;
   },
 
