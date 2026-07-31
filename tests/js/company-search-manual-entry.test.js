@@ -290,10 +290,7 @@ describe("company-search manual-entry affordance", () => {
      * @returns {Object} the jQuery.Event dispatched
      */
     function tabAt($el, opts) {
-      const e = jQuery.Event(
-        "keydown",
-        Object.assign({ key: "Tab", which: 9 }, opts || {})
-      );
+      const e = jQuery.Event("keydown", Object.assign({ key: "Tab", which: 9 }, opts || {}));
       $el.trigger(e);
       return e;
     }
@@ -403,9 +400,8 @@ describe("company-search manual-entry affordance", () => {
         query: { term: "abc" }
       });
       expect(
-        $("#select2-billing_company_display-results").find(
-          ".select2-results__option--highlighted"
-        ).length
+        $("#select2-billing_company_display-results").find(".select2-results__option--highlighted")
+          .length
       ).toBe(1);
       expect(btn().length).toBe(1);
 
