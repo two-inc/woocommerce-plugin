@@ -1328,6 +1328,33 @@ describe("company-search manual-entry affordance", () => {
       expect(ctx.twoinc.enable_company_search).toBe("no");
       expect($("#" + helper.searchCompanyBtnId)[0].style.display).not.toBe("none");
     });
+
+    test("switching to sole trader closes the widget before destroying it, not the other way round (#30.x.13, round 1 review — Han)", () => {
+      // Same hazard as enterManualCompanyEntry's own close()-before-destroy()
+      // fix, in a sibling call site this PR's first pass missed: a buyer can
+      // reach sole-trader mode with the search dropdown still OPEN — via the
+      // mode chip directly, or via the email-driven autofill prefetch
+      // (onEmailChanged) — without ever going through manual entry first.
+      // destroy() alone on an open widget skips selectWoo's own close
+      // cleanup, which is what unbinds its document-level Tab/Enter-as-select
+      // interceptor — the same page-wide-Tab-shaped gap. Asserting only that
+      // destroy() happened, without the order, would pass against the old
+      // (buggy) code too.
+      const $select = openWithAffordance();
+      const calls = [];
+      const original = jQuery.fn.select2;
+      jest.spyOn(jQuery.fn, "select2").mockImplementation(function (arg) {
+        if (arg === "close" || arg === "destroy") calls.push(arg);
+        return original.apply(this, arguments);
+      });
+
+      expect($select.data("select2").isOpen()).toBe(true);
+
+      ctx.soleTrader.setMode("sole_trader");
+
+      expect(calls).toEqual(["close", "destroy"]);
+      jQuery.fn.select2.mockRestore();
+    });
   });
 
   describe("returning to search lands the buyer IN the search box", () => {

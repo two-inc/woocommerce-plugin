@@ -2456,6 +2456,20 @@ let twoincSoleTrader = {
       window.twoinc.manual_company_entry_active = false;
       const $display = jQuery("#billing_company_display");
       if ($display.data("select2")) {
+        // close() before destroy() — same fix, same reason, as
+        // enterManualCompanyEntry (#30.x.13). This branch is reachable with
+        // the widget still OPEN exactly like that one: a buyer mid manual
+        // entry (dropdown already torn down, so a no-op there) or mid an
+        // open search (dropdown live) can switch to sole-trader mode via
+        // the mode chip, and the autofill prefetch (onEmailChanged) can
+        // call setMode("sole_trader") on its own regardless of what the
+        // dropdown is doing. destroy() alone, on an open widget, skips
+        // selectWoo's own close cleanup — the same page-wide-Tab-shaped gap
+        // documented in bindManualEntryAffordance and enterManualCompanyEntry
+        // above (found under adversarial review, round 1 — Han: this PR
+        // fixed the identical hazard in enterManualCompanyEntry but missed
+        // this sibling call site).
+        $display.select2("close");
         $display.select2("destroy");
       }
       // Only the link back to search: the manual-entry row lives inside the
