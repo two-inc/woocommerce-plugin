@@ -18,7 +18,14 @@
 
 "use strict";
 
+const fs = require("fs");
+const path = require("path");
 const harness = require("./wc-harness");
+
+/** @returns {string} the raw twoinc.css source */
+function stylesheetSource() {
+  return fs.readFileSync(path.join(harness.REPO_ROOT, harness.STYLESHEET_PATH), "utf8");
+}
 
 const GATEWAY_ID = "woocommerce-gateway-tillit";
 
@@ -193,7 +200,7 @@ describe("read-only captured-company summary", () => {
 
       expect(nameStyle.display).toBe("block");
       expect(idStyle.display).toBe("block");
-      expect(idStyle.textAlign).toBe("right");
+      expect(idStyle.textAlign).toBe("end");
     });
 
     test("the id element carries no same-line margin from the name any more", () => {
@@ -202,17 +209,45 @@ describe("read-only captured-company summary", () => {
       // directly against the shipped rule, not just the computed style,
       // because jsdom does not lay out real text wrapping to prove the
       // collision — the CSS declaration itself is the fix.
-      const fs = require("fs");
-      const path = require("path");
-      const css = fs.readFileSync(
-        path.join(harness.REPO_ROOT, harness.STYLESHEET_PATH),
-        "utf8"
-      );
-      const m = /\.twoinc-company-summary-id\s*\{([^}]*)\}/.exec(css);
+      const m = /\.twoinc-company-summary-id\s*\{([^}]*)\}/.exec(stylesheetSource());
       expect(m).not.toBeNull();
       expect(m[1]).not.toMatch(/margin-left/);
-      expect(m[1]).toMatch(/text-align:\s*right/);
+      expect(m[1]).toMatch(/text-align:\s*end/);
       expect(m[1]).toMatch(/display:\s*block/);
+    });
+
+    test("neither the name nor the id can overflow past the row on a single unbroken token", () => {
+      // Round 1 review (Vader): the block-row fix stops the NUMBER competing
+      // with the name for space, but does nothing on its own for a single
+      // unbroken token — routine in DE/NL/NO registry names — which would
+      // otherwise overflow the row horizontally instead of wrapping.
+      const nameBody = /\.twoinc-company-summary-name\s*\{([^}]*)\}/.exec(stylesheetSource());
+      const idBody = /\.twoinc-company-summary-id\s*\{([^}]*)\}/.exec(stylesheetSource());
+      expect(nameBody).not.toBeNull();
+      expect(idBody).not.toBeNull();
+      expect(nameBody[1]).toMatch(/overflow-wrap:\s*anywhere/);
+      expect(idBody[1]).toMatch(/overflow-wrap:\s*anywhere/);
+      // The old nowrap protected the (inline, same-line) id from wrapping
+      // onto an ugly second line — but now that it has its own row, nowrap
+      // would instead let an exceptionally long identifier run past the
+      // row's edge, invisible, which is the exact bug this PR fixes.
+      expect(idBody[1]).not.toMatch(/white-space:\s*nowrap/);
+    });
+  });
+
+  describe("pay-for-order page: number stays aligned with the name, not the full-width row (#30.x.9)", () => {
+    // Round 1 review (Han): that page lays the company fields out as
+    // flex-wrap items and gives the summary `flex-basis: 100%` — a
+    // full-page-width row, unlike the checkout page where the summary is
+    // only as wide as the (narrower) field above it. Right-aligning the id
+    // against that full width would detach it from the actual input, which
+    // sits centred between the two. Assert the override lands.
+    test("the id's alignment is overridden back to the leading edge on .custom-checkout", () => {
+      const m = /\.custom-checkout\s+\.twoinc-company-summary-id\s*\{([^}]*)\}/.exec(
+        stylesheetSource()
+      );
+      expect(m).not.toBeNull();
+      expect(m[1]).toMatch(/text-align:\s*start/);
     });
   });
 

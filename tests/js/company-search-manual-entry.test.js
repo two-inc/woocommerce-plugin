@@ -637,7 +637,41 @@ describe("company-search manual-entry affordance", () => {
       const btnStyle = window.getComputedStyle($searchBtn[0]);
       expect(btnStyle.position).not.toBe("absolute");
       expect(btnStyle.display).toBe("block");
-      expect(btnStyle.textAlign).toBe("right");
+      expect(btnStyle.textAlign).toBe("end");
+    });
+
+    test("the wrapper is blockified explicitly, not left to whatever the host theme declares (round 1 review)", () => {
+      // Han/Vader, convergent: `.woocommerce-input-wrapper` is a <span> —
+      // inline by default — and this repo has no control over what a host
+      // theme sets it to. A theme declaring it `display: flex` would put
+      // the button back on the same line as the input, silently
+      // re-creating the overlap this change removes. `position: relative`
+      // stays too — it's what the OLD absolute-positioned button relied on,
+      // kept at zero cost so no theme-supplied decoration inside this
+      // wrapper silently changes its own positioning context.
+      const m = /#billing_company_field\s+\.woocommerce-input-wrapper\s*\{([^}]*)\}/.exec(
+        fs.readFileSync(path.join(harness.REPO_ROOT, harness.STYLESHEET_PATH), "utf8")
+      );
+      expect(m).not.toBeNull();
+      expect(m[1]).toMatch(/display:\s*block/);
+      expect(m[1]).toMatch(/position:\s*relative/);
+    });
+
+    test("#search_company_btn declares its below-the-field gap explicitly (round 1 review — Vader)", () => {
+      // Mutation-caught gap: the button's own `display`/`position`/
+      // `text-align` were asserted above, but `margin-top` — the actual
+      // "sits below the field with a gap" spacing — was not, and a mutation
+      // deleting it passed the full suite. `width: 100%` was also removed
+      // entirely here (round 1 review): a `display: block` element already
+      // fills its containing block at `width: auto`, and declaring 100%
+      // explicitly overflows that box by the padding+border under
+      // content-box sizing, which this repo does not guarantee globally.
+      const m = /^#search_company_btn\s*\{([^}]*)\}/m.exec(
+        fs.readFileSync(path.join(harness.REPO_ROOT, harness.STYLESHEET_PATH), "utf8")
+      );
+      expect(m).not.toBeNull();
+      expect(m[1]).toMatch(/margin-top:\s*4px/);
+      expect(m[1]).not.toMatch(/width:\s*100%/);
     });
 
     test("self-heals a missing .woocommerce-input-wrapper instead of silently falling back to the unpositioned field (found under adversarial review)", () => {
