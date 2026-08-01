@@ -1297,7 +1297,12 @@ let twoincDomHelper = {
 
     let $field = jQuery("#company_id_field");
     if (!$field.length) $field = jQuery("#billing_company_field");
-    if (!$field.length) return isNew ? jQuery() : $node;
+    // Dead ternary removed (round 2 review — Vader): `isNew` is exactly
+    // `!$node.length`, and `$node` is never reassigned before this line, so
+    // `isNew ? jQuery() : $node` and plain `$node` are the same value in
+    // both branches — an equivalent mutant proved it. Reads as if it guards
+    // something it doesn't.
+    if (!$field.length) return $node;
 
     if (isNew) {
       $node = jQuery(
