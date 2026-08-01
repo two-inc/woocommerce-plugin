@@ -186,7 +186,9 @@ describe("read-only captured-company summary", () => {
         .appendTo($form);
       const children = () => $form.children().toArray();
       const indexOf = (sel) => children().indexOf($(sel)[0]);
-      expect(indexOf("#" + dom.companySummaryId)).toBeLessThan(indexOf("#billing_company_display_field"));
+      expect(indexOf("#" + dom.companySummaryId)).toBeLessThan(
+        indexOf("#billing_company_display_field")
+      );
 
       // Any subsequent render (payment-method switch, country change,
       // another pick — toggleBusinessFields is the common path for all of
@@ -194,7 +196,9 @@ describe("read-only captured-company summary", () => {
       dom.renderCompanySummary();
 
       expect(summary().prev().is("#company_id_field")).toBe(true);
-      expect(indexOf("#" + dom.companySummaryId)).toBeGreaterThan(indexOf("#billing_company_display_field"));
+      expect(indexOf("#" + dom.companySummaryId)).toBeGreaterThan(
+        indexOf("#billing_company_display_field")
+      );
     });
 
     test("does not physically move the node when it is already correctly positioned (round 1 review — Han)", () => {
