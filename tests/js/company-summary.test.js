@@ -197,6 +197,27 @@ describe("read-only captured-company summary", () => {
       expect(indexOf("#" + dom.companySummaryId)).toBeGreaterThan(indexOf("#billing_company_display_field"));
     });
 
+    test("does not physically move the node when it is already correctly positioned (round 1 review — Han)", () => {
+      // Repositioning unconditionally on every call — the first version of
+      // this fix — physically detaches and re-inserts the node even when
+      // nothing has drifted, which collapses any text selection inside the
+      // summary (the only interaction this read-only display affords is
+      // selecting the org number to copy it) and forces an avoidable
+      // reflow. Guarded on `$node.prev()` matching the anchor: spy on
+      // jQuery's own `insertAfter` and assert it is NOT called on an
+      // ordinary re-render once the summary is already positioned right —
+      // a plain node-identity check can't tell "moved but same reference"
+      // from "never touched", since jQuery never clones the element either
+      // way.
+      pickCompany("ACME Widgets Ltd", "12345678");
+
+      const insertAfterSpy = jest.spyOn($.fn, "insertAfter");
+      dom.renderCompanySummary();
+
+      expect(insertAfterSpy).not.toHaveBeenCalled();
+      insertAfterSpy.mockRestore();
+    });
+
     test("nothing inside the summary posts a value of its own", () => {
       pickCompany("ACME Widgets Ltd", "12345678");
 
