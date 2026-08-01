@@ -661,17 +661,32 @@ describe("company-search manual-entry affordance", () => {
       // Mutation-caught gap: the button's own `display`/`position`/
       // `text-align` were asserted above, but `margin-top` — the actual
       // "sits below the field with a gap" spacing — was not, and a mutation
-      // deleting it passed the full suite. `width: 100%` was also removed
-      // entirely here (round 1 review): a `display: block` element already
-      // fills its containing block at `width: auto`, and declaring 100%
-      // explicitly overflows that box by the padding+border under
-      // content-box sizing, which this repo does not guarantee globally.
+      // deleting it passed the full suite.
       const m = /^#search_company_btn\s*\{([^}]*)\}/m.exec(
         fs.readFileSync(path.join(harness.REPO_ROOT, harness.STYLESHEET_PATH), "utf8")
       );
       expect(m).not.toBeNull();
       expect(m[1]).toMatch(/margin-top:\s*4px/);
-      expect(m[1]).not.toMatch(/width:\s*100%/);
+    });
+
+    test("#search_company_btn keeps width: 100% paired with box-sizing: border-box (round 2 review — Vader, correcting round 1)", () => {
+      // Round 1 deleted `width: 100%` on the theory that `display: block`
+      // alone fills the containing block at `width: auto` — true for an
+      // ordinary element, FALSE for a <button>: form controls use intrinsic
+      // (shrink-to-fit) sizing at `width: auto` regardless of `display`.
+      // Without `width: 100%` this button hugs its own label and sits at
+      // the input's left edge, making `text-align: end` a no-op — silently
+      // reintroducing a left-aligned link where the design calls for
+      // right-aligned. `box-sizing: border-box` is what actually answers
+      // round 1's original overflow concern (no global border-box
+      // guaranteed anywhere in this stylesheet), so the two must ship
+      // together — either alone reproduces a bug.
+      const m = /^#search_company_btn\s*\{([^}]*)\}/m.exec(
+        fs.readFileSync(path.join(harness.REPO_ROOT, harness.STYLESHEET_PATH), "utf8")
+      );
+      expect(m).not.toBeNull();
+      expect(m[1]).toMatch(/width:\s*100%/);
+      expect(m[1]).toMatch(/box-sizing:\s*border-box/);
     });
 
     test("self-heals a missing .woocommerce-input-wrapper instead of silently falling back to the unpositioned field (found under adversarial review)", () => {

@@ -302,11 +302,27 @@
  * renders inside/over the field" bug. With the absolute positioning removed
  * the button falls into NORMAL block flow as the wrapper's last child — i.e.
  * immediately below the input, inside the same box the input's own border
- * defines, so `text-align: end` lines its text up with the input's right
- * edge without needing any explicit positioning at all. Matches the pattern
- * Magento/Luma (`magento-plugin` `.search_for_company`) and Hyvä already use:
- * a plain block appended after the field, right-aligned, no absolute
- * positioning.
+ * defines. Matches the pattern Magento/Luma (`magento-plugin`
+ * `.search_for_company`) and Hyvä already use: a plain block appended after
+ * the field, right-aligned, no absolute positioning.
+ *
+ * `width: 100%` is still required for `text-align: end` to mean anything
+ * (round 2 review — Vader, correcting round 1): a `<button>` is a form
+ * control, and form controls use intrinsic (shrink-to-fit) sizing at
+ * `width: auto` REGARDLESS of `display: block` — unlike an ordinary
+ * element, which fills its containing block at `width: auto` once
+ * blockified. Round 1 deleted `width: 100%` believing `display: block`
+ * alone was sufficient (the same belief `#company_not_in_btn`'s own
+ * comment above already contradicts: "`display: block` + full width keeps
+ * it filling the dropdown"). Without it, this button shrink-wraps its own
+ * label and sits at the input's LEFT edge — `text-align: end` becomes a
+ * no-op on a box already exactly the text's width, silently reintroducing
+ * a left-aligned link where the design calls for right-aligned. `box-
+ * sizing: border-box` is what round 1's original concern (no global
+ * border-box guaranteed in this stylesheet — verified, zero hits) actually
+ * needed: it keeps `width: 100%` + this rule's own padding/border from
+ * overflowing the containing block by 6px, without giving up the width
+ * declaration itself.
  *
  * The wrapper itself gets an explicit `display: block` (round 1 review —
  * Han/Vader, convergent), replacing the `position: relative` this rule used
@@ -328,6 +344,8 @@
 }
 #search_company_btn {
   display: block;
+  box-sizing: border-box;
+  width: 100%;
   margin-top: 4px;
   text-align: end;
   cursor: pointer;

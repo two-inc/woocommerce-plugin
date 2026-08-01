@@ -203,6 +203,23 @@ describe("read-only captured-company summary", () => {
       expect(idStyle.textAlign).toBe("end");
     });
 
+    test("the summary box carries WooCommerce core's own form-row padding, so the id lines up with the input's real edge (round 2 review — Vader)", () => {
+      // Mutation-caught gap: deleting `padding-left`/`padding-right` from
+      // `.twoinc-company-summary` (round 1's fix for the ~3px offset
+      // against the input) passed the full suite with nothing to catch it.
+      // Asserted against computed style, not a stylesheet-source regex —
+      // the `[^}]*` capture used elsewhere in this file terminates early on
+      // the `}` inside this rule's own CSS *comment* (`.form-row { padding:
+      // 3px }`), so a naive regex test would silently pass regardless of
+      // what the rule actually declares.
+      harness.injectStylesheet();
+      pickCompany("ACME Widgets Ltd", "12345678");
+
+      const summaryStyle = window.getComputedStyle(summary()[0]);
+      expect(summaryStyle.paddingLeft).toBe("3px");
+      expect(summaryStyle.paddingRight).toBe("3px");
+    });
+
     test("the id element carries no same-line margin from the name any more", () => {
       // The old inline layout's `margin-left: 8px` on the id is exactly what
       // let it be squeezed off the visible line by a long name. Asserted
@@ -248,6 +265,23 @@ describe("read-only captured-company summary", () => {
       );
       expect(m).not.toBeNull();
       expect(m[1]).toMatch(/text-align:\s*start/);
+    });
+
+    test("the override actually wins the cascade, not just exists in source (round 2 review — Han)", () => {
+      // The regex test above only proves the rule EXISTS, not that it WINS.
+      // Both the general `.twoinc-company-summary-id` rule and this
+      // `.custom-checkout` override are live in the same stylesheet — if a
+      // future edit ever reordered them so the general rule landed after
+      // the override in source, `text-align` would resolve to "end" here
+      // regardless of what this file's regex still matches. Render the
+      // summary inside a `.custom-checkout` ancestor and read the actual
+      // computed value.
+      harness.injectStylesheet();
+      pickCompany("ACME Widgets Ltd", "12345678");
+      summary().wrap('<div class="custom-checkout"></div>');
+
+      const idStyle = window.getComputedStyle(summary().find(".twoinc-company-summary-id")[0]);
+      expect(idStyle.textAlign).toBe("start");
     });
   });
 
