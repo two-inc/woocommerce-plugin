@@ -162,6 +162,41 @@ describe("read-only captured-company summary", () => {
       expect($("#company_id").val()).toBe("12345678");
     });
 
+    test("self-heals its position after WooCommerce core's own field resort (#30.x.9, found by live post-merge verification)", () => {
+      // Reported live: after picking a company, the summary rendered ABOVE
+      // the company field instead of below it. Root cause, documented in
+      // WC_Twoinc_Checkout.php above move_country_field(): WooCommerce
+      // core's own address-i18n.js detaches and re-appends every
+      // `.form-row` in the billing wrapper by priority, on EVERY checkout
+      // load — not only on country change. This summary is a plain <div>,
+      // not a `.form-row`, so it never takes part in that resort; the OLD
+      // code positioned it once on first creation and never again, so once
+      // WC moved the real fields past it, it stayed stranded above all of
+      // them for the rest of the page's life.
+      pickCompany("ACME Widgets Ltd", "12345678");
+      expect(summary().prev().is("#company_id_field")).toBe(true);
+
+      // Simulate WC's own resort: detach the real fields and re-append them
+      // AFTER the summary — exactly what `rows.detach().appendTo(wrapper)`
+      // does, and exactly the shape of the reported bug (summary now
+      // precedes the fields it's meant to sit below).
+      const $form = $("form[name='checkout']");
+      $("#billing_company_display_field, #billing_company_field, #company_id_field")
+        .detach()
+        .appendTo($form);
+      const children = () => $form.children().toArray();
+      const indexOf = (sel) => children().indexOf($(sel)[0]);
+      expect(indexOf("#" + dom.companySummaryId)).toBeLessThan(indexOf("#billing_company_display_field"));
+
+      // Any subsequent render (payment-method switch, country change,
+      // another pick — toggleBusinessFields is the common path for all of
+      // them) must snap the summary back into place, not leave it stranded.
+      dom.renderCompanySummary();
+
+      expect(summary().prev().is("#company_id_field")).toBe(true);
+      expect(indexOf("#" + dom.companySummaryId)).toBeGreaterThan(indexOf("#billing_company_display_field"));
+    });
+
     test("nothing inside the summary posts a value of its own", () => {
       pickCompany("ACME Widgets Ltd", "12345678");
 

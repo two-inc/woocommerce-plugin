@@ -1257,25 +1257,47 @@ let twoincDomHelper = {
    * invisible on that page in exactly the search mode it matters most for. The
    * checkout page has no wrappers and the anchor falls through to the field.
    *
+   * Re-anchored on EVERY call, not just on first creation (#30.x.9, found by
+   * live post-merge verification — reported live: the summary rendered ABOVE
+   * the company field instead of below it). Root cause is documented in
+   * `WC_Twoinc_Checkout.php`, above `move_country_field()` and
+   * `sync_locale_country_priority()`: WooCommerce core's own
+   * `address-i18n.js` detaches and re-appends every `.form-row` in the
+   * billing wrapper by priority, on EVERY checkout load — not only on
+   * country change. This summary is a plain `<div>`, not a `.form-row`, so
+   * it never takes part in that resort; once WC moves the real fields past
+   * it, it stays stranded wherever it was first inserted, above all of
+   * them. The plugin already carries two established fixes for exactly this
+   * mechanism (for the country field) — this is the same class of bug for
+   * the summary. `insertAfter` on an already-attached node MOVES it rather
+   * than cloning, so re-running it here on every `renderCompanySummary()`
+   * call (which already fires on every pick, payment-method switch, country
+   * change and re-render) snaps the summary back into place after any
+   * external resort, at the cost of one no-op DOM move on calls where
+   * nothing has drifted.
+   *
    * @returns {Object} jQuery-wrapped summary, or an empty set on a page with
    *   no company fields at all
    */
   getCompanySummaryNode: function () {
     let $node = jQuery("#" + twoincDomHelper.companySummaryId);
-    if ($node.length) return $node;
+    const isNew = !$node.length;
 
     let $field = jQuery("#company_id_field");
     if (!$field.length) $field = jQuery("#billing_company_field");
-    if (!$field.length) return jQuery();
+    if (!$field.length) return isNew ? jQuery() : $node;
 
-    $node = jQuery(
-      '<div id="' +
-        twoincDomHelper.companySummaryId +
-        '" class="twoinc-company-summary hidden">' +
-        '<span class="twoinc-company-summary-name"></span>' +
-        '<span class="twoinc-company-summary-id"></span>' +
-        "</div>"
-    );
+    if (isNew) {
+      $node = jQuery(
+        '<div id="' +
+          twoincDomHelper.companySummaryId +
+          '" class="twoinc-company-summary hidden">' +
+          '<span class="twoinc-company-summary-name"></span>' +
+          '<span class="twoinc-company-summary-id"></span>' +
+          "</div>"
+      );
+    }
+
     const $wrapper = $field.closest(".twoinc-inp-container");
     $node.insertAfter($wrapper.length ? $wrapper : $field);
     return $node;
