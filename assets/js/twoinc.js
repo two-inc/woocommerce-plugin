@@ -1257,27 +1257,67 @@ let twoincDomHelper = {
    * invisible on that page in exactly the search mode it matters most for. The
    * checkout page has no wrappers and the anchor falls through to the field.
    *
+   * Re-anchored on EVERY call, not just on first creation (#30.x.9, found by
+   * live post-merge verification — reported live: the summary rendered ABOVE
+   * the company field instead of below it). Root cause is documented in
+   * `WC_Twoinc_Checkout.php`, above `move_country_field()` and
+   * `sync_locale_country_priority()`: WooCommerce core's own
+   * `address-i18n.js` detaches and re-appends every `.form-row` in the
+   * billing wrapper by priority, on EVERY checkout load — not only on
+   * country change. This summary is a plain `<div>`, not a `.form-row`, so
+   * it never takes part in that resort; once WC moves the real fields past
+   * it, it stays stranded wherever it was first inserted, above all of
+   * them. The plugin already carries two established fixes for exactly this
+   * mechanism (for the country field) — this is the same class of bug for
+   * the summary. `insertAfter` on an already-attached node MOVES it rather
+   * than cloning, so re-checking the anchor here on every
+   * `renderCompanySummary()` call (which already fires on every pick,
+   * payment-method switch, country change and re-render) snaps the summary
+   * back into place after any external resort.
+   *
+   * Guarded on `$node.prev()` (round 1 review — Han): re-running
+   * `insertAfter` UNCONDITIONALLY, on every call, physically detaches and
+   * re-inserts the node even when nothing has drifted — measured with a
+   * MutationObserver, every "healthy" call still fires a childList removal
+   * + addition. That collapses any text selection inside the summary (the
+   * only interaction this read-only org-number display affords is
+   * selecting it to copy), forces a reflow, and would restart any CSS
+   * transition a brand overlay puts on this element (`.custom-checkout
+   * .twoinc-company-summary` in twoinc.css proves overlays do style it).
+   * `.prev()` is element-only (ignores text nodes), so "prev is already the
+   * anchor" reliably implies "already positioned, same parent, nothing to
+   * do" — the move only runs when the anchor actually changed.
+   *
    * @returns {Object} jQuery-wrapped summary, or an empty set on a page with
    *   no company fields at all
    */
   getCompanySummaryNode: function () {
     let $node = jQuery("#" + twoincDomHelper.companySummaryId);
-    if ($node.length) return $node;
+    const isNew = !$node.length;
 
     let $field = jQuery("#company_id_field");
     if (!$field.length) $field = jQuery("#billing_company_field");
-    if (!$field.length) return jQuery();
+    // Dead ternary removed (round 2 review — Vader): `isNew` is exactly
+    // `!$node.length`, and `$node` is never reassigned before this line, so
+    // `isNew ? jQuery() : $node` and plain `$node` are the same value in
+    // both branches — an equivalent mutant proved it. Reads as if it guards
+    // something it doesn't.
+    if (!$field.length) return $node;
 
-    $node = jQuery(
-      '<div id="' +
-        twoincDomHelper.companySummaryId +
-        '" class="twoinc-company-summary hidden">' +
-        '<span class="twoinc-company-summary-name"></span>' +
-        '<span class="twoinc-company-summary-id"></span>' +
-        "</div>"
-    );
+    if (isNew) {
+      $node = jQuery(
+        '<div id="' +
+          twoincDomHelper.companySummaryId +
+          '" class="twoinc-company-summary hidden">' +
+          '<span class="twoinc-company-summary-name"></span>' +
+          '<span class="twoinc-company-summary-id"></span>' +
+          "</div>"
+      );
+    }
+
     const $wrapper = $field.closest(".twoinc-inp-container");
-    $node.insertAfter($wrapper.length ? $wrapper : $field);
+    const $anchor = $wrapper.length ? $wrapper : $field;
+    if ($node.prev()[0] !== $anchor[0]) $node.insertAfter($anchor);
     return $node;
   },
 
