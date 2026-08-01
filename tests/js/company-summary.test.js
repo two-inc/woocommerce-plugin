@@ -18,7 +18,14 @@
 
 "use strict";
 
+const fs = require("fs");
+const path = require("path");
 const harness = require("./wc-harness");
+
+/** @returns {string} the raw twoinc.css source */
+function stylesheetSource() {
+  return fs.readFileSync(path.join(harness.REPO_ROOT, harness.STYLESHEET_PATH), "utf8");
+}
 
 const GATEWAY_ID = "woocommerce-gateway-tillit";
 
@@ -171,6 +178,111 @@ describe("read-only captured-company summary", () => {
       expect(isShown()).toBe(true);
       expect(renderedName()).toBe("ACME Widgets Ltd");
       expect(renderedNumber()).toBe("");
+    });
+  });
+
+  describe("number rendered below the name, right-aligned, not sharing its line (#30.x.9)", () => {
+    // Reported live: picking a search result left the company number
+    // effectively invisible. Root cause was layout, not logic — the number
+    // used to sit on the SAME line as the name, `margin-left: 8px` away from
+    // it, `white-space: nowrap`. A long company name pushed it toward, and
+    // on a narrow viewport past, the right edge of the summary's own box.
+    // Doug's canonical cross-platform ruling: the number gets its own row,
+    // immediately below the name, right-aligned to the input's right edge —
+    // so it can never again compete with the name for the same horizontal
+    // space regardless of how long the name is.
+    test("the number is a block of its own, not inline with the name", () => {
+      harness.injectStylesheet();
+      pickCompany("A Very Long International Holdings Group Company Ltd", "12345678");
+
+      const nameStyle = window.getComputedStyle(summary().find(".twoinc-company-summary-name")[0]);
+      const idStyle = window.getComputedStyle(summary().find(".twoinc-company-summary-id")[0]);
+
+      expect(nameStyle.display).toBe("block");
+      expect(idStyle.display).toBe("block");
+      expect(idStyle.textAlign).toBe("end");
+    });
+
+    test("the summary box carries WooCommerce core's own form-row padding, so the id lines up with the input's real edge (round 2 review — Vader)", () => {
+      // Mutation-caught gap: deleting `padding-left`/`padding-right` from
+      // `.twoinc-company-summary` (round 1's fix for the ~3px offset
+      // against the input) passed the full suite with nothing to catch it.
+      // Asserted against computed style, not a stylesheet-source regex —
+      // the `[^}]*` capture used elsewhere in this file terminates early on
+      // the `}` inside this rule's own CSS *comment* (`.form-row { padding:
+      // 3px }`), so a naive regex test would silently pass regardless of
+      // what the rule actually declares.
+      harness.injectStylesheet();
+      pickCompany("ACME Widgets Ltd", "12345678");
+
+      const summaryStyle = window.getComputedStyle(summary()[0]);
+      expect(summaryStyle.paddingLeft).toBe("3px");
+      expect(summaryStyle.paddingRight).toBe("3px");
+    });
+
+    test("the id element carries no same-line margin from the name any more", () => {
+      // The old inline layout's `margin-left: 8px` on the id is exactly what
+      // let it be squeezed off the visible line by a long name. Asserted
+      // directly against the shipped rule, not just the computed style,
+      // because jsdom does not lay out real text wrapping to prove the
+      // collision — the CSS declaration itself is the fix.
+      const m = /\.twoinc-company-summary-id\s*\{([^}]*)\}/.exec(stylesheetSource());
+      expect(m).not.toBeNull();
+      expect(m[1]).not.toMatch(/margin-left/);
+      expect(m[1]).toMatch(/text-align:\s*end/);
+      expect(m[1]).toMatch(/display:\s*block/);
+    });
+
+    test("neither the name nor the id can overflow past the row on a single unbroken token", () => {
+      // Round 1 review (Vader): the block-row fix stops the NUMBER competing
+      // with the name for space, but does nothing on its own for a single
+      // unbroken token — routine in DE/NL/NO registry names — which would
+      // otherwise overflow the row horizontally instead of wrapping.
+      const nameBody = /\.twoinc-company-summary-name\s*\{([^}]*)\}/.exec(stylesheetSource());
+      const idBody = /\.twoinc-company-summary-id\s*\{([^}]*)\}/.exec(stylesheetSource());
+      expect(nameBody).not.toBeNull();
+      expect(idBody).not.toBeNull();
+      expect(nameBody[1]).toMatch(/overflow-wrap:\s*anywhere/);
+      expect(idBody[1]).toMatch(/overflow-wrap:\s*anywhere/);
+      // The old nowrap protected the (inline, same-line) id from wrapping
+      // onto an ugly second line — but now that it has its own row, nowrap
+      // would instead let an exceptionally long identifier run past the
+      // row's edge, invisible, which is the exact bug this PR fixes.
+      expect(idBody[1]).not.toMatch(/white-space:\s*nowrap/);
+    });
+  });
+
+  describe("pay-for-order page: number stays aligned with the name, not the full-width row (#30.x.9)", () => {
+    // Round 1 review (Han): that page lays the company fields out as
+    // flex-wrap items and gives the summary `flex-basis: 100%` — a
+    // full-page-width row, unlike the checkout page where the summary is
+    // only as wide as the (narrower) field above it. Right-aligning the id
+    // against that full width would detach it from the actual input, which
+    // sits centred between the two. Assert the override lands.
+    test("the id's alignment is overridden back to the leading edge on .custom-checkout", () => {
+      const m = /\.custom-checkout\s+\.twoinc-company-summary-id\s*\{([^}]*)\}/.exec(
+        stylesheetSource()
+      );
+      expect(m).not.toBeNull();
+      expect(m[1]).toMatch(/text-align:\s*start/);
+    });
+
+    test("the override actually wins the cascade, not just exists in source (round 2 review — Han)", () => {
+      // The regex test above only proves the rule EXISTS, not that it WINS
+      // against a real rendered element. `.custom-checkout
+      // .twoinc-company-summary-id` outranks the bare `.twoinc-company-
+      // summary-id` on specificity (0,2,0 vs 0,1,0) regardless of source
+      // order, so this isn't guarding against reordering — it's guarding
+      // against the override rule silently stopping applying at all (typo'd
+      // selector, wrong class, etc.), which a source-only regex can't catch.
+      // Render the summary inside a `.custom-checkout` ancestor and read the
+      // actual computed value.
+      harness.injectStylesheet();
+      pickCompany("ACME Widgets Ltd", "12345678");
+      summary().wrap('<div class="custom-checkout"></div>');
+
+      const idStyle = window.getComputedStyle(summary().find(".twoinc-company-summary-id")[0]);
+      expect(idStyle.textAlign).toBe("start");
     });
   });
 

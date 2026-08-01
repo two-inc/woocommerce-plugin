@@ -590,11 +590,13 @@ describe("company-search manual-entry affordance", () => {
     });
   });
 
-  describe("vertical alignment against the visible field, not the field+label (#30.x.5.3, round 3)", () => {
+  describe("placement below the visible field, not overlapping it (#30.x.5.3 round 3; reworked #30.x.9)", () => {
     test("#search_company_btn is appended into .woocommerce-input-wrapper, not #billing_company_field directly", () => {
-      // See the rule comment above `#billing_company_field
-      // .woocommerce-input-wrapper` in twoinc.css for why this containing
-      // block matters (label-height vs. visible-field centring).
+      // See the rule comment above `#search_company_btn` in twoinc.css for
+      // why this containing block matters: it is WooCommerce core's own
+      // wrapper around just the <input>, no label inside it, so a button
+      // appended as its last child lands in normal flow immediately below
+      // the input rather than below the label+input combined.
       jest.useFakeTimers();
       openWithAffordance();
       type("abc");
@@ -608,7 +610,13 @@ describe("company-search manual-entry affordance", () => {
       expect($searchBtn.closest("#billing_company_field").length).toBe(1);
     });
 
-    test("the containing wrapper is positioned and the button centres against it, not the field", () => {
+    test("the button sits in normal flow below the input, not absolutely positioned over it (#30.x.9)", () => {
+      // Reported live: the button used to be `position: absolute; top: 50%;
+      // transform: translateY(-50%)` against `.woocommerce-input-wrapper` —
+      // centred vertically against the input, which put it ON TOP of the
+      // input rather than below it. Doug's ruling: no absolute positioning,
+      // normal block flow below the field, right-aligned — same pattern as
+      // Magento/Luma's `.search_for_company` and Hyvä.
       harness.injectStylesheet();
 
       jest.useFakeTimers();
@@ -619,26 +627,76 @@ describe("company-search manual-entry affordance", () => {
       jest.useRealTimers();
 
       const $searchBtn = ctx.dom.getSearchCompanyBtnNode();
-      const wrapper = $searchBtn.parent()[0];
 
-      expect(window.getComputedStyle(wrapper).position).toBe("relative");
+      // The button is the LAST child of the wrapper, after the <input> —
+      // i.e. it renders below it in normal document flow.
+      const wrapper = $searchBtn.parent();
+      expect(wrapper.children().last().get(0)).toBe($searchBtn.get(0));
+      expect($searchBtn.prev().is("input")).toBe(true);
+
       const btnStyle = window.getComputedStyle($searchBtn[0]);
-      expect(btnStyle.position).toBe("absolute");
-      expect(btnStyle.top).toBe("50%");
-      // jsdom reports the declared transform function verbatim rather than
-      // resolving it to a matrix() (no layout engine to resolve it against),
-      // so this asserts the declaration itself rather than a computed value.
-      expect(btnStyle.transform).toContain("translateY(-50%)");
+      expect(btnStyle.position).not.toBe("absolute");
+      expect(btnStyle.display).toBe("block");
+      expect(btnStyle.textAlign).toBe("end");
+    });
+
+    test("the wrapper is blockified explicitly, not left to whatever the host theme declares (round 1 review)", () => {
+      // Han/Vader, convergent: `.woocommerce-input-wrapper` is a <span> —
+      // inline by default — and this repo has no control over what a host
+      // theme sets it to. A theme declaring it `display: flex` would put
+      // the button back on the same line as the input, silently
+      // re-creating the overlap this change removes. `position: relative`
+      // stays too — it's what the OLD absolute-positioned button relied on,
+      // kept at zero cost so no theme-supplied decoration inside this
+      // wrapper silently changes its own positioning context.
+      const m = /#billing_company_field\s+\.woocommerce-input-wrapper\s*\{([^}]*)\}/.exec(
+        fs.readFileSync(path.join(harness.REPO_ROOT, harness.STYLESHEET_PATH), "utf8")
+      );
+      expect(m).not.toBeNull();
+      expect(m[1]).toMatch(/display:\s*block/);
+      expect(m[1]).toMatch(/position:\s*relative/);
+    });
+
+    test("#search_company_btn declares its below-the-field gap explicitly (round 1 review — Vader)", () => {
+      // Mutation-caught gap: the button's own `display`/`position`/
+      // `text-align` were asserted above, but `margin-top` — the actual
+      // "sits below the field with a gap" spacing — was not, and a mutation
+      // deleting it passed the full suite.
+      const m = /^#search_company_btn\s*\{([^}]*)\}/m.exec(
+        fs.readFileSync(path.join(harness.REPO_ROOT, harness.STYLESHEET_PATH), "utf8")
+      );
+      expect(m).not.toBeNull();
+      expect(m[1]).toMatch(/margin-top:\s*4px/);
+    });
+
+    test("#search_company_btn keeps width: 100% paired with box-sizing: border-box (round 2 review — Vader, correcting round 1)", () => {
+      // Round 1 deleted `width: 100%` on the theory that `display: block`
+      // alone fills the containing block at `width: auto` — true for an
+      // ordinary element, FALSE for a <button>: form controls use intrinsic
+      // (shrink-to-fit) sizing at `width: auto` regardless of `display`.
+      // Without `width: 100%` this button hugs its own label and sits at
+      // the input's left edge, making `text-align: end` a no-op — silently
+      // reintroducing a left-aligned link where the design calls for
+      // right-aligned. `box-sizing: border-box` is what actually answers
+      // round 1's original overflow concern (no global border-box
+      // guaranteed anywhere in this stylesheet), so the two must ship
+      // together — either alone reproduces a bug.
+      const m = /^#search_company_btn\s*\{([^}]*)\}/m.exec(
+        fs.readFileSync(path.join(harness.REPO_ROOT, harness.STYLESHEET_PATH), "utf8")
+      );
+      expect(m).not.toBeNull();
+      expect(m[1]).toMatch(/width:\s*100%/);
+      expect(m[1]).toMatch(/box-sizing:\s*border-box/);
     });
 
     test("self-heals a missing .woocommerce-input-wrapper instead of silently falling back to the unpositioned field (found under adversarial review)", () => {
       // A host template that renders #billing_company_field without
       // WooCommerce core's own .woocommerce-input-wrapper span around the
       // input would otherwise leave this button falling back to appending
-      // directly onto #billing_company_field — which already carries
-      // `position: relative` from BEFORE this round (see twoinc.css), so the
-      // button would still centre with top:50%/translateY(-50%) against
-      // label+input COMBINED, silently reproducing the exact bug this round
+      // directly onto #billing_company_field — which wraps BOTH the label
+      // and the input, so the button would land below the label+input
+      // COMBINED rather than immediately below the input alone, silently
+      // reproducing the exact "not right below the field" bug this round
       // exists to fix, with nothing to signal the fallback path was taken.
       // getSearchCompanyBtnNode must instead build an equivalent wrapper
       // around the bare input rather than degrade.
@@ -876,8 +934,9 @@ describe("company-search manual-entry affordance", () => {
       expect($back[0].style.display).toBe("none");
       // In place, not floating: it belongs beside the manual company field —
       // specifically inside .woocommerce-input-wrapper (round 3, #30.x.5.3),
-      // not directly on #billing_company_field, so CSS can centre it against
-      // the visible input box rather than the field's label+input combined.
+      // not directly on #billing_company_field, so it renders immediately
+      // below the visible input box rather than below the field's
+      // label+input combined.
       expect($back.parent().hasClass("woocommerce-input-wrapper")).toBe(true);
       expect($back.closest("#billing_company_field").length).toBe(1);
     });

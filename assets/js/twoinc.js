@@ -1379,9 +1379,12 @@ let twoincDomHelper = {
    * from submitting it.
    *
    * Appended into `.woocommerce-input-wrapper`, not directly into
-   * `#billing_company_field` (round 3, #30.x.5.3) — see the rule comment
-   * above `#billing_company_field .woocommerce-input-wrapper` in twoinc.css
-   * for why (label-height vs. visible-field centring). If that wrapper is
+   * `#billing_company_field` (round 3, #30.x.5.3; positioning reworked
+   * #30.x.9) — see the rule comment above `#search_company_btn` in
+   * twoinc.css for why: that wrapper is WooCommerce core's own box around
+   * just the <input>, no label inside it, so a plain block appended as its
+   * last child lands in normal flow immediately below the input regardless
+   * of label height or how many lines it wraps to. If that wrapper is
    * missing (a host template not using WooCommerce core's own field markup),
    * one is built around `#billing_company` directly rather than falling back
    * to `#billing_company_field` itself, which would silently reintroduce the
@@ -1443,20 +1446,16 @@ let twoincDomHelper = {
 
     // Self-heal rather than silently degrade (found under adversarial
     // review before merge, round 3): a plain "fall back to
-    // #billing_company_field" here would still centre the button with
-    // `top: 50%; transform: translateY(-50%)` (see twoinc.css) against
-    // #billing_company_field itself — which ALREADY carries `position:
-    // relative` from before this fix — so on any host template that
-    // doesn't render the standard WooCommerce wrapper, this button would
-    // silently reproduce the exact label-height centring bug this round
-    // exists to fix, with nothing to signal that the fallback path was
-    // even taken. Instead, build an equivalent wrapper around just the
-    // <input> ourselves: same DOM shape WooCommerce core's own
-    // woocommerce_form_field() would have produced, so the CSS centring
-    // rule has a consistent structure to hook onto regardless of which
-    // path got here. Falls through to #billing_company_field only if
-    // #billing_company itself is missing — a field this whole feature
-    // already depends on existing.
+    // #billing_company_field" here would append the button as a sibling of
+    // BOTH the label and the input, rather than immediately after the input
+    // alone — reintroducing the old overlap-with-the-field-label class of
+    // bug this wrapper exists to avoid. Instead, build an equivalent wrapper
+    // around just the <input> ourselves: same DOM shape WooCommerce core's
+    // own woocommerce_form_field() would have produced, so the button always
+    // lands directly below the input regardless of which path got here.
+    // Falls through to #billing_company_field only if #billing_company
+    // itself is missing — a field this whole feature already depends on
+    // existing.
     if (!$wrapper.length) {
       const $input = jQuery("#billing_company");
       if ($input.length) {
