@@ -174,6 +174,48 @@ describe("read-only captured-company summary", () => {
     });
   });
 
+  describe("number rendered below the name, right-aligned, not sharing its line (#30.x.9)", () => {
+    // Reported live: picking a search result left the company number
+    // effectively invisible. Root cause was layout, not logic — the number
+    // used to sit on the SAME line as the name, `margin-left: 8px` away from
+    // it, `white-space: nowrap`. A long company name pushed it toward, and
+    // on a narrow viewport past, the right edge of the summary's own box.
+    // Doug's canonical cross-platform ruling: the number gets its own row,
+    // immediately below the name, right-aligned to the input's right edge —
+    // so it can never again compete with the name for the same horizontal
+    // space regardless of how long the name is.
+    test("the number is a block of its own, not inline with the name", () => {
+      harness.injectStylesheet();
+      pickCompany("A Very Long International Holdings Group Company Ltd", "12345678");
+
+      const nameStyle = window.getComputedStyle(summary().find(".twoinc-company-summary-name")[0]);
+      const idStyle = window.getComputedStyle(summary().find(".twoinc-company-summary-id")[0]);
+
+      expect(nameStyle.display).toBe("block");
+      expect(idStyle.display).toBe("block");
+      expect(idStyle.textAlign).toBe("right");
+    });
+
+    test("the id element carries no same-line margin from the name any more", () => {
+      // The old inline layout's `margin-left: 8px` on the id is exactly what
+      // let it be squeezed off the visible line by a long name. Asserted
+      // directly against the shipped rule, not just the computed style,
+      // because jsdom does not lay out real text wrapping to prove the
+      // collision — the CSS declaration itself is the fix.
+      const fs = require("fs");
+      const path = require("path");
+      const css = fs.readFileSync(
+        path.join(harness.REPO_ROOT, harness.STYLESHEET_PATH),
+        "utf8"
+      );
+      const m = /\.twoinc-company-summary-id\s*\{([^}]*)\}/.exec(css);
+      expect(m).not.toBeNull();
+      expect(m[1]).not.toMatch(/margin-left/);
+      expect(m[1]).toMatch(/text-align:\s*right/);
+      expect(m[1]).toMatch(/display:\s*block/);
+    });
+  });
+
   describe("manual entry", () => {
     /**
      * Type a company name the way the buyer does in manual entry, and let the

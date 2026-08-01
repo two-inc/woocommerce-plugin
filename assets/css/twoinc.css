@@ -164,6 +164,7 @@
 
 .twoinc-company-summary-name {
   font-weight: 600;
+  display: block;
 }
 
 /*
@@ -172,9 +173,20 @@
  * used (#ddd) was close to invisible on a white checkout. Kept as a flat
  * single-class selector so brand overlays can recolour it without raising
  * specificity.
+ *
+ * `display: block` + `text-align: right` (#30.x.9, Doug's canonical
+ * cross-platform ruling): this used to sit on the SAME line as the name,
+ * `margin-left: 8px` away from it. A long company name pushed the number
+ * right up against — and on a narrow viewport, past — the edge of the
+ * summary's own box, which is exactly what Doug found live: picking a
+ * result left no number visibly on screen. Giving the number its own row,
+ * right-aligned to the input's right edge (the summary div is the same
+ * width as the field above it), means the two values never compete for
+ * the same horizontal space regardless of how long the name is.
  */
 .twoinc-company-summary-id {
-  margin-left: 8px;
+  display: block;
+  text-align: right;
   color: #6b6b6b;
   white-space: nowrap;
 }
@@ -242,32 +254,31 @@
  * button rule kept winning on this element specifically while the other one
  * was already fixed. Same fix, same reason, just missed the first time.
  *
- * Vertical centring against `.woocommerce-input-wrapper`, not against this
- * button's own containing `#billing_company_field` (round 3, #30.x.5.3).
- * `#billing_company_field` wraps BOTH the "Company name" <label> and the
- * input, but only the input carries a visible border — the label sits above
- * it with no box of its own. This button used to be positioned with no
- * explicit `top` at all, so its vertical position fell back to its "static
- * position" (roughly where it would render in normal flow, i.e. after the
- * label+input together) rather than to the middle of the bordered input box
- * beneath the label. `.woocommerce-input-wrapper` is WooCommerce core's own
- * wrapper around just the <input> — no label inside it — so this button is
- * now appended there (see `getSearchCompanyBtnNode` in twoinc.js) and
- * centred with `top: 50%; transform: translateY(-50%)` against THAT box,
- * which lines it up with the visible field regardless of label height or how
- * many lines it wraps to on a narrow viewport.
+ * Appended into `.woocommerce-input-wrapper` (WooCommerce core's own wrapper
+ * around just the <input>, no label inside it — see `getSearchCompanyBtnNode`
+ * in twoinc.js), the same container round 3 (#30.x.5.3) introduced. That
+ * round centred the button with `position: absolute; top: 50%; transform:
+ * translateY(-50%)` against the wrapper, which lined it up vertically with
+ * the input but placed it ON TOP of it, right-pinned 4px from the edge —
+ * overlapping the input itself. Reported live (#30.x.9, Doug's canonical
+ * cross-platform ruling): that overlap is exactly the "search-again link
+ * renders inside/over the field" bug. `.woocommerce-input-wrapper` still has
+ * no fixed height of its own, so with the absolute positioning removed the
+ * button now falls into NORMAL block flow as the wrapper's last child — i.e.
+ * immediately below the input, inside the same box the input's own border
+ * defines, so `text-align: right` lines its text up with the input's right
+ * edge without needing any explicit positioning at all. Matches the pattern
+ * Magento/Luma (`magento-plugin` `.search_for_company`) and Hyvä already use:
+ * a plain block appended after the field, right-aligned, no absolute
+ * positioning.
  */
-#billing_company_field .woocommerce-input-wrapper {
-  position: relative;
-}
 #search_company_btn {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
   text-align: right;
   cursor: pointer;
   color: #3043d1;
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  right: 4px;
   background: none;
   border: 1px dotted transparent;
   padding: 0 2px;
