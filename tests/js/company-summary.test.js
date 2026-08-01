@@ -268,14 +268,15 @@ describe("read-only captured-company summary", () => {
     });
 
     test("the override actually wins the cascade, not just exists in source (round 2 review — Han)", () => {
-      // The regex test above only proves the rule EXISTS, not that it WINS.
-      // Both the general `.twoinc-company-summary-id` rule and this
-      // `.custom-checkout` override are live in the same stylesheet — if a
-      // future edit ever reordered them so the general rule landed after
-      // the override in source, `text-align` would resolve to "end" here
-      // regardless of what this file's regex still matches. Render the
-      // summary inside a `.custom-checkout` ancestor and read the actual
-      // computed value.
+      // The regex test above only proves the rule EXISTS, not that it WINS
+      // against a real rendered element. `.custom-checkout
+      // .twoinc-company-summary-id` outranks the bare `.twoinc-company-
+      // summary-id` on specificity (0,2,0 vs 0,1,0) regardless of source
+      // order, so this isn't guarding against reordering — it's guarding
+      // against the override rule silently stopping applying at all (typo'd
+      // selector, wrong class, etc.), which a source-only regex can't catch.
+      // Render the summary inside a `.custom-checkout` ancestor and read the
+      // actual computed value.
       harness.injectStylesheet();
       pickCompany("ACME Widgets Ltd", "12345678");
       summary().wrap('<div class="custom-checkout"></div>');

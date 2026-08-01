@@ -377,9 +377,9 @@
  * deliberately, rather than `border: 0` — a border occupies box space
  * (unlike outline, which doesn't), so drawing it only on `:focus` would grow
  * the button by 2px the moment focus lands and shrink it back on blur,
- * nudging its (unfixed-width, right-pinned) box and its text sideways by
- * ~1px each way. Reserving the same width up front, invisible until
- * `:focus` recolours it, means the box never changes size — only colour.
+ * nudging its right-aligned text sideways by ~1px each way. Reserving the
+ * same width up front, invisible until `:focus` recolours it, means the
+ * box never changes size — only colour.
  *
  * `!important` for the same defensive reason as the text-transform override:
  * a theme's own button-focus reset, if one exists, is routinely `!important`
