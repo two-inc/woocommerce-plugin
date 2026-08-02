@@ -1355,6 +1355,56 @@ describe("company-search manual-entry affordance", () => {
       expect(calls).toEqual(["close", "destroy"]);
       jQuery.fn.select2.mockRestore();
     });
+
+    test("a deferred manual-entry activation that lands AFTER an async sole-trader switch does not stomp it (#30.x.13, round 2 review — Han+Vader, convergent)", () => {
+      // Real race, not hypothetical: `activateManualEntry` removes the
+      // button synchronously but defers the actual mode switch via
+      // `setTimeout(enterManualCompanyEntry, 0)` (so destroying the widget
+      // doesn't happen from inside its own still-unwinding click handler).
+      // Separately, the email-driven autofill prefetch can call
+      // `twoincSoleTrader.setMode("sole_trader")` on its own, asynchronously,
+      // regardless of what the dropdown/manual-entry button is doing (see
+      // the comment on `savedManualEntryActive`). If that prefetch's
+      // callback lands in the SAME tick window as the pending deferred
+      // `enterManualCompanyEntry` — entirely plausible, both are macrotask/
+      // microtask-scheduled independently of each other — `setMode` runs
+      // first (snapshotting the correct pre-manual-entry state), and then
+      // the stale `enterManualCompanyEntry` fires anyway: without a guard it
+      // would force `manual_company_entry_active` back to true (wrong —
+      // sole trader needs `#company_id_field` for its synthetic id),
+      // re-show the search-again button `setMode` just hid, and wipe
+      // `#billing_company`/`#company_id` out from under the synthetic id
+      // sole-trader mode may have just written. That reproduces the exact
+      // #30.x.13 wrong-id-field-visibility symptom via a path this PR's own
+      // new flag opened up. This asserts `enterManualCompanyEntry` bails
+      // once sole-trader mode has taken over by the time it actually runs.
+      jest.useFakeTimers();
+      openWithAffordance();
+      type("abc");
+
+      // The button's click handler fires synchronously; the mode switch
+      // itself is what's deferred.
+      activate();
+
+      // Async sole-trader switch races in and completes BEFORE the deferred
+      // enterManualCompanyEntry timer fires.
+      ctx.soleTrader.setMode("sole_trader");
+      expect(ctx.twoinc.manual_company_entry_active).toBe(false);
+      expect(ctx.twoinc.enable_company_search).toBe("no");
+
+      // Now the stale deferred callback runs. Without the guard in
+      // enterManualCompanyEntry, this forces manual_company_entry_active
+      // back to true — wrong, sole trader needs #company_id_field for its
+      // synthetic id (see toggleBusinessFields) — reproducing the
+      // #30.x.13 wrong-id-field-visibility symptom via this new flag.
+      jest.advanceTimersByTime(1);
+      jest.useRealTimers();
+
+      // Sole-trader mode must still be intact — not stomped by the late
+      // manual-entry activation.
+      expect(ctx.twoinc.manual_company_entry_active).toBe(false);
+      expect(ctx.twoinc.enable_company_search).toBe("no");
+    });
   });
 
   describe("returning to search lands the buyer IN the search box", () => {

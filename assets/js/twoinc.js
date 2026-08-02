@@ -1541,6 +1541,25 @@ let twoincDomHelper = {
    * @returns {void}
    */
   enterManualCompanyEntry: function () {
+    // Guard against the deferred activation (activateManualEntry's
+    // `setTimeout(enterManualCompanyEntry, 0)`) landing AFTER an async
+    // sole-trader switch raced in during the same tick — e.g. the
+    // email-driven autofill prefetch calling
+    // `twoincSoleTrader.setMode("sole_trader")` "on its own", independent of
+    // what the dropdown is doing (round 2 review, Han+Vader, convergent:
+    // both independently reproduced this race). Without this guard, this
+    // function would still run after setMode already put the buyer into
+    // sole-trader mode — forcing `manual_company_entry_active` back to
+    // true (wrong: sole trader needs `#company_id_field` for its synthetic
+    // id), re-showing the search-again button setMode just hid, and
+    // wiping `#billing_company`/`#company_id` out from under the synthetic
+    // id sole-trader mode may have just written. That reproduces the exact
+    // #30.x.13 symptom (wrong id-field visibility) via a path this PR's
+    // own new flag opened up. Same shape as the existing "remove the
+    // button before deferring" reentrancy guard in `activateManualEntry`,
+    // one level further out.
+    if (twoincSoleTrader.mode === "sole_trader") return;
+
     window.twoinc.enable_company_search = "no";
     // Distinguishes THIS route into "search suppressed" from the other two
     // (merchant-level company-search-off, and twoincSoleTrader.setMode) —
