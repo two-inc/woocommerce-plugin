@@ -307,6 +307,43 @@ describe("billing country switch", () => {
       expect(ctx.helper.lastObservedCountry).toBe("GB");
     });
 
+    test("the updated_checkout re-sync terminates instead of looping", () => {
+      // The loop this could have been: `updated_checkout` -> a real country
+      // change -> clearSelectedCompany() -> setAddress() -> `update_checkout`
+      // -> WooCommerce refreshes -> `updated_checkout` again. What stops it is
+      // that the country was RECORDED on the way through, so the second pass
+      // sees no change and returns. Worth pinning rather than reasoning about:
+      // the termination condition lives in a different function from the
+      // recursion, and address lookup (which is what reaches setAddress) is
+      // off by default, so the loop would only appear on shops that enable it.
+      ctx.twoinc.enable_address_lookup = "yes";
+      ctx
+        .$("form[name='checkout']")
+        .append(
+          [
+            "<input type='text' id='billing_address_1' value='' />",
+            "<input type='text' id='billing_address_2' value='' />",
+            "<input type='text' id='billing_city' value='' />",
+            "<input type='text' id='billing_postcode' value='' />"
+          ].join("\n")
+        );
+      initializeCheckout();
+      // Stand in for WooCommerce core's checkout.js, which is what turns a
+      // requested `update_checkout` into a completed `updated_checkout`.
+      let passes = 0;
+      ctx.$(document.body).on("update_checkout", function () {
+        passes += 1;
+        if (passes > 20) throw new Error("update_checkout did not settle");
+        ctx.$(document.body).trigger("updated_checkout");
+      });
+
+      ctx.$("#billing_country").val("ES");
+      ctx.$(document.body).trigger("updated_checkout");
+
+      expect(passes).toBeLessThan(5);
+      expect(ctx.helper.lastObservedCountry).toBe("ES");
+    });
+
     test("an empty reading is neither acted on nor recorded", () => {
       // WooCommerce replaces #billing_country wholesale on some re-renders,
       // so an event landing mid-replacement reads "". Clearing on that would
