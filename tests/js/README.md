@@ -258,12 +258,23 @@ about the company-search helper, so the bootstrap is left to no-op.
   `change` with the value unchanged, and each one used to destroy the captured company. The
   guard compares against the last country acted on, so the captured company survives one
   such event and a run of them, and nothing in flight is invalidated.
-- **`initialize()` seeds that comparison** from the country already in the form, because the
-  first event the binding sees is usually WooCommerce's own. Asserted through a real
-  `trigger("change")` on the delegated binding, so unwiring either half fails it.
 - **a real change still clears everything**, records the new country for the next comparison,
   and leaves the new `country_prefix` on `customerCompany` — set _after_ `clearSelectedCompany()`,
   which resets that object wholesale and only re-reads it from the DOM three seconds later.
+- **the tracker cannot drift from the field**, which is the failure mode the guard buys and
+  therefore the one this suite spends most of its assertions on. Five separate ways it could:
+  `initialize()` seeds it, and the seed is what makes a genuine FIRST change act rather than
+  be adopted; the first country the page ever sees (billing fields rendering after
+  `initialize()` has run) is adopted, not acted on; an empty reading — WooCommerce replacing
+  `#billing_country` wholesale mid-re-render — is neither acted on _nor recorded_, so the
+  switch that completes afterwards still acts; `updated_checkout` re-syncs a country that
+  moved with no `change` event at all; and that re-sync terminates rather than looping,
+  because a real change there reaches `setAddress()`, which triggers `update_checkout`.
+- **the whole suite drives the real wiring**: a real `initialize(false)`, then
+  `trigger("change")` on the field, so unwiring the delegated binding or moving the seed out
+  of `initialize()`'s reach fails it. `afterEach` unbinds `document.body` — jsdom's document
+  outlives the test, so without it each test leaves a live handler closed over its own
+  evaluation of the source and the next test's event runs all of them.
 - **the search country is read per request**, so a widget that outlived a country change
   queries the country the form currently holds rather than the one it was built under.
 - **an in-flight company search for the outgoing country cannot repopulate the list** — the
@@ -272,7 +283,15 @@ about the company-search helper, so the bootstrap is left to no-op.
   the country snapshot taken when the request was issued. Both are needed and both are pinned
   separately — a country written programmatically fires no `change`, so nothing bumps the
   sequence, and a country switched away and back leaves the sequence stale but the country
-  matching. The happy path is pinned too, so the guard cannot be tightened into a no-op.
+  matching. A third case, the country reading back empty mid-replacement, is deliberately
+  NOT a mismatch — dropping a good registry address there would be a silent failure with no
+  retry. The happy path is pinned too, so the guard cannot be tightened into a no-op.
+
+One line in this change is deliberately uncovered and says so in its own comment: the
+spinner hand-off in the country handler. Nothing reachable fails without it — what clears
+the spinner today is `clearSelectedCompany()` re-attaching the widget and taking the
+dropdown with it — so a test asserting the spinner is gone afterwards would pass either way,
+which is worse than no test.
 
 ### Two defects these tests found, now fixed
 
