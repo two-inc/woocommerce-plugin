@@ -142,8 +142,9 @@ about the company-search helper, so the bootstrap is left to no-op.
 - request url: the configured host and `/companies/v2/company` path, the country from the
   checkout form, `limit`/`offset` bounding and paging by that same bound, the term decoded
   exactly once, and `client`/`client_v` alongside the search params rather than replacing them.
-- the country is captured when `genSelectWooParams()` runs, not per keystroke — which is
-  why a country change has to re-run `selectWoo()` with fresh params.
+- the country is read per request rather than captured when `genSelectWooParams()` runs
+  (inverted by TWO-24867 — the widget outlives a country change on every path that does
+  not go through `clearSelectedCompany()`).
 - widget params: the 3-character minimum, the 300ms debounce shared with the other plugin
   checkouts, `escapeMarkup` passing the endpoint's highlight markup through while
   `templateSelection` uses plain text, and the non-error messages borrowing WooCommerce
@@ -247,6 +248,31 @@ about the company-search helper, so the bootstrap is left to no-op.
   on the select.
 - the user-meta restore path, which passes both values explicitly because `loadUserMetaInputs`
   writes `#company_id` _after_ it renders.
+
+`country-switch.test.js` — what a billing-country change does, and what a fake one must not
+(TWO-24867, with TWO-25326):
+
+- **a `change` event that is not a country change is inert.** WooCommerce re-renders the
+  billing fields on `updated_checkout`, and core's `address-i18n.js` re-triggers the country
+  field on `country_to_state_changing` at init — both reach the delegated handler as a bare
+  `change` with the value unchanged, and each one used to destroy the captured company. The
+  guard compares against the last country acted on, so the captured company survives one
+  such event and a run of them, and nothing in flight is invalidated.
+- **`initialize()` seeds that comparison** from the country already in the form, because the
+  first event the binding sees is usually WooCommerce's own. Asserted through a real
+  `trigger("change")` on the delegated binding, so unwiring either half fails it.
+- **a real change still clears everything**, records the new country for the next comparison,
+  and leaves the new `country_prefix` on `customerCompany` — set _after_ `clearSelectedCompany()`,
+  which resets that object wholesale and only re-reads it from the DOM three seconds later.
+- **the search country is read per request**, so a widget that outlived a country change
+  queries the country the form currently holds rather than the one it was built under.
+- **an in-flight company search for the outgoing country cannot repopulate the list** — the
+  supersession counter is bumped by the country change, not only by a newer search.
+- **the registry address lookup is guarded twice**: by sequence (a newer lookup wins) and by
+  the country snapshot taken when the request was issued. Both are needed and both are pinned
+  separately — a country written programmatically fires no `change`, so nothing bumps the
+  sequence, and a country switched away and back leaves the sequence stale but the country
+  matching. The happy path is pinned too, so the guard cannot be tightened into a no-op.
 
 ### Two defects these tests found, now fixed
 

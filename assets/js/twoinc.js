@@ -928,11 +928,65 @@ let twoincSelectWooHelper = {
   },
 
   /**
+   * The billing country the checkout form currently holds, upper-cased, or
+   * "" when the field is absent or unset (TWO-24867).
+   *
+   * Single reader for every country-sensitive code path here, so the search
+   * request, the change guard and the address-lookup supersession check can
+   * never disagree about what "the current country" is.
+   */
+  currentCountry: function () {
+    return (jQuery("#billing_country").val() || "").toUpperCase();
+  },
+
+  /**
+   * The last billing country this page has acted on (TWO-24867 / TWO-25326).
+   *
+   * `null` until seeded by `initialize()`. Seeding matters: an unseeded
+   * tracker treats the first event it sees as a change, which is exactly the
+   * spurious re-render event this guard exists to swallow.
+   */
+  lastObservedCountry: null,
+
+  /**
+   * Whether a `change` event on #billing_country represents a REAL country
+   * change, as opposed to WooCommerce re-emitting one during its own
+   * re-render (TWO-25326).
+   *
+   * The handler this gates destroys the captured company — #billing_company,
+   * #company_id, the picker's selection and the registry address behind it.
+   * WooCommerce fires `change` on #billing_country for reasons that are not
+   * the buyer changing country: `updated_checkout` re-renders the billing
+   * fields and core's address-i18n.js re-triggers the field on
+   * `country_to_state_changing` at init, not only on a user gesture. Bound
+   * delegated on document.body, this handler saw all of them, so a buyer who
+   * had picked a company watched it vanish on an unrelated re-render with no
+   * action of their own — observed live on TWO-25326.
+   *
+   * Compared by value rather than by `event.originalEvent` being present:
+   * WooCommerce's re-render path re-triggers through jQuery on some themes
+   * and dispatches a native event on others, so an event-source test would
+   * hold on the fixture and fail on the shop. The value comparison is true
+   * to what the handler actually needs to know.
+   *
+   * Records the new value as a side effect, so the caller must invoke this
+   * exactly once per event and act on its answer.
+   *
+   * @param {string} country upper-cased ISO code currently in the field
+   * @returns {boolean}
+   */
+  countryDidChange: function (country) {
+    if (country === twoincSelectWooHelper.lastObservedCountry) {
+      return false;
+    }
+    twoincSelectWooHelper.lastObservedCountry = country;
+    return true;
+  },
+
+  /**
    * Generate parameters for selectwoo
    */
   genSelectWooParams: function () {
-    let country = jQuery("#billing_country").val();
-
     let twoincSearchLimit = 50;
     return {
       minimumInputLength: twoincSelectWooHelper.companySearchMinLength,
@@ -1032,8 +1086,17 @@ let twoincSelectWooHelper = {
           return request;
         },
         url: function (params) {
+          // Read live, per request — NOT captured when the widget was built
+          // (TWO-24867). The widget outlives a country change on any path
+          // that does not rebuild it: WooCommerce replaces #billing_country
+          // wholesale on some `updated_checkout` re-renders, address-i18n.js
+          // rewrites the field without a user gesture, and a programmatic
+          // `.val()` fires no `change` at all. A captured value made the
+          // search query the PREVIOUS country's register while the form said
+          // otherwise — the buyer saw "no companies found" for a company that
+          // exists, which reads as a broken registry rather than stale state.
           const searchParams = new URLSearchParams({
-            country: country,
+            country: twoincSelectWooHelper.currentCountry(),
             limit: twoincSearchLimit,
             offset: (params.page || 0) * twoincSearchLimit,
             q: decodeURIComponent(params.term)
@@ -3294,6 +3357,11 @@ class Twoinc {
     // (TWO-25288); read by `enterManualCompanyEntry` to decide whether
     // disowning the company should clear the address behind it.
     this.registryAddressApplied = false;
+    // Monotonic supersession counter for the registry address lookup
+    // (TWO-24867). Bumped by every lookup and by every real country change,
+    // so only the newest lookup — and only one issued under the country still
+    // selected — is allowed to write the address fields.
+    this.addressLookupSeq = 0;
     this.orderIntentCheck = {
       interval: null,
       pendingCheck: false,
@@ -3469,7 +3537,15 @@ class Twoinc {
       twoincDomHelper.togglePaySubtitleDesc();
     });
 
-    // Handle the country inputs change event
+    // Handle the country inputs change event.
+    //
+    // Seeded first (TWO-25326): the handler only acts when the value differs
+    // from the last one recorded, and the very first event this binding sees
+    // is usually WooCommerce's own — core's address-i18n.js triggers
+    // `country_to_state_changing` on checkout init, carrying the country the
+    // form already had. Without the seed that event reads as a change and
+    // clears a company restored from the customer's saved address.
+    twoincSelectWooHelper.lastObservedCountry = twoincSelectWooHelper.currentCountry();
     $body.on("change", "#billing_country", self.onCountryInputChange);
 
     // Re-evaluate the sole-trader autofill prefetch whenever the email
@@ -3722,11 +3798,22 @@ class Twoinc {
 
   addressLookup(selectedCompany) {
     const self = this;
+    // Supersession, not cancellation (TWO-24867). Two independent things can
+    // make this response wrong by the time it arrives: a newer lookup (the
+    // buyer picked a different company) and a country change (the buyer
+    // corrected a mis-clicked country). The sequence number catches the
+    // first, the country snapshot the second — a country switched away from
+    // and back again between request and response leaves the sequence stale
+    // but the country matching, and vice versa, so both are needed.
+    const seq = (self.addressLookupSeq += 1);
+    const requestCountry = twoincSelectWooHelper.currentCountry();
     const addressResponse = jQuery.ajax({
       dataType: "json",
       url: twoincUtilHelper.constructTwoincUrl(`/companies/v2/company/${selectedCompany.lookup_id}`)
     });
     addressResponse.done(function (response) {
+      if (seq !== self.addressLookupSeq) return;
+      if (twoincSelectWooHelper.currentCountry() !== requestCountry) return;
       // Use new address lookup by default
       if (response.addresses) {
         self.setAddress(response.addresses[0]);
@@ -3862,18 +3949,47 @@ class Twoinc {
    */
 
   onCountryInputChange(event) {
-    const $input = jQuery(this);
+    const country = twoincSelectWooHelper.currentCountry();
 
-    Twoinc.getInstance().customerCompany.country_prefix = $input.val();
+    // Only a REAL change gets to throw away the captured company
+    // (TWO-25326 — see countryDidChange for the events this swallows).
+    if (!twoincSelectWooHelper.countryDidChange(country)) {
+      return;
+    }
+
+    const self = Twoinc.getInstance();
+
+    // Invalidate everything already in flight under the OUTGOING country
+    // (TWO-24867). Neither of these responses can be allowed to land:
+    //
+    //  - a company search would repopulate the picker with the previous
+    //    country's register, next to a field this handler is about to clear;
+    //  - an address lookup would write the previous country's registry
+    //    address over the cleared address fields, and set
+    //    registryAddressApplied on it.
+    //
+    // Both are supersession counters rather than aborts on purpose: the
+    // network request may already have completed, so cancelling it is not
+    // enough — the guard has to sit on the handler.
+    twoincSelectWooHelper.companySearchSeq += 1;
+    self.addressLookupSeq += 1;
 
     twoincDomHelper.toggleBusinessFields();
 
     twoincDomHelper.clearSelectedCompany();
 
+    // AFTER clearSelectedCompany, deliberately: that function resets
+    // `customerCompany` to {} wholesale, so setting the country prefix before
+    // it (as this used to) discarded it immediately and left getApproval()
+    // below — and getDueInDays(), which early-returns without one — running
+    // on an undefined country for the three seconds until the deferred
+    // re-read inside clearSelectedCompany put it back (TWO-24867).
+    self.customerCompany.country_prefix = country;
+
     // Sole trader availability is per-country; re-evaluate the toggle.
     twoincSoleTrader.refresh();
 
-    Twoinc.getInstance().getApproval();
+    self.getApproval();
   }
 }
 

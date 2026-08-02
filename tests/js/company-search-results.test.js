@@ -204,16 +204,21 @@ describe("company search results", () => {
       expect(urlFor({ term: "Example & Co" }).searchParams.get("q")).toBe("Example & Co");
     });
 
-    test("the country is read at widget-creation time, not per keystroke", () => {
-      // genSelectWooParams() closes over the country. That is why
-      // clearSelectedCompany() re-runs selectWoo() with fresh params on
-      // a country change instead of relying on url() to re-read the
-      // field — pinned here so the closure is not "simplified" away
-      // without noticing what depends on it.
+    test("the country is read per request, not captured when the widget is built", () => {
+      // Inverted by TWO-24867. genSelectWooParams() used to close over the
+      // country, on the reasoning that clearSelectedCompany() re-runs
+      // selectWoo() with fresh params on a country change. That coupling
+      // only held while EVERY country change reached that handler, and it
+      // no longer does: the handler now ignores the re-render `change`
+      // events WooCommerce emits with the value unchanged (TWO-25326), and
+      // a country written programmatically fires no `change` at all. Both
+      // leave the widget alive with a stale closure, searching the previous
+      // country's register. Reading the field per request removes the
+      // dependency instead of documenting it.
       const url = ctx.helper.genSelectWooParams().ajax.url;
       ctx.$("#billing_country").append('<option value="SE">Sweden</option>').val("SE");
 
-      expect(new URL(url({ term: "exampleco" })).searchParams.get("country")).toBe("GB");
+      expect(new URL(url({ term: "exampleco" })).searchParams.get("country")).toBe("SE");
     });
 
     test("identifies the plugin and its version to the API", () => {
