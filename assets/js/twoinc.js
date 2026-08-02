@@ -1606,19 +1606,35 @@ let twoincDomHelper = {
       // `close()` BEFORE `destroy()` — new, #30.x.13. Reached here the
       // widget is essentially always still OPEN: this function only runs
       // from activating the manual-entry row, and that row exists only
-      // INSIDE the open results list. selectWoo's own close cleanup (the
-      // work that unbinds its document-level "close on outside click" and
-      // Tab/Enter-as-select handlers — see the long comment in
-      // bindManualEntryAffordance above, which already documented this
-      // exact class of gap as a "known, DELIBERATELY UNFIXED" risk) only
-      // runs when the widget is told to close; `destroy()` on an OPEN
-      // widget tears down the widget's own DOM without ever running that
-      // cleanup, leaving those document-level handlers bound to
-      // `document` indefinitely — with no live widget left for them to
+      // INSIDE the open results list.
+      //
+      // CORRECTED mechanism (round 2 review, Han+Vader, both independently
+      // verified directly against the real vendored selectWoo.full.js —
+      // the previous version of this comment had the mechanism wrong):
+      // selectWoo's document-level keydown handler (bound ONCE per widget
+      // instance in `_registerEvents`, `$(document).on('keydown', ...)`,
+      // see the long comment in bindManualEntryAffordance above) is never
+      // unbound by anything — not by `close()`, not by `destroy()`. What
+      // actually neutralizes it: that handler's dangerous branches are
+      // gated on `self.isOpen()`, which just reads a CSS class
+      // (`select2-container--open`) on the container. `close()`
+      // synchronously flips that class off. `destroy()` alone never fires
+      // the close event, so a destroyed-but-still-referenced instance's
+      // container keeps that class (and therefore `isOpen() === true`)
+      // forever — the handler is still bound to `document` and still
+      // "live" by its own gate, just with no widget left for it to
       // reason about. That is what live reproduction (#30.x.13, Doug)
       // showed: Tab became unresponsive PAGE-WIDE, not just near the
-      // company field, the moment manual entry was reached, exactly what a
-      // stray document-level Tab interceptor with no scoping would produce.
+      // company field, the moment manual entry was reached — exactly
+      // what that ungated zombie handler produces. Calling `close()`
+      // first is what actually fixes it, by flipping the one flag the
+      // handler checks; the handler itself is still bound afterward and
+      // always will be, so this is a mitigation of a permanent gap, not
+      // a removal of it. Direct empirical repro (round 2, Vader): a real
+      // widget destroyed WITHOUT close() first leaves a subsequent
+      // synthetic document keydown{which:9} reporting
+      // `defaultPrevented === true` (Tab trapped); with close() first,
+      // the same dispatch reports `false` (Tab free).
       //
       // Safe to call unconditionally ahead of destroy(): `close()` on an
       // already-closed widget is a documented no-op in select2/selectWoo.
