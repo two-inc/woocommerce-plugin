@@ -3950,10 +3950,24 @@ class Twoinc {
 
   onCountryInputChange(event) {
     const country = twoincSelectWooHelper.currentCountry();
+    const changed = twoincSelectWooHelper.countryDidChange(country);
 
-    // Only a REAL change gets to throw away the captured company
-    // (TWO-25326 — see countryDidChange for the events this swallows).
-    if (!twoincSelectWooHelper.countryDidChange(country)) {
+    // Unconditional, and BEFORE the guard below. This pass is idempotent —
+    // it re-derives which company fields should be visible and required from
+    // the current state and writes nothing the buyer typed — and the events
+    // the guard now swallows are exactly the ones that just re-rendered the
+    // billing fields underneath it (core's address-i18n.js re-sorts them on
+    // `country_to_state_changing`). Gating it behind the guard along with
+    // everything else would have turned this fix into a field-visibility
+    // regression on every such re-render (TWO-24867).
+    twoincDomHelper.toggleBusinessFields();
+
+    // Everything past here is destructive, so only a REAL country change gets
+    // to run it (TWO-25326 — see countryDidChange for the events this
+    // swallows). The rest of what this handler used to do on those events is
+    // already re-run by `onUpdatedCheckout`: sole-trader availability and the
+    // approval check both go through it.
+    if (!changed) {
       return;
     }
 
@@ -3973,8 +3987,6 @@ class Twoinc {
     // enough — the guard has to sit on the handler.
     twoincSelectWooHelper.companySearchSeq += 1;
     self.addressLookupSeq += 1;
-
-    twoincDomHelper.toggleBusinessFields();
 
     twoincDomHelper.clearSelectedCompany();
 

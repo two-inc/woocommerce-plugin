@@ -106,6 +106,24 @@ describe("billing country switch", () => {
       expect(ctx.helper.companySearchSeq).toBe(seqBefore);
     });
 
+    test("still re-runs the field-visibility pass", () => {
+      // The half of the handler that is NOT destructive stays unconditional.
+      // These events are exactly the ones that just re-rendered the billing
+      // fields underneath the plugin, so skipping the visibility pass along
+      // with the clear would turn this guard into a field-visibility
+      // regression. Simulated by knocking a field's state out and checking
+      // the handler puts it back.
+      ctx.helper.lastObservedCountry = "GB";
+      // The field this configuration resolves to visible (the gateway is not
+      // the selected payment method here, and company search is not enabled
+      // for other methods, so the plain company field is the one shown).
+      ctx.$("#billing_company_field").addClass("hidden");
+
+      fireCountryChange();
+
+      expect(ctx.$("#billing_company_field").hasClass("hidden")).toBe(false);
+    });
+
     test("repeated re-renders stay inert, not just the first", () => {
       ctx.helper.lastObservedCountry = "GB";
       captureCompany("Example Co", "123456789");
