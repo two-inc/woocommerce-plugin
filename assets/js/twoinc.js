@@ -2250,6 +2250,21 @@ let twoincSoleTrader = {
   availabilityByCountry: {},
   tokens: null,
   savedCompanySearch: null,
+  // Snapshot of window.twoinc.manual_company_entry_active, saved/restored
+  // alongside savedCompanySearch (#30.x.13, round 1 review — Vader). Without
+  // this, a buyer who reaches sole-trader mode WHILE in manual entry (the
+  // mode chip is not hidden during manual entry, and the email-driven
+  // autofill prefetch can also call setMode("sole_trader") unprompted) comes
+  // back out of sole-trader mode with enable_company_search correctly
+  // restored to "no" (still manual) but manual_company_entry_active left at
+  // the "false" this branch forces below — toggleBusinessFields then reads
+  // that as the OTHER "no" case (merchant-level search-off / sole-trader)
+  // and shows + REQUIRES #company_id_field, with no working search widget
+  // to fill it from (enableCompanySearch early-returns since
+  // enable_company_search !== "yes") and no manual name-only path left. Same
+  // null-sentinel pattern as savedCompanySearch: `null` means "nothing
+  // saved", distinct from the flag's own true/false/undefined values.
+  savedManualEntryActive: null,
   messageListenerBound: false,
   // Result of the most recent autofill prefetch for the entered email.
   // ready=false until the first prefetch resolves; matches=true when the
@@ -2443,16 +2458,20 @@ let twoincSoleTrader = {
 
     if (mode === "sole_trader") {
       // Suppress company search by the same lever the manual-entry row uses,
-      // restoring the merchant's setting on the way back to business mode.
+      // restoring the merchant's setting (and whether manual entry was
+      // active) on the way back to business mode.
       if (twoincSoleTrader.savedCompanySearch === null) {
         twoincSoleTrader.savedCompanySearch = window.twoinc.enable_company_search;
+        twoincSoleTrader.savedManualEntryActive = window.twoinc.manual_company_entry_active;
       }
       window.twoinc.enable_company_search = "no";
       // Sole trader is a DIFFERENT one of this org's three company-capture
       // modes than manual entry — it carries a synthetic id (see the
       // comment on this flag's read in toggleBusinessFields) — so any
       // manual-entry state left over from before this switch must not
-      // suppress #company_id_field here.
+      // suppress #company_id_field here. Snapshotted above first so it can
+      // be put back on the way out, in case the buyer really was mid manual
+      // entry.
       window.twoinc.manual_company_entry_active = false;
       const $display = jQuery("#billing_company_display");
       if ($display.data("select2")) {
@@ -2482,7 +2501,9 @@ let twoincSoleTrader = {
       jQuery("#billing_company, #company_id").prop("readonly", false);
       if (twoincSoleTrader.savedCompanySearch !== null) {
         window.twoinc.enable_company_search = twoincSoleTrader.savedCompanySearch;
+        window.twoinc.manual_company_entry_active = twoincSoleTrader.savedManualEntryActive;
         twoincSoleTrader.savedCompanySearch = null;
+        twoincSoleTrader.savedManualEntryActive = null;
       }
       twoincSoleTrader.setCompany("", "");
       twoincDomHelper.toggleBusinessFields();

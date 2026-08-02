@@ -409,6 +409,29 @@ describe("read-only captured-company summary", () => {
       expect($("#company_id_field").hasClass("hidden")).toBe(true);
       expect($("#company_id").prop("required")).toBe(false);
     });
+
+    test("stays name-only after a round trip through sole-trader mode (#30.x.13, round 1 review — Vader)", () => {
+      // Real dead end found live by Vader's review: sole-trader mode is
+      // reachable WHILE in manual entry — the mode chip is not hidden during
+      // manual entry, and the email-driven autofill prefetch can call
+      // twoincSoleTrader.setMode("sole_trader") on its own regardless of
+      // capture mode. setMode saves/restores `enable_company_search` around
+      // the trip, so a buyer who was in manual entry correctly lands back on
+      // enable_company_search === "no" — but without also saving/restoring
+      // `manual_company_entry_active`, toggleBusinessFields cannot tell that
+      // "no" apart from sole-trader's own, and would show + REQUIRE
+      // #company_id_field with no working search widget behind it
+      // (enableCompanySearch early-returns) and no way back to name-only.
+      pickCompany("ACME Widgets Ltd", "12345678");
+      dom.enterManualCompanyEntry();
+      typeCompanyName("Sole Proprietor Bakery");
+
+      ctx.soleTrader.setMode("sole_trader");
+      ctx.soleTrader.setMode("business");
+
+      expect($("#company_id_field").hasClass("hidden")).toBe(true);
+      expect($("#company_id").prop("required")).toBe(false);
+    });
   });
 
   describe("sole trader", () => {
