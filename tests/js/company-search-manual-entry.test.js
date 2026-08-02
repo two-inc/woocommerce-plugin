@@ -140,7 +140,20 @@ describe("company-search manual-entry affordance", () => {
     expect(searchInput().length).toBe(1);
   });
 
-  describe("visibility follows capture state, not the search threshold (TWO-25326 §2)", () => {
+  describe("visibility: present whenever the dropdown is open (TWO-25326 §2)", () => {
+    /**
+     * Dispatch a real Tab keydown at the query field. Same `which: 9`
+     * reasoning as the copies in the Tab describes below.
+     *
+     * @param {Object} $el
+     * @returns {Object} the jQuery.Event dispatched
+     */
+    function tabAtSearch($el) {
+      const e = jQuery.Event("keydown", { key: "Tab", which: 9 });
+      $el.trigger(e);
+      return e;
+    }
+
     test("present as soon as the dropdown opens, before the buyer has typed anything", () => {
       openWithAffordance();
 
@@ -202,7 +215,15 @@ describe("company-search manual-entry affordance", () => {
       expect(btn().length).toBe(1);
     });
 
-    test("gone once a company IS captured", () => {
+    test("still there after a company has been captured and the dropdown reopened", () => {
+      // The regression Doug found live on 2026-08-02. A capture gate used to
+      // remove the button as soon as the display select held a value, so a
+      // buyer who picked the wrong company and reopened the dropdown to
+      // correct it had no route into manual entry at all — and typing no
+      // longer brought it back, which the threshold gate before it at least
+      // did. §2's "hidden once a company IS selected" is satisfied by the
+      // dropdown being shut; it does not mean locking the buyer out of manual
+      // entry mid-correction.
       openWithAffordance();
       expect(btn().length).toBe(1);
 
@@ -211,20 +232,26 @@ describe("company-search manual-entry affordance", () => {
       );
       helper.syncManualEntryButton();
 
-      expect(btn().length).toBe(0);
+      expect(btn().length).toBe(1);
     });
 
-    test("the empty option's non-breaking space does not read as a capture", () => {
-      // selectWoo's placeholder option carries   as its label and, on this
-      // field, as its value — so a naive truthiness check on the select's
-      // value reports a company captured on an untouched field and hides the
-      // button on exactly the state the requirement is written about.
+    test("a captured company does not disable the Tab shortcut either", () => {
+      // The same gate took the keyboard with it: the search-field Tab handler
+      // keys on the button existing, so removing the button turned Tab into a
+      // no-op that selectWoo's own document handler then swallowed whole —
+      // one regression presenting as two (§2 invisible, §4 keyboard trap).
       openWithAffordance();
-
-      $("#billing_company_display").append('<option value=" " selected> </option>');
+      $("#billing_company_display").append(
+        '<option value="ACME Widgets Ltd" selected>ACME Widgets Ltd</option>'
+      );
       helper.syncManualEntryButton();
+      type("abc");
 
-      expect(btn().length).toBe(1);
+      searchInput().get(0).focus();
+      const e = tabAtSearch(searchInput());
+
+      expect(e.isDefaultPrevented()).toBe(true);
+      expect(document.activeElement).toBe(btn().get(0));
     });
   });
 
@@ -368,26 +395,52 @@ describe("company-search manual-entry affordance", () => {
       expect(document.activeElement).not.toBe(btn().get(0));
     });
 
-    test("Tab is not intercepted when there is no button to reach", () => {
-      // Same reasoning as the Shift+Tab test above re: not asserting
-      // `isDefaultPrevented()` — that reflects selectWoo's own document-level
-      // Tab-as-Enter handling, not this feature. The contract under test is
-      // the `!btn` early return: nothing gets created or focused when the
-      // button is not there.
-      //
-      // The button now exists from the moment the dropdown opens (TWO-25326
-      // §2), so a below-threshold term no longer produces this state and the
-      // absence has to be arranged directly. It is still reachable in
-      // production — a brand overlay that removes the affordance, or a
-      // captured company, both leave the dropdown open with no button in it.
+    test("Tab with no button to reach still closes the dropdown and moves on", () => {
+      // Measured live 2026-08-02 in exactly this state: with no button, this
+      // handler used to `return` and let the keystroke through — straight into
+      // selectWoo's document-level handler, which swallows it whole
+      // (preventDefault + refocus the search field). Focus never left the
+      // query field and the dropdown never closed. That is the keyboard trap
+      // §4 forbids, and "no button" is reachable in production through a brand
+      // overlay that drops the affordance.
+      jest.useFakeTimers();
       openWithAffordance();
+      type("abc");
       btn().remove();
       expect(btn().length).toBe(0);
+
+      const onwards = helper.tabbablesAfterCompanyField()[0];
+      expect(onwards).toBeDefined();
+
+      searchInput().get(0).focus();
+      const e = tabAt(searchInput());
+
+      expect(e.isDefaultPrevented()).toBe(true);
+      expect($("#billing_company_display").data("select2").isOpen()).toBe(false);
+      expect(document.activeElement).toBe(onwards);
+
+      jest.advanceTimersByTime(30);
+      expect(document.activeElement).toBe(onwards);
+      jest.useRealTimers();
+    });
+
+    test("a button that refuses focus is not a dead end either", () => {
+      // `.focus()` on a hidden or mid-transition element silently no-ops per
+      // the HTML spec. The shortcut used to call it and assume — the same
+      // mistake that shipped in the Tab-out handler and had to be fixed there.
+      jest.useFakeTimers();
+      openWithAffordance();
+      type("abc");
+      btn().get(0).focus = function () {};
+
+      const onwards = helper.tabbablesAfterCompanyField()[0];
 
       searchInput().get(0).focus();
       tabAt(searchInput());
 
-      expect(btn().length).toBe(0);
+      expect($("#billing_company_display").data("select2").isOpen()).toBe(false);
+      expect(document.activeElement).toBe(onwards);
+      jest.useRealTimers();
     });
 
     test("no-trap regression check: closing the dropdown removes this handler's own hook, not just the button", () => {

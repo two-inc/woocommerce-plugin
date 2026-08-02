@@ -284,20 +284,29 @@ let twoincSelectWooHelper = {
   syncManualEntryButton: function () {
     const helper = twoincSelectWooHelper;
 
-    const $display = jQuery("#billing_company_display");
-    const picker = $display.data("select2");
+    const picker = jQuery("#billing_company_display").data("select2");
     if (!picker || !picker.$results || !picker.$results.length) return;
 
     const $list = picker.$results;
     const $existing = jQuery("#" + helper.manualEntryRowId);
 
-    // The empty option's label is a non-breaking space, so an unselected
-    // picker reads back as " " rather than "" — the same trap
-    // renderCompanySummary documents. blankToEmpty collapses both.
-    if (twoincUtilHelper.blankToEmpty($display.val())) {
-      $existing.remove();
-      return;
-    }
+    // No capture gate. There was one — the button was removed as soon as
+    // `#billing_company_display` held a value — and it was wrong, found live
+    // by Doug 2026-08-02: pick a company, reopen the dropdown to change it,
+    // and there was no route into manual entry at all any more. Worse than
+    // the threshold gate it replaced, because typing no longer brought it
+    // back either.
+    //
+    // §2's "hidden once a company IS selected" cannot mean that. This button
+    // only ever exists inside the dropdown, so it is only ever on screen
+    // while the dropdown is open — and the dropdown being open IS the buyer
+    // searching again. "Hidden once selected" is satisfied by the dropdown
+    // being shut; it does not extend to locking a buyer out of manual entry
+    // because of a pick they are in the middle of correcting.
+    //
+    // That gate also silently disabled the Tab shortcut, since the handler
+    // below keys on the button existing — which is how one regression
+    // presented as two (§2 invisible, §4 keyboard trap).
 
     // Already there, immediately after the current results list: nothing to
     // do. Load-bearing rather than an optimisation for the same reason it was
@@ -434,19 +443,43 @@ let twoincSelectWooHelper = {
       .on("keydown.twoincManualEntry", helper.companySearchInputSelector, function (e) {
         if (e.which !== 9 || e.shiftKey) return;
 
+        // No button to shortcut to — a brand overlay that drops the
+        // affordance, or any future gating — must NOT fall through to the
+        // browser's own Tab. Measured live 2026-08-02, in exactly that state:
+        // selectWoo's document-level handler swallows the keystroke whole
+        // (`preventDefault` + refocus the search field), so focus never left
+        // the query field and the dropdown never closed. That is a keyboard
+        // trap, which §4 forbids outright, and it is what the removed capture
+        // gate above was producing. Close and move on instead, the same way
+        // Tab from the button does.
         const btn = jQuery("#" + helper.manualEntryRowId).get(0);
-        if (!btn) return;
+        if (!btn) {
+          const onwards = helper.tabbablesAfterCompanyField();
+          e.preventDefault();
+          e.stopPropagation();
+          helper.closeCompanySearchDropdown();
+          if (!helper.focusFirstThatTakes(onwards)) helper.releaseFocusFromCompanyField();
+          setTimeout(function () {
+            if (!helper.focusIsBackOnCompanyField()) return;
+            if (!helper.focusFirstThatTakes(onwards)) helper.releaseFocusFromCompanyField();
+          }, 20);
+          return;
+        }
 
-        // Accepted risk, not handled: if the button happens to be hidden or
-        // mid-transition at this exact moment, `.focus()` on a real browser
-        // silently no-ops per the HTML spec (unlike jsdom, which does not
-        // reliably enforce this, so no test here can catch it either way).
-        // The buyer is left with focus stuck on the search field — no worse
-        // than before this feature existed, just not the "Tab reaches the
-        // button" this comment otherwise promises.
+        // `.focus()` on a button that is hidden or mid-transition silently
+        // no-ops per the HTML spec, so confirm it landed rather than assume —
+        // same lesson as the Tab-out handler below, which shipped broken for
+        // exactly this reason. If the button will not take focus, fall
+        // through to closing and moving on rather than stranding the buyer.
         e.preventDefault();
         e.stopPropagation();
         btn.focus();
+        if (document.activeElement !== btn) {
+          const onwards = helper.tabbablesAfterCompanyField();
+          helper.closeCompanySearchDropdown();
+          if (!helper.focusFirstThatTakes(onwards)) helper.releaseFocusFromCompanyField();
+          return;
+        }
 
         setTimeout(function () {
           const stillThere = jQuery("#" + helper.manualEntryRowId).get(0);
