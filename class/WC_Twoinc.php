@@ -917,12 +917,34 @@ if (!class_exists('WC_Twoinc')) {
             // would report an invalid brand value twice per render.
             $notice_enabled = $this->is_intent_approved_notice_enabled();
 
+            // The captured company, as `<name> (<number>)` (TWO-25326 §7).
+            //
+            // Position is the ticket's, read literally: "between the chips and
+            // the intent message (if rendered) or else the optional fields".
+            // On WooCommerce the fallback half of that has no referent — the
+            // optional fields (invoice email, project, department) are billing
+            // form fields, not tile content — so the only anchor that exists
+            // here is the intent message, and this sits immediately before the
+            // intent loader/notice pair. That also keeps it last in the tile
+            // when the notice is switched off, which is where the fallback
+            // would have put it anyway.
+            //
+            // Empty and `hidden` on render, filled by renderCompanyTileLabel()
+            // in twoinc.js. Server-side it cannot be filled at all: the
+            // captured company is chosen client-side after this markup is
+            // generated, and this same block is re-rendered by every
+            // `update_checkout` regardless of whether a company was picked.
+            //
+            // A <div>, not a <p>: some themes give `.payment_box p` its own
+            // margins, and this must not pick up spacing the chips and notices
+            // around it do not have.
             return sprintf(
                 '<div>
                     %s
                     <label class="twoinc-term-chips-heading hidden"></label>
                     <div class="twoinc-term-chips hidden" role="radiogroup"></div>
                     <div class="twoinc-sole-trader-toggle hidden" role="radiogroup"></div>
+                    <div class="twoinc-company-tile-label hidden"></div>
                     %s
                     %s
                     <div class="twoinc-pay-box twoinc-err-payment-default hidden">%s</div>

@@ -159,9 +159,20 @@ about the company-search helper, so the bootstrap is left to no-op.
 - `data-selected="true"` is specifically pinned as wrong: the picker routes activation of an
   already-selected row to closing the dropdown, so the row would look reachable and do
   nothing. The mutation that flips it takes the activation tests down.
-- visibility is the search threshold and nothing else. The row is present at the threshold
-  with **zero** requests made, which is what rules out a "has a search run" gate, and the
-  threshold assertion injects a different number so a leftover literal `3` cannot pass.
+- visibility is capture state, **not** the search threshold (TWO-25326 §2, reversed from the
+  original rule after Doug found the old one live). The button is in the dropdown from the
+  moment it opens, before a single keystroke — the requirement is a route into manual entry
+  that does not make the buyer type a doomed query first — it stays put when the term drops
+  back under the threshold, and the only thing that removes it is a company actually being
+  captured. Placement is asserted through the delegated `select2:open` handler with no input
+  event anywhere near it, since an `input`-only binding is exactly what the old rule allowed.
+- Tab **out** of the button is driven by hand, not by the browser (TWO-25326 §1/§4). The
+  dropdown is attached to the end of `<body>`, so native Tab from the button walks off the end
+  of the document — live, focus landed on `<body>` and the dropdown stayed open. The handler
+  resolves the next tabbable control in FORM order first, then closes, then focuses it, then
+  re-asserts that focus past selectWoo's own unconditional `$selection.focus()` 1ms after
+  close. All four steps are pinned, and the target resolution has its own describe covering
+  `hidden`-class wrappers, `tabindex="-1"`, hidden inputs, and manual-entry mode.
 - activation prevents the selection: no `select2:select`, no company name, no company id. A
   normal company row still selects, which is what stops the interception from being a
   blanket one.
@@ -201,15 +212,20 @@ about the company-search helper, so the bootstrap is left to no-op.
 
 `company-summary.test.js` — the read-only captured-company summary (TWO-25288):
 
-- all three capture modes render the right pair of values: the picked company's name and
-  organisation number in search mode, the name and number Two holds for a sole trader, and in
-  manual entry the typed name with **no** number, because entering manual entry clears the
-  number of the company the buyer has just disowned. A hit that carries no organisation number
-  at all renders its name alone.
+- the two halves render in two different places (TWO-25326 §7). The address area gets the
+  organisation **number** only, as a right-aligned text label under the company-name field;
+  the **name** renders in the payment tile, as `<name> (<number>)`. The name used to render in
+  the address area too, under the control that already showed it, which is what Doug found
+  live. Both are asserted for all three capture modes, and the address-area block is asserted
+  to contain no company name at all.
+- no number means no label, not an empty one: a registry hit with no organisation number, and
+  manual entry (which clears the number of the company the buyer just disowned), both leave
+  the address-area block hidden outright rather than occupying a row under the field. The tile
+  drops the parenthesised half in the same case rather than rendering `Name ()`.
 - search-mode rendering is driven through `enableCompanySearch`'s own `select2:select` binding
   rather than by calling the render function, so unwiring the two fails the test.
 - the display is genuinely read-only: no `input`, `select`, `textarea` or `contenteditable`
-  inside it, both values in `span`s, nothing tabbable, and — the affordance this reversal
+  inside either half, the number in a `span`, nothing tabbable, and — the affordance this reversal
   removes — no button, link, image, `onclick` or bound handler that would let the buyer delete
   a captured company. The overlay this replaces shipped an `<img>` with an inline `onclick`.
 - submission is unaffected. `#billing_company` and `#company_id` still carry the values

@@ -480,4 +480,174 @@ describe("company search ajax transport", () => {
       expect(() => ctx.helper.showCompanySearchUnavailable()).not.toThrow();
     });
   });
+
+  describe("spinner wiring — driven through the widget, not the transport directly (TWO-25326 §1)", () => {
+    /*
+     * Every assertion in "spinner lifecycle" above calls
+     * `genSelectWooParams().ajax.transport` by hand. That proves the transport
+     * toggles the spinner; it proves nothing about whether the transport is
+     * ever reached, or whether anything else on the page is required for the
+     * spinner to appear. Live verification on 2026-08-02 found no spinner at
+     * all during a real search on staging while results came back normally —
+     * i.e. exactly the gap a hand-called transport cannot see.
+     *
+     * These drive the real widget instead: type into the query field the
+     * dropdown actually renders, let selectWoo's own `query` → data adapter
+     * → transport chain run, and assert on what the buyer would see.
+     */
+
+    /**
+     * Attach and open the widget with the plugin's own event bindings in
+     * place — `fixSelectWooPositionCompanyName` is where the spinner's
+     * lifecycle handlers live, and `enableCompanySearch` and
+     * `clearSelectedCompany` are the two production callers of it.
+     *
+     * @returns {Object} the jQuery-wrapped select
+     */
+    function openWired() {
+      const $select = harness.openCompanyWidget(ctx.$, ctx.helper);
+      ctx.helper.fixSelectWooPositionCompanyName();
+      return $select;
+    }
+
+    /**
+     * Type into the dropdown's own query field with the events selectWoo
+     * listens on, so its `query` really fires.
+     *
+     * @param {string} term
+     * @returns {void}
+     */
+    function typeQuery(term) {
+      const $search = ctx.$(ctx.helper.companySearchInputSelector);
+      $search.val(term).trigger("input");
+    }
+
+    test("typing a searchable term shows the spinner, and the response clears it", () => {
+      jest.useFakeTimers();
+      openWired();
+
+      typeQuery("kaffe");
+      expect(spinnerVisible()).toBe(true);
+
+      // Still up across the debounce and while the request is in flight.
+      jest.advanceTimersByTime(400);
+      expect(ajax.calls.length).toBe(1);
+      expect(spinnerVisible()).toBe(true);
+
+      ajax.last().succeed({ items: [] });
+
+      expect(spinnerVisible()).toBe(false);
+      jest.useRealTimers();
+    });
+
+    test("the spinner is up during the debounce, before any request goes out", () => {
+      // The buyer is waiting for 300ms before the request is even dispatched.
+      // Hanging the spinner off the transport alone left that window blank,
+      // which on a fast connection is most of the visible wait.
+      jest.useFakeTimers();
+      openWired();
+
+      typeQuery("kaffe");
+
+      expect(ajax.calls.length).toBe(0);
+      expect(spinnerVisible()).toBe(true);
+      jest.useRealTimers();
+    });
+
+    test("a below-threshold term does not leave a spinner running", () => {
+      // The ordering trap this guards: handlers run in registration order and
+      // the widget registered its own `query` handler first, so for a term
+      // under the minimum the minimumInputLength decorator has ALREADY
+      // answered with `results:message` — the hide — by the time the show
+      // would run. Without the length check in the show handler the spinner
+      // would sit there forever over a "Please enter 3 or more characters"
+      // hint with nothing in flight.
+      jest.useFakeTimers();
+      openWired();
+
+      typeQuery("ka");
+      jest.advanceTimersByTime(400);
+
+      expect(ajax.calls.length).toBe(0);
+      expect(spinnerVisible()).toBe(false);
+      jest.useRealTimers();
+    });
+
+    test("a message result — no matches, or search unavailable — clears it too", () => {
+      jest.useFakeTimers();
+      const $select = openWired();
+      const picker = $select.data("select2");
+
+      typeQuery("kaffe");
+      expect(spinnerVisible()).toBe(true);
+
+      picker.trigger("results:message", { message: "noResults" });
+
+      expect(spinnerVisible()).toBe(false);
+      jest.useRealTimers();
+    });
+
+    test("the spinner lands inside the query field's own wrapper, at its end", () => {
+      // Position is the requirement: "within and at the right hand end of the
+      // query field". The stylesheet does the placing, so what this asserts is
+      // the anchor the stylesheet needs — the spinner is the last child of the
+      // wrapper the query input lives in, and that wrapper is flagged so the
+      // rule reserving the right-hand gutter applies.
+      jest.useFakeTimers();
+      openWired();
+
+      typeQuery("kaffe");
+
+      const $spinner = ctx.$(".twoinc-search-spinner");
+      expect($spinner.length).toBe(1);
+
+      const $wrapper = $spinner.parent();
+      expect($wrapper.hasClass("select2-search--dropdown")).toBe(true);
+      expect($wrapper.hasClass("twoinc-searching")).toBe(true);
+      expect($wrapper.find(ctx.helper.companySearchInputSelector).length).toBe(1);
+      expect($wrapper.children().last().is($spinner)).toBe(true);
+      jest.useRealTimers();
+    });
+
+    test("the field wrapper is still found once selectWoo has stripped aria-owns", () => {
+      // `companySearchInputSelector` keys on `aria-owns`, which selectWoo sets
+      // on open and REMOVES on close — so the primary lookup is a widget-state
+      // check wearing an element lookup's clothes, and a caller that runs a
+      // tick off gets a silent no-op instead of a spinner. The fallback is
+      // anchored on the results list's static id instead.
+      const $select = harness.openCompanyWidget(ctx.$, ctx.helper);
+      const $search = ctx.$(ctx.helper.companySearchInputSelector);
+      expect($search.length).toBe(1);
+
+      $search.removeAttr("aria-owns");
+      expect(ctx.$(ctx.helper.companySearchInputSelector).length).toBe(0);
+
+      const $found = ctx.helper.getCompanySearchFieldContainer();
+
+      expect($found.length).toBe(1);
+      expect($found.hasClass("select2-search--dropdown")).toBe(true);
+      expect($select.data("select2")).toBeDefined();
+    });
+
+    test("the fallback cannot pick up a different field's dropdown", () => {
+      // Scoped on this field's own results-list id, not on the generic
+      // `.select2-search--dropdown` class, which the country picker's open
+      // dropdown carries just as well.
+      harness.openCompanyWidget(ctx.$, ctx.helper);
+      ctx.$(ctx.helper.companySearchInputSelector).removeAttr("aria-owns");
+
+      const $found = ctx.helper.getCompanySearchFieldContainer();
+      expect($found.length).toBe(1);
+      expect(
+        $found.closest(".select2-dropdown").find("#select2-billing_company_display-results").length
+      ).toBe(1);
+    });
+
+    test("no widget at all is inert, not a throw", () => {
+      document.body.innerHTML = "";
+
+      expect(() => ctx.helper.toggleCompanySearchSpinner(true)).not.toThrow();
+      expect(ctx.helper.getCompanySearchFieldContainer().length).toBe(0);
+    });
+  });
 });

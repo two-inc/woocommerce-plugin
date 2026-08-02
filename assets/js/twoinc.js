@@ -254,26 +254,47 @@ let twoincSelectWooHelper = {
    * results list lives in — so it reads as part of the same panel, just
    * beneath the scrollable area rather than the last row inside it.
    *
-   * Visibility rule unchanged from the pseudo-option version: the search
-   * threshold and nothing else — no "has a search completed" gate. The
-   * button appears the moment the buyer has typed enough for a search to be
-   * worth running, which is BEFORE the debounced request goes out, so a
-   * buyer who already knows their company is not in the registry never has
-   * to wait for a round trip to find that out.
+   * Visibility rule is "search UI active and nothing captured yet", NOT the
+   * search threshold (TWO-25326 §2, found live 2026-08-02).
+   *
+   * It used to be the threshold and nothing else, which meant the button did
+   * not exist in the DOM at all until the buyer had typed three characters.
+   * Doug's requirement is the opposite: a buyer who already knows their
+   * company is not in the registry must have a route into manual entry
+   * WITHOUT typing a doomed query first, so the button is present from the
+   * moment the dropdown opens. `bindManualEntryAffordance` therefore also
+   * calls this on `select2:open`, not only on `input` — with a threshold gate
+   * an open-with-nothing-typed dropdown had nothing to sync.
+   *
+   * The one thing that DOES hide it is a company already being captured: the
+   * gate reads the display select's own value, which is written by the
+   * picker's select handler and cleared by `clearSelectedCompany`. A buyer
+   * who picks a company and then reopens the dropdown to change it is past
+   * the point where "not on the list" means anything, and the ticket calls
+   * that state out explicitly.
+   *
+   * Note this leaves the button in the dropdown's subtree while the dropdown
+   * is closed. That is not a stray tab-stop: selectWoo's AttachBody decorator
+   * DETACHES the whole dropdown container from the document on close, so a
+   * node inside it is not focusable, not rendered and not reachable by Tab
+   * until the dropdown is attached again.
    *
    * @returns {void}
    */
   syncManualEntryButton: function () {
     const helper = twoincSelectWooHelper;
 
-    const picker = jQuery("#billing_company_display").data("select2");
+    const $display = jQuery("#billing_company_display");
+    const picker = $display.data("select2");
     if (!picker || !picker.$results || !picker.$results.length) return;
 
     const $list = picker.$results;
     const $existing = jQuery("#" + helper.manualEntryRowId);
-    const term = jQuery(helper.companySearchInputSelector).val() || "";
 
-    if (term.length < helper.companySearchMinLength) {
+    // The empty option's label is a non-breaking space, so an unselected
+    // picker reads back as " " rather than "" — the same trap
+    // renderCompanySummary documents. blankToEmpty collapses both.
+    if (twoincUtilHelper.blankToEmpty($display.val())) {
       $existing.remove();
       return;
     }
@@ -319,6 +340,28 @@ let twoincSelectWooHelper = {
       .off("input.twoincManualEntry")
       .on("input.twoincManualEntry", helper.companySearchInputSelector, function () {
         helper.syncManualEntryButton();
+      });
+
+    // Open, as well as input (TWO-25326 §2). The button's visibility rule is
+    // no longer "the buyer has typed enough", so an `input` handler alone can
+    // never place it: a buyer who opens the dropdown and types nothing fires
+    // no input event at all, and that is precisely the case the requirement
+    // is about.
+    //
+    // Delegated on <body> keyed on the SELECT, not bound to the select2
+    // instance, for the same reason the two handlers above are: the instance
+    // is thrown away and rebuilt by `clearSelectedCompany` and by every
+    // return out of manual entry, and a handler bound to an instance dies
+    // with it. `select2:open` is a jQuery event triggered on the original
+    // <select>, so it bubbles to <body> like any other.
+    //
+    // Deferred a tick: `select2:open` fires while the open is still
+    // unwinding, and `syncManualEntryButton` needs the results list to be its
+    // post-open self before it anchors anything after it.
+    jQuery(document.body)
+      .off("select2:open.twoincManualEntry")
+      .on("select2:open.twoincManualEntry", "#billing_company_display", function () {
+        setTimeout(helper.syncManualEntryButton, 0);
       });
 
     // Tab-to-button shortcut (#30.x.6).
@@ -434,36 +477,46 @@ let twoincSelectWooHelper = {
     // the buyer is trapped AND a wrong company gets silently selected
     // underneath them.
     //
-    // Fixed the same way as the shortcut above — `stopPropagation` to keep
-    // selectWoo's document handler from ever seeing this keydown — but
-    // deliberately WITHOUT `preventDefault` this time: the whole point here
-    // is to let the browser's own native Tab traversal proceed to whatever
-    // the next real tab-stop is, in either direction (this button carries no
-    // special Shift+Tab behaviour, so both directions get the same
-    // protection).
+    // `stopPropagation` keeps selectWoo's document handler from ever seeing
+    // this keydown. That alone is not enough, and the previous revision of
+    // this handler stopped there — which left the two defects TWO-25326 §1
+    // and §4 record against WC, both confirmed live 2026-08-02:
     //
-    // A known, DELIBERATELY UNFIXED gap this surfaces rather than causes,
-    // found under adversarial review: selectWoo never actually clears
-    // `isOpen()` on keyboard-only focus-away — nothing but Escape, a result
-    // pick, or a `mousedown` anywhere outside the widget closes it
-    // (`_attachCloseHandler` in the vendored bundle). A buyer who reaches
-    // this button by keyboard and then keeps tabbing onward, without ever
-    // clicking anything, leaves the dropdown "open" indefinitely — every
-    // later Tab/Enter/Escape ANYWHERE on the page, including Enter on the
-    // checkout submit button, still gets caught by selectWoo's unscoped
-    // document handler until a stray click finally closes it. This predates
-    // this feature; this fix just makes it reachable for the first time
-    // (Tab could never actually escape the open dropdown at all before this
-    // PR, so nobody could reach "focus outside + still open" via keyboard).
-    // Deliberately NOT calling `.select2('close')` here to plug it: that
-    // triggers selectWoo's own `container.on('close', ...)` handler, which
-    // schedules `self.$selection.focus()` 1ms later UNCONDITIONALLY — which
-    // would yank focus straight back from wherever the buyer just legitimately
-    // tabbed to, reintroducing the exact keyboard trap #416 (#30.x.4) was
-    // written to fix, just one level further out. A real fix needs
-    // selectWoo's own close-on-blur gap addressed generally, not patched
-    // per-field here — flagged to Doug as a candidate follow-up ticket rather
-    // than attempted blind.
+    //   1. The dropdown stayed open. selectWoo never clears `isOpen()` on
+    //      keyboard-only focus-away — nothing but Escape, a result pick, or a
+    //      `mousedown` outside the widget closes it (`_attachCloseHandler` in
+    //      the vendored bundle) — so every later Tab/Enter/Escape ANYWHERE on
+    //      the page, including Enter on the checkout submit button, kept
+    //      getting caught by selectWoo's unscoped document handler until a
+    //      stray click finally closed it.
+    //   2. Native Tab from here does not reach the next form field. The
+    //      dropdown is attached to the END of <body> by selectWoo's AttachBody
+    //      decorator, so this button is the last tabbable element in the
+    //      document: plain Tab fell off the end of the page and landed on
+    //      <body>. Measured, not assumed.
+    //
+    // Both are fixed together, because fixing either alone cannot work. Tab
+    // is now `preventDefault`ed and driven by hand: resolve the next real
+    // tab-stop after the company-name control FIRST (while the dropdown is
+    // still up and the anchor is still in the document), then close, then
+    // focus it.
+    //
+    // The re-assert on a timer is the part that earns its keep. Closing fires
+    // selectWoo's own `container.on('close', ...)`, which schedules
+    // `self.$selection.focus()` ~1ms later UNCONDITIONALLY — the exact
+    // behaviour the previous revision cited as its reason not to close at all,
+    // since it yanks focus back from wherever the buyer legitimately went.
+    // Rather than avoid the close, outlast the steal: re-focus the intended
+    // target just past that window, and only if the steal actually won, so a
+    // buyer who has moved on under their own steam is never fought. That
+    // "only if it won" guard is the same shape as the one the search-field
+    // Tab shortcut above already uses against selectWoo's other timer.
+    //
+    // Shift+Tab is deliberately untouched (beyond `stopPropagation`): reverse
+    // Tab from here should go back to the query field, which sits immediately
+    // before this button inside the same dropdown, and native traversal
+    // already does exactly that. Hijacking it would close the dropdown the
+    // buyer is trying to move back into.
     // Enter and Space, pressed while the button itself has focus, need the
     // exact same protection as Tab above and for the exact same reason
     // (#30.x.6, round 3) — found live: Doug reported Enter and Space both
@@ -501,6 +554,24 @@ let twoincSelectWooHelper = {
       .on("keydown.twoincManualEntryButton", "#" + helper.manualEntryRowId, function (e) {
         if (e.which !== 9 && e.which !== 13 && e.which !== 32) return;
         e.stopPropagation();
+
+        // Enter and Space stop here: their native "activate a focused
+        // <button>" default action must still run so this button's own click
+        // handler fires. Shift+Tab stops here too — see above.
+        if (e.which !== 9 || e.shiftKey) return;
+
+        // Resolved BEFORE the close, while the company-name control this is
+        // measured from is still the one on screen.
+        const next = helper.nextTabbableAfterCompanyField();
+
+        e.preventDefault();
+        helper.closeCompanySearchDropdown();
+
+        if (!next) return;
+        next.focus();
+        setTimeout(function () {
+          if (document.activeElement !== next) next.focus();
+        }, 20);
       });
     // NOTE: #search_company_btn's equivalent Enter/Space fix (round 4,
     // #30.x.7, in getSearchCompanyBtnNode) looks different on purpose — it
@@ -510,6 +581,150 @@ let twoincSelectWooHelper = {
     // interferers (selectWoo's document handler here; something unconfirmed
     // and external there, since selectWoo isn't even alive at that point),
     // so the fix shape differs — see that function's own comment.
+  },
+
+  /**
+   * Close the company-search dropdown, if one is open (TWO-25326).
+   *
+   * Goes through the instance rather than `.select2('close')` so it is a
+   * no-op — not a thrown "select2 is not a function" — on a page where the
+   * widget was never attached, which is every page the buyer reaches with
+   * company search disabled.
+   *
+   * @returns {void}
+   */
+  closeCompanySearchDropdown: function () {
+    const picker = jQuery("#billing_company_display").data("select2");
+    if (picker && typeof picker.close === "function") picker.close();
+  },
+
+  /**
+   * Elements the browser will stop on during Tab traversal.
+   *
+   * Deliberately a superset — `[tabindex]` catches both the select2 combobox
+   * span (`tabindex="0"`, not a natively focusable element) and rows that
+   * carry `tabindex="-1"` to opt OUT — which is why the caller filters on the
+   * live `tabIndex` property rather than trusting the selector alone.
+   */
+  tabbableSelector:
+    "a[href], area[href], input:not([disabled]):not([type=hidden]), " +
+    "select:not([disabled]), textarea:not([disabled]), button:not([disabled]), " +
+    "iframe, object, embed, [tabindex], [contenteditable]",
+
+  /**
+   * Is this element hidden, for the purpose of choosing a Tab target?
+   *
+   * Deliberately NOT jQuery's `:visible`. That is the more accurate answer in
+   * a browser and the wrong tool here for one reason: it is a LAYOUT query
+   * (`offsetWidth || offsetHeight || getClientRects().length`), and jsdom
+   * implements no layout at all, so under Jest it reports every element in
+   * the document as hidden. A caller filtered on `:visible` would find no tab
+   * target ever, and the test proving the fix works would pass against a
+   * function that always returns null.
+   *
+   * The three checks below are the ways this checkout actually hides a field,
+   * and all of them are readable without layout:
+   *
+   *   - the `hidden` CLASS on the field or any ancestor — the plugin's and
+   *     WooCommerce's own convention, and how every company field on this
+   *     form is toggled (`#billing_company_field.hidden`, the tile's boxes,
+   *     `toggleBusinessFields`);
+   *   - the `hidden` ATTRIBUTE, for anything a theme hides declaratively;
+   *   - an inline `display: none`, for anything hidden by a script.
+   *
+   * The residual gap is a field hidden by a stylesheet rule that is neither
+   * of those — a theme with its own `.foo { display: none }`. Landing focus
+   * on such a field would be wrong, but it fails safe: the buyer sees focus
+   * apparently vanish and Tabs again, which is where they were before this
+   * function existed. Worth revisiting if a theme is ever found doing it.
+   *
+   * @param {HTMLElement} el
+   * @returns {boolean}
+   */
+  isHiddenForTabbing: function (el) {
+    const $el = jQuery(el);
+    if ($el.closest(".hidden, [hidden]").length) return true;
+    return Boolean(el.style && el.style.display === "none");
+  },
+
+  /**
+   * The next real tab-stop after the company-name control (TWO-25326 §4).
+   *
+   * Needed because the dropdown is not where the buyer thinks it is: selectWoo
+   * attaches it to the END of `<body>`, so native Tab out of anything inside
+   * it walks off the end of the document instead of continuing through the
+   * address form. To put focus where the buyer expects it, the traversal has
+   * to be recomputed from the control's position in the FORM, not from the
+   * focused element's position in the document.
+   *
+   * Anchored on the select2 combobox in search mode and on `#billing_company`
+   * otherwise, so the same function answers correctly in both capture modes.
+   *
+   * Everything inside an open select2 is excluded from the candidate list.
+   * Without that the answer would be the query field or this very button —
+   * both of which follow the anchor in document order, both of which are
+   * about to be detached by the close, and neither of which is "the next
+   * control in the tab order" in any sense the buyer would recognise.
+   *
+   * Uses `compareDocumentPosition` rather than an index into the candidate
+   * list on purpose: selectWoo flips the combobox's own `tabindex` while the
+   * dropdown is open, so the anchor is not reliably a member of the list it
+   * is being located within, and an index lookup would return -1 exactly when
+   * this is called.
+   *
+   * @returns {HTMLElement|null} the element to focus, or null if there is
+   *   nothing after the company field (last control on the page)
+   */
+  nextTabbableAfterCompanyField: function () {
+    let $anchor = jQuery("#billing_company_display_field").find(".select2-selection").first();
+    if (!$anchor.length) $anchor = jQuery("#billing_company").first();
+    if (!$anchor.length) return null;
+
+    const anchor = $anchor.get(0);
+    let next = null;
+
+    // jQuery returns a multi-element selector's matches in document order, so
+    // the FIRST candidate that follows the anchor is the one Tab would reach.
+    jQuery(twoincSelectWooHelper.tabbableSelector).each(function () {
+      if (next) return;
+      if (this.tabIndex < 0) return;
+      if (jQuery(this).closest(".select2-container--open, .select2-dropdown").length) return;
+      if (twoincSelectWooHelper.isHiddenForTabbing(this)) return;
+      if (!((anchor.compareDocumentPosition(this) & 4) /* DOCUMENT_POSITION_FOLLOWING */)) return;
+      next = this;
+    });
+
+    return next;
+  },
+
+  /**
+   * The dropdown's query-field wrapper — where the spinner belongs
+   * (TWO-25326).
+   *
+   * Two lookups, because the primary one is conditional on widget state in a
+   * way that is easy to miss: selectWoo sets `aria-owns` on the query field
+   * in its `container.on('open')` handler and REMOVES it again on close, so
+   * `companySearchInputSelector` matches nothing whenever the dropdown is
+   * shut. That is correct for the spinner (there is nothing to paint on a
+   * closed dropdown) but it makes the selector a state check masquerading as
+   * an element lookup, and a caller that runs a tick early or a tick late
+   * gets a silent no-op rather than a spinner.
+   *
+   * The fallback is anchored on the results list's id instead, which is
+   * static markup: it identifies THIS field's dropdown specifically, so it
+   * can never pick up the country picker's search field, which sits in an
+   * identically-classed wrapper whenever that dropdown happens to be open.
+   *
+   * @returns {Object} jQuery-wrapped wrapper, empty if there is no dropdown
+   */
+  getCompanySearchFieldContainer: function () {
+    const $byAria = jQuery(twoincSelectWooHelper.companySearchInputSelector).parent();
+    if ($byAria.length) return $byAria;
+
+    return jQuery("#select2-billing_company_display-results")
+      .closest(".select2-dropdown")
+      .find(".select2-search--dropdown")
+      .first();
   },
 
   /**
@@ -528,7 +743,7 @@ let twoincSelectWooHelper = {
    * animating element running behind a closed dropdown.
    */
   toggleCompanySearchSpinner: function (isSearching) {
-    const $search = jQuery('input[aria-owns="select2-billing_company_display-results"]').parent();
+    const $search = twoincSelectWooHelper.getCompanySearchFieldContainer();
     if ($search.length === 0) return;
     $search.find(".twoinc-search-spinner").remove();
     if (isSearching) {
@@ -725,6 +940,54 @@ let twoincSelectWooHelper = {
         billingCompanyDisplay.on("results:message", function (e) {
           this.dropdown._resizeDropdown();
           this.dropdown._positionDropdown();
+        });
+
+        // Spinner, driven off the widget's own query lifecycle as well as off
+        // the ajax transport (TWO-25326 §1).
+        //
+        // The transport hooks in genSelectWooParams stay — they are the
+        // accurate signal, and they are what the supersession guard is built
+        // around. These are additive, and they buy two things the transport
+        // cannot:
+        //
+        //   - Coverage of the debounce. `query` fires on the keystroke;
+        //     the transport does not run until 300ms later. To the buyer, the
+        //     search is "in progress" for that whole time — this bullet asks
+        //     for a spinner "while a search query is in progress", and a third
+        //     of a second of dead field before it appears is the visible part
+        //     of the wait.
+        //   - Independence from the transport actually being reached. Live
+        //     verification on 2026-08-02 found no spinner during a real
+        //     search on staging, while the identical path driven through the
+        //     real selectWoo widget under Jest shows it correctly — so the
+        //     transport hook demonstrably does not always land in a real
+        //     browser, and the root cause is not yet established. Hanging the
+        //     spinner off the widget's own events as well means it no longer
+        //     depends on which of the two paths runs.
+        //
+        // `results:all` and `results:message` are the two terminal states of a
+        // query — a rendered result set, or a message row ("No matches found",
+        // "search unavailable"). Both mean the search is over.
+        //
+        // The threshold check is load-bearing, not a tidy-up. Handlers run in
+        // registration order and the widget registered its own `query`
+        // handler at construction, so by the time this one runs the data
+        // adapter has ALREADY been asked for results — and for a below-minimum
+        // term the minimumInputLength decorator answers it synchronously with
+        // `results:message`, meaning the hide below has already fired before
+        // this show would run. Without the guard, every keystroke under three
+        // characters would leave a spinner running forever over a "Please
+        // enter 3 or more characters" hint with no request in flight.
+        billingCompanyDisplay.on("query", function (params) {
+          const term = (params && params.term) || "";
+          if (term.length < twoincSelectWooHelper.companySearchMinLength) return;
+          twoincSelectWooHelper.toggleCompanySearchSpinner(true);
+        });
+        billingCompanyDisplay.on("results:all", function () {
+          twoincSelectWooHelper.toggleCompanySearchSpinner(false);
+        });
+        billingCompanyDisplay.on("results:message", function () {
+          twoincSelectWooHelper.toggleCompanySearchSpinner(false);
         });
       }
     }
@@ -1257,20 +1520,41 @@ let twoincDomHelper = {
     }, 3000);
   },
 
-  /** DOM id of the read-only captured-company summary (TWO-25288). */
+  /**
+   * DOM id of the company-number label under the company-name field
+   * (TWO-25288, narrowed to number-only by TWO-25326 §7).
+   *
+   * Id and class kept as `twoinc_company_summary` / `.twoinc-company-summary`
+   * even though it no longer summarises anything but the number: brand
+   * overlays style this element by class (`.custom-checkout
+   * .twoinc-company-summary` in twoinc.css is one in this repo alone), and
+   * renaming it would silently drop their styling on a change whose whole
+   * purpose is cosmetic.
+   */
   companySummaryId: "twoinc_company_summary",
 
   /**
-   * The read-only summary of the captured company, built hidden on first use
-   * (TWO-25288).
+   * The read-only company-number label, built hidden on first use
+   * (TWO-25288; scope narrowed TWO-25326 §7).
    *
-   * Two <span>s and no <input>: the captured identity is a value the buyer is
+   * ONE <span> and no <input>: the captured number is a value the buyer is
    * shown, not a field they fill in, so there is deliberately nothing here to
    * type into and no control that removes it. `readonly` inputs are this
    * plugin's convention for a field that still carries a value the buyer must
    * not change (sole-trader mode readonly-locks #billing_company and
    * #company_id) — but those are the SUBMITTED fields, and they keep that job
-   * untouched. This is a display beside them, so spans are the right shape.
+   * untouched. This is a display beside them, so a span is the right shape.
+   *
+   * It used to render the captured NAME here too, in a
+   * `.twoinc-company-summary-name` span above the number. That span is gone
+   * (TWO-25326 §7): the name is already on screen in the company-name control
+   * immediately above, and the ticket rules out any additional company name
+   * or number text in the address area beyond the company-name field itself
+   * and this number label. The number stays because §5 requires exactly this
+   * — the number as a plain right-aligned text label immediately below the
+   * name field, never as an input — and this element is the only thing on WC
+   * providing it. The name moved to the payment tile instead, where §7 wants
+   * it; see `renderCompanyTileLabel`.
    *
    * Anchored after the company-id field's enclosing `.twoinc-inp-container`
    * where there is one, NOT inside it. The pay-for-order page wraps every
@@ -1331,7 +1615,6 @@ let twoincDomHelper = {
         '<div id="' +
           twoincDomHelper.companySummaryId +
           '" class="twoinc-company-summary hidden">' +
-          '<span class="twoinc-company-summary-name"></span>' +
           '<span class="twoinc-company-summary-id"></span>' +
           "</div>"
       );
@@ -1369,30 +1652,80 @@ let twoincDomHelper = {
    * @returns {void}
    */
   renderCompanySummary: function (companyName, companyId) {
-    const $node = twoincDomHelper.getCompanySummaryNode();
-    if (!$node.length) return;
-
     const data =
       companyName === undefined && companyId === undefined
         ? twoincDomHelper.readCapturedCompany()
         : { company_name: companyName, organization_number: companyId };
 
     // The empty selectWoo option's label is a non-breaking space, so an
-    // unselected picker reads back as " " rather than "" — which would
-    // render as a summary with an invisible name in it.
+    // unselected picker reads back as " " rather than "" — which would
+    // render as a label with an invisible value in it.
     const name = twoincUtilHelper.blankToEmpty(data.company_name);
     const number = twoincUtilHelper.blankToEmpty(data.organization_number);
 
-    $node.find(".twoinc-company-summary-name").text(name);
+    // Rendered from the same resolved pair, in the same call, so the tile and
+    // the address area can never disagree about what was captured
+    // (TWO-25326 §7).
+    twoincDomHelper.renderCompanyTileLabel(name, number);
+
+    const $node = twoincDomHelper.getCompanySummaryNode();
+    if (!$node.length) return;
+
     $node.find(".twoinc-company-summary-id").text(number);
 
-    // Shown only for a Two purchase with something captured. A buyer paying by
-    // another method may well have typed a company name into WooCommerce's own
-    // field, and echoing it back at them under Two's styling is noise.
+    // Keyed on the NUMBER alone now, not on "name or number" (TWO-25326 §5,
+    // §7). This element renders nothing but the number, so a captured company
+    // with no number — which is exactly what manual entry produces, since it
+    // clears #company_id — must leave no empty block behind occupying vertical
+    // space under the field. §5 states it outright: manual-entry mode shows no
+    // company-number field or label at all.
+    //
+    // Shown only for a Two purchase. A buyer paying by another method may well
+    // have a company number sitting in the field, and echoing it back at them
+    // under Two's styling is noise.
     const visible = Boolean(
-      (name || number) && twoincDomHelper.isTwoincVisible() && twoincDomHelper.isTwoincSelected()
+      number && twoincDomHelper.isTwoincVisible() && twoincDomHelper.isTwoincSelected()
     );
     $node.toggleClass("hidden", !visible);
+  },
+
+  /** DOM class of the payment tile's captured-company label (TWO-25326 §7). */
+  companyTileLabelClass: "twoinc-company-tile-label",
+
+  /**
+   * Render the captured company inside the payment tile (TWO-25326 §7).
+   *
+   * The ticket asks for `<name> (<number>)` as a text label in the tile,
+   * "between the chips and the intent message (if rendered) or else the
+   * optional fields". On WooCommerce the second half of that has no referent:
+   * the optional fields (invoice email, project, department) are checkout
+   * form fields in the billing column, not tile content, so there is nothing
+   * in the tile for the label to sit above if the intent message is switched
+   * off. The container is therefore server-rendered as the last element of
+   * the tile block before the intent loader/notice, which satisfies the
+   * position in both cases — see the block comment on that markup in
+   * WC_Twoinc.php.
+   *
+   * Nothing here creates DOM. The container is server-rendered, so a brand
+   * overlay that removes or repositions it in its own template simply gets no
+   * label, rather than having one injected back underneath it.
+   *
+   * Falls back to the bare name when the capture carries no number, which is
+   * manual entry. `<name> ()` would read as a rendering fault, and the number
+   * is genuinely absent rather than pending.
+   *
+   * @param {string} name already blank-collapsed
+   * @param {string} number already blank-collapsed
+   * @returns {void}
+   */
+  renderCompanyTileLabel: function (name, number) {
+    const $label = jQuery("." + twoincDomHelper.companyTileLabelClass);
+    if (!$label.length) return;
+
+    const text = name && number ? name + " (" + number + ")" : name;
+
+    $label.text(text);
+    $label.toggleClass("hidden", !text);
   },
 
   /**

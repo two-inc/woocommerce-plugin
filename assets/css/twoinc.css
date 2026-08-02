@@ -149,13 +149,19 @@
 }
 
 /*
- * Read-only summary of the captured company (TWO-25288).
+ * Read-only label carrying the captured company NUMBER (TWO-25288; narrowed
+ * from name+number to number-only by TWO-25326 §7).
  *
  * Replaces the floating company-id overlay, which was absolutely positioned
  * over the picker's selection box and so could only ever hold one short value.
- * This sits in normal flow underneath the company fields and carries both the
- * name and the number, so neither has to compete with the other for the same
- * few pixels of the combobox.
+ * This sits in normal flow underneath the company fields, where §5 requires
+ * the number to be.
+ *
+ * The captured NAME no longer renders here. §7 rules out any company name or
+ * number text in the address area beyond the company-name field itself and
+ * this number label — the name was a second copy of what the control directly
+ * above already shows. It moved to the payment tile
+ * (`.twoinc-company-tile-label`).
  */
 .twoinc-company-summary {
   padding-bottom: 15px;
@@ -169,20 +175,6 @@
   padding-left: 3px;
   padding-right: 3px;
   line-height: 1.4;
-}
-
-.twoinc-company-summary-name {
-  font-weight: 600;
-  display: block;
-  /*
-   * Round 1 review (Vader): a single unbroken token — routine in DE/NL/NO
-   * registry names — would otherwise overflow the row horizontally instead
-   * of wrapping. `anywhere` rather than `break-word`: it also allows a break
-   * before the first character of an overflowing word, which `break-word`
-   * does not, so a name that alone is wider than the field still wraps
-   * rather than escaping the box.
-   */
-  overflow-wrap: anywhere;
 }
 
 /*
@@ -594,6 +586,35 @@
   margin: 12px 0;
 }
 .twoinc-sole-trader-toggle.hidden {
+  display: none;
+}
+
+/*
+ * The captured company, as `<name> (<number>)`, in the payment tile
+ * (TWO-25326 §7).
+ *
+ * A text label, deliberately styled as one: no border, no background, nothing
+ * that reads as a control. The buyer cannot act on this — it restates what
+ * they already picked in the address form — and anything that looks clickable
+ * here invites them to try to edit it in the tile, which is the exact failure
+ * mode the ticket records against the Magento implementations.
+ *
+ * Semibold rather than a colour change, so it stays legible on any brand
+ * overlay's tile background without this rule having to know what colour that
+ * is.
+ *
+ * `overflow-wrap: anywhere` for the same reason the number label under the
+ * address field carries it: registry names in DE/NL/NO routinely contain a
+ * single unbroken token longer than the tile is wide, and the tile is
+ * narrower than the address column.
+ */
+.twoinc-company-tile-label {
+  margin: 12px 0;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.twoinc-company-tile-label.hidden {
   display: none;
 }
 .twoinc-mode-selector {

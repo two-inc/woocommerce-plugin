@@ -176,6 +176,7 @@ final class BrandConfigSpec
             'testClientVersionSuffixesShortShaWhenStamped',
             'testClientVersionIsQueryEncodedAsPlus',
             'testPaymentBoxOrdersTaglineChipsThenSoleTrader',
+            'testPaymentBoxRendersCompanyLabelBetweenChipsAndIntentMessage',
             'testSelectedTermInputPrecedesChipsContainer',
             'testBrandWithoutTaglineEmitsNoTaglineBlock',
             'testTaglineSentenceIsPlatformCopyWithBrandFaqLink',
@@ -5258,6 +5259,41 @@ final class BrandConfigSpec
         TinyAssert::true($tagline < $chips, 'tagline must precede the chips');
         TinyAssert::true($chips < $sole_trader, 'chips must precede the sole-trader toggle');
         TinyAssert::true($sole_trader < $about, 'about block must trail the box');
+    }
+
+    /**
+     * The captured company renders in the payment tile, as a text label
+     * between the term chips and the intent message (TWO-25326 section 7).
+     *
+     * Position is asserted, not just presence: the requirement names the
+     * chips and the intent message as its two anchors, and the whole box is
+     * one concatenated sprintf, so an edit that moves the label is a silent
+     * regression exactly like the ordering test above guards against.
+     *
+     * Empty on render by design. The captured company is chosen client-side
+     * after this markup is generated, so the container ships empty and
+     * hidden and renderCompanyTileLabel() in twoinc.js fills it.
+     */
+    private static function testPaymentBoxRendersCompanyLabelBetweenChipsAndIntentMessage(): void
+    {
+        self::useTaglineBrand();
+        $html = self::gateway()->build_payment_description();
+
+        $chips = strpos($html, 'twoinc-term-chips');
+        $label = strpos($html, 'twoinc-company-tile-label');
+        $intent = strpos($html, 'twoinc-pay-box');
+
+        TinyAssert::true($chips !== false, 'chips container missing');
+        TinyAssert::true($label !== false, 'company tile label missing');
+        TinyAssert::true($intent !== false, 'intent/notice pay box missing');
+
+        TinyAssert::true($chips < $label, 'chips must precede the company label');
+        TinyAssert::true($label < $intent, 'company label must precede the intent message');
+
+        TinyAssert::true(
+            strpos($html, '<div class="twoinc-company-tile-label hidden"></div>') !== false,
+            'company tile label must ship empty and hidden'
+        );
     }
 
     /**
