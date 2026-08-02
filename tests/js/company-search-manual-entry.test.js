@@ -768,6 +768,39 @@ describe("company-search manual-entry affordance", () => {
       jest.useRealTimers();
     });
 
+    test("closes the widget before destroying it, not the other way round (#30.x.13)", () => {
+      // Live-reported regression: Tab became unresponsive PAGE-WIDE the
+      // moment manual entry was reached, not just near the company field —
+      // exactly what selectWoo's own document-level Tab/Enter-as-select
+      // handler would produce if left bound with nothing to reason about.
+      // That handler is only unbound as part of selectWoo's own CLOSE
+      // cleanup — `destroy()` alone, called while the widget is still open
+      // (the only way this function is ever reached — the manual-entry row
+      // lives INSIDE the open results list), tears down the widget's DOM
+      // without ever running that cleanup. `close()` before `destroy()` is
+      // the fix; this asserts the ORDER, which is what the fix actually is
+      // — asserting only that `select2("destroy")` happened somewhere,
+      // without the order, would pass against the old code too.
+      const $select = openWithAffordance();
+      const calls = [];
+      const original = jQuery.fn.select2;
+      jest.spyOn(jQuery.fn, "select2").mockImplementation(function (arg) {
+        if (arg === "close" || arg === "destroy") calls.push(arg);
+        return original.apply(this, arguments);
+      });
+
+      expect($select.data("select2").isOpen()).toBe(true);
+
+      jest.useFakeTimers();
+      type("abc");
+      activate();
+      jest.advanceTimersByTime(1);
+      jest.useRealTimers();
+
+      expect(calls).toEqual(["close", "destroy"]);
+      jQuery.fn.select2.mockRestore();
+    });
+
     test("the way back out appears, keyboard-reachable", () => {
       jest.useFakeTimers();
       openWithAffordance();
@@ -939,6 +972,42 @@ describe("company-search manual-entry affordance", () => {
       // label+input combined.
       expect($back.parent().hasClass("woocommerce-input-wrapper")).toBe(true);
       expect($back.closest("#billing_company_field").length).toBe(1);
+    });
+
+    test("a real click activates the way back out even detached from the document (#30.x.13)", () => {
+      // Live-reported regression: clicking #search_company_btn did nothing
+      // on the real checkout, though a real Enter keypress on the same
+      // button (its own directly-bound keydown handler) worked. The
+      // activation used to be a `$body.on("click", "#" + searchCompanyBtnId,
+      // ...)` delegated handler — which a plain `$btn.trigger("click")`
+      // cannot distinguish from a direct binding, because jQuery delegation
+      // works identically in jsdom whether or not the real browser's click
+      // event actually reaches document.body (that interference is exactly
+      // what this suite cannot reproduce — it is a live-browser-only bug).
+      //
+      // What DOES distinguish the two here: detaching the button from the
+      // document before dispatching the click. A delegated `$body.on(...)`
+      // handler only ever fires via bubbling up to `document.body` — an
+      // element with no parent cannot bubble anywhere, so a delegated
+      // handler could never see this click. A handler bound DIRECTLY on the
+      // element itself still runs for a native click dispatched at that
+      // element, attached or not. This is a real regression test: it fails
+      // against the old delegated-only binding and passes against a direct
+      // one, without needing a real browser.
+      openWithAffordance();
+      jest.useFakeTimers();
+      type("abc");
+      activate();
+      jest.advanceTimersByTime(1);
+      jest.useRealTimers();
+
+      const $btn = ctx.dom.getSearchCompanyBtnNode();
+      const detached = $btn.detach();
+
+      expect(detached.parent().length).toBe(0);
+      detached.trigger("click");
+
+      expect(ctx.twoinc.enable_company_search).toBe("yes");
     });
 
     test("leaving manual entry hides the way back out again", () => {
@@ -1258,6 +1327,83 @@ describe("company-search manual-entry affordance", () => {
 
       expect(ctx.twoinc.enable_company_search).toBe("no");
       expect($("#" + helper.searchCompanyBtnId)[0].style.display).not.toBe("none");
+    });
+
+    test("switching to sole trader closes the widget before destroying it, not the other way round (#30.x.13, round 1 review — Han)", () => {
+      // Same hazard as enterManualCompanyEntry's own close()-before-destroy()
+      // fix, in a sibling call site this PR's first pass missed: a buyer can
+      // reach sole-trader mode with the search dropdown still OPEN — via the
+      // mode chip directly, or via the email-driven autofill prefetch
+      // (onEmailChanged) — without ever going through manual entry first.
+      // destroy() alone on an open widget skips selectWoo's own close
+      // cleanup, which is what unbinds its document-level Tab/Enter-as-select
+      // interceptor — the same page-wide-Tab-shaped gap. Asserting only that
+      // destroy() happened, without the order, would pass against the old
+      // (buggy) code too.
+      const $select = openWithAffordance();
+      const calls = [];
+      const original = jQuery.fn.select2;
+      jest.spyOn(jQuery.fn, "select2").mockImplementation(function (arg) {
+        if (arg === "close" || arg === "destroy") calls.push(arg);
+        return original.apply(this, arguments);
+      });
+
+      expect($select.data("select2").isOpen()).toBe(true);
+
+      ctx.soleTrader.setMode("sole_trader");
+
+      expect(calls).toEqual(["close", "destroy"]);
+      jQuery.fn.select2.mockRestore();
+    });
+
+    test("a deferred manual-entry activation that lands AFTER an async sole-trader switch does not stomp it (#30.x.13, round 2 review — Han+Vader, convergent)", () => {
+      // Real race, not hypothetical: `activateManualEntry` removes the
+      // button synchronously but defers the actual mode switch via
+      // `setTimeout(enterManualCompanyEntry, 0)` (so destroying the widget
+      // doesn't happen from inside its own still-unwinding click handler).
+      // Separately, the email-driven autofill prefetch can call
+      // `twoincSoleTrader.setMode("sole_trader")` on its own, asynchronously,
+      // regardless of what the dropdown/manual-entry button is doing (see
+      // the comment on `savedManualEntryActive`). If that prefetch's
+      // callback lands in the SAME tick window as the pending deferred
+      // `enterManualCompanyEntry` — entirely plausible, both are macrotask/
+      // microtask-scheduled independently of each other — `setMode` runs
+      // first (snapshotting the correct pre-manual-entry state), and then
+      // the stale `enterManualCompanyEntry` fires anyway: without a guard it
+      // would force `manual_company_entry_active` back to true (wrong —
+      // sole trader needs `#company_id_field` for its synthetic id),
+      // re-show the search-again button `setMode` just hid, and wipe
+      // `#billing_company`/`#company_id` out from under the synthetic id
+      // sole-trader mode may have just written. That reproduces the exact
+      // #30.x.13 wrong-id-field-visibility symptom via a path this PR's own
+      // new flag opened up. This asserts `enterManualCompanyEntry` bails
+      // once sole-trader mode has taken over by the time it actually runs.
+      jest.useFakeTimers();
+      openWithAffordance();
+      type("abc");
+
+      // The button's click handler fires synchronously; the mode switch
+      // itself is what's deferred.
+      activate();
+
+      // Async sole-trader switch races in and completes BEFORE the deferred
+      // enterManualCompanyEntry timer fires.
+      ctx.soleTrader.setMode("sole_trader");
+      expect(ctx.twoinc.manual_company_entry_active).toBe(false);
+      expect(ctx.twoinc.enable_company_search).toBe("no");
+
+      // Now the stale deferred callback runs. Without the guard in
+      // enterManualCompanyEntry, this forces manual_company_entry_active
+      // back to true — wrong, sole trader needs #company_id_field for its
+      // synthetic id (see toggleBusinessFields) — reproducing the
+      // #30.x.13 wrong-id-field-visibility symptom via this new flag.
+      jest.advanceTimersByTime(1);
+      jest.useRealTimers();
+
+      // Sole-trader mode must still be intact — not stomped by the late
+      // manual-entry activation.
+      expect(ctx.twoinc.manual_company_entry_active).toBe(false);
+      expect(ctx.twoinc.enable_company_search).toBe("no");
     });
   });
 

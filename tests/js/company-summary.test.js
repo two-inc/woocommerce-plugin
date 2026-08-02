@@ -393,27 +393,44 @@ describe("read-only captured-company summary", () => {
       expect($("#billing_company").val()).toBe(renderedName());
     });
 
-    test("the blur handler picks up a number the buyer supplies themselves", () => {
-      // On this platform manual entry keeps its own organisation-number field
-      // (toggleBusinessFields reveals and requires `#company_id_field`), so
-      // "blank" above means "not carried over from the abandoned pick", not
-      // "unobtainable".
-      //
-      // The handler is invoked directly rather than by dispatching a blur: the
-      // `$body.on("blur", "#company_id", …)` delegation is installed by
-      // Twoinc.initialize, whose bootstrap this suite does not stand up. So
-      // this covers the handler's body, NOT that it is wired to the event —
-      // hence the test name.
-      const ajax = harness.stubAjax($);
+    test("hides #company_id_field — manual entry is name-only, no id (#30.x.13)", () => {
+      // Settled cross-platform three-mode company-capture model: search gets
+      // name+id, sole-trader gets name+synthetic id, manual entry gets name
+      // ONLY — Two's payment method cannot function without an id, and
+      // showing this field in manual entry invites one that was never
+      // validated against anything (see the `manual_company_entry_active`
+      // comment in toggleBusinessFields). Previously this platform diverged
+      // and kept the field visible/required in manual entry — that was the
+      // bug (#30.x.13, live-reported by Doug).
+      pickCompany("ACME Widgets Ltd", "12345678");
       dom.enterManualCompanyEntry();
       typeCompanyName("Sole Proprietor Bakery");
 
-      $("#company_id").val("55554444");
-      ctx.Twoinc.prototype.onCompanyManualInputBlur.call($("#company_id")[0]);
+      expect($("#company_id_field").hasClass("hidden")).toBe(true);
+      expect($("#company_id").prop("required")).toBe(false);
+    });
 
-      expect(renderedName()).toBe("Sole Proprietor Bakery");
-      expect(renderedNumber()).toBe("55554444");
-      ajax.restore();
+    test("stays name-only after a round trip through sole-trader mode (#30.x.13, round 1 review — Vader)", () => {
+      // Real dead end found live by Vader's review: sole-trader mode is
+      // reachable WHILE in manual entry — the mode chip is not hidden during
+      // manual entry, and the email-driven autofill prefetch can call
+      // twoincSoleTrader.setMode("sole_trader") on its own regardless of
+      // capture mode. setMode saves/restores `enable_company_search` around
+      // the trip, so a buyer who was in manual entry correctly lands back on
+      // enable_company_search === "no" — but without also saving/restoring
+      // `manual_company_entry_active`, toggleBusinessFields cannot tell that
+      // "no" apart from sole-trader's own, and would show + REQUIRE
+      // #company_id_field with no working search widget behind it
+      // (enableCompanySearch early-returns) and no way back to name-only.
+      pickCompany("ACME Widgets Ltd", "12345678");
+      dom.enterManualCompanyEntry();
+      typeCompanyName("Sole Proprietor Bakery");
+
+      ctx.soleTrader.setMode("sole_trader");
+      ctx.soleTrader.setMode("business");
+
+      expect($("#company_id_field").hasClass("hidden")).toBe(true);
+      expect($("#company_id").prop("required")).toBe(false);
     });
   });
 

@@ -1006,8 +1006,30 @@ let twoincDomHelper = {
         visibleTargets.push("#billing_company_display_field");
         requiredTargets.push("#billing_company_display_field");
       } else {
-        visibleTargets.push("#billing_company_field", "#company_id_field");
-        requiredTargets.push("#billing_company_field", "#company_id_field");
+        visibleTargets.push("#billing_company_field");
+        requiredTargets.push("#billing_company_field");
+
+        // #company_id_field is deliberately left OUT here when manual entry
+        // (TWO-25288/#30.x.13) is what put us on this branch. This branch is
+        // shared with two other reasons `enable_company_search` can read
+        // "no" — the merchant simply never enabled company search at all,
+        // and sole-trader mode (twoincSoleTrader.setMode), which both
+        // legitimately want the id field: the plain fallback captures
+        // name+id like it always has, and sole-trader mode fills company_id
+        // itself with a synthetic identifier (Two's payment method cannot
+        // function without one). Manual entry is the one case in this org's
+        // three-mode company-capture model that captures name ONLY — Two's
+        // payment method still needs an id in the other two modes, but a
+        // buyer who says "my company isn't in the registry" has no id to
+        // give, and showing the field only invites one that was never
+        // validated against anything. `manual_company_entry_active` is set
+        // by enterManualCompanyEntry/exitManualCompanyEntry specifically so
+        // this branch can tell "manual entry" apart from the other two
+        // routes into it.
+        if (!window.twoinc.manual_company_entry_active) {
+          visibleTargets.push("#company_id_field");
+          requiredTargets.push("#company_id_field");
+        }
       }
     } else {
       if (
@@ -1442,39 +1464,42 @@ let twoincDomHelper = {
       .attr({ id: id, type: "button" })
       .text(twoincSelectWooHelper.searchCompanyText())
       .hide()
-      // Enter/Space must activate this button directly, not rely on the
-      // browser's native "activate a focused <button>" default action
-      // (#30.x.7). Reported live: Tab reaches this button fine (it is a
-      // real, focusable <button>), but pressing Enter or Space while it has
-      // focus does nothing. Unlike #company_not_in_btn's equivalent fix
-      // (round 3, #30.x.6), the interference here cannot be a document-level
-      // selectWoo handler — selectWoo's widget is destroyed the moment
-      // manual entry is entered (see enterManualCompanyEntry), long before
-      // this button is ever shown. UNCONFIRMED (no live-browser access from
-      // here, and this repo does not vendor WooCommerce core or the host
-      // theme to check directly) — one plausible culprit: WooCommerce core's
-      // checkout.js and various host themes commonly bind a keydown/keypress
-      // guard on the whole checkout form to stop Enter from submitting it
-      // prematurely while any form control has focus. That said, such guards
-      // are typically delegated against specific input selectors, which a
-      // <button> may not even match — so this may not be the actual
-      // mechanism. This fix does not depend on the theory being right: it
-      // owns activation on a node it exclusively creates, rather than
-      // chasing whichever interferer turns out to be real.
+      // Both click AND Enter/Space must activate this button directly,
+      // bound on the element itself rather than delegated from
+      // document.body (#30.x.7, #30.x.13).
       //
-      // Bound directly on this element (not delegated from document.body)
-      // so it is the first listener to see the keydown — a directly-bound
-      // bubble-phase listener always runs before any bubble-phase listener
-      // on an ancestor, regardless of registration order or where that
-      // ancestor handler lives. (Not overridable by any bubble-phase
-      // handler we know of; the one theoretical exception is a capture-phase
-      // listener somewhere in the ancestor chain, which jQuery never
-      // installs and nothing vendored in this repo uses either.) Driving the
-      // switch back to search directly, rather than depending on native
-      // activation reaching the existing `$body.on("click", "#" +
-      // searchCompanyBtnId, ...)` handler below, means this works regardless
-      // of whether some ancestor handler already called `preventDefault()`
-      // by the time this runs.
+      // CLICK (#30.x.13, live-reported by Doug): a `$body.on("click", "#" +
+      // searchCompanyBtnId, ...)` delegated handler used to be the only
+      // activation path. Live reproduction confirmed the mouse event DOES
+      // reach this button (mousedown focuses it, document.activeElement
+      // becomes this element, elementFromPoint at its centre resolves to
+      // the button itself — no overlap, no z-index/stacking interference),
+      // yet the delegated handler never ran and nothing was switched back
+      // to search. The same button's OWN direct keydown handler (below)
+      // fires correctly for a real Enter keypress on the same element in
+      // the same session — so whatever is intercepting this is specific to
+      // the bubble-phase "click" event reaching document.body, not to this
+      // button or to activation in general. Binding directly here removes
+      // the dependency on that bubble reaching body at all, the same
+      // reasoning already applied to Enter/Space below.
+      //
+      // ENTER/SPACE (#30.x.7): reported live — Tab reaches this button fine
+      // (it is a real, focusable <button>), but pressing Enter or Space
+      // while it has focus did nothing via the browser's native "activate a
+      // focused <button>" default action alone.
+      //
+      // A directly-bound bubble-phase listener always runs before any
+      // bubble-phase listener on an ancestor, regardless of registration
+      // order or where that ancestor handler lives (the one theoretical
+      // exception is a capture-phase listener somewhere in the ancestor
+      // chain, which jQuery never installs and nothing vendored in this
+      // repo uses either) — so both of these fire regardless of whatever
+      // else is bound between this element and document.body, and
+      // regardless of whether some ancestor handler already called
+      // `preventDefault()`/`stopPropagation()` by the time it runs.
+      .on("click", function (e) {
+        twoincDomHelper.exitManualCompanyEntry();
+      })
       .on("keydown", function (e) {
         if (e.which !== 13 && e.which !== 32) return;
         e.preventDefault();
@@ -1516,7 +1541,31 @@ let twoincDomHelper = {
    * @returns {void}
    */
   enterManualCompanyEntry: function () {
+    // Guard against the deferred activation (activateManualEntry's
+    // `setTimeout(enterManualCompanyEntry, 0)`) landing AFTER an async
+    // sole-trader switch raced in during the same tick — e.g. the
+    // email-driven autofill prefetch calling
+    // `twoincSoleTrader.setMode("sole_trader")` "on its own", independent of
+    // what the dropdown is doing (round 2 review, Han+Vader, convergent:
+    // both independently reproduced this race). Without this guard, this
+    // function would still run after setMode already put the buyer into
+    // sole-trader mode — forcing `manual_company_entry_active` back to
+    // true (wrong: sole trader needs `#company_id_field` for its synthetic
+    // id), re-showing the search-again button setMode just hid, and
+    // wiping `#billing_company`/`#company_id` out from under the synthetic
+    // id sole-trader mode may have just written. That reproduces the exact
+    // #30.x.13 symptom (wrong id-field visibility) via a path this PR's
+    // own new flag opened up. Same shape as the existing "remove the
+    // button before deferring" reentrancy guard in `activateManualEntry`,
+    // one level further out.
+    if (twoincSoleTrader.mode === "sole_trader") return;
+
     window.twoinc.enable_company_search = "no";
+    // Distinguishes THIS route into "search suppressed" from the other two
+    // (merchant-level company-search-off, and twoincSoleTrader.setMode) —
+    // see the comment on this flag's read in toggleBusinessFields. Reset in
+    // exitManualCompanyEntry.
+    window.twoinc.manual_company_entry_active = true;
 
     jQuery("#billing_company_display").val("");
     // The real company field too, not just the display one. Without this the
@@ -1553,7 +1602,53 @@ let twoincDomHelper = {
     // widget since that reference was taken, and the one to tear down is
     // whichever one is currently attached.
     const $display = jQuery("#billing_company_display");
-    if ($display.data("select2")) $display.select2("destroy");
+    if ($display.data("select2")) {
+      // `close()` BEFORE `destroy()` — new, #30.x.13. Reached here the
+      // widget is essentially always still OPEN: this function only runs
+      // from activating the manual-entry row, and that row exists only
+      // INSIDE the open results list.
+      //
+      // CORRECTED mechanism (round 2 review, Han+Vader, both independently
+      // verified directly against the real vendored selectWoo.full.js —
+      // the previous version of this comment had the mechanism wrong):
+      // selectWoo's document-level keydown handler (bound ONCE per widget
+      // instance in `_registerEvents`, `$(document).on('keydown', ...)`,
+      // see the long comment in bindManualEntryAffordance above) is never
+      // unbound by anything — not by `close()`, not by `destroy()`. What
+      // actually neutralizes it: that handler's dangerous branches are
+      // gated on `self.isOpen()`, which just reads a CSS class
+      // (`select2-container--open`) on the container. `close()`
+      // synchronously flips that class off. `destroy()` alone never fires
+      // the close event, so a destroyed-but-still-referenced instance's
+      // container keeps that class (and therefore `isOpen() === true`)
+      // forever — the handler is still bound to `document` and still
+      // "live" by its own gate, just with no widget left for it to
+      // reason about. That is what live reproduction (#30.x.13, Doug)
+      // showed: Tab became unresponsive PAGE-WIDE, not just near the
+      // company field, the moment manual entry was reached — exactly
+      // what that ungated zombie handler produces. Calling `close()`
+      // first is what actually fixes it, by flipping the one flag the
+      // handler checks; the handler itself is still bound afterward and
+      // always will be, so this is a mitigation of a permanent gap, not
+      // a removal of it. Direct empirical repro (round 2, Vader): a real
+      // widget destroyed WITHOUT close() first leaves a subsequent
+      // synthetic document keydown{which:9} reporting
+      // `defaultPrevented === true` (Tab trapped); with close() first,
+      // the same dispatch reports `false` (Tab free).
+      //
+      // Safe to call unconditionally ahead of destroy(): `close()` on an
+      // already-closed widget is a documented no-op in select2/selectWoo.
+      // `close()` does schedule its own `self.$selection.focus()` ~1ms
+      // later (see the same earlier comment) — by the time that timer
+      // fires, `destroy()` below has already run and
+      // `focusVisibleCompanyField("#billing_company")` at the end of this
+      // function has already handed focus to the manual field, and
+      // `toggleBusinessFields()` has hidden `#billing_company_display_field`
+      // — so that stray refocus lands on a `display: none` element, which
+      // is a silent no-op per the HTML focus spec, not a fight over focus.
+      $display.select2("close");
+      $display.select2("destroy");
+    }
 
     jQuery("#" + twoincSelectWooHelper.manualEntryRowId).remove();
     twoincDomHelper.getSearchCompanyBtnNode().show();
@@ -1574,6 +1669,7 @@ let twoincDomHelper = {
    */
   exitManualCompanyEntry: function () {
     window.twoinc.enable_company_search = "yes";
+    window.twoinc.manual_company_entry_active = false;
 
     Twoinc.getInstance().enableCompanySearch();
 
@@ -2189,6 +2285,21 @@ let twoincSoleTrader = {
   availabilityByCountry: {},
   tokens: null,
   savedCompanySearch: null,
+  // Snapshot of window.twoinc.manual_company_entry_active, saved/restored
+  // alongside savedCompanySearch (#30.x.13, round 1 review — Vader). Without
+  // this, a buyer who reaches sole-trader mode WHILE in manual entry (the
+  // mode chip is not hidden during manual entry, and the email-driven
+  // autofill prefetch can also call setMode("sole_trader") unprompted) comes
+  // back out of sole-trader mode with enable_company_search correctly
+  // restored to "no" (still manual) but manual_company_entry_active left at
+  // the "false" this branch forces below — toggleBusinessFields then reads
+  // that as the OTHER "no" case (merchant-level search-off / sole-trader)
+  // and shows + REQUIRES #company_id_field, with no working search widget
+  // to fill it from (enableCompanySearch early-returns since
+  // enable_company_search !== "yes") and no manual name-only path left. Same
+  // null-sentinel pattern as savedCompanySearch: `null` means "nothing
+  // saved", distinct from the flag's own true/false/undefined values.
+  savedManualEntryActive: null,
   messageListenerBound: false,
   // Result of the most recent autofill prefetch for the entered email.
   // ready=false until the first prefetch resolves; matches=true when the
@@ -2382,13 +2493,37 @@ let twoincSoleTrader = {
 
     if (mode === "sole_trader") {
       // Suppress company search by the same lever the manual-entry row uses,
-      // restoring the merchant's setting on the way back to business mode.
+      // restoring the merchant's setting (and whether manual entry was
+      // active) on the way back to business mode.
       if (twoincSoleTrader.savedCompanySearch === null) {
         twoincSoleTrader.savedCompanySearch = window.twoinc.enable_company_search;
+        twoincSoleTrader.savedManualEntryActive = window.twoinc.manual_company_entry_active;
       }
       window.twoinc.enable_company_search = "no";
+      // Sole trader is a DIFFERENT one of this org's three company-capture
+      // modes than manual entry — it carries a synthetic id (see the
+      // comment on this flag's read in toggleBusinessFields) — so any
+      // manual-entry state left over from before this switch must not
+      // suppress #company_id_field here. Snapshotted above first so it can
+      // be put back on the way out, in case the buyer really was mid manual
+      // entry.
+      window.twoinc.manual_company_entry_active = false;
       const $display = jQuery("#billing_company_display");
       if ($display.data("select2")) {
+        // close() before destroy() — same fix, same reason, as
+        // enterManualCompanyEntry (#30.x.13). This branch is reachable with
+        // the widget still OPEN exactly like that one: a buyer mid manual
+        // entry (dropdown already torn down, so a no-op there) or mid an
+        // open search (dropdown live) can switch to sole-trader mode via
+        // the mode chip, and the autofill prefetch (onEmailChanged) can
+        // call setMode("sole_trader") on its own regardless of what the
+        // dropdown is doing. destroy() alone, on an open widget, skips
+        // selectWoo's own close cleanup — the same page-wide-Tab-shaped gap
+        // documented in bindManualEntryAffordance and enterManualCompanyEntry
+        // above (found under adversarial review, round 1 — Han: this PR
+        // fixed the identical hazard in enterManualCompanyEntry but missed
+        // this sibling call site).
+        $display.select2("close");
         $display.select2("destroy");
       }
       // Only the link back to search: the manual-entry row lives inside the
@@ -2401,7 +2536,9 @@ let twoincSoleTrader = {
       jQuery("#billing_company, #company_id").prop("readonly", false);
       if (twoincSoleTrader.savedCompanySearch !== null) {
         window.twoinc.enable_company_search = twoincSoleTrader.savedCompanySearch;
+        window.twoinc.manual_company_entry_active = twoincSoleTrader.savedManualEntryActive;
         twoincSoleTrader.savedCompanySearch = null;
+        twoincSoleTrader.savedManualEntryActive = null;
       }
       twoincSoleTrader.setCompany("", "");
       twoincDomHelper.toggleBusinessFields();
@@ -2805,9 +2942,15 @@ class Twoinc {
     // on it into the same internal select that Enter does, and
     // bindManualEntryAffordance intercepts that one event for both. A second,
     // click-only path here would fire alongside it on every mouse activation.
-    $body.on("click", "#" + twoincSelectWooHelper.searchCompanyBtnId, function () {
-      twoincDomHelper.exitManualCompanyEntry();
-    });
+    //
+    // #search_company_btn's own click activation used to be delegated from
+    // here (`$body.on("click", "#" + searchCompanyBtnId, ...)`). Removed
+    // (#30.x.13) — live reproduction showed a real click on that button
+    // never reached this handler (no console errors, mousedown/focus both
+    // landed on the button correctly), so the activation now lives directly
+    // on the button itself, alongside its Enter/Space handler — see the
+    // comment in getSearchCompanyBtnNode for why binding directly there is
+    // also more robust than delegating here in the first place.
 
     // Handle the representative inputs blur event
     $body.on(
