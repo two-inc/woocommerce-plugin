@@ -68,6 +68,18 @@ describe("read-only captured-company summary", () => {
     $("form[name='checkout']").append(
       '<input type="radio" name="payment_method" value="' + GATEWAY_ID + '" checked />'
     );
+
+    // The payment tile, minimally. The captured company now renders as a text
+    // label INSIDE the tile (TWO-25326 §7), from server-rendered markup that
+    // renderCompanyTileLabel() only fills — it never creates it — so without
+    // this every tile assertion below would be checking an element that does
+    // not exist. Deliberately outside the billing field wrapper, which is what
+    // the address-area assertions are scoped to.
+    $(document.body).append(
+      '<li class="wc_payment_method"><div class="payment_box">' +
+        '<div class="twoinc-company-tile-label hidden"></div>' +
+        "</div></li>"
+    );
   }
 
   /** @returns {Object} the summary element, or an empty set */
@@ -75,9 +87,31 @@ describe("read-only captured-company summary", () => {
     return $("#" + dom.companySummaryId);
   }
 
-  /** @returns {string} the rendered company name */
+  /** @returns {Object} the payment tile's captured-company label */
+  function tileLabel() {
+    return $("." + dom.companyTileLabelClass);
+  }
+
+  /** @returns {string} the tile label's text, `<name> (<number>)` */
+  function tileText() {
+    return tileLabel().hasClass("hidden") ? "" : tileLabel().text();
+  }
+
+  /**
+   * The rendered company NAME.
+   *
+   * Reads the payment tile, not the address area. The name used to render in
+   * a `.twoinc-company-summary-name` span under the company field; TWO-25326
+   * §7 removed it from there — it was a second copy of what the company-name
+   * control immediately above already shows — and put it in the tile instead.
+   * The assertions that pre-date the move are still asking the right
+   * question, so they still call this; they just get their answer from where
+   * the name actually is now.
+   *
+   * @returns {string}
+   */
   function renderedName() {
-    return summary().find(".twoinc-company-summary-name").text();
+    return tileText().replace(/\s*\([^()]*\)\s*$/, "");
   }
 
   /** @returns {string} the rendered organisation number */
@@ -121,12 +155,25 @@ describe("read-only captured-company summary", () => {
   }
 
   describe("company search", () => {
-    test("renders the picked company's name and number", () => {
+    test("renders the picked company's number under the field and its name in the tile", () => {
       pickCompany("ACME Widgets Ltd", "12345678");
 
       expect(isShown()).toBe(true);
-      expect(renderedName()).toBe("ACME Widgets Ltd");
       expect(renderedNumber()).toBe("12345678");
+      expect(renderedName()).toBe("ACME Widgets Ltd");
+      expect(tileText()).toBe("ACME Widgets Ltd (12345678)");
+    });
+
+    test("the name does NOT render anywhere in the address area (TWO-25326 §7)", () => {
+      // Doug's finding, live 2026-08-02: the address area showed the company
+      // name twice — once in the company-name control the buyer picked it in,
+      // and again in this block underneath. §7 allows the company-name field
+      // and the number label below it, and nothing else.
+      pickCompany("ACME Widgets Ltd", "12345678");
+
+      expect(summary().find(".twoinc-company-summary-name").length).toBe(0);
+      expect(summary().text()).not.toContain("ACME Widgets Ltd");
+      expect(summary().text()).toBe("12345678");
     });
 
     test("survives a re-render with no sessionStorage snapshot behind it", () => {
@@ -145,6 +192,7 @@ describe("read-only captured-company summary", () => {
       expect(isShown()).toBe(true);
       expect(renderedName()).toBe("ACME Widgets Ltd");
       expect(renderedNumber()).toBe("12345678");
+      expect(tileText()).toBe("ACME Widgets Ltd (12345678)");
     });
 
     test("the picked values are still the posted ones", () => {
@@ -235,9 +283,14 @@ describe("read-only captured-company summary", () => {
       // The organisation number is optional on a registry hit; the name is not.
       pickCompany("ACME Widgets Ltd", "");
 
-      expect(isShown()).toBe(true);
-      expect(renderedName()).toBe("ACME Widgets Ltd");
+      // No number means no number label at all — not an empty one taking up a
+      // row under the field (TWO-25326 §5).
+      expect(isShown()).toBe(false);
       expect(renderedNumber()).toBe("");
+
+      // The tile drops the parenthesised number rather than rendering
+      // `ACME Widgets Ltd ()`, which would read as a rendering fault.
+      expect(tileText()).toBe("ACME Widgets Ltd");
     });
   });
 
@@ -255,10 +308,8 @@ describe("read-only captured-company summary", () => {
       harness.injectStylesheet();
       pickCompany("A Very Long International Holdings Group Company Ltd", "12345678");
 
-      const nameStyle = window.getComputedStyle(summary().find(".twoinc-company-summary-name")[0]);
       const idStyle = window.getComputedStyle(summary().find(".twoinc-company-summary-id")[0]);
 
-      expect(nameStyle.display).toBe("block");
       expect(idStyle.display).toBe("block");
       expect(idStyle.textAlign).toBe("end");
     });
@@ -298,12 +349,17 @@ describe("read-only captured-company summary", () => {
       // with the name for space, but does nothing on its own for a single
       // unbroken token — routine in DE/NL/NO registry names — which would
       // otherwise overflow the row horizontally instead of wrapping.
-      const nameBody = /\.twoinc-company-summary-name\s*\{([^}]*)\}/.exec(stylesheetSource());
       const idBody = /\.twoinc-company-summary-id\s*\{([^}]*)\}/.exec(stylesheetSource());
-      expect(nameBody).not.toBeNull();
       expect(idBody).not.toBeNull();
-      expect(nameBody[1]).toMatch(/overflow-wrap:\s*anywhere/);
       expect(idBody[1]).toMatch(/overflow-wrap:\s*anywhere/);
+
+      // The name rule is gone with the name span (TWO-25326 §7); the same
+      // protection now has to be on the tile label, which is narrower than
+      // the address column and so needs it more.
+      expect(stylesheetSource()).not.toMatch(/\.twoinc-company-summary-name\s*\{/);
+      const tileBody = /\.twoinc-company-tile-label\s*\{([^}]*)\}/.exec(stylesheetSource());
+      expect(tileBody).not.toBeNull();
+      expect(tileBody[1]).toMatch(/overflow-wrap:\s*anywhere/);
       // The old nowrap protected the (inline, same-line) id from wrapping
       // onto an ugly second line — but now that it has its own row, nowrap
       // would instead let an exceptionally long identifier run past the
@@ -374,10 +430,13 @@ describe("read-only captured-company summary", () => {
       dom.enterManualCompanyEntry();
       typeCompanyName("Sole Proprietor Bakery");
 
-      expect(isShown()).toBe(true);
       expect(renderedName()).toBe("Sole Proprietor Bakery");
+      expect(tileText()).toBe("Sole Proprietor Bakery");
       // enterManualCompanyEntry clears #company_id: the buyer has said the
       // registry company is not theirs, so its number must not survive.
+      // §5 goes further — manual entry shows no number label at all, so the
+      // block is hidden outright rather than rendered empty.
+      expect(isShown()).toBe(false);
       expect(renderedNumber()).toBe("");
       expect($("#company_id").val()).toBe("");
     });
@@ -441,6 +500,7 @@ describe("read-only captured-company summary", () => {
       expect(isShown()).toBe(true);
       expect(renderedName()).toBe("Jo Bloggs Trading");
       expect(renderedNumber()).toBe("99887766");
+      expect(tileText()).toBe("Jo Bloggs Trading (99887766)");
       expect($("#billing_company").val()).toBe("Jo Bloggs Trading");
       expect($("#company_id").val()).toBe("99887766");
     });
@@ -451,9 +511,12 @@ describe("read-only captured-company summary", () => {
       pickCompany("ACME Widgets Ltd", "12345678");
 
       expect(summary().find("input, select, textarea, [contenteditable]").length).toBe(0);
-      // Both values live in elements a user cannot put a caret in.
-      expect(summary().find(".twoinc-company-summary-name").prop("tagName")).toBe("SPAN");
+      // The value lives in an element a user cannot put a caret in.
       expect(summary().find(".twoinc-company-summary-id").prop("tagName")).toBe("SPAN");
+
+      // Same for the tile label, which is now the other half of the display.
+      expect(tileLabel().find("input, select, textarea, [contenteditable]").length).toBe(0);
+      expect(tileLabel().prop("tagName")).toBe("DIV");
     });
 
     test("there is no control in it that removes the captured company", () => {

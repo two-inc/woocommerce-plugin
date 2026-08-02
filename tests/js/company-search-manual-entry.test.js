@@ -61,6 +61,8 @@ describe("company-search manual-entry affordance", () => {
     harness.releaseWidgets($);
     $(document.body).off("input.twoincManualEntry");
     $(document.body).off("keydown.twoincManualEntry");
+    $(document.body).off("select2:open.twoincManualEntry");
+    $(document.body).off("keydown.twoincManualEntryButton");
     document.body.innerHTML = "";
   });
 
@@ -71,8 +73,18 @@ describe("company-search manual-entry affordance", () => {
    * @returns {Object} the jQuery-wrapped select
    */
   function openWithAffordance() {
-    const $select = harness.openCompanyWidget($, helper);
+    // Bound BEFORE the open, the way enableCompanySearch does it: the button
+    // is now placed by a delegated `select2:open` handler (TWO-25326 §2), so
+    // binding after the widget is already open would miss the event that
+    // places it.
     helper.bindManualEntryAffordance();
+    const $select = harness.openCompanyWidget($, helper);
+
+    // That open handler defers the sync a tick. Flushed by hand here so the
+    // rest of the suite does not have to run fake timers to see the button;
+    // the deferral itself is covered by its own test below, which does NOT
+    // use this helper.
+    helper.syncManualEntryButton();
     return $select;
   }
 
@@ -128,20 +140,45 @@ describe("company-search manual-entry affordance", () => {
     expect(searchInput().length).toBe(1);
   });
 
-  describe("visibility follows the search threshold and nothing else", () => {
-    test("absent below the threshold", () => {
+  describe("visibility follows capture state, not the search threshold (TWO-25326 §2)", () => {
+    test("present as soon as the dropdown opens, before the buyer has typed anything", () => {
       openWithAffordance();
 
-      // Reach the threshold FIRST, so the mechanism is demonstrably live in
-      // this test before the absence is asserted. Without this the assertion
-      // below is a precondition dressed as a check: the button was never
-      // there, so "it is not there" holds no matter what the code does.
+      // The whole point of the requirement: Doug rejected a route into manual
+      // entry that makes the buyer type a query they already know will fail.
+      // A buyer who knows their company is not in the registry must be able to
+      // open the field and leave immediately.
+      expect(searchInput().val()).toBe("");
+      expect(btn().length).toBe(1);
+    });
+
+    test("it is `select2:open` that places it, not only an input event", () => {
+      // Deliberately not using openWithAffordance(), which flushes the
+      // deferred sync by hand. Nothing here fires an `input` event, so if the
+      // open handler were removed the button would never appear — which is
+      // exactly the failure the old threshold-gated version had.
+      jest.useFakeTimers();
+      helper.bindManualEntryAffordance();
+      harness.openCompanyWidget($, helper);
+
+      expect(btn().length).toBe(0);
+      jest.advanceTimersByTime(1);
+      expect(btn().length).toBe(1);
+      jest.useRealTimers();
+    });
+
+    test("stays put below the search threshold", () => {
+      // This is the behaviour reversal. It used to be removed here.
+      openWithAffordance();
+
       type("a".repeat(helper.companySearchMinLength));
       expect(btn().length).toBe(1);
 
       type("a".repeat(helper.companySearchMinLength - 1));
+      expect(btn().length).toBe(1);
 
-      expect(btn().length).toBe(0);
+      type("");
+      expect(btn().length).toBe(1);
     });
 
     test("present at the threshold, before any request has been made", () => {
@@ -151,8 +188,8 @@ describe("company-search manual-entry affordance", () => {
       type("a".repeat(helper.companySearchMinLength));
 
       expect(btn().length).toBe(1);
-      // The point of the timing rule: no round trip has happened, and the
-      // button is already there. A `hasSearched` gate would fail this.
+      // No round trip has happened and the button is there. A `hasSearched`
+      // gate would fail this.
       expect(ajax.calls.length).toBe(0);
       ajax.restore();
     });
@@ -165,27 +202,28 @@ describe("company-search manual-entry affordance", () => {
       expect(btn().length).toBe(1);
     });
 
-    test("removed again when the buyer deletes back below the threshold", () => {
+    test("gone once a company IS captured", () => {
       openWithAffordance();
-
-      type("a".repeat(helper.companySearchMinLength));
       expect(btn().length).toBe(1);
 
-      type("a".repeat(helper.companySearchMinLength - 1));
+      $("#billing_company_display").append(
+        '<option value="ACME Widgets Ltd" selected>ACME Widgets Ltd</option>'
+      );
+      helper.syncManualEntryButton();
+
       expect(btn().length).toBe(0);
     });
 
-    test("the threshold is read from the shared constant, not hard-coded", () => {
-      // Injecting a DIFFERENT number is the only version of this assertion
-      // worth having: a test that types three characters passes just as well
-      // against a leftover literal 3.
-      helper.companySearchMinLength = 5;
+    test("the empty option's non-breaking space does not read as a capture", () => {
+      // selectWoo's placeholder option carries   as its label and, on this
+      // field, as its value — so a naive truthiness check on the select's
+      // value reports a company captured on an untouched field and hides the
+      // button on exactly the state the requirement is written about.
       openWithAffordance();
 
-      type("abcd");
-      expect(btn().length).toBe(0);
+      $("#billing_company_display").append('<option value=" " selected> </option>');
+      helper.syncManualEntryButton();
 
-      type("abcde");
       expect(btn().length).toBe(1);
     });
   });
@@ -330,14 +368,20 @@ describe("company-search manual-entry affordance", () => {
       expect(document.activeElement).not.toBe(btn().get(0));
     });
 
-    test("below the threshold (button absent) Tab is not intercepted", () => {
+    test("Tab is not intercepted when there is no button to reach", () => {
       // Same reasoning as the Shift+Tab test above re: not asserting
       // `isDefaultPrevented()` — that reflects selectWoo's own document-level
       // Tab-as-Enter handling, not this feature. The contract under test is
       // the `!btn` early return: nothing gets created or focused when the
-      // button doesn't exist yet.
+      // button is not there.
+      //
+      // The button now exists from the moment the dropdown opens (TWO-25326
+      // §2), so a below-threshold term no longer produces this state and the
+      // absence has to be arranged directly. It is still reachable in
+      // production — a brand overlay that removes the affordance, or a
+      // captured company, both leave the dropdown open with no button in it.
       openWithAffordance();
-      type("a".repeat(helper.companySearchMinLength - 1));
+      btn().remove();
       expect(btn().length).toBe(0);
 
       searchInput().get(0).focus();
@@ -418,18 +462,18 @@ describe("company-search manual-entry affordance", () => {
       jest.useRealTimers();
     });
 
-    test("a second Tab press FROM the button does not silently select the highlighted row", () => {
-      // Found under adversarial review, reproduced against the real widget
-      // before this fix was written. selectWoo's `isOpen()` — the gate its
-      // own document-level Tab-as-Enter handler checks — is purely a CSS
-      // class on the container, entirely independent of where DOM focus
-      // actually is. Landing on the button via the shortcut does not close
-      // the dropdown, so a buyer pressing Tab AGAIN from the button — trying
-      // to move on to the next real page field, the ordinary next step —
-      // used to have that keydown bubble straight to selectWoo's still-live
-      // document handler, which silently fired `results:select` on whatever
-      // row was highlighted (a company the buyer never chose) and yanked
-      // focus back into the search field.
+    test("a second Tab press FROM the button closes the dropdown, moves on, and selects nothing", () => {
+      // TWO-25326 §1 and §4, both confirmed broken live on 2026-08-02 and
+      // both fixed by the same handler.
+      //
+      // What this used to do: `stopPropagation` and nothing else. That kept
+      // selectWoo's document-level Tab-as-Enter handler from silently
+      // selecting the highlighted row — which is real and is still asserted
+      // below — but left the dropdown open indefinitely (selectWoo only
+      // closes on Escape, a pick, or an outside mousedown) and let native Tab
+      // run, which walks off the end of the document because the dropdown is
+      // attached to the end of <body>. Live, that landed focus on <body>.
+      jest.useFakeTimers();
       const $select = openWithAffordance();
       const picker = $select.data("select2");
 
@@ -447,11 +491,48 @@ describe("company-search manual-entry affordance", () => {
       const selected = [];
       $select.on("select2:select", (ev) => selected.push(ev.params.data));
 
+      // Resolved here, from the same function the handler uses, while the
+      // dropdown is still up — which is also when the handler resolves it.
+      const expectedNext = helper.nextTabbableAfterCompanyField();
+      expect(expectedNext).not.toBeNull();
+      expect(document.activeElement).not.toBe(expectedNext);
+
       const e2 = tabAt(btn());
 
-      expect(e2.isDefaultPrevented()).toBe(false);
+      // Native Tab is now suppressed on purpose: it cannot reach the next
+      // form control from inside a body-attached dropdown, so the traversal
+      // is done by hand instead.
+      expect(e2.isDefaultPrevented()).toBe(true);
+      expect(picker.isOpen()).toBe(false);
+      expect(document.activeElement).toBe(expectedNext);
+
+      // Still no silent selection — the original contract, unchanged.
       expect(selected).toEqual([]);
       expect($("#billing_company").val()).toBe("");
+
+      // And it survives selectWoo's own post-close `$selection.focus()`,
+      // which it schedules ~1ms out, unconditionally. This is the reason the
+      // previous revision refused to close the dropdown at all.
+      jest.advanceTimersByTime(30);
+      expect(document.activeElement).toBe(expectedNext);
+      jest.useRealTimers();
+    });
+
+    test("Shift+Tab from the button is left to the browser, and leaves the dropdown open", () => {
+      // Reverse Tab from the button should go back to the query field, which
+      // sits immediately before it inside the same dropdown. Closing on
+      // Shift+Tab would tear down the thing the buyer is navigating back
+      // into.
+      const $select = openWithAffordance();
+      const picker = $select.data("select2");
+
+      type("abc");
+      btn().get(0).focus();
+
+      const e = tabAt(btn(), { shiftKey: true });
+
+      expect(e.isDefaultPrevented()).toBe(false);
+      expect(picker.isOpen()).toBe(true);
     });
 
     /**
@@ -933,8 +1014,13 @@ describe("company-search manual-entry affordance", () => {
       openWithAffordance();
       expect($("#billing_company_display").val()).toBe("ACME Widgets Ltd");
 
-      type("abc");
-      activate();
+      // Straight to the switch rather than through the button. With a company
+      // captured the manual-entry button is, correctly, no longer offered
+      // (TWO-25326 §2), so it is not the route into this state — but the
+      // state is still reachable, from sole-trader mode and from the
+      // user-meta restore, and what it must do to the display select is
+      // unchanged.
+      ctx.dom.enterManualCompanyEntry();
       jest.advanceTimersByTime(1);
 
       expect($("#billing_company_display").val()).toBe("");
@@ -1538,6 +1624,59 @@ describe("company-search manual-entry affordance", () => {
       $(fieldSelector).removeClass("hidden");
       ctx.dom.syncCompanyFieldWrappers();
       expect($(fieldSelector).parent().hasClass("hidden")).toBe(false);
+    });
+  });
+
+  describe("choosing the Tab target out of the dropdown (TWO-25326 §4)", () => {
+    test("it is the next tabbable control after the company field, in FORM order", () => {
+      openWithAffordance();
+
+      const next = helper.nextTabbableAfterCompanyField();
+
+      // Not the query field and not the button, even though both follow the
+      // anchor in DOCUMENT order — the dropdown is attached to the end of
+      // <body>, which is the whole reason native Tab could not do this.
+      expect(next).toBe($("#billing_company").get(0));
+    });
+
+    test("controls hidden by the `hidden` class are skipped, along with their contents", () => {
+      // How this checkout hides a field: the class goes on the `.form-row`
+      // wrapper, not the input. Landing focus on an invisible input is the
+      // failure this guards, and in search mode BOTH company inputs are
+      // hidden that way behind the picker.
+      openWithAffordance();
+      $("#billing_company_field, #company_id_field").addClass("hidden");
+
+      expect(helper.nextTabbableAfterCompanyField()).toBeNull();
+
+      $("#company_id_field").removeClass("hidden");
+      expect(helper.nextTabbableAfterCompanyField()).toBe($("#company_id").get(0));
+    });
+
+    test("`tabindex=-1` and hidden inputs are not tab stops", () => {
+      openWithAffordance();
+      $("#billing_company").attr("tabindex", "-1");
+      $("#company_id_field").before(
+        '<input type="hidden" id="a_hidden_input" name="a_hidden_input" value="x" />'
+      );
+
+      expect(helper.nextTabbableAfterCompanyField()).toBe($("#company_id").get(0));
+    });
+
+    test("nothing after the company field at all answers null rather than guessing", () => {
+      openWithAffordance();
+      $("#billing_company_field, #company_id_field").remove();
+
+      expect(helper.nextTabbableAfterCompanyField()).toBeNull();
+    });
+
+    test("in manual-entry mode it anchors on the real input, not the absent picker", () => {
+      // The combobox does not exist in manual entry, so an anchor lookup that
+      // only knew about it would return null and Tab would go nowhere.
+      openWithAffordance();
+      $("#billing_company_display_field").remove();
+
+      expect(helper.nextTabbableAfterCompanyField()).toBe($("#company_id").get(0));
     });
   });
 });
