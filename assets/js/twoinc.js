@@ -562,15 +562,33 @@ let twoincSelectWooHelper = {
 
         // Resolved BEFORE the close, while the company-name control this is
         // measured from is still the one on screen.
-        const next = helper.nextTabbableAfterCompanyField();
+        const candidates = helper.tabbablesAfterCompanyField();
 
         e.preventDefault();
         helper.closeCompanySearchDropdown();
 
-        if (!next) return;
-        next.focus();
+        // Walk the candidates until one actually takes focus, rather than
+        // focusing one and hoping. This is the fix for what Doug found live on
+        // the first attempt (PR #427): the dropdown closed correctly but focus
+        // stayed on company-name, because the single resolved target could not
+        // take focus, `.focus()` said nothing about it, and selectWoo's own
+        // post-close refocus was left to win by default.
+        //
+        // Falling all the way through means nothing after the company field
+        // can be focused at all. `<body>` is then the honest answer — Tab
+        // again resumes from the top of the document — and it is strictly
+        // better than being dumped back on company-name, which is
+        // indistinguishable from Tab having done nothing.
+        if (!helper.focusFirstThatTakes(candidates)) helper.releaseFocusFromCompanyField();
+
+        // selectWoo schedules `$selection.focus()` 1ms after close,
+        // unconditionally (vendored bundle, `container.on('close')`). 20ms
+        // clears that comfortably. Re-checked rather than re-applied blindly:
+        // only take focus back if the steal actually happened, so a buyer who
+        // clicked somewhere else inside the window is never fought.
         setTimeout(function () {
-          if (document.activeElement !== next) next.focus();
+          if (!helper.focusIsBackOnCompanyField()) return;
+          if (!helper.focusFirstThatTakes(candidates)) helper.releaseFocusFromCompanyField();
         }, 20);
       });
     // NOTE: #search_company_btn's equivalent Enter/Space fix (round 4,
@@ -614,29 +632,25 @@ let twoincSelectWooHelper = {
   /**
    * Is this element hidden, for the purpose of choosing a Tab target?
    *
-   * Deliberately NOT jQuery's `:visible`. That is the more accurate answer in
-   * a browser and the wrong tool here for one reason: it is a LAYOUT query
-   * (`offsetWidth || offsetHeight || getClientRects().length`), and jsdom
-   * implements no layout at all, so under Jest it reports every element in
-   * the document as hidden. A caller filtered on `:visible` would find no tab
-   * target ever, and the test proving the fix works would pass against a
-   * function that always returns null.
+   * A cheap pre-filter, NOT the guarantee. It reads the ways this checkout
+   * actually hides a field — the `hidden` class on the field or an ancestor
+   * (the plugin's and WooCommerce's own convention, and how both company
+   * inputs are hidden behind the picker in search mode), the `hidden`
+   * attribute, and an inline `display: none` — all of which are readable
+   * without layout.
    *
-   * The three checks below are the ways this checkout actually hides a field,
-   * and all of them are readable without layout:
+   * Deliberately NOT jQuery's `:visible`, which is a layout query
+   * (`offsetWidth || offsetHeight || getClientRects().length`). jsdom
+   * implements no layout, so under Jest `:visible` reports every element in
+   * the document as hidden and a filter built on it would find no tab target
+   * ever — the test proving the fix works would pass against a function that
+   * always returns nothing.
    *
-   *   - the `hidden` CLASS on the field or any ancestor — the plugin's and
-   *     WooCommerce's own convention, and how every company field on this
-   *     form is toggled (`#billing_company_field.hidden`, the tile's boxes,
-   *     `toggleBusinessFields`);
-   *   - the `hidden` ATTRIBUTE, for anything a theme hides declaratively;
-   *   - an inline `display: none`, for anything hidden by a script.
-   *
-   * The residual gap is a field hidden by a stylesheet rule that is neither
-   * of those — a theme with its own `.foo { display: none }`. Landing focus
-   * on such a field would be wrong, but it fails safe: the buyer sees focus
-   * apparently vanish and Tabs again, which is where they were before this
-   * function existed. Worth revisiting if a theme is ever found doing it.
+   * What this cannot see is a field hidden by a stylesheet rule that is none
+   * of the above. That is why the caller no longer trusts this: it walks the
+   * candidates in order and CHECKS that focus actually landed, because
+   * `.focus()` on a non-rendered element silently no-ops per the HTML spec.
+   * See `focusFirstThatTakes`.
    *
    * @param {HTMLElement} el
    * @returns {boolean}
@@ -648,7 +662,8 @@ let twoincSelectWooHelper = {
   },
 
   /**
-   * The next real tab-stop after the company-name control (TWO-25326 §4).
+   * Every real tab-stop after the company-name control, in tab order
+   * (TWO-25326 §4).
    *
    * Needed because the dropdown is not where the buyer thinks it is: selectWoo
    * attaches it to the END of `<body>`, so native Tab out of anything inside
@@ -657,44 +672,158 @@ let twoincSelectWooHelper = {
    * to be recomputed from the control's position in the FORM, not from the
    * focused element's position in the document.
    *
-   * Anchored on the select2 combobox in search mode and on `#billing_company`
-   * otherwise, so the same function answers correctly in both capture modes.
+   * Returns a LIST, not just the first hit, and that is the fix for the defect
+   * Doug found on the merged first attempt (PR #427, live-tested 2026-08-02):
+   * Tab closed the dropdown but left focus sitting on company-name. The old
+   * version resolved exactly one element and the caller focused it and assumed
+   * it worked. Any reason that one element could not take focus — chiefly a
+   * theme hiding it by a stylesheet rule this cannot detect, where `.focus()`
+   * silently no-ops — degraded to "nothing focused", which handed the race to
+   * selectWoo's own unconditional post-close `$selection.focus()`. Losing that
+   * race puts focus back on company-name, which is precisely the symptom. With
+   * a list the caller can keep walking until one actually takes.
    *
-   * Everything inside an open select2 is excluded from the candidate list.
-   * Without that the answer would be the query field or this very button —
-   * both of which follow the anchor in document order, both of which are
-   * about to be detached by the close, and neither of which is "the next
-   * control in the tab order" in any sense the buyer would recognise.
+   * Anchored on the select2 combobox in search mode, falling through to the
+   * field wrapper and then the plain input, so the same function answers in
+   * both capture modes and survives the combobox not being where it is
+   * expected. A missing anchor now yields an empty list rather than a null the
+   * caller has to remember to handle.
+   *
+   * Everything inside an open select2 is excluded. Without that the answer
+   * would be the query field or the manual-entry button — both of which follow
+   * the anchor in document order, both of which are about to be detached by
+   * the close, and neither of which is "the next control in the tab order" in
+   * any sense the buyer would recognise.
    *
    * Uses `compareDocumentPosition` rather than an index into the candidate
    * list on purpose: selectWoo flips the combobox's own `tabindex` while the
-   * dropdown is open, so the anchor is not reliably a member of the list it
-   * is being located within, and an index lookup would return -1 exactly when
+   * dropdown is open, so the anchor is not reliably a member of the list it is
+   * being located within, and an index lookup would return -1 exactly when
    * this is called.
    *
-   * @returns {HTMLElement|null} the element to focus, or null if there is
-   *   nothing after the company field (last control on the page)
+   * @returns {Array<HTMLElement>} in document order, possibly empty
    */
-  nextTabbableAfterCompanyField: function () {
-    let $anchor = jQuery("#billing_company_display_field").find(".select2-selection").first();
-    if (!$anchor.length) $anchor = jQuery("#billing_company").first();
-    if (!$anchor.length) return null;
+  tabbablesAfterCompanyField: function () {
+    const anchor = twoincSelectWooHelper.companyFieldTabAnchor();
+    if (!anchor) return [];
 
-    const anchor = $anchor.get(0);
-    let next = null;
+    const found = [];
 
-    // jQuery returns a multi-element selector's matches in document order, so
-    // the FIRST candidate that follows the anchor is the one Tab would reach.
+    // jQuery returns a grouped selector's matches in document order, so
+    // appending in iteration order gives the list in tab order.
     jQuery(twoincSelectWooHelper.tabbableSelector).each(function () {
-      if (next) return;
       if (this.tabIndex < 0) return;
       if (jQuery(this).closest(".select2-container--open, .select2-dropdown").length) return;
       if (twoincSelectWooHelper.isHiddenForTabbing(this)) return;
       if (!((anchor.compareDocumentPosition(this) & 4) /* DOCUMENT_POSITION_FOLLOWING */)) return;
-      next = this;
+      found.push(this);
     });
 
-    return next;
+    return found;
+  },
+
+  /**
+   * The element the Tab traversal is measured from (TWO-25326 §4).
+   *
+   * Three candidates rather than the two the first attempt used, in order of
+   * how precisely they locate the control the buyer is actually tabbing out
+   * of: the rendered combobox, then its `.form-row` wrapper, then the plain
+   * input that manual entry uses. The wrapper is the new middle rung — it is
+   * present whether or not select2 has rendered, and whether or not the
+   * plugin's own field reordering has moved the container, so the anchor no
+   * longer disappears just because the combobox is not where it was looked
+   * for.
+   *
+   * @returns {HTMLElement|null}
+   */
+  companyFieldTabAnchor: function () {
+    const selectors = [
+      "#billing_company_display_field .select2-selection",
+      "#billing_company_display_field",
+      "#billing_company"
+    ];
+
+    for (let i = 0; i < selectors.length; i++) {
+      const el = jQuery(selectors[i]).get(0);
+      if (el) return el;
+    }
+
+    return null;
+  },
+
+  /**
+   * Focus the first candidate that will actually accept focus (TWO-25326 §4).
+   *
+   * `.focus()` is not a request that can be relied on to succeed: per the HTML
+   * spec it silently does nothing on an element that is not being rendered,
+   * and returns nothing to say so. A caller that focuses one element and moves
+   * on cannot tell "focused" from "no-op", which is the whole reason the first
+   * attempt at this fix shipped broken.
+   *
+   * So: try, then read `document.activeElement` back, and keep walking on
+   * failure. The verification is what makes the visibility pre-filter in
+   * `isHiddenForTabbing` an optimisation rather than a correctness
+   * requirement — a field hidden in a way this plugin cannot detect costs one
+   * wasted `.focus()` call and nothing else.
+   *
+   * @param {Array<HTMLElement>} candidates in tab order
+   * @returns {HTMLElement|null} the element that took focus, or null
+   */
+  focusFirstThatTakes: function (candidates) {
+    for (let i = 0; i < candidates.length; i++) {
+      candidates[i].focus();
+      if (document.activeElement === candidates[i]) return candidates[i];
+    }
+
+    return null;
+  },
+
+  /**
+   * Is focus back on the company-name control? (TWO-25326 §4)
+   *
+   * Asked after the dropdown closes, to tell selectWoo's unconditional
+   * post-close `$selection.focus()` — scheduled 1ms out, in the vendored
+   * bundle's `container.on('close')` — apart from the buyer having deliberately
+   * gone somewhere themselves in the meantime. Only the former is worth
+   * fighting.
+   *
+   * Nothing focused (`<body>`) counts as yes. Either the traversal found no
+   * target and released focus deliberately, or the browser dropped it when the
+   * dropdown was torn out from under it; both are worth one more attempt at
+   * the candidates now that the dropdown is gone. What must NOT count is focus
+   * sitting on some other real control, which only the buyer can have caused.
+   *
+   * @returns {boolean}
+   */
+  focusIsBackOnCompanyField: function () {
+    const active = document.activeElement;
+    if (!active || active === document.body) return true;
+
+    return (
+      jQuery(active).closest("#billing_company_display_field").length > 0 ||
+      active === jQuery("#billing_company").get(0)
+    );
+  },
+
+  /**
+   * Give up on finding a tab target, but do not let the buyer be dumped back
+   * where they started (TWO-25326 §4).
+   *
+   * If nothing after the company field can take focus, `<body>` is the honest
+   * answer — the buyer presses Tab again and the browser resumes from the top
+   * of the document. Leaving focus on the company-name control instead is
+   * strictly worse: it is indistinguishable from Tab having done nothing at
+   * all, which is exactly what was reported live.
+   *
+   * @returns {void}
+   */
+  releaseFocusFromCompanyField: function () {
+    const active = document.activeElement;
+    if (!active || typeof active.blur !== "function") return;
+    if (!twoincSelectWooHelper.focusIsBackOnCompanyField()) return;
+    if (active === document.body) return;
+
+    active.blur();
   },
 
   /**

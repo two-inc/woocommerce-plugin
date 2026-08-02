@@ -493,8 +493,8 @@ describe("company-search manual-entry affordance", () => {
 
       // Resolved here, from the same function the handler uses, while the
       // dropdown is still up — which is also when the handler resolves it.
-      const expectedNext = helper.nextTabbableAfterCompanyField();
-      expect(expectedNext).not.toBeNull();
+      const expectedNext = helper.tabbablesAfterCompanyField()[0];
+      expect(expectedNext).toBeDefined();
       expect(document.activeElement).not.toBe(expectedNext);
 
       const e2 = tabAt(btn());
@@ -1628,29 +1628,45 @@ describe("company-search manual-entry affordance", () => {
   });
 
   describe("choosing the Tab target out of the dropdown (TWO-25326 §4)", () => {
-    test("it is the next tabbable control after the company field, in FORM order", () => {
-      openWithAffordance();
+    /** @returns {HTMLElement|undefined} first candidate, for the common case */
+    function firstTarget() {
+      return helper.tabbablesAfterCompanyField()[0];
+    }
 
-      const next = helper.nextTabbableAfterCompanyField();
+    test("the first candidate is the next tabbable control after the company field, in FORM order", () => {
+      openWithAffordance();
 
       // Not the query field and not the button, even though both follow the
       // anchor in DOCUMENT order — the dropdown is attached to the end of
       // <body>, which is the whole reason native Tab could not do this.
-      expect(next).toBe($("#billing_company").get(0));
+      expect(firstTarget()).toBe($("#billing_company").get(0));
+    });
+
+    test("it returns EVERY following tab stop, in order, not just the first", () => {
+      // The list is the fix for the live defect on PR #427. One resolved
+      // element gave the caller no way to recover when that element turned
+      // out not to be focusable, and "nothing focused" hands the race to
+      // selectWoo's post-close refocus — which lands on company-name, exactly
+      // what Doug reported.
+      openWithAffordance();
+
+      expect(helper.tabbablesAfterCompanyField()).toEqual([
+        $("#billing_company").get(0),
+        $("#company_id").get(0)
+      ]);
     });
 
     test("controls hidden by the `hidden` class are skipped, along with their contents", () => {
       // How this checkout hides a field: the class goes on the `.form-row`
-      // wrapper, not the input. Landing focus on an invisible input is the
-      // failure this guards, and in search mode BOTH company inputs are
-      // hidden that way behind the picker.
+      // wrapper, not the input. In search mode BOTH company inputs are hidden
+      // that way behind the picker.
       openWithAffordance();
       $("#billing_company_field, #company_id_field").addClass("hidden");
 
-      expect(helper.nextTabbableAfterCompanyField()).toBeNull();
+      expect(helper.tabbablesAfterCompanyField()).toEqual([]);
 
       $("#company_id_field").removeClass("hidden");
-      expect(helper.nextTabbableAfterCompanyField()).toBe($("#company_id").get(0));
+      expect(firstTarget()).toBe($("#company_id").get(0));
     });
 
     test("`tabindex=-1` and hidden inputs are not tab stops", () => {
@@ -1660,23 +1676,159 @@ describe("company-search manual-entry affordance", () => {
         '<input type="hidden" id="a_hidden_input" name="a_hidden_input" value="x" />'
       );
 
-      expect(helper.nextTabbableAfterCompanyField()).toBe($("#company_id").get(0));
+      expect(firstTarget()).toBe($("#company_id").get(0));
     });
 
-    test("nothing after the company field at all answers null rather than guessing", () => {
+    test("nothing after the company field at all answers an empty list", () => {
       openWithAffordance();
       $("#billing_company_field, #company_id_field").remove();
 
-      expect(helper.nextTabbableAfterCompanyField()).toBeNull();
+      expect(helper.tabbablesAfterCompanyField()).toEqual([]);
     });
 
-    test("in manual-entry mode it anchors on the real input, not the absent picker", () => {
-      // The combobox does not exist in manual entry, so an anchor lookup that
-      // only knew about it would return null and Tab would go nowhere.
+    test("the anchor falls through the combobox, then its wrapper, then the plain input", () => {
+      // Three rungs rather than two. The wrapper is the one added after the
+      // live failure: it is present whether or not select2 has rendered and
+      // wherever the plugin's own field reordering has put the container, so
+      // the anchor no longer vanishes just because the combobox was not found
+      // where it was looked for — and a vanished anchor is an empty candidate
+      // list, which is how focus ended up stranded on company-name.
       openWithAffordance();
-      $("#billing_company_display_field").remove();
+      expect(helper.companyFieldTabAnchor()).toBe(
+        $("#billing_company_display_field .select2-selection").get(0)
+      );
 
-      expect(helper.nextTabbableAfterCompanyField()).toBe($("#company_id").get(0));
+      $("#billing_company_display_field").find(".select2-container").remove();
+      expect(helper.companyFieldTabAnchor()).toBe($("#billing_company_display_field").get(0));
+
+      $("#billing_company_display_field").remove();
+      expect(helper.companyFieldTabAnchor()).toBe($("#billing_company").get(0));
+
+      $("#billing_company_field").remove();
+      expect(helper.companyFieldTabAnchor()).toBeNull();
+    });
+  });
+
+  describe("landing the focus, not just aiming it (TWO-25326 §4)", () => {
+    /**
+     * Dispatch a real Tab keydown, the way the browser would. Same shape and
+     * same `which: 9` reasoning as the copy in the shortcut describe above.
+     *
+     * @param {Object} $el
+     * @returns {Object} the jQuery.Event dispatched
+     */
+    function tabAt($el) {
+      const e = jQuery.Event("keydown", { key: "Tab", which: 9 });
+      $el.trigger(e);
+      return e;
+    }
+
+    /**
+     * A candidate that refuses focus, the way a non-rendered element does in
+     * a real browser: `.focus()` is called, nothing happens, and nothing is
+     * returned to say so. jsdom does not enforce that rule — it focuses
+     * anything — so the behaviour has to be modelled explicitly or no test
+     * here can exercise the recovery path at all.
+     *
+     * @returns {HTMLElement} an element whose focus() is a no-op
+     */
+    function unfocusable() {
+      const el = document.createElement("input");
+      document.body.appendChild(el);
+      el.focus = function () {};
+      return el;
+    }
+
+    test("skips a candidate whose focus() silently does nothing", () => {
+      openWithAffordance();
+      const dead = unfocusable();
+      const live = $("#billing_company").get(0);
+
+      expect(helper.focusFirstThatTakes([dead, live])).toBe(live);
+      expect(document.activeElement).toBe(live);
+    });
+
+    test("answers null when no candidate will take focus", () => {
+      openWithAffordance();
+
+      expect(helper.focusFirstThatTakes([unfocusable(), unfocusable()])).toBeNull();
+    });
+
+    test("an empty candidate list is not an error", () => {
+      openWithAffordance();
+
+      expect(helper.focusFirstThatTakes([])).toBeNull();
+    });
+
+    test("a Tab that can find nothing focusable releases the field rather than sitting on it", () => {
+      // The live symptom being fixed: focus left on company-name is
+      // indistinguishable from Tab having done nothing. <body> at least lets
+      // the next Tab resume from the top of the document.
+      jest.useFakeTimers();
+      openWithAffordance();
+      type("abc");
+
+      // Nothing after the company field can be focused.
+      $("#billing_company_field, #company_id_field").addClass("hidden");
+      expect(helper.tabbablesAfterCompanyField()).toEqual([]);
+
+      btn().get(0).focus();
+      tabAt(btn());
+
+      expect(document.activeElement).toBe(document.body);
+
+      // And selectWoo's post-close refocus does not get to undo that.
+      jest.advanceTimersByTime(30);
+      expect(document.activeElement).toBe(document.body);
+      jest.useRealTimers();
+    });
+
+    test("focus stolen back to the company field inside the window is taken back again", () => {
+      // selectWoo's `container.on('close')` fires `$selection.focus()` 1ms
+      // out, unconditionally. Modelled directly here rather than relying on
+      // the widget's own timing, so the recovery is pinned even if the
+      // vendored bundle changes when it fires.
+      jest.useFakeTimers();
+      openWithAffordance();
+      type("abc");
+
+      btn().get(0).focus();
+      tabAt(btn());
+      const landed = $("#billing_company").get(0);
+      expect(document.activeElement).toBe(landed);
+
+      $("#billing_company_display_field").find(".select2-selection").get(0).focus();
+
+      jest.advanceTimersByTime(30);
+
+      expect(document.activeElement).toBe(landed);
+      jest.useRealTimers();
+    });
+
+    test("a buyer who moves on themselves is not dragged back", () => {
+      jest.useFakeTimers();
+      openWithAffordance();
+      type("abc");
+
+      btn().get(0).focus();
+      tabAt(btn());
+
+      // Let selectWoo's own 1ms post-close refocus land FIRST. Ordering is the
+      // point: the buyer can only meaningfully "move on themselves" after that
+      // steal, and modelling their click before it would be modelling a 1ms
+      // window that no human is in. (Inside that window the steal wins and
+      // this code then moves focus to its own target rather than the buyer's
+      // click — an accepted trade, and still better than leaving it on
+      // company-name.)
+      jest.advanceTimersByTime(5);
+
+      const elsewhere = $("#billing_country").get(0);
+      elsewhere.focus();
+
+      jest.advanceTimersByTime(30);
+
+      expect(document.activeElement).toBe(elsewhere);
+      jest.useRealTimers();
     });
   });
 });
