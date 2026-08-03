@@ -3290,6 +3290,13 @@ let twoincSoleTrader = {
     const instance = Twoinc.getInstance();
     instance.customerCompany.organization_number = companyId;
     instance.customerCompany.company_name = companyName;
+    // Pin the capture country next to the number, same as the picker's select
+    // handler does and for the same reason (TWO-25333 — see there). Only on
+    // the capturing call: setMode("business") reaches this with both arguments
+    // falsy to CLEAR, and there is no capture then for a country to belong to.
+    if (companyId) {
+      instance.customerCompany.country_prefix = twoincSelectWooHelper.currentCountry();
+    }
     // Explicit rather than DOM-read: this function is the authority on what was
     // just captured, so the summary should not depend on the order the mirrors
     // above are written in (TWO-25288).
@@ -3513,6 +3520,18 @@ class Twoinc {
 
       // Set the company ID
       self.customerCompany.organization_number = data.company_id;
+
+      // Pin the country this company was captured UNDER, alongside the number
+      // (TWO-25333). Without this the pair could be assembled from two
+      // different moments: the number is written here, while `country_prefix`
+      // was last written by whichever DOM re-read ran most recently — so a
+      // country that moved with no `change` event before the pick left the
+      // OLD country next to a company from the NEW one, which getApproval()
+      // then posted as a self-consistent pair. It is also what makes
+      // `clearCompanyIfCountryStale` sound: a witness written at a different
+      // time from the thing it witnesses produces false positives, and a
+      // false positive there is a destructive clear.
+      self.customerCompany.country_prefix = twoincSelectWooHelper.currentCountry();
 
       // Set the company ID to HTML DOM
       $companyId.val(data.company_id);
@@ -4027,7 +4046,16 @@ class Twoinc {
     // destroy what the same re-render just put back — the TWO-25326 failure
     // on a new trigger. Throwing away a captured company needs the buyer's
     // gesture, and the `change` event is the only signal of one there is.
-    if (twoincSelectWooHelper.countryDidChange(twoincSelectWooHelper.currentCountry())) {
+    //
+    // Record-only is still not the whole answer, though: a country that moved
+    // to something the captured company does not belong to left that company
+    // captured and approved, and the mismatch surfaced as an opaque
+    // order-creation failure. `clearCompanyIfCountryStale` below is the
+    // discriminator for that — it fires on the countries DISAGREEING, not on
+    // the country having moved, so it stays silent on the restore-together
+    // case above (TWO-25333).
+    const movedCountry = twoincSelectWooHelper.currentCountry();
+    if (twoincSelectWooHelper.countryDidChange(movedCountry)) {
       // Invalidating in-flight work IS safe here, though, and record-only
       // would otherwise leave a hole: on this path nothing bumps either
       // counter, so a company-search response or a registry address for the
@@ -4041,6 +4069,11 @@ class Twoinc {
       // selected, which is not something the buyer can lose.
       twoincSelectWooHelper.companySearchSeq += 1;
       Twoinc.getInstance().addressLookupSeq += 1;
+
+      // BEFORE updateElements() below, which is what re-runs getApproval():
+      // called after it, the intent request for the stale pair would already
+      // have gone out and its answer would still be on screen.
+      Twoinc.getInstance().clearCompanyIfCountryStale(movedCountry);
     }
 
     Twoinc.getInstance().updateElements();
@@ -4068,6 +4101,12 @@ class Twoinc {
 
     if (inputName === "company_id") {
       Twoinc.getInstance().customerCompany.organization_number = $input.val();
+      // Pin the capture country next to the number the buyer just typed
+      // (TWO-25333 — see the picker's select handler for why the two have to
+      // be written together). Unconditional on the value: an emptied field
+      // leaves no capture for the country to be wrong about, and re-pinning it
+      // to the country now in the form is true either way.
+      Twoinc.getInstance().customerCompany.country_prefix = twoincSelectWooHelper.currentCountry();
     } else if (inputName === "billing_company_display") {
       Twoinc.getInstance().customerCompany.company_name = $input.val();
     }
@@ -4185,6 +4224,105 @@ class Twoinc {
     twoincSoleTrader.refresh();
 
     self.getApproval();
+  }
+
+  /**
+   * Drop a captured company that belongs to a country the checkout has since
+   * moved away from (TWO-25333).
+   *
+   * The gap this closes. `onUpdatedCheckout` records a country that moved with
+   * no `change` event and deliberately does NOT clear the capture, because
+   * those re-renders restore the country and the company together and
+   * clearing would destroy what the re-render just put back (TWO-24867 /
+   * TWO-25326 — see there). But when the country really did move to something
+   * the captured company does not belong to, that company survived and
+   * nothing downstream caught it: `getApproval()` posts `customerCompany`
+   * carrying the OLD `country_prefix` next to the OLD organisation number, so
+   * the pair is internally consistent and the intent check approves it and
+   * the buyer sees a green payment method; the order payload then pairs that
+   * `company_id` with the ORDER's billing country with no consistency check
+   * between the two. The mismatch reached the Two API at order creation and
+   * came back as an opaque failure the buyer could not act on.
+   *
+   * Discriminating rather than choosing between "always clear" and "never
+   * clear" is what keeps this from being TWO-25326 again: in the
+   * restore-together case the recorded country and the captured company's own
+   * country agree by construction, because the same re-render supplied both,
+   * so this stays silent exactly where clearing would be destructive.
+   *
+   * Called only from `onUpdatedCheckout`. The `change` path
+   * (`syncBillingCountry`) already clears unconditionally on a real country
+   * change, which is strictly stronger, so running this there as well would
+   * be dead code rather than extra safety.
+   *
+   * Three readings are NOT grounds to clear, and none of them is incidental:
+   *
+   *   - No organisation number on `customerCompany`. A company name with no
+   *     id is not a capture (TWO-25326 §6: the payment method is usable only
+   *     for a company captured WITH an id), and there is nothing about a bare
+   *     name that a country change invalidates.
+   *   - An unknown country on either side. `country_prefix` is null until the
+   *     first capture or DOM re-read, and an empty field reading means the
+   *     field was mid-replacement — the same rule the address-lookup guard
+   *     and `countryDidChange` already apply, for the same reason: only two
+   *     countries that are both KNOWN and DIFFERENT are evidence of anything.
+   *   - The DOM already holding a DIFFERENT company from the one recorded.
+   *     Then it is the record that is stale, not the fields: `customerCompany`
+   *     is refreshed from the DOM on a timer, so a re-render that swapped in
+   *     another saved address — country AND company together, a different pair
+   *     but a self-consistent one — reaches here with the previous capture
+   *     still in JS state. Clearing on that would destroy the company the
+   *     re-render had just restored, which is precisely the regression this
+   *     ticket must not reintroduce. Re-sync to the DOM instead.
+   *
+   * Compared case-insensitively because the two sides are written by
+   * different readers: `currentCountry()` upper-cases, `getCompanyData()`
+   * reads `#billing_country` raw (the inconsistency noted in the comment on
+   * `currentCountry`, still not swept up here). WooCommerce's country values
+   * are upper-case ISO codes today, so this normalisation is guarding the
+   * comparison against that known disagreement rather than against observed
+   * mixed-case data — a false positive here is a destructive clear.
+   *
+   * @param {string} country upper-cased ISO code the checkout has moved to
+   * @returns {boolean} whether a stale capture was dropped
+   */
+  clearCompanyIfCountryStale(country) {
+    const company = this.customerCompany || {};
+    if (!company.organization_number) return false;
+
+    const capturedCountry = (company.country_prefix || "").toUpperCase();
+    if (!country || !capturedCountry || capturedCountry === country) return false;
+
+    const domNumber = jQuery("#company_id").val() || "";
+    if (domNumber && domNumber !== company.organization_number) {
+      // Re-read both halves together, from the same DOM, in one go — the
+      // pairing is the whole point, so taking the company from the fields and
+      // the country from the tracker would rebuild the same mismatch this
+      // function exists to catch.
+      this.customerCompany = twoincDomHelper.getCompanyData();
+      return false;
+    }
+
+    // No supersession bump here, deliberately. `clearSelectedCompany()` below
+    // empties the fields, so a company search or a registry address issued
+    // under the outgoing country must not land on top of them afterwards — but
+    // the only caller has already bumped both counters, unconditionally on the
+    // country having moved, before it reaches this. A defensive repeat was
+    // written here first and then removed: it changed nothing observable, so no
+    // test could hold it in place, and an untestable line that reads as the
+    // guarantee is worse than the guarantee living plainly at the one call
+    // site. A second caller would have to bump them too, and its own test for
+    // that is what would say so.
+    twoincDomHelper.clearSelectedCompany();
+
+    // AFTER clearSelectedCompany, for the reason spelled out in
+    // syncBillingCountry: it resets `customerCompany` to {} wholesale, so an
+    // assignment made before it is dropped and leaves getApproval() and
+    // getDueInDays() with no country for the three seconds until its deferred
+    // re-read runs.
+    this.customerCompany.country_prefix = country;
+
+    return true;
   }
 }
 

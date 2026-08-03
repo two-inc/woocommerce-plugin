@@ -250,7 +250,7 @@ about the company-search helper, so the bootstrap is left to no-op.
   writes `#company_id` _after_ it renders.
 
 `country-switch.test.js` — what a billing-country change does, and what a fake one must not
-(TWO-24867, with TWO-25326):
+(TWO-24867, with TWO-25326 and TWO-25333):
 
 - **a `change` event that is not a country change is inert.** WooCommerce re-renders the
   billing fields on `updated_checkout`, and core's `address-i18n.js` re-triggers the country
@@ -272,9 +272,38 @@ about the company-search helper, so the bootstrap is left to no-op.
   adopted, not acted on; an empty reading — WooCommerce replacing `#billing_country` wholesale
   mid-re-render — is neither acted on _nor recorded_, so the switch that completes afterwards
   still acts; `updated_checkout` **records** a country that moved with no `change` event;
-  it records **without** clearing the capture, because those re-renders restore the country and
-  the company together and clearing would destroy what they just restored; and the recording
-  path cannot loop, even though a change reaching `setAddress()` triggers `update_checkout`.
+  it records **without** clearing a capture the same re-render is consistent with (see the
+  next bullet, which narrowed this); and the recording path cannot loop, even though a change
+  reaching `setAddress()` triggers `update_checkout`.
+- **a capture stranded in the wrong country is dropped** (TWO-25333), which is the one case
+  record-only got wrong. Recording without clearing is right when the re-render restores the
+  country and the company **together** — they agree by construction — but it left a company
+  captured under the country just left still captured, still approved, and paired with the new
+  billing country in the order payload with no consistency check anywhere between the two: the
+  buyer saw a green payment method and an opaque order-creation failure. `updated_checkout`
+  therefore clears the capture when the recorded country and the captured company's own
+  `country_prefix` actually **disagree**, and only then. Pinned in both directions, because the
+  discriminator is the whole fix: a company captured under the country just left is cleared and
+  `isReadyApprovalCheck()` comes back down with it (TWO-25326 §6 — the method is usable only for
+  a company captured _with_ an id); a matching pair is untouched, on either
+  `enable_address_lookup` setting. Three readings are deliberately not grounds to clear, each
+  with its own test — a company name with no organisation number (not a capture), an unknown
+  country on either side (`country_prefix` is null until the first capture, and an empty field
+  reading means mid-replacement), and the DOM already holding a **different** company from the
+  one recorded, which means the record is what is stale rather than the fields, so it is
+  re-synced to the DOM instead of destroying a company the re-render had just restored. The
+  comparison is case-insensitive, because `currentCountry()` upper-cases and `getCompanyData()`
+  reads the field raw — a false positive here is a destructive clear. This path can now reach
+  `clearSelectedCompany()`, so the loop it used to be immune to by construction
+  (clear → `setAddress()` → `update_checkout`) is pinned again for it.
+- **the capture country is pinned when the company is captured** (TWO-25333), at all three
+  capture sites: the picker's `select2:select` handler, a manually typed organisation number,
+  and the sole-trader setter — which does _not_ re-pin on the clearing call `setMode("business")`
+  makes with both arguments falsy. Without this the pair is assembled from two different
+  moments, the number at capture and `country_prefix` from whichever DOM re-read ran last, so a
+  country that moved with no `change` event _before_ the capture left the old country next to a
+  company from the new one — posted by `getApproval()` as a self-consistent pair, and read by
+  the discriminator above as a mismatch it would clear.
 - **the whole suite drives the real wiring**: a real `initialize(false)`, then
   `trigger("change")` on the field, so unwiring the delegated binding or moving the seed out
   of `initialize()`'s reach fails it. `afterEach` unbinds `document.body` — jsdom's document
