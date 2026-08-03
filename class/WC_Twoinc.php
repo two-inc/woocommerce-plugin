@@ -885,6 +885,7 @@ if (!class_exists('WC_Twoinc')) {
                 // dropped from this variant per the ruling's literal wording;
                 // it stays in the no-company fallback below, which the
                 // ruling does not cover.
+                /* translators: %1$s: brand product name (e.g. "Two"); %2$s: the buyer's captured company name and number, substituted client-side — reorderable, do not assume %1$s precedes %2$s in every locale */
                 $template = __('This order by %2$s is likely to be accepted by %1$s', 'twoinc-payment-gateway');
             }
 
@@ -932,6 +933,7 @@ if (!class_exists('WC_Twoinc')) {
             if (!is_string($template) || trim($template) === '') {
                 // TWO-25326 §7.3 literal wording: "<product> is not available
                 // for this order by <name> (<number>)".
+                /* translators: %1$s: brand product name (e.g. "Two"); %2$s: the buyer's captured company name and number, substituted client-side */
                 $template = __('%1$s is not available for this order by %2$s', 'twoinc-payment-gateway');
             }
 

@@ -1616,9 +1616,95 @@ let twoincDomHelper = {
   companySearchTileSlotClass: "twoinc-company-search-tile-slot",
 
   /**
+   * DOM id of the wrapper that holds the relocated company-search control
+   * (TWO-25326 §7.1). One element, created once; every move below is this
+   * same node changing parent, never a clone.
+   */
+  companySearchTileWrapperId: "twoinc-company-search-tile-wrapper",
+
+  /**
+   * DOM id of the safe holding pen the wrapper sits in whenever it is NOT
+   * currently inside the live `.twoinc-company-search-tile-slot` (TWO-25326
+   * §7.1, hardened round 2026-08-03 after adversarial review).
+   *
+   * Exists as a direct child of `<form name="checkout">` — stable across
+   * every WooCommerce checkout AJAX refresh (the form element itself is
+   * never one of the fragments `update_order_review` replaces) — rather than
+   * `document.body`, so a buyer who manages to submit the form during the
+   * brief detached window still posts real, still-attached inputs.
+   *
+   * @returns {Object} jQuery-wrapped holding pen, created on first use
+   */
+  getCompanySearchTileHoldingPen: function () {
+    let $pen = jQuery("#twoinc-company-search-tile-holding-pen");
+    if (!$pen.length) {
+      $pen = jQuery('<div id="twoinc-company-search-tile-holding-pen" class="hidden"></div>');
+      const $form = jQuery('form[name="checkout"]');
+      // Falls through to <body> only on a page with no checkout form at all
+      // (never expected in production; keeps this a no-op rather than a
+      // throw on such a page).
+      (($form.length && $form) || jQuery("body")).append($pen);
+    }
+    return $pen;
+  },
+
+  /**
+   * Detach the company-search tile wrapper to the safe holding pen, BEFORE
+   * any WooCommerce checkout AJAX refresh can destroy it (TWO-25326 §7.1,
+   * hardened round 2026-08-03).
+   *
+   * The bug this closes (found independently by every reviewer in the
+   * TWO-25326 adversarial round): WooCommerce's `update_order_review` AJAX
+   * — fired on a shipping-method change, a coupon apply, a quantity change,
+   * not only a payment-method or country switch — replaces the WHOLE
+   * `.woocommerce-checkout-payment` fragment wholesale
+   * (`$(key).replaceWith(fragments[key])` in WC core's checkout.js). The
+   * payment tile's slot lives inside that fragment. A real, live
+   * `<select>`/`<input>` re-parented into the slot is therefore a
+   * descendant of a subtree WooCommerce can destroy at any moment with no
+   * warning — `replaceWith` removes the old nodes outright; nothing
+   * resurrects them, and no later re-sync call can recover a node jQuery
+   * already tore down.
+   *
+   * The fix is to never leave the wrapper sitting inside that fragment for
+   * longer than it has to: bound to WooCommerce's OWN `update_checkout`
+   * trigger (the past-tense `updated_checkout` fires only after the
+   * fragments are already swapped in — this is the PRESENT-tense trigger
+   * that starts an update, fired synchronously before the async AJAX call
+   * begins). jQuery dispatches every handler bound to a trigger
+   * synchronously, in the same tick, before any of them can kick off async
+   * work — so this handler is guaranteed to run and complete before the
+   * fragment swap it is defending against, regardless of registration order
+   * against WooCommerce's own handler on the same event.
+   *
+   * A no-op on 'address_area' (nothing was ever moved into the fragment) and
+   * a no-op if the wrapper doesn't exist yet (nothing captured, no company
+   * fields ever relocated) or is already in the pen.
+   *
+   * @returns {void}
+   */
+  detachCompanySearchTileWrapperToSafety: function () {
+    if (window.twoinc.company_search_location !== "payment_tile") return;
+
+    const $wrapper = jQuery("#" + twoincDomHelper.companySearchTileWrapperId);
+    if (!$wrapper.length) return;
+
+    const $pen = twoincDomHelper.getCompanySearchTileHoldingPen();
+    if ($wrapper.parent()[0] !== $pen[0]) {
+      $wrapper.appendTo($pen);
+    }
+  },
+
+  /** DOM class of the payment-tile slot the company-search control moves into
+   * when `company_search_location` is 'payment_tile' (TWO-25326 §7.1). */
+  companySearchTileSlotClass: "twoinc-company-search-tile-slot",
+
+  /**
    * Relocate the ONE company-search control into the payment tile, or leave
    * it in the address area, per the `company_search_location` admin setting
-   * (TWO-25326 §7.1, ruling 2026-08-03).
+   * (TWO-25326 §7.1, ruling 2026-08-03; hardened round 2026-08-03 after
+   * adversarial review — see `detachCompanySearchTileWrapperToSafety` for
+   * the AJAX-destruction bug this pairs with).
    *
    * This is the same control both ways — the real `#billing_company_field`,
    * `#billing_company_display_field` and `#company_id_field` rows (plus the
@@ -1640,20 +1726,23 @@ let twoincDomHelper = {
    * now-removed `.twoinc-company-tile-label` used to occupy). A single
    * wrapper (`#twoinc-company-search-tile-wrapper`) is created once and holds
    * all the moved rows in address-form order, so the slot only ever has one
-   * child to manage.
+   * child to manage. This function only ever pulls the wrapper INTO the
+   * slot — pulling it back OUT, before it can be destroyed, is
+   * `detachCompanySearchTileWrapperToSafety`'s job, called from the
+   * `update_checkout` trigger paired with this one on `updated_checkout`.
    *
-   * Idempotent and safe to call on every render, mirroring the anchor-check
-   * pattern `getCompanySummaryNode()` already uses for the same reason: WC's
-   * own checkout JS resorts `.form-row` elements it still owns, but once a
-   * row is moved out of the billing wrapper into the tile it is no longer one
-   * of the rows WC resorts, so this only needs to run again defensively (a
-   * full billing-fields re-render, a theme, a future WC version) rather than
-   * on every keystroke.
+   * Every move below is guarded on the node's CURRENT parent — the same
+   * `$x.parent()[0] !== $y[0]` idempotency check `getCompanySummaryNode()`
+   * already relies on elsewhere in this file, for the same reason (round 1
+   * review — Leia): an unconditional `appendTo()` on every call physically
+   * detaches and reattaches a live `<select>` even when nothing has moved,
+   * which would silently close an open selectWoo dropdown and collapse any
+   * in-progress text selection on every payment-method/country switch.
    *
-   * Called from `toggleBusinessFields()`, which already runs on every
-   * payment-method switch, country change and `updated_checkout` — the same
-   * triggers that can re-decide which company fields are even visible, and
-   * so the same ones that must re-decide where they live.
+   * Called directly from `onUpdatedCheckout()` (bound to `updated_checkout`)
+   * and from `toggleBusinessFields()` (payment-method switch, gestured
+   * country change) — the two paths that can re-decide which company fields
+   * are even visible, and so the two that must re-decide where they live.
    *
    * @returns {void}
    */
@@ -1666,28 +1755,41 @@ let twoincDomHelper = {
       // once per page load (see WC_Twoinc_Checkout::prepare_twoinc_object),
       // so this value cannot flip mid-session — every call on this branch,
       // for the lifetime of the page, is a genuine no-op.
-      $slot.addClass("hidden");
+      if (!$slot.hasClass("hidden")) $slot.addClass("hidden");
       return;
     }
 
-    let $wrapper = jQuery("#twoinc-company-search-tile-wrapper");
+    let $wrapper = jQuery("#" + twoincDomHelper.companySearchTileWrapperId);
     if (!$wrapper.length) {
-      $wrapper = jQuery('<div id="twoinc-company-search-tile-wrapper"></div>');
+      $wrapper = jQuery('<div id="' + twoincDomHelper.companySearchTileWrapperId + '"></div>');
       $slot.append($wrapper);
     } else if ($wrapper.parent()[0] !== $slot[0]) {
       $slot.append($wrapper);
     }
 
-    // Address-form order: name/search control, hidden org-number field, the
-    // read-only number label underneath it. `.appendTo()` on an
-    // already-attached node MOVES it (never clones), same as
-    // `getCompanySummaryNode()` relies on elsewhere in this file.
-    jQuery("#billing_company_display_field, #billing_company_field, #company_id_field").appendTo(
-      $wrapper
+    // Ends up in address-form order (name/search control, then the hidden
+    // org-number field) because that already IS each one's document order in
+    // the address form before this runs — jQuery's multi-selector returns
+    // matches in document order, not the order the selector string lists
+    // them in (round 1 review — Leia: a prior version of this comment
+    // credited the selector string's own argument order, which is not what
+    // jQuery actually guarantees). `.appendTo()` on an already-attached node
+    // MOVES it (never clones), same as `getCompanySummaryNode()` relies on
+    // elsewhere in this file — but only when it isn't already there, so a
+    // stale selectWoo dropdown or text selection survives a re-render that
+    // changed nothing.
+    jQuery("#billing_company_display_field, #billing_company_field, #company_id_field").each(
+      function () {
+        const $field = jQuery(this);
+        if ($field.parent()[0] !== $wrapper[0]) $field.appendTo($wrapper);
+      }
     );
-    twoincDomHelper.getCompanySummaryNode().appendTo($wrapper);
+    const $summary = twoincDomHelper.getCompanySummaryNode();
+    if ($summary.length && $summary.parent()[0] !== $wrapper[0]) {
+      $summary.appendTo($wrapper);
+    }
 
-    $slot.removeClass("hidden");
+    if ($slot.hasClass("hidden")) $slot.removeClass("hidden");
   },
 
   /**
@@ -1773,7 +1875,15 @@ let twoincDomHelper = {
           twoincUtilHelper.blankToEmpty(captured.organization_number)
         );
         if (companyTemplate && companyText) {
-          intentBox.text(companyTemplate.replace("{company}", companyText));
+          intentBox.text(companyTemplate.replace("{company}", function () {
+            // Function replacer (Vader, round 1 review): a string replacer
+            // honours special patterns like `$&`/`$$` inside the SECOND
+            // argument, so a company literally named "Acme $& Corp" or
+            // "50% Ltd $$" would come out mangled with a plain-string
+            // replace. A function replacer passes companyText through
+            // literally, no matter what it contains.
+            return companyText;
+          }));
         } else {
           intentBox.text(intentBox.data("twoincDefaultText"));
         }
@@ -1795,7 +1905,9 @@ let twoincDomHelper = {
             twoincUtilHelper.blankToEmpty(captured.organization_number)
           );
           if (declinedTemplate && companyText) {
-            $errBox.text(declinedTemplate.replace("{company}", companyText));
+            $errBox.text(declinedTemplate.replace("{company}", function () {
+              return companyText;
+            }));
           } else {
             $errBox.text($errBox.data("twoincDefaultText"));
           }
@@ -3729,6 +3841,19 @@ class Twoinc {
     // Disable or enable actions based on the account type
     $body.on("updated_checkout", Twoinc.getInstance().onUpdatedCheckout);
 
+    // Company-search tile relocation (TWO-25326 §7.1), paired handlers on
+    // WooCommerce's own before/after checkout-update triggers. `update_checkout`
+    // is the PRESENT-tense trigger that starts a recalculation — fired
+    // synchronously, before the async AJAX call WooCommerce's own handler on
+    // this same event kicks off — so detaching the tile wrapper here always
+    // completes before that AJAX response can wholesale-replace the
+    // `.woocommerce-checkout-payment` fragment the tile lives inside (see
+    // `detachCompanySearchTileWrapperToSafety`'s doc comment for the bug this
+    // closes). `onUpdatedCheckout` (the past-tense, after-swap trigger,
+    // already bound above) is what moves the wrapper back into the fresh
+    // slot.
+    $body.on("update_checkout", twoincDomHelper.detachCompanySearchTileWrapperToSafety);
+
     // No click handler for the manual-entry row (TWO-25288). It is a pseudo-
     // option inside the results list now, so the picker already turns a click
     // on it into the same internal select that Enter does, and
@@ -4199,6 +4324,19 @@ class Twoinc {
 
     twoincTermChips.refresh();
     twoincSoleTrader.refresh();
+
+    // TWO-25326 §7.1, hardened round 2026-08-03: called directly here, not
+    // only via `toggleBusinessFields()`. `updated_checkout` (this handler)
+    // fires on every WooCommerce checkout AJAX refresh — a shipping-method
+    // change, a coupon apply, a quantity change — not only the
+    // payment-method/gestured-country switches that call
+    // `toggleBusinessFields()`. The server just re-rendered a fresh, empty
+    // `.twoinc-company-search-tile-slot` as part of that same refresh (see
+    // `detachCompanySearchTileWrapperToSafety`, paired on `update_checkout`,
+    // for why the wrapper survived the refresh to be moved back in here at
+    // all), and every one of those triggers needs it re-populated, not just
+    // the two `toggleBusinessFields()` already covered.
+    twoincDomHelper.syncCompanySearchTileLocation();
   }
 
   /**
