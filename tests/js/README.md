@@ -396,11 +396,41 @@ still holds nulls — during `initialize()`'s deferred seed, and for three secon
 deferred re-read then re-pairs the old country's company with the new country via
 `getCompanyData()`, which reads `#billing_country` live and so un-pins the witness. Closing it
 means stopping the DOM re-reads from overwriting a pinned `country_prefix`, which changes
-`getCompanyData()`'s contract for its other callers, so it wants its own ticket. The suite also
-cannot observe those timers: advancing them throws from `setTimeout(this.enableCompanySearch, 800)`
-in `initialize()` — an unbound `this` in a strict class body, pre-existing and firing on every
-real page load with company search on. That wants fixing first, in its own commit, before any
-timer-based test here is possible.
+`getCompanyData()`'s contract for its other callers, so it wants its own ticket.
+
+Advancing `initialize()`'s timers is now possible — see `company-search-deferred-init.test.js`.
+It used to throw from `setTimeout(this.enableCompanySearch, 800)`, which TWO-25337 fixed. Note
+what that throw was and was not, because an earlier version of this paragraph had it wrong: it
+was **not** a production error. `setTimeout` invokes a bare method reference with the global as
+its receiver — the timer steps supply `window` as the callback's this-value, and a strict-mode
+class body does not change that, since the global is only substituted for a null/undefined
+receiver in sloppy mode and here a receiver was passed. Real Chromium runs that call with
+`this === window`, completes it, and logs nothing. The real defect was a misdirected write: the
+deferred pass set `billingCompanySelect` on `window` and left the instance property stale.
+
+**This harness cannot see that.** Jest's fake timers invoke the callback with `null` rather than
+the global, so pre-fix code throws a `TypeError` here where a browser completes it — the crash is
+Sinon's, not the plugin's, and the browser's actual misbehaviour is not reproducible in jsdom at
+all. Evidence for it came from a real Chromium run, recorded on the ticket, not from this suite.
+So do not cite a green run here as proof of browser `this`-binding, and do not write
+`expect(...).not.toThrow()` against these timers: all of its discriminating power is Sinon's, so
+it would go quietly vacuous the moment the timer implementation stopped manufacturing that
+TypeError. Assert the deferred pass's effect on the instance and the DOM instead.
+
+Two traps when you do.
+
+Most of what the retry does is **idempotent** — re-attaching to a field that already has a picker
+leaves the DOM as it was — so an end-state assertion passes whether the timer fired or not, and
+deleting the `setTimeout` outright leaves it green. Give any such test a witness that the deferred
+pass actually ran.
+
+But make that witness invariant to how the call is bound. Spying the INSTANCE after `initialize()`
+returns works against a wrapper (`function () { self.enableCompanySearch(); }`, a late property
+lookup) and fails against `this.enableCompanySearch.bind(this)`, which resolves the method when
+the timer is _scheduled_ — an equally correct fix that such a test would reject. Spy
+`Twoinc.prototype.enableCompanySearch` BEFORE `initialize()` instead: every binding shape reaches
+the prototype, so the witness survives all of them. The cost is that the synchronous pass is
+counted too, so assert 1 call before advancing and 2 after.
 
 - **the whole suite drives the real wiring**: a real `initialize(false)`, then
   `trigger("change")` on the field, so unwiring the delegated binding or moving the seed out
