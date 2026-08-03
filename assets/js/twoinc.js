@@ -1580,6 +1580,47 @@ let twoincDomHelper = {
         jQuery(".twoinc-pay-box" + errSelector).removeClass("hidden");
       }
     }
+
+    // The tile's captured-company label tracks the intent notice's
+    // visibility (TWO-25326 §7, revised 2026-08-03), and this method is the
+    // ONLY thing in the plugin that changes that visibility — the sweep on
+    // the first line plus the three branches above are the whole set. So the
+    // re-sync belongs here, at the end, AFTER the notice's own class has
+    // settled: `renderCompanyTileLabel()` reads that class back rather than
+    // recomputing the action, which is what keeps the two from drifting.
+    //
+    // Called unconditionally, including for the actions that show nothing:
+    // hiding the notice must hide the label in the same turn, and the early
+    // `addClass` sweep means every non-intent action is a hide.
+    twoincDomHelper.renderCompanyTileLabel();
+  },
+
+  /**
+   * Whether the payment tile's intent-approved notice is on screen right now
+   * (TWO-25326 §7, revised 2026-08-03).
+   *
+   * The single source of truth for the captured-company label's visibility.
+   * Deliberately reads the notice ELEMENT's own state rather than re-deriving
+   * it from the intent action: the requirement is that the label shows
+   * exactly when the notice shows, and any second copy of the condition — however
+   * faithful when written — is a thing that can come to disagree.
+   *
+   * Both halves are load-bearing, and they cover the two independent ways the
+   * notice can be off screen:
+   *   - `.length` — the brand switched the notice off, so
+   *     get_intent_approved_notice() returned '' and the div was never
+   *     rendered at all (`intent_approved_notice_enabled: false`). An absent
+   *     notice is a hidden notice, so the label stays hidden forever on that
+   *     brand;
+   *   - `.hidden` — the notice exists but the checkout is not in the
+   *     intent-approved state (pre-intent, checking, errored, or a
+   *     re-render), which is the runtime case.
+   *
+   * @returns {boolean}
+   */
+  isIntentNoticeVisible: function () {
+    const $notice = jQuery(".twoinc-pay-box.twoinc-intent-approved");
+    return $notice.length > 0 && !$notice.hasClass("hidden");
   },
 
   /**
@@ -1884,10 +1925,38 @@ let twoincDomHelper = {
     const $label = jQuery("." + twoincDomHelper.companyTileLabelClass);
     if (!$label.length) return;
 
+    // Both arguments omitted => read the live inputs, the same fallback
+    // `renderCompanySummary` uses. This is the shape `togglePaySubtitleDesc`
+    // calls: it knows the notice's visibility changed but holds no company
+    // values of its own, and re-reading is what lets it re-sync the label
+    // without the capture sites having to notify it.
+    if (name === undefined && number === undefined) {
+      const captured = twoincDomHelper.readCapturedCompany();
+      name = twoincUtilHelper.blankToEmpty(captured.company_name);
+      number = twoincUtilHelper.blankToEmpty(captured.organization_number);
+    }
+
     const text = name && number ? name + " (" + number + ")" : name;
 
     $label.text(text);
-    $label.toggleClass("hidden", !text);
+
+    // Visibility is the intent notice's, not "is a company captured"
+    // (TWO-25326 §7, revised 2026-08-03: the label is no longer wanted
+    // shown unconditionally once a company is known). `isIntentNoticeVisible()`
+    // reads the notice element back, so this is the same gate the notice
+    // itself passed through rather than a parallel re-derivation of it.
+    //
+    // Note what is NOT and-ed in here: `text`. A captured company is no
+    // longer part of the condition, so an intent-approved checkout whose
+    // company is unknown — a real state, which is precisely why the notice
+    // ships a no-company variant of its sentence — leaves this element
+    // unhidden with nothing in it. The empty case is suppressed in CSS
+    // instead (`.twoinc-company-tile-label:empty`), because an empty label
+    // with the rule's 12px margins would otherwise push the notice down by
+    // 24px for no visible reason. Keeping that out of the JS is what makes
+    // "shown exactly when the notice is shown" literally true of this line,
+    // with the no-content case handled as the rendering detail it is.
+    $label.toggleClass("hidden", !twoincDomHelper.isIntentNoticeVisible());
   },
 
   /**

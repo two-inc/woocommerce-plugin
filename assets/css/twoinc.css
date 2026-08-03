@@ -617,6 +617,24 @@
 .twoinc-company-tile-label.hidden {
   display: none;
 }
+/*
+ * The no-content case (TWO-25326 §7, revised 2026-08-03).
+ *
+ * The label's visibility now mirrors the intent-approved notice's, and NOT
+ * "has a company been captured" — so the label can be unhidden while holding
+ * no text, on an intent-approved checkout whose company is unknown. That is a
+ * real state rather than a defensive hypothetical: the notice itself carries a
+ * separate no-company variant of its sentence for exactly it.
+ *
+ * Without this rule such a label would be an invisible 24px gap (the 12px
+ * margins above and below) wedged between the chips and the notice. Handled
+ * here rather than by and-ing the text back into the JS condition, so the one
+ * gate in twoinc.js stays literally "shown when the notice is shown" and this
+ * stays what it is — a rendering detail about an element with nothing in it.
+ */
+.twoinc-company-tile-label:empty {
+  display: none;
+}
 .twoinc-mode-selector {
   display: flex;
   flex-wrap: wrap;

@@ -925,9 +925,7 @@ if (!class_exists('WC_Twoinc')) {
             // optional fields (invoice email, project, department) are billing
             // form fields, not tile content — so the only anchor that exists
             // here is the intent message, and this sits immediately before the
-            // intent loader/notice pair. That also keeps it last in the tile
-            // when the notice is switched off, which is where the fallback
-            // would have put it anyway.
+            // intent loader/notice pair.
             //
             // Empty and `hidden` on render, filled by renderCompanyTileLabel()
             // in twoinc.js. Server-side it cannot be filled at all: the
@@ -935,22 +933,38 @@ if (!class_exists('WC_Twoinc')) {
             // generated, and this same block is re-rendered by every
             // `update_checkout` regardless of whether a company was picked.
             //
+            // Suppressed with the notice (TWO-25326 §7, revised 2026-08-03).
+            // The label's visibility now mirrors the intent-approved notice's
+            // exactly, so on a brand with 'intent_approved_notice_enabled'
+            // false there is no state in which this container can ever be
+            // shown — shipping it anyway would be markup that only ever sits
+            // empty and hidden. This is the same reasoning TWO-25224 already
+            // applied to the intent loader, and it puts the label inside the
+            // one reassurance pass the notice switch governs. twoinc.js does
+            // not rely on the suppression (its gate reads the notice element,
+            // and an absent notice reads as hidden) — the two agree because
+            // they are the same rule, which is the point.
+            //
             // A <div>, not a <p>: some themes give `.payment_box p` its own
             // margins, and this must not pick up spacing the chips and notices
             // around it do not have.
+            $company_label = $notice_enabled
+                ? '<div class="twoinc-company-tile-label hidden"></div>'
+                : '';
             return sprintf(
                 '<div>
                     %s
                     <label class="twoinc-term-chips-heading hidden"></label>
                     <div class="twoinc-term-chips hidden" role="radiogroup"></div>
                     <div class="twoinc-sole-trader-toggle hidden" role="radiogroup"></div>
-                    <div class="twoinc-company-tile-label hidden"></div>
+                    %s
                     %s
                     %s
                     <div class="twoinc-pay-box twoinc-err-payment-default hidden">%s</div>
                     <div class="twoinc-pay-box twoinc-err-phone-number hidden">%s</div>
                 </div>',
                 $term_input,
+                $company_label,
                 $this->get_intent_loader_html($notice_enabled),
                 $this->get_intent_approved_notice($notice_enabled),
                 sprintf(__('Invoice purchase with %s is not available for this order.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')),

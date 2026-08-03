@@ -75,11 +75,54 @@ describe("read-only captured-company summary", () => {
     // this every tile assertion below would be checking an element that does
     // not exist. Deliberately outside the billing field wrapper, which is what
     // the address-area assertions are scoped to.
+    //
+    // The intent-approved notice is part of that minimum now (TWO-25326 §7,
+    // revised 2026-08-03): the label's visibility mirrors this element's, so
+    // a tile without it is a tile whose label can never appear. Rendered with
+    // the server's own attributes — `hidden`, and the company template on
+    // data-company-template — because both are what the production markup
+    // ships and the gate reads the `hidden` class back.
     $(document.body).append(
       '<li class="wc_payment_method"><div class="payment_box">' +
         '<div class="twoinc-company-tile-label hidden"></div>' +
+        '<div class="twoinc-pay-box twoinc-intent-approved hidden" ' +
+        'data-company-template="Your invoice is likely to be accepted for {company}.">' +
+        "Your invoice is likely to be accepted." +
+        "</div>" +
         "</div></li>"
     );
+
+    // Intent approved is this suite's baseline state, because it is the only
+    // state in which the label is on screen at all. Tests about WHEN the label
+    // shows live in their own describe block below and drive the notice
+    // themselves; everything else here is about WHAT it renders, and would be
+    // asserting against a permanently hidden element without this.
+    approveIntent();
+  }
+
+  /**
+   * Put the tile into the intent-approved state — the notice on screen, and
+   * so the label with it.
+   *
+   * @returns {void}
+   */
+  function approveIntent() {
+    dom.togglePaySubtitleDesc("intent-approved");
+  }
+
+  /** @returns {Object} the payment tile's intent-approved notice */
+  function intentNotice() {
+    return $(".twoinc-pay-box.twoinc-intent-approved");
+  }
+
+  /** @returns {boolean} whether the intent-approved notice is on screen */
+  function intentShown() {
+    return intentNotice().length > 0 && !intentNotice().hasClass("hidden");
+  }
+
+  /** @returns {boolean} whether the tile's company label is on screen */
+  function tileLabelShown() {
+    return tileLabel().length > 0 && !tileLabel().hasClass("hidden");
   }
 
   /** @returns {Object} the summary element, or an empty set */
@@ -158,6 +201,13 @@ describe("read-only captured-company summary", () => {
     test("renders the picked company's number under the field and its name in the tile", () => {
       pickCompany("ACME Widgets Ltd", "12345678");
 
+      // Picking a company invalidates the intent that was approved for the
+      // PREVIOUS one, so the pick itself takes the notice back off screen —
+      // and the label with it (TWO-25326 §7, revised 2026-08-03). That is the
+      // behaviour, not a harness quirk; re-approve to get back to the state
+      // this test is about, which is what the label renders once shown.
+      approveIntent();
+
       expect(isShown()).toBe(true);
       expect(renderedNumber()).toBe("12345678");
       expect(renderedName()).toBe("ACME Widgets Ltd");
@@ -188,6 +238,13 @@ describe("read-only captured-company summary", () => {
       sessionStorage.removeItem("checkoutInputs");
 
       dom.toggleBusinessFields();
+
+      // The re-render clears the intent state (toggleBusinessFields calls
+      // togglePaySubtitleDesc with no action), which hides the notice and the
+      // label together — correct, since nothing is approved mid-re-render.
+      // Re-approve: the question here is whether the NAME survives the
+      // re-render, and the label has to be on screen to answer it.
+      approveIntent();
 
       expect(isShown()).toBe(true);
       expect(renderedName()).toBe("ACME Widgets Ltd");
@@ -282,6 +339,10 @@ describe("read-only captured-company summary", () => {
     test("a company carrying no organisation number renders its name alone", () => {
       // The organisation number is optional on a registry hit; the name is not.
       pickCompany("ACME Widgets Ltd", "");
+
+      // The pick invalidated the previous intent; re-approve so the tile label
+      // is on screen to be read (see the first test in this block).
+      approveIntent();
 
       // No number means no number label at all — not an empty one taking up a
       // row under the field (TWO-25326 §5).
@@ -429,6 +490,11 @@ describe("read-only captured-company summary", () => {
 
       dom.enterManualCompanyEntry();
       typeCompanyName("Sole Proprietor Bakery");
+
+      // The pick above invalidated the previous intent; re-approve so the tile
+      // label is on screen to be read (see the first test in this file's
+      // company-search block).
+      approveIntent();
 
       expect(renderedName()).toBe("Sole Proprietor Bakery");
       expect(tileText()).toBe("Sole Proprietor Bakery");
@@ -682,6 +748,156 @@ describe("read-only captured-company summary", () => {
       expect(renderedName()).toBe("ACME Widgets Ltd");
       expect(renderedNumber()).toBe("12345678");
       expect($("#company_id").val()).toBe("12345678");
+    });
+  });
+
+  /**
+   * The tile label's visibility mirrors the intent-approved notice's
+   * (TWO-25326 §7, revised by Doug 2026-08-03).
+   *
+   * The rule this replaces was "shown whenever a company is captured", which
+   * shipped the night before in PR #429. The revision drops that: capture is no
+   * longer part of the condition at all — the
+   * notice's visibility is the whole of it, in both directions.
+   *
+   * The assertions below are deliberately written against the NOTICE's state
+   * rather than against the action that produced it. A test that checked
+   * `action === "intent-approved"` would pass just as happily against a
+   * parallel re-derivation of the condition, which is the exact failure mode
+   * the implementation is built to rule out — the label has to follow the
+   * element, so that is what gets compared.
+   */
+  describe("tile label visibility mirrors the intent notice (TWO-25326 §7, 2026-08-03)", () => {
+    /** Capture a company without leaving the intent notice on screen. */
+    function captureCompanyOnly() {
+      const ajax = harness.stubAjax($);
+      pickCompany("ACME Widgets Ltd", "12345678");
+      ajax.restore();
+    }
+
+    test("a captured company alone does NOT show the label", () => {
+      // The whole point of the revision. Picking a company fills the label's
+      // text and leaves it hidden, because nothing has approved an intent yet.
+      captureCompanyOnly();
+
+      expect($("#billing_company").val()).toBe("ACME Widgets Ltd");
+      expect(intentShown()).toBe(false);
+      expect(tileLabelShown()).toBe(false);
+    });
+
+    test("the label appears with the notice, and carries the captured company", () => {
+      captureCompanyOnly();
+      approveIntent();
+
+      expect(intentShown()).toBe(true);
+      expect(tileLabelShown()).toBe(true);
+      expect(tileLabel().text()).toBe("ACME Widgets Ltd (12345678)");
+    });
+
+    test("the label goes away again when the notice does", () => {
+      captureCompanyOnly();
+      approveIntent();
+      expect(tileLabelShown()).toBe(true);
+
+      // Back into the checking state: a new intent is in flight, so the
+      // approval no longer holds and neither element may claim it does.
+      dom.togglePaySubtitleDesc("checking-intent");
+
+      expect(intentShown()).toBe(false);
+      expect(tileLabelShown()).toBe(false);
+    });
+
+    test("an error state hides the label even with a company captured", () => {
+      captureCompanyOnly();
+      approveIntent();
+
+      dom.togglePaySubtitleDesc("errored", ".twoinc-err-payment-default");
+
+      expect(intentShown()).toBe(false);
+      expect(tileLabelShown()).toBe(false);
+    });
+
+    test("the two agree across every intent action, in both directions", () => {
+      // The invariant itself, swept over the full action set rather than
+      // spot-checked: hidden(label) === hidden(notice), always. A parallel
+      // condition that merely usually agrees fails somewhere in here.
+      captureCompanyOnly();
+
+      const actions = [
+        undefined,
+        "checking-intent",
+        "intent-approved",
+        "errored",
+        "intent-approved",
+        undefined,
+        "intent-approved"
+      ];
+
+      actions.forEach(function (action) {
+        dom.togglePaySubtitleDesc(action, ".twoinc-err-payment-default");
+        expect(tileLabelShown()).toBe(intentShown());
+      });
+
+      // And the sweep genuinely visited both states, so the invariant was not
+      // satisfied trivially by everything staying hidden throughout.
+      dom.togglePaySubtitleDesc("intent-approved");
+      expect(tileLabelShown()).toBe(true);
+      dom.togglePaySubtitleDesc();
+      expect(tileLabelShown()).toBe(false);
+    });
+
+    test("a brand that suppressed the notice never shows the label", () => {
+      // 'intent_approved_notice_enabled: false' => get_intent_approved_notice()
+      // returns '' and the notice div is never rendered. An absent notice is a
+      // hidden notice, so the label must stay down even on the action that
+      // would otherwise show it. WC_Twoinc.php also stops emitting the label
+      // container on such a brand; this asserts the JS gate holds on its own,
+      // so the two are not load-bearing for each other.
+      intentNotice().remove();
+      captureCompanyOnly();
+
+      dom.togglePaySubtitleDesc("intent-approved");
+
+      expect(intentNotice().length).toBe(0);
+      expect(tileLabelShown()).toBe(false);
+    });
+
+    test("the label re-syncs without the capture sites having to re-render it", () => {
+      // togglePaySubtitleDesc holds no company values of its own, so the
+      // no-argument path of renderCompanyTileLabel has to read them back off
+      // the live inputs. If it did not, toggling the notice would show an
+      // empty label on a checkout that has a company.
+      captureCompanyOnly();
+      tileLabel().text("");
+
+      dom.togglePaySubtitleDesc("intent-approved");
+
+      expect(tileLabel().text()).toBe("ACME Widgets Ltd (12345678)");
+    });
+
+    test("an intent-approved checkout with no company leaves no empty label behind", () => {
+      // The no-company state is real — the notice ships a separate sentence
+      // for it — and the JS gate deliberately does not and-in the text, so the
+      // element is unhidden while empty. CSS is what stops that being a 24px
+      // gap (the rule's own 12px margins) between the chips and the notice.
+      $("#billing_company").val("");
+      $("#company_id").val("");
+
+      dom.togglePaySubtitleDesc("intent-approved");
+
+      expect(intentShown()).toBe(true);
+      expect(tileLabel().text()).toBe("");
+
+      // The element is deliberately NOT hidden here — that is the whole reason
+      // the CSS rule below has to exist. Asserted rather than left implied
+      // (round 1 review): without it this test would still pass against an
+      // implementation that quietly and-ed the text back into the JS gate, and
+      // the CSS assertion underneath would then be guarding nothing.
+      expect(tileLabelShown()).toBe(true);
+
+      const empty = /\.twoinc-company-tile-label:empty\s*\{([^}]*)\}/.exec(stylesheetSource());
+      expect(empty).not.toBeNull();
+      expect(empty[1]).toMatch(/display:\s*none/);
     });
   });
 });
