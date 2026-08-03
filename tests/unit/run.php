@@ -191,6 +191,7 @@ final class BrandConfigSpec
             'testIntentApprovedNoticeInvalidSwitchReportsAndDefaultsOn',
             'testIntentLoaderRendersTheOneSharedDotPulse',
             'testIntentLoaderSuppressedWithTheNoticeButErrorBoxesSurvive',
+            'testCompanyTileLabelSuppressedWithTheNotice',
             'testAssetVersionTracksFileMtimeNotPluginVersion',
             'testAssetVersionFallsBackToPluginVersionWhenFileMissing',
         ];
@@ -5716,6 +5717,48 @@ final class BrandConfigSpec
         TinyAssert::true(
             strpos($html, 'twoinc-pay-box twoinc-err-phone-number hidden') !== false,
             'the phone-number error box must survive the notice being off'
+        );
+    }
+
+    /**
+     * TWO-25326 section 7, revised 2026-08-03: the captured-company label's
+     * visibility mirrors the intent-approved notice's exactly. On a brand
+     * that switched the notice off there is therefore no state in which the
+     * label can ever be shown, so its container must not be emitted either —
+     * the same conclusion TWO-25224 reached for the loader, extended to the
+     * label now that it belongs to the same reassurance pass.
+     *
+     * Asserted as a pair with the enabled case. Presence alone would pass
+     * against markup that emits the container unconditionally, and absence
+     * alone would pass against markup that never emits it at all; only the
+     * two together pin the container to the switch.
+     */
+    private static function testCompanyTileLabelSuppressedWithTheNotice(): void
+    {
+        add_filter('twoinc_brand_file', static function ($file) {
+            return __DIR__ . '/fixtures/suppressednoticebrand.php';
+        });
+        TinyAssert::same(false, WC_Twoinc_Brand::get('intent_approved_notice_enabled'));
+
+        $html = self::gateway()->build_payment_description();
+        TinyAssert::true(
+            strpos($html, 'twoinc-company-tile-label') === false,
+            'a brand disabling the notice must emit no company tile label container'
+        );
+
+        // The error boxes still prove the tile itself rendered, so the
+        // absence above is the switch doing its job and not an empty build.
+        TinyAssert::true(
+            strpos($html, 'twoinc-pay-box twoinc-err-phone-number hidden') !== false,
+            'the tile must still have rendered for that absence to mean anything'
+        );
+
+        self::reset();
+        self::useTaglineBrand();
+        $enabled_html = self::gateway()->build_payment_description();
+        TinyAssert::true(
+            strpos($enabled_html, '<div class="twoinc-company-tile-label hidden"></div>') !== false,
+            'a brand with the notice on must still ship the label container'
         );
     }
 
