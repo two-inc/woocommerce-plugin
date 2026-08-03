@@ -403,8 +403,8 @@
 
 /* Payment terms chip selector (TWO-24751) */
 /*
- * Heading above the chips, shown only when more than one term is offered
- * (ABN-468). Mirrors Magento's <label class="label"> in the Luma
+ * Heading above the chips, shown only when more than one term is offered.
+ * Mirrors Magento's <label class="label"> in the Luma
  * gateway_method.html template — a plain form label, not a chip.
  */
 .twoinc-term-chips-heading {

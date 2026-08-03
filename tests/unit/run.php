@@ -1671,7 +1671,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-468: the chip fee label goes out already formatted by the store's
+     * The chip fee label goes out already formatted by the store's
      * own price format, so the buyer sees the currency SYMBOL — Magento's
      * priceUtils.formatPrice behaviour, not the currency code the pricing
      * API echoes back. Tags stripped and entities decoded, because the chip
@@ -2366,7 +2366,7 @@ final class BrandConfigSpec
         // cap (Woo does no FX conversion), so the help text must not claim
         // a fixed maximum it will not enforce. The fixed-amount help
         // paragraph disappears entirely and the combined variant degrades
-        // to the percentage-only wording (ABN-476) — the percentage
+        // to the percentage-only wording — the percentage
         // ceiling itself is always enforced, so "Max: 100%" stays.
         $GLOBALS['__twoinc_test_store_currency'] = 'NOK';
         $html = $gateway->generate_two_surcharge_grid_html('surcharge_grid', []);
@@ -2398,7 +2398,7 @@ final class BrandConfigSpec
      * admin.css) so the help text wraps at the grid's width rather than the
      * full width of the WooCommerce settings cell. The table therefore
      * carries no width of its own — admin.css makes it 100% of the
-     * container. Mirrors Magento's #surcharge-grid-container (ABN-476).
+     * container. Mirrors Magento's #surcharge-grid-container.
      */
     private static function testSurchargeGridNotesShareTheGridsWidthContainer(): void
     {
