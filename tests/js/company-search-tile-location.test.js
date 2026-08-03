@@ -129,6 +129,33 @@ describe("company-search tile location (TWO-25326 §7.1)", () => {
       appendToSpy.mockRestore();
     });
 
+    test("detach-to-safety is also idempotent — a second call in a row does not re-move an already-parked wrapper (round 2 review — Vader)", () => {
+      dom.syncCompanySearchTileLocation();
+
+      dom.detachCompanySearchTileWrapperToSafety();
+      const appendToSpy = jest.spyOn($.fn, "appendTo");
+      dom.detachCompanySearchTileWrapperToSafety();
+
+      expect(appendToSpy).not.toHaveBeenCalled();
+      appendToSpy.mockRestore();
+    });
+
+    test("a wrapper detached to the pen while the tile slot is absent stays parked there, not orphaned (round 2 review — Vader)", () => {
+      dom.syncCompanySearchTileLocation();
+      dom.detachCompanySearchTileWrapperToSafety();
+
+      // Simulate the slot genuinely not existing yet when `updated_checkout`
+      // fires — e.g. the gateway hasn't rendered on this particular refresh.
+      tileSlot().remove();
+
+      expect(() => dom.syncCompanySearchTileLocation()).not.toThrow();
+
+      const $wrapper = $("#twoinc-company-search-tile-wrapper");
+      expect($wrapper.length).toBe(1);
+      expect($wrapper.closest("#twoinc-company-search-tile-holding-pen").length).toBe(1);
+      expect($("#billing_company_display_field").length).toBe(1);
+    });
+
     test("survives a WooCommerce-style fragment replace of .woocommerce-checkout-payment", () => {
       dom.syncCompanySearchTileLocation();
       expect($("#billing_company_display_field").closest(".twoinc-company-search-tile-slot").length).toBe(
