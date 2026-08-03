@@ -48,6 +48,20 @@
 }
 
 /*
+ * TWO-25326 §7.3 (ruling 2026-08-03): the approved and declined intent
+ * messages now carry the captured company (`<name> (<number>)`) directly in
+ * their sentence, where the standalone `.twoinc-company-tile-label` used to.
+ * That label carried `overflow-wrap: anywhere` for exactly this reason —
+ * registry names in DE/NL/NO routinely contain a single unbroken token wider
+ * than the tile column — and these two boxes need the same protection now
+ * that they are the ones holding the name.
+ */
+.twoinc-pay-box.twoinc-intent-approved,
+.twoinc-pay-box.twoinc-err-payment-default {
+  overflow-wrap: anywhere;
+}
+
+/*
  * Visually hidden but readable by assistive technology. Defined here rather
  * than leaning on the theme's .screen-reader-text, which not every theme
  * ships — a missing rule there would render the text visibly.
@@ -160,8 +174,9 @@
  * The captured NAME no longer renders here. §7 rules out any company name or
  * number text in the address area beyond the company-name field itself and
  * this number label — the name was a second copy of what the control directly
- * above already shows. It moved to the payment tile
- * (`.twoinc-company-tile-label`).
+ * above already shows. It no longer renders as a standalone label anywhere
+ * (TWO-25326 §7.2/§7.3, ruling 2026-08-03): it lives inside the payment
+ * tile's intent-message sentence instead.
  */
 .twoinc-company-summary {
   padding-bottom: 15px;
@@ -590,49 +605,23 @@
 }
 
 /*
- * The captured company, as `<name> (<number>)`, in the payment tile
- * (TWO-25326 §7).
+ * The company-search control's location in the payment tile (TWO-25326 §7.1,
+ * ruling 2026-08-03), when the `company_search_location` admin setting is
+ * 'payment_tile'. Holds the SAME control moved out of the address area by
+ * twoincDomHelper.syncCompanySearchTileLocation() — the fields themselves
+ * (`#billing_company_field` etc.) already carry all their own styling from
+ * the address form, so this wrapper only needs enough of its own spacing to
+ * sit cleanly between the sole-trader toggle and the intent message.
  *
- * A text label, deliberately styled as one: no border, no background, nothing
- * that reads as a control. The buyer cannot act on this — it restates what
- * they already picked in the address form — and anything that looks clickable
- * here invites them to try to edit it in the tile, which is the exact failure
- * mode the ticket records against the Magento implementations.
- *
- * Semibold rather than a colour change, so it stays legible on any brand
- * overlay's tile background without this rule having to know what colour that
- * is.
- *
- * `overflow-wrap: anywhere` for the same reason the number label under the
- * address field carries it: registry names in DE/NL/NO routinely contain a
- * single unbroken token longer than the tile is wide, and the tile is
- * narrower than the address column.
+ * The standalone `.twoinc-company-tile-label` text label this replaced is
+ * gone outright (§7.2/§7.3): the company now lives inside the intent-message
+ * sentences instead, which need no CSS of their own beyond what
+ * `.twoinc-pay-box` already provides.
  */
-.twoinc-company-tile-label {
+.twoinc-company-search-tile-slot {
   margin: 12px 0;
-  font-weight: 600;
-  line-height: 1.4;
-  overflow-wrap: anywhere;
 }
-.twoinc-company-tile-label.hidden {
-  display: none;
-}
-/*
- * The no-content case (TWO-25326 §7, revised 2026-08-03).
- *
- * The label's visibility now mirrors the intent-approved notice's, and NOT
- * "has a company been captured" — so the label can be unhidden while holding
- * no text, on an intent-approved checkout whose company is unknown. That is a
- * real state rather than a defensive hypothetical: the notice itself carries a
- * separate no-company variant of its sentence for exactly it.
- *
- * Without this rule such a label would be an invisible 24px gap (the 12px
- * margins above and below) wedged between the chips and the notice. Handled
- * here rather than by and-ing the text back into the JS condition, so the one
- * gate in twoinc.js stays literally "shown when the notice is shown" and this
- * stays what it is — a rendering detail about an element with nothing in it.
- */
-.twoinc-company-tile-label:empty {
+.twoinc-company-search-tile-slot.hidden {
   display: none;
 }
 .twoinc-mode-selector {

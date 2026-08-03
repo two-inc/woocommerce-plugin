@@ -1571,6 +1571,13 @@ let twoincDomHelper = {
 
     twoincDomHelper.syncCompanyFieldWrappers();
 
+    // Relocate the company-search control per the admin setting (TWO-25326
+    // §7.1) BEFORE renderCompanySummary() below: the summary node's anchor
+    // (getCompanySummaryNode()) is relative to whichever field is currently
+    // its neighbour, and this call may just have moved that field's wrapper
+    // into the tile.
+    twoincDomHelper.syncCompanySearchTileLocation();
+
     // Last, and unconditionally: this function runs on every payment-method,
     // country and capture-mode switch, which is exactly when the summary's own
     // visibility gate needs re-evaluating. It reads the current inputs and
@@ -1604,6 +1611,85 @@ let twoincDomHelper = {
     );
   },
 
+  /** DOM class of the payment-tile slot the company-search control moves into
+   * when `company_search_location` is 'payment_tile' (TWO-25326 §7.1). */
+  companySearchTileSlotClass: "twoinc-company-search-tile-slot",
+
+  /**
+   * Relocate the ONE company-search control into the payment tile, or leave
+   * it in the address area, per the `company_search_location` admin setting
+   * (TWO-25326 §7.1, ruling 2026-08-03).
+   *
+   * This is the same control both ways — the real `#billing_company_field`,
+   * `#billing_company_display_field` and `#company_id_field` rows (plus the
+   * read-only number label, `getCompanySummaryNode()`), MOVED with
+   * `appendTo()`, never cloned and never a second implementation. Whatever
+   * JS already targets those ids/classes (selectWoo init, keyboard handling,
+   * tab-order fixes, `getCompanyName()`/`getCompanyData()`, the manual-entry
+   * affordances) keeps working unchanged, because it all selects by id or
+   * class rather than by position in the DOM.
+   *
+   * Default setting is 'address_area': this function is then a no-op and the
+   * control renders exactly where WooCommerce always put it — zero
+   * behavioural change for every merchant who does not touch the new
+   * setting.
+   *
+   * 'payment_tile': the fields move into `.twoinc-company-search-tile-slot`,
+   * the empty slot `get_pay_box_description()` server-renders between the
+   * sole-trader toggle and the intent loader/notice (the same position the
+   * now-removed `.twoinc-company-tile-label` used to occupy). A single
+   * wrapper (`#twoinc-company-search-tile-wrapper`) is created once and holds
+   * all the moved rows in address-form order, so the slot only ever has one
+   * child to manage.
+   *
+   * Idempotent and safe to call on every render, mirroring the anchor-check
+   * pattern `getCompanySummaryNode()` already uses for the same reason: WC's
+   * own checkout JS resorts `.form-row` elements it still owns, but once a
+   * row is moved out of the billing wrapper into the tile it is no longer one
+   * of the rows WC resorts, so this only needs to run again defensively (a
+   * full billing-fields re-render, a theme, a future WC version) rather than
+   * on every keystroke.
+   *
+   * Called from `toggleBusinessFields()`, which already runs on every
+   * payment-method switch, country change and `updated_checkout` — the same
+   * triggers that can re-decide which company fields are even visible, and
+   * so the same ones that must re-decide where they live.
+   *
+   * @returns {void}
+   */
+  syncCompanySearchTileLocation: function () {
+    const $slot = jQuery("." + twoincDomHelper.companySearchTileSlotClass);
+    if (!$slot.length) return;
+
+    if (window.twoinc.company_search_location !== "payment_tile") {
+      // Address area (default): nothing to move. `window.twoinc` is written
+      // once per page load (see WC_Twoinc_Checkout::prepare_twoinc_object),
+      // so this value cannot flip mid-session — every call on this branch,
+      // for the lifetime of the page, is a genuine no-op.
+      $slot.addClass("hidden");
+      return;
+    }
+
+    let $wrapper = jQuery("#twoinc-company-search-tile-wrapper");
+    if (!$wrapper.length) {
+      $wrapper = jQuery('<div id="twoinc-company-search-tile-wrapper"></div>');
+      $slot.append($wrapper);
+    } else if ($wrapper.parent()[0] !== $slot[0]) {
+      $slot.append($wrapper);
+    }
+
+    // Address-form order: name/search control, hidden org-number field, the
+    // read-only number label underneath it. `.appendTo()` on an
+    // already-attached node MOVES it (never clones), same as
+    // `getCompanySummaryNode()` relies on elsewhere in this file.
+    jQuery("#billing_company_display_field, #billing_company_field, #company_id_field").appendTo(
+      $wrapper
+    );
+    twoincDomHelper.getCompanySummaryNode().appendTo($wrapper);
+
+    $slot.removeClass("hidden");
+  },
+
   /**
    * Deselect payment method and select the first available one
    */
@@ -1635,6 +1721,24 @@ let twoincDomHelper = {
   },
 
   /**
+   * The captured company as the intent-message sentences want it
+   * (TWO-25326 §7.3): "<name> (<number>)", or bare <name> when there is no
+   * number (manual entry, which clears #company_id). Never "<name> ()" —
+   * an absent number is genuinely absent, not pending.
+   *
+   * This is what used to build the now-removed `.twoinc-company-tile-label`
+   * text. It has the same job now, just substituted into the intent
+   * sentences' data-company-template token instead of a standalone element.
+   *
+   * @param {string} name already blank-collapsed
+   * @param {string} number already blank-collapsed
+   * @returns {string}
+   */
+  getCompanyLabelText: function (name, number) {
+    return name && number ? name + " (" + number + ")" : name;
+  },
+
+  /**
    * Toggle payment text in subtitle and description
    */
   togglePaySubtitleDesc: function (action, errSelector) {
@@ -1648,69 +1752,57 @@ let twoincDomHelper = {
         jQuery(".twoinc-pay-box.twoinc-loader").removeClass("hidden");
       } else if (action === "intent-approved") {
         // The notice ships the no-company sentence as its text and the
-        // company-name variant as a template on data-company-template
-        // (only the browser knows the buyer's company). Substitute here,
+        // company variant as a template on data-company-template (only the
+        // browser knows the buyer's captured company). Substitute here,
         // always from the template, so a later company change re-renders
         // and an emptied company falls back to the served sentence.
         // Suppressed by the brand => the div is absent and every call
         // below is a no-op on an empty jQuery set.
+        //
+        // TWO-25326 §7.3: the token now stands for the WHOLE "<name>
+        // (<number>)" chunk, not the bare name — this is what replaces the
+        // separate `.twoinc-company-tile-label` element.
         let intentBox = jQuery(".twoinc-pay-box.twoinc-intent-approved");
         if (intentBox.data("twoincDefaultText") === undefined) {
           intentBox.data("twoincDefaultText", intentBox.text());
         }
         let companyTemplate = intentBox.attr("data-company-template");
-        let companyName = (twoincDomHelper.getCompanyName() || "").trim();
-        if (companyTemplate && companyName) {
-          intentBox.text(companyTemplate.replace("{company}", companyName));
+        let captured = twoincDomHelper.readCapturedCompany();
+        let companyText = twoincDomHelper.getCompanyLabelText(
+          twoincUtilHelper.blankToEmpty(captured.company_name),
+          twoincUtilHelper.blankToEmpty(captured.organization_number)
+        );
+        if (companyTemplate && companyText) {
+          intentBox.text(companyTemplate.replace("{company}", companyText));
         } else {
           intentBox.text(intentBox.data("twoincDefaultText"));
         }
         intentBox.removeClass("hidden");
       } else if (action === "errored") {
-        jQuery(".twoinc-pay-box" + errSelector).removeClass("hidden");
+        // TWO-25326 §7.3: the "not available" box carries the same
+        // data-company-template/token mechanism as the approved notice
+        // above, but ONLY on `.twoinc-err-payment-default` — the phone-number
+        // box is a fixed, unrelated message and never gets one.
+        let $errBox = jQuery(".twoinc-pay-box" + errSelector);
+        if (errSelector === ".twoinc-err-payment-default") {
+          if ($errBox.data("twoincDefaultText") === undefined) {
+            $errBox.data("twoincDefaultText", $errBox.text());
+          }
+          let declinedTemplate = $errBox.attr("data-company-template");
+          let captured = twoincDomHelper.readCapturedCompany();
+          let companyText = twoincDomHelper.getCompanyLabelText(
+            twoincUtilHelper.blankToEmpty(captured.company_name),
+            twoincUtilHelper.blankToEmpty(captured.organization_number)
+          );
+          if (declinedTemplate && companyText) {
+            $errBox.text(declinedTemplate.replace("{company}", companyText));
+          } else {
+            $errBox.text($errBox.data("twoincDefaultText"));
+          }
+        }
+        $errBox.removeClass("hidden");
       }
     }
-
-    // The tile's captured-company label tracks the intent notice's
-    // visibility (TWO-25326 §7, revised 2026-08-03), and this method is the
-    // ONLY thing in the plugin that changes that visibility — the sweep on
-    // the first line plus the three branches above are the whole set. So the
-    // re-sync belongs here, at the end, AFTER the notice's own class has
-    // settled: `renderCompanyTileLabel()` reads that class back rather than
-    // recomputing the action, which is what keeps the two from drifting.
-    //
-    // Called unconditionally, including for the actions that show nothing:
-    // hiding the notice must hide the label in the same turn, and the early
-    // `addClass` sweep means every non-intent action is a hide.
-    twoincDomHelper.renderCompanyTileLabel();
-  },
-
-  /**
-   * Whether the payment tile's intent-approved notice is on screen right now
-   * (TWO-25326 §7, revised 2026-08-03).
-   *
-   * The single source of truth for the captured-company label's visibility.
-   * Deliberately reads the notice ELEMENT's own state rather than re-deriving
-   * it from the intent action: the requirement is that the label shows
-   * exactly when the notice shows, and any second copy of the condition — however
-   * faithful when written — is a thing that can come to disagree.
-   *
-   * Both halves are load-bearing, and they cover the two independent ways the
-   * notice can be off screen:
-   *   - `.length` — the brand switched the notice off, so
-   *     get_intent_approved_notice() returned '' and the div was never
-   *     rendered at all (`intent_approved_notice_enabled: false`). An absent
-   *     notice is a hidden notice, so the label stays hidden forever on that
-   *     brand;
-   *   - `.hidden` — the notice exists but the checkout is not in the
-   *     intent-approved state (pre-intent, checking, errored, or a
-   *     re-render), which is the runtime case.
-   *
-   * @returns {boolean}
-   */
-  isIntentNoticeVisible: function () {
-    const $notice = jQuery(".twoinc-pay-box.twoinc-intent-approved");
-    return $notice.length > 0 && !$notice.hasClass("hidden");
   },
 
   /**
@@ -1846,8 +1938,10 @@ let twoincDomHelper = {
    * and this number label. The number stays because §5 requires exactly this
    * — the number as a plain right-aligned text label immediately below the
    * name field, never as an input — and this element is the only thing on WC
-   * providing it. The name moved to the payment tile instead, where §7 wants
-   * it; see `renderCompanyTileLabel`.
+   * providing it. The name itself no longer renders anywhere in the tile
+   * either, as a standalone label (TWO-25326 §7.2/§7.3, ruling 2026-08-03):
+   * it is substituted directly into the intent-message sentence instead —
+   * see `getCompanyLabelText` and its callers in `togglePaySubtitleDesc`.
    *
    * Anchored after the company-id field's enclosing `.twoinc-inp-container`
    * where there is one, NOT inside it. The pay-for-order page wraps every
@@ -1956,10 +2050,10 @@ let twoincDomHelper = {
     const name = twoincUtilHelper.blankToEmpty(data.company_name);
     const number = twoincUtilHelper.blankToEmpty(data.organization_number);
 
-    // Rendered from the same resolved pair, in the same call, so the tile and
-    // the address area can never disagree about what was captured
-    // (TWO-25326 §7).
-    twoincDomHelper.renderCompanyTileLabel(name, number);
+    // The tile no longer carries a separate company label to keep in sync
+    // here (TWO-25326 §7.2/§7.3, ruling 2026-08-03: `.twoinc-company-tile-label`
+    // is removed — the company now lives inside the intent-message sentences
+    // themselves, substituted in togglePaySubtitleDesc()).
 
     const $node = twoincDomHelper.getCompanySummaryNode();
     if (!$node.length) return;
@@ -1980,73 +2074,6 @@ let twoincDomHelper = {
       number && twoincDomHelper.isTwoincVisible() && twoincDomHelper.isTwoincSelected()
     );
     $node.toggleClass("hidden", !visible);
-  },
-
-  /** DOM class of the payment tile's captured-company label (TWO-25326 §7). */
-  companyTileLabelClass: "twoinc-company-tile-label",
-
-  /**
-   * Render the captured company inside the payment tile (TWO-25326 §7).
-   *
-   * The ticket asks for `<name> (<number>)` as a text label in the tile,
-   * "between the chips and the intent message (if rendered) or else the
-   * optional fields". On WooCommerce the second half of that has no referent:
-   * the optional fields (invoice email, project, department) are checkout
-   * form fields in the billing column, not tile content, so there is nothing
-   * in the tile for the label to sit above if the intent message is switched
-   * off. The container is therefore server-rendered as the last element of
-   * the tile block before the intent loader/notice, which satisfies the
-   * position in both cases — see the block comment on that markup in
-   * WC_Twoinc.php.
-   *
-   * Nothing here creates DOM. The container is server-rendered, so a brand
-   * overlay that removes or repositions it in its own template simply gets no
-   * label, rather than having one injected back underneath it.
-   *
-   * Falls back to the bare name when the capture carries no number, which is
-   * manual entry. `<name> ()` would read as a rendering fault, and the number
-   * is genuinely absent rather than pending.
-   *
-   * @param {string} name already blank-collapsed
-   * @param {string} number already blank-collapsed
-   * @returns {void}
-   */
-  renderCompanyTileLabel: function (name, number) {
-    const $label = jQuery("." + twoincDomHelper.companyTileLabelClass);
-    if (!$label.length) return;
-
-    // Both arguments omitted => read the live inputs, the same fallback
-    // `renderCompanySummary` uses. This is the shape `togglePaySubtitleDesc`
-    // calls: it knows the notice's visibility changed but holds no company
-    // values of its own, and re-reading is what lets it re-sync the label
-    // without the capture sites having to notify it.
-    if (name === undefined && number === undefined) {
-      const captured = twoincDomHelper.readCapturedCompany();
-      name = twoincUtilHelper.blankToEmpty(captured.company_name);
-      number = twoincUtilHelper.blankToEmpty(captured.organization_number);
-    }
-
-    const text = name && number ? name + " (" + number + ")" : name;
-
-    $label.text(text);
-
-    // Visibility is the intent notice's, not "is a company captured"
-    // (TWO-25326 §7, revised 2026-08-03: the label is no longer wanted
-    // shown unconditionally once a company is known). `isIntentNoticeVisible()`
-    // reads the notice element back, so this is the same gate the notice
-    // itself passed through rather than a parallel re-derivation of it.
-    //
-    // Note what is NOT and-ed in here: `text`. A captured company is no
-    // longer part of the condition, so an intent-approved checkout whose
-    // company is unknown — a real state, which is precisely why the notice
-    // ships a no-company variant of its sentence — leaves this element
-    // unhidden with nothing in it. The empty case is suppressed in CSS
-    // instead (`.twoinc-company-tile-label:empty`), because an empty label
-    // with the rule's 12px margins would otherwise push the notice down by
-    // 24px for no visible reason. Keeping that out of the JS is what makes
-    // "shown exactly when the notice is shown" literally true of this line,
-    // with the no-content case handled as the rendering detail it is.
-    $label.toggleClass("hidden", !twoincDomHelper.isIntentNoticeVisible());
   },
 
   /**

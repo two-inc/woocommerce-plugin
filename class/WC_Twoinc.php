@@ -273,6 +273,25 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
+         * Where the ONE company-search control (§1-§4) renders (TWO-25326
+         * §7.1). Never "on vs off" — the control always exists; this only
+         * decides its location:
+         *   - 'address_area' (default): renders in the billing address form,
+         *     exactly as before this setting existed. The payment tile then
+         *     shows only the intent message (§7.2/§7.3).
+         *   - 'payment_tile': the SAME control (fields, JS, dropdown) is
+         *     relocated into the payment tile instead — see
+         *     twoincDomHelper.syncCompanySearchTileLocation() in twoinc.js.
+         *
+         * @return string 'address_area' or 'payment_tile'
+         */
+        public function get_company_search_location(): string
+        {
+            $location = $this->get_option('company_search_location');
+            return $location === 'payment_tile' ? 'payment_tile' : 'address_area';
+        }
+
+        /**
          * The decoded GET /v1/merchant/{id} record, fetched at most once
          * per PHP request — the memo covers failures too, so a hanging API
          * costs a single capped stall per request instead of one per
@@ -831,12 +850,23 @@ if (!class_exists('WC_Twoinc')) {
          *     the company-name variant's sprintf template.
          *
          * Two placeholders, in this order: %1$s is the brand product name,
-         * substituted here; %2$s is the buyer's company name, which only
+         * substituted here; %2$s is the buyer's captured company, which only
          * the browser knows, so it is emitted as a token on
-         * data-company-template for the checkout JS to substitute at
-         * unhide time. The div's own text is the no-company variant, so a
-         * buyer whose company is unknown (or whose JS never runs) still
-         * reads a complete sentence.
+         * data-company-template for the checkout JS to substitute at unhide
+         * time. As of TWO-25326 §7.3 that token stands for the WHOLE
+         * "<name> (<number>)" chunk (or bare name with no number, e.g. manual
+         * entry) — twoinc.js builds that string the same way the old,
+         * now-removed `.twoinc-company-tile-label` used to, and substitutes
+         * it wherever this token lands, so the tile no longer needs a
+         * standalone label element to carry the company at all. The div's
+         * own text is the no-company variant, so a buyer whose company is
+         * unknown (or whose JS never runs) still reads a complete sentence.
+         *
+         * A brand's own override template still works unchanged: it keeps
+         * its own wording and its own %1$s product name, and only needs to
+         * place %2$s somewhere in its sentence to get the same company
+         * substitution (§7.4) — nothing here special-cases the default copy
+         * over a brand's.
          *
          * @param bool $notice_enabled resolved once per render by the caller
          *                             (see get_intent_loader_html()).
@@ -849,10 +879,13 @@ if (!class_exists('WC_Twoinc')) {
 
             $template = WC_Twoinc_Brand::get('intent_approved_notice');
             if (!is_string($template) || trim($template) === '') {
-                $template = __(
-                    'Your invoice with %1$s is likely to be accepted for %2$s, subject to additional checks.',
-                    'twoinc-payment-gateway'
-                );
+                // TWO-25326 §7.3: the company (name + number, formatted by
+                // twoinc.js) sits directly in the sentence now, replacing the
+                // standalone tile label. "subject to additional checks" is
+                // dropped from this variant per the ruling's literal wording;
+                // it stays in the no-company fallback below, which the
+                // ruling does not cover.
+                $template = __('This order by %2$s is likely to be accepted by %1$s', 'twoinc-payment-gateway');
             }
 
             $product_name = WC_Twoinc_Brand::get('product_name');
@@ -871,6 +904,39 @@ if (!class_exists('WC_Twoinc')) {
                 esc_attr($with_company),
                 esc_html($without_company)
             );
+        }
+
+        /**
+         * Buyer-facing notice shown when order intent is NOT approved (or no
+         * intent check has run) — the `.twoinc-err-payment-default` block
+         * (TWO-25326 §7.3, added 2026-08-03).
+         *
+         * Unlike the approved notice above, this box is NEVER gated on
+         * 'intent_approved_notice_enabled' (TWO-25224: "a merchant who wants
+         * no reassurance still needs failures surfaced") — it always renders,
+         * brand suppression or not, so its default text argument is used
+         * directly as a fallback rather than routed through an early return.
+         *
+         * Same token mechanism as get_intent_approved_notice(): %1$s is the
+         * brand product name, %2$s is the company token twoinc.js substitutes
+         * with the same "<name> (<number>)" (or bare name) string. A brand
+         * may override the template via 'intent_declined_notice', mirroring
+         * 'intent_approved_notice' — absent/empty means the platform default.
+         *
+         * @return string sprintf template with %1$s and the company TOKEN,
+         *                 ready for esc_attr() into data-company-template.
+         */
+        private function get_intent_declined_notice_template(): string
+        {
+            $template = WC_Twoinc_Brand::get('intent_declined_notice');
+            if (!is_string($template) || trim($template) === '') {
+                // TWO-25326 §7.3 literal wording: "<product> is not available
+                // for this order by <name> (<number>)".
+                $template = __('%1$s is not available for this order by %2$s', 'twoinc-payment-gateway');
+            }
+
+            $product_name = WC_Twoinc_Brand::get('product_name');
+            return sprintf($template, $product_name, self::INTENT_NOTICE_COMPANY_TOKEN);
         }
 
         /**
@@ -917,40 +983,24 @@ if (!class_exists('WC_Twoinc')) {
             // would report an invalid brand value twice per render.
             $notice_enabled = $this->is_intent_approved_notice_enabled();
 
-            // The captured company, as `<name> (<number>)` (TWO-25326 §7).
+            // The standalone `<name> (<number>)` tile label is REMOVED
+            // (TWO-25326 §7.2/§7.3, ruling 2026-08-03). The company now lives
+            // only inside the intent-approved/declined sentences themselves
+            // (get_intent_approved_notice() / get_intent_declined_notice_template()
+            // above), never as a separate element — see those methods' doc
+            // comments for the token mechanism that replaces it.
             //
-            // Position is the ticket's, read literally: "between the chips and
-            // the intent message (if rendered) or else the optional fields".
-            // On WooCommerce the fallback half of that has no referent — the
-            // optional fields (invoice email, project, department) are billing
-            // form fields, not tile content — so the only anchor that exists
-            // here is the intent message, and this sits immediately before the
-            // intent loader/notice pair.
-            //
-            // Empty and `hidden` on render, filled by renderCompanyTileLabel()
-            // in twoinc.js. Server-side it cannot be filled at all: the
-            // captured company is chosen client-side after this markup is
-            // generated, and this same block is re-rendered by every
-            // `update_checkout` regardless of whether a company was picked.
-            //
-            // Suppressed with the notice (TWO-25326 §7, revised 2026-08-03).
-            // The label's visibility now mirrors the intent-approved notice's
-            // exactly, so on a brand with 'intent_approved_notice_enabled'
-            // false there is no state in which this container can ever be
-            // shown — shipping it anyway would be markup that only ever sits
-            // empty and hidden. This is the same reasoning TWO-25224 already
-            // applied to the intent loader, and it puts the label inside the
-            // one reassurance pass the notice switch governs. twoinc.js does
-            // not rely on the suppression (its gate reads the notice element,
-            // and an absent notice reads as hidden) — the two agree because
-            // they are the same rule, which is the point.
-            //
-            // A <div>, not a <p>: some themes give `.payment_box p` its own
-            // margins, and this must not pick up spacing the chips and notices
-            // around it do not have.
-            $company_label = $notice_enabled
-                ? '<div class="twoinc-company-tile-label hidden"></div>'
-                : '';
+            // The tile-location slot below is new (§7.1): empty and hidden by
+            // default (setting = 'address_area', the unchanged behaviour).
+            // When the merchant sets 'company_search_location' to
+            // 'payment_tile', twoinc.js relocates the SAME company-search
+            // control (the real billing_company/billing_company_display/
+            // company_id fields, moved, not cloned) into this slot — see
+            // twoincDomHelper.syncCompanySearchTileLocation(). Always rendered
+            // (a hidden empty div is cheap) so the JS never has to special-case
+            // "the slot doesn't exist yet" against "the setting is off".
+            $company_search_tile_slot = '<div class="twoinc-company-search-tile-slot hidden"></div>';
+
             return sprintf(
                 '<div>
                     %s
@@ -960,13 +1010,14 @@ if (!class_exists('WC_Twoinc')) {
                     %s
                     %s
                     %s
-                    <div class="twoinc-pay-box twoinc-err-payment-default hidden">%s</div>
+                    <div class="twoinc-pay-box twoinc-err-payment-default hidden" data-company-template="%s">%s</div>
                     <div class="twoinc-pay-box twoinc-err-phone-number hidden">%s</div>
                 </div>',
                 $term_input,
-                $company_label,
+                $company_search_tile_slot,
                 $this->get_intent_loader_html($notice_enabled),
                 $this->get_intent_approved_notice($notice_enabled),
+                esc_attr($this->get_intent_declined_notice_template()),
                 sprintf(__('Invoice purchase with %s is not available for this order.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')),
                 __('Phone number is invalid.', 'twoinc-payment-gateway')
             );
@@ -3884,6 +3935,17 @@ if (!class_exists('WC_Twoinc')) {
                     'label'       => ' ',
                     'type'        => 'checkbox',
                     'default'     => 'yes'
+                ],
+                'company_search_location' => [
+                    'title'       => __('Company search location', 'twoinc-payment-gateway'),
+                    'description' => __('Where the company search control renders: in the address area (as part of the billing form), or inside the Two payment tile itself. Either way it is the same control — this only decides where it appears.', 'twoinc-payment-gateway'),
+                    'desc_tip'    => true,
+                    'type'        => 'select',
+                    'options'     => [
+                        'address_area' => __('Address area', 'twoinc-payment-gateway'),
+                        'payment_tile' => __('Payment tile', 'twoinc-payment-gateway'),
+                    ],
+                    'default'     => 'address_area'
                 ],
                 // No sole-trader section: sole trader checkout is gated on the
                 // registry's answer for the billing country alone, with no

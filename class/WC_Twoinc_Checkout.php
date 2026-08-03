@@ -390,6 +390,8 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 'twoinc_checkout_host' => $this->wc_twoinc->get_twoinc_checkout_host(),
                 'enable_company_search' => $this->wc_twoinc->get_enable_company_search(),
                 'enable_company_search_for_others' => $this->wc_twoinc->get_option('enable_company_search_for_others'),
+                // TWO-25326 §7.1: where the one company-search control renders.
+                'company_search_location' => $this->wc_twoinc->get_company_search_location(),
                 'enable_address_lookup' => $this->wc_twoinc->get_option('enable_address_lookup'),
                 'enable_order_intent' => $this->wc_twoinc->get_option('enable_order_intent'),
                 'display_tooltips' => $this->wc_twoinc->get_option('display_tooltips'),
