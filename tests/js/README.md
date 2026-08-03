@@ -347,18 +347,33 @@ holds a string; and **whitespace** in either direction — the record picks it u
 blur handler storing what the field holds, the DOM from a paste into `#company_id` or a trailing
 space typed into `#billing_company` with no blur behind it.
 
-Mutation state, stated as a scope rather than a bare count, because "exactly one survivor" was
-claimed here twice while the harness simply had not covered the rest: of 25 mutations aimed at
-this change, 22 are caught by the test named in the mutation, and **three survive, each documented
-in the code beside it** — `capturedCountry` left un-normalised (equivalent: country values are
-unpadded upper-case ISO strings on both sides, and the `.toUpperCase()` that does matter is
-tested); `country_prefix: country` swapped for a fresh `currentCountry()` read (indistinguishable
-today, written as the argument so the pairing is provably against the value the change was
-detected on); and a `domName || recordedName` fallback in the re-sync (dead, because the condition
-guarantees a non-empty name — and actively wrong if it were reachable, since it would pair one
-company's name with another's number). The blur handler storing raw is a fourth deliberate,
-documented choice rather than an oversight: normalising on the way in would change the
-organisation number the plugin posts on the order intent, which nothing here asked for.
+Mutation state is stated as a scope rather than a bare count, because a count was claimed here
+wrongly three times running — twice as "exactly one survivor", then as three — each time
+describing the harness rather than the code. Every mutation aimed at this change is either caught
+by the test named in the mutation, or is one of the following, each with its reason written into
+the code beside it:
+
+- `capturedCountry` left un-normalised — equivalent: country values are unpadded upper-case ISO
+  strings on both sides. The `.toUpperCase()` that _does_ matter, because two readers disagree
+  about it, is tested.
+- `country_prefix: country` swapped for a fresh `currentCountry()` read — indistinguishable
+  today; written as the argument so the pairing is provably against the value the change was
+  detected on.
+- `domName || recordedName` in the re-sync — dead, because the condition guarantees a non-empty
+  name, and actively wrong if it were reachable, since it would pair one company's name with
+  another's number.
+- `!country` in the early guard — unreachable from the only caller, because `countryDidChange`
+  already refuses an empty reading. Kept as the guard a second caller would need. Only the
+  captured side of "an unknown country on either side" is actually tested.
+- `this.customerCompany || {}` — equivalent: the property is an object from construction onward,
+  and `clearSelectedCompany` sets `{}` rather than null.
+- The blur handler storing the raw field value — a deliberate choice, not an oversight:
+  normalising on the way in would change the organisation number the plugin posts on the order
+  intent, which nothing here asked for.
+
+The re-sync branch's own stored values are a different matter and _are_ pinned: once the branch
+has decided the DOM holds a different company, what it stores is what `getApproval()` posts inside
+`buyer.company`, so padding there would reach the order intent verbatim.
 
 The both-mirrors rule holds on WooCommerce's own re-render paths for a concrete reason worth
 knowing: `#company_id` is a registered billing field (`$fields['billing']['company_id']` in

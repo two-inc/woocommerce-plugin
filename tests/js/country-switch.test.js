@@ -652,6 +652,25 @@ describe("billing country switch", () => {
       expect(ctx.Twoinc.getInstance().customerCompany.company_name).toBe("Ejemplo SL");
     });
 
+    test("the re-synced record holds trimmed values, which are what get posted", () => {
+      // Not the same assertion as "padding is not read as divergence" above.
+      // Once the branch HAS decided the DOM holds a different company, what it
+      // stores is what `getApproval()` posts inside `buyer.company` — so a
+      // padded field value would reach the order intent verbatim. The opposite
+      // direction from the blur handler's deliberate raw store, and unlike that
+      // one this is observable and therefore pinned.
+      addAddressFields();
+      initializeCheckout();
+      captureCompany("Example Co", "123456789", "GB");
+
+      ctx.$("#billing_company").val("  Ejemplo SL  ");
+      ctx.$("#company_id").val("  B12345678  ");
+      moveCountrySilently("ES");
+
+      expect(ctx.Twoinc.getInstance().customerCompany.organization_number).toBe("B12345678");
+      expect(ctx.Twoinc.getInstance().customerCompany.company_name).toBe("Ejemplo SL");
+    });
+
     test("clears when only the NUMBER diverged — a keystroke, not a restore", () => {
       // Fail-closed, and the reason the discriminator needs both halves. A
       // buyer typing into #company_id without blurring diverges the number

@@ -4355,6 +4355,11 @@ class Twoinc {
     if (!company.organization_number) return;
 
     const capturedCountry = twoincUtilHelper.blankToEmpty(company.country_prefix).toUpperCase();
+    // `!country` is unreachable from the only caller today and no test covers
+    // it: `countryDidChange` already returns false on an empty reading, so this
+    // is never entered with one. Kept as the guard a second caller would need,
+    // and said out loud so the docblock's "an unknown country on either side"
+    // is not read as two tested readings when only the captured side is.
     if (!country || !capturedCountry || capturedCountry === country) return;
 
     // Every comparison below goes through `blankToEmpty`, which normalises
