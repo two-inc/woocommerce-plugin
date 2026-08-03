@@ -3612,9 +3612,92 @@ class Twoinc {
       twoincSelectWooHelper.waitToFocus("billing_country");
     });
 
-    // Enable company search
+    // Enable company search, then again on a delay to catch a billing fragment
+    // that WooCommerce had not rendered yet when initialize() ran. This retry is
+    // the only one this code owns: `updated_checkout` re-syncs plenty of other
+    // state but does not re-attach the picker itself. The other callers of
+    // enableCompanySearch are the manual-entry exit and the sole-trader mode
+    // switch — so a checkout whose deferred pass misses can still be recovered
+    // by going through one of those, but nothing here is aiming for that, and it
+    // is not a path to rely on. Treat this timer as the one that has to work.
+    //
+    // Wrapped rather than passed by reference (TWO-25337). `setTimeout` invokes
+    // a bare method reference with the GLOBAL as its receiver: the timer steps
+    // supply `window` as the callback's this-value, and a strict-mode class body
+    // does not change that, because the global is only substituted for a
+    // null/undefined receiver in sloppy mode and here a receiver was passed. So
+    // `this` inside enableCompanySearch was `window`, and the deferred pass
+    // wrote its `billingCompanySelect` onto `window` rather than onto this
+    // instance.
+    //
+    // That did NOT throw and did not break the retry: nothing outside
+    // enableCompanySearch reads `billingCompanySelect`, so the widget still
+    // attached, and every other lookup in there goes through the DOM or
+    // `Twoinc.getInstance()`. What it left behind was a live selectWoo object on
+    // `window`, plus an instance property still holding whatever the
+    // synchronous pass wrote. Note what that value is, because it is NOT null:
+    // `.selectWoo()` on an empty jQuery set returns that same empty set. So in
+    // the late-render case this timer exists for, the property held a truthy
+    // empty set — a widget-shaped object wrapping no element, which is worse
+    // than null for anyone testing it for presence. (`null` survives only when
+    // company search is off, where the early return sits above the assignment.)
+    // The first reader of `this.billingCompanySelect` after a deferred
+    // re-attach would get that stale value, which is the trap
+    // `clearSelectedCompany` already avoids by looking the widget up from the
+    // DOM instead.
+    //
+    // Verified in real Chromium rather than reasoned about: the receiver is
+    // `window`, the assignment succeeds, and the console stays clean. Under
+    // Jest's fake timers the same call throws instead, because Sinon invokes
+    // the callback with `null` rather than the global — so the suite sees a
+    // TypeError that no browser ever produces. Do not restate that TypeError as
+    // production behaviour; it is a test-harness artefact.
+    //
+    // NOT fixed here, and not caused here: the deferred re-run leaves the
+    // picker's own `select2:select` / `select2:open` handlers DUPLICATED. Those
+    // are bound unnamespaced with no preceding `.off()`, and selectWoo's re-init
+    // destroys the previous instance with `.off(".select2")`, which cannot match
+    // them — so after the retry a single pick runs the whole select body twice.
+    //
+    // What that costs, per handler, neither overstated nor waved away. The
+    // `select2:select` copy is the one that costs anything.
+    //
+    // From the duplicated `select2:select`: `renderCompanySummary()` and
+    // `togglePaySubtitleDesc()` genuinely run twice, and `addressLookup()` does
+    // too when address lookup is enabled. The DOM and `customerCompany` writes
+    // are idempotent — same data both times. `getApproval()` costs nothing: the
+    // second entry finds `orderIntentCheck.interval` already set, flags
+    // `pendingCheck` and returns, and that flag cannot buy a later extra round
+    // either, because `pendingCheck` is only ever set inside that same guard and
+    // every site that nulls `interval` clears it in the same block — so the 3s
+    // poller only sees it set while the interval is still running, and the call
+    // it makes re-enters the guard and returns. The duplicate is simply dropped.
+    //
+    // From the duplicated `select2:open`: very little, and specifically NOT a
+    // pair of racing focus pollers. `addSelectWooFocusFixHandler` is idempotent
+    // (it guards on its own `two-focused-handler` attribute), and while
+    // `waitToFocus` has no dedupe, the arguments this site passes it —
+    // `("billing_company_display", null, null)` — defeat its own defaults: it
+    // guards them with `isNaN`, and `isNaN(null)` is false, so `hitsRequired`
+    // stays null and `attemptsLeft` becomes `null * 8`, i.e. 0. The interval
+    // clears itself on its first tick. Duplicating it therefore costs two
+    // single-shot focus nudges, each already a no-op when the input is focused.
+    //
+    // One stale figure to distrust while reading around this:
+    // `focusStillWithinCompanySearch`'s docblock says the poll can nudge "up to
+    // ~4.8s from `select2:open`", which is 2 x 8 x 300ms — the numbers you get by
+    // assuming those `isNaN` defaults apply. They do not apply to this call site,
+    // so that bound does not describe it. Left as-is rather than corrected here
+    // because it belongs with the `waitToFocus` work in TWO-25338, but do not
+    // take it as evidence of a focus race on the company picker.
+    //
+    // Pre-existing and unchanged by this commit: the retry ran on a live widget
+    // before it too, only storing its reference elsewhere. Its own ticket,
+    // TWO-25338.
     this.enableCompanySearch();
-    setTimeout(this.enableCompanySearch, 800);
+    setTimeout(function () {
+      self.enableCompanySearch();
+    }, 800);
 
     // Disable or enable actions based on the account type
     $body.on("updated_checkout", Twoinc.getInstance().onUpdatedCheckout);

@@ -15,10 +15,12 @@ module.exports = {
   rootDir: "../..",
   testMatch: ["<rootDir>/tests/js/**/*.test.js"],
   testEnvironment: "jsdom",
-  // The suite uses no jest mocks today — it stubs jQuery.ajax by hand and
-  // restores it in afterEach. These are the net for the first test that
-  // reaches for jest.spyOn, since a leaked spy on a shared helper object fails
-  // somewhere other than where it was created.
+  // Most of the suite stubs jQuery.ajax by hand and restores it in afterEach.
+  // These two are the net under the tests that do reach for jest.spyOn — the
+  // deferred-init suite spies on `Twoinc.prototype.enableCompanySearch` — since
+  // a leaked spy on a shared prototype or helper object fails somewhere other
+  // than where it was created. Both fire before each test, so a spy created
+  // inside a test body still calls through.
   restoreMocks: true,
   resetMocks: true
 };
