@@ -4130,13 +4130,15 @@ class Twoinc {
       const numberMoved = twoincUtilHelper.blankToEmpty(typed) !== previousNumber;
       // Stored RAW, deliberately. Normalising on the way in was written here
       // first, to remove the asymmetry between this one writer and the readers
-      // that all normalise — and then reverted: no test could tell the
-      // difference, because the discriminator normalises the recorded value
-      // anyway and that normalisation IS tested. It would also have changed the
-      // organisation number this plugin POSTS on the order intent, which is a
-      // behaviour change nothing in this ticket asked for. The record may hold
-      // an unnormalised value; that is precisely why every comparison against
-      // it goes through `blankToEmpty` rather than trusting its shape.
+      // that all normalise — and then reverted, because it would have changed
+      // the organisation number this plugin POSTS on the order intent
+      // (`customerCompany` goes into `buyer.company` verbatim in getApproval),
+      // which is a behaviour change nothing in this ticket asked for. No test in
+      // this suite distinguishes the two, and that is a consequence of the
+      // choice rather than a justification for it — a test trivially could,
+      // by asserting the stored value keeps its padding. The record may hold an
+      // unnormalised value; that is precisely why every comparison against it
+      // goes through `blankToEmpty` rather than trusting its shape.
       Twoinc.getInstance().customerCompany.organization_number = typed;
       if (numberMoved && twoincUtilHelper.blankToEmpty(typed)) {
         Twoinc.getInstance().customerCompany.country_prefix =
@@ -4416,11 +4418,12 @@ class Twoinc {
     // `clearSelectedCompany` and `enterManualCompanyEntry` already treat as
     // authoritative.
     //
-    // Normalising the RECORDED values is load-bearing, not defence in depth —
-    // an earlier version of this comment claimed the name condition made it
-    // unreachable and that was wrong, so both halves now have their own test.
-    // Two reachable ways the record diverges from the DOM by representation
-    // alone, while the name has genuinely moved:
+    // Normalising is load-bearing on ALL FOUR values, not defence in depth — an
+    // earlier version of this comment claimed the name condition made the
+    // recorded number's normalisation unreachable, and that was wrong twice
+    // over, so each of the four now has its own test. Reachable ways a value
+    // diverges from its counterpart by representation alone, while the other
+    // mirror has genuinely moved:
     //
     //   - Type. `twoincSoleTrader.setCompany()` writes the organisation number
     //     straight out of parsed JSON, so the record can hold the NUMBER
@@ -4429,12 +4432,26 @@ class Twoinc {
     //     `#company_id` alone, and an un-normalised compare takes the re-sync
     //     branch and launders a GB-captured number into a self-consistent ES
     //     pair.
-    //   - Whitespace, on either side, which this file produces itself: the
-    //     manual blur handler stores what the field holds.
+    //   - Whitespace, on either side and in either direction. The record picks
+    //     it up because the manual blur handler stores what the field holds;
+    //     the DOM picks it up from a paste into `#company_id` or a trailing
+    //     space typed into `#billing_company` with no blur behind it.
     //
-    // One thing here IS equivalent by construction, and is recorded so the next
-    // reader does not "fix" it into a difference: `company_name: domName` needs
-    // no fallback. The condition guarantees `domName` is non-empty, so
+    // Not normalised, and equivalent by construction: `capturedCountry`. It is
+    // compared against a value `currentCountry()` produced, and WooCommerce's
+    // country values are unpadded upper-case ISO strings on both sides — the
+    // `.toUpperCase()` there is about the two READERS disagreeing, which is a
+    // real difference and is tested.
+    //
+    // `country_prefix: country` rather than a fresh `currentCountry()` read is
+    // also indistinguishable today — the caller took `country` from that same
+    // reader on this same tick. Written as the argument anyway, so the value
+    // this pairs the company with is provably the one the change was detected
+    // against rather than whatever the field says by the time this line runs.
+    //
+    // Also equivalent by construction, recorded so the next reader does not
+    // "fix" it into a difference: `company_name: domName` needs no fallback.
+    // The condition guarantees `domName` is non-empty, so
     // `domName || recordedName` is dead — and worse than dead, because falling
     // back to the record's name would pair company A's name with company B's
     // number, the two-moment pair this whole function exists to prevent.

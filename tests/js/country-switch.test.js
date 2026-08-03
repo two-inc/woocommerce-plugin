@@ -762,6 +762,38 @@ describe("billing country switch", () => {
       expect(capturedCompany()).toEqual({ name: "", id: "" });
     });
 
+    test("a whitespace-padded DOM number is not read as diverged", () => {
+      // The DOM side of the same normalisation, and it needed its own test for
+      // the same reason the record side did: the reasoning applies identically
+      // to both, so testing only one left half the guard resting on an
+      // assumption. A buyer pasting a padded number into #company_id without
+      // blurring leaves the record holding the picker's clean value, so an
+      // un-normalised compare reads it as a different company — and with the
+      // name moved by a re-render, launders the GB capture into an ES pair.
+      addAddressFields();
+      initializeCheckout();
+      captureCompany("Example Co", "123456789", "GB");
+
+      ctx.$("#company_id").val("  123456789  ");
+      ctx.$("#billing_company").val("Other Saved Ltd");
+      moveCountrySilently("ES");
+
+      expect(capturedCompany()).toEqual({ name: "", id: "" });
+    });
+
+    test("a whitespace-padded DOM name is not read as diverged", () => {
+      // The mirror of the above, on the name half.
+      addAddressFields();
+      initializeCheckout();
+      captureCompany("Example Co", "123456789", "GB");
+
+      ctx.$("#billing_company").val("  Example Co  ");
+      ctx.$("#company_id").val("B12345678");
+      moveCountrySilently("ES");
+
+      expect(capturedCompany()).toEqual({ name: "", id: "" });
+    });
+
     test("a numeric organisation number is not read as a different company", () => {
       // `organization_number` is seeded null and written from parsed JSON by
       // the sole-trader prefill, so it is not guaranteed to be a string while

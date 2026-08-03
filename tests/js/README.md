@@ -337,21 +337,28 @@ about the company-search helper, so the bootstrap is left to no-op.
   a value differing only by stray whitespace, and emptying a populated number (which is not a
   capture and must leave no witness claiming one).
 
-Normalising the **recorded** values is load-bearing rather than defensive, and an earlier version
-of this note claimed otherwise. Two reachable ways the record diverges from the DOM by
-representation alone while the name has genuinely moved, each with its own test: the type, because
-`twoincSoleTrader.setCompany()` writes the organisation number straight out of parsed JSON so the
-record can hold a number where the field holds a string; and whitespace, which the manual blur
-handler produces itself by storing what the field holds. The blur handler storing raw is
-deliberate — normalising on the way in was written and then reverted, because no test could tell
-the difference and it would have changed the organisation number the plugin posts on the order
-intent, which nothing here asked for.
+Normalising is load-bearing on **all four** compared values, not defensive, and two earlier
+versions of this note claimed otherwise — first that the recorded number's normaliser was
+unreachable, then that only the record side mattered. Each of the four now has its own test.
+Reachable ways one value diverges from its counterpart by representation alone while the other
+mirror has genuinely moved: the **type**, because `twoincSoleTrader.setCompany()` writes the
+organisation number straight out of parsed JSON so the record can hold a number where the field
+holds a string; and **whitespace** in either direction — the record picks it up from the manual
+blur handler storing what the field holds, the DOM from a paste into `#company_id` or a trailing
+space typed into `#billing_company` with no blur behind it.
 
-Exactly **one** mutation in this area deliberately survives, and the reason is written into the
-code next to it: a `domName || recordedName` fallback in the re-sync is dead, because the
-condition guarantees the name is non-empty — and would be actively wrong if it were reachable,
-since it would pair one company's name with another's number. Recorded so the next reader does
-not "fix" it into a difference.
+Mutation state, stated as a scope rather than a bare count, because "exactly one survivor" was
+claimed here twice while the harness simply had not covered the rest: of 25 mutations aimed at
+this change, 22 are caught by the test named in the mutation, and **three survive, each documented
+in the code beside it** — `capturedCountry` left un-normalised (equivalent: country values are
+unpadded upper-case ISO strings on both sides, and the `.toUpperCase()` that does matter is
+tested); `country_prefix: country` swapped for a fresh `currentCountry()` read (indistinguishable
+today, written as the argument so the pairing is provably against the value the change was
+detected on); and a `domName || recordedName` fallback in the re-sync (dead, because the condition
+guarantees a non-empty name — and actively wrong if it were reachable, since it would pair one
+company's name with another's number). The blur handler storing raw is a fourth deliberate,
+documented choice rather than an oversight: normalising on the way in would change the
+organisation number the plugin posts on the order intent, which nothing here asked for.
 
 The both-mirrors rule holds on WooCommerce's own re-render paths for a concrete reason worth
 knowing: `#company_id` is a registered billing field (`$fields['billing']['company_id']` in
