@@ -888,6 +888,13 @@ describe("read-only captured-company summary", () => {
       expect(intentShown()).toBe(true);
       expect(tileLabel().text()).toBe("");
 
+      // The element is deliberately NOT hidden here — that is the whole reason
+      // the CSS rule below has to exist. Asserted rather than left implied
+      // (round 1 review): without it this test would still pass against an
+      // implementation that quietly and-ed the text back into the JS gate, and
+      // the CSS assertion underneath would then be guarding nothing.
+      expect(tileLabelShown()).toBe(true);
+
       const empty = /\.twoinc-company-tile-label:empty\s*\{([^}]*)\}/.exec(stylesheetSource());
       expect(empty).not.toBeNull();
       expect(empty[1]).toMatch(/display:\s*none/);
