@@ -262,14 +262,19 @@ about the company-search helper, so the bootstrap is left to no-op.
   and leaves the new `country_prefix` on `customerCompany` — set _after_ `clearSelectedCompany()`,
   which resets that object wholesale and only re-reads it from the DOM three seconds later.
 - **the tracker cannot drift from the field**, which is the failure mode the guard buys and
-  therefore the one this suite spends most of its assertions on. Five separate ways it could:
+  therefore the one this suite spends most of its assertions on. Seven separate ways it could:
   `initialize()` seeds it, and the seed is what makes a genuine FIRST change act rather than
-  be adopted; the first country the page ever sees (billing fields rendering after
-  `initialize()` has run) is adopted, not acted on; an empty reading — WooCommerce replacing
-  `#billing_country` wholesale mid-re-render — is neither acted on _nor recorded_, so the
-  switch that completes afterwards still acts; `updated_checkout` re-syncs a country that
-  moved with no `change` event at all; and that re-sync terminates rather than looping,
-  because a real change there reaches `setAddress()`, which triggers `update_checkout`.
+  be adopted; the seed is taken _after_ `loadStorageInputs()`, which writes the country with
+  `selectElem.value` and fires no `change` — seeded before it, the first re-render read the
+  restore as a real country change and destroyed the company that restore had just put back
+  (`initialize(true)` is the bootstrap's own call, so that was the production path); the first
+  country the page ever sees (billing fields rendering after `initialize()` has run) is
+  adopted, not acted on; an empty reading — WooCommerce replacing `#billing_country` wholesale
+  mid-re-render — is neither acted on _nor recorded_, so the switch that completes afterwards
+  still acts; `updated_checkout` **records** a country that moved with no `change` event;
+  it records **without** clearing the capture, because those re-renders restore the country and
+  the company together and clearing would destroy what they just restored; and the recording
+  path cannot loop, even though a change reaching `setAddress()` triggers `update_checkout`.
 - **the whole suite drives the real wiring**: a real `initialize(false)`, then
   `trigger("change")` on the field, so unwiring the delegated binding or moving the seed out
   of `initialize()`'s reach fails it. `afterEach` unbinds `document.body` — jsdom's document
@@ -283,9 +288,10 @@ about the company-search helper, so the bootstrap is left to no-op.
   the country snapshot taken when the request was issued. Both are needed and both are pinned
   separately — a country written programmatically fires no `change`, so nothing bumps the
   sequence, and a country switched away and back leaves the sequence stale but the country
-  matching. A third case, the country reading back empty mid-replacement, is deliberately
-  NOT a mismatch — dropping a good registry address there would be a silent failure with no
-  retry. The happy path is pinned too, so the guard cannot be tightened into a no-op.
+  matching. An empty reading on _either_ side is deliberately NOT a mismatch — dropping a good
+  registry address there would be a silent failure with no retry, and a lookup issued during a
+  replacement snapshots `""`, which compared against a known country would discard every
+  response. The happy path is pinned too, so the guard cannot be tightened into a no-op.
 
 One line in this change is deliberately uncovered and says so in its own comment: the
 spinner hand-off in the country handler. Nothing reachable fails without it — what clears
