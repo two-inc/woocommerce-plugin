@@ -4128,6 +4128,15 @@ class Twoinc {
         Twoinc.getInstance().customerCompany.organization_number
       );
       const numberMoved = twoincUtilHelper.blankToEmpty(typed) !== previousNumber;
+      // Stored RAW, deliberately. Normalising on the way in was written here
+      // first, to remove the asymmetry between this one writer and the readers
+      // that all normalise — and then reverted: no test could tell the
+      // difference, because the discriminator normalises the recorded value
+      // anyway and that normalisation IS tested. It would also have changed the
+      // organisation number this plugin POSTS on the order intent, which is a
+      // behaviour change nothing in this ticket asked for. The record may hold
+      // an unnormalised value; that is precisely why every comparison against
+      // it goes through `blankToEmpty` rather than trusting its shape.
       Twoinc.getInstance().customerCompany.organization_number = typed;
       if (numberMoved && twoincUtilHelper.blankToEmpty(typed)) {
         Twoinc.getInstance().customerCompany.country_prefix =
@@ -4372,8 +4381,20 @@ class Twoinc {
     // branch then pinned the new country onto a number no capture path had
     // witnessed, next to the PREVIOUS company's name — a two-moment pair made
     // self-consistent, which is the exact defect this function exists to catch.
-    // Requiring the name to have moved too is what separates a restore (which
-    // writes both mirrors) from a keystroke (which writes one).
+    //
+    // What the rule actually tests is "both mirrors changed", not "restore
+    // versus keystroke" — the two are not the same thing and the difference
+    // matters to whoever reads this next. A genuine restore of a DIFFERENT
+    // company that happens to carry the SAME name (group entities trading
+    // under one name) reads as one mirror moving and is cleared. Accepted:
+    // rare, fail-closed, and the buyer re-picks.
+    //
+    // The rule holds on WooCommerce's own re-render paths because `#company_id`
+    // is a registered billing field (`$fields['billing']['company_id']` in
+    // WC_Twoinc_Checkout), so it lives in the same billing fragment as
+    // `#billing_company` and every WC-driven re-render writes both from the
+    // same vintage. One mirror moving alone is therefore evidence of something
+    // other than a re-render.
     //
     // Anything else falls through to the clear, deliberately fail-CLOSED. In
     // particular a diverged number with an EMPTY `#billing_company` is NOT
@@ -4395,22 +4416,28 @@ class Twoinc {
     // `clearSelectedCompany` and `enterManualCompanyEntry` already treat as
     // authoritative.
     //
-    // Two things here are deliberately NOT independently covered, because no
-    // reachable case can distinguish them — recorded rather than left for the
-    // next reader to "fix" into a difference:
+    // Normalising the RECORDED values is load-bearing, not defence in depth —
+    // an earlier version of this comment claimed the name condition made it
+    // unreachable and that was wrong, so both halves now have their own test.
+    // Two reachable ways the record diverges from the DOM by representation
+    // alone, while the name has genuinely moved:
     //
-    //   - Normalising `recordedNumber` is defence in depth, not an independent
-    //     guard. A number-vs-string mismatch on its own cannot reach the
-    //     re-sync, because the name condition rejects it first; it would take a
-    //     re-render that moved the name while leaving a numerically identical
-    //     but differently typed number. Kept because all four values go through
-    //     the same normaliser and making one of them the exception is how the
-    //     next type mismatch gets in.
-    //   - `company_name: domName` needs no fallback. The condition guarantees
-    //     `domName` is non-empty, so `domName || recordedName` would be dead —
-    //     and worse than dead: falling back to the record's name would pair
-    //     company A's name with company B's number, which is the two-moment
-    //     pair this whole function exists to prevent.
+    //   - Type. `twoincSoleTrader.setCompany()` writes the organisation number
+    //     straight out of parsed JSON, so the record can hold the NUMBER
+    //     123456789 while `#company_id` holds the string "123456789". Add a
+    //     re-render that rewrote `#billing_company` and left the plugin's own
+    //     `#company_id` alone, and an un-normalised compare takes the re-sync
+    //     branch and launders a GB-captured number into a self-consistent ES
+    //     pair.
+    //   - Whitespace, on either side, which this file produces itself: the
+    //     manual blur handler stores what the field holds.
+    //
+    // One thing here IS equivalent by construction, and is recorded so the next
+    // reader does not "fix" it into a difference: `company_name: domName` needs
+    // no fallback. The condition guarantees `domName` is non-empty, so
+    // `domName || recordedName` is dead — and worse than dead, because falling
+    // back to the record's name would pair company A's name with company B's
+    // number, the two-moment pair this whole function exists to prevent.
     if (domNumber && domName && domNumber !== recordedNumber && domName !== recordedName) {
       this.customerCompany = {
         company_name: domName,

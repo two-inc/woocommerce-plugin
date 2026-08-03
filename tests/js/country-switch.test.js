@@ -709,6 +709,59 @@ describe("billing country switch", () => {
       expect(ctx.Twoinc.getInstance().isReadyApprovalCheck()).toBe(false);
     });
 
+    test("a sole-trader numeric number survives a re-render of the NAME alone", () => {
+      // The reachable chain the recorded-number normalisation actually guards,
+      // driven through the real setter rather than by poking the record.
+      // `setCompany` writes the organisation number straight out of parsed
+      // JSON, so the record holds a NUMBER while `#company_id` holds a string.
+      // Then a re-render rewrites WooCommerce's own `#billing_company` and
+      // leaves the plugin's `#company_id` untouched — the mirror asymmetry this
+      // whole ticket is about. Un-normalised, the number reads as diverged, the
+      // name genuinely has diverged, and the re-sync branch launders a
+      // GB-captured number into a self-consistent ES pair with nothing left
+      // downstream to catch it.
+      addAddressFields();
+      initializeCheckout();
+      ctx.soleTrader.setCompany(123456789, "Sole Trader Co");
+      expect(ctx.Twoinc.getInstance().customerCompany.organization_number).toBe(123456789);
+
+      ctx.$("#billing_company").val("Other Saved Ltd");
+      moveCountrySilently("ES");
+
+      expect(ctx.$("#company_id").val()).toBe("");
+      expect(ctx.Twoinc.getInstance().customerCompany.organization_number).toBeFalsy();
+    });
+
+    test("a whitespace-padded recorded number is not read as diverged", () => {
+      // The other representation-only divergence, and one this file produces
+      // itself. Same shape as the test above: the name has genuinely moved, so
+      // only the number comparison stands between a correct clear and a
+      // laundered re-sync.
+      addAddressFields();
+      initializeCheckout();
+      captureCompany("Example Co", "123456789", "GB");
+      ctx.Twoinc.getInstance().customerCompany.organization_number = "  123456789  ";
+
+      ctx.$("#billing_company").val("Other Saved Ltd");
+      moveCountrySilently("ES");
+
+      expect(capturedCompany()).toEqual({ name: "", id: "" });
+    });
+
+    test("a whitespace-padded recorded NAME is not read as diverged either", () => {
+      // The recorded name goes through the same normaliser, for the same
+      // reason and with the same consequence if it does not.
+      addAddressFields();
+      initializeCheckout();
+      captureCompany("Example Co", "123456789", "GB");
+      ctx.Twoinc.getInstance().customerCompany.company_name = "  Example Co  ";
+
+      ctx.$("#company_id").val("B12345678");
+      moveCountrySilently("ES");
+
+      expect(capturedCompany()).toEqual({ name: "", id: "" });
+    });
+
     test("a numeric organisation number is not read as a different company", () => {
       // `organization_number` is seeded null and written from parsed JSON by
       // the sole-trader prefill, so it is not guaranteed to be a string while
@@ -1001,11 +1054,19 @@ describe("billing country switch", () => {
       expect(ctx.Twoinc.getInstance().customerCompany.country_prefix).toBe("GB");
     });
 
-    test("a blur on an empty untouched field pins nothing", () => {
+    test("a blur on an empty untouched field pins nothing (conjunction)", () => {
       // "" !== null counts as movement without normalisation, so a fresh
       // checkout's first stray blur pinned a country onto a capture that does
       // not exist. Inert downstream, but a witness that looks authoritative and
       // is not is how this class of bug arrives.
+      //
+      // Labelled a CONJUNCTION test on purpose: no single revert breaks it, and
+      // it should not be read as independent coverage of either guard.
+      // Un-normalising `previousNumber` alone is still stopped by the emptiness
+      // check, and dropping the emptiness check alone is still stopped by
+      // `numberMoved` being false. The two tests above cover each guard on its
+      // own; this one covers them holding together on the path a real page
+      // takes first.
       initializeCheckout();
       ctx.$("#billing_country").val("ES");
 

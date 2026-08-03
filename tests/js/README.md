@@ -337,12 +337,27 @@ about the company-search helper, so the bootstrap is left to no-op.
   a value differing only by stray whitespace, and emptying a populated number (which is not a
   capture and must leave no witness claiming one).
 
-Two mutations in this area deliberately **survive**, and the reasons are written into the code
-next to them: normalising the recorded number is defence in depth the name condition already
-covers, so no reachable case can distinguish it; and a `domName || recordedName` fallback in the
-re-sync is dead, because the condition guarantees the name is non-empty — and would be actively
-wrong if it were reachable. They are recorded so the next reader does not "fix" them into a
-difference.
+Normalising the **recorded** values is load-bearing rather than defensive, and an earlier version
+of this note claimed otherwise. Two reachable ways the record diverges from the DOM by
+representation alone while the name has genuinely moved, each with its own test: the type, because
+`twoincSoleTrader.setCompany()` writes the organisation number straight out of parsed JSON so the
+record can hold a number where the field holds a string; and whitespace, which the manual blur
+handler produces itself by storing what the field holds. The blur handler storing raw is
+deliberate — normalising on the way in was written and then reverted, because no test could tell
+the difference and it would have changed the organisation number the plugin posts on the order
+intent, which nothing here asked for.
+
+Exactly **one** mutation in this area deliberately survives, and the reason is written into the
+code next to it: a `domName || recordedName` fallback in the re-sync is dead, because the
+condition guarantees the name is non-empty — and would be actively wrong if it were reachable,
+since it would pair one company's name with another's number. Recorded so the next reader does
+not "fix" it into a difference.
+
+The both-mirrors rule holds on WooCommerce's own re-render paths for a concrete reason worth
+knowing: `#company_id` is a registered billing field (`$fields['billing']['company_id']` in
+`WC_Twoinc_Checkout`), so it sits in the same billing fragment as `#billing_company` and every
+WC-driven re-render writes both from the same vintage. One mirror moving alone is therefore
+evidence of something that is not a re-render.
 
 The clear in manual-entry mode also carries one **characterisation** assertion:
 `clearSelectedCompany` re-attaches selectWoo to `#billing_company_display` unconditionally, so a
