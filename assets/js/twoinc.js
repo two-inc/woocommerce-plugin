@@ -936,6 +936,9 @@ let twoincSelectWooHelper = {
    * supersession check — so those three can never disagree about what "the
    * current country" is.
    *
+   * `twoincSoleTrader.currentCountry()` delegates to this one, so the
+   * per-country availability cache cannot be keyed on a different answer.
+   *
    * NOT the only reader in the file: `getCompanyData()` and
    * `isCountrySupported()` still read `.val()` raw and uncased, so the
    * `country_prefix` this file's handler writes upper-cased is replaced with
@@ -2895,8 +2898,12 @@ let twoincSoleTrader = {
     return (window.twoinc && window.twoinc.sole_trader) || {};
   },
 
+  // Delegated rather than a second copy of the same two lines (TWO-24867):
+  // sole-trader availability is decided per country and cached per country,
+  // so it disagreeing with the country the search and the change guard use
+  // would be a cache keyed on one answer and read with another.
   currentCountry: function () {
-    return (jQuery("#billing_country").val() || "").toUpperCase();
+    return twoincSelectWooHelper.currentCountry();
   },
 
   enteredEmail: function () {
@@ -3561,18 +3568,8 @@ class Twoinc {
       twoincDomHelper.togglePaySubtitleDesc();
     });
 
-    // Handle the country inputs change event.
-    //
-    // Seeded first (TWO-25326 / TWO-24867), through the same single writer
-    // the handler uses. The handler only acts when the value differs from the
-    // last one recorded, and with no seed the FIRST country the page ever
-    // sees is adopted rather than acted on — correct for the re-render event
-    // WooCommerce fires at init (core's address-i18n.js triggers
-    // `country_to_state_changing` carrying the country the form already had),
-    // but wrong for a buyer who changes country before any re-render happens:
-    // their switch would be the first known country and would be swallowed.
-    // Seeding here is what tells those two apart.
-    twoincSelectWooHelper.countryDidChange(twoincSelectWooHelper.currentCountry());
+    // Handle the country inputs change event. The tracker behind it is seeded
+    // at the END of this function, not here — see the comment there.
     $body.on("change", "#billing_country", self.onCountryInputChange);
 
     // Re-evaluate the sole-trader autofill prefetch whenever the email
@@ -3604,6 +3601,29 @@ class Twoinc {
 
     twoincDomHelper.loadUserMetaInputs();
     if (loadSavedInputs) twoincDomHelper.loadStorageInputs();
+
+    // Seed the country tracker HERE — after the two restore passes above, not
+    // next to the binding that reads it (TWO-24867 / TWO-25326).
+    //
+    // `loadStorageInputs()` writes #billing_country with `selectElem.value =`
+    // and fires no `change`. Seeded before it, the tracker held the country
+    // the page was rendered with while the field held the restored one, and
+    // the first re-render afterwards read the difference as a real country
+    // change — destroying the company and address that same restore had just
+    // put back. The bootstrap's own call is `initialize(true)`, so that is the
+    // production path, not an edge case.
+    //
+    // Seeding at all is what tells the two first-event cases apart: with no
+    // seed the FIRST country the page ever sees is adopted rather than acted
+    // on — right for the re-render WooCommerce fires at init (core's
+    // address-i18n.js triggers `country_to_state_changing` carrying the
+    // country the form already had), wrong for a buyer who changes country
+    // before any re-render happens.
+    //
+    // Through `countryDidChange` rather than by assignment, so this file has
+    // exactly one writer for the tracker.
+    twoincSelectWooHelper.countryDidChange(twoincSelectWooHelper.currentCountry());
+
     setTimeout(function () {
       twoincDomHelper.saveCheckoutInputs();
       Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData();
@@ -3840,12 +3860,15 @@ class Twoinc {
     });
     addressResponse.done(function (response) {
       if (seq !== self.addressLookupSeq) return;
-      // An empty reading means the field is mid-replacement, not that the
-      // country moved — discarding a good registry address on it would be a
-      // silent failure with no retry and no message. Only a country that is
-      // known AND different is grounds to drop this.
+      // An empty reading on EITHER side means the field was mid-replacement,
+      // not that the country moved — discarding a good registry address on it
+      // would be a silent failure with no retry and no message. Both sides
+      // matter: a lookup issued during a replacement snapshots "", and
+      // comparing that against a known country would drop every response.
+      // Only two countries that are both known AND different are grounds to
+      // drop this.
       const landedCountry = twoincSelectWooHelper.currentCountry();
-      if (landedCountry && landedCountry !== requestCountry) return;
+      if (requestCountry && landedCountry && landedCountry !== requestCountry) return;
       // Use new address lookup by default
       if (response.addresses) {
         self.setAddress(response.addresses[0]);
@@ -3923,9 +3946,19 @@ class Twoinc {
    * Handle the woocommerce updated checkout event
    */
   onUpdatedCheckout() {
-    // First: a re-render can have moved the billing country without firing a
-    // `change`, and everything below reads state that depends on it.
-    Twoinc.getInstance().syncBillingCountry();
+    // RECORD the billing country, and nothing else (TWO-24867). A re-render
+    // can move the field with no `change` event — a `checkout_error`
+    // re-render, a multi-step theme, a session address restored server-side —
+    // and without this the tracker would hold the pre-re-render country for
+    // the rest of the page, so a later genuine switch BACK to that value
+    // would read as no change and be swallowed.
+    //
+    // Deliberately NOT `syncBillingCountry()`. These re-renders restore the
+    // country and the company together, so clearing the capture here would
+    // destroy what the same re-render just put back — the TWO-25326 failure
+    // on a new trigger. Throwing away a captured company needs the buyer's
+    // gesture, and the `change` event is the only signal of one there is.
+    twoincSelectWooHelper.countryDidChange(twoincSelectWooHelper.currentCountry());
 
     Twoinc.getInstance().updateElements();
 
@@ -3984,31 +4017,25 @@ class Twoinc {
    * @param event
    */
 
-  onCountryInputChange(event) {
+  onCountryInputChange() {
     Twoinc.getInstance().syncBillingCountry();
   }
 
   /**
    * Bring everything that depends on the billing country back into step with
-   * the field (TWO-24867).
+   * the field (TWO-24867). Reached only from the `change` handler on
+   * #billing_country — that event is the closest thing this checkout has to a
+   * buyer gesture on the country.
    *
-   * Called from two places, and it has to be both:
-   *
-   *   - the `change` handler on #billing_country, which is the buyer's own
-   *     country change plus every re-render event WooCommerce emits alongside
-   *     it;
-   *   - `onUpdatedCheckout`, because a `change` is not guaranteed. WooCommerce
-   *     can replace the billing fields with a server-rendered country that
-   *     differs from the one on screen (a `checkout_error` re-render, a
-   *     multi-step theme, a session address restored server-side) and fire no
-   *     `change` at all. Without this second entry point the tracker below
-   *     would keep the pre-re-render country for the rest of the page, and a
-   *     later genuine switch BACK to that value would read as no change and
-   *     be swallowed — the exact opposite failure to the one this fix is
-   *     about, and a much quieter one.
-   *
-   * Both routes go through `countryDidChange`, so the tracker has a single
-   * writer and cannot drift from the field whichever way the country moved.
+   * Everything destructive lives behind that gesture on purpose. WooCommerce
+   * can also move the country with no `change` at all — a `checkout_error`
+   * re-render, a multi-step theme, a session address restored server-side —
+   * and it is tempting to run this from `updated_checkout` so the tracker
+   * cannot drift. It must NOT: those re-renders restore the country and the
+   * company TOGETHER, so clearing on them destroys data the same re-render
+   * just put back, which is the TWO-25326 failure again on a new trigger.
+   * `onUpdatedCheckout` therefore only RECORDS the country (see there); the
+   * tracker still cannot drift, and nothing is thrown away without a gesture.
    */
   syncBillingCountry() {
     const country = twoincSelectWooHelper.currentCountry();

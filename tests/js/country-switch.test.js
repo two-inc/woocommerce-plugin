@@ -66,6 +66,9 @@ describe("billing country switch", () => {
     // cleared by a predecessor's zombie guard — rather than as the leak it is.
     ctx.$(document.body).off();
     document.body.innerHTML = "";
+    // jsdom's sessionStorage outlives the test too, and one test seeds a
+    // saved-input snapshot into it.
+    window.sessionStorage.clear();
     jest.clearAllTimers();
     jest.useRealTimers();
   });
@@ -268,20 +271,91 @@ describe("billing country switch", () => {
       expect(capturedCompany()).toEqual({ name: "Example Co", id: "123456789" });
     });
 
-    test("updated_checkout re-syncs a country that moved with no change event", () => {
+    test("updated_checkout RECORDS a country that moved with no change event", () => {
       // WooCommerce can replace the billing fields with a server-rendered
       // country and fire no `change`: a checkout_error re-render, a
       // multi-step theme, a session address restored server-side. Left
-      // unhandled the tracker keeps the pre-re-render country for the rest of
-      // the page, and a later genuine switch BACK to it reads as no change.
+      // unrecorded the tracker keeps the pre-re-render country for the rest
+      // of the page, and a later genuine switch BACK to it reads as no
+      // change and is swallowed.
+      initializeCheckout();
+
+      ctx.$("#billing_country").val("ES");
+      ctx.$(document.body).trigger("updated_checkout");
+
+      expect(ctx.helper.lastObservedCountry).toBe("ES");
+
+      // And the tracker is genuinely usable afterwards: a switch back to GB
+      // is a real change and is acted on.
+      captureCompany("Ejemplo SL", "B12345678");
+      ctx.$("#billing_country").val("GB");
+      fireCountryChange();
+
+      expect(capturedCompany()).toEqual({ name: "", id: "" });
+    });
+
+    test("updated_checkout records WITHOUT clearing the captured company", () => {
+      // The other half, and the reason this entry point records rather than
+      // running the whole handler. Those re-renders restore the country and
+      // the company TOGETHER, so clearing here destroys what the same
+      // re-render just put back — TWO-25326 again on a new trigger. Nothing
+      // is thrown away without the buyer's gesture, and a `change` event is
+      // the only signal of one this checkout has.
       initializeCheckout();
       captureCompany("Example Co", "123456789");
 
       ctx.$("#billing_country").val("ES");
       ctx.$(document.body).trigger("updated_checkout");
 
+      expect(capturedCompany()).toEqual({ name: "Example Co", id: "123456789" });
+    });
+
+    test("the seed is taken AFTER the saved-input restore, not before", () => {
+      // `loadStorageInputs()` writes #billing_country with `selectElem.value`
+      // and fires no `change`. Seeded before it ran, the tracker held the
+      // country the page was RENDERED with while the field held the RESTORED
+      // one, and the first re-render afterwards read the difference as a real
+      // country change — destroying the company and address that same restore
+      // had just put back. `initialize(true)` is the bootstrap's own call, so
+      // this is the production path.
+      // The shape saveCheckoutInputs() actually writes.
+      window.sessionStorage.setItem(
+        "checkoutInputs",
+        JSON.stringify([
+          {
+            htmlTag: "SELECT",
+            id: "billing_country",
+            name: "billing_country",
+            val: "ES",
+            optionHtml: '<option value="ES">Spain</option>'
+          },
+          {
+            htmlTag: "INPUT",
+            id: "billing_company",
+            name: "billing_company",
+            type: "text",
+            val: "Ejemplo SL"
+          },
+          {
+            htmlTag: "INPUT",
+            id: "company_id",
+            name: "company_id",
+            type: "text",
+            val: "B12345678"
+          }
+        ])
+      );
+
+      ctx.Twoinc.getInstance().initialize(true);
+
+      expect(ctx.$("#billing_country").val()).toBe("ES");
       expect(ctx.helper.lastObservedCountry).toBe("ES");
-      expect(capturedCompany()).toEqual({ name: "", id: "" });
+
+      // The re-render that follows the restore must not read it as a change.
+      ctx.$(document.body).trigger("updated_checkout");
+      fireCountryChange();
+
+      expect(capturedCompany()).toEqual({ name: "Ejemplo SL", id: "B12345678" });
     });
 
     test("the FIRST country ever seen is adopted, not acted on", () => {
@@ -308,14 +382,16 @@ describe("billing country switch", () => {
     });
 
     test("the updated_checkout re-sync terminates instead of looping", () => {
-      // The loop this could have been: `updated_checkout` -> a real country
-      // change -> clearSelectedCompany() -> setAddress() -> `update_checkout`
-      // -> WooCommerce refreshes -> `updated_checkout` again. What stops it is
-      // that the country was RECORDED on the way through, so the second pass
-      // sees no change and returns. Worth pinning rather than reasoning about:
-      // the termination condition lives in a different function from the
-      // recursion, and address lookup (which is what reaches setAddress) is
-      // off by default, so the loop would only appear on shops that enable it.
+      // The loop this must not become: `updated_checkout` -> a country change
+      // -> clearSelectedCompany() -> setAddress() -> `update_checkout` ->
+      // WooCommerce refreshes -> `updated_checkout` again. Two things stop it
+      // — this entry point only RECORDS, so it never reaches
+      // clearSelectedCompany at all; and even if it did, the country was
+      // recorded on the way through, so the second pass sees no change.
+      // Pinned rather than reasoned about because both guards live in
+      // different functions from the recursion, and the setAddress leg is
+      // behind `enable_address_lookup`, so a regression here would only
+      // appear on shops that turn address lookup on.
       ctx.twoinc.enable_address_lookup = "yes";
       ctx
         .$("form[name='checkout']")
