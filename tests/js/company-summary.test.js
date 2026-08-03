@@ -824,12 +824,14 @@ describe("read-only captured-company summary", () => {
     test("the phone-number error box is never substituted, even with a company captured", () => {
       // Only `.twoinc-err-payment-default` gets the company-template
       // treatment — the phone-number box is a fixed, unrelated message.
-      $(document.body).find(".payment_box").append(
-        '<div class="twoinc-pay-box twoinc-err-phone-number hidden" ' +
-          'data-company-template="{company}">' +
-          "Phone number is invalid." +
-          "</div>"
-      );
+      $(document.body)
+        .find(".payment_box")
+        .append(
+          '<div class="twoinc-pay-box twoinc-err-phone-number hidden" ' +
+            'data-company-template="{company}">' +
+            "Phone number is invalid." +
+            "</div>"
+        );
       captureCompanyOnly();
 
       dom.togglePaySubtitleDesc("errored", ".twoinc-err-phone-number");

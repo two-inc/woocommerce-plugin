@@ -114,9 +114,7 @@ describe("company-search tile location (TWO-25326 §7.1)", () => {
       // whole document, and the address-area wrapper it used to sit in is
       // now empty.
       expect($("#billing_company_display_field").length).toBe(1);
-      expect($(".woocommerce-billing-fields__field-wrapper #billing_company_field").length).toBe(
-        0
-      );
+      expect($(".woocommerce-billing-fields__field-wrapper #billing_company_field").length).toBe(0);
     });
 
     test("is idempotent — a second call does not physically re-detach nodes that are already in place", () => {
@@ -158,9 +156,9 @@ describe("company-search tile location (TWO-25326 §7.1)", () => {
 
     test("survives a WooCommerce-style fragment replace of .woocommerce-checkout-payment", () => {
       dom.syncCompanySearchTileLocation();
-      expect($("#billing_company_display_field").closest(".twoinc-company-search-tile-slot").length).toBe(
-        1
-      );
+      expect(
+        $("#billing_company_display_field").closest(".twoinc-company-search-tile-slot").length
+      ).toBe(1);
 
       // The bug this whole mechanism exists to close: WooCommerce's
       // `update_checkout` trigger fires synchronously BEFORE the AJAX call
@@ -270,9 +268,9 @@ describe("company-search tile location (TWO-25326 §7.1)", () => {
 
       dom.syncCompanySearchTileLocation();
 
-      expect($("#billing_company_display_field").closest(".twoinc-company-search-tile-slot").length).toBe(
-        0
-      );
+      expect(
+        $("#billing_company_display_field").closest(".twoinc-company-search-tile-slot").length
+      ).toBe(0);
       expect(tileSlot().hasClass("hidden")).toBe(true);
       expect(appendToSpy).not.toHaveBeenCalled();
       appendToSpy.mockRestore();

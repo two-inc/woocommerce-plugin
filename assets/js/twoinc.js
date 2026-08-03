@@ -1875,15 +1875,17 @@ let twoincDomHelper = {
           twoincUtilHelper.blankToEmpty(captured.organization_number)
         );
         if (companyTemplate && companyText) {
-          intentBox.text(companyTemplate.replace("{company}", function () {
-            // Function replacer (Vader, round 1 review): a string replacer
-            // honours special patterns like `$&`/`$$` inside the SECOND
-            // argument, so a company literally named "Acme $& Corp" or
-            // "50% Ltd $$" would come out mangled with a plain-string
-            // replace. A function replacer passes companyText through
-            // literally, no matter what it contains.
-            return companyText;
-          }));
+          intentBox.text(
+            companyTemplate.replace("{company}", function () {
+              // Function replacer (Vader, round 1 review): a string replacer
+              // honours special patterns like `$&`/`$$` inside the SECOND
+              // argument, so a company literally named "Acme $& Corp" or
+              // "50% Ltd $$" would come out mangled with a plain-string
+              // replace. A function replacer passes companyText through
+              // literally, no matter what it contains.
+              return companyText;
+            })
+          );
         } else {
           intentBox.text(intentBox.data("twoincDefaultText"));
         }
@@ -1905,9 +1907,11 @@ let twoincDomHelper = {
             twoincUtilHelper.blankToEmpty(captured.organization_number)
           );
           if (declinedTemplate && companyText) {
-            $errBox.text(declinedTemplate.replace("{company}", function () {
-              return companyText;
-            }));
+            $errBox.text(
+              declinedTemplate.replace("{company}", function () {
+                return companyText;
+              })
+            );
           } else {
             $errBox.text($errBox.data("twoincDefaultText"));
           }
