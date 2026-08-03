@@ -381,6 +381,52 @@ describe("billing country switch", () => {
       expect(ctx.helper.lastObservedCountry).toBe("GB");
     });
 
+    test("updated_checkout invalidates in-flight work for the outgoing country", () => {
+      // Record-only would otherwise leave a hole: nothing on this path bumps
+      // either counter, so a registry address for the country just left could
+      // still land. The lookup's own country comparison does not cover it —
+      // an empty reading on either side waves the response through by design,
+      // and the field being mid-replacement is exactly what this path is
+      // about. Invalidating pending answers is safe in a way clearing the
+      // capture is not: it discards replies to questions asked under a
+      // country that is no longer selected, which the buyer cannot lose.
+      ctx
+        .$("form[name='checkout']")
+        .append(
+          "<input type='text' id='billing_address_1' value='' />" +
+            "<input type='text' id='billing_city' value='' />" +
+            "<input type='text' id='billing_postcode' value='' />" +
+            "<input type='text' id='billing_address_2' value='' />"
+        );
+      initializeCheckout();
+      const searchSeqBefore = ctx.helper.companySearchSeq;
+      ctx.Twoinc.getInstance().addressLookup({ lookup_id: "gb-lookup-id" });
+      const inFlight = ajax.last();
+
+      // No `change` event — the whole point of this path.
+      ctx.$("#billing_country").val("ES");
+      ctx.$(document.body).trigger("updated_checkout");
+      inFlight.succeed({
+        addresses: [{ street_address: "1 Example Street", city: "London", postal_code: "EC1A 1BB" }]
+      });
+
+      expect(ctx.helper.companySearchSeq).toBeGreaterThan(searchSeqBefore);
+      expect(ctx.$("#billing_address_1").val()).toBe("");
+      expect(ctx.Twoinc.getInstance().registryAddressApplied).toBe(false);
+    });
+
+    test("updated_checkout does NOT invalidate when the country is unchanged", () => {
+      // The counter bump is behind the same change test as the recording, so
+      // the constant stream of `updated_checkout` events on an ordinary
+      // checkout does not cancel the buyer's own in-flight search.
+      initializeCheckout();
+      const searchSeqBefore = ctx.helper.companySearchSeq;
+
+      ctx.$(document.body).trigger("updated_checkout");
+
+      expect(ctx.helper.companySearchSeq).toBe(searchSeqBefore);
+    });
+
     test("the updated_checkout re-sync terminates instead of looping", () => {
       // The loop this must not become: `updated_checkout` -> a country change
       // -> clearSelectedCompany() -> setAddress() -> `update_checkout` ->

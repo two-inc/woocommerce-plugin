@@ -3958,7 +3958,21 @@ class Twoinc {
     // destroy what the same re-render just put back — the TWO-25326 failure
     // on a new trigger. Throwing away a captured company needs the buyer's
     // gesture, and the `change` event is the only signal of one there is.
-    twoincSelectWooHelper.countryDidChange(twoincSelectWooHelper.currentCountry());
+    if (twoincSelectWooHelper.countryDidChange(twoincSelectWooHelper.currentCountry())) {
+      // Invalidating in-flight work IS safe here, though, and record-only
+      // would otherwise leave a hole: on this path nothing bumps either
+      // counter, so a company-search response or a registry address for the
+      // OUTGOING country could still land — and the address guard's own
+      // country comparison does not cover it either, since an empty reading
+      // on either side (the field mid-replacement, which is exactly what this
+      // path is about) waves the response through by design.
+      //
+      // Purely destructive-to-pending, never to captured state: it discards
+      // answers to questions asked under a country that is no longer
+      // selected, which is not something the buyer can lose.
+      twoincSelectWooHelper.companySearchSeq += 1;
+      Twoinc.getInstance().addressLookupSeq += 1;
+    }
 
     Twoinc.getInstance().updateElements();
 
