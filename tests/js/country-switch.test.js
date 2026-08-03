@@ -637,7 +637,9 @@ describe("billing country switch", () => {
       initializeCheckout();
       captureCompany("Example Co", "123456789", "GB");
 
-      // The re-render's own doing: new country, new company, both in the DOM.
+      // The re-render's own doing: new country, new company, BOTH mirrors in
+      // the DOM. Both halves matter — see the two tests below, where only one
+      // of them moved.
       ctx.$("#billing_company").val("Ejemplo SL");
       ctx.$("#company_id").val("B12345678");
       moveCountrySilently("ES");
@@ -648,6 +650,80 @@ describe("billing country switch", () => {
       expect(ctx.Twoinc.getInstance().customerCompany.organization_number).toBe("B12345678");
       expect(ctx.Twoinc.getInstance().customerCompany.country_prefix).toBe("ES");
       expect(ctx.Twoinc.getInstance().customerCompany.company_name).toBe("Ejemplo SL");
+    });
+
+    test("clears when only the NUMBER diverged — a keystroke, not a restore", () => {
+      // Fail-closed, and the reason the discriminator needs both halves. A
+      // buyer typing into #company_id without blurring diverges the number
+      // exactly as a restore does; trusting that pinned the new country onto a
+      // number no capture path had witnessed, next to the PREVIOUS company's
+      // name — a two-moment pair made to look self-consistent, which is the
+      // defect this whole function exists to catch. A restore writes both
+      // mirrors; a keystroke writes one.
+      addAddressFields();
+      initializeCheckout();
+      captureCompany("Example Co", "123456789", "GB");
+
+      ctx.$("#company_id").val("999999999");
+      moveCountrySilently("ES");
+
+      expect(capturedCompany()).toEqual({ name: "", id: "" });
+      expect(ctx.Twoinc.getInstance().customerCompany.organization_number).toBeFalsy();
+    });
+
+    test("clears when only the NAME diverged — the mirror of the case above", () => {
+      // The other half of "both mirrors must have moved". A name that changed
+      // under an unchanged number is not a restored company either; treating it
+      // as one would pin the new country onto the number still sitting there
+      // from the previous country's capture.
+      addAddressFields();
+      initializeCheckout();
+      captureCompany("Example Co", "123456789", "GB");
+
+      ctx.$("#billing_company").val("Ejemplo SL");
+      moveCountrySilently("ES");
+
+      expect(capturedCompany()).toEqual({ name: "", id: "" });
+    });
+
+    test("clears when the number diverged but #billing_company reads empty", () => {
+      // The other fail-closed leg, and the one with the worst alternative. Both
+      // ways of trusting a nameless DOM pair are traps: taking the name from
+      // the record pairs company A's name with company B's number, and writing
+      // the empty name through leaves isReadyApprovalCheck() refusing forever —
+      // this branch arms no deferred re-read, so the next re-render would see a
+      // self-consistent pair, never fire again, and the payment method would be
+      // stuck unusable with no way back. Clearing is recoverable; that is not.
+      addAddressFields();
+      initializeCheckout();
+      captureCompany("Example Co", "123456789", "GB");
+
+      ctx.$("#billing_company").val("");
+      ctx.$("#company_id").val("B12345678");
+      moveCountrySilently("ES");
+
+      expect(ctx.$("#company_id").val()).toBe("");
+      expect(ctx.Twoinc.getInstance().customerCompany.organization_number).toBeFalsy();
+      // And the approval gate is down rather than stuck refusing on an empty
+      // name it can never be rid of.
+      expect(ctx.Twoinc.getInstance().isReadyApprovalCheck()).toBe(false);
+    });
+
+    test("a numeric organisation number is not read as a different company", () => {
+      // `organization_number` is seeded null and written from parsed JSON by
+      // the sole-trader prefill, so it is not guaranteed to be a string while
+      // `.val()` always is. Un-normalised, `123456789 !== "123456789"` is true
+      // and the DOM-differs branch would fire on a capture that had not moved
+      // at all — trusting the fields and pinning the NEW country onto the same
+      // old company, which is a laundered stale pair rather than a clear.
+      addAddressFields();
+      initializeCheckout();
+      captureCompany("Example Co", "123456789", "GB");
+      ctx.Twoinc.getInstance().customerCompany.organization_number = 123456789;
+
+      moveCountrySilently("ES");
+
+      expect(capturedCompany()).toEqual({ name: "", id: "" });
     });
 
     test("does NOT clear a company name with no organisation number", () => {
@@ -797,6 +873,18 @@ describe("billing country switch", () => {
       expect(ctx.$("#company_id").val()).toBe("");
       expect(ctx.$("#billing_company").val()).toBe("Example Co");
       expect(ctx.Twoinc.getInstance().customerCompany.organization_number).toBeFalsy();
+
+      // CHARACTERISATION, not endorsement. `clearSelectedCompany` re-attaches
+      // selectWoo to #billing_company_display unconditionally, so a clear in
+      // manual-entry mode resurrects the picker the buyer had dismissed even
+      // with company search off. That is PRE-EXISTING — the `change` path has
+      // called this on every real country change in manual entry since long
+      // before this ticket — and fixing it means changing a shared destructive
+      // function's behaviour on that path too, which is exactly the kind of
+      // stacking TWO-25333 was split out of TWO-24867 to avoid. Pinned here so
+      // the behaviour is recorded and a later fix has something to flip, not
+      // because it is right.
+      expect(ctx.$("#billing_company_display").data("select2")).toBeTruthy();
     });
 
     test("does NOT clear the matching pair with company search OFF either", () => {
@@ -861,9 +949,69 @@ describe("billing country switch", () => {
       ctx.$("#company_id").trigger("blur");
 
       expect(ctx.Twoinc.getInstance().customerCompany.country_prefix).toBe("GB");
-      // And the stale pair is therefore still catchable on the next re-render.
-      ctx.$(document.body).trigger("updated_checkout");
-      expect(capturedCompany()).toEqual({ name: "", id: "" });
+
+      // Positive control, in the same fixture. Without it this test also passes
+      // when the whole `company_id` blur branch is dead, so it could not tell
+      // "the guard works" from "the handler never ran".
+      ctx.$("#company_id").val("B12345678").trigger("blur");
+      expect(ctx.Twoinc.getInstance().customerCompany.country_prefix).toBe("ES");
+    });
+
+    test("a numeric recorded number does not read as movement on blur", () => {
+      // Same normalisation hazard as in the discriminator, at the other end: an
+      // `organization_number` that arrived as a number (the sole-trader prefill
+      // writes parsed JSON) compared raw against `.val()`'s string counts as
+      // movement, and re-pins the country on a blur that changed nothing.
+      initializeCheckout();
+      captureCompany("Example Co", "123456789", "GB");
+      ctx.Twoinc.getInstance().customerCompany.organization_number = 123456789;
+      ctx.$("#billing_country").val("ES");
+
+      ctx.$("#company_id").trigger("blur");
+
+      expect(ctx.Twoinc.getInstance().customerCompany.country_prefix).toBe("GB");
+    });
+
+    test("EMPTYING a populated number pins nothing", () => {
+      // The only case the emptiness half of the guard is reachable in:
+      // `numberMoved` alone already excludes a blur that changed nothing, so
+      // this is what distinguishes "pin when a number was entered" from "pin
+      // whenever the field moved". Clearing the number is not a capture, so it
+      // must not leave a witness behind claiming one was made under ES.
+      initializeCheckout();
+      captureCompany("Example Co", "123456789", "GB");
+      ctx.$("#billing_country").val("ES");
+
+      ctx.$("#company_id").val("").trigger("blur");
+
+      expect(ctx.Twoinc.getInstance().customerCompany.country_prefix).toBe("GB");
+    });
+
+    test("re-blurring the same number with stray whitespace is not movement", () => {
+      // `.val()` hands back exactly what is in the field, so a pasted value can
+      // differ from the recorded one by padding alone. Compared untrimmed that
+      // counts as movement and re-pins the country on a number that did not
+      // change — the laundering path again, through whitespace this time.
+      initializeCheckout();
+      captureCompany("Example Co", "123456789", "GB");
+      ctx.$("#billing_country").val("ES");
+
+      ctx.$("#company_id").val("  123456789  ").trigger("blur");
+
+      expect(ctx.Twoinc.getInstance().customerCompany.country_prefix).toBe("GB");
+    });
+
+    test("a blur on an empty untouched field pins nothing", () => {
+      // "" !== null counts as movement without normalisation, so a fresh
+      // checkout's first stray blur pinned a country onto a capture that does
+      // not exist. Inert downstream, but a witness that looks authoritative and
+      // is not is how this class of bug arrives.
+      initializeCheckout();
+      ctx.$("#billing_country").val("ES");
+
+      ctx.$("#company_id").trigger("blur");
+
+      expect(ctx.Twoinc.getInstance().customerCompany.country_prefix).toBeFalsy();
     });
 
     test("a sole-trader capture pins the country, and clearing does not", () => {

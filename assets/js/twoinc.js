@@ -4114,9 +4114,22 @@ class Twoinc {
       // `clearCompanyIfCountryStale` could never fire on it again. Pinning only
       // a number the buyer actually entered keeps the witness tied to a
       // capture rather than to a keystroke that passed through.
-      const numberMoved = typed !== Twoinc.getInstance().customerCompany.organization_number;
+      // Normalised on both sides, and requiring a value: `organization_number`
+      // is seeded null by the constructor and written from parsed JSON by the
+      // sole-trader prefill, so a raw `!==` reads the number 123456789 as
+      // different from the string "123456789" and re-pins on a blur that moved
+      // nothing — reopening the laundering this guard exists to close, through
+      // a type mismatch. And a blur on an EMPTY untouched field would otherwise
+      // count as movement ("" !== null), pinning a country onto a capture that
+      // does not exist; inert today, but it makes the witness look
+      // authoritative to the next reader, which is how this class of bug got
+      // here.
+      const previousNumber = twoincUtilHelper.blankToEmpty(
+        Twoinc.getInstance().customerCompany.organization_number
+      );
+      const numberMoved = twoincUtilHelper.blankToEmpty(typed) !== previousNumber;
       Twoinc.getInstance().customerCompany.organization_number = typed;
-      if (numberMoved) {
+      if (numberMoved && twoincUtilHelper.blankToEmpty(typed)) {
         Twoinc.getInstance().customerCompany.country_prefix =
           twoincSelectWooHelper.currentCountry();
       }
@@ -4283,7 +4296,14 @@ class Twoinc {
    *     re-read then pairs the old country's company with the new country via
    *     `getCompanyData()`, which reads `#billing_country` live and so
    *     UN-PINS the witness — leaving a self-consistent false pair nothing can
-   *     detect afterwards. Falling back to `#company_id` here would not help:
+   *     detect afterwards. The country is not the only half `getCompanyData()`
+   *     unpairs: it also sources the name from `getCompanyName()`, which in
+   *     company-search mode reads the `checkoutInputs` sessionStorage snapshot
+   *     rather than the DOM, so the name comes from a third moment again.
+   *     Benign in both windows as things stand, because `organization_number`
+   *     is empty there and every downstream guard refuses on that — but the
+   *     gap is two-axis, not one, and a later reader should not conclude the
+   *     name half is sound. Falling back to `#company_id` here would not help:
    *     the DOM has no per-company country to compare against, which is why
    *     the witness has to live in JS state at all. Closing it properly means
    *     stopping the DOM re-reads from overwriting a pinned `country_prefix`,
@@ -4312,43 +4332,92 @@ class Twoinc {
    * comparison against that known disagreement rather than against observed
    * mixed-case data — a false positive here is a destructive clear.
    *
+   * Returns nothing on purpose. It reported whether it had cleared, the only
+   * caller ignored it, and flipping the value broke no test — an unverified
+   * contract stated in a docblock is worse than none.
+   *
    * @param {string} country upper-cased ISO code the checkout has moved to
-   * @returns {boolean} whether a stale capture was dropped
+   * @returns {void}
    */
   clearCompanyIfCountryStale(country) {
     const company = this.customerCompany || {};
-    if (!company.organization_number) return false;
+    if (!company.organization_number) return;
 
-    const capturedCountry = (company.country_prefix || "").toUpperCase();
-    if (!country || !capturedCountry || capturedCountry === country) return false;
+    const capturedCountry = twoincUtilHelper.blankToEmpty(company.country_prefix).toUpperCase();
+    if (!country || !capturedCountry || capturedCountry === country) return;
 
-    const domNumber = jQuery("#company_id").val() || "";
-    if (domNumber && domNumber !== company.organization_number) {
-      // Built field by field rather than by `getCompanyData()`, which is what
-      // this did first and which was wrong on the half that matters. In
-      // company-search mode `getCompanyData()` takes the name from
-      // `getCompanyName()`, and that does not read the DOM at all: it reads the
-      // `checkoutInputs` sessionStorage snapshot, refreshed only by
-      // `saveCheckoutInputs()`'s own interval. So the name came from a
-      // different moment than the number and the country — up to three seconds
-      // stale, or `""` when no snapshot had been taken yet — which is the
-      // mismatched-pair defect this function exists to prevent, rebuilt by the
-      // function itself. An empty name is not cosmetic either:
-      // `isReadyApprovalCheck()` refuses on ANY empty value, so it left the
-      // payment method quietly unusable for a company the re-render had just
-      // restored, with nothing scheduled to re-read it (this branch never arms
-      // clearSelectedCompany's deferred pass).
-      //
-      // `#billing_company` is the right name source here: it is the field
-      // WooCommerce posts, the mirror a restore writes, and the one
-      // `clearSelectedCompany` and `enterManualCompanyEntry` already treat as
-      // authoritative. All three values are now read within this one tick.
+    // Every comparison below goes through `blankToEmpty`, which normalises
+    // null/undefined to "" and coerces to a trimmed string. Not defensive
+    // noise: `organization_number` is seeded null by the constructor and
+    // written from parsed JSON by the sole-trader prefill, so it is not
+    // guaranteed to be a string, while `.val()` always is. A raw `!==` between
+    // the number 123456789 and the string "123456789" is true, and every
+    // comparison here treats "different" as evidence — so an un-normalised
+    // compare turns a type mismatch into either a laundered stale pair or a
+    // destructive clear of a valid capture.
+    const domNumber = twoincUtilHelper.blankToEmpty(jQuery("#company_id").val());
+    const domName = twoincUtilHelper.blankToEmpty(jQuery("#billing_company").val());
+    const recordedNumber = twoincUtilHelper.blankToEmpty(company.organization_number);
+    const recordedName = twoincUtilHelper.blankToEmpty(company.company_name);
+
+    // The DOM holds a DIFFERENT company than the record: BOTH halves present
+    // and BOTH diverged. Then it is the record that is stale rather than the
+    // fields — a re-render swapped in another saved address, country and
+    // company together, a different pair but a self-consistent one — and
+    // clearing would destroy what that re-render just restored.
+    //
+    // Both halves, and both non-empty, is the whole discriminator. Requiring
+    // only the number to diverge was fail-OPEN: a buyer typing into
+    // `#company_id` without blurring produces the same divergence, and this
+    // branch then pinned the new country onto a number no capture path had
+    // witnessed, next to the PREVIOUS company's name — a two-moment pair made
+    // self-consistent, which is the exact defect this function exists to catch.
+    // Requiring the name to have moved too is what separates a restore (which
+    // writes both mirrors) from a keystroke (which writes one).
+    //
+    // Anything else falls through to the clear, deliberately fail-CLOSED. In
+    // particular a diverged number with an EMPTY `#billing_company` is NOT
+    // trusted: taking the name from the record instead would pair company A's
+    // name with company B's number, and writing the empty name through would
+    // leave `isReadyApprovalCheck()` refusing forever — this branch arms no
+    // deferred re-read, and the next re-render would see a self-consistent
+    // pair and never fire again, so the payment method would be stuck unusable
+    // with no way back. A clear is recoverable; that is not.
+    //
+    // Read field by field rather than through `getCompanyData()`, which is what
+    // this did first and which was wrong on the half that matters: in
+    // company-search mode that takes the name from `getCompanyName()`, and that
+    // does not read the DOM at all — it reads the `checkoutInputs`
+    // sessionStorage snapshot, refreshed only by `saveCheckoutInputs()`'s own
+    // interval. So the name came from a different moment than the number and
+    // the country. `#billing_company` is the right source here: the field
+    // WooCommerce posts, the mirror a restore writes, and the one
+    // `clearSelectedCompany` and `enterManualCompanyEntry` already treat as
+    // authoritative.
+    //
+    // Two things here are deliberately NOT independently covered, because no
+    // reachable case can distinguish them — recorded rather than left for the
+    // next reader to "fix" into a difference:
+    //
+    //   - Normalising `recordedNumber` is defence in depth, not an independent
+    //     guard. A number-vs-string mismatch on its own cannot reach the
+    //     re-sync, because the name condition rejects it first; it would take a
+    //     re-render that moved the name while leaving a numerically identical
+    //     but differently typed number. Kept because all four values go through
+    //     the same normaliser and making one of them the exception is how the
+    //     next type mismatch gets in.
+    //   - `company_name: domName` needs no fallback. The condition guarantees
+    //     `domName` is non-empty, so `domName || recordedName` would be dead —
+    //     and worse than dead: falling back to the record's name would pair
+    //     company A's name with company B's number, which is the two-moment
+    //     pair this whole function exists to prevent.
+    if (domNumber && domName && domNumber !== recordedNumber && domName !== recordedName) {
       this.customerCompany = {
-        company_name: jQuery("#billing_company").val() || "",
+        company_name: domName,
         country_prefix: country,
         organization_number: domNumber
       };
-      return false;
+      return;
     }
 
     // No supersession bump here, deliberately. `clearSelectedCompany()` below
@@ -4369,8 +4438,6 @@ class Twoinc {
     // getDueInDays() with no country for the three seconds until its deferred
     // re-read runs.
     this.customerCompany.country_prefix = country;
-
-    return true;
   }
 }
 

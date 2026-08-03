@@ -293,7 +293,19 @@ about the company-search helper, so the bootstrap is left to no-op.
   null until the first capture, and an empty field reading means mid-replacement), and the DOM
   already holding a **different** company from the one recorded, which means the record is what
   is stale rather than the fields, so it is re-synced from the fields instead of destroying a
-  company the re-render had just restored. That re-sync reads `#billing_company`,
+  company the re-render had just restored. That last one needs **both** mirrors to have moved and
+  both to be non-empty, and every leg of that is pinned: a diverged number alone is a buyer
+  typing into `#company_id` without blurring, a diverged name alone is the mirror of it, and a
+  diverged number with an empty `#billing_company` is trusted by neither of the two available
+  fallbacks — the record's name would pair company A's name with company B's number, and an empty
+  name would leave `isReadyApprovalCheck()` refusing forever, since this branch arms no deferred
+  re-read and the next re-render would see a self-consistent pair and never fire again. All three
+  fall through to the clear, deliberately fail-closed: a clear is recoverable, a permanently
+  unusable payment method is not. Every comparison goes through `blankToEmpty`, because
+  `organization_number` is seeded null and written from parsed JSON by the sole-trader prefill
+  while `.val()` is always a string — `123456789 !== "123456789"` would otherwise turn a type
+  mismatch into either a laundered pair or a destructive clear, and both directions are pinned.
+  That re-sync reads `#billing_company`,
   `#company_id` and the country within one tick rather than calling `getCompanyData()`: in
   company-search mode that takes the name from the `checkoutInputs` **sessionStorage** snapshot
   rather than the DOM, so it rebuilt a two-moment pair — and an empty name takes
@@ -318,8 +330,27 @@ about the company-search helper, so the bootstrap is left to no-op.
   the discriminator above as a mismatch it would clear. The manual-entry pin fires only when the
   blur actually **moved** the number: that handler is bound to `blur`, not `change`, so tabbing
   through an untouched `#company_id` would otherwise launder a stale pair into a
-  consistent-looking one the discriminator could never fire on again. Pinned, in both
-  directions.
+  consistent-looking one the discriminator could never fire on again. Pinned in both directions,
+  with a positive control in the same fixture — without one the test could not tell "the guard
+  works" from "the handler never ran" — plus the normalisation cases that reopen the same
+  laundering by another route: a recorded number that arrived as a number rather than a string,
+  a value differing only by stray whitespace, and emptying a populated number (which is not a
+  capture and must leave no witness claiming one).
+
+Two mutations in this area deliberately **survive**, and the reasons are written into the code
+next to them: normalising the recorded number is defence in depth the name condition already
+covers, so no reachable case can distinguish it; and a `domName || recordedName` fallback in the
+re-sync is dead, because the condition guarantees the name is non-empty — and would be actively
+wrong if it were reachable. They are recorded so the next reader does not "fix" them into a
+difference.
+
+The clear in manual-entry mode also carries one **characterisation** assertion:
+`clearSelectedCompany` re-attaches selectWoo to `#billing_company_display` unconditionally, so a
+clear resurrects the picker the buyer had dismissed even with company search off. That is
+pre-existing — the `change` path has done it on every real country change in manual entry since
+long before this ticket — and the assertion records the behaviour rather than endorsing it.
+Fixing it changes a shared destructive function on that path too, which is the kind of stacking
+TWO-25333 was split out of TWO-24867 to avoid.
 
 A **known residual gap** is recorded in the code rather than fixed here: `customerCompany` is
 populated from the DOM on a timer, so `#company_id` can hold a real capture while that object
