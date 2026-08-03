@@ -250,7 +250,7 @@ about the company-search helper, so the bootstrap is left to no-op.
   writes `#company_id` _after_ it renders.
 
 `country-switch.test.js` — what a billing-country change does, and what a fake one must not
-(TWO-24867, with TWO-25326):
+(TWO-24867, with TWO-25326 and TWO-25333):
 
 - **a `change` event that is not a country change is inert.** WooCommerce re-renders the
   billing fields on `updated_checkout`, and core's `address-i18n.js` re-triggers the country
@@ -272,9 +272,136 @@ about the company-search helper, so the bootstrap is left to no-op.
   adopted, not acted on; an empty reading — WooCommerce replacing `#billing_country` wholesale
   mid-re-render — is neither acted on _nor recorded_, so the switch that completes afterwards
   still acts; `updated_checkout` **records** a country that moved with no `change` event;
-  it records **without** clearing the capture, because those re-renders restore the country and
-  the company together and clearing would destroy what they just restored; and the recording
-  path cannot loop, even though a change reaching `setAddress()` triggers `update_checkout`.
+  it records **without** clearing a capture the same re-render is consistent with (see the
+  next bullet, which narrowed this); and the recording path cannot loop, even though a change
+  reaching `setAddress()` triggers `update_checkout`.
+- **a capture stranded in the wrong country is dropped** (TWO-25333), which is the one case
+  record-only got wrong. Recording without clearing is right when the re-render restores the
+  country and the company **together** — they agree by construction — but it left a company
+  captured under the country just left still captured, still approved, and paired with the new
+  billing country in the order payload with no consistency check anywhere between the two: the
+  buyer saw a green payment method and an opaque order-creation failure. `updated_checkout`
+  therefore clears the capture when the recorded country and the captured company's own
+  `country_prefix` actually **disagree**, and only then. Pinned in both directions, because the
+  discriminator is the whole fix: a company captured under the country just left is cleared and
+  the approval gate comes back down with it; a matching pair is untouched. Both directions are
+  pinned on **both** `enable_address_lookup` settings and **both** `enable_company_search`
+  settings — the manual-entry leg differs, because `clearSelectedCompany` deliberately keeps the
+  buyer's typed `#billing_company` there while still blanking `#company_id`. Three readings are
+  deliberately not grounds to clear, each with its own test — a company name with no
+  organisation number (not a capture), an unknown country on either side (`country_prefix` is
+  null until the first capture, and an empty field reading means mid-replacement), and the DOM
+  already holding a **different** company from the one recorded, which means the record is what
+  is stale rather than the fields, so it is re-synced from the fields instead of destroying a
+  company the re-render had just restored. That last one needs **both** mirrors to have moved and
+  both to be non-empty, and every leg of that is pinned: a diverged number alone is a buyer
+  typing into `#company_id` without blurring, a diverged name alone is the mirror of it, and a
+  diverged number with an empty `#billing_company` is trusted by neither of the two available
+  fallbacks — the record's name would pair company A's name with company B's number, and an empty
+  name would leave `isReadyApprovalCheck()` refusing forever, since this branch arms no deferred
+  re-read and the next re-render would see a self-consistent pair and never fire again. All three
+  fall through to the clear, deliberately fail-closed: a clear is recoverable, a permanently
+  unusable payment method is not. Every comparison goes through `blankToEmpty`, because
+  `organization_number` is seeded null and written from parsed JSON by the sole-trader prefill
+  while `.val()` is always a string — `123456789 !== "123456789"` would otherwise turn a type
+  mismatch into either a laundered pair or a destructive clear, and both directions are pinned.
+  That re-sync reads `#billing_company`,
+  `#company_id` and the country within one tick rather than calling `getCompanyData()`: in
+  company-search mode that takes the name from the `checkoutInputs` **sessionStorage** snapshot
+  rather than the DOM, so it rebuilt a two-moment pair — and an empty name takes
+  `isReadyApprovalCheck()` down with it, leaving the method unusable for a company that was
+  legitimately restored. The comparison is case-insensitive, because `currentCountry()`
+  upper-cases and `getCompanyData()` reads the field raw — a false positive here is a
+  destructive clear. This path can now reach `clearSelectedCompany()`, so the loop it used to be
+  immune to by construction (clear → `setAddress()` → `update_checkout`) is pinned again for it.
+- **what the approval-gate test does and does not prove.** `isReadyApprovalCheck()` coming back
+  down stops a fresh intent being sought for the dropped pair, and that is what is asserted. It
+  is _not_ the same as the payment method becoming unselectable: nothing in the file deselects
+  the gateway radio and `isTwoincApproved` is written but never read, so a buyer already approved
+  keeps a selected Two method over an emptied company until the next intent pass. Enforcing
+  TWO-25326 §6 by deselecting is the deferred half of that design and is not in this suite.
+- **the capture country is pinned when the company is captured** (TWO-25333), at all three
+  capture sites: the picker's `select2:select` handler, a manually typed organisation number,
+  and the sole-trader setter — which does _not_ re-pin on the clearing call `setMode("business")`
+  makes with both arguments falsy. Without this the pair is assembled from two different
+  moments, the number at capture and `country_prefix` from whichever DOM re-read ran last, so a
+  country that moved with no `change` event _before_ the capture left the old country next to a
+  company from the new one — posted by `getApproval()` as a self-consistent pair, and read by
+  the discriminator above as a mismatch it would clear. The manual-entry pin fires only when the
+  blur actually **moved** the number: that handler is bound to `blur`, not `change`, so tabbing
+  through an untouched `#company_id` would otherwise launder a stale pair into a
+  consistent-looking one the discriminator could never fire on again. Pinned in both directions,
+  with a positive control in the same fixture — without one the test could not tell "the guard
+  works" from "the handler never ran" — plus the normalisation cases that reopen the same
+  laundering by another route: a recorded number that arrived as a number rather than a string,
+  a value differing only by stray whitespace, and emptying a populated number (which is not a
+  capture and must leave no witness claiming one).
+
+Normalising is load-bearing on **all four** compared values, not defensive, and two earlier
+versions of this note claimed otherwise — first that the recorded number's normaliser was
+unreachable, then that only the record side mattered. Each of the four now has its own test.
+Reachable ways one value diverges from its counterpart by representation alone while the other
+mirror has genuinely moved: the **type**, because `twoincSoleTrader.setCompany()` writes the
+organisation number straight out of parsed JSON so the record can hold a number where the field
+holds a string; and **whitespace** in either direction — the record picks it up from the manual
+blur handler storing what the field holds, the DOM from a paste into `#company_id` or a trailing
+space typed into `#billing_company` with no blur behind it.
+
+Mutation state is stated as a scope rather than a bare count, because a count was claimed here
+wrongly three times running — twice as "exactly one survivor", then as three — each time
+describing the harness rather than the code. Every mutation aimed at this change is either caught
+by the test named in the mutation, or is one of the following, each with its reason written into
+the code beside it:
+
+- `capturedCountry` left un-normalised — equivalent: country values are unpadded upper-case ISO
+  strings on both sides. The `.toUpperCase()` that _does_ matter, because two readers disagree
+  about it, is tested.
+- `country_prefix: country` swapped for a fresh `currentCountry()` read — indistinguishable
+  today; written as the argument so the pairing is provably against the value the change was
+  detected on.
+- `domName || recordedName` in the re-sync — dead, because the condition guarantees a non-empty
+  name, and actively wrong if it were reachable, since it would pair one company's name with
+  another's number.
+- `!country` in the early guard — unreachable from the only caller, because `countryDidChange`
+  already refuses an empty reading. Kept as the guard a second caller would need. Only the
+  captured side of "an unknown country on either side" is actually tested.
+- `this.customerCompany || {}` — equivalent: the property is an object from construction onward,
+  and `clearSelectedCompany` sets `{}` rather than null.
+- The blur handler storing the raw field value — a deliberate choice, not an oversight:
+  normalising on the way in would change the organisation number the plugin posts on the order
+  intent, which nothing here asked for.
+
+The re-sync branch's own stored values are a different matter and _are_ pinned: once the branch
+has decided the DOM holds a different company, what it stores is what `getApproval()` posts inside
+`buyer.company`, so padding there would reach the order intent verbatim.
+
+The both-mirrors rule holds on WooCommerce's own re-render paths for a concrete reason worth
+knowing: `#company_id` is a registered billing field (`$fields['billing']['company_id']` in
+`WC_Twoinc_Checkout`), so it sits in the same billing fragment as `#billing_company` and every
+WC-driven re-render writes both from the same vintage. One mirror moving alone is therefore
+evidence of something that is not a re-render.
+
+The clear in manual-entry mode also carries one **characterisation** assertion:
+`clearSelectedCompany` re-attaches selectWoo to `#billing_company_display` unconditionally, so a
+clear resurrects the picker the buyer had dismissed even with company search off. That is
+pre-existing — the `change` path has done it on every real country change in manual entry since
+long before this ticket — and the assertion records the behaviour rather than endorsing it.
+Fixing it changes a shared destructive function on that path too, which is the kind of stacking
+TWO-25333 was split out of TWO-24867 to avoid.
+
+A **known residual gap** is recorded in the code rather than fixed here: `customerCompany` is
+populated from the DOM on a timer, so `#company_id` can hold a real capture while that object
+still holds nulls — during `initialize()`'s deferred seed, and for three seconds after
+`clearSelectedCompany`. A silent country move inside one of those windows is missed, and the
+deferred re-read then re-pairs the old country's company with the new country via
+`getCompanyData()`, which reads `#billing_country` live and so un-pins the witness. Closing it
+means stopping the DOM re-reads from overwriting a pinned `country_prefix`, which changes
+`getCompanyData()`'s contract for its other callers, so it wants its own ticket. The suite also
+cannot observe those timers: advancing them throws from `setTimeout(this.enableCompanySearch, 800)`
+in `initialize()` — an unbound `this` in a strict class body, pre-existing and firing on every
+real page load with company search on. That wants fixing first, in its own commit, before any
+timer-based test here is possible.
+
 - **the whole suite drives the real wiring**: a real `initialize(false)`, then
   `trigger("change")` on the field, so unwiring the delegated binding or moving the seed out
   of `initialize()`'s reach fails it. `afterEach` unbinds `document.body` — jsdom's document
