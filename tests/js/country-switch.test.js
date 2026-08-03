@@ -552,12 +552,21 @@ describe("billing country switch", () => {
       expect(ctx.Twoinc.getInstance().customerCompany.organization_number).toBeFalsy();
     });
 
-    test("the cleared capture leaves the payment method unusable again", () => {
-      // TWO-25326 §6: the method is selectable and usable only for a company
-      // captured WITH an id. `isReadyApprovalCheck` is the gate that decides
-      // whether an intent is even asked for, so it is what has to come back
-      // down — asserting the fields are empty would not prove the approval
-      // path noticed.
+    test("the cleared capture takes the approval gate back down", () => {
+      // Named for what it proves, which is narrower than "the payment method
+      // becomes unusable". `isReadyApprovalCheck` is the gate deciding whether
+      // an intent is asked for at all, so it coming back down is what stops a
+      // fresh approval being sought for the dropped pair — and it is a real
+      // assertion the emptied fields would not give us.
+      //
+      // What it does NOT prove: the gateway radio stays `checked` and
+      // `isTwoincApproved` stays true after this, because nothing in the file
+      // deselects the method and `isTwoincApproved` is written but never read.
+      // So a buyer who had already been approved keeps a selected Two method
+      // over an emptied company until the next intent pass. Enforcing §6 by
+      // deselecting is the DEFERRED half of that design and belongs to its own
+      // ticket, not to this one — recorded here so the gap is not mistaken for
+      // something this test covers.
       ctx.twoinc.enable_order_intent = "yes";
       addAddressFields();
       initializeCheckout();
@@ -592,18 +601,12 @@ describe("billing country switch", () => {
       expect(ctx.Twoinc.getInstance().customerCompany.country_prefix).toBe("ES");
     });
 
-    test("invalidates in-flight work for the company it just dropped", () => {
-      addAddressFields();
-      initializeCheckout();
-      captureCompany("Example Co", "123456789", "GB");
-      const searchSeqBefore = ctx.helper.companySearchSeq;
-      const lookupSeqBefore = ctx.Twoinc.getInstance().addressLookupSeq;
-
-      moveCountrySilently("ES");
-
-      expect(ctx.helper.companySearchSeq).toBeGreaterThan(searchSeqBefore);
-      expect(ctx.Twoinc.getInstance().addressLookupSeq).toBeGreaterThan(lookupSeqBefore);
-    });
+    // No test here for the supersession counters being bumped. They are bumped
+    // by the caller, unconditionally on the country having moved, which is
+    // pre-existing TWO-24867 behaviour already pinned by "updated_checkout
+    // invalidates in-flight work for the outgoing country" above. A copy inside
+    // this block passed with this whole feature reverted, so it asserted
+    // nothing about it.
 
     test("does NOT clear when the restore supplies country and company together", () => {
       // The regression guard, and the reason this is a discriminator rather
@@ -644,6 +647,7 @@ describe("billing country switch", () => {
       // rather than left describing a company that is no longer in the form.
       expect(ctx.Twoinc.getInstance().customerCompany.organization_number).toBe("B12345678");
       expect(ctx.Twoinc.getInstance().customerCompany.country_prefix).toBe("ES");
+      expect(ctx.Twoinc.getInstance().customerCompany.company_name).toBe("Ejemplo SL");
     });
 
     test("does NOT clear a company name with no organisation number", () => {
@@ -756,16 +760,52 @@ describe("billing country switch", () => {
       expect(capturedCompany()).toEqual({ name: "", id: "" });
     });
 
-    test("a second re-render after the clear is inert", () => {
+    test("a clear does not condemn what is captured after it", () => {
       addAddressFields();
       initializeCheckout();
       captureCompany("Example Co", "123456789", "GB");
 
       moveCountrySilently("ES");
+      // Asserted mid-test on purpose. Without this the test passes with the
+      // whole feature reverted: `captureCompany` overwrites `customerCompany`
+      // wholesale, so with nothing cleared the only state it could witness is
+      // `lastObservedCountry`, which is already ES either way.
+      expect(capturedCompany()).toEqual({ name: "", id: "" });
+
       // A fresh capture under the country now selected must survive the next
       // re-render — the clear must not leave the tracker or the witness in a
       // state that condemns everything captured afterwards.
       captureCompany("Ejemplo SL", "B12345678", "ES");
+      ctx.$(document.body).trigger("updated_checkout");
+
+      expect(capturedCompany()).toEqual({ name: "Ejemplo SL", id: "B12345678" });
+    });
+
+    test("clears with company search OFF (manual entry) as well as on", () => {
+      // The manual-entry leg behaves differently inside
+      // `clearSelectedCompany`: it deliberately KEEPS the buyer's typed
+      // `#billing_company` (it is their own input, not a picked company) while
+      // still blanking `#company_id`. So the assertion is not the same one the
+      // search-mode tests make, and running only those left this leg unproven.
+      ctx.twoinc.enable_company_search = "no";
+      addAddressFields();
+      initializeCheckout();
+      captureCompany("Example Co", "123456789", "GB");
+
+      moveCountrySilently("ES");
+
+      expect(ctx.$("#company_id").val()).toBe("");
+      expect(ctx.$("#billing_company").val()).toBe("Example Co");
+      expect(ctx.Twoinc.getInstance().customerCompany.organization_number).toBeFalsy();
+    });
+
+    test("does NOT clear the matching pair with company search OFF either", () => {
+      ctx.twoinc.enable_company_search = "no";
+      addAddressFields();
+      initializeCheckout();
+      ctx.$("#billing_country").val("ES");
+      captureCompany("Ejemplo SL", "B12345678", "ES");
+
       ctx.$(document.body).trigger("updated_checkout");
 
       expect(capturedCompany()).toEqual({ name: "Ejemplo SL", id: "B12345678" });
@@ -805,6 +845,25 @@ describe("billing country switch", () => {
 
       expect(ctx.Twoinc.getInstance().customerCompany.organization_number).toBe("B12345678");
       expect(ctx.Twoinc.getInstance().customerCompany.country_prefix).toBe("ES");
+    });
+
+    test("tabbing THROUGH an untouched number does not launder a stale pair", () => {
+      // This handler is bound to `blur`, not `change`, so it also fires when
+      // focus merely passes through the field. Re-pinning there would rewrite
+      // the witness to the country the form has since moved to while the number
+      // is still the previous country's company — a stale pair made to look
+      // consistent, which `clearCompanyIfCountryStale` could then never fire on.
+      initializeCheckout();
+      captureCompany("Example Co", "123456789", "GB");
+      // A silent country move the record-only path has not seen yet.
+      ctx.$("#billing_country").val("ES");
+
+      ctx.$("#company_id").trigger("blur");
+
+      expect(ctx.Twoinc.getInstance().customerCompany.country_prefix).toBe("GB");
+      // And the stale pair is therefore still catchable on the next re-render.
+      ctx.$(document.body).trigger("updated_checkout");
+      expect(capturedCompany()).toEqual({ name: "", id: "" });
     });
 
     test("a sole-trader capture pins the country, and clearing does not", () => {

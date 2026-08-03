@@ -284,18 +284,30 @@ about the company-search helper, so the bootstrap is left to no-op.
   therefore clears the capture when the recorded country and the captured company's own
   `country_prefix` actually **disagree**, and only then. Pinned in both directions, because the
   discriminator is the whole fix: a company captured under the country just left is cleared and
-  `isReadyApprovalCheck()` comes back down with it (TWO-25326 §6 — the method is usable only for
-  a company captured _with_ an id); a matching pair is untouched, on either
-  `enable_address_lookup` setting. Three readings are deliberately not grounds to clear, each
-  with its own test — a company name with no organisation number (not a capture), an unknown
-  country on either side (`country_prefix` is null until the first capture, and an empty field
-  reading means mid-replacement), and the DOM already holding a **different** company from the
-  one recorded, which means the record is what is stale rather than the fields, so it is
-  re-synced to the DOM instead of destroying a company the re-render had just restored. The
-  comparison is case-insensitive, because `currentCountry()` upper-cases and `getCompanyData()`
-  reads the field raw — a false positive here is a destructive clear. This path can now reach
-  `clearSelectedCompany()`, so the loop it used to be immune to by construction
-  (clear → `setAddress()` → `update_checkout`) is pinned again for it.
+  the approval gate comes back down with it; a matching pair is untouched. Both directions are
+  pinned on **both** `enable_address_lookup` settings and **both** `enable_company_search`
+  settings — the manual-entry leg differs, because `clearSelectedCompany` deliberately keeps the
+  buyer's typed `#billing_company` there while still blanking `#company_id`. Three readings are
+  deliberately not grounds to clear, each with its own test — a company name with no
+  organisation number (not a capture), an unknown country on either side (`country_prefix` is
+  null until the first capture, and an empty field reading means mid-replacement), and the DOM
+  already holding a **different** company from the one recorded, which means the record is what
+  is stale rather than the fields, so it is re-synced from the fields instead of destroying a
+  company the re-render had just restored. That re-sync reads `#billing_company`,
+  `#company_id` and the country within one tick rather than calling `getCompanyData()`: in
+  company-search mode that takes the name from the `checkoutInputs` **sessionStorage** snapshot
+  rather than the DOM, so it rebuilt a two-moment pair — and an empty name takes
+  `isReadyApprovalCheck()` down with it, leaving the method unusable for a company that was
+  legitimately restored. The comparison is case-insensitive, because `currentCountry()`
+  upper-cases and `getCompanyData()` reads the field raw — a false positive here is a
+  destructive clear. This path can now reach `clearSelectedCompany()`, so the loop it used to be
+  immune to by construction (clear → `setAddress()` → `update_checkout`) is pinned again for it.
+- **what the approval-gate test does and does not prove.** `isReadyApprovalCheck()` coming back
+  down stops a fresh intent being sought for the dropped pair, and that is what is asserted. It
+  is _not_ the same as the payment method becoming unselectable: nothing in the file deselects
+  the gateway radio and `isTwoincApproved` is written but never read, so a buyer already approved
+  keeps a selected Two method over an emptied company until the next intent pass. Enforcing
+  TWO-25326 §6 by deselecting is the deferred half of that design and is not in this suite.
 - **the capture country is pinned when the company is captured** (TWO-25333), at all three
   capture sites: the picker's `select2:select` handler, a manually typed organisation number,
   and the sole-trader setter — which does _not_ re-pin on the clearing call `setMode("business")`
@@ -303,7 +315,25 @@ about the company-search helper, so the bootstrap is left to no-op.
   moments, the number at capture and `country_prefix` from whichever DOM re-read ran last, so a
   country that moved with no `change` event _before_ the capture left the old country next to a
   company from the new one — posted by `getApproval()` as a self-consistent pair, and read by
-  the discriminator above as a mismatch it would clear.
+  the discriminator above as a mismatch it would clear. The manual-entry pin fires only when the
+  blur actually **moved** the number: that handler is bound to `blur`, not `change`, so tabbing
+  through an untouched `#company_id` would otherwise launder a stale pair into a
+  consistent-looking one the discriminator could never fire on again. Pinned, in both
+  directions.
+
+A **known residual gap** is recorded in the code rather than fixed here: `customerCompany` is
+populated from the DOM on a timer, so `#company_id` can hold a real capture while that object
+still holds nulls — during `initialize()`'s deferred seed, and for three seconds after
+`clearSelectedCompany`. A silent country move inside one of those windows is missed, and the
+deferred re-read then re-pairs the old country's company with the new country via
+`getCompanyData()`, which reads `#billing_country` live and so un-pins the witness. Closing it
+means stopping the DOM re-reads from overwriting a pinned `country_prefix`, which changes
+`getCompanyData()`'s contract for its other callers, so it wants its own ticket. The suite also
+cannot observe those timers: advancing them throws from `setTimeout(this.enableCompanySearch, 800)`
+in `initialize()` — an unbound `this` in a strict class body, pre-existing and firing on every
+real page load with company search on. That wants fixing first, in its own commit, before any
+timer-based test here is possible.
+
 - **the whole suite drives the real wiring**: a real `initialize(false)`, then
   `trigger("change")` on the field, so unwiring the delegated binding or moving the seed out
   of `initialize()`'s reach fails it. `afterEach` unbinds `document.body` — jsdom's document

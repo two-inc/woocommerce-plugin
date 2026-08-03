@@ -4070,9 +4070,12 @@ class Twoinc {
       twoincSelectWooHelper.companySearchSeq += 1;
       Twoinc.getInstance().addressLookupSeq += 1;
 
-      // BEFORE updateElements() below, which is what re-runs getApproval():
-      // called after it, the intent request for the stale pair would already
-      // have gone out and its answer would still be on screen.
+      // BEFORE updateElements() below, which is what re-runs getApproval().
+      // getApproval() does not fire immediately — it arms a 1s interval — so
+      // the ordering is not what stops the stale pair being posted, and no
+      // test pins it as though it were. It is here because clearing before the
+      // approval pass is the only order in which `updateElements` sees the
+      // state that the rest of this event's work should be derived from.
       Twoinc.getInstance().clearCompanyIfCountryStale(movedCountry);
     }
 
@@ -4100,13 +4103,23 @@ class Twoinc {
     let inputName = $input.attr("name");
 
     if (inputName === "company_id") {
-      Twoinc.getInstance().customerCompany.organization_number = $input.val();
-      // Pin the capture country next to the number the buyer just typed
-      // (TWO-25333 — see the picker's select handler for why the two have to
-      // be written together). Unconditional on the value: an emptied field
-      // leaves no capture for the country to be wrong about, and re-pinning it
-      // to the country now in the form is true either way.
-      Twoinc.getInstance().customerCompany.country_prefix = twoincSelectWooHelper.currentCountry();
+      const typed = $input.val();
+      // Only when the blur actually MOVED the number (TWO-25333 — see the
+      // picker's select handler for why the number and the country have to be
+      // written together). This is a BLUR, not a change: tabbing through an
+      // untouched `#company_id` fires it too, and re-pinning there would
+      // launder a stale pair into a consistent-looking one. The number would
+      // still be the previous country's company while `country_prefix` was
+      // rewritten to the country the form has since moved to, and
+      // `clearCompanyIfCountryStale` could never fire on it again. Pinning only
+      // a number the buyer actually entered keeps the witness tied to a
+      // capture rather than to a keystroke that passed through.
+      const numberMoved = typed !== Twoinc.getInstance().customerCompany.organization_number;
+      Twoinc.getInstance().customerCompany.organization_number = typed;
+      if (numberMoved) {
+        Twoinc.getInstance().customerCompany.country_prefix =
+          twoincSelectWooHelper.currentCountry();
+      }
     } else if (inputName === "billing_company_display") {
       Twoinc.getInstance().customerCompany.company_name = $input.val();
     }
@@ -4261,6 +4274,22 @@ class Twoinc {
    *     id is not a capture (TWO-25326 §6: the payment method is usable only
    *     for a company captured WITH an id), and there is nothing about a bare
    *     name that a country change invalidates.
+   *
+   *     KNOWN RESIDUAL GAP, not closed here. `customerCompany` is populated
+   *     from the DOM on a timer, so `#company_id` can hold a real capture
+   *     while this object still holds nulls — during `initialize()`'s deferred
+   *     seed, and for the three seconds after `clearSelectedCompany`. A silent
+   *     country move inside one of those windows is missed, and the deferred
+   *     re-read then pairs the old country's company with the new country via
+   *     `getCompanyData()`, which reads `#billing_country` live and so
+   *     UN-PINS the witness — leaving a self-consistent false pair nothing can
+   *     detect afterwards. Falling back to `#company_id` here would not help:
+   *     the DOM has no per-company country to compare against, which is why
+   *     the witness has to live in JS state at all. Closing it properly means
+   *     stopping the DOM re-reads from overwriting a pinned `country_prefix`,
+   *     which is a change to `getCompanyData()`'s contract and its several
+   *     other callers — deliberately left for its own ticket rather than
+   *     widened into this one.
    *   - An unknown country on either side. `country_prefix` is null until the
    *     first capture or DOM re-read, and an empty field reading means the
    *     field was mid-replacement — the same rule the address-lookup guard
@@ -4295,11 +4324,30 @@ class Twoinc {
 
     const domNumber = jQuery("#company_id").val() || "";
     if (domNumber && domNumber !== company.organization_number) {
-      // Re-read both halves together, from the same DOM, in one go — the
-      // pairing is the whole point, so taking the company from the fields and
-      // the country from the tracker would rebuild the same mismatch this
-      // function exists to catch.
-      this.customerCompany = twoincDomHelper.getCompanyData();
+      // Built field by field rather than by `getCompanyData()`, which is what
+      // this did first and which was wrong on the half that matters. In
+      // company-search mode `getCompanyData()` takes the name from
+      // `getCompanyName()`, and that does not read the DOM at all: it reads the
+      // `checkoutInputs` sessionStorage snapshot, refreshed only by
+      // `saveCheckoutInputs()`'s own interval. So the name came from a
+      // different moment than the number and the country — up to three seconds
+      // stale, or `""` when no snapshot had been taken yet — which is the
+      // mismatched-pair defect this function exists to prevent, rebuilt by the
+      // function itself. An empty name is not cosmetic either:
+      // `isReadyApprovalCheck()` refuses on ANY empty value, so it left the
+      // payment method quietly unusable for a company the re-render had just
+      // restored, with nothing scheduled to re-read it (this branch never arms
+      // clearSelectedCompany's deferred pass).
+      //
+      // `#billing_company` is the right name source here: it is the field
+      // WooCommerce posts, the mirror a restore writes, and the one
+      // `clearSelectedCompany` and `enterManualCompanyEntry` already treat as
+      // authoritative. All three values are now read within this one tick.
+      this.customerCompany = {
+        company_name: jQuery("#billing_company").val() || "",
+        country_prefix: country,
+        organization_number: domNumber
+      };
       return false;
     }
 
