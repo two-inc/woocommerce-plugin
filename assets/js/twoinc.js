@@ -75,7 +75,42 @@ let twoincUtilHelper = {
   }
 };
 
-let twoincSelectWooHelper = {
+/**
+ * Company-search widget: search/dropdown/manual-entry/select2 lifecycle,
+ * encapsulated (TWO-25326 architecture rebuild). Mirrors PrestaShop's
+ * TwoCompanySearch class — a single class owns the ENTIRE search, dropdown,
+ * manual-entry and select2 lifecycle, configured via a constructor options
+ * object, with exactly one construction site (below, `twoincSelectWooHelper`).
+ * Same class, same dropdown/query-field/manual-entry behaviour, never a
+ * second implementation.
+ *
+ * Company-search-adjacent but checkout-wide concerns — toggling which
+ * fields are visible for the selected account type, the intent-message
+ * text, sole-trader mode — stay in `twoincDomHelper` / `twoincSoleTrader`
+ * below and call into this class's public methods, the same way
+ * `Twoinc#enableCompanySearch()` does.
+ */
+class TwoCompanySearch {
+  /**
+   * @param {Object} [options]
+   * @param {string} [options.companyFieldSelector] CSS selector of the
+   *   company-search <select> to attach to. Defaults to
+   *   `#billing_company_display`, the id WooCommerce always renders it
+   *   under on this plugin's checkout.
+   */
+  constructor(options) {
+    options = options || {};
+    this.companyFieldSelector = options.companyFieldSelector || "#billing_company_display";
+  }
+
+  /**
+   * CSS selector of the <select> this instance attaches selectWoo to. Set
+   * from the constructor's options above; declared here (rather than left
+   * purely as an instance property) so every other field this class owns is
+   * visible in one place.
+   */
+  companyFieldSelector;
+
   /**
    * Hard ceiling on a single company-search request, ms (TWO-25232). Before
    * this there was no client timeout at all, so a request that never
@@ -84,7 +119,7 @@ let twoincSelectWooHelper = {
    * slow-but-arriving response is never cut off client-side — this is the
    * backstop for a request that does not arrive at all.
    */
-  companySearchTimeoutMs: 30000,
+  companySearchTimeoutMs = 30000;
 
   /**
    * Characters the buyer must type before the company search runs
@@ -95,7 +130,7 @@ let twoincSelectWooHelper = {
    * that reason — the number the buyer is told and the number enforced are
    * the same value, so they cannot drift apart.
    */
-  companySearchMinLength: 3,
+  companySearchMinLength = 3;
 
   /**
    * The dropdown's own search field. select2 tears the dropdown down and
@@ -103,17 +138,17 @@ let twoincSelectWooHelper = {
    * nothing may hold a reference to it — every use is a fresh lookup, and
    * every handler on it is delegated.
    */
-  companySearchInputSelector: 'input[aria-owns="select2-billing_company_display-results"]',
+  companySearchInputSelector = 'input[aria-owns="select2-billing_company_display-results"]';
 
   /**
    * DOM id of the manual-entry button. Unchanged across TWO-25288 (the
    * cloned-<div> version) and the button rework below, so the stylesheet
    * rule and any brand overlays that match it keep working.
    */
-  manualEntryRowId: "company_not_in_btn",
+  manualEntryRowId = "company_not_in_btn";
 
   /** DOM id of the link back out of manual entry and into search. */
-  searchCompanyBtnId: "search_company_btn",
+  searchCompanyBtnId = "search_company_btn";
 
   /**
    * Text for a company search that could not be completed. Read lazily
@@ -129,25 +164,72 @@ let twoincSelectWooHelper = {
    * internal detail of select2's ajax adapter, and a stuck-hidden spinner
    * would be a silent regression if it ever changed.
    */
-  companySearchSeq: 0,
+  companySearchSeq = 0;
 
-  companySearchUnavailableText: function () {
+  /**
+   * Elements the browser will stop on during Tab traversal.
+   *
+   * Deliberately a superset — `[tabindex]` catches both the select2 combobox
+   * span (`tabindex="0"`, not a natively focusable element) and rows that
+   * carry `tabindex="-1"` to opt OUT — which is why the caller filters on the
+   * live `tabIndex` property rather than trusting the selector alone.
+   */
+  tabbableSelector =
+    "a[href], area[href], input:not([disabled]):not([type=hidden]), " +
+    "select:not([disabled]), textarea:not([disabled]), button:not([disabled]), " +
+    "iframe, object, embed, [tabindex], [contenteditable]";
+
+  /**
+   * The last billing country this page has acted on (TWO-24867 / TWO-25326).
+   *
+   * `null` until the first known country is seen — by `initialize()`'s seed,
+   * by the country handler, or by `onUpdatedCheckout`'s re-sync, whichever
+   * gets there first. All three go through `countryDidChange`, so none of
+   * them can leave this out of step with the field.
+   */
+  lastObservedCountry = null;
+
+  /** DOM class of the payment-tile slot the company-search control moves into
+   * when `company_search_location` is 'payment_tile' (TWO-25326 §7.1). */
+  companySearchTileSlotClass = "twoinc-company-search-tile-slot";
+
+  /**
+   * DOM id of the wrapper that holds the relocated company-search control
+   * (TWO-25326 §7.1). One element, created once; every move below is this
+   * same node changing parent, never a clone.
+   */
+  companySearchTileWrapperId = "twoinc-company-search-tile-wrapper";
+
+  /**
+   * DOM id of the company-number label under the company-name field
+   * (TWO-25288, narrowed to number-only by TWO-25326 §7).
+   *
+   * Id and class kept as `twoinc_company_summary` / `.twoinc-company-summary`
+   * even though it no longer summarises anything but the number: brand
+   * overlays style this element by class (`.custom-checkout
+   * .twoinc-company-summary` in twoinc.css is one in this repo alone), and
+   * renaming it would silently drop their styling on a change whose whole
+   * purpose is cosmetic.
+   */
+  companySummaryId = "twoinc_company_summary";
+
+  companySearchUnavailableText() {
     return (
       (window.twoinc && window.twoinc.text && window.twoinc.text.company_search_unavailable) ||
       "Company search is temporarily unavailable. Please try again."
     );
-  },
+  }
 
   /**
    * Hint shown in the empty company-search field (TWO-25288). Read lazily for
    * the same reason as the message above.
    */
-  companySearchPlaceholderText: function () {
+  companySearchPlaceholderText() {
     return (
       (window.twoinc && window.twoinc.text && window.twoinc.text.company_search_placeholder) ||
       "Enter company name to search"
     );
-  },
+  }
 
   /**
    * Hint shown while the typed term is below the search threshold
@@ -158,7 +240,7 @@ let twoincSelectWooHelper = {
    * currently are. The template carries an unresolved %d, interpolated here
    * from companySearchMinLength, so the claimed minimum is the enforced one.
    */
-  companySearchTooShortText: function () {
+  companySearchTooShortText() {
     const template =
       (window.twoinc && window.twoinc.text && window.twoinc.text.company_search_too_short) ||
       "Please enter %d or more characters";
@@ -167,26 +249,26 @@ let twoincSelectWooHelper = {
     // `#, php-format` family of placeholders is what they would reach for. The
     // msgid itself stays `%d` — changing it would invalidate the catalogues.
     return template.replace(/%(\d+\$)?d/, twoincSelectWooHelper.companySearchMinLength);
-  },
+  }
 
   /**
    * Label of the manual-entry row (TWO-25288). Read lazily for the same
    * reason as the hints above.
    */
-  companyNotInListText: function () {
+  companyNotInListText() {
     return (
       (window.twoinc && window.twoinc.text && window.twoinc.text.company_not_in_list) ||
       "My company is not on the list"
     );
-  },
+  }
 
   /** Label of the link back out of manual entry and into search. */
-  searchCompanyText: function () {
+  searchCompanyText() {
     return (
       (window.twoinc && window.twoinc.text && window.twoinc.text.search_company) ||
       "Search for company"
     );
-  },
+  }
 
   /**
    * Build the manual-entry affordance as a real, focusable button (#30.x.1,
@@ -214,7 +296,7 @@ let twoincSelectWooHelper = {
    *
    * @returns {Object} jQuery-wrapped <button>
    */
-  buildManualEntryButton: function () {
+  buildManualEntryButton() {
     const helper = twoincSelectWooHelper;
 
     return jQuery("<button></button>")
@@ -223,7 +305,7 @@ let twoincSelectWooHelper = {
       .on("click", function () {
         helper.activateManualEntry();
       });
-  },
+  }
 
   /**
    * Switch out of company search into manual entry, from the button's own
@@ -237,11 +319,11 @@ let twoincSelectWooHelper = {
    *
    * @returns {void}
    */
-  activateManualEntry: function () {
+  activateManualEntry() {
     const helper = twoincSelectWooHelper;
     jQuery("#" + helper.manualEntryRowId).remove();
-    setTimeout(twoincDomHelper.enterManualCompanyEntry, 0);
-  },
+    setTimeout(twoincSelectWooHelper.enterManualCompanyEntry, 0);
+  }
 
   /**
    * Put the manual-entry button right after the results list, or take it
@@ -281,7 +363,7 @@ let twoincSelectWooHelper = {
    *
    * @returns {void}
    */
-  syncManualEntryButton: function () {
+  syncManualEntryButton() {
     const helper = twoincSelectWooHelper;
 
     const picker = jQuery("#billing_company_display").data("select2");
@@ -316,7 +398,7 @@ let twoincSelectWooHelper = {
 
     $existing.remove();
     $list.after(helper.buildManualEntryButton());
-  },
+  }
 
   /**
    * Wire the manual-entry affordance to a company-search widget (TWO-25288,
@@ -338,7 +420,7 @@ let twoincSelectWooHelper = {
    *
    * @returns {void}
    */
-  bindManualEntryAffordance: function () {
+  bindManualEntryAffordance() {
     const helper = twoincSelectWooHelper;
 
     // Delegated on <body> rather than bound to the search field: that field
@@ -632,7 +714,7 @@ let twoincSelectWooHelper = {
     // interferers (selectWoo's document handler here; something unconfirmed
     // and external there, since selectWoo isn't even alive at that point),
     // so the fix shape differs — see that function's own comment.
-  },
+  }
 
   /**
    * Close the company-search dropdown, if one is open (TWO-25326).
@@ -644,23 +726,10 @@ let twoincSelectWooHelper = {
    *
    * @returns {void}
    */
-  closeCompanySearchDropdown: function () {
+  closeCompanySearchDropdown() {
     const picker = jQuery("#billing_company_display").data("select2");
     if (picker && typeof picker.close === "function") picker.close();
-  },
-
-  /**
-   * Elements the browser will stop on during Tab traversal.
-   *
-   * Deliberately a superset — `[tabindex]` catches both the select2 combobox
-   * span (`tabindex="0"`, not a natively focusable element) and rows that
-   * carry `tabindex="-1"` to opt OUT — which is why the caller filters on the
-   * live `tabIndex` property rather than trusting the selector alone.
-   */
-  tabbableSelector:
-    "a[href], area[href], input:not([disabled]):not([type=hidden]), " +
-    "select:not([disabled]), textarea:not([disabled]), button:not([disabled]), " +
-    "iframe, object, embed, [tabindex], [contenteditable]",
+  }
 
   /**
    * Is this element hidden, for the purpose of choosing a Tab target?
@@ -688,11 +757,11 @@ let twoincSelectWooHelper = {
    * @param {HTMLElement} el
    * @returns {boolean}
    */
-  isHiddenForTabbing: function (el) {
+  isHiddenForTabbing(el) {
     const $el = jQuery(el);
     if ($el.closest(".hidden, [hidden]").length) return true;
     return Boolean(el.style && el.style.display === "none");
-  },
+  }
 
   /**
    * Every real tab-stop after the company-name control, in tab order
@@ -736,7 +805,7 @@ let twoincSelectWooHelper = {
    *
    * @returns {Array<HTMLElement>} in document order, possibly empty
    */
-  tabbablesAfterCompanyField: function () {
+  tabbablesAfterCompanyField() {
     const anchor = twoincSelectWooHelper.companyFieldTabAnchor();
     if (!anchor) return [];
 
@@ -753,7 +822,7 @@ let twoincSelectWooHelper = {
     });
 
     return found;
-  },
+  }
 
   /**
    * The element the Tab traversal is measured from (TWO-25326 §4).
@@ -769,7 +838,7 @@ let twoincSelectWooHelper = {
    *
    * @returns {HTMLElement|null}
    */
-  companyFieldTabAnchor: function () {
+  companyFieldTabAnchor() {
     const selectors = [
       "#billing_company_display_field .select2-selection",
       "#billing_company_display_field",
@@ -782,7 +851,7 @@ let twoincSelectWooHelper = {
     }
 
     return null;
-  },
+  }
 
   /**
    * Focus the first candidate that will actually accept focus (TWO-25326 §4).
@@ -802,14 +871,14 @@ let twoincSelectWooHelper = {
    * @param {Array<HTMLElement>} candidates in tab order
    * @returns {HTMLElement|null} the element that took focus, or null
    */
-  focusFirstThatTakes: function (candidates) {
+  focusFirstThatTakes(candidates) {
     for (let i = 0; i < candidates.length; i++) {
       candidates[i].focus();
       if (document.activeElement === candidates[i]) return candidates[i];
     }
 
     return null;
-  },
+  }
 
   /**
    * Is focus back on the company-name control? (TWO-25326 §4)
@@ -828,7 +897,7 @@ let twoincSelectWooHelper = {
    *
    * @returns {boolean}
    */
-  focusIsBackOnCompanyField: function () {
+  focusIsBackOnCompanyField() {
     const active = document.activeElement;
     if (!active || active === document.body) return true;
 
@@ -836,7 +905,7 @@ let twoincSelectWooHelper = {
       jQuery(active).closest("#billing_company_display_field").length > 0 ||
       active === jQuery("#billing_company").get(0)
     );
-  },
+  }
 
   /**
    * Give up on finding a tab target, but do not let the buyer be dumped back
@@ -850,14 +919,14 @@ let twoincSelectWooHelper = {
    *
    * @returns {void}
    */
-  releaseFocusFromCompanyField: function () {
+  releaseFocusFromCompanyField() {
     const active = document.activeElement;
     if (!active || typeof active.blur !== "function") return;
     if (!twoincSelectWooHelper.focusIsBackOnCompanyField()) return;
     if (active === document.body) return;
 
     active.blur();
-  },
+  }
 
   /**
    * The dropdown's query-field wrapper — where the spinner belongs
@@ -879,7 +948,7 @@ let twoincSelectWooHelper = {
    *
    * @returns {Object} jQuery-wrapped wrapper, empty if there is no dropdown
    */
-  getCompanySearchFieldContainer: function () {
+  getCompanySearchFieldContainer() {
     const $byAria = jQuery(twoincSelectWooHelper.companySearchInputSelector).parent();
     if ($byAria.length) return $byAria;
 
@@ -887,7 +956,7 @@ let twoincSelectWooHelper = {
       .closest(".select2-dropdown")
       .find(".select2-search--dropdown")
       .first();
-  },
+  }
 
   /**
    * Toggle the in-field search spinner (TWO-25288).
@@ -904,7 +973,7 @@ let twoincSelectWooHelper = {
    * open, so add-then-remove keeps at most one node alive and leaves no
    * animating element running behind a closed dropdown.
    */
-  toggleCompanySearchSpinner: function (isSearching) {
+  toggleCompanySearchSpinner(isSearching) {
     const $search = twoincSelectWooHelper.getCompanySearchFieldContainer();
     if ($search.length === 0) return;
     $search.find(".twoinc-search-spinner").remove();
@@ -912,7 +981,7 @@ let twoincSelectWooHelper = {
       $search.append('<span class="twoinc-search-spinner" aria-hidden="true"></span>');
     }
     $search.toggleClass("twoinc-searching", !!isSearching);
-  },
+  }
 
   /**
    * Replace the results list with the "search unavailable" message. Goes
@@ -920,12 +989,12 @@ let twoincSelectWooHelper = {
    * listens on the container for it) so the message is cleared on the next
    * query like any other, instead of us hand-managing dropdown DOM.
    */
-  showCompanySearchUnavailable: function () {
+  showCompanySearchUnavailable() {
     const select2 = jQuery("#billing_company_display").data("select2");
     if (select2 && typeof select2.trigger === "function") {
       select2.trigger("results:message", { message: "errorLoading" });
     }
-  },
+  }
 
   /**
    * The billing country the checkout form currently holds, upper-cased, or
@@ -947,19 +1016,9 @@ let twoincSelectWooHelper = {
    * codes — and left alone rather than swept into this fix, but do not read
    * the paragraph above as a claim that the whole file is unified.
    */
-  currentCountry: function () {
+  currentCountry() {
     return (jQuery("#billing_country").val() || "").toUpperCase();
-  },
-
-  /**
-   * The last billing country this page has acted on (TWO-24867 / TWO-25326).
-   *
-   * `null` until the first known country is seen — by `initialize()`'s seed,
-   * by the country handler, or by `onUpdatedCheckout`'s re-sync, whichever
-   * gets there first. All three go through `countryDidChange`, so none of
-   * them can leave this out of step with the field.
-   */
-  lastObservedCountry: null,
+  }
 
   /**
    * Whether a `change` event on #billing_country represents a REAL country
@@ -1001,19 +1060,19 @@ let twoincSelectWooHelper = {
    * @param {string} country upper-cased ISO code currently in the field
    * @returns {boolean}
    */
-  countryDidChange: function (country) {
+  countryDidChange(country) {
     if (!country) {
       return false;
     }
     const previous = twoincSelectWooHelper.lastObservedCountry;
     twoincSelectWooHelper.lastObservedCountry = country;
     return !!previous && country !== previous;
-  },
+  }
 
   /**
    * Generate parameters for selectwoo
    */
-  genSelectWooParams: function () {
+  genSelectWooParams() {
     let twoincSearchLimit = 50;
     return {
       minimumInputLength: twoincSelectWooHelper.companySearchMinLength,
@@ -1174,13 +1233,13 @@ let twoincSelectWooHelper = {
         }
       }
     };
-  },
+  }
 
   /**
    * Fix the position bug
    * https://github.com/select2/select2/issues/4614
    */
-  fixSelectWooPositionCompanyName: function () {
+  fixSelectWooPositionCompanyName() {
     if (window.twoinc.enable_company_search === "yes") {
       const billingCompanyDisplay = jQuery("#billing_company_display").data("select2");
 
@@ -1243,7 +1302,7 @@ let twoincSelectWooHelper = {
         });
       }
     }
-  },
+  }
 
   /**
    * Whether focus is still somewhere this poll is allowed to touch.
@@ -1268,7 +1327,7 @@ let twoincSelectWooHelper = {
    * @param {string} selectWooElemId the select's element id
    * @returns {boolean}
    */
-  focusStillWithinCompanySearch: function (selectWooElemId) {
+  focusStillWithinCompanySearch(selectWooElemId) {
     const active = document.activeElement;
     if (!active || active === document.body) return true;
 
@@ -1280,12 +1339,12 @@ let twoincSelectWooHelper = {
         "#select2-" + selectWooElemId + "-results, #select2-" + selectWooElemId + "-container"
       ).length > 0
     );
-  },
+  }
 
   /**
    * Wait until element appear and focus
    */
-  waitToFocus: function (selectWooElemId, hitsRequired, intervalDuration, callbackFunc) {
+  waitToFocus(selectWooElemId, hitsRequired, intervalDuration, callbackFunc) {
     if (isNaN(intervalDuration)) intervalDuration = 300;
     if (isNaN(hitsRequired)) hitsRequired = 2;
     let attemptsLeft = hitsRequired * 8;
@@ -1313,12 +1372,12 @@ let twoincSelectWooHelper = {
         if (inpElem && callbackFunc) callbackFunc();
       }
     }, intervalDuration);
-  },
+  }
 
   /**
    * Wait until element appear and focus
    */
-  addSelectWooFocusFixHandler: function (selectWooElemId) {
+  addSelectWooFocusFixHandler(selectWooElemId) {
     let billingCompanyDisplayResult = jQuery("#select2-" + selectWooElemId + "-results");
 
     // Ensure the element exists and the handler hasn't been added already
@@ -1349,288 +1408,6 @@ let twoincSelectWooHelper = {
       });
     }
   }
-};
-
-let twoincDomHelper = {
-  /**
-   * Add a placeholder after an input, used for moving the fields in HTML DOM
-   */
-  addPlaceholder: function ($el, name) {
-    // Get an existing placeholder
-    let $placeholder = jQuery("#twoinc-" + name + "-source");
-
-    // Stop if we already have a placeholder
-    if ($placeholder.length > 0) return;
-
-    // Create a placeholder
-    $placeholder = jQuery('<div id="twoinc-' + name + '-source" class="twoinc-source"></div>');
-
-    // Add placeholder after element
-    $placeholder.insertAfter($el);
-  },
-
-  /**
-   * Move a field to Twoinc template location and leave a placeholder
-   */
-  moveField: function (selector, name) {
-    // Get the element
-    const $el = jQuery("#" + selector);
-
-    // Add a placeholder
-    twoincDomHelper.addPlaceholder($el, name);
-
-    // Get the target
-    const $target = jQuery("#twoinc-" + name + "-target");
-
-    // Move the input
-    $el.insertAfter($target);
-  },
-
-  /**
-   * Move a field back to its original location
-   */
-  revertField: function (selector, name) {
-    // Get the element
-    const $el = jQuery("#" + selector);
-
-    // Get the target
-    const $source = jQuery("#twoinc-" + name + "-source");
-
-    // Move the input
-    if ($source.length > 0) {
-      $el.insertAfter($source);
-    }
-  },
-
-  /**
-   * Move the fields to their original or Twoinc template location.
-   *
-   * Phone and email used to be pulled up here too (into the pre-billing
-   * "representative" wrapper, alongside first/last name), so a buyer would
-   * see one field order on first paint and a different one ~1s later once
-   * this fired. That grouping's own visual cue (an h3 heading) was commented
-   * out back in 2021 and never replaced with CSS, so nothing distinguishes
-   * the wrapper today — it was pure reorder with no remaining display
-   * purpose. Phone/email now stay in their native WC position (#33).
-   */
-  positionFields: function () {
-    setTimeout(function () {
-      // If business account
-      if (twoincDomHelper.isTwoincSelected()) {
-        twoincDomHelper.moveField("billing_first_name_field", "fn");
-        twoincDomHelper.moveField("billing_last_name_field", "ln");
-      } else {
-        twoincDomHelper.revertField("billing_first_name_field", "fn");
-        twoincDomHelper.revertField("billing_last_name_field", "ln");
-      }
-
-      twoincDomHelper.toggleTooltip(
-        '#billing_phone, label[for="billing_phone"]',
-        window.twoinc.text.tooltip_phone
-      );
-      twoincDomHelper.toggleTooltip(
-        '#billing_company_display_field .select2-container, label[for="billing_company_display"], #billing_company, label[for="billing_company"]',
-        window.twoinc.text.tooltip_company
-      );
-    }, 100);
-  },
-
-  /**
-   * Mark checkout inputs invalid
-   */
-  markFieldInvalid: function (fieldWrapperId) {
-    const fieldWrapper = document.querySelector("#" + fieldWrapperId);
-
-    if (fieldWrapper && fieldWrapper.classList) {
-      fieldWrapper.classList.remove("woocommerce-validated");
-      fieldWrapper.classList.add("woocommerce-invalid");
-    }
-  },
-
-  /**
-   * Toggle the visual cues for required fields
-   */
-  toggleRequiredCues: function ($targets, is_required) {
-    // For each input
-    $targets.find(":input").each(function () {
-      // Get the input
-      const $input = jQuery(this);
-
-      // Get the input row
-      const $row = $input.parents(".form-row");
-
-      // Toggle the required property
-      if (is_required) {
-        $input.attr("required", true);
-
-        // Add 'required' visual cue
-        if ($row.find("label .twoinc-required, label .required").length == 0) {
-          $row
-            .find("label")
-            .append('<abbr class="required twoinc-required" title="required">*</abbr>');
-        }
-        $row.find("label .optional").hide();
-      } else {
-        $input.attr("required", false);
-
-        // Show the hidden optional visual cue
-        $row.find("label .twoinc-required").remove();
-        $row.find("label .optional").show();
-      }
-    });
-  },
-
-  /**
-   * Toggle the custom business fields for Twoinc
-   */
-  toggleBusinessFields: function () {
-    // Get the targets
-    let allTargets = [
-      ".woocommerce-company-fields",
-      ".woocommerce-representative-fields",
-      "#billing_phone_field",
-      "#billing_company_display_field",
-      "#billing_company_field",
-      "#company_id_field",
-      "#invoice_email_field",
-      "#purchase_order_number_field",
-      "#project_field",
-      "#department_field"
-    ];
-    let requiredBusinessTargets = [];
-    let visibleTargets = [
-      ".woocommerce-company-fields",
-      ".woocommerce-representative-fields",
-      "#billing_phone_field"
-    ];
-    let requiredTargets = [];
-
-    // Toggle the targets based on the account type
-    const isTwoincSelected =
-      twoincDomHelper.isTwoincVisible() && twoincDomHelper.isTwoincSelected();
-
-    if (isTwoincSelected) {
-      visibleTargets.push(
-        "#invoice_email_field",
-        "#purchase_order_number_field",
-        "#project_field",
-        "#department_field"
-      );
-      requiredTargets.push("#billing_phone_field");
-      if (twoincDomHelper.isCountrySupported() && window.twoinc.enable_company_search === "yes") {
-        visibleTargets.push("#billing_company_display_field");
-        requiredTargets.push("#billing_company_display_field");
-      } else {
-        visibleTargets.push("#billing_company_field");
-        requiredTargets.push("#billing_company_field");
-
-        // #company_id_field is deliberately left OUT here when manual entry
-        // (TWO-25288/#30.x.13) is what put us on this branch. This branch is
-        // shared with the one other reason `enable_company_search` can read
-        // "no" at runtime — sole-trader mode (twoincSoleTrader.setMode),
-        // which also legitimately wants the id field: the plain fallback
-        // captures name+id like it always has, and sole-trader mode fills
-        // company_id itself with a synthetic identifier (Two's payment
-        // method cannot function without one). Manual entry is the one case
-        // in this org's three-mode company-capture model that captures name
-        // ONLY — Two's payment method still needs an id in the other mode,
-        // but a buyer who says "my company isn't in the registry" has no id
-        // to give, and showing the field only invites one that was never
-        // validated against anything. `manual_company_entry_active` is set
-        // by enterManualCompanyEntry/exitManualCompanyEntry specifically so
-        // this branch can tell "manual entry" apart from the other route
-        // into it.
-        if (!window.twoinc.manual_company_entry_active) {
-          visibleTargets.push("#company_id_field");
-          requiredTargets.push("#company_id_field");
-        }
-      }
-    } else {
-      // `enable_company_search_for_others`'s own admin description ties it
-      // to the checkbox being checked ("Requires the option above to be
-      // checked") — i.e. the ADMIN's address-area preference, not whatever
-      // `window.twoinc.enable_company_search` currently reads at runtime
-      // (that flag is "yes" whenever the search widget is the active input
-      // method, in BOTH placements — see the doc comment on
-      // syncCompanySearchTileLocation). Reading it here instead of
-      // `company_search_location` would light up address-area search for
-      // other payment methods even when the merchant chose payment-tile
-      // placement, where there is no tile to show it in at all (the tile
-      // only exists inside this gateway's own payment box).
-      if (
-        twoincDomHelper.isCountrySupported() &&
-        window.twoinc.company_search_location === "address_area" &&
-        window.twoinc.enable_company_search_for_others === "yes"
-      ) {
-        visibleTargets.push("#billing_company_display_field");
-      } else {
-        visibleTargets.push("#billing_company_field");
-      }
-    }
-
-    allTargets = jQuery(allTargets.join(","));
-    requiredTargets = jQuery(requiredTargets.join(","));
-    visibleTargets = jQuery(visibleTargets.join(","));
-
-    allTargets.addClass("hidden");
-    visibleTargets.removeClass("hidden");
-
-    // Toggle the required fields based on the account type
-    twoincDomHelper.toggleRequiredCues(allTargets, false);
-    twoincDomHelper.toggleRequiredCues(requiredTargets, isTwoincSelected);
-
-    twoincDomHelper.syncCompanyFieldWrappers();
-
-    // Relocate the company-search control per the admin setting (TWO-25326
-    // §7.1) BEFORE renderCompanySummary() below: the summary node's anchor
-    // (getCompanySummaryNode()) is relative to whichever field is currently
-    // its neighbour, and this call may just have moved that field's wrapper
-    // into the tile.
-    twoincDomHelper.syncCompanySearchTileLocation();
-
-    // Last, and unconditionally: this function runs on every payment-method,
-    // country and capture-mode switch, which is exactly when the summary's own
-    // visibility gate needs re-evaluating. It reads the current inputs and
-    // calls nothing that re-enters here.
-    twoincDomHelper.renderCompanySummary();
-  },
-
-  /**
-   * Mirror each company field's visibility onto its enclosing wrapper
-   * (TWO-25288).
-   *
-   * The pay-for-order page lays its copy of the company inputs out in
-   * per-field wrappers, each carrying its own hidden state that the function
-   * above does not touch — so hiding or revealing the field inside one has no
-   * visible effect there. Manual entry was unreachable on that page until now,
-   * which is the only reason that has not shown up: switching to it would have
-   * revealed a company field still inside a hidden wrapper, leaving the buyer
-   * with nowhere to type. The checkout page has no such wrappers and this is a
-   * no-op there.
-   *
-   * @returns {void}
-   */
-  syncCompanyFieldWrappers: function () {
-    jQuery("#billing_company_display_field, #billing_company_field, #company_id_field").each(
-      function () {
-        const $field = jQuery(this);
-        const $wrapper = $field.closest(".twoinc-inp-container");
-        if (!$wrapper.length) return;
-        $wrapper.toggleClass("hidden", $field.hasClass("hidden"));
-      }
-    );
-  },
-
-  /** DOM class of the payment-tile slot the company-search control moves into
-   * when `company_search_location` is 'payment_tile' (TWO-25326 §7.1). */
-  companySearchTileSlotClass: "twoinc-company-search-tile-slot",
-
-  /**
-   * DOM id of the wrapper that holds the relocated company-search control
-   * (TWO-25326 §7.1). One element, created once; every move below is this
-   * same node changing parent, never a clone.
-   */
-  companySearchTileWrapperId: "twoinc-company-search-tile-wrapper",
 
   /**
    * DOM id of the safe holding pen the wrapper sits in whenever it is NOT
@@ -1645,7 +1422,7 @@ let twoincDomHelper = {
    *
    * @returns {Object} jQuery-wrapped holding pen, created on first use
    */
-  getCompanySearchTileHoldingPen: function () {
+  getCompanySearchTileHoldingPen() {
     let $pen = jQuery("#twoinc-company-search-tile-holding-pen");
     if (!$pen.length) {
       $pen = jQuery('<div id="twoinc-company-search-tile-holding-pen" class="hidden"></div>');
@@ -1656,7 +1433,7 @@ let twoincDomHelper = {
       (($form.length && $form) || jQuery("body")).append($pen);
     }
     return $pen;
-  },
+  }
 
   /**
    * Detach the company-search tile wrapper to the safe holding pen, BEFORE
@@ -1693,21 +1470,17 @@ let twoincDomHelper = {
    *
    * @returns {void}
    */
-  detachCompanySearchTileWrapperToSafety: function () {
+  detachCompanySearchTileWrapperToSafety() {
     if (window.twoinc.company_search_location !== "payment_tile") return;
 
-    const $wrapper = jQuery("#" + twoincDomHelper.companySearchTileWrapperId);
+    const $wrapper = jQuery("#" + twoincSelectWooHelper.companySearchTileWrapperId);
     if (!$wrapper.length) return;
 
-    const $pen = twoincDomHelper.getCompanySearchTileHoldingPen();
+    const $pen = twoincSelectWooHelper.getCompanySearchTileHoldingPen();
     if ($wrapper.parent()[0] !== $pen[0]) {
       $wrapper.appendTo($pen);
     }
-  },
-
-  /** DOM class of the payment-tile slot the company-search control moves into
-   * when `company_search_location` is 'payment_tile' (TWO-25326 §7.1). */
-  companySearchTileSlotClass: "twoinc-company-search-tile-slot",
+  }
 
   /**
    * Relocate the ONE company-search control into the payment tile, or leave
@@ -1796,8 +1569,8 @@ let twoincDomHelper = {
    *
    * @returns {void}
    */
-  syncCompanySearchTileLocation: function () {
-    const $slot = jQuery("." + twoincDomHelper.companySearchTileSlotClass);
+  syncCompanySearchTileLocation() {
+    const $slot = jQuery("." + twoincSelectWooHelper.companySearchTileSlotClass);
     if (!$slot.length) return;
 
     if (window.twoinc.company_search_location !== "payment_tile") {
@@ -1809,9 +1582,11 @@ let twoincDomHelper = {
       return;
     }
 
-    let $wrapper = jQuery("#" + twoincDomHelper.companySearchTileWrapperId);
+    let $wrapper = jQuery("#" + twoincSelectWooHelper.companySearchTileWrapperId);
     if (!$wrapper.length) {
-      $wrapper = jQuery('<div id="' + twoincDomHelper.companySearchTileWrapperId + '"></div>');
+      $wrapper = jQuery(
+        '<div id="' + twoincSelectWooHelper.companySearchTileWrapperId + '"></div>'
+      );
       $slot.append($wrapper);
     } else if ($wrapper.parent()[0] !== $slot[0]) {
       $slot.append($wrapper);
@@ -1876,141 +1651,12 @@ let twoincDomHelper = {
     } else if (!$slot.hasClass("hidden")) {
       $slot.addClass("hidden");
     }
-  },
-
-  /**
-   * Deselect payment method and select the first available one
-   */
-  deselectPaymentMethod: function () {
-    const paymentMethodRadioObj = jQuery(':input[value="' + window.twoinc.gateway_id + '"]');
-    // Deselect the current payment method
-    if (paymentMethodRadioObj) {
-      paymentMethodRadioObj.prop("checked", false);
-    }
-  },
-
-  /**
-   * Toggle the tooltip for input fields
-   */
-  toggleTooltip: function (selectorStr, tooltip) {
-    if (window.twoinc.display_tooltips !== "yes") return;
-
-    jQuery(selectorStr).each(function () {
-      if (twoincDomHelper.isTwoincSelected()) {
-        if (!jQuery(this).attr("original-title") && tooltip !== jQuery(this).attr("title")) {
-          jQuery(this).attr("original-title", jQuery(this).attr("title"));
-        }
-        jQuery(this).attr("title", tooltip);
-      } else {
-        jQuery(this).attr("title", jQuery(this).attr("original-title"));
-        jQuery(this).attr("original-title", "");
-      }
-    });
-  },
-
-  /**
-   * The captured company as the intent-message sentences want it
-   * (TWO-25326 §7.3): "<name> (<number>)", or bare <name> when there is no
-   * number (manual entry, which clears #company_id). Never "<name> ()" —
-   * an absent number is genuinely absent, not pending.
-   *
-   * This is what used to build the now-removed `.twoinc-company-tile-label`
-   * text. It has the same job now, just substituted into the intent
-   * sentences' data-company-template token instead of a standalone element.
-   *
-   * @param {string} name already blank-collapsed
-   * @param {string} number already blank-collapsed
-   * @returns {string}
-   */
-  getCompanyLabelText: function (name, number) {
-    return name && number ? name + " (" + number + ")" : name;
-  },
-
-  /**
-   * Toggle payment text in subtitle and description
-   */
-  togglePaySubtitleDesc: function (action, errSelector) {
-    jQuery(".twoinc-pay-box").addClass("hidden");
-    if (["checking-intent", "intent-approved", "errored"].includes(action)) {
-      if (action === "checking-intent") {
-        // Suppressed by the brand => the loader div is absent too
-        // (TWO-25224: the notice switch covers the whole reassurance
-        // pass, loading state included), so this is a no-op on an empty
-        // jQuery set. The error branches below are never suppressed.
-        jQuery(".twoinc-pay-box.twoinc-loader").removeClass("hidden");
-      } else if (action === "intent-approved") {
-        // The notice ships the no-company sentence as its text and the
-        // company variant as a template on data-company-template (only the
-        // browser knows the buyer's captured company). Substitute here,
-        // always from the template, so a later company change re-renders
-        // and an emptied company falls back to the served sentence.
-        // Suppressed by the brand => the div is absent and every call
-        // below is a no-op on an empty jQuery set.
-        //
-        // TWO-25326 §7.3: the token now stands for the WHOLE "<name>
-        // (<number>)" chunk, not the bare name — this is what replaces the
-        // separate `.twoinc-company-tile-label` element.
-        let intentBox = jQuery(".twoinc-pay-box.twoinc-intent-approved");
-        if (intentBox.data("twoincDefaultText") === undefined) {
-          intentBox.data("twoincDefaultText", intentBox.text());
-        }
-        let companyTemplate = intentBox.attr("data-company-template");
-        let captured = twoincDomHelper.readCapturedCompany();
-        let companyText = twoincDomHelper.getCompanyLabelText(
-          twoincUtilHelper.blankToEmpty(captured.company_name),
-          twoincUtilHelper.blankToEmpty(captured.organization_number)
-        );
-        if (companyTemplate && companyText) {
-          intentBox.text(
-            companyTemplate.replace("{company}", function () {
-              // Function replacer (Vader, round 1 review): a string replacer
-              // honours special patterns like `$&`/`$$` inside the SECOND
-              // argument, so a company literally named "Acme $& Corp" or
-              // "50% Ltd $$" would come out mangled with a plain-string
-              // replace. A function replacer passes companyText through
-              // literally, no matter what it contains.
-              return companyText;
-            })
-          );
-        } else {
-          intentBox.text(intentBox.data("twoincDefaultText"));
-        }
-        intentBox.removeClass("hidden");
-      } else if (action === "errored") {
-        // TWO-25326 §7.3: the "not available" box carries the same
-        // data-company-template/token mechanism as the approved notice
-        // above, but ONLY on `.twoinc-err-payment-default` — the phone-number
-        // box is a fixed, unrelated message and never gets one.
-        let $errBox = jQuery(".twoinc-pay-box" + errSelector);
-        if (errSelector === ".twoinc-err-payment-default") {
-          if ($errBox.data("twoincDefaultText") === undefined) {
-            $errBox.data("twoincDefaultText", $errBox.text());
-          }
-          let declinedTemplate = $errBox.attr("data-company-template");
-          let captured = twoincDomHelper.readCapturedCompany();
-          let companyText = twoincDomHelper.getCompanyLabelText(
-            twoincUtilHelper.blankToEmpty(captured.company_name),
-            twoincUtilHelper.blankToEmpty(captured.organization_number)
-          );
-          if (declinedTemplate && companyText) {
-            $errBox.text(
-              declinedTemplate.replace("{company}", function () {
-                return companyText;
-              })
-            );
-          } else {
-            $errBox.text($errBox.data("twoincDefaultText"));
-          }
-        }
-        $errBox.removeClass("hidden");
-      }
-    }
-  },
+  }
 
   /**
    * Get company name string
    */
-  getCompanyName: function () {
+  getCompanyName() {
     if (window.twoinc.enable_company_search === "yes") {
       let companyNameObj = twoincDomHelper.getCheckoutInput(
         "SPAN",
@@ -2025,37 +1671,12 @@ let twoincDomHelper = {
     }
 
     return "";
-  },
-
-  /**
-   * Get company data from current HTML inputs
-   */
-  getCompanyData: function () {
-    return {
-      company_name: twoincDomHelper.getCompanyName(),
-      country_prefix: jQuery("#billing_country").val(),
-      organization_number: jQuery("#company_id").val()
-    };
-  },
-
-  /**
-   * Get representative data from current HTML inputs
-   */
-  getRepresentativeData: function () {
-    let representativeData = {};
-    if (jQuery("#billing_email").val())
-      representativeData["email"] = jQuery("#billing_email").val();
-    if (jQuery("#billing_phone").val())
-      representativeData["phone_number"] = jQuery("#billing_phone").val();
-    representativeData["first_name"] = jQuery("#billing_first_name").val();
-    representativeData["last_name"] = jQuery("#billing_last_name").val();
-    return representativeData;
-  },
+  }
 
   /**
    * Clear the selected selectWoo company name and id
    */
-  clearSelectedCompany: function () {
+  clearSelectedCompany() {
     // Clear company inputs
     let billingCompanyDisplay = jQuery("#billing_company_display");
     billingCompanyDisplay.html("");
@@ -2096,29 +1717,16 @@ let twoincDomHelper = {
     // clear above: in manual entry the buyer's typed company is deliberately
     // kept, so the summary vanished here and reappeared 3s later when the
     // re-read below ran.
-    twoincDomHelper.renderCompanySummary();
+    twoincSelectWooHelper.renderCompanySummary();
     twoincDomHelper.togglePaySubtitleDesc();
 
     // Update again after all elements are updated
     setTimeout(function () {
       Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData();
-      twoincDomHelper.renderCompanySummary();
+      twoincSelectWooHelper.renderCompanySummary();
       twoincDomHelper.togglePaySubtitleDesc();
     }, 3000);
-  },
-
-  /**
-   * DOM id of the company-number label under the company-name field
-   * (TWO-25288, narrowed to number-only by TWO-25326 §7).
-   *
-   * Id and class kept as `twoinc_company_summary` / `.twoinc-company-summary`
-   * even though it no longer summarises anything but the number: brand
-   * overlays style this element by class (`.custom-checkout
-   * .twoinc-company-summary` in twoinc.css is one in this repo alone), and
-   * renaming it would silently drop their styling on a change whose whole
-   * purpose is cosmetic.
-   */
-  companySummaryId: "twoinc_company_summary",
+  }
 
   /**
    * The read-only company-number label, built hidden on first use
@@ -2186,8 +1794,8 @@ let twoincDomHelper = {
    * @returns {Object} jQuery-wrapped summary, or an empty set on a page with
    *   no company fields at all
    */
-  getCompanySummaryNode: function () {
-    let $node = jQuery("#" + twoincDomHelper.companySummaryId);
+  getCompanySummaryNode() {
+    let $node = jQuery("#" + twoincSelectWooHelper.companySummaryId);
     const isNew = !$node.length;
 
     let $field = jQuery("#company_id_field");
@@ -2202,7 +1810,7 @@ let twoincDomHelper = {
     if (isNew) {
       $node = jQuery(
         '<div id="' +
-          twoincDomHelper.companySummaryId +
+          twoincSelectWooHelper.companySummaryId +
           '" class="twoinc-company-summary hidden">' +
           '<span class="twoinc-company-summary-id"></span>' +
           "</div>"
@@ -2213,7 +1821,7 @@ let twoincDomHelper = {
     const $anchor = $wrapper.length ? $wrapper : $field;
     if ($node.prev()[0] !== $anchor[0]) $node.insertAfter($anchor);
     return $node;
-  },
+  }
 
   /**
    * Render the captured company's name and number, read-only (TWO-25288).
@@ -2240,10 +1848,10 @@ let twoincDomHelper = {
    * @param {string} [companyId]
    * @returns {void}
    */
-  renderCompanySummary: function (companyName, companyId) {
+  renderCompanySummary(companyName, companyId) {
     const data =
       companyName === undefined && companyId === undefined
-        ? twoincDomHelper.readCapturedCompany()
+        ? twoincSelectWooHelper.readCapturedCompany()
         : { company_name: companyName, organization_number: companyId };
 
     // The empty selectWoo option's label is a non-breaking space, so an
@@ -2257,7 +1865,7 @@ let twoincDomHelper = {
     // is removed — the company now lives inside the intent-message sentences
     // themselves, substituted in togglePaySubtitleDesc()).
 
-    const $node = twoincDomHelper.getCompanySummaryNode();
+    const $node = twoincSelectWooHelper.getCompanySummaryNode();
     if (!$node.length) return;
 
     $node.find(".twoinc-company-summary-id").text(number);
@@ -2276,7 +1884,7 @@ let twoincDomHelper = {
       number && twoincDomHelper.isTwoincVisible() && twoincDomHelper.isTwoincSelected()
     );
     $node.toggleClass("hidden", !visible);
-  },
+  }
 
   /**
    * Read the captured company straight out of the live inputs (TWO-25288).
@@ -2307,12 +1915,12 @@ let twoincDomHelper = {
    *
    * @returns {{company_name: string, organization_number: string}}
    */
-  readCapturedCompany: function () {
+  readCapturedCompany() {
     return {
       company_name: twoincUtilHelper.blankToEmpty(jQuery("#billing_company").val()),
       organization_number: twoincUtilHelper.blankToEmpty(jQuery("#company_id").val())
     };
-  },
+  }
 
   /**
    * Get the link back out of manual entry and into company search, building it
@@ -2337,7 +1945,7 @@ let twoincDomHelper = {
    *
    * @returns {Object} jQuery-wrapped button
    */
-  getSearchCompanyBtnNode: function () {
+  getSearchCompanyBtnNode() {
     const id = twoincSelectWooHelper.searchCompanyBtnId;
 
     let $btn = jQuery("#" + id);
@@ -2381,13 +1989,13 @@ let twoincDomHelper = {
       // regardless of whether some ancestor handler already called
       // `preventDefault()`/`stopPropagation()` by the time it runs.
       .on("click", function (e) {
-        twoincDomHelper.exitManualCompanyEntry();
+        twoincSelectWooHelper.exitManualCompanyEntry();
       })
       .on("keydown", function (e) {
         if (e.which !== 13 && e.which !== 32) return;
         e.preventDefault();
         e.stopPropagation();
-        twoincDomHelper.exitManualCompanyEntry();
+        twoincSelectWooHelper.exitManualCompanyEntry();
       });
 
     let $wrapper = jQuery("#billing_company_field .woocommerce-input-wrapper");
@@ -2414,7 +2022,7 @@ let twoincDomHelper = {
 
     ($wrapper.length ? $wrapper : jQuery("#billing_company_field")).append($btn);
     return $btn;
-  },
+  }
 
   /**
    * Switch the company field from search to manual entry (TWO-25288).
@@ -2423,7 +2031,7 @@ let twoincDomHelper = {
    *
    * @returns {void}
    */
-  enterManualCompanyEntry: function () {
+  enterManualCompanyEntry() {
     // Guard against the deferred activation (activateManualEntry's
     // `setTimeout(enterManualCompanyEntry, 0)`) landing AFTER an async
     // sole-trader switch raced in during the same tick — e.g. the
@@ -2534,7 +2142,7 @@ let twoincDomHelper = {
     }
 
     jQuery("#" + twoincSelectWooHelper.manualEntryRowId).remove();
-    twoincDomHelper.getSearchCompanyBtnNode().show();
+    twoincSelectWooHelper.getSearchCompanyBtnNode().show();
 
     twoincDomHelper.toggleBusinessFields();
 
@@ -2542,15 +2150,15 @@ let twoincDomHelper = {
     // to <body> — so a keyboard or AT user loses their place mid-checkout and
     // has to tab in from the top of the document. Hand focus to the field they
     // asked to be given.
-    twoincDomHelper.focusVisibleCompanyField("#billing_company");
-  },
+    twoincSelectWooHelper.focusVisibleCompanyField("#billing_company");
+  }
 
   /**
    * Switch the company field back from manual entry to search (TWO-25288).
    *
    * @returns {void}
    */
-  exitManualCompanyEntry: function () {
+  exitManualCompanyEntry() {
     window.twoinc.enable_company_search = "yes";
     window.twoinc.manual_company_entry_active = false;
 
@@ -2560,7 +2168,7 @@ let twoincDomHelper = {
     jQuery("#company_id").val("");
     Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData();
 
-    twoincDomHelper.getSearchCompanyBtnNode().hide();
+    twoincSelectWooHelper.getSearchCompanyBtnNode().hide();
     twoincDomHelper.toggleBusinessFields();
 
     // Asking to search again is a request to search, not a request to be shown
@@ -2570,7 +2178,7 @@ let twoincDomHelper = {
     // After toggleBusinessFields, deliberately. Opening the dropdown positions
     // it against its container, and that container is only laid out once the
     // business fields have been shown.
-    if (!twoincDomHelper.openCompanySearchDropdown()) {
+    if (!twoincSelectWooHelper.openCompanySearchDropdown()) {
       // Fallback for a surface with no picker attached (the pay-for-order page
       // renders a different set of fields). Mirrors the enter path: the button
       // that had focus is now hidden, so without this focus is stranded on a
@@ -2585,14 +2193,14 @@ let twoincDomHelper = {
       // its accessible role onto the rendered combobox, which is the element
       // carrying tabindex and the one a buyer can actually see.
       if (
-        !twoincDomHelper.focusVisibleCompanyField(
+        !twoincSelectWooHelper.focusVisibleCompanyField(
           "#billing_company_display_field .select2-selection"
         )
       ) {
-        twoincDomHelper.focusVisibleCompanyField("#billing_company_display");
+        twoincSelectWooHelper.focusVisibleCompanyField("#billing_company_display");
       }
     }
-  },
+  }
 
   /**
    * Open the company-search dropdown and put the caret in its search box
@@ -2618,7 +2226,7 @@ let twoincDomHelper = {
    *
    * @returns {boolean} whether the search dropdown was opened
    */
-  openCompanySearchDropdown: function () {
+  openCompanySearchDropdown() {
     const $display = jQuery("#billing_company_display");
     if (!$display.length || !$display.data("select2")) return false;
 
@@ -2627,10 +2235,12 @@ let twoincDomHelper = {
     // Looked up after opening, never cached: the picker tears the dropdown
     // down and rebuilds the search field on every open, so the node focused
     // here is the one this open just created.
-    twoincDomHelper.focusVisibleCompanyField(twoincSelectWooHelper.companySearchInputSelector);
+    twoincSelectWooHelper.focusVisibleCompanyField(
+      twoincSelectWooHelper.companySearchInputSelector
+    );
 
     return true;
-  },
+  }
 
   /**
    * Move focus to a company field, if it is actually focusable (TWO-25288).
@@ -2642,27 +2252,526 @@ let twoincDomHelper = {
    * @param {string} selector the field to focus
    * @returns {boolean} whether focus was moved
    */
-  focusVisibleCompanyField: function (selector) {
+  focusVisibleCompanyField(selector) {
     const $field = jQuery(selector);
     if (!$field.length || $field.prop("disabled")) return false;
     $field.trigger("focus");
     return jQuery(document.activeElement).is($field);
-  },
+  }
 
+  /**
+   * Attach (or re-attach) the selectWoo widget to this instance's configured
+   * field and wire up the search/select/open lifecycle (TWO-25326
+   * architecture rebuild).
+   *
+   * This is the ONE place selectWoo is initialised against the company
+   * field. Called from `Twoinc#enableCompanySearch()`, which is itself
+   * called from `initialize()`, from its own 800ms retry, from
+   * `exitManualCompanyEntry()` and from a sole-trader mode switch back to
+   * search — every one of those needs the widget RE-attached (selectWoo's
+   * own re-init tears down and rebuilds its instance), not a second
+   * TwoCompanySearch constructed: the class itself is still constructed
+   * exactly once, at module load, below.
+   *
+   * @param {Twoinc} [twoincInstance] the singleton, so the `select2:select`
+   *   handler can write the pick onto it (customerCompany, approval, address
+   *   lookup). Falls back to `Twoinc.getInstance()` when omitted.
+   * @returns {Object} the jQuery-wrapped selectWoo widget
+   */
+  attach(twoincInstance) {
+    const self = this;
+    const $body = jQuery(document.body);
+    const $field = $body.find(self.companyFieldSelector);
+    const $billingCompany = $body.find("#billing_company");
+    const $companyId = $body.find("#company_id");
+
+    const widget = $field.selectWoo(self.genSelectWooParams());
+    twoincDomHelper.toggleTooltip(
+      "#billing_company_display_field .select2-container",
+      window.twoinc.text.tooltip_company
+    );
+
+    widget.on("select2:select", function (e) {
+      const instance = twoincInstance || Twoinc.getInstance();
+
+      // Get the option data
+      const data = e.params.data;
+
+      // Set the company name
+      instance.customerCompany.company_name = data.id;
+
+      // Set the company ID
+      instance.customerCompany.organization_number = data.company_id;
+
+      // Pin the country this company was captured UNDER, alongside the
+      // number (TWO-25333), so the pair can never be assembled from two
+      // different moments.
+      instance.customerCompany.country_prefix = self.currentCountry();
+
+      // Set the company ID to HTML DOM
+      $companyId.val(data.company_id);
+
+      // Set the company name to HTML DOM
+      $billingCompany.val(data.id);
+
+      // Display the picked company read-only, synchronously.
+      self.renderCompanySummary(data.id, data.company_id);
+
+      // Update the company name in agreement sentence and text in
+      // subtitle/description
+      twoincDomHelper.togglePaySubtitleDesc();
+
+      // Get the company approval status
+      instance.getApproval();
+
+      // Address search
+      if (window.twoinc.enable_address_lookup === "yes") {
+        instance.addressLookup(data);
+      }
+    });
+
+    self.fixSelectWooPositionCompanyName();
+
+    // Manual-entry affordance (TWO-25288). Bound here, once per widget,
+    // rather than on every dropdown open: the handlers it installs are
+    // delegated and outlive the dropdown, so re-binding them per open only
+    // ever accumulated duplicates.
+    self.bindManualEntryAffordance();
+
+    widget.on("select2:open", function (e) {
+      // Arguments kept verbatim: waitToFocus treats an explicit null as a
+      // value rather than a default, so dropping them would change the poll
+      // timing of the focus fix, which is not what this change is about.
+      self.waitToFocus("billing_company_display", null, null);
+      self.addSelectWooFocusFixHandler("billing_company_display");
+    });
+
+    return widget;
+  }
+}
+
+/**
+ * The one and only TwoCompanySearch instance (TWO-25326 architecture
+ * rebuild). Every company-search behaviour on this checkout — search,
+ * dropdown, manual entry, tile relocation — goes through this instance;
+ * nothing else in this file constructs a second one.
+ */
+let twoincSelectWooHelper = new TwoCompanySearch({
+  companyFieldSelector: "#billing_company_display"
+});
+
+let twoincDomHelper = {
+  /**
+   * Add a placeholder after an input, used for moving the fields in HTML DOM
+   */
+  addPlaceholder: function ($el, name) {
+    // Get an existing placeholder
+    let $placeholder = jQuery("#twoinc-" + name + "-source");
+
+    // Stop if we already have a placeholder
+    if ($placeholder.length > 0) return;
+
+    // Create a placeholder
+    $placeholder = jQuery('<div id="twoinc-' + name + '-source" class="twoinc-source"></div>');
+
+    // Add placeholder after element
+    $placeholder.insertAfter($el);
+  },
+  /**
+   * Move a field to Twoinc template location and leave a placeholder
+   */
+  moveField: function (selector, name) {
+    // Get the element
+    const $el = jQuery("#" + selector);
+
+    // Add a placeholder
+    twoincDomHelper.addPlaceholder($el, name);
+
+    // Get the target
+    const $target = jQuery("#twoinc-" + name + "-target");
+
+    // Move the input
+    $el.insertAfter($target);
+  },
+  /**
+   * Move a field back to its original location
+   */
+  revertField: function (selector, name) {
+    // Get the element
+    const $el = jQuery("#" + selector);
+
+    // Get the target
+    const $source = jQuery("#twoinc-" + name + "-source");
+
+    // Move the input
+    if ($source.length > 0) {
+      $el.insertAfter($source);
+    }
+  },
+  /**
+   * Move the fields to their original or Twoinc template location.
+   *
+   * Phone and email used to be pulled up here too (into the pre-billing
+   * "representative" wrapper, alongside first/last name), so a buyer would
+   * see one field order on first paint and a different one ~1s later once
+   * this fired. That grouping's own visual cue (an h3 heading) was commented
+   * out back in 2021 and never replaced with CSS, so nothing distinguishes
+   * the wrapper today — it was pure reorder with no remaining display
+   * purpose. Phone/email now stay in their native WC position (#33).
+   */
+  positionFields: function () {
+    setTimeout(function () {
+      // If business account
+      if (twoincDomHelper.isTwoincSelected()) {
+        twoincDomHelper.moveField("billing_first_name_field", "fn");
+        twoincDomHelper.moveField("billing_last_name_field", "ln");
+      } else {
+        twoincDomHelper.revertField("billing_first_name_field", "fn");
+        twoincDomHelper.revertField("billing_last_name_field", "ln");
+      }
+
+      twoincDomHelper.toggleTooltip(
+        '#billing_phone, label[for="billing_phone"]',
+        window.twoinc.text.tooltip_phone
+      );
+      twoincDomHelper.toggleTooltip(
+        '#billing_company_display_field .select2-container, label[for="billing_company_display"], #billing_company, label[for="billing_company"]',
+        window.twoinc.text.tooltip_company
+      );
+    }, 100);
+  },
+  /**
+   * Mark checkout inputs invalid
+   */
+  markFieldInvalid: function (fieldWrapperId) {
+    const fieldWrapper = document.querySelector("#" + fieldWrapperId);
+
+    if (fieldWrapper && fieldWrapper.classList) {
+      fieldWrapper.classList.remove("woocommerce-validated");
+      fieldWrapper.classList.add("woocommerce-invalid");
+    }
+  },
+  /**
+   * Toggle the visual cues for required fields
+   */
+  toggleRequiredCues: function ($targets, is_required) {
+    // For each input
+    $targets.find(":input").each(function () {
+      // Get the input
+      const $input = jQuery(this);
+
+      // Get the input row
+      const $row = $input.parents(".form-row");
+
+      // Toggle the required property
+      if (is_required) {
+        $input.attr("required", true);
+
+        // Add 'required' visual cue
+        if ($row.find("label .twoinc-required, label .required").length == 0) {
+          $row
+            .find("label")
+            .append('<abbr class="required twoinc-required" title="required">*</abbr>');
+        }
+        $row.find("label .optional").hide();
+      } else {
+        $input.attr("required", false);
+
+        // Show the hidden optional visual cue
+        $row.find("label .twoinc-required").remove();
+        $row.find("label .optional").show();
+      }
+    });
+  },
+  /**
+   * Toggle the custom business fields for Twoinc
+   */
+  toggleBusinessFields: function () {
+    // Get the targets
+    let allTargets = [
+      ".woocommerce-company-fields",
+      ".woocommerce-representative-fields",
+      "#billing_phone_field",
+      "#billing_company_display_field",
+      "#billing_company_field",
+      "#company_id_field",
+      "#invoice_email_field",
+      "#purchase_order_number_field",
+      "#project_field",
+      "#department_field"
+    ];
+    let requiredBusinessTargets = [];
+    let visibleTargets = [
+      ".woocommerce-company-fields",
+      ".woocommerce-representative-fields",
+      "#billing_phone_field"
+    ];
+    let requiredTargets = [];
+
+    // Toggle the targets based on the account type
+    const isTwoincSelected =
+      twoincDomHelper.isTwoincVisible() && twoincDomHelper.isTwoincSelected();
+
+    if (isTwoincSelected) {
+      visibleTargets.push(
+        "#invoice_email_field",
+        "#purchase_order_number_field",
+        "#project_field",
+        "#department_field"
+      );
+      requiredTargets.push("#billing_phone_field");
+      if (twoincDomHelper.isCountrySupported() && window.twoinc.enable_company_search === "yes") {
+        visibleTargets.push("#billing_company_display_field");
+        requiredTargets.push("#billing_company_display_field");
+      } else {
+        visibleTargets.push("#billing_company_field");
+        requiredTargets.push("#billing_company_field");
+
+        // #company_id_field is deliberately left OUT here when manual entry
+        // (TWO-25288/#30.x.13) is what put us on this branch. This branch is
+        // shared with two other reasons `enable_company_search` can read
+        // "no" — the merchant simply never enabled company search at all,
+        // and sole-trader mode (twoincSoleTrader.setMode), which both
+        // legitimately want the id field: the plain fallback captures
+        // name+id like it always has, and sole-trader mode fills company_id
+        // itself with a synthetic identifier (Two's payment method cannot
+        // function without one). Manual entry is the one case in this org's
+        // three-mode company-capture model that captures name ONLY — Two's
+        // payment method still needs an id in the other two modes, but a
+        // buyer who says "my company isn't in the registry" has no id to
+        // give, and showing the field only invites one that was never
+        // validated against anything. `manual_company_entry_active` is set
+        // by enterManualCompanyEntry/exitManualCompanyEntry specifically so
+        // this branch can tell "manual entry" apart from the other two
+        // routes into it.
+        if (!window.twoinc.manual_company_entry_active) {
+          visibleTargets.push("#company_id_field");
+          requiredTargets.push("#company_id_field");
+        }
+      }
+    } else {
+      if (
+        twoincDomHelper.isCountrySupported() &&
+        window.twoinc.enable_company_search === "yes" &&
+        window.twoinc.enable_company_search_for_others === "yes"
+      ) {
+        visibleTargets.push("#billing_company_display_field");
+      } else {
+        visibleTargets.push("#billing_company_field");
+      }
+    }
+
+    allTargets = jQuery(allTargets.join(","));
+    requiredTargets = jQuery(requiredTargets.join(","));
+    visibleTargets = jQuery(visibleTargets.join(","));
+
+    allTargets.addClass("hidden");
+    visibleTargets.removeClass("hidden");
+
+    // Toggle the required fields based on the account type
+    twoincDomHelper.toggleRequiredCues(allTargets, false);
+    twoincDomHelper.toggleRequiredCues(requiredTargets, isTwoincSelected);
+
+    twoincDomHelper.syncCompanyFieldWrappers();
+
+    // Relocate the company-search control per the admin setting (TWO-25326
+    // §7.1) BEFORE renderCompanySummary() below: the summary node's anchor
+    // (getCompanySummaryNode()) is relative to whichever field is currently
+    // its neighbour, and this call may just have moved that field's wrapper
+    // into the tile.
+    twoincSelectWooHelper.syncCompanySearchTileLocation();
+
+    // Last, and unconditionally: this function runs on every payment-method,
+    // country and capture-mode switch, which is exactly when the summary's own
+    // visibility gate needs re-evaluating. It reads the current inputs and
+    // calls nothing that re-enters here.
+    twoincSelectWooHelper.renderCompanySummary();
+  },
+  /**
+   * Mirror each company field's visibility onto its enclosing wrapper
+   * (TWO-25288).
+   *
+   * The pay-for-order page lays its copy of the company inputs out in
+   * per-field wrappers, each carrying its own hidden state that the function
+   * above does not touch — so hiding or revealing the field inside one has no
+   * visible effect there. Manual entry was unreachable on that page until now,
+   * which is the only reason that has not shown up: switching to it would have
+   * revealed a company field still inside a hidden wrapper, leaving the buyer
+   * with nowhere to type. The checkout page has no such wrappers and this is a
+   * no-op there.
+   *
+   * @returns {void}
+   */
+  syncCompanyFieldWrappers: function () {
+    jQuery("#billing_company_display_field, #billing_company_field, #company_id_field").each(
+      function () {
+        const $field = jQuery(this);
+        const $wrapper = $field.closest(".twoinc-inp-container");
+        if (!$wrapper.length) return;
+        $wrapper.toggleClass("hidden", $field.hasClass("hidden"));
+      }
+    );
+  },
+  /**
+   * Deselect payment method and select the first available one
+   */
+  deselectPaymentMethod: function () {
+    const paymentMethodRadioObj = jQuery(':input[value="' + window.twoinc.gateway_id + '"]');
+    // Deselect the current payment method
+    if (paymentMethodRadioObj) {
+      paymentMethodRadioObj.prop("checked", false);
+    }
+  },
+  /**
+   * Toggle the tooltip for input fields
+   */
+  toggleTooltip: function (selectorStr, tooltip) {
+    if (window.twoinc.display_tooltips !== "yes") return;
+
+    jQuery(selectorStr).each(function () {
+      if (twoincDomHelper.isTwoincSelected()) {
+        if (!jQuery(this).attr("original-title") && tooltip !== jQuery(this).attr("title")) {
+          jQuery(this).attr("original-title", jQuery(this).attr("title"));
+        }
+        jQuery(this).attr("title", tooltip);
+      } else {
+        jQuery(this).attr("title", jQuery(this).attr("original-title"));
+        jQuery(this).attr("original-title", "");
+      }
+    });
+  },
+  /**
+   * The captured company as the intent-message sentences want it
+   * (TWO-25326 §7.3): "<name> (<number>)", or bare <name> when there is no
+   * number (manual entry, which clears #company_id). Never "<name> ()" —
+   * an absent number is genuinely absent, not pending.
+   *
+   * This is what used to build the now-removed `.twoinc-company-tile-label`
+   * text. It has the same job now, just substituted into the intent
+   * sentences' data-company-template token instead of a standalone element.
+   *
+   * @param {string} name already blank-collapsed
+   * @param {string} number already blank-collapsed
+   * @returns {string}
+   */
+  getCompanyLabelText: function (name, number) {
+    return name && number ? name + " (" + number + ")" : name;
+  },
+  /**
+   * Toggle payment text in subtitle and description
+   */
+  togglePaySubtitleDesc: function (action, errSelector) {
+    jQuery(".twoinc-pay-box").addClass("hidden");
+    if (["checking-intent", "intent-approved", "errored"].includes(action)) {
+      if (action === "checking-intent") {
+        // Suppressed by the brand => the loader div is absent too
+        // (TWO-25224: the notice switch covers the whole reassurance
+        // pass, loading state included), so this is a no-op on an empty
+        // jQuery set. The error branches below are never suppressed.
+        jQuery(".twoinc-pay-box.twoinc-loader").removeClass("hidden");
+      } else if (action === "intent-approved") {
+        // The notice ships the no-company sentence as its text and the
+        // company variant as a template on data-company-template (only the
+        // browser knows the buyer's captured company). Substitute here,
+        // always from the template, so a later company change re-renders
+        // and an emptied company falls back to the served sentence.
+        // Suppressed by the brand => the div is absent and every call
+        // below is a no-op on an empty jQuery set.
+        //
+        // TWO-25326 §7.3: the token now stands for the WHOLE "<name>
+        // (<number>)" chunk, not the bare name — this is what replaces the
+        // separate `.twoinc-company-tile-label` element.
+        let intentBox = jQuery(".twoinc-pay-box.twoinc-intent-approved");
+        if (intentBox.data("twoincDefaultText") === undefined) {
+          intentBox.data("twoincDefaultText", intentBox.text());
+        }
+        let companyTemplate = intentBox.attr("data-company-template");
+        let captured = twoincSelectWooHelper.readCapturedCompany();
+        let companyText = twoincDomHelper.getCompanyLabelText(
+          twoincUtilHelper.blankToEmpty(captured.company_name),
+          twoincUtilHelper.blankToEmpty(captured.organization_number)
+        );
+        if (companyTemplate && companyText) {
+          intentBox.text(
+            companyTemplate.replace("{company}", function () {
+              // Function replacer (Vader, round 1 review): a string replacer
+              // honours special patterns like `$&`/`$$` inside the SECOND
+              // argument, so a company literally named "Acme $& Corp" or
+              // "50% Ltd $$" would come out mangled with a plain-string
+              // replace. A function replacer passes companyText through
+              // literally, no matter what it contains.
+              return companyText;
+            })
+          );
+        } else {
+          intentBox.text(intentBox.data("twoincDefaultText"));
+        }
+        intentBox.removeClass("hidden");
+      } else if (action === "errored") {
+        // TWO-25326 §7.3: the "not available" box carries the same
+        // data-company-template/token mechanism as the approved notice
+        // above, but ONLY on `.twoinc-err-payment-default` — the phone-number
+        // box is a fixed, unrelated message and never gets one.
+        let $errBox = jQuery(".twoinc-pay-box" + errSelector);
+        if (errSelector === ".twoinc-err-payment-default") {
+          if ($errBox.data("twoincDefaultText") === undefined) {
+            $errBox.data("twoincDefaultText", $errBox.text());
+          }
+          let declinedTemplate = $errBox.attr("data-company-template");
+          let captured = twoincSelectWooHelper.readCapturedCompany();
+          let companyText = twoincDomHelper.getCompanyLabelText(
+            twoincUtilHelper.blankToEmpty(captured.company_name),
+            twoincUtilHelper.blankToEmpty(captured.organization_number)
+          );
+          if (declinedTemplate && companyText) {
+            $errBox.text(
+              declinedTemplate.replace("{company}", function () {
+                return companyText;
+              })
+            );
+          } else {
+            $errBox.text($errBox.data("twoincDefaultText"));
+          }
+        }
+        $errBox.removeClass("hidden");
+      }
+    }
+  },
+  /**
+   * Get company data from current HTML inputs
+   */
+  getCompanyData: function () {
+    return {
+      company_name: twoincSelectWooHelper.getCompanyName(),
+      country_prefix: jQuery("#billing_country").val(),
+      organization_number: jQuery("#company_id").val()
+    };
+  },
+  /**
+   * Get representative data from current HTML inputs
+   */
+  getRepresentativeData: function () {
+    let representativeData = {};
+    if (jQuery("#billing_email").val())
+      representativeData["email"] = jQuery("#billing_email").val();
+    if (jQuery("#billing_phone").val())
+      representativeData["phone_number"] = jQuery("#billing_phone").val();
+    representativeData["first_name"] = jQuery("#billing_first_name").val();
+    representativeData["last_name"] = jQuery("#billing_last_name").val();
+    return representativeData;
+  },
   /**
    * Check if selected country is supported by Twoinc
    */
   isCountrySupported: function () {
     return window.twoinc.supported_buyer_countries.includes(jQuery("#billing_country").val());
   },
-
   /**
    * Check if twoinc payment is currently selected
    */
   isTwoincSelected: function () {
     return jQuery('input[name="payment_method"]:checked').val() === window.twoinc.gateway_id;
   },
-
   /**
    * Check if twoinc payment is currently visible
    */
@@ -2673,7 +2782,6 @@ let twoincDomHelper = {
     );
     //return jQuery('#payment_method_' + window.twoinc.gateway_id + ':visible').length !== 0
   },
-
   /**
    * Get price recursively from a DOM node
    */
@@ -2697,7 +2805,6 @@ let twoincDomHelper = {
       }
     }
   },
-
   /**
    * Get price from DOM
    */
@@ -2707,7 +2814,6 @@ let twoincDomHelper = {
       document.querySelector("." + priceName + " .woocommerce-Price-amount");
     return twoincDomHelper.getPriceRecursively(node);
   },
-
   /**
    * Rearrange descriptions in Twoinc payment to make it cleaner
    */
@@ -2717,7 +2823,6 @@ let twoincDomHelper = {
       twoincPaymentBox.after(jQuery(".abt-twoinc"));
     }
   },
-
   /**
    * Save checkout inputs
    */
@@ -2810,7 +2915,6 @@ let twoincDomHelper = {
     }
     sessionStorage.setItem("checkoutInputs", JSON.stringify(checkoutInputs));
   },
-
   /**
    * Get checkout input
    */
@@ -2824,7 +2928,6 @@ let twoincDomHelper = {
       }
     }
   },
-
   /**
    * Load sessionStorage checkout inputs
    */
@@ -2890,7 +2993,6 @@ let twoincDomHelper = {
       }
     }
   },
-
   /**
    * Load usermeta checkout inputs
    */
@@ -2915,7 +3017,7 @@ let twoincDomHelper = {
         // are passed explicitly: `#company_id` is written further down this
         // function, so reading the DOM here would render an empty number.
         if (window.twoinc.user_meta_exists) {
-          twoincDomHelper.renderCompanySummary(
+          twoincSelectWooHelper.renderCompanySummary(
             window.twoinc.billing_company,
             window.twoinc.company_id
           );
@@ -2937,7 +3039,6 @@ let twoincDomHelper = {
       document.querySelector("#company_id").value = window.twoinc.company_id;
     }
   },
-
   /**
    * Get id of current or parent theme, return null if not found
    */
@@ -2960,7 +3061,6 @@ let twoincDomHelper = {
       return "shopkeeper";
     }
   },
-
   /**
    * Get id of current or parent theme, return null if not found
    */
@@ -3456,7 +3556,7 @@ let twoincSoleTrader = {
         window.twoinc.enable_company_search !== "yes" &&
         window.twoinc.manual_company_entry_active
       ) {
-        twoincDomHelper.getSearchCompanyBtnNode().show();
+        twoincSelectWooHelper.getSearchCompanyBtnNode().show();
       }
     }
   },
@@ -3549,7 +3649,7 @@ let twoincSoleTrader = {
     // Explicit rather than DOM-read: this function is the authority on what was
     // just captured, so the summary should not depend on the order the mirrors
     // above are written in (TWO-25288).
-    twoincDomHelper.renderCompanySummary(companyName, companyId);
+    twoincSelectWooHelper.renderCompanySummary(companyName, companyId);
     if (companyId) {
       instance.getApproval();
     }
@@ -3739,89 +3839,18 @@ class Twoinc {
     this.billingCompanySelect = null;
   }
 
+  /**
+   * Attach the company-search widget (TWO-25326 architecture rebuild).
+   *
+   * All the search/dropdown/manual-entry/select2 lifecycle logic this used
+   * to inline now lives on `TwoCompanySearch` (see `twoincSelectWooHelper`,
+   * constructed once at module load, above). This method's own job is just
+   * the early-return gate and handing this singleton to the widget's
+   * `select2:select` handler.
+   */
   enableCompanySearch() {
-    const self = this;
-
-    const $body = jQuery(document.body);
-
-    // Get the billing company field
-    const $billingCompanyDisplay = $body.find("#billing_company_display");
-    const $billingCompany = $body.find("#billing_company");
-
-    // Get the company ID field
-    const $companyId = $body.find("#company_id");
     if (window.twoinc.enable_company_search !== "yes") return;
-    self.billingCompanySelect = $billingCompanyDisplay.selectWoo(
-      twoincSelectWooHelper.genSelectWooParams()
-    );
-    twoincDomHelper.toggleTooltip(
-      "#billing_company_display_field .select2-container",
-      window.twoinc.text.tooltip_company
-    );
-    self.billingCompanySelect.on("select2:select", function (e) {
-      const self = Twoinc.getInstance();
-
-      // Get the option data
-      const data = e.params.data;
-
-      // Set the company name
-      self.customerCompany.company_name = data.id;
-
-      // Set the company ID
-      self.customerCompany.organization_number = data.company_id;
-
-      // Pin the country this company was captured UNDER, alongside the number
-      // (TWO-25333). Without this the pair could be assembled from two
-      // different moments: the number is written here, while `country_prefix`
-      // was last written by whichever DOM re-read ran most recently — so a
-      // country that moved with no `change` event before the pick left the
-      // OLD country next to a company from the NEW one, which getApproval()
-      // then posted as a self-consistent pair. It is also what makes
-      // `clearCompanyIfCountryStale` sound: a witness written at a different
-      // time from the thing it witnesses produces false positives, and a
-      // false positive there is a destructive clear.
-      self.customerCompany.country_prefix = twoincSelectWooHelper.currentCountry();
-
-      // Set the company ID to HTML DOM
-      $companyId.val(data.company_id);
-
-      // Set the company name to HTML DOM
-      $billingCompany.val(data.id);
-
-      // Display the picked company read-only. Synchronous, unlike the
-      // overlay this replaces: that had to wait for select2 to rebuild its
-      // selection container because it was positioned against it, and this is
-      // anchored to a field that is already in the document.
-      twoincDomHelper.renderCompanySummary(data.id, data.company_id);
-
-      // Update the company name in agreement sentence and text in subtitle/description
-      twoincDomHelper.togglePaySubtitleDesc();
-
-      // Get the company approval status
-      self.getApproval();
-
-      // Address search
-      if (window.twoinc.enable_address_lookup === "yes") {
-        // Fetch the company data
-        self.addressLookup(data);
-      }
-    });
-
-    twoincSelectWooHelper.fixSelectWooPositionCompanyName();
-
-    // Manual-entry affordance (TWO-25288). Bound here, once per widget, rather
-    // than on every dropdown open: the handlers it installs are delegated and
-    // outlive the dropdown, so re-binding them per open only ever accumulated
-    // duplicates.
-    twoincSelectWooHelper.bindManualEntryAffordance();
-
-    self.billingCompanySelect.on("select2:open", function (e) {
-      // Arguments kept verbatim: waitToFocus treats an explicit null as a
-      // value rather than a default, so dropping them would change the poll
-      // timing of the focus fix, which is not what this change is about.
-      twoincSelectWooHelper.waitToFocus("billing_company_display", null, null);
-      twoincSelectWooHelper.addSelectWooFocusFixHandler("billing_company_display");
-    });
+    this.billingCompanySelect = twoincSelectWooHelper.attach(this);
   }
 
   /**
@@ -3965,7 +3994,7 @@ class Twoinc {
     // closes). `onUpdatedCheckout` (the past-tense, after-swap trigger,
     // already bound above) is what moves the wrapper back into the fresh
     // slot.
-    $body.on("update_checkout", twoincDomHelper.detachCompanySearchTileWrapperToSafety);
+    $body.on("update_checkout", twoincSelectWooHelper.detachCompanySearchTileWrapperToSafety);
 
     // No click handler for the manual-entry row (TWO-25288). It is a pseudo-
     // option inside the results list now, so the picker already turns a click
@@ -3999,8 +4028,8 @@ class Twoinc {
       twoincDomHelper.togglePaySubtitleDesc
     );
     $body.on("change", "#billing_company", function () {
-      Twoinc.getInstance().customerCompany.company_name = twoincDomHelper.getCompanyName();
-      twoincDomHelper.renderCompanySummary();
+      Twoinc.getInstance().customerCompany.company_name = twoincSelectWooHelper.getCompanyName();
+      twoincSelectWooHelper.renderCompanySummary();
       twoincDomHelper.togglePaySubtitleDesc();
     });
 
@@ -4064,7 +4093,7 @@ class Twoinc {
       twoincDomHelper.saveCheckoutInputs();
       Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData();
       Twoinc.getInstance().customerRepresentative = twoincDomHelper.getRepresentativeData();
-      twoincDomHelper.renderCompanySummary();
+      twoincSelectWooHelper.renderCompanySummary();
       Twoinc.getInstance().getApproval();
     }, 1000);
     this.updateElements();
@@ -4449,7 +4478,7 @@ class Twoinc {
     // for why the wrapper survived the refresh to be moved back in here at
     // all), and every one of those triggers needs it re-populated, not just
     // the two `toggleBusinessFields()` already covered.
-    twoincDomHelper.syncCompanySearchTileLocation();
+    twoincSelectWooHelper.syncCompanySearchTileLocation();
   }
 
   /**
@@ -4509,7 +4538,7 @@ class Twoinc {
       Twoinc.getInstance().customerCompany.company_name = $input.val();
     }
 
-    twoincDomHelper.renderCompanySummary();
+    twoincSelectWooHelper.renderCompanySummary();
     Twoinc.getInstance().getApproval();
   }
 
@@ -4608,7 +4637,7 @@ class Twoinc {
     // an incidental consequence of an unrelated call, not a guarantee.
     twoincSelectWooHelper.toggleCompanySearchSpinner(false);
 
-    twoincDomHelper.clearSelectedCompany();
+    twoincSelectWooHelper.clearSelectedCompany();
 
     // AFTER clearSelectedCompany, deliberately: that function resets
     // `customerCompany` to {} wholesale, so setting the country prefix before
@@ -4840,7 +4869,7 @@ class Twoinc {
     // guarantee is worse than the guarantee living plainly at the one call
     // site. A second caller would have to bump them too, and its own test for
     // that is what would say so.
-    twoincDomHelper.clearSelectedCompany();
+    twoincSelectWooHelper.clearSelectedCompany();
 
     // AFTER clearSelectedCompany, for the reason spelled out in
     // syncBillingCountry: it resets `customerCompany` to {} wholesale, so an
@@ -4950,7 +4979,7 @@ jQuery(function () {
 
     setTimeout(function () {
       // Init the hidden Company name field
-      const companyName = twoincDomHelper.getCompanyName().trim();
+      const companyName = twoincSelectWooHelper.getCompanyName().trim();
       if (companyName) {
         jQuery("#billing_company").val(companyName);
       }

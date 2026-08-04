@@ -738,7 +738,7 @@ describe("company-search manual-entry affordance", () => {
       jest.advanceTimersByTime(1);
       jest.useRealTimers();
 
-      const $searchBtn = ctx.dom.getSearchCompanyBtnNode();
+      const $searchBtn = ctx.helper.getSearchCompanyBtnNode();
       const $parent = $searchBtn.parent();
       expect($parent.hasClass("woocommerce-input-wrapper")).toBe(true);
       expect($searchBtn.closest("#billing_company_field").length).toBe(1);
@@ -760,7 +760,7 @@ describe("company-search manual-entry affordance", () => {
       jest.advanceTimersByTime(1);
       jest.useRealTimers();
 
-      const $searchBtn = ctx.dom.getSearchCompanyBtnNode();
+      const $searchBtn = ctx.helper.getSearchCompanyBtnNode();
 
       // The button is the LAST child of the wrapper, after the <input> —
       // i.e. it renders below it in normal document flow.
@@ -837,7 +837,7 @@ describe("company-search manual-entry affordance", () => {
       $("#billing_company").unwrap();
       expect($("#billing_company_field .woocommerce-input-wrapper").length).toBe(0);
 
-      const $searchBtn = ctx.dom.getSearchCompanyBtnNode();
+      const $searchBtn = ctx.helper.getSearchCompanyBtnNode();
 
       const $parent = $searchBtn.parent();
       expect($parent.hasClass("woocommerce-input-wrapper")).toBe(true);
@@ -962,15 +962,15 @@ describe("company-search manual-entry affordance", () => {
       ctx.twoinc.text.search_company = "Søk etter selskap";
       openWithAffordance();
 
-      expect(ctx.dom.getSearchCompanyBtnNode().text()).toBe("Søk etter selskap");
+      expect(ctx.helper.getSearchCompanyBtnNode().text()).toBe("Søk etter selskap");
     });
 
     test("repeating the activation in one tick switches once, not once per press", () => {
       jest.useFakeTimers();
       openWithAffordance();
       let entered = 0;
-      const realEnter = ctx.dom.enterManualCompanyEntry;
-      ctx.dom.enterManualCompanyEntry = function () {
+      const realEnter = ctx.helper.enterManualCompanyEntry;
+      ctx.helper.enterManualCompanyEntry = function () {
         entered++;
         return realEnter.apply(this, arguments);
       };
@@ -986,7 +986,7 @@ describe("company-search manual-entry affordance", () => {
 
         expect(entered).toBe(1);
       } finally {
-        ctx.dom.enterManualCompanyEntry = realEnter;
+        ctx.helper.enterManualCompanyEntry = realEnter;
         jest.useRealTimers();
       }
     });
@@ -1073,7 +1073,7 @@ describe("company-search manual-entry affordance", () => {
       // state is still reachable, from sole-trader mode and from the
       // user-meta restore, and what it must do to the display select is
       // unchanged.
-      ctx.dom.enterManualCompanyEntry();
+      ctx.helper.enterManualCompanyEntry();
       jest.advanceTimersByTime(1);
 
       expect($("#billing_company_display").val()).toBe("");
@@ -1091,7 +1091,7 @@ describe("company-search manual-entry affordance", () => {
       $("#billing_company").val("Hand Typed Ltd");
       $("#company_id").val("99999999");
 
-      ctx.dom.exitManualCompanyEntry();
+      ctx.helper.exitManualCompanyEntry();
 
       expect($("#billing_company").val()).toBe("");
       expect($("#company_id").val()).toBe("");
@@ -1101,7 +1101,7 @@ describe("company-search manual-entry affordance", () => {
     test("the way back out is built hidden, before manual entry is entered", () => {
       openWithAffordance();
 
-      const $back = ctx.dom.getSearchCompanyBtnNode();
+      const $back = ctx.helper.getSearchCompanyBtnNode();
 
       expect($back[0].style.display).toBe("none");
       // In place, not floating: it belongs beside the manual company field —
@@ -1140,7 +1140,7 @@ describe("company-search manual-entry affordance", () => {
       jest.advanceTimersByTime(1);
       jest.useRealTimers();
 
-      const $btn = ctx.dom.getSearchCompanyBtnNode();
+      const $btn = ctx.helper.getSearchCompanyBtnNode();
       const detached = $btn.detach();
 
       expect(detached.parent().length).toBe(0);
@@ -1158,7 +1158,7 @@ describe("company-search manual-entry affordance", () => {
       jest.advanceTimersByTime(1);
       expect($("#" + helper.searchCompanyBtnId)[0].style.display).not.toBe("none");
 
-      ctx.dom.exitManualCompanyEntry();
+      ctx.helper.exitManualCompanyEntry();
 
       expect(ctx.twoinc.enable_company_search).toBe("yes");
       expect($("#" + helper.searchCompanyBtnId)[0].style.display).toBe("none");
@@ -1263,7 +1263,7 @@ describe("company-search manual-entry affordance", () => {
       activate();
       jest.advanceTimersByTime(1);
 
-      const $searchBtn = ctx.dom.getSearchCompanyBtnNode();
+      const $searchBtn = ctx.helper.getSearchCompanyBtnNode();
       $searchBtn.get(0).focus();
 
       const e = jQuery.Event("keydown", { which: 13 });
@@ -1281,7 +1281,7 @@ describe("company-search manual-entry affordance", () => {
       activate();
       jest.advanceTimersByTime(1);
 
-      const $searchBtn = ctx.dom.getSearchCompanyBtnNode();
+      const $searchBtn = ctx.helper.getSearchCompanyBtnNode();
       $searchBtn.get(0).focus();
 
       const e = jQuery.Event("keydown", { which: 32 });
@@ -1304,7 +1304,7 @@ describe("company-search manual-entry affordance", () => {
       activate();
       jest.advanceTimersByTime(1);
 
-      const $searchBtn = ctx.dom.getSearchCompanyBtnNode();
+      const $searchBtn = ctx.helper.getSearchCompanyBtnNode();
       $searchBtn.get(0).focus();
 
       const e = jQuery.Event("keydown", { which: 65 }); // "A"
@@ -1393,25 +1393,25 @@ describe("company-search manual-entry affordance", () => {
       jest.advanceTimersByTime(1);
       jest.useRealTimers();
 
-      ctx.dom.exitManualCompanyEntry();
+      ctx.helper.exitManualCompanyEntry();
 
       expect(document.activeElement).not.toBe($("#" + helper.searchCompanyBtnId)[0]);
       expect(document.activeElement).not.toBe(document.body);
     });
 
     test("focusing a field that is not there reports failure rather than lying", () => {
-      expect(ctx.dom.focusVisibleCompanyField("#no_such_field_at_all")).toBe(false);
-      expect(ctx.dom.focusVisibleCompanyField("#billing_company")).toBe(true);
+      expect(ctx.helper.focusVisibleCompanyField("#no_such_field_at_all")).toBe(false);
+      expect(ctx.helper.focusVisibleCompanyField("#billing_company")).toBe(true);
     });
 
     test("a disabled field reports failure rather than lying", () => {
       $("#billing_company").prop("disabled", true);
 
-      expect(ctx.dom.focusVisibleCompanyField("#billing_company")).toBe(false);
+      expect(ctx.helper.focusVisibleCompanyField("#billing_company")).toBe(false);
       expect(document.activeElement).not.toBe($("#billing_company")[0]);
 
       $("#billing_company").prop("disabled", false);
-      expect(ctx.dom.focusVisibleCompanyField("#billing_company")).toBe(true);
+      expect(ctx.helper.focusVisibleCompanyField("#billing_company")).toBe(true);
     });
   });
 
@@ -1427,7 +1427,7 @@ describe("company-search manual-entry affordance", () => {
 
       // The real gesture: the × on the floating company id. It re-creates the
       // widget and knows nothing about this affordance, so nothing re-binds.
-      ctx.dom.clearSelectedCompany();
+      ctx.helper.clearSelectedCompany();
       $select.select2("open");
 
       type("abc");
@@ -1438,7 +1438,7 @@ describe("company-search manual-entry affordance", () => {
       const twoinc = ctx.Twoinc.getInstance();
       twoinc.registryAddressApplied = true;
 
-      ctx.dom.clearSelectedCompany();
+      ctx.helper.clearSelectedCompany();
 
       expect(twoinc.registryAddressApplied).toBe(false);
     });
@@ -1575,7 +1575,7 @@ describe("company-search manual-entry affordance", () => {
     test("the dropdown is open, not just re-attached", () => {
       enterManualEntry();
 
-      ctx.dom.exitManualCompanyEntry();
+      ctx.helper.exitManualCompanyEntry();
 
       expect(container().hasClass("select2-container--open")).toBe(true);
       expect($("#select2-billing_company_display-results").length).toBe(1);
@@ -1584,7 +1584,7 @@ describe("company-search manual-entry affordance", () => {
     test("the caret is in the dropdown's search box, not on the closed combobox", () => {
       enterManualEntry();
 
-      ctx.dom.exitManualCompanyEntry();
+      ctx.helper.exitManualCompanyEntry();
 
       const input = searchInput();
       expect(input.length).toBe(1);
@@ -1598,7 +1598,7 @@ describe("company-search manual-entry affordance", () => {
     test("the buyer can type straight away and the button comes back", () => {
       enterManualEntry();
 
-      ctx.dom.exitManualCompanyEntry();
+      ctx.helper.exitManualCompanyEntry();
 
       $(document.activeElement).val("abc").trigger("input");
 
@@ -1607,9 +1607,9 @@ describe("company-search manual-entry affordance", () => {
 
     test("opening an already-open dropdown is a no-op, not a second dropdown", () => {
       enterManualEntry();
-      ctx.dom.exitManualCompanyEntry();
+      ctx.helper.exitManualCompanyEntry();
 
-      expect(ctx.dom.openCompanySearchDropdown()).toBe(true);
+      expect(ctx.helper.openCompanySearchDropdown()).toBe(true);
 
       expect(container().hasClass("select2-container--open")).toBe(true);
       expect($("#select2-billing_company_display-results").length).toBe(1);
@@ -1618,13 +1618,13 @@ describe("company-search manual-entry affordance", () => {
 
     test("a focus that fails does not drag focus back onto the collapsed combobox", () => {
       enterManualEntry();
-      const realFocus = ctx.dom.focusVisibleCompanyField;
-      jest.spyOn(ctx.dom, "focusVisibleCompanyField").mockImplementation((selector) => {
+      const realFocus = ctx.helper.focusVisibleCompanyField;
+      jest.spyOn(ctx.helper, "focusVisibleCompanyField").mockImplementation((selector) => {
         if (selector === helper.companySearchInputSelector) return false;
         return realFocus.call(ctx.dom, selector);
       });
 
-      ctx.dom.exitManualCompanyEntry();
+      ctx.helper.exitManualCompanyEntry();
 
       expect(container().hasClass("select2-container--open")).toBe(true);
       expect(document.activeElement).not.toBe(
@@ -1635,13 +1635,13 @@ describe("company-search manual-entry affordance", () => {
     test("no picker attached reports failure rather than lying", () => {
       harness.releaseWidgets($);
 
-      expect(ctx.dom.openCompanySearchDropdown()).toBe(false);
+      expect(ctx.helper.openCompanySearchDropdown()).toBe(false);
     });
 
     test("a surface with no company select at all still reports failure", () => {
       document.body.innerHTML = "";
 
-      expect(ctx.dom.openCompanySearchDropdown()).toBe(false);
+      expect(ctx.helper.openCompanySearchDropdown()).toBe(false);
     });
   });
 

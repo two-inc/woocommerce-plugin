@@ -368,7 +368,8 @@ if (!class_exists('WC_Twoinc_Checkout')) {
          *   - anything else (unchecked): 'payment_tile' — the SAME control
          *     (fields, JS, dropdown) is relocated into the payment tile
          *     instead of being turned off — see
-         *     twoincDomHelper.syncCompanySearchTileLocation() in twoinc.js.
+         *     twoincSelectWooHelper.syncCompanySearchTileLocation() (the
+         *     TwoCompanySearch class instance) in twoinc.js.
          *
          * @param string|null $enable_company_search WC_Twoinc::get_enable_company_search()'s return value — nullable, same as the option chain it reads.
          * @return string 'address_area' or 'payment_tile'
