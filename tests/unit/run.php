@@ -34,6 +34,7 @@ final class BrandConfigSpec
             'testCheckoutFieldsHookFires',
             'testInvoiceEmailFieldHasNoPlaceholder',
             'testFieldPrioritiesMatchDesiredCheckoutOrder',
+            'testBillingCompanyDisplayAlwaysRegisteredRegardlessOfCheckbox',
             'testCompanyPriorityClampPreventsInversionAboveOptionals',
             'testLocaleDefaultCountryPriorityStaysBelowCompany',
             'testConfirmationUrlHookReceivesUrlAndOrderId',
@@ -475,6 +476,54 @@ final class BrandConfigSpec
         TinyAssert::true($p('invoice_email') < $p('purchase_order_number'));
         TinyAssert::true($p('purchase_order_number') < $p('project'));
         TinyAssert::true($p('project') < $p('department'));
+    }
+
+    /**
+     * TWO-25326 §7.1, correction 2026-08-04 round 3 (Doug's ruling). The ONE
+     * company-search control must always be registered by
+     * update_company_fields() — the checkbox this ticket is about
+     * ("Enable Company Search In Address Entry") only ever decides WHERE it
+     * renders (address area vs payment tile, via `company_search_location`
+     * — see derive_company_search_location() and
+     * twoincDomHelper.syncCompanySearchTileLocation() in twoinc.js), never
+     * whether it exists. A gate here that skips registration when the
+     * checkbox is unchecked is exactly the bug this correction closes: the
+     * payment-tile relocation JS then has nothing to move, and the buyer
+     * sees no working search anywhere on the page. Checked in both
+     * directions so a regression that reintroduces the gate in either
+     * direction fails here rather than only live.
+     */
+    private static function testBillingCompanyDisplayAlwaysRegisteredRegardlessOfCheckbox(): void
+    {
+        foreach (['yes', 'no', null, ''] as $enableCompanySearch) {
+            $gateway = new class ($enableCompanySearch) extends WC_Twoinc {
+                private $enable_company_search;
+
+                public function __construct($enable_company_search)
+                {
+                    $this->id = WC_Twoinc_Brand::get('gateway_id');
+                    $this->enable_company_search = $enable_company_search;
+                }
+
+                public function get_option($key, $empty_value = null)
+                {
+                    return '';
+                }
+
+                public function get_enable_company_search()
+                {
+                    return $this->enable_company_search;
+                }
+            };
+
+            $checkout = new WC_Twoinc_Checkout($gateway);
+            $fields = $checkout->update_company_fields(['billing' => []]);
+
+            TinyAssert::true(
+                isset($fields['billing']['billing_company_display']),
+                'billing_company_display must be registered when get_enable_company_search() returns ' . var_export($enableCompanySearch, true)
+            );
+        }
     }
 
     /**
