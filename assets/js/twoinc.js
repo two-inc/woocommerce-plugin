@@ -1821,12 +1821,10 @@ let twoincDomHelper = {
     // EXCLUDED from this selector (2026-08-04 correction, see the doc
     // comment above) — both stay in the address form no matter which
     // branch this function takes.
-    jQuery("#billing_company_display_field").each(
-      function () {
-        const $field = jQuery(this);
-        if ($field.parent()[0] !== $wrapper[0]) $field.appendTo($wrapper);
-      }
-    );
+    jQuery("#billing_company_display_field").each(function () {
+      const $field = jQuery(this);
+      if ($field.parent()[0] !== $wrapper[0]) $field.appendTo($wrapper);
+    });
 
     // The read-only company summary is deliberately NOT followed into the
     // wrapper (bug found in adversarial review, Han, 2026-08-04, after
@@ -3440,7 +3438,10 @@ let twoincSoleTrader = {
       // its original, sole intent: only when the buyer was actually IN
       // manual entry before the sole-trader detour, never merely because
       // the merchant's setting happens to read "no".
-      if (window.twoinc.enable_company_search !== "yes" && window.twoinc.manual_company_entry_active) {
+      if (
+        window.twoinc.enable_company_search !== "yes" &&
+        window.twoinc.manual_company_entry_active
+      ) {
         twoincDomHelper.getSearchCompanyBtnNode().show();
       }
     }
