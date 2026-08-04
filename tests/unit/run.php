@@ -176,7 +176,8 @@ final class BrandConfigSpec
             'testClientVersionSuffixesShortShaWhenStamped',
             'testClientVersionIsQueryEncodedAsPlus',
             'testPaymentBoxOrdersTaglineChipsThenSoleTrader',
-            'testPaymentBoxRendersCompanyLabelBetweenChipsAndIntentMessage',
+            'testPaymentBoxRendersCompanySearchTileSlotBetweenSoleTraderAndIntentMessage',
+            'testDeclinedBoxCarriesCompanyTemplate',
             'testSelectedTermInputPrecedesChipsContainer',
             'testBrandWithoutTaglineEmitsNoTaglineBlock',
             'testTaglineSentenceIsPlatformCopyWithBrandFaqLink',
@@ -191,7 +192,7 @@ final class BrandConfigSpec
             'testIntentApprovedNoticeInvalidSwitchReportsAndDefaultsOn',
             'testIntentLoaderRendersTheOneSharedDotPulse',
             'testIntentLoaderSuppressedWithTheNoticeButErrorBoxesSurvive',
-            'testCompanyTileLabelSuppressedWithTheNotice',
+            'testCompanySearchTileSlotAndDeclinedTemplateSurviveNoticeSuppression',
             'testAssetVersionTracksFileMtimeNotPluginVersion',
             'testAssetVersionFallsBackToPluginVersionWhenFileMissing',
         ];
@@ -5263,37 +5264,78 @@ final class BrandConfigSpec
     }
 
     /**
-     * The captured company renders in the payment tile, as a text label
-     * between the term chips and the intent message (TWO-25326 section 7).
+     * The company-search-tile-location slot renders between the sole-trader
+     * toggle and the intent message (TWO-25326 §7.1, ruling 2026-08-03,
+     * superseding the standalone company-tile-label this ticket originally
+     * shipped in PR #431).
      *
      * Position is asserted, not just presence: the requirement names the
-     * chips and the intent message as its two anchors, and the whole box is
-     * one concatenated sprintf, so an edit that moves the label is a silent
-     * regression exactly like the ordering test above guards against.
+     * sole-trader toggle and the intent message as its two anchors, and the
+     * whole box is one concatenated sprintf, so an edit that moves the slot
+     * is a silent regression exactly like the ordering test above guards
+     * against.
      *
-     * Empty on render by design. The captured company is chosen client-side
-     * after this markup is generated, so the container ships empty and
-     * hidden and renderCompanyTileLabel() in twoinc.js fills it.
+     * Empty and hidden on render regardless of the `company_search_location`
+     * setting — twoinc.js's syncCompanySearchTileLocation() is what moves the
+     * real company-search fields into it and unhides it, client-side, and
+     * this markup does not know the setting's value at all (it is read from
+     * `window.twoinc.company_search_location`, not baked into this HTML).
      */
-    private static function testPaymentBoxRendersCompanyLabelBetweenChipsAndIntentMessage(): void
+    private static function testPaymentBoxRendersCompanySearchTileSlotBetweenSoleTraderAndIntentMessage(): void
     {
         self::useTaglineBrand();
         $html = self::gateway()->build_payment_description();
 
-        $chips = strpos($html, 'twoinc-term-chips');
-        $label = strpos($html, 'twoinc-company-tile-label');
+        $sole_trader = strpos($html, 'twoinc-sole-trader-toggle');
+        $slot = strpos($html, 'twoinc-company-search-tile-slot');
         $intent = strpos($html, 'twoinc-pay-box');
 
-        TinyAssert::true($chips !== false, 'chips container missing');
-        TinyAssert::true($label !== false, 'company tile label missing');
+        TinyAssert::true($sole_trader !== false, 'sole-trader toggle missing');
+        TinyAssert::true($slot !== false, 'company-search tile slot missing');
         TinyAssert::true($intent !== false, 'intent/notice pay box missing');
 
-        TinyAssert::true($chips < $label, 'chips must precede the company label');
-        TinyAssert::true($label < $intent, 'company label must precede the intent message');
+        TinyAssert::true($sole_trader < $slot, 'sole-trader toggle must precede the tile slot');
+        TinyAssert::true($slot < $intent, 'tile slot must precede the intent message');
 
         TinyAssert::true(
-            strpos($html, '<div class="twoinc-company-tile-label hidden"></div>') !== false,
-            'company tile label must ship empty and hidden'
+            strpos($html, '<div class="twoinc-company-search-tile-slot hidden"></div>') !== false,
+            'the tile slot must ship empty and hidden'
+        );
+
+        // §7.2/§7.3: the standalone tile label PR #431 shipped is gone
+        // outright, not just replaced in this position.
+        TinyAssert::true(
+            strpos($html, 'twoinc-company-tile-label') === false,
+            'the superseded standalone company tile label must not be emitted'
+        );
+    }
+
+    /**
+     * The declined ("not available") box carries the same company-token
+     * mechanism as the approved notice (TWO-25326 §7.3, ruling 2026-08-03):
+     * %1$s is the brand product name, resolved here; %2$s is the buyer's
+     * captured company, left as the {company} token for twoinc.js to
+     * substitute, since only the browser knows it.
+     */
+    private static function testDeclinedBoxCarriesCompanyTemplate(): void
+    {
+        self::useTaglineBrand();
+        $html = self::gateway()->build_payment_description();
+
+        TinyAssert::true(
+            strpos(
+                $html,
+                'twoinc-pay-box twoinc-err-payment-default hidden" data-company-template="Taglinebrand is not'
+                . ' available for this order by {company}"'
+            ) !== false,
+            'the declined box must carry the company template, brand name resolved, company tokenised'
+        );
+
+        // Unchanged, no-company fallback text — still the box's own visible
+        // content, exactly as before this ticket added the template.
+        TinyAssert::true(
+            strpos($html, 'Invoice purchase with Taglinebrand is not available for this order.') !== false,
+            'the no-company fallback sentence must be unchanged'
         );
     }
 
@@ -5498,8 +5540,7 @@ final class BrandConfigSpec
         TinyAssert::true(
             strpos(
                 $html,
-                'data-company-template="Your invoice with Two is likely to be accepted for {company},'
-                . ' subject to additional checks."'
+                'data-company-template="This order by {company} is likely to be accepted by Two"'
             ) !== false,
             'the notice must carry the company variant, brand name resolved, company name tokenised'
         );
@@ -5555,8 +5596,7 @@ final class BrandConfigSpec
             TinyAssert::true(
                 strpos(
                     $html,
-                    'data-company-template="Your invoice with ' . $product
-                    . ' is likely to be accepted for {company}, subject to additional checks."'
+                    'data-company-template="This order by {company} is likely to be accepted by ' . $product . '"'
                 ) !== false,
                 $fixture . ': the company variant must be the platform default copy too'
             );
@@ -5721,19 +5761,23 @@ final class BrandConfigSpec
     }
 
     /**
-     * TWO-25326 section 7, revised 2026-08-03: the captured-company label's
-     * visibility mirrors the intent-approved notice's exactly. On a brand
-     * that switched the notice off there is therefore no state in which the
-     * label can ever be shown, so its container must not be emitted either —
-     * the same conclusion TWO-25224 reached for the loader, extended to the
-     * label now that it belongs to the same reassurance pass.
+     * TWO-25326 §7.1-§7.3, ruling 2026-08-03: the standalone company-tile
+     * label this section originally tested (PR #431) is gone outright, on
+     * every brand, notice switch or not — it is superseded, not conditional.
+     * The company-search tile slot that replaces its POSITION is unrelated to
+     * the notice switch entirely: it exists to let the location SETTING
+     * (§7.1) move the search control into the tile, which has nothing to do
+     * with whether the approved-intent reassurance copy is on. It must
+     * therefore render on BOTH a brand that suppresses the notice and one
+     * that does not.
      *
-     * Asserted as a pair with the enabled case. Presence alone would pass
-     * against markup that emits the container unconditionally, and absence
-     * alone would pass against markup that never emits it at all; only the
-     * two together pin the container to the switch.
+     * The declined ("not available") box is the one still worth pinning
+     * against the switch here (TWO-25224's rule, extended by §7.3's new
+     * company template): it is NEVER gated on
+     * 'intent_approved_notice_enabled', so its data-company-template must
+     * survive even on a brand that suppresses the approved notice entirely.
      */
-    private static function testCompanyTileLabelSuppressedWithTheNotice(): void
+    private static function testCompanySearchTileSlotAndDeclinedTemplateSurviveNoticeSuppression(): void
     {
         add_filter('twoinc_brand_file', static function ($file) {
             return __DIR__ . '/fixtures/suppressednoticebrand.php';
@@ -5743,22 +5787,27 @@ final class BrandConfigSpec
         $html = self::gateway()->build_payment_description();
         TinyAssert::true(
             strpos($html, 'twoinc-company-tile-label') === false,
-            'a brand disabling the notice must emit no company tile label container'
+            'the superseded standalone company tile label must never be emitted'
         );
-
-        // The error boxes still prove the tile itself rendered, so the
-        // absence above is the switch doing its job and not an empty build.
         TinyAssert::true(
-            strpos($html, 'twoinc-pay-box twoinc-err-phone-number hidden') !== false,
-            'the tile must still have rendered for that absence to mean anything'
+            strpos($html, '<div class="twoinc-company-search-tile-slot hidden"></div>') !== false,
+            'the tile slot must still render on a brand that suppresses the approved notice'
+        );
+        TinyAssert::true(
+            strpos(
+                $html,
+                'twoinc-pay-box twoinc-err-payment-default hidden" data-company-template="Suppressednoticebrand'
+                . ' is not available for this order by {company}"'
+            ) !== false,
+            'the declined box\'s company template must survive the approved notice being suppressed'
         );
 
         self::reset();
         self::useTaglineBrand();
         $enabled_html = self::gateway()->build_payment_description();
         TinyAssert::true(
-            strpos($enabled_html, '<div class="twoinc-company-tile-label hidden"></div>') !== false,
-            'a brand with the notice on must still ship the label container'
+            strpos($enabled_html, '<div class="twoinc-company-search-tile-slot hidden"></div>') !== false,
+            'the tile slot must also render on a brand with the notice on'
         );
     }
 
