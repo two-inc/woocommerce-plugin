@@ -49,7 +49,6 @@ describe("company-search manual-entry affordance", () => {
       text: TEXT,
       supported_buyer_countries: ["GB"],
       enable_company_search: "yes",
-      enable_company_search_for_others: "yes",
       enable_address_lookup: "no"
     });
     $ = ctx.$;

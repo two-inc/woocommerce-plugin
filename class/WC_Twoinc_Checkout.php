@@ -451,16 +451,17 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 // the control renders is `company_search_location`'s job,
                 // below — driven by the checkbox — never this flag's.
                 'enable_company_search' => 'yes',
-                'enable_company_search_for_others' => $this->wc_twoinc->get_option('enable_company_search_for_others'),
                 // TWO-25326 §7.1, correction 2026-08-04: where the one
                 // company-search control renders — driven by the
                 // `enable_company_search` checkbox itself (not a setting of
                 // its own; see get_enable_company_search()'s doc comment).
-                // Any JS check for the admin's own "checked" preference
-                // (e.g. gating `enable_company_search_for_others`, which its
-                // own description ties to the checkbox) must read THIS value
-                // against 'address_area', not the runtime
-                // `enable_company_search` flag above.
+                // Any JS check for the admin's own "checked" preference —
+                // including whether company search shows for OTHER payment
+                // methods, which is this same checkbox now too (the
+                // standalone `enable_company_search_for_others` setting was
+                // removed, Doug's ruling) — must read THIS value against
+                // 'address_area', not the runtime `enable_company_search`
+                // flag above.
                 'company_search_location' => self::derive_company_search_location($enable_company_search),
                 'enable_address_lookup' => $this->wc_twoinc->get_option('enable_address_lookup'),
                 'enable_order_intent' => $this->wc_twoinc->get_option('enable_order_intent'),

@@ -2573,10 +2573,18 @@ let twoincDomHelper = {
         }
       }
     } else {
+      // Whether company search is available for OTHER payment methods is no
+      // longer a setting of its own (TWO-25326, Doug's ruling: a separate
+      // `enable_company_search_for_others` toggle was one control too many —
+      // there is no scenario where a merchant wants this to disagree with
+      // "Enable Company Search In Address Entry"). It now follows that same
+      // admin checkbox directly, via `company_search_location`
+      // ('address_area' means checked): checked shows the search field for
+      // other payment methods too, unchecked does not.
       if (
         twoincDomHelper.isCountrySupported() &&
         window.twoinc.enable_company_search === "yes" &&
-        window.twoinc.enable_company_search_for_others === "yes"
+        window.twoinc.company_search_location === "address_area"
       ) {
         visibleTargets.push("#billing_company_display_field");
       } else {
@@ -3900,9 +3908,11 @@ class Twoinc {
       twoincDomHelper.isTwoincVisible() ||
       // Admin's address-area preference, not the runtime
       // `enable_company_search` flag — see the comment on the equivalent
-      // check in toggleBusinessFields (TWO-25326 §7.1).
-      (window.twoinc.company_search_location === "address_area" &&
-        window.twoinc.enable_company_search_for_others === "yes")
+      // check in toggleBusinessFields (TWO-25326 §7.1). No longer ANDed with
+      // a separate "for other payment methods" toggle (removed, TWO-25326 —
+      // that setting is now just this same checkbox, so the AND collapsed
+      // to a no-op).
+      window.twoinc.company_search_location === "address_area"
     ) {
       // Toggle the business fields
       twoincDomHelper.toggleBusinessFields();
@@ -4018,6 +4028,39 @@ class Twoinc {
     // already bound above) is what moves the wrapper back into the fresh
     // slot.
     $body.on("update_checkout", twoincSelectWooHelper.detachCompanySearchTileWrapperToSafety);
+
+    // A payment-method switch must re-DECIDE company-field visibility, not
+    // just relocate whatever is already there (TWO-25326 bugfix, Doug
+    // live-verified: the search control never appeared in the payment tile
+    // at all). `onUpdatedCheckout()` below only calls
+    // `syncCompanySearchTileLocation()` — it never revisits which field
+    // `toggleBusinessFields()` decided to show, so a buyer who starts on a
+    // DIFFERENT gateway (the ordinary case: WooCommerce checks the first
+    // available gateway by default) and switches TO this one saw an empty
+    // tile: `#billing_company_display_field`'s hidden/visible decision was
+    // made once, at page load, while some other gateway was selected — the
+    // "other payment methods" branch of `toggleBusinessFields()`, gated on
+    // `enable_company_search_for_others` — and nothing re-ran that decision
+    // on the switch. `syncCompanySearchTileLocation()`'s own "unhide only if
+    // a VISIBLE child moved in" guard (see its doc comment) then correctly
+    // kept the slot hidden around a still-hidden field, which is the exact
+    // symptom reported live.
+    //
+    // The `change` listener `onUpdatedCheckout()` itself re-registers on
+    // every `updated_checkout` (below) cannot be relied on for this: it is
+    // bound too late to catch the FIRST payment-method switch of a session,
+    // since nothing forces `updated_checkout` to have fired even once before
+    // a buyer picks a payment method, and — unbound with no matching `.off`
+    // — it accumulates a duplicate on every cycle besides. Namespaced and
+    // delegated here instead, alongside this function's other one-time
+    // bindings, so it exists before the buyer's first click and never
+    // duplicates across repeated `initialize()` calls (guarded by
+    // `isInitialized` above, same as every other binding in this function).
+    $body
+      .off("change.twoincPaymentMethod", 'input[name="payment_method"]')
+      .on("change.twoincPaymentMethod", 'input[name="payment_method"]', function () {
+        twoincDomHelper.toggleBusinessFields();
+      });
 
     // No click handler for the manual-entry row (TWO-25288). It is a pseudo-
     // option inside the results list now, so the picker already turns a click
@@ -4481,9 +4524,11 @@ class Twoinc {
 
     Twoinc.getInstance().updateElements();
 
-    jQuery('input[name="payment_method"]').on("change", function () {
-      twoincDomHelper.toggleBusinessFields();
-    });
+    // Payment-method-switch handling moved to a single namespaced, delegated
+    // binding in `initialize()` (TWO-25326 bugfix) — bound once, before the
+    // buyer's first click, rather than re-registered (with no `.off()`, so it
+    // duplicated) on every `updated_checkout`. See that binding's own doc
+    // comment for the live bug this closes.
 
     twoincDomHelper.rearrangeDescription();
 
@@ -4940,14 +4985,15 @@ jQuery(function () {
         // country change). The old one-shot check left company search
         // unwired for the whole session. Re-check on every
         // updated_checkout; and when company search is enabled for other
-        // methods, wire it immediately — that setting exists precisely
-        // for checkouts where this gateway isn't offered.
+        // methods — the same "Enable Company Search In Address Entry"
+        // checkbox, no separate setting any more (TWO-25326) — wire it
+        // immediately: that state exists precisely for checkouts where this
+        // gateway isn't offered.
         if (
           // Admin's address-area preference, not the runtime
           // `enable_company_search` flag — see the comment on the
           // equivalent check in toggleBusinessFields (TWO-25326 §7.1).
-          window.twoinc.company_search_location === "address_area" &&
-          window.twoinc.enable_company_search_for_others === "yes"
+          window.twoinc.company_search_location === "address_area"
         ) {
           Twoinc.getInstance().initialize(true);
         } else {

@@ -683,7 +683,16 @@ if (!class_exists('WC_Twoinc')) {
             // sitting inert in their settings row (adversarial review
             // finding, Yoda). Same mechanism as `enable_sole_trader`
             // (TWO-25163).
-            $removed = ['enable_sole_trader', 'company_search_location'];
+            //
+            // 'enable_company_search_for_others' (TWO-25326, Doug's ruling):
+            // a second, independent toggle for whether company search shows
+            // on OTHER payment methods was one control too many — there is
+            // no scenario where a merchant wants that to disagree with
+            // "Enable Company Search In Address Entry" itself, so the
+            // behaviour now follows that same checkbox directly (see
+            // `WC_Twoinc_Checkout::prepare_twoinc_object()` and
+            // `twoincDomHelper.toggleBusinessFields()` in twoinc.js).
+            $removed = ['enable_sole_trader', 'company_search_location', 'enable_company_search_for_others'];
             $present = [];
             foreach ($removed as $key) {
                 if (is_array($this->settings) && array_key_exists($key, $this->settings)) {
@@ -994,21 +1003,19 @@ if (!class_exists('WC_Twoinc')) {
             // The tile-location slot below is new (§7.1): empty and hidden by
             // default (enable_company_search checked, the unchanged
             // behaviour). When the merchant UNCHECKS "Enable Company Search
-            // In Address Entry", twoincDomHelper.syncCompanySearchTileLocation()
+            // In Address Entry", twoincSelectWooHelper.syncCompanySearchTileLocation()
             // in twoinc.js relocates `#billing_company_display_field` (the
-            // ONLY field still eligible to move here as of the 2026-08-04
-            // correction — `#billing_company_field` and `#company_id_field`
-            // deliberately stay in the address form; see that function's own
-            // doc comment) into this slot, and unhides the slot only if
-            // something actually moved in. In practice today that field
-            // never exists server-side when the checkbox is unchecked (see
-            // update_company_fields() in WC_Twoinc_Checkout), so this slot
-            // currently stays empty and hidden in every reachable state —
-            // tracked as a known gap, not a bug: making search functionally
-            // live inside the tile is bigger scope than this correction.
-            // Always rendered (a hidden empty div is cheap) so the JS never
-            // has to special-case "the slot doesn't exist yet" against "the
-            // setting is off".
+            // ONLY field still eligible to move here — `#billing_company_field`
+            // and `#company_id_field` deliberately stay in the address form;
+            // see that function's own doc comment) into this slot, and
+            // unhides the slot only if something actually moved in. The
+            // field is always registered server-side now (see
+            // update_company_fields() in WC_Twoinc_Checkout — the earlier
+            // gate that skipped registration on an unchecked box is
+            // removed), so this branch is live: a functional selectWoo
+            // search inside the tile, not an empty box. Always rendered (a
+            // hidden empty div is cheap) so the JS never has to special-case
+            // "the slot doesn't exist yet" against "the setting is off".
             $company_search_tile_slot = '<div class="twoinc-company-search-tile-slot hidden"></div>';
 
             return sprintf(
@@ -3925,14 +3932,6 @@ if (!class_exists('WC_Twoinc')) {
                 'enable_company_search' => [
                     'title'       => __('Enable Company Search In Address Entry', 'twoinc-payment-gateway'),
                     'description' => __('When enabled, the buyer may search for their company within the address entry section of the checkout. Otherwise, company search will be visible within the payment method.', 'twoinc-payment-gateway'),
-                    'desc_tip'    => true,
-                    'label'       => ' ',
-                    'type'        => 'checkbox',
-                    'default'     => 'yes'
-                ],
-                'enable_company_search_for_others' => [
-                    'title'       => __('Enable company name search for other payment options', 'twoinc-payment-gateway'),
-                    'description' => __('Enables searching for company name even when other payment options are selected. Requires the option above to be checked.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'label'       => ' ',
                     'type'        => 'checkbox',

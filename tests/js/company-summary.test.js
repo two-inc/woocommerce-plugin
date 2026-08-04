@@ -40,7 +40,6 @@ describe("read-only captured-company summary", () => {
       gateway_id: GATEWAY_ID,
       supported_buyer_countries: ["GB"],
       enable_company_search: "yes",
-      enable_company_search_for_others: "yes",
       enable_address_lookup: "no",
       text: {}
     });
