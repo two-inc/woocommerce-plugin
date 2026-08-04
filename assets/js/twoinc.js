@@ -2537,7 +2537,7 @@ let twoincDomHelper = {
         // WooCommerce's OWN native company field is a completely separate
         // concern from where OUR search control lives (bug found by Doug
         // 2026-08-04, live-verified against the checkbox-off/payment_tile
-        // state): unchecking "Enable Company Search In Address Entry" moves
+        // state): unchecking "Enable company search in address entry" moves
         // the search control into the payment tile, but must never take
         // WooCommerce's stock field away from the address area — the two
         // coexist, search in the tile, native field where WC always puts
@@ -2577,7 +2577,7 @@ let twoincDomHelper = {
       // longer a setting of its own (TWO-25326, Doug's ruling: a separate
       // `enable_company_search_for_others` toggle was one control too many —
       // there is no scenario where a merchant wants this to disagree with
-      // "Enable Company Search In Address Entry"). It now follows that same
+      // "Enable company search in address entry"). It now follows that same
       // admin checkbox directly, via `company_search_location`
       // ('address_area' means checked): checked shows the search field for
       // other payment methods too, unchecked does not.
@@ -4985,7 +4985,7 @@ jQuery(function () {
         // country change). The old one-shot check left company search
         // unwired for the whole session. Re-check on every
         // updated_checkout; and when company search is enabled for other
-        // methods — the same "Enable Company Search In Address Entry"
+        // methods — the same "Enable company search in address entry"
         // checkbox, no separate setting any more (TWO-25326) — wire it
         // immediately: that state exists precisely for checkouts where this
         // gateway isn't offered.

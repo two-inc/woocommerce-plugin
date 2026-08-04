@@ -483,7 +483,7 @@ final class BrandConfigSpec
      * TWO-25326 §7.1, correction 2026-08-04 round 3 (Doug's ruling). The ONE
      * company-search control must always be registered by
      * update_company_fields() — the checkbox this ticket is about
-     * ("Enable Company Search In Address Entry") only ever decides WHERE it
+     * ("Enable company search in address entry") only ever decides WHERE it
      * renders (address area vs payment tile, via `company_search_location`
      * — see derive_company_search_location() and
      * twoincDomHelper.syncCompanySearchTileLocation() in twoinc.js), never
@@ -5445,7 +5445,7 @@ final class BrandConfigSpec
      * TWO-25326, Doug's ruling: the standalone "Enable company name search
      * for other payment options" setting is removed outright — whether
      * company search shows for OTHER payment methods now follows the same
-     * "Enable Company Search In Address Entry" checkbox directly, with no
+     * "Enable company search in address entry" checkbox directly, with no
      * independent toggle. Mirrors
      * testCompanySearchLocationSettingDroppedFromUpgradedInstalls above: the
      * admin field must be gone, and drop_removed_settings() must clean the

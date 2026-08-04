@@ -688,7 +688,7 @@ if (!class_exists('WC_Twoinc')) {
             // a second, independent toggle for whether company search shows
             // on OTHER payment methods was one control too many — there is
             // no scenario where a merchant wants that to disagree with
-            // "Enable Company Search In Address Entry" itself, so the
+            // "Enable company search in address entry" itself, so the
             // behaviour now follows that same checkbox directly (see
             // `WC_Twoinc_Checkout::prepare_twoinc_object()` and
             // `twoincDomHelper.toggleBusinessFields()` in twoinc.js).
@@ -3930,7 +3930,7 @@ if (!class_exists('WC_Twoinc')) {
                     'title'       => __('Auto-complete settings', 'twoinc-payment-gateway')
                 ],
                 'enable_company_search' => [
-                    'title'       => __('Enable Company Search In Address Entry', 'twoinc-payment-gateway'),
+                    'title'       => __('Enable company search in address entry', 'twoinc-payment-gateway'),
                     'description' => __('When enabled, the buyer may search for their company within the address entry section of the checkout. Otherwise, company search will be visible within the payment method.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'label'       => ' ',
