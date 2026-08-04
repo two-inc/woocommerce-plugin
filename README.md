@@ -129,7 +129,6 @@ cat > docker/config/staging.json <<EOF
   "show_abt_link": "yes",
   "section_auto_complete_settings": "",
   "enable_company_search": "yes",
-  "enable_company_search_for_others": "yes",
   "enable_address_lookup": "yes"
 }
 EOF

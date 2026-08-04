@@ -200,6 +200,7 @@ final class BrandConfigSpec
             'testCompanySearchLocationDerivedFromEnableCompanySearchBothDirections',
             'testCompanySearchLocationFallsBackToPaymentTileOnNullOrEmpty',
             'testCompanySearchLocationSettingDroppedFromUpgradedInstalls',
+            'testEnableCompanySearchForOthersSettingDroppedFromUpgradedInstalls',
         ];
         foreach ($tests as $test) {
             self::reset();
@@ -5435,6 +5436,43 @@ final class BrandConfigSpec
         $drop->setAccessible(true);
 
         $GLOBALS['__twoinc_test_options'][$key] = ['company_search_location' => 'payment_tile', 'api_key' => 'keep-me'];
+        $gateway->init_settings();
+        $drop->invoke($gateway);
+        TinyAssert::same(['api_key' => 'keep-me'], $GLOBALS['__twoinc_test_options'][$key]);
+    }
+
+    /**
+     * TWO-25326, Doug's ruling: the standalone "Enable company name search
+     * for other payment options" setting is removed outright — whether
+     * company search shows for OTHER payment methods now follows the same
+     * "Enable Company Search In Address Entry" checkbox directly, with no
+     * independent toggle. Mirrors
+     * testCompanySearchLocationSettingDroppedFromUpgradedInstalls above: the
+     * admin field must be gone, and drop_removed_settings() must clean the
+     * option key up on an install that saved it before removal.
+     */
+    private static function testEnableCompanySearchForOthersSettingDroppedFromUpgradedInstalls(): void
+    {
+        $gateway = new class () extends WC_Twoinc {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+        };
+        $gateway->init_form_fields();
+        TinyAssert::same(
+            false,
+            array_key_exists('enable_company_search_for_others', $gateway->form_fields)
+        );
+
+        $key = $gateway->get_option_key();
+        $drop = new ReflectionMethod(WC_Twoinc::class, 'drop_removed_settings');
+        $drop->setAccessible(true);
+
+        $GLOBALS['__twoinc_test_options'][$key] = [
+            'enable_company_search_for_others' => 'yes',
+            'api_key' => 'keep-me'
+        ];
         $gateway->init_settings();
         $drop->invoke($gateway);
         TinyAssert::same(['api_key' => 'keep-me'], $GLOBALS['__twoinc_test_options'][$key]);

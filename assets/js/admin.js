@@ -43,10 +43,6 @@ jQuery(function ($) {
     function (e) {
       toggleChildrenFields(
         $(this),
-        $("#woocommerce_" + twoinc_admin.gateway_id + "_enable_company_search_for_others")
-      );
-      toggleChildrenFields(
-        $(this),
         $("#woocommerce_" + twoinc_admin.gateway_id + "_enable_address_lookup")
       );
     }
@@ -72,10 +68,6 @@ jQuery(function ($) {
 
   jQuery("h3.wc-settings-sub-title").next().hide();
 
-  toggleChildrenFields(
-    $("#woocommerce_" + twoinc_admin.gateway_id + "_enable_company_search"),
-    $("#woocommerce_" + twoinc_admin.gateway_id + "_enable_company_search_for_others")
-  );
   toggleChildrenFields(
     $("#woocommerce_" + twoinc_admin.gateway_id + "_enable_company_search"),
     $("#woocommerce_" + twoinc_admin.gateway_id + "_enable_address_lookup")
