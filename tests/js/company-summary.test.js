@@ -283,7 +283,7 @@ describe("read-only captured-company summary", () => {
       // WC moved the real fields past it, it stayed stranded above all of
       // them for the rest of the page's life.
       pickCompany("ACME Widgets Ltd", "12345678");
-      expect(summary().prev().is("#company_id_field")).toBe(true);
+      expect(summary().prev().is("#billing_company_display_field")).toBe(true);
 
       // Simulate WC's own resort: detach the real fields and re-append them
       // AFTER the summary — exactly what `rows.detach().appendTo(wrapper)`
@@ -304,7 +304,7 @@ describe("read-only captured-company summary", () => {
       // them) must snap the summary back into place, not leave it stranded.
       helper.renderCompanySummary();
 
-      expect(summary().prev().is("#company_id_field")).toBe(true);
+      expect(summary().prev().is("#billing_company_display_field")).toBe(true);
       expect(indexOf("#" + helper.companySummaryId)).toBeGreaterThan(
         indexOf("#billing_company_display_field")
       );

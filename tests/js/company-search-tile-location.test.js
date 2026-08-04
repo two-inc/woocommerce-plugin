@@ -346,6 +346,68 @@ describe("company-search tile location (TWO-25326 §7.1)", () => {
       expect($pen.length).toBe(1);
       expect($pen.closest('form[name="checkout"]').length).toBe(1);
     });
+
+    /**
+     * Bug found live by Doug 2026-08-04: the read-only company-number
+     * summary (`getCompanySummaryNode()`, TWO-25288) used to anchor itself
+     * against `#company_id_field`, which — like `#billing_company_field` —
+     * is deliberately never relocated into the tile. So relocating the
+     * search control left the summary orphaned in the address area,
+     * rendering nothing anyone had put there deliberately. The fix anchors
+     * the summary against `#billing_company_display_field` itself — the one
+     * field that DOES relocate — so it travels with the control instead of
+     * being a second, independently-positioned element.
+     */
+    test("the read-only company summary follows the search control into the tile, not left orphaned in the address area", () => {
+      $("#billing_company").val("ACME Widgets Ltd");
+      $("#company_id").val("12345678");
+
+      helper.syncCompanySearchTileLocation();
+      helper.renderCompanySummary();
+
+      const $summary = $("#" + helper.companySummaryId);
+      expect($summary.length).toBe(1);
+      expect($summary.closest(".twoinc-company-search-tile-slot").length).toBe(1);
+      // Not left behind as a stray sibling in the address form.
+      expect($summary.closest("#billing_company_field, #company_id_field").length).toBe(0);
+    });
+
+    /**
+     * Bug found live by Doug 2026-08-04: unchecking "Enable Company Search
+     * In Address Entry" (payment_tile mode) was silently removing
+     * WooCommerce's OWN native `#billing_company_field` from the address
+     * area entirely, leaving nothing there. Root cause:
+     * `toggleBusinessFields()` decided whether to show the search field or
+     * the native field using the RUNTIME `window.twoinc.enable_company_search`
+     * flag — which `WC_Twoinc_Checkout::prepare_twoinc_object()` hardcodes to
+     * "yes" unconditionally (TWO-25326 §7.1 correction 2026-08-04; see its
+     * own doc comment) precisely so the relocated search widget stays live —
+     * so that flag can no longer distinguish "checkbox on" from "checkbox
+     * off". The two fields are independent concerns: the search control's
+     * location (address area vs tile) is `company_search_location`'s job,
+     * and WooCommerce's own native field must render exactly as WooCommerce
+     * defines it regardless of that setting.
+     */
+    test("does not remove WooCommerce's native #billing_company_field when the search control is relocated to the tile", () => {
+      // isCountrySupported() is what toggleBusinessFields() gates the
+      // display-field branch on; absent from this describe block's own
+      // fixture, which never exercises that branch directly.
+      ctx.twoinc.supported_buyer_countries = ["GB"];
+
+      dom.toggleBusinessFields();
+
+      expect($("#billing_company_field").hasClass("hidden")).toBe(false);
+      expect($("#billing_company_field").closest('form[name="checkout"]').length).toBe(1);
+      expect($("#billing_company_field").closest(".twoinc-company-search-tile-slot").length).toBe(
+        0
+      );
+
+      // The search control itself is still live, just relocated.
+      expect(
+        $("#billing_company_display_field").closest(".twoinc-company-search-tile-slot").length
+      ).toBe(1);
+      expect(tileSlot().hasClass("hidden")).toBe(false);
+    });
   });
 
   describe("address_area setting (default)", () => {
