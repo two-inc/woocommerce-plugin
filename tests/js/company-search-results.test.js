@@ -518,7 +518,7 @@ describe("company search hints", () => {
     test("is not what getCompanyName and getCompanyData report", () => {
       snapshotUntouchedField();
 
-      expect(ctx.dom.getCompanyName()).toBe("");
+      expect(ctx.helper.getCompanyName()).toBe("");
       expect(ctx.dom.getCompanyData().company_name).toBe("");
     });
 
@@ -551,7 +551,7 @@ describe("company search hints", () => {
       ctx.$("#billing_company_display").selectWoo(ctx.helper.genSelectWooParams());
       ctx.dom.saveCheckoutInputs();
 
-      expect(ctx.dom.getCompanyName()).toBe("Example Trading Co");
+      expect(ctx.helper.getCompanyName()).toBe("Example Trading Co");
     });
   });
 

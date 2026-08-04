@@ -39,6 +39,7 @@ describe("company-search tile location (TWO-25326 §7.1)", () => {
   let ctx;
   let $;
   let dom;
+  let helper;
 
   beforeEach(() => {
     harness.buildCheckoutForm();
@@ -99,11 +100,12 @@ describe("company-search tile location (TWO-25326 §7.1)", () => {
       });
       $ = ctx.$;
       dom = ctx.dom;
+      helper = ctx.helper;
       buildTileSlot();
     });
 
     test("moves the search widget into the tile slot, not a clone", () => {
-      dom.syncCompanySearchTileLocation();
+      helper.syncCompanySearchTileLocation();
 
       const $display = $("#billing_company_display_field");
       expect($display.length).toBe(1);
@@ -132,7 +134,7 @@ describe("company-search tile location (TWO-25326 §7.1)", () => {
      * into its move-set fails this test loudly.
      */
     test("never relocates #billing_company_field or #company_id_field — both stay in the address form, visible and editable", () => {
-      dom.syncCompanySearchTileLocation();
+      helper.syncCompanySearchTileLocation();
 
       const $billingCompany = $("#billing_company_field");
       expect($billingCompany.length).toBe(1);
@@ -147,10 +149,10 @@ describe("company-search tile location (TWO-25326 §7.1)", () => {
     });
 
     test("is idempotent — a second call does not physically re-detach nodes that are already in place", () => {
-      dom.syncCompanySearchTileLocation();
+      helper.syncCompanySearchTileLocation();
 
       const appendToSpy = jest.spyOn($.fn, "appendTo");
-      dom.syncCompanySearchTileLocation();
+      helper.syncCompanySearchTileLocation();
 
       expect(appendToSpy).not.toHaveBeenCalled();
       appendToSpy.mockRestore();
@@ -174,7 +176,7 @@ describe("company-search tile location (TWO-25326 §7.1)", () => {
     test("stays hidden when the only thing moved in is a hidden field (manual entry / sole-trader mode)", () => {
       $("#billing_company_display_field").addClass("hidden");
 
-      dom.syncCompanySearchTileLocation();
+      helper.syncCompanySearchTileLocation();
 
       expect(
         $("#billing_company_display_field").closest(".twoinc-company-search-tile-slot").length
@@ -224,25 +226,25 @@ describe("company-search tile location (TWO-25326 §7.1)", () => {
     });
 
     test("detach-to-safety is also idempotent — a second call in a row does not re-move an already-parked wrapper (round 2 review — Vader)", () => {
-      dom.syncCompanySearchTileLocation();
+      helper.syncCompanySearchTileLocation();
 
-      dom.detachCompanySearchTileWrapperToSafety();
+      helper.detachCompanySearchTileWrapperToSafety();
       const appendToSpy = jest.spyOn($.fn, "appendTo");
-      dom.detachCompanySearchTileWrapperToSafety();
+      helper.detachCompanySearchTileWrapperToSafety();
 
       expect(appendToSpy).not.toHaveBeenCalled();
       appendToSpy.mockRestore();
     });
 
     test("a wrapper detached to the pen while the tile slot is absent stays parked there, not orphaned (round 2 review — Vader)", () => {
-      dom.syncCompanySearchTileLocation();
-      dom.detachCompanySearchTileWrapperToSafety();
+      helper.syncCompanySearchTileLocation();
+      helper.detachCompanySearchTileWrapperToSafety();
 
       // Simulate the slot genuinely not existing yet when `updated_checkout`
       // fires — e.g. the gateway hasn't rendered on this particular refresh.
       tileSlot().remove();
 
-      expect(() => dom.syncCompanySearchTileLocation()).not.toThrow();
+      expect(() => helper.syncCompanySearchTileLocation()).not.toThrow();
 
       const $wrapper = $("#twoinc-company-search-tile-wrapper");
       expect($wrapper.length).toBe(1);
@@ -251,7 +253,7 @@ describe("company-search tile location (TWO-25326 §7.1)", () => {
     });
 
     test("survives a WooCommerce-style fragment replace of .woocommerce-checkout-payment", () => {
-      dom.syncCompanySearchTileLocation();
+      helper.syncCompanySearchTileLocation();
       expect(
         $("#billing_company_display_field").closest(".twoinc-company-search-tile-slot").length
       ).toBe(1);
@@ -259,7 +261,7 @@ describe("company-search tile location (TWO-25326 §7.1)", () => {
       // The bug this whole mechanism exists to close: WooCommerce's
       // `update_checkout` trigger fires synchronously BEFORE the AJAX call
       // that eventually calls `.replaceWith()` on this fragment.
-      dom.detachCompanySearchTileWrapperToSafety();
+      helper.detachCompanySearchTileWrapperToSafety();
 
       // Simulate WooCommerce's own AJAX success handler: wholesale-replace
       // the payment fragment with a FRESH server render (an empty tile slot,
@@ -292,7 +294,7 @@ describe("company-search tile location (TWO-25326 §7.1)", () => {
       // WooCommerce's own past-tense trigger, fired after the fragments are
       // back — this is what moves the surviving fields back into the FRESH
       // slot.
-      dom.syncCompanySearchTileLocation();
+      helper.syncCompanySearchTileLocation();
 
       expect(
         $("#billing_company_display_field").closest(".twoinc-company-search-tile-slot").length
@@ -301,11 +303,11 @@ describe("company-search tile location (TWO-25326 §7.1)", () => {
     });
 
     test("a captured company value survives the fragment replace", () => {
-      dom.syncCompanySearchTileLocation();
+      helper.syncCompanySearchTileLocation();
       $("#billing_company").val("ACME Widgets Ltd");
       $("#company_id").val("12345678");
 
-      dom.detachCompanySearchTileWrapperToSafety();
+      helper.detachCompanySearchTileWrapperToSafety();
       paymentFragment().replaceWith(
         '<div class="woocommerce-checkout-payment">' +
           '<ul class="wc_payment_methods payment_methods methods">' +
@@ -324,7 +326,7 @@ describe("company-search tile location (TWO-25326 §7.1)", () => {
           "</ul>" +
           "</div>"
       );
-      dom.syncCompanySearchTileLocation();
+      helper.syncCompanySearchTileLocation();
 
       expect($("#billing_company").val()).toBe("ACME Widgets Ltd");
       expect($("#company_id").val()).toBe("12345678");
@@ -332,13 +334,13 @@ describe("company-search tile location (TWO-25326 §7.1)", () => {
 
     test("detach-to-safety is a no-op when nothing has been relocated yet", () => {
       // Never called syncCompanySearchTileLocation() — no wrapper exists.
-      expect(() => dom.detachCompanySearchTileWrapperToSafety()).not.toThrow();
+      expect(() => helper.detachCompanySearchTileWrapperToSafety()).not.toThrow();
       expect($("#twoinc-company-search-tile-holding-pen").length).toBe(0);
     });
 
     test("the holding pen lives inside the checkout form, not detached from it", () => {
-      dom.syncCompanySearchTileLocation();
-      dom.detachCompanySearchTileWrapperToSafety();
+      helper.syncCompanySearchTileLocation();
+      helper.detachCompanySearchTileWrapperToSafety();
 
       const $pen = $("#twoinc-company-search-tile-holding-pen");
       expect($pen.length).toBe(1);
@@ -356,13 +358,14 @@ describe("company-search tile location (TWO-25326 §7.1)", () => {
       });
       $ = ctx.$;
       dom = ctx.dom;
+      helper = ctx.helper;
       buildTileSlot();
     });
 
     test("is a no-op — the control never moves, the slot stays hidden", () => {
       const appendToSpy = jest.spyOn($.fn, "appendTo");
 
-      dom.syncCompanySearchTileLocation();
+      helper.syncCompanySearchTileLocation();
 
       expect(
         $("#billing_company_display_field").closest(".twoinc-company-search-tile-slot").length
@@ -374,7 +377,7 @@ describe("company-search tile location (TWO-25326 §7.1)", () => {
 
     test("detach-to-safety is also a no-op on this setting", () => {
       const appendToSpy = jest.spyOn($.fn, "appendTo");
-      dom.detachCompanySearchTileWrapperToSafety();
+      helper.detachCompanySearchTileWrapperToSafety();
       expect(appendToSpy).not.toHaveBeenCalled();
       appendToSpy.mockRestore();
     });
@@ -390,12 +393,13 @@ describe("company-search tile location (TWO-25326 §7.1)", () => {
       });
       $ = ctx.$;
       dom = ctx.dom;
+      helper = ctx.helper;
       // Deliberately no buildTileSlot() — the Two gateway markup (and so the
       // tile slot) has not rendered yet.
     });
 
     test("is a safe no-op, not a throw", () => {
-      expect(() => dom.syncCompanySearchTileLocation()).not.toThrow();
+      expect(() => helper.syncCompanySearchTileLocation()).not.toThrow();
       expect($("#billing_company_field").length).toBeGreaterThan(0);
       expect($("#billing_company_field").closest(".twoinc-company-search-tile-slot").length).toBe(
         0

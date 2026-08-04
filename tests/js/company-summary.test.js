@@ -33,6 +33,7 @@ describe("read-only captured-company summary", () => {
   let ctx;
   let $;
   let dom;
+  let helper;
 
   beforeEach(() => {
     ctx = harness.loadTwoinc({
@@ -45,6 +46,7 @@ describe("read-only captured-company summary", () => {
     });
     $ = ctx.$;
     dom = ctx.dom;
+    helper = ctx.helper;
     harness.buildCheckoutForm();
     selectTwo();
   });
@@ -125,7 +127,7 @@ describe("read-only captured-company summary", () => {
 
   /** @returns {Object} the summary element, or an empty set */
   function summary() {
-    return $("#" + dom.companySummaryId);
+    return $("#" + helper.companySummaryId);
   }
 
   /**
@@ -264,7 +266,7 @@ describe("read-only captured-company summary", () => {
       expect($("#company_id").val()).toBe("12345678");
 
       // And re-rendering must not disturb them.
-      dom.renderCompanySummary();
+      helper.renderCompanySummary();
       expect($("#billing_company").val()).toBe("ACME Widgets Ltd");
       expect($("#company_id").val()).toBe("12345678");
     });
@@ -293,17 +295,17 @@ describe("read-only captured-company summary", () => {
         .appendTo($form);
       const children = () => $form.children().toArray();
       const indexOf = (sel) => children().indexOf($(sel)[0]);
-      expect(indexOf("#" + dom.companySummaryId)).toBeLessThan(
+      expect(indexOf("#" + helper.companySummaryId)).toBeLessThan(
         indexOf("#billing_company_display_field")
       );
 
       // Any subsequent render (payment-method switch, country change,
       // another pick — toggleBusinessFields is the common path for all of
       // them) must snap the summary back into place, not leave it stranded.
-      dom.renderCompanySummary();
+      helper.renderCompanySummary();
 
       expect(summary().prev().is("#company_id_field")).toBe(true);
-      expect(indexOf("#" + dom.companySummaryId)).toBeGreaterThan(
+      expect(indexOf("#" + helper.companySummaryId)).toBeGreaterThan(
         indexOf("#billing_company_display_field")
       );
     });
@@ -323,7 +325,7 @@ describe("read-only captured-company summary", () => {
       pickCompany("ACME Widgets Ltd", "12345678");
 
       const insertAfterSpy = jest.spyOn($.fn, "insertAfter");
-      dom.renderCompanySummary();
+      helper.renderCompanySummary();
 
       expect(insertAfterSpy).not.toHaveBeenCalled();
       insertAfterSpy.mockRestore();
@@ -495,7 +497,7 @@ describe("read-only captured-company summary", () => {
       pickCompany("ACME Widgets Ltd", "12345678");
       expect(renderedNumber()).toBe("12345678");
 
-      dom.enterManualCompanyEntry();
+      helper.enterManualCompanyEntry();
       typeCompanyName("Sole Proprietor Bakery");
 
       // The pick above invalidated the previous intent; re-approve so the tile
@@ -515,7 +517,7 @@ describe("read-only captured-company summary", () => {
     });
 
     test("what is displayed is what gets posted", () => {
-      dom.enterManualCompanyEntry();
+      helper.enterManualCompanyEntry();
       typeCompanyName("Sole Proprietor Bakery");
 
       // The posted field on its own would be vacuous here — typeCompanyName is
@@ -535,7 +537,7 @@ describe("read-only captured-company summary", () => {
       // and kept the field visible/required in manual entry — that was the
       // bug (#30.x.13, live-reported by Doug).
       pickCompany("ACME Widgets Ltd", "12345678");
-      dom.enterManualCompanyEntry();
+      helper.enterManualCompanyEntry();
       typeCompanyName("Sole Proprietor Bakery");
 
       expect($("#company_id_field").hasClass("hidden")).toBe(true);
@@ -555,7 +557,7 @@ describe("read-only captured-company summary", () => {
       // #company_id_field with no working search widget behind it
       // (enableCompanySearch early-returns) and no way back to name-only.
       pickCompany("ACME Widgets Ltd", "12345678");
-      dom.enterManualCompanyEntry();
+      helper.enterManualCompanyEntry();
       typeCompanyName("Sole Proprietor Bakery");
 
       ctx.soleTrader.setMode("sole_trader");
@@ -634,10 +636,10 @@ describe("read-only captured-company summary", () => {
     test("absent from the page until something is captured", () => {
       // Prove the mechanism is live in this test before asserting the absence,
       // so the assertion cannot pass merely because nothing ever ran.
-      dom.renderCompanySummary("ACME Widgets Ltd", "12345678");
+      helper.renderCompanySummary("ACME Widgets Ltd", "12345678");
       expect(isShown()).toBe(true);
 
-      dom.renderCompanySummary("", "");
+      helper.renderCompanySummary("", "");
       expect(isShown()).toBe(false);
     });
 
@@ -646,7 +648,7 @@ describe("read-only captured-company summary", () => {
       expect(isShown()).toBe(true);
 
       $('input[name="payment_method"]').prop("checked", false);
-      dom.renderCompanySummary();
+      helper.renderCompanySummary();
 
       expect(isShown()).toBe(false);
       // Still rendered, just not shown — and the fields still post.
@@ -658,7 +660,7 @@ describe("read-only captured-company summary", () => {
       pickCompany("ACME Widgets Ltd", "12345678");
       expect(isShown()).toBe(true);
 
-      dom.clearSelectedCompany();
+      helper.clearSelectedCompany();
 
       expect(isShown()).toBe(false);
       expect(renderedName()).toBe("");
@@ -688,7 +690,7 @@ describe("read-only captured-company summary", () => {
       // "". Written as the escape rather than pasted in, so neither a reader
       // nor an editor has to tell the two space characters apart — pasted, it
       // was mistaken for U+0020 in review.
-      dom.renderCompanySummary("\u00a0", "");
+      helper.renderCompanySummary("\u00a0", "");
 
       expect(renderedName()).toBe("");
       expect(isShown()).toBe(false);
@@ -698,7 +700,7 @@ describe("read-only captured-company summary", () => {
       // is why the live read cannot see one and the guard above is defensive.
       $("#billing_company").val("");
       expect($("#billing_company_display").val()).toBe("");
-      dom.renderCompanySummary();
+      helper.renderCompanySummary();
 
       expect(renderedName()).toBe("");
       expect(isShown()).toBe(false);
@@ -737,7 +739,7 @@ describe("read-only captured-company summary", () => {
       $("#billing_company").val("");
       $("#company_id").val("");
 
-      dom.renderCompanySummary();
+      helper.renderCompanySummary();
 
       // The stale option is still on the select — that is the point.
       expect($("#billing_company_display").val()).toBe("ACME Widgets Ltd");
