@@ -1847,7 +1847,23 @@ let twoincDomHelper = {
     // internal re-home). The summary simply stays wherever
     // `getCompanySummaryNode()` already put it — correctly, next to the
     // fields that are actually capturing the value.
-    if ($slot.hasClass("hidden")) $slot.removeClass("hidden");
+    //
+    // Unhidden only when the wrapper actually gained a child (bug found in
+    // adversarial review round 2, Han, 2026-08-04): in the only state this
+    // branch is reachable in today (checkbox unchecked), the move above is
+    // itself a no-op — `#billing_company_display_field` never exists
+    // server-side in that state, per the same doc comment — so an
+    // unconditional unhide left every checkbox-off merchant with a bare,
+    // unexplained gap (`.twoinc-company-search-tile-slot`'s own
+    // `margin: 12px 0`, assets/css/twoinc.css) between the sole-trader
+    // toggle and the intent message on every checkout. Re-hiding when
+    // nothing moved in is the same "confusing empty box" failure mode the
+    // company_id_field exclusion above was fixing, just the inverse of it.
+    if ($wrapper.children().length) {
+      if ($slot.hasClass("hidden")) $slot.removeClass("hidden");
+    } else if (!$slot.hasClass("hidden")) {
+      $slot.addClass("hidden");
+    }
   },
 
   /**

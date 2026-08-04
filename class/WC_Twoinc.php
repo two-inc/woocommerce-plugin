@@ -993,13 +993,22 @@ if (!class_exists('WC_Twoinc')) {
             //
             // The tile-location slot below is new (§7.1): empty and hidden by
             // default (enable_company_search checked, the unchanged
-            // behaviour). When the merchant UNCHECKS "Enable company search
-            // within address", twoinc.js relocates the SAME company-search
-            // control (the real billing_company/billing_company_display/
-            // company_id fields, moved, not cloned) into this slot — see
-            // twoincDomHelper.syncCompanySearchTileLocation(). Always rendered
-            // (a hidden empty div is cheap) so the JS never has to special-case
-            // "the slot doesn't exist yet" against "the setting is off".
+            // behaviour). When the merchant UNCHECKS "Enable Company Search
+            // In Address Entry", twoincDomHelper.syncCompanySearchTileLocation()
+            // in twoinc.js relocates `#billing_company_display_field` (the
+            // ONLY field still eligible to move here as of the 2026-08-04
+            // correction — `#billing_company_field` and `#company_id_field`
+            // deliberately stay in the address form; see that function's own
+            // doc comment) into this slot, and unhides the slot only if
+            // something actually moved in. In practice today that field
+            // never exists server-side when the checkbox is unchecked (see
+            // update_company_fields() in WC_Twoinc_Checkout), so this slot
+            // currently stays empty and hidden in every reachable state —
+            // tracked as a known gap, not a bug: making search functionally
+            // live inside the tile is bigger scope than this correction.
+            // Always rendered (a hidden empty div is cheap) so the JS never
+            // has to special-case "the slot doesn't exist yet" against "the
+            // setting is off".
             $company_search_tile_slot = '<div class="twoinc-company-search-tile-slot hidden"></div>';
 
             return sprintf(

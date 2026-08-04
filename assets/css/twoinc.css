@@ -606,12 +606,16 @@
 
 /*
  * The company-search control's location in the payment tile (TWO-25326 §7.1,
- * ruling 2026-08-03), when the `company_search_location` admin setting is
- * 'payment_tile'. Holds the SAME control moved out of the address area by
- * twoincDomHelper.syncCompanySearchTileLocation() — the fields themselves
- * (`#billing_company_field` etc.) already carry all their own styling from
- * the address form, so this wrapper only needs enough of its own spacing to
- * sit cleanly between the sole-trader toggle and the intent message.
+ * ruling 2026-08-03; correction 2026-08-04 folded the standalone
+ * `company_search_location` setting into the `enable_company_search`
+ * checkbox — unchecked now means this slot, not "off"). Holds
+ * `#billing_company_display_field` when twoincDomHelper.syncCompanySearchTileLocation()
+ * moves it out of the address area — NOT `#billing_company_field` or
+ * `#company_id_field`, which deliberately stay put (see that function's own
+ * doc comment). The field carries all its own styling from the address
+ * form, so this wrapper only needs enough of its own spacing to sit cleanly
+ * between the sole-trader toggle and the intent message, when it holds
+ * anything at all.
  *
  * The standalone `.twoinc-company-tile-label` text label this replaced is
  * gone outright (§7.2/§7.3): the company now lives inside the intent-message

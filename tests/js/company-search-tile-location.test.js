@@ -156,6 +156,27 @@ describe("company-search tile location (TWO-25326 §7.1)", () => {
       appendToSpy.mockRestore();
     });
 
+    /**
+     * Bug found in adversarial review round 2 (Han, 2026-08-04): in the
+     * only state this branch is reachable in today (checkbox unchecked),
+     * `#billing_company_display_field` never exists server-side at all
+     * (WC_Twoinc_Checkout::update_company_fields() only registers it when
+     * `enable_company_search === 'yes'`) — so the move loop is a no-op and
+     * the wrapper stays empty. A version of this function that unhides the
+     * slot unconditionally leaves every checkbox-off merchant with a bare,
+     * unexplained gap (the slot's own `margin: 12px 0`) between the sole-
+     * trader toggle and the intent message on every checkout. This test
+     * removes the display field from the fixture to reproduce that exact
+     * real-world DOM shape and asserts the slot stays hidden.
+     */
+    test("stays hidden when nothing is left to move — the field doesn't exist server-side when the checkbox is off", () => {
+      $("#billing_company_display_field").remove();
+
+      dom.syncCompanySearchTileLocation();
+
+      expect(tileSlot().hasClass("hidden")).toBe(true);
+    });
+
     test("detach-to-safety is also idempotent — a second call in a row does not re-move an already-parked wrapper (round 2 review — Vader)", () => {
       dom.syncCompanySearchTileLocation();
 
