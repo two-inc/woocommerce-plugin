@@ -120,16 +120,16 @@ describe("company-search tile location (TWO-25326 §7.1)", () => {
      * 2026-08-04: neither WooCommerce's OWN native `#billing_company_field`
      * NOR `#company_id_field` are part of this plugin's search control, and
      * neither may be relocated into the tile. `#billing_company_field` is
-     * the plain, unenhanced fallback the buyer types into when the
-     * checkbox is off (Hyvä companyName.phtml parity: degrade to a plain
-     * field for the same entity attribute, never remove it).
-     * `#company_id_field` moving ALONE (its search-widget partner,
-     * `#billing_company_display_field`, never even exists server-side when
-     * the checkbox is off — see WC_Twoinc_Checkout::update_company_fields())
-     * left a bare, unlabelled, REQUIRED "Company ID" box floating in the
-     * payment tile with no search behind it to fill it from — checkout-
-     * blocking confusion. A version of this function that folds either
-     * field back into its move-set fails this test loudly.
+     * the plain, unenhanced fallback the buyer types into when manual entry
+     * or sole-trader mode takes over (Hyvä companyName.phtml parity:
+     * degrade to a plain field for the same entity attribute, never remove
+     * it). `#company_id_field` is a plain hidden input with no visible home
+     * to move to — it is submitted with the rest of the form regardless of
+     * where inside it it physically sits, and moving it ALONE, without the
+     * search widget behind it, would leave a bare, unlabelled, REQUIRED
+     * "Company ID" box floating in the payment tile — checkout-blocking
+     * confusion. A version of this function that folds either field back
+     * into its move-set fails this test loudly.
      */
     test("never relocates #billing_company_field or #company_id_field — both stay in the address form, visible and editable", () => {
       dom.syncCompanySearchTileLocation();
@@ -157,24 +157,70 @@ describe("company-search tile location (TWO-25326 §7.1)", () => {
     });
 
     /**
-     * Bug found in adversarial review round 2 (Han, 2026-08-04): in the
-     * only state this branch is reachable in today (checkbox unchecked),
-     * `#billing_company_display_field` never exists server-side at all
-     * (WC_Twoinc_Checkout::update_company_fields() only registers it when
-     * `enable_company_search === 'yes'`) — so the move loop is a no-op and
-     * the wrapper stays empty. A version of this function that unhides the
-     * slot unconditionally leaves every checkbox-off merchant with a bare,
-     * unexplained gap (the slot's own `margin: 12px 0`) between the sole-
-     * trader toggle and the intent message on every checkout. This test
-     * removes the display field from the fixture to reproduce that exact
-     * real-world DOM shape and asserts the slot stays hidden.
+     * Bug found in adversarial review round 2 (Han, 2026-08-04), widened in
+     * the 2026-08-04 correction round 3: the field now always exists
+     * server-side (`WC_Twoinc_Checkout::update_company_fields()` no longer
+     * gates its registration on the checkbox), but manual entry and
+     * sole-trader mode still hide it with the `hidden` class rather than
+     * removing it from the DOM (see toggleBusinessFields). The move loop
+     * moves it into the wrapper regardless of that class, so checking mere
+     * presence would unhide the slot around a `display: none` field —
+     * leaving the buyer a bare, unexplained gap
+     * (`.twoinc-company-search-tile-slot`'s own `margin: 12px 0`) between
+     * the sole-trader toggle and the intent message. This test hides the
+     * display field the way toggleBusinessFields does in that state and
+     * asserts the slot stays hidden even though the field itself did move.
      */
-    test("stays hidden when nothing is left to move — the field doesn't exist server-side when the checkbox is off", () => {
-      $("#billing_company_display_field").remove();
+    test("stays hidden when the only thing moved in is a hidden field (manual entry / sole-trader mode)", () => {
+      $("#billing_company_display_field").addClass("hidden");
 
       dom.syncCompanySearchTileLocation();
 
+      expect(
+        $("#billing_company_display_field").closest(".twoinc-company-search-tile-slot").length
+      ).toBe(1);
       expect(tileSlot().hasClass("hidden")).toBe(true);
+    });
+
+    /**
+     * TWO-25326 §7.1, correction 2026-08-04 round 3 (Doug's ruling): the
+     * whole point of this correction is that the search control is
+     * FUNCTIONAL once relocated, not just present in the DOM — the earlier
+     * bug this ticket closes shipped the relocation mechanism with nothing
+     * for it to move, because `update_company_fields()` skipped registering
+     * the field whenever the checkbox was unchecked. Drives the real
+     * checkout-page wiring (`Twoinc.initialize()`, not the helper directly)
+     * so a regression that reintroduces that gate, or that leaves
+     * `enableCompanySearch()` gated on the admin's raw checkbox value again,
+     * fails here rather than only in a narrower unit test.
+     */
+    test("the relocated control is a live, initialized selectWoo widget — not just a moved DOM node", () => {
+      // isCountrySupported() (called from toggleBusinessFields, which
+      // initialize() reaches) reads this — absent from the fixture above,
+      // which never exercises that branch itself.
+      ctx.twoinc.supported_buyer_countries = ["GB"];
+
+      ctx.$("form[name='checkout']").after('<div id="order_review"></div>');
+      ctx
+        .$("form[name='checkout']")
+        .append(
+          "<input type='radio' id='payment_method_" +
+            GATEWAY_ID +
+            "' name='payment_method' value='" +
+            GATEWAY_ID +
+            "' checked />"
+        );
+
+      ctx.Twoinc.getInstance().initialize(false);
+
+      expect(
+        $("#billing_company_display_field").closest(".twoinc-company-search-tile-slot").length
+      ).toBe(1);
+      expect(tileSlot().hasClass("hidden")).toBe(false);
+      expect($("#billing_company_display").data("select2")).toBeTruthy();
+
+      harness.releaseWidgets($);
+      $(document.body).off();
     });
 
     test("detach-to-safety is also idempotent — a second call in a row does not re-move an already-parked wrapper (round 2 review — Vader)", () => {

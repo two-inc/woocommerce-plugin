@@ -189,31 +189,42 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             // priority needs its own ceiling).
             $company_name_priority = self::clamp_company_priority($fields['billing']['billing_company']['priority'] ?? 30);
 
-            if ($this->wc_twoinc->get_enable_company_search() === 'yes') {
-                $fields['billing']['billing_company_display'] = [
-                    'label' => __('Company name', 'twoinc-payment-gateway'),
-                    'autocomplete' => 'organization',
-                    'type' => 'select',
-                    /*'custom_attributes' => [
-                        'data-multiple' => true,
-                        'data-multi' => true
-                    ],*/
-                    // form-row-wide is what carries WooCommerce's
-                    // `clear: both` (and full width) for a checkout row.
-                    // Without it this row does not clear the
-                    // form-row-first/form-row-last float pair that the first-
-                    // and last-name rows form, so its label's line boxes get
-                    // squeezed into the gutter between those two 47% floats —
-                    // the label renders wrapped between the two name inputs
-                    // (TWO-25160).
-                    'class' => array('billing_company_selectwoo', 'form-row-wide', 'hidden'),
-                    'options' => [
-                        '' => '&nbsp;'
-                    ],
-                    'required' => false,
-                    'priority' => $company_name_priority
-                ];
-            }
+            // Always registered — TWO-25326 §7.1 correction 2026-08-04. This
+            // is the ONE company-search control; `get_enable_company_search()`
+            // only ever decides WHERE it renders (address area vs payment
+            // tile, via `company_search_location` — see
+            // derive_company_search_location() and
+            // twoincDomHelper.syncCompanySearchTileLocation() in twoinc.js),
+            // never whether it exists. A gate here that skipped registration
+            // when the checkbox was unchecked left the payment-tile branch
+            // with nothing to relocate — the tile rendered empty and the
+            // buyer saw only the plain, unenhanced fallback fields
+            // (`#billing_company_field` + `#company_id_field`) in the address
+            // area, with no working search anywhere on the page. Removing the
+            // gate is what gives the relocation JS a control to move.
+            $fields['billing']['billing_company_display'] = [
+                'label' => __('Company name', 'twoinc-payment-gateway'),
+                'autocomplete' => 'organization',
+                'type' => 'select',
+                /*'custom_attributes' => [
+                    'data-multiple' => true,
+                    'data-multi' => true
+                ],*/
+                // form-row-wide is what carries WooCommerce's
+                // `clear: both` (and full width) for a checkout row.
+                // Without it this row does not clear the
+                // form-row-first/form-row-last float pair that the first-
+                // and last-name rows form, so its label's line boxes get
+                // squeezed into the gutter between those two 47% floats —
+                // the label renders wrapped between the two name inputs
+                // (TWO-25160).
+                'class' => array('billing_company_selectwoo', 'form-row-wide', 'hidden'),
+                'options' => [
+                    '' => '&nbsp;'
+                ],
+                'required' => false,
+                'priority' => $company_name_priority
+            ];
 
             $fields['billing']['company_id'] = [
                 'label' => __('Company ID', 'twoinc-payment-gateway'),
@@ -423,12 +434,32 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     'search_company' => __('Search for company', 'twoinc-payment-gateway'),
                 ],
                 'twoinc_checkout_host' => $this->wc_twoinc->get_twoinc_checkout_host(),
-                'enable_company_search' => $enable_company_search,
+                // Always 'yes' at load — TWO-25326 §7.1 correction
+                // 2026-08-04 (Doug's ruling: the search control is never
+                // "off", only relocated). `window.twoinc.enable_company_search`
+                // is a RUNTIME flag in twoinc.js — toggled to "no" only by
+                // enterManualCompanyEntry()/twoincSoleTrader.setMode() to
+                // mean "the search widget is not the active input method
+                // right now" — not the admin's raw checkbox value. Feeding
+                // the raw checkbox value in here used to make the two
+                // meanings collide: a merchant who unchecked the box (asking
+                // for payment-tile placement) also read as "search is
+                // suppressed" everywhere this flag gates the actual
+                // selectWoo widget (Twoinc.enableCompanySearch() and
+                // friends), so nothing in the tile ever became live. Where
+                // the control renders is `company_search_location`'s job,
+                // below — driven by the checkbox — never this flag's.
+                'enable_company_search' => 'yes',
                 'enable_company_search_for_others' => $this->wc_twoinc->get_option('enable_company_search_for_others'),
                 // TWO-25326 §7.1, correction 2026-08-04: where the one
                 // company-search control renders — driven by the
                 // `enable_company_search` checkbox itself (not a setting of
                 // its own; see get_enable_company_search()'s doc comment).
+                // Any JS check for the admin's own "checked" preference
+                // (e.g. gating `enable_company_search_for_others`, which its
+                // own description ties to the checkbox) must read THIS value
+                // against 'address_area', not the runtime
+                // `enable_company_search` flag above.
                 'company_search_location' => self::derive_company_search_location($enable_company_search),
                 'enable_address_lookup' => $this->wc_twoinc->get_option('enable_address_lookup'),
                 'enable_order_intent' => $this->wc_twoinc->get_option('enable_order_intent'),
