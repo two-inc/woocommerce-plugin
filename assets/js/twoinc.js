@@ -1713,14 +1713,13 @@ let twoincDomHelper = {
    * See WC_Twoinc_Checkout::prepare_twoinc_object() and
    * WC_Twoinc::get_enable_company_search()'s doc comment for the source.
    *
-   * This is the same control both ways — the real `#billing_company_display_field`
-   * and `#company_id_field` rows (plus the read-only number label,
-   * `getCompanySummaryNode()`), MOVED with `appendTo()`, never cloned and
-   * never a second implementation. Whatever JS already targets those ids/
-   * classes (selectWoo init, keyboard handling, tab-order fixes,
-   * `getCompanyName()`/`getCompanyData()`, the manual-entry affordances)
-   * keeps working unchanged, because it all selects by id or class rather
-   * than by position in the DOM.
+   * This is the same control both ways — `#billing_company_display_field`
+   * (plus the read-only number label, `getCompanySummaryNode()`), MOVED with
+   * `appendTo()`, never cloned and never a second implementation. Whatever
+   * JS already targets those ids/classes (selectWoo init, keyboard
+   * handling, tab-order fixes, `getCompanyName()`/`getCompanyData()`, the
+   * manual-entry affordances) keeps working unchanged, because it all
+   * selects by id or class rather than by position in the DOM.
    *
    * `#billing_company_field` — WooCommerce's OWN native company field, not
    * part of this plugin's search control at all — is deliberately NEVER
@@ -1734,16 +1733,30 @@ let twoincDomHelper = {
    * company name out of the address form entirely, which is exactly the bug
    * this comment documents.
    *
+   * `#company_id_field` is ALSO excluded (adversarial review finding, Vader,
+   * 2026-08-04): `WC_Twoinc_Checkout::update_company_fields()` only
+   * registers `billing_company_display` server-side when
+   * `get_enable_company_search() === 'yes'` — the ONLY state that ever
+   * reaches this function's 'payment_tile' branch is checkbox-unchecked, in
+   * which `#billing_company_display_field` never exists in the DOM at all.
+   * Moving `#company_id_field` alone into the tile in that state left a
+   * bare, unlabelled, REQUIRED "Company ID" box floating in the payment
+   * tile with no search widget behind it to populate it — confusing and
+   * checkout-blocking. Excluding it too means this branch is currently a
+   * true no-op for every reachable state (tracked as a follow-up: making
+   * search functionally live inside the tile, matching this field's own
+   * admin description, is materially bigger scope than this correction and
+   * needs its own design pass); both plain fields now simply stay in the
+   * address form together when the checkbox is off, exactly like the
+   * pre-PR-#436 fallback.
+   *
    * Default is 'address_area' (checkbox checked): this function is then a
    * no-op and the control renders exactly where WooCommerce always put it —
    * zero behavioural change for every merchant who leaves the checkbox at
-   * its default. A merchant who already had the checkbox UNCHECKED before
-   * the 2026-08-04 correction previously got company search fully off; they
-   * now get the plain `#billing_company_field` fallback in the address
-   * area (unchanged from that prior "off" behaviour) with the search
-   * widget markup additionally relocated into the payment tile — a real
-   * behaviour change, called out in the PR that made this correction
-   * (TWO-25326).
+   * its default. A merchant with the checkbox UNCHECKED gets the plain
+   * `#billing_company_field` + `#company_id_field` fallback pair in the
+   * address area — unchanged from the pre-PR-#436 "off" behaviour — and no
+   * change to the (currently empty) payment tile.
    *
    * 'payment_tile': the fields move into `.twoinc-company-search-tile-slot`,
    * the empty slot `get_pay_box_description()` server-renders between the
@@ -1804,20 +1817,36 @@ let twoincDomHelper = {
     // stale selectWoo dropdown or text selection survives a re-render that
     // changed nothing.
     //
-    // `#billing_company_field` is deliberately EXCLUDED from this selector
-    // (2026-08-04 correction, see the doc comment above) — it stays in the
-    // address form no matter which branch this function takes.
-    jQuery("#billing_company_display_field, #company_id_field").each(
+    // `#billing_company_field` and `#company_id_field` are deliberately
+    // EXCLUDED from this selector (2026-08-04 correction, see the doc
+    // comment above) — both stay in the address form no matter which
+    // branch this function takes.
+    jQuery("#billing_company_display_field").each(
       function () {
         const $field = jQuery(this);
         if ($field.parent()[0] !== $wrapper[0]) $field.appendTo($wrapper);
       }
     );
-    const $summary = twoincDomHelper.getCompanySummaryNode();
-    if ($summary.length && $summary.parent()[0] !== $wrapper[0]) {
-      $summary.appendTo($wrapper);
-    }
 
+    // The read-only company summary is deliberately NOT followed into the
+    // wrapper (bug found in adversarial review, Han, 2026-08-04, after
+    // `#company_id_field` was excluded above): `getCompanySummaryNode()`
+    // anchors the summary against `#company_id_field` wherever THAT field
+    // currently lives — the address form, in every state this branch is
+    // reachable in today, since `#billing_company_display_field` never
+    // exists server-side when the checkbox is unchecked (see the doc
+    // comment above). A version of this function that still calls
+    // `getCompanySummaryNode()` and appends its result into the wrapper
+    // fights that anchor on every call: `getCompanySummaryNode()` re-homes
+    // the node next to `#company_id_field` (address form) as a side effect
+    // of being called at all, then the append here immediately yanks it
+    // back into the tile — an infinite tug-of-war that broke this
+    // function's own idempotency guarantee (verified: the previous version
+    // of this fix, gating the append on `$wrapper.children().length`,
+    // still called `getCompanySummaryNode()` and so still triggered its
+    // internal re-home). The summary simply stays wherever
+    // `getCompanySummaryNode()` already put it — correctly, next to the
+    // fields that are actually capturing the value.
     if ($slot.hasClass("hidden")) $slot.removeClass("hidden");
   },
 
@@ -3378,7 +3407,24 @@ let twoincSoleTrader = {
       // enableCompanySearch has just early-returned. Without this the link
       // back to search stays hidden and business mode has no route back to
       // the picker at all (TWO-25288).
-      if (window.twoinc.enable_company_search !== "yes") {
+      //
+      // Gated on `manual_company_entry_active` too (bug found in adversarial
+      // review, TWO-25326 correction, 2026-08-04 — Han): `enable_company_search`
+      // alone used to be a reliable proxy for "restored from manual entry"
+      // because that was the ONLY way this restore point could see anything
+      // but "yes" here. Since the 2026-08-04 correction, `enable_company_search`
+      // unchecked is ALSO the merchant's own, stable, deliberate "search lives
+      // in the payment tile" configuration — a buyer reachable via
+      // `onEmailChanged`'s automatic sole-trader detour on a merchant with
+      // that box unchecked would otherwise show this button, and clicking it
+      // calls `exitManualCompanyEntry()`, which unconditionally flips
+      // `enable_company_search` to "yes" — silently overriding the
+      // merchant's admin setting for the rest of the session. Checking the
+      // just-restored `manual_company_entry_active` narrows this back to
+      // its original, sole intent: only when the buyer was actually IN
+      // manual entry before the sole-trader detour, never merely because
+      // the merchant's setting happens to read "no".
+      if (window.twoinc.enable_company_search !== "yes" && window.twoinc.manual_company_entry_active) {
         twoincDomHelper.getSearchCompanyBtnNode().show();
       }
     }

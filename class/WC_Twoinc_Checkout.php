@@ -387,6 +387,12 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             // TODO: Make this dynamic based on active merchant payee accounts
             $supported_buyer_countries = WC_Twoinc_Brand::get('supported_buyer_countries');
 
+            // Read once, fed to both `enable_company_search` below and
+            // `derive_company_search_location()` — same option chain, same
+            // request, no reason to hit `get_option()` twice (review nit,
+            // Leia).
+            $enable_company_search = $this->wc_twoinc->get_enable_company_search();
+
             $properties = [
                 'text' => [
                     'tooltip_phone' => __('We require your phone number so we can verify your purchase.', 'twoinc-payment-gateway'),
@@ -417,13 +423,13 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     'search_company' => __('Search for company', 'twoinc-payment-gateway'),
                 ],
                 'twoinc_checkout_host' => $this->wc_twoinc->get_twoinc_checkout_host(),
-                'enable_company_search' => $this->wc_twoinc->get_enable_company_search(),
+                'enable_company_search' => $enable_company_search,
                 'enable_company_search_for_others' => $this->wc_twoinc->get_option('enable_company_search_for_others'),
                 // TWO-25326 §7.1, correction 2026-08-04: where the one
                 // company-search control renders — driven by the
                 // `enable_company_search` checkbox itself (not a setting of
                 // its own; see get_enable_company_search()'s doc comment).
-                'company_search_location' => self::derive_company_search_location($this->wc_twoinc->get_enable_company_search()),
+                'company_search_location' => self::derive_company_search_location($enable_company_search),
                 'enable_address_lookup' => $this->wc_twoinc->get_option('enable_address_lookup'),
                 'enable_order_intent' => $this->wc_twoinc->get_option('enable_order_intent'),
                 'display_tooltips' => $this->wc_twoinc->get_option('display_tooltips'),

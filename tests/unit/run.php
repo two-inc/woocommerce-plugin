@@ -197,6 +197,7 @@ final class BrandConfigSpec
             'testAssetVersionFallsBackToPluginVersionWhenFileMissing',
             'testCompanySearchLocationDerivedFromEnableCompanySearchBothDirections',
             'testCompanySearchLocationFallsBackToPaymentTileOnNullOrEmpty',
+            'testCompanySearchLocationSettingDroppedFromUpgradedInstalls',
         ];
         foreach ($tests as $test) {
             self::reset();
@@ -5357,6 +5358,36 @@ final class BrandConfigSpec
 
         TinyAssert::same('payment_tile', $derive->invoke(null, null));
         TinyAssert::same('payment_tile', $derive->invoke(null, ''));
+    }
+
+    /**
+     * TWO-25326 §7.1, correction 2026-08-04 (adversarial review finding,
+     * Yoda). `company_search_location` (PR #436) lived for less than a day
+     * before this correction deleted the admin field and its getter — any
+     * merchant who touched it during that window has the key sitting inert
+     * in their settings row. `drop_removed_settings()` (same mechanism as
+     * `enable_sole_trader`, TWO-25163) must clean it up on an upgraded
+     * install, mirroring `testSoleTraderHasNoMerchantToggleSetting` above.
+     */
+    private static function testCompanySearchLocationSettingDroppedFromUpgradedInstalls(): void
+    {
+        $gateway = new class () extends WC_Twoinc {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+        };
+        $gateway->init_form_fields();
+        TinyAssert::same(false, array_key_exists('company_search_location', $gateway->form_fields));
+
+        $key = $gateway->get_option_key();
+        $drop = new ReflectionMethod(WC_Twoinc::class, 'drop_removed_settings');
+        $drop->setAccessible(true);
+
+        $GLOBALS['__twoinc_test_options'][$key] = ['company_search_location' => 'payment_tile', 'api_key' => 'keep-me'];
+        $gateway->init_settings();
+        $drop->invoke($gateway);
+        TinyAssert::same(['api_key' => 'keep-me'], $GLOBALS['__twoinc_test_options'][$key]);
     }
 
     /**

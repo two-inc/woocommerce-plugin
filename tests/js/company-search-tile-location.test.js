@@ -102,13 +102,12 @@ describe("company-search tile location (TWO-25326 §7.1)", () => {
       buildTileSlot();
     });
 
-    test("moves the search widget and org-number field into the tile slot, not a clone", () => {
+    test("moves the search widget into the tile slot, not a clone", () => {
       dom.syncCompanySearchTileLocation();
 
       const $display = $("#billing_company_display_field");
       expect($display.length).toBe(1);
       expect($display.closest(".twoinc-company-search-tile-slot").length).toBe(1);
-      expect($("#company_id_field").closest(".twoinc-company-search-tile-slot").length).toBe(1);
       expect(tileSlot().hasClass("hidden")).toBe(false);
 
       // Not a clone: exactly one #billing_company_display_field in the
@@ -117,17 +116,22 @@ describe("company-search tile location (TWO-25326 §7.1)", () => {
     });
 
     /**
-     * Bug found by Doug, live-verified 2026-08-04: WooCommerce's OWN native
-     * `#billing_company_field` is not part of this plugin's search control
-     * and must NEVER be relocated into the tile — it is the plain,
-     * unenhanced fallback the buyer types into when the checkbox is off
-     * (Hyvä companyName.phtml parity: degrade to a plain field for the same
-     * entity attribute, never remove it). A version of this function that
-     * folds `#billing_company_field` back into its move-set would pull the
-     * buyer's only way to enter a company name out of the address form
-     * entirely — this test fails loudly if that regresses.
+     * Bugs found by Doug + adversarial review (Vader), live-verified
+     * 2026-08-04: neither WooCommerce's OWN native `#billing_company_field`
+     * NOR `#company_id_field` are part of this plugin's search control, and
+     * neither may be relocated into the tile. `#billing_company_field` is
+     * the plain, unenhanced fallback the buyer types into when the
+     * checkbox is off (Hyvä companyName.phtml parity: degrade to a plain
+     * field for the same entity attribute, never remove it).
+     * `#company_id_field` moving ALONE (its search-widget partner,
+     * `#billing_company_display_field`, never even exists server-side when
+     * the checkbox is off — see WC_Twoinc_Checkout::update_company_fields())
+     * left a bare, unlabelled, REQUIRED "Company ID" box floating in the
+     * payment tile with no search behind it to fill it from — checkout-
+     * blocking confusion. A version of this function that folds either
+     * field back into its move-set fails this test loudly.
      */
-    test("never relocates the native #billing_company_field — it stays in the address form, visible and editable", () => {
+    test("never relocates #billing_company_field or #company_id_field — both stay in the address form, visible and editable", () => {
       dom.syncCompanySearchTileLocation();
 
       const $billingCompany = $("#billing_company_field");
@@ -135,6 +139,11 @@ describe("company-search tile location (TWO-25326 §7.1)", () => {
       expect($billingCompany.closest(".twoinc-company-search-tile-slot").length).toBe(0);
       expect($billingCompany.closest('form[name="checkout"]').length).toBe(1);
       expect($("#billing_company").prop("disabled")).toBeFalsy();
+
+      const $companyId = $("#company_id_field");
+      expect($companyId.length).toBe(1);
+      expect($companyId.closest(".twoinc-company-search-tile-slot").length).toBe(0);
+      expect($companyId.closest('form[name="checkout"]').length).toBe(1);
     });
 
     test("is idempotent — a second call does not physically re-detach nodes that are already in place", () => {

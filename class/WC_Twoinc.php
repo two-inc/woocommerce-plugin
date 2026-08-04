@@ -283,7 +283,6 @@ if (!class_exists('WC_Twoinc')) {
             return $this->get_option('enable_company_search') ?? $this->get_option('enable_company_name');
         }
 
-
         /**
          * The decoded GET /v1/merchant/{id} record, fetched at most once
          * per PHP request — the memo covers failures too, so a hanging API
@@ -677,7 +676,14 @@ if (!class_exists('WC_Twoinc')) {
 
         private function drop_removed_settings()
         {
-            $removed = ['enable_sole_trader'];
+            // 'company_search_location' (TWO-25326, PR #436) lived for less
+            // than a day before the 2026-08-04 correction folded its
+            // decision into `enable_company_search` and deleted the field —
+            // any merchant who touched it during that window has the key
+            // sitting inert in their settings row (adversarial review
+            // finding, Yoda). Same mechanism as `enable_sole_trader`
+            // (TWO-25163).
+            $removed = ['enable_sole_trader', 'company_search_location'];
             $present = [];
             foreach ($removed as $key) {
                 if (is_array($this->settings) && array_key_exists($key, $this->settings)) {
