@@ -3033,7 +3033,7 @@ let twoincTermChips = {
     // Heading placement mirrors Magento's Luma template: shown ABOVE the
     // chips only when the buyer has a choice to make. A single chip carries
     // its own "Payment Terms N days" label instead, so a heading there would
-    // say the same thing twice (ABN-468).
+    // say the same thing twice.
     const $heading = jQuery(".twoinc-term-chips-heading");
     if (single || terms.length === 0) {
       $heading.addClass("hidden").text("");

@@ -486,7 +486,7 @@ suite green:
   the surcharge fee recalculation trigger, saved-input replay, sole-trader fields;
 - the fetch half of `twoincTermChips` — `refresh()`'s fee POST and its done/fail branches.
   `render()` itself IS covered, by `term-chips.test.js`: the singular/plural chip labelling
-  and heading placement, and the currency-symbol fee label (ABN-468);
+  and heading placement, and the currency-symbol fee label;
 - the selection side of company search — `onCompanySelected`-equivalent handling in
   `Twoinc.initialize`'s `select2:select` binding, `clearSelectedCompany()`, the
   the address autofill. Neither the manual-entry row nor the captured-company summary is among

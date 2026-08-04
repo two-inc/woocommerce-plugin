@@ -952,7 +952,7 @@ if (!class_exists('WC_Twoinc')) {
             // this server-side one is the fallback for every path where that
             // JS never runs — JS disabled, a theme that strips the container,
             // or the pay-for-order page (TWO-24812 — a withdrawn single term
-            // must abort, not silently re-price). Since ABN-468 the chips DO
+            // must abort, not silently re-price). The chips now DO
             // render for a single offered term, so this is no longer the
             // single-term case's only input; it stays as the belt to the
             // JS input's braces.
@@ -4059,9 +4059,9 @@ if (!class_exists('WC_Twoinc')) {
                     // surcharge-method-keyed copy that
                     // generate_two_surcharge_grid_html() renders BELOW the
                     // table, word-for-word from Magento's
-                    // view/adminhtml/templates/system/config/field/surcharge-grid.phtml
-                    // (ABN-476). A 'description' set by a wc_two_form_fields
-                    // filter is still rendered, also below the table.
+                    // view/adminhtml/templates/system/config/field/surcharge-grid.phtml.
+                    // A 'description' set by a wc_two_form_fields filter is
+                    // still rendered, also below the table.
                     'type'        => 'two_surcharge_grid',
                 ],
                 'surcharge_rounding_basis' => [

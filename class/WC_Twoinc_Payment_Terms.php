@@ -921,7 +921,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         /**
          * Buyer-facing chip amount: the store's own price format, so the chip
          * shows the currency SYMBOL in the store's configured position with
-         * the store's separators — "€12,50", not "12.50 EUR" (ABN-468).
+         * the store's separators — "€12,50", not "12.50 EUR".
          *
          * This is the WooCommerce equivalent of Magento's
          * priceUtils.formatPrice(amount, quote.getPriceFormat()) in

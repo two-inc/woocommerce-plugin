@@ -453,7 +453,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     // (view/frontend/web/js/view/payment/method-renderer/
                     // gateway_method.js + template/payment/gateway_method.html),
                     // which is also what the Amasty and Fire checkouts render —
-                    // they share that one template (ABN-468).
+                    // they share that one template.
                     //
                     // >1 term  → `heading` sits ABOVE the chips.
                     // exactly 1 → no heading; `single_label` replaces the bare

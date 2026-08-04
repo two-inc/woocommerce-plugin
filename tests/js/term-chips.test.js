@@ -1,5 +1,5 @@
 /**
- * ABN-468. The payment-terms chip renderer in assets/js/twoinc.js.
+ * The payment-terms chip renderer in assets/js/twoinc.js.
  *
  * Three behaviours are pinned here because all three are silent when they
  * regress — the chips still render, just saying the wrong thing:
