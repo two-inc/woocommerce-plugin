@@ -919,22 +919,22 @@ if (!class_exists('WC_Twoinc')) {
          *
          * Same token mechanism as get_intent_approved_notice(): %1$s is the
          * brand product name, %2$s is the company token twoinc.js substitutes
-         * with the same "<name> (<number>)" (or bare name) string. A brand
-         * may override the template via 'intent_declined_notice', mirroring
-         * 'intent_approved_notice' — absent/empty means the platform default.
+         * with the same "<name> (<number>)" (or bare name) string.
+         *
+         * Deliberately NOT brand-overridable (2026-08-04 ruling, TWO-25326):
+         * unlike get_intent_approved_notice() above, there is no
+         * 'intent_declined_notice' brand key and there must never be one —
+         * every brand renders this exact platform default copy.
          *
          * @return string sprintf template with %1$s and the company TOKEN,
          *                 ready for esc_attr() into data-company-template.
          */
         private function get_intent_declined_notice_template(): string
         {
-            $template = WC_Twoinc_Brand::get('intent_declined_notice');
-            if (!is_string($template) || trim($template) === '') {
-                // TWO-25326 §7.3 literal wording: "<product> is not available
-                // for this order by <name> (<number>)".
-                /* translators: %1$s: brand product name (e.g. "Two"); %2$s: the buyer's captured company name and number, substituted client-side */
-                $template = __('%1$s is not available for this order by %2$s', 'twoinc-payment-gateway');
-            }
+            // TWO-25326 §7.3 literal wording: "<product> is not available
+            // for this order by <name> (<number>)".
+            /* translators: %1$s: brand product name (e.g. "Two"); %2$s: the buyer's captured company name and number, substituted client-side */
+            $template = __('%1$s is not available for this order by %2$s', 'twoinc-payment-gateway');
 
             $product_name = WC_Twoinc_Brand::get('product_name');
             return sprintf($template, $product_name, self::INTENT_NOTICE_COMPANY_TOKEN);
