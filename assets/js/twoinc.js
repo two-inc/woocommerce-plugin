@@ -817,7 +817,7 @@ class TwoCompanySearch {
       if (this.tabIndex < 0) return;
       if (jQuery(this).closest(".select2-container--open, .select2-dropdown").length) return;
       if (twoincSelectWooHelper.isHiddenForTabbing(this)) return;
-      if (!((anchor.compareDocumentPosition(this) & 4) /* DOCUMENT_POSITION_FOLLOWING */)) return;
+      if (!(anchor.compareDocumentPosition(this) & 4 /* DOCUMENT_POSITION_FOLLOWING */)) return;
       found.push(this);
     });
 
@@ -1613,24 +1613,20 @@ class TwoCompanySearch {
       if ($field.parent()[0] !== $wrapper[0]) $field.appendTo($wrapper);
     });
 
-    // The read-only company summary is deliberately NOT followed into the
-    // wrapper (bug found in adversarial review, Han, 2026-08-04, after
-    // `#company_id_field` was excluded above): `getCompanySummaryNode()`
-    // anchors the summary against `#company_id_field` wherever THAT field
-    // currently lives — the address form, since `#company_id_field` is
-    // itself never relocated (see the doc comment above). A version of this
-    // function that still calls `getCompanySummaryNode()` and appends its
-    // result into the wrapper
-    // fights that anchor on every call: `getCompanySummaryNode()` re-homes
-    // the node next to `#company_id_field` (address form) as a side effect
-    // of being called at all, then the append here immediately yanks it
-    // back into the tile — an infinite tug-of-war that broke this
-    // function's own idempotency guarantee (verified: the previous version
-    // of this fix, gating the append on `$wrapper.children().length`,
-    // still called `getCompanySummaryNode()` and so still triggered its
-    // internal re-home). The summary simply stays wherever
-    // `getCompanySummaryNode()` already put it — correctly, next to the
-    // fields that are actually capturing the value.
+    // The read-only company summary is NOT appended here directly — no
+    // second implementation of "where does the summary live". It follows
+    // the search control on its own, because `getCompanySummaryNode()`
+    // (called from the `renderCompanySummary()` that always runs right
+    // after this function — see toggleBusinessFields/onUpdatedCheckout)
+    // anchors the summary against `#billing_company_display_field` itself,
+    // the same field this function just relocated above. By the time that
+    // anchor lookup runs, the field is already inside `$wrapper` (or still
+    // in the address form, in 'address_area' mode), so the summary lands
+    // right there too, with no separate move call needed and no risk of the
+    // tug-of-war a duplicate append here used to cause (round 2026-08-04,
+    // fixed by anchoring on the field that actually relocates instead of
+    // `#company_id_field`, which never does — see the doc comment on
+    // `getCompanySummaryNode()`).
     //
     // Unhidden only when the wrapper actually gained a VISIBLE child (bug
     // found in adversarial review round 2, Han, 2026-08-04; widened
@@ -1753,12 +1749,25 @@ class TwoCompanySearch {
    * it is substituted directly into the intent-message sentence instead —
    * see `getCompanyLabelText` and its callers in `togglePaySubtitleDesc`.
    *
-   * Anchored after the company-id field's enclosing `.twoinc-inp-container`
-   * where there is one, NOT inside it. The pay-for-order page wraps every
+   * Anchored after the company-SEARCH field's (`#billing_company_display_field`)
+   * enclosing `.twoinc-inp-container` where there is one, NOT inside it —
+   * `#company_id_field`/`#billing_company_field` only as a fallback for a
+   * page with no search field at all. The pay-for-order page wraps every
    * company input in such a container and hides the container, not just the
    * field (see syncCompanyFieldWrappers) — so a summary placed inside would be
    * invisible on that page in exactly the search mode it matters most for. The
    * checkout page has no wrappers and the anchor falls through to the field.
+   *
+   * Anchoring against the SEARCH field specifically (rather than
+   * `#company_id_field`, which is deliberately never relocated — see
+   * `syncCompanySearchTileLocation()`) is what makes the summary follow the
+   * control into the payment tile (TWO-25326 bugfix, Doug 2026-08-04
+   * live-verified: the summary used to stay orphaned in the address area
+   * after the search control moved). `syncCompanySearchTileLocation()` runs
+   * BEFORE every `renderCompanySummary()` call, so by the time this anchor
+   * lookup runs, `#billing_company_display_field` is already wherever it is
+   * going to be for this render — tile or address area — and the summary
+   * simply follows.
    *
    * Re-anchored on EVERY call, not just on first creation (#30.x.9, found by
    * live post-merge verification — reported live: the summary rendered ABOVE
@@ -1798,7 +1807,8 @@ class TwoCompanySearch {
     let $node = jQuery("#" + twoincSelectWooHelper.companySummaryId);
     const isNew = !$node.length;
 
-    let $field = jQuery("#company_id_field");
+    let $field = jQuery("#billing_company_display_field");
+    if (!$field.length) $field = jQuery("#company_id_field");
     if (!$field.length) $field = jQuery("#billing_company_field");
     // Dead ternary removed (round 2 review — Vader): `isNew` is exactly
     // `!$node.length`, and `$node` is never reassigned before this line, so
@@ -2523,6 +2533,19 @@ let twoincDomHelper = {
       if (twoincDomHelper.isCountrySupported() && window.twoinc.enable_company_search === "yes") {
         visibleTargets.push("#billing_company_display_field");
         requiredTargets.push("#billing_company_display_field");
+
+        // WooCommerce's OWN native company field is a completely separate
+        // concern from where OUR search control lives (bug found by Doug
+        // 2026-08-04, live-verified against the checkbox-off/payment_tile
+        // state): unchecking "Enable Company Search In Address Entry" moves
+        // the search control into the payment tile, but must never take
+        // WooCommerce's stock field away from the address area — the two
+        // coexist, search in the tile, native field where WC always puts
+        // it. Left untouched (no required cue): WC owns that field's own
+        // required-ness, this plugin only decides whether it is shown.
+        if (window.twoinc.company_search_location === "payment_tile") {
+          visibleTargets.push("#billing_company_field");
+        }
       } else {
         visibleTargets.push("#billing_company_field");
         requiredTargets.push("#billing_company_field");
