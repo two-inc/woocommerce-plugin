@@ -1701,24 +1701,49 @@ let twoincDomHelper = {
 
   /**
    * Relocate the ONE company-search control into the payment tile, or leave
-   * it in the address area, per the `company_search_location` admin setting
+   * it in the address area, per `window.twoinc.company_search_location`
    * (TWO-25326 §7.1, ruling 2026-08-03; hardened round 2026-08-03 after
    * adversarial review — see `detachCompanySearchTileWrapperToSafety` for
    * the AJAX-destruction bug this pairs with).
    *
-   * This is the same control both ways — the real `#billing_company_field`,
-   * `#billing_company_display_field` and `#company_id_field` rows (plus the
-   * read-only number label, `getCompanySummaryNode()`), MOVED with
-   * `appendTo()`, never cloned and never a second implementation. Whatever
-   * JS already targets those ids/classes (selectWoo init, keyboard handling,
-   * tab-order fixes, `getCompanyName()`/`getCompanyData()`, the manual-entry
-   * affordances) keeps working unchanged, because it all selects by id or
-   * class rather than by position in the DOM.
+   * As of the 2026-08-04 correction, this value is DERIVED from the
+   * `enable_company_search` checkbox admin field — checked means address
+   * area, unchecked means payment tile (never "off": the control never
+   * disappears, it only moves) — rather than a location setting of its own.
+   * See WC_Twoinc_Checkout::prepare_twoinc_object() and
+   * WC_Twoinc::get_enable_company_search()'s doc comment for the source.
    *
-   * Default setting is 'address_area': this function is then a no-op and the
-   * control renders exactly where WooCommerce always put it — zero
-   * behavioural change for every merchant who does not touch the new
-   * setting.
+   * This is the same control both ways — the real `#billing_company_display_field`
+   * and `#company_id_field` rows (plus the read-only number label,
+   * `getCompanySummaryNode()`), MOVED with `appendTo()`, never cloned and
+   * never a second implementation. Whatever JS already targets those ids/
+   * classes (selectWoo init, keyboard handling, tab-order fixes,
+   * `getCompanyName()`/`getCompanyData()`, the manual-entry affordances)
+   * keeps working unchanged, because it all selects by id or class rather
+   * than by position in the DOM.
+   *
+   * `#billing_company_field` — WooCommerce's OWN native company field, not
+   * part of this plugin's search control at all — is deliberately NEVER
+   * moved (bug found by Doug 2026-08-04, live-verified against the
+   * checkbox-off state this correction introduces): it is the plain,
+   * unenhanced fallback the buyer types into directly when the checkbox is
+   * unchecked (`toggleBusinessFields()`'s disabled branch), mirroring the
+   * Hyvä companyName.phtml pattern of degrading to a plain field for the
+   * same entity attribute rather than removing it. Moving it into the tile
+   * alongside the search control would pull the buyer's ONLY way to enter a
+   * company name out of the address form entirely, which is exactly the bug
+   * this comment documents.
+   *
+   * Default is 'address_area' (checkbox checked): this function is then a
+   * no-op and the control renders exactly where WooCommerce always put it —
+   * zero behavioural change for every merchant who leaves the checkbox at
+   * its default. A merchant who already had the checkbox UNCHECKED before
+   * the 2026-08-04 correction previously got company search fully off; they
+   * now get the plain `#billing_company_field` fallback in the address
+   * area (unchanged from that prior "off" behaviour) with the search
+   * widget markup additionally relocated into the payment tile — a real
+   * behaviour change, called out in the PR that made this correction
+   * (TWO-25326).
    *
    * 'payment_tile': the fields move into `.twoinc-company-search-tile-slot`,
    * the empty slot `get_pay_box_description()` server-renders between the
@@ -1767,7 +1792,7 @@ let twoincDomHelper = {
       $slot.append($wrapper);
     }
 
-    // Ends up in address-form order (name/search control, then the hidden
+    // Ends up in address-form order (search control, then the hidden
     // org-number field) because that already IS each one's document order in
     // the address form before this runs — jQuery's multi-selector returns
     // matches in document order, not the order the selector string lists
@@ -1778,7 +1803,11 @@ let twoincDomHelper = {
     // elsewhere in this file — but only when it isn't already there, so a
     // stale selectWoo dropdown or text selection survives a re-render that
     // changed nothing.
-    jQuery("#billing_company_display_field, #billing_company_field, #company_id_field").each(
+    //
+    // `#billing_company_field` is deliberately EXCLUDED from this selector
+    // (2026-08-04 correction, see the doc comment above) — it stays in the
+    // address form no matter which branch this function takes.
+    jQuery("#billing_company_display_field, #company_id_field").each(
       function () {
         const $field = jQuery(this);
         if ($field.parent()[0] !== $wrapper[0]) $field.appendTo($wrapper);

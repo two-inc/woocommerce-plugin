@@ -1,7 +1,11 @@
 /**
  * TWO-25326 §7.1, ruling 2026-08-03 (hardened after adversarial review the
- * same day). The `company_search_location` admin setting relocates the ONE
- * company-search control between the address area and the payment tile.
+ * same day; corrected 2026-08-04 to derive the location from the existing
+ * `enable_company_search` checkbox rather than a standalone location
+ * setting). `window.twoinc.company_search_location` relocates the ONE
+ * company-search control between the address area and the payment tile —
+ * this suite drives that JS-side signal directly, so it is unaffected by
+ * where the PHP side derives its value from.
  *
  * The round-1 adversarial review (Leia, Han, Yoda, Vader — all four,
  * independently) found the same real bug in the first version of this
@@ -98,23 +102,39 @@ describe("company-search tile location (TWO-25326 §7.1)", () => {
       buildTileSlot();
     });
 
-    test("moves the real fields into the tile slot, not a clone", () => {
+    test("moves the search widget and org-number field into the tile slot, not a clone", () => {
       dom.syncCompanySearchTileLocation();
 
       const $display = $("#billing_company_display_field");
       expect($display.length).toBe(1);
       expect($display.closest(".twoinc-company-search-tile-slot").length).toBe(1);
-      expect($("#billing_company_field").closest(".twoinc-company-search-tile-slot").length).toBe(
-        1
-      );
       expect($("#company_id_field").closest(".twoinc-company-search-tile-slot").length).toBe(1);
       expect(tileSlot().hasClass("hidden")).toBe(false);
 
       // Not a clone: exactly one #billing_company_display_field in the
-      // whole document, and the address-area wrapper it used to sit in is
-      // now empty.
+      // whole document.
       expect($("#billing_company_display_field").length).toBe(1);
-      expect($(".woocommerce-billing-fields__field-wrapper #billing_company_field").length).toBe(0);
+    });
+
+    /**
+     * Bug found by Doug, live-verified 2026-08-04: WooCommerce's OWN native
+     * `#billing_company_field` is not part of this plugin's search control
+     * and must NEVER be relocated into the tile — it is the plain,
+     * unenhanced fallback the buyer types into when the checkbox is off
+     * (Hyvä companyName.phtml parity: degrade to a plain field for the same
+     * entity attribute, never remove it). A version of this function that
+     * folds `#billing_company_field` back into its move-set would pull the
+     * buyer's only way to enter a company name out of the address form
+     * entirely — this test fails loudly if that regresses.
+     */
+    test("never relocates the native #billing_company_field — it stays in the address form, visible and editable", () => {
+      dom.syncCompanySearchTileLocation();
+
+      const $billingCompany = $("#billing_company_field");
+      expect($billingCompany.length).toBe(1);
+      expect($billingCompany.closest(".twoinc-company-search-tile-slot").length).toBe(0);
+      expect($billingCompany.closest('form[name="checkout"]').length).toBe(1);
+      expect($("#billing_company").prop("disabled")).toBeFalsy();
     });
 
     test("is idempotent — a second call does not physically re-detach nodes that are already in place", () => {
