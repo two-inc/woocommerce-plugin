@@ -178,6 +178,7 @@ final class BrandConfigSpec
             'testPaymentBoxOrdersTaglineChipsThenSoleTrader',
             'testPaymentBoxRendersCompanySearchTileSlotBetweenSoleTraderAndIntentMessage',
             'testDeclinedBoxCarriesCompanyTemplate',
+            'testDeclinedNoticeIgnoresABrandOverrideKey',
             'testSelectedTermInputPrecedesChipsContainer',
             'testBrandWithoutTaglineEmitsNoTaglineBlock',
             'testTaglineSentenceIsPlatformCopyWithBrandFaqLink',
@@ -5416,6 +5417,36 @@ final class BrandConfigSpec
         TinyAssert::true(
             strpos($html, 'Invoice purchase with Taglinebrand is not available for this order.') !== false,
             'the no-company fallback sentence must be unchanged'
+        );
+    }
+
+    /**
+     * 2026-08-04 ruling (TWO-25326): the declined/"not available" notice is
+     * never brand-overridable. WC_Twoinc no longer reads an
+     * 'intent_declined_notice' brand key at all, so a brand file declaring
+     * one (fixtures/decidedoverridebrand.php) must be silently ignored —
+     * the platform default copy renders regardless, with only the brand's
+     * product_name substituted the normal way.
+     */
+    private static function testDeclinedNoticeIgnoresABrandOverrideKey(): void
+    {
+        add_filter('twoinc_brand_file', static function ($file) {
+            return __DIR__ . '/fixtures/decidedoverridebrand.php';
+        });
+
+        $html = self::gateway()->build_payment_description();
+
+        TinyAssert::true(
+            strpos(
+                $html,
+                'twoinc-pay-box twoinc-err-payment-default hidden" data-company-template="Decidedoverridebrand'
+                . ' is not available for this order by {company}"'
+            ) !== false,
+            'the declined box must render the platform default copy, ignoring the brand override key'
+        );
+        TinyAssert::true(
+            strpos($html, 'This override must never render') === false,
+            'a brand-declared intent_declined_notice must never reach rendered output'
         );
     }
 

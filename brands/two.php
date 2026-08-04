@@ -109,4 +109,10 @@ return [
     // the brand product_name and %2$s the buyer's company name.
     // WC_Twoinc::get_intent_approved_notice is the only reader.
     'intent_approved_notice' => null,
+    // Deliberately no 'intent_declined_notice' key here (removed
+    // 2026-08-04 ruling, TWO-25326): the "order intent NOT approved"
+    // notice is never brand-overridable. WC_Twoinc::
+    // get_intent_declined_notice_template() no longer reads any brand
+    // key for this — do not add one back, and do not add one to an
+    // overlay's own brand file either; it would be silently ignored.
 ];
