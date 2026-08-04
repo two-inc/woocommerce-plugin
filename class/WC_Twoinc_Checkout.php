@@ -339,6 +339,35 @@ if (!class_exists('WC_Twoinc_Checkout')) {
         }
 
         /**
+         * Where the ONE company-search control (§1-§4) renders in the
+         * checkout DOM (TWO-25326 §7.1, correction 2026-08-04). Pulled out
+         * as a pure function — no gateway, no WP/WC globals — precisely so
+         * this branch can be unit-tested in isolation without dragging in
+         * everything else `prepare_twoinc_object()` touches.
+         *
+         * Superseded the short-lived standalone `company_search_location`
+         * admin setting from PR #436: Doug's correction was that merchants
+         * already have the `enable_company_search` checkbox, and a second
+         * location-only setting was one control too many. So the SAME
+         * checkbox now drives both "is the control shown in the address
+         * form" (`enable_company_search === 'yes'`, the value this takes)
+         * and, via this function, where it lives when it isn't:
+         *   - 'yes' (checked, the default): 'address_area' — renders in the
+         *     billing address form exactly as before this setting existed.
+         *   - anything else (unchecked): 'payment_tile' — the SAME control
+         *     (fields, JS, dropdown) is relocated into the payment tile
+         *     instead of being turned off — see
+         *     twoincDomHelper.syncCompanySearchTileLocation() in twoinc.js.
+         *
+         * @param string|null $enable_company_search WC_Twoinc::get_enable_company_search()'s return value — nullable, same as the option chain it reads.
+         * @return string 'address_area' or 'payment_tile'
+         */
+        private static function derive_company_search_location(?string $enable_company_search): string
+        {
+            return $enable_company_search === 'yes' ? 'address_area' : 'payment_tile';
+        }
+
+        /**
          * Passing config to javascript
          *
          * @param $merchant array
@@ -357,6 +386,12 @@ if (!class_exists('WC_Twoinc_Checkout')) {
 
             // TODO: Make this dynamic based on active merchant payee accounts
             $supported_buyer_countries = WC_Twoinc_Brand::get('supported_buyer_countries');
+
+            // Read once, fed to both `enable_company_search` below and
+            // `derive_company_search_location()` — same option chain, same
+            // request, no reason to hit `get_option()` twice (review nit,
+            // Leia).
+            $enable_company_search = $this->wc_twoinc->get_enable_company_search();
 
             $properties = [
                 'text' => [
@@ -388,10 +423,13 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     'search_company' => __('Search for company', 'twoinc-payment-gateway'),
                 ],
                 'twoinc_checkout_host' => $this->wc_twoinc->get_twoinc_checkout_host(),
-                'enable_company_search' => $this->wc_twoinc->get_enable_company_search(),
+                'enable_company_search' => $enable_company_search,
                 'enable_company_search_for_others' => $this->wc_twoinc->get_option('enable_company_search_for_others'),
-                // TWO-25326 §7.1: where the one company-search control renders.
-                'company_search_location' => $this->wc_twoinc->get_company_search_location(),
+                // TWO-25326 §7.1, correction 2026-08-04: where the one
+                // company-search control renders — driven by the
+                // `enable_company_search` checkbox itself (not a setting of
+                // its own; see get_enable_company_search()'s doc comment).
+                'company_search_location' => self::derive_company_search_location($enable_company_search),
                 'enable_address_lookup' => $this->wc_twoinc->get_option('enable_address_lookup'),
                 'enable_order_intent' => $this->wc_twoinc->get_option('enable_order_intent'),
                 'display_tooltips' => $this->wc_twoinc->get_option('display_tooltips'),

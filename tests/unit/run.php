@@ -195,6 +195,9 @@ final class BrandConfigSpec
             'testCompanySearchTileSlotAndDeclinedTemplateSurviveNoticeSuppression',
             'testAssetVersionTracksFileMtimeNotPluginVersion',
             'testAssetVersionFallsBackToPluginVersionWhenFileMissing',
+            'testCompanySearchLocationDerivedFromEnableCompanySearchBothDirections',
+            'testCompanySearchLocationFallsBackToPaymentTileOnNullOrEmpty',
+            'testCompanySearchLocationSettingDroppedFromUpgradedInstalls',
         ];
         foreach ($tests as $test) {
             self::reset();
@@ -5275,7 +5278,7 @@ final class BrandConfigSpec
      * is a silent regression exactly like the ordering test above guards
      * against.
      *
-     * Empty and hidden on render regardless of the `company_search_location`
+     * Empty and hidden on render regardless of the `enable_company_search`
      * setting — twoinc.js's syncCompanySearchTileLocation() is what moves the
      * real company-search fields into it and unhides it, client-side, and
      * this markup does not know the setting's value at all (it is read from
@@ -5308,6 +5311,83 @@ final class BrandConfigSpec
             strpos($html, 'twoinc-company-tile-label') === false,
             'the superseded standalone company tile label must not be emitted'
         );
+    }
+
+    /**
+     * TWO-25326 §7.1, correction 2026-08-04. The short-lived standalone
+     * `company_search_location` admin setting from PR #436 is gone; the
+     * SAME location decision is now derived from the pre-existing
+     * `enable_company_search` checkbox by
+     * WC_Twoinc_Checkout::derive_company_search_location(). Flip both
+     * directions directly against that pure function — no gateway, no
+     * WP/WC stubs needed — so a mutation that inverts or drops the branch
+     * fails here rather than only in the JS suite (which drives
+     * `window.twoinc.company_search_location` directly and so cannot see
+     * this PHP-side derivation at all).
+     */
+    private static function testCompanySearchLocationDerivedFromEnableCompanySearchBothDirections(): void
+    {
+        $derive = new ReflectionMethod(WC_Twoinc_Checkout::class, 'derive_company_search_location');
+        $derive->setAccessible(true);
+
+        TinyAssert::same(
+            'address_area',
+            $derive->invoke(null, 'yes'),
+            'checkbox checked ("yes") must render in the address area'
+        );
+        TinyAssert::same(
+            'payment_tile',
+            $derive->invoke(null, 'no'),
+            'checkbox unchecked ("no") must relocate into the payment tile, not disappear'
+        );
+    }
+
+    /**
+     * get_enable_company_search() can return null (both the current and the
+     * legacy `enable_company_name` option keys unset) or '' (WooCommerce's
+     * WC_Settings_API::get_option empty-string convention) — neither is
+     * "yes", so both must land on the safe side: relocated into the payment
+     * tile, never silently missing from the checkout entirely (#33-style
+     * regression the fallback in get_enable_company_search() exists to
+     * prevent).
+     */
+    private static function testCompanySearchLocationFallsBackToPaymentTileOnNullOrEmpty(): void
+    {
+        $derive = new ReflectionMethod(WC_Twoinc_Checkout::class, 'derive_company_search_location');
+        $derive->setAccessible(true);
+
+        TinyAssert::same('payment_tile', $derive->invoke(null, null));
+        TinyAssert::same('payment_tile', $derive->invoke(null, ''));
+    }
+
+    /**
+     * TWO-25326 §7.1, correction 2026-08-04 (adversarial review finding,
+     * Yoda). `company_search_location` (PR #436) lived for less than a day
+     * before this correction deleted the admin field and its getter — any
+     * merchant who touched it during that window has the key sitting inert
+     * in their settings row. `drop_removed_settings()` (same mechanism as
+     * `enable_sole_trader`, TWO-25163) must clean it up on an upgraded
+     * install, mirroring `testSoleTraderHasNoMerchantToggleSetting` above.
+     */
+    private static function testCompanySearchLocationSettingDroppedFromUpgradedInstalls(): void
+    {
+        $gateway = new class () extends WC_Twoinc {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+        };
+        $gateway->init_form_fields();
+        TinyAssert::same(false, array_key_exists('company_search_location', $gateway->form_fields));
+
+        $key = $gateway->get_option_key();
+        $drop = new ReflectionMethod(WC_Twoinc::class, 'drop_removed_settings');
+        $drop->setAccessible(true);
+
+        $GLOBALS['__twoinc_test_options'][$key] = ['company_search_location' => 'payment_tile', 'api_key' => 'keep-me'];
+        $gateway->init_settings();
+        $drop->invoke($gateway);
+        TinyAssert::same(['api_key' => 'keep-me'], $GLOBALS['__twoinc_test_options'][$key]);
     }
 
     /**

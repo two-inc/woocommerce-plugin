@@ -1,7 +1,11 @@
 /**
  * TWO-25326 §7.1, ruling 2026-08-03 (hardened after adversarial review the
- * same day). The `company_search_location` admin setting relocates the ONE
- * company-search control between the address area and the payment tile.
+ * same day; corrected 2026-08-04 to derive the location from the existing
+ * `enable_company_search` checkbox rather than a standalone location
+ * setting). `window.twoinc.company_search_location` relocates the ONE
+ * company-search control between the address area and the payment tile —
+ * this suite drives that JS-side signal directly, so it is unaffected by
+ * where the PHP side derives its value from.
  *
  * The round-1 adversarial review (Leia, Han, Yoda, Vader — all four,
  * independently) found the same real bug in the first version of this
@@ -98,23 +102,48 @@ describe("company-search tile location (TWO-25326 §7.1)", () => {
       buildTileSlot();
     });
 
-    test("moves the real fields into the tile slot, not a clone", () => {
+    test("moves the search widget into the tile slot, not a clone", () => {
       dom.syncCompanySearchTileLocation();
 
       const $display = $("#billing_company_display_field");
       expect($display.length).toBe(1);
       expect($display.closest(".twoinc-company-search-tile-slot").length).toBe(1);
-      expect($("#billing_company_field").closest(".twoinc-company-search-tile-slot").length).toBe(
-        1
-      );
-      expect($("#company_id_field").closest(".twoinc-company-search-tile-slot").length).toBe(1);
       expect(tileSlot().hasClass("hidden")).toBe(false);
 
       // Not a clone: exactly one #billing_company_display_field in the
-      // whole document, and the address-area wrapper it used to sit in is
-      // now empty.
+      // whole document.
       expect($("#billing_company_display_field").length).toBe(1);
-      expect($(".woocommerce-billing-fields__field-wrapper #billing_company_field").length).toBe(0);
+    });
+
+    /**
+     * Bugs found by Doug + adversarial review (Vader), live-verified
+     * 2026-08-04: neither WooCommerce's OWN native `#billing_company_field`
+     * NOR `#company_id_field` are part of this plugin's search control, and
+     * neither may be relocated into the tile. `#billing_company_field` is
+     * the plain, unenhanced fallback the buyer types into when the
+     * checkbox is off (Hyvä companyName.phtml parity: degrade to a plain
+     * field for the same entity attribute, never remove it).
+     * `#company_id_field` moving ALONE (its search-widget partner,
+     * `#billing_company_display_field`, never even exists server-side when
+     * the checkbox is off — see WC_Twoinc_Checkout::update_company_fields())
+     * left a bare, unlabelled, REQUIRED "Company ID" box floating in the
+     * payment tile with no search behind it to fill it from — checkout-
+     * blocking confusion. A version of this function that folds either
+     * field back into its move-set fails this test loudly.
+     */
+    test("never relocates #billing_company_field or #company_id_field — both stay in the address form, visible and editable", () => {
+      dom.syncCompanySearchTileLocation();
+
+      const $billingCompany = $("#billing_company_field");
+      expect($billingCompany.length).toBe(1);
+      expect($billingCompany.closest(".twoinc-company-search-tile-slot").length).toBe(0);
+      expect($billingCompany.closest('form[name="checkout"]').length).toBe(1);
+      expect($("#billing_company").prop("disabled")).toBeFalsy();
+
+      const $companyId = $("#company_id_field");
+      expect($companyId.length).toBe(1);
+      expect($companyId.closest(".twoinc-company-search-tile-slot").length).toBe(0);
+      expect($companyId.closest('form[name="checkout"]').length).toBe(1);
     });
 
     test("is idempotent — a second call does not physically re-detach nodes that are already in place", () => {
@@ -125,6 +154,27 @@ describe("company-search tile location (TWO-25326 §7.1)", () => {
 
       expect(appendToSpy).not.toHaveBeenCalled();
       appendToSpy.mockRestore();
+    });
+
+    /**
+     * Bug found in adversarial review round 2 (Han, 2026-08-04): in the
+     * only state this branch is reachable in today (checkbox unchecked),
+     * `#billing_company_display_field` never exists server-side at all
+     * (WC_Twoinc_Checkout::update_company_fields() only registers it when
+     * `enable_company_search === 'yes'`) — so the move loop is a no-op and
+     * the wrapper stays empty. A version of this function that unhides the
+     * slot unconditionally leaves every checkbox-off merchant with a bare,
+     * unexplained gap (the slot's own `margin: 12px 0`) between the sole-
+     * trader toggle and the intent message on every checkout. This test
+     * removes the display field from the fixture to reproduce that exact
+     * real-world DOM shape and asserts the slot stays hidden.
+     */
+    test("stays hidden when nothing is left to move — the field doesn't exist server-side when the checkbox is off", () => {
+      $("#billing_company_display_field").remove();
+
+      dom.syncCompanySearchTileLocation();
+
+      expect(tileSlot().hasClass("hidden")).toBe(true);
     });
 
     test("detach-to-safety is also idempotent — a second call in a row does not re-move an already-parked wrapper (round 2 review — Vader)", () => {
