@@ -213,6 +213,7 @@ final class BrandConfigSpec
             'testApiKeyNoticesCarryTwoProductNameAndStatusPlaceholder',
             'testApiKeyNoticesUseOverlayProductNameNotTwo',
             'testApiKeyNoticeCatalogueWithBadPlaceholdersDegradesNotFatals',
+            'testApiKeyNoticesNeverShipAnUnfillablePlaceholder',
             'testApiKeyNoticeCopyIsTranslatedInEveryLocale',
         ];
         foreach ($tests as $test) {
@@ -242,6 +243,7 @@ final class BrandConfigSpec
         WC_Twoinc_Payment_Terms::reset_fee_cache();
         WC_Twoinc_Sole_Trader::reset_cache();
         WC_Twoinc::reset_merchant_record_memo();
+        WC_Twoinc::reset_api_key_notice_log_guard();
         WC_Twoinc_FX::reset_request_cache();
         unset($GLOBALS['__twoinc_test_translations']);
         $GLOBALS['__twoinc_test_transients'] = [];
@@ -6597,13 +6599,54 @@ final class BrandConfigSpec
         }
         // And the failure is not swallowed silently. Match the message rather
         // than counting every log line, so an unrelated log cannot satisfy it.
-        $mismatch_logs = array_filter(
+        TinyAssert::same(1, self::countNoticeMismatchLogs(), 'a catalogue mismatch must be logged');
+
+        // ...but exactly once. These notices are rebuilt on every wp-admin page
+        // view and a bad catalogue stays bad, so an unthrottled log would grow
+        // without bound.
+        self::gateway()->get_api_key_notices();
+        self::gateway()->get_api_key_notices();
+        TinyAssert::same(1, self::countNoticeMismatchLogs(), 'the mismatch log must fire once per request');
+    }
+
+    private static function countNoticeMismatchLogs(): int
+    {
+        return count(array_filter(
             $GLOBALS['__twoinc_test_logs'],
             static function ($entry) {
                 return strpos($entry['message'] ?? '', 'does not match the source placeholders') !== false;
             }
+        ));
+    }
+
+    private static function testApiKeyNoticesNeverShipAnUnfillablePlaceholder(): void
+    {
+        $templates = WC_Twoinc::api_key_notice_templates();
+        // The three notices the plugin does not format, and the fallback the
+        // degraded path returns, are all translated strings too — nothing
+        // downstream substitutes into them, so a catalogue that invented a
+        // specifier would otherwise print it verbatim at the admin. Covers the
+        // shapes str_replace('%s') alone would have missed.
+        $GLOBALS['__twoinc_test_translations'] = [
+            $templates['invalid_key'] => 'Nøkkelen er ugyldig %s.',
+            $templates['request_failed'] => 'Kunne ikke fullføre %1$s.',
+            $templates['unverified'] => 'Kunne ikke verifisere %d.',
+        ];
+
+        $notices = self::gateway()->get_api_key_notices();
+
+        TinyAssert::same('Nøkkelen er ugyldig .', $notices['invalid_key']);
+        TinyAssert::same('Kunne ikke fullføre .', $notices['request_failed']);
+        TinyAssert::same('Kunne ikke verifisere .', $notices['unverified']);
+
+        // An escaped percent and a literal percent in prose both survive.
+        $GLOBALS['__twoinc_test_translations'] = [
+            $templates['invalid_key'] => 'Bare 100% av nøklene, 50%% av tiden.',
+        ];
+        TinyAssert::same(
+            'Bare 100% av nøklene, 50%% av tiden.',
+            self::gateway()->get_api_key_notices()['invalid_key']
         );
-        TinyAssert::same(3, count($mismatch_logs), 'each catalogue mismatch must be logged');
     }
 
     private static function testApiKeyNoticeCopyIsTranslatedInEveryLocale(): void

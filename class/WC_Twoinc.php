@@ -21,6 +21,11 @@ if (!class_exists('WC_Twoinc')) {
         private static $merchant_record = null;
         private static $merchant_record_fetched = false;
 
+        // Log-once guard for a runtime catalogue whose API-key notice
+        // placeholders do not match the source: the notices are rebuilt on
+        // every wp-admin page view, and a bad catalogue stays bad.
+        private static $api_key_notice_mismatch_logged = false;
+
         // BC-frozen: external integrations may read these constants, but all
         // runtime reads go through WC_Twoinc_Brand so overlays can rebrand.
         // They mirror brands/two.php; tests/unit pins them against drift.
@@ -332,6 +337,16 @@ if (!class_exists('WC_Twoinc')) {
         {
             self::$merchant_record = null;
             self::$merchant_record_fetched = false;
+        }
+
+        /**
+         * Reset the per-request log-once guard for API-key notice catalogue
+         * mismatches. Production has no reason to call this — a request is the
+         * boundary — but the unit harness runs the whole suite in one process.
+         */
+        public static function reset_api_key_notice_log_guard(): void
+        {
+            self::$api_key_notice_mismatch_logged = false;
         }
 
         /**
@@ -2796,7 +2811,10 @@ if (!class_exists('WC_Twoinc')) {
             $templates = self::api_key_notice_templates();
 
             return [
-                'invalid_key' => $templates['invalid_key'],
+                // Passed through the placeholder strip like every other entry:
+                // this template declares none, so any placeholder present came
+                // from a broken catalogue and nothing downstream would fill it.
+                'invalid_key' => self::strip_unfilled_placeholders($templates['invalid_key']),
                 // The '%s' passed as the status argument is a literal that
                 // survives into the output for admin.js to replace with the
                 // real HTTP status code; only the two templates that declare a
@@ -2818,14 +2836,38 @@ if (!class_exists('WC_Twoinc')) {
                     [$product_name],
                     $templates['unverified']
                 ),
-                'request_failed' => $templates['request_failed'],
+                'request_failed' => self::strip_unfilled_placeholders($templates['request_failed']),
                 'unexpected_response' => self::format_api_key_notice(
                     $templates['unexpected_response'],
                     [$product_name, '%s'],
                     $templates['unverified']
                 ),
-                'unverified' => $templates['unverified'],
+                'unverified' => self::strip_unfilled_placeholders($templates['unverified']),
             ];
+        }
+
+        /**
+         * Drop conversion specifiers from a notice that nothing will substitute
+         * into, so a catalogue that invented one cannot print it at an admin.
+         *
+         * Only reached for copy the plugin does NOT format: the three notices
+         * with no arguments, and the degraded fallback. admin.js substitutes a
+         * status code into exactly two categories and nothing else touches the
+         * rest, so any specifier here is catalogue damage.
+         *
+         * Numbered ('%1$s') and width-qualified ('%05d') specifiers are
+         * matched; an escaped '%%' and a percent sign used as prose ('100% of
+         * the time') are deliberately NOT, which is why the flag characters
+         * sprintf also accepts — a space among them — are left out of the
+         * pattern: including them would eat '% o' out of a real sentence.
+         *
+         * @param string $text
+         *
+         * @return string
+         */
+        private static function strip_unfilled_placeholders($text)
+        {
+            return preg_replace('/(?<!%)%(?:\d+\$)?[0-9.]*[bcdeEfFgGosuxX]/', '', (string) $text);
         }
 
         /**
@@ -2866,7 +2908,14 @@ if (!class_exists('WC_Twoinc')) {
                 $reason = $e->getMessage();
             }
 
-            if (function_exists('wc_get_logger')) {
+            // Log once per request, mirroring the "log once" pattern the FX
+            // failure path and apply_brand_availability_gate() already use. The
+            // notices are rebuilt on EVERY wp-admin page view (this hook has no
+            // screen check), and a bad catalogue stays bad, so logging each
+            // failed category each time would fill the WooCommerce log with
+            // thousands of copies of the same line.
+            if (!self::$api_key_notice_mismatch_logged && function_exists('wc_get_logger')) {
+                self::$api_key_notice_mismatch_logged = true;
                 wc_get_logger()->error(
                     sprintf(
                         'Installed translation of an API key notice does not match the'
@@ -2879,9 +2928,8 @@ if (!class_exists('WC_Twoinc')) {
 
             // The fallback is a translated string too, so a catalogue broken
             // enough to reach this branch could have put a placeholder in it as
-            // well. Nothing substitutes one there, so drop it rather than print
-            // it; a literal '%' elsewhere in the sentence is left alone.
-            return str_replace('%s', '', $fallback);
+            // well.
+            return self::strip_unfilled_placeholders($fallback);
         }
 
         /**
