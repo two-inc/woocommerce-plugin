@@ -21,6 +21,12 @@ if (!class_exists('WC_Twoinc')) {
         private static $merchant_record = null;
         private static $merchant_record_fetched = false;
 
+        // How long to suppress a repeat of the "installed translation of an
+        // API key notice does not match the source" log, per category. A bad
+        // catalogue stays bad and the notices are rebuilt on every wp-admin
+        // page view, so this is what keeps the log bounded.
+        public const NOTICE_FORMAT_LOG_THROTTLE = 86400;
+
         // BC-frozen: external integrations may read these constants, but all
         // runtime reads go through WC_Twoinc_Brand so overlays can rebrand.
         // They mirror brands/two.php; tests/unit pins them against drift.
@@ -2769,19 +2775,219 @@ if (!class_exists('WC_Twoinc')) {
                 // Categorized API-key verification failure text (TWO-25326
                 // follow-up) — admin.js's invalidNoticeText() renders these
                 // instead of hardcoded English so the notice is translatable.
-                // service_error/unexpected_response carry a literal %s that
-                // JS substitutes with the HTTP status code (mirrors days_label
-                // above).
-                'api_key_notices' => [
-                    'invalid_key' => __('This API key is invalid or has expired.', 'twoinc-payment-gateway'),
-                    'service_error' => __("Two's API returned a service error (HTTP %s). This is likely temporary on Two's side — try again shortly.", 'twoinc-payment-gateway'),
-                    'unreachable' => __("Could not reach Two's API (network or connectivity error). Try again shortly.", 'twoinc-payment-gateway'),
-                    'not_configured' => __('Enter an API key above to enable Two.', 'twoinc-payment-gateway'),
-                    'request_failed' => __('Could not complete verification — try again shortly.', 'twoinc-payment-gateway'),
-                    'unexpected_response' => __("Two's API returned an unexpected response (HTTP %s).", 'twoinc-payment-gateway'),
-                    'unverified' => __('This API key could not be verified.', 'twoinc-payment-gateway'),
-                ],
+                'api_key_notices' => $this->get_api_key_notices(),
             ]);
+        }
+
+        /**
+         * Categorized API-key verification failure text for admin.js's
+         * invalidNoticeText(), keyed by the category
+         * categorize_verification_result() reports.
+         *
+         * The product name is resolved through WC_Twoinc_Brand rather than
+         * written into the copy, so a brand overlay's admin sees its own
+         * name — the same convention every other user-facing string in this
+         * file follows. The HTTP status code is NOT available at localize
+         * time (it arrives with the AJAX response), so service_error and
+         * unexpected_response deliberately pass a literal '%s' as their
+         * status argument: sprintf() does not rescan its own output, so the
+         * brand is substituted here and the '%s' survives for admin.js to
+         * replace with the status code (mirrors the days_label pattern).
+         *
+         * @return array
+         */
+        public function get_api_key_notices()
+        {
+            $product_name = WC_Twoinc_Brand::get('product_name');
+            $templates = self::api_key_notice_templates();
+
+            return [
+                // Passed through the placeholder strip like every other entry:
+                // this template declares none, so any placeholder present came
+                // from a broken catalogue and nothing downstream would fill it.
+                'invalid_key' => self::strip_unfilled_placeholders($templates['invalid_key']),
+                // The '%s' passed as the status argument is a literal that
+                // survives into the output for admin.js to replace with the
+                // real HTTP status code; only the two templates that declare a
+                // status placeholder are given one, so a translation of the
+                // other two that invents an extra placeholder is caught as the
+                // mismatch it is rather than quietly rendering a raw '%s'.
+                'service_error' => self::format_api_key_notice(
+                    'service_error',
+                    $templates['service_error'],
+                    [$product_name, '%s'],
+                    $templates['unverified'],
+                    true
+                ),
+                'unreachable' => self::format_api_key_notice(
+                    'unreachable',
+                    $templates['unreachable'],
+                    [$product_name],
+                    $templates['unverified'],
+                    false
+                ),
+                'not_configured' => self::format_api_key_notice(
+                    'not_configured',
+                    $templates['not_configured'],
+                    [$product_name],
+                    $templates['unverified'],
+                    false
+                ),
+                'request_failed' => self::strip_unfilled_placeholders($templates['request_failed']),
+                'unexpected_response' => self::format_api_key_notice(
+                    'unexpected_response',
+                    $templates['unexpected_response'],
+                    [$product_name, '%s'],
+                    $templates['unverified'],
+                    true
+                ),
+                'unverified' => self::strip_unfilled_placeholders($templates['unverified']),
+            ];
+        }
+
+        /**
+         * Drop conversion specifiers from a notice that nothing will substitute
+         * into, so a catalogue that invented one cannot print it at an admin.
+         *
+         * Only reached for copy the plugin does NOT format: the three notices
+         * with no arguments, and the degraded fallback. admin.js substitutes a
+         * status code into exactly two categories and nothing else touches the
+         * rest, so any specifier here is catalogue damage.
+         *
+         * Numbered ('%1$s') and width-qualified ('%05d') specifiers are
+         * matched. Deliberately NOT matched: an escaped '%%', and a percent
+         * sign used as prose ('100% of the time'). That is why sprintf's flag
+         * characters are left out of the pattern — the space flag would make
+         * '% o' in a real sentence look like a specifier, and stripping it
+         * mangles the sentence worse than leaving a stray specifier visible.
+         * The trade is deliberate and the residue it accepts is narrow: a
+         * flagged specifier ('%-5s'), and an escaped percent immediately
+         * followed by a real one ('%%%s'), both survive. Neither is reachable
+         * for the copy this actually runs on — the three notices with no
+         * arguments, which contain no percent sign in any shipped locale.
+         *
+         * @param string $text
+         *
+         * @return string
+         */
+        private static function strip_unfilled_placeholders($text)
+        {
+            return preg_replace('/(?<!%)%(?:\d+\$)?[0-9.]*[bcdeEfFgGosuxX]/', '', (string) $text);
+        }
+
+        /**
+         * Interpolate the brand into one notice template, degrading rather
+         * than fataling on a catalogue that does not match the source.
+         *
+         * These strings pass through __(), so the format string is whatever
+         * catalogue is installed at RUNTIME — a Loco-edited .mo or a
+         * translate.wordpress.org import can carry a placeholder the source
+         * never had, which this repo's msgfmt gate cannot see. Both failure
+         * shapes are handled because the plugin supports PHP 7.4 as well as 8:
+         * PHP 8 throws ArgumentCountError/ValueError, PHP 7.4 emits a warning
+         * and returns false. Unhandled, from admin_enqueue_scripts, the PHP 8
+         * shape takes down the whole gateway settings page and the 7.4 shape
+         * puts a bare `false` into the notice, so a non-string result degrades
+         * to the placeholder-free copy (what was shown before the failures
+         * were categorized at all).
+         *
+         * @param string $key            notice category, for the log
+         * @param string $template
+         * @param array  $args           arguments for the template's placeholders
+         * @param string $fallback       placeholder-free notice text
+         * @param bool   $expects_status whether this category's copy declares a
+         *                               status placeholder for admin.js to fill,
+         *                               stated by the caller rather than inferred
+         *                               from the argument count
+         *
+         * @return string
+         */
+        private static function format_api_key_notice($key, $template, array $args, $fallback, $expects_status)
+        {
+            $reason = 'sprintf() rejected the format string';
+            try {
+                // Silenced deliberately: PHP 7.4 reports the mismatch as a
+                // warning and returns false, and the is_string() check below is
+                // what acts on it. The warning itself would otherwise print
+                // into the admin page's output.
+                $formatted = @vsprintf($template, $args);
+                if (is_string($formatted)) {
+                    if (!$expects_status) {
+                        // Nothing downstream substitutes into these, and
+                        // formatting does not remove an escaped '%%s' — it
+                        // UNescapes it into a literal '%s' that would render
+                        // verbatim at the admin. Strip whatever survived.
+                        return self::strip_unfilled_placeholders($formatted);
+                    }
+                    if (strpos($formatted, '%s') !== false) {
+                        return $formatted;
+                    }
+                    // vsprintf accepts a format string that uses FEWER
+                    // arguments than it was given, so a translation that
+                    // dropped the status placeholder formats cleanly and simply
+                    // loses the HTTP status code — the one detail that tells a
+                    // merchant which failure they are looking at. Treat it as
+                    // the mismatch it is rather than shipping a notice that
+                    // silently says less than it should.
+                    $reason = 'the translation dropped the HTTP status placeholder';
+                }
+            } catch (Throwable $e) {
+                $reason = $e->getMessage();
+            }
+
+            // Throttled per category through a transient, not just a static:
+            // these notices are rebuilt on EVERY wp-admin page view (the hook
+            // has no screen check) and a bad catalogue stays bad, so a
+            // per-request guard would still write a line per page view forever.
+            // Per category, because four can break at once and one line naming
+            // none of them is not diagnosable.
+            $throttle_key = WC_Twoinc_Brand::prefixed_name('notice_format_logged_' . $key);
+            if (!get_transient($throttle_key) && function_exists('wc_get_logger')) {
+                set_transient($throttle_key, 1, self::NOTICE_FORMAT_LOG_THROTTLE);
+                wc_get_logger()->error(
+                    sprintf(
+                        'Installed translation of the "%s" API key notice does not match the'
+                        . ' source placeholders (%s); showing the generic notice instead',
+                        $key,
+                        $reason
+                    ),
+                    ['source' => 'twoinc-payment-gateway']
+                );
+            }
+
+            // The fallback is a translated string too, so a catalogue broken
+            // enough to reach this branch could have put a placeholder in it as
+            // well.
+            return self::strip_unfilled_placeholders($fallback);
+        }
+
+        /**
+         * The translated source copy behind get_api_key_notices(), before the
+         * brand and status-code placeholders are filled in.
+         *
+         * Separate from get_api_key_notices() so a catalogue-drift test can
+         * read the msgids off the live source instead of retyping them (see
+         * the skip_confirm_auth precedent in the unit suite): a retyped copy
+         * of a literal cannot see the source being reworded without the
+         * catalogues being regenerated, which is the regression that matters.
+         *
+         * @return array
+         */
+        public static function api_key_notice_templates()
+        {
+            return [
+                'invalid_key' => __('This API key is invalid or has expired.', 'twoinc-payment-gateway'),
+                /* translators: 1: product name (e.g. Two). 2: HTTP status code returned by the API (e.g. 502), substituted by admin.js. */
+                'service_error' => __("%1\$s's API returned a service error (HTTP %2\$s). This is likely temporary on %1\$s's side — try again shortly.", 'twoinc-payment-gateway'),
+                /* translators: %s: product name (e.g. Two). */
+                'unreachable' => __("Could not reach %s's API (network or connectivity error). Try again shortly.", 'twoinc-payment-gateway'),
+                /* translators: %s: product name (e.g. Two). */
+                'not_configured' => __('Enter an API key above to enable %s.', 'twoinc-payment-gateway'),
+                'request_failed' => __('Could not complete verification — try again shortly.', 'twoinc-payment-gateway'),
+                /* translators: 1: product name (e.g. Two). 2: HTTP status code returned by the API (e.g. 418), substituted by admin.js. */
+                'unexpected_response' => __("%1\$s's API returned an unexpected response (HTTP %2\$s).", 'twoinc-payment-gateway'),
+                'unverified' => __('This API key could not be verified.', 'twoinc-payment-gateway'),
+            ];
         }
 
         /**

@@ -43,7 +43,7 @@ describe("API key verification — categorized failure display", () => {
     expect($("#twoinc-merchant-invalid-notice").text()).toMatch(/invalid or has expired/i);
   });
 
-  test('a 5xx shows a Two-service-error message, not "invalid key"', async () => {
+  test('a 5xx shows a service-error message, not "invalid key"', async () => {
     const { $ } = await loadAdmin({
       apiKey: "an-old-stored-key",
       checked: [30],
@@ -73,6 +73,103 @@ describe("API key verification — categorized failure display", () => {
     expect(text).not.toMatch(/invalid or has expired/i);
     expect(text).not.toMatch(/two's api/i);
     expect($("#twoinc-merchant-info").css("display")).toBe("none");
+  });
+
+  // Regression guards on the localisation contract, NOT evidence for the brand
+  // fix: the brand is resolved in PHP (WC_Twoinc::get_api_key_notices()
+  // interpolates WC_Twoinc_Brand::get('product_name')), and these three pass
+  // against pre-fix admin.js too, because preferring the localized copy over
+  // the literal is behaviour it already had. What they pin is that it keeps
+  // doing so — a future literal creeping back in front of a `notices.X` lookup
+  // would show an overlay's admin the wrong brand, and nothing else would see
+  // it. The brand resolution itself is covered by the PHP suite's
+  // testApiKeyNoticesUseOverlayProductNameNotTwo.
+  describe("admin.js renders the localized copy, not a literal of its own", () => {
+    const OVERLAY_NOTICES = {
+      invalid_key: "This API key is invalid or has expired.",
+      service_error:
+        "Testbrand's API returned a service error (HTTP %s). This is likely temporary on Testbrand's side — try again shortly.",
+      unreachable:
+        "Could not reach Testbrand's API (network or connectivity error). Try again shortly.",
+      not_configured: "Enter an API key above to enable Testbrand.",
+      request_failed: "Could not complete verification — try again shortly.",
+      unexpected_response: "Testbrand's API returned an unexpected response (HTTP %s).",
+      unverified: "This API key could not be verified."
+    };
+
+    test("a 5xx names the overlay brand, not Two, and still carries the status code", async () => {
+      const { $ } = await loadAdmin({
+        apiKey: "an-old-stored-key",
+        checked: [30],
+        apiKeyNotices: OVERLAY_NOTICES,
+        stubAjax: stubAjaxError("service_error", 503)
+      });
+
+      const text = $("#twoinc-merchant-invalid-notice").text();
+      expect(text).toContain("Testbrand's API");
+      expect(text).toContain("503");
+      expect(text).not.toContain("%s");
+      expect(text).not.toMatch(/\bTwo\b/);
+    });
+
+    // A translator may legitimately reference %2$s (the status code) more than
+    // once — msgfmt accepts it — so PHP hands admin.js a string with two %s.
+    // Replacing only the first left a raw "%s" on screen.
+    test("a translation that repeats the status placeholder substitutes every occurrence", async () => {
+      const { $ } = await loadAdmin({
+        apiKey: "an-old-stored-key",
+        checked: [30],
+        apiKeyNotices: Object.assign({}, OVERLAY_NOTICES, {
+          service_error: "Testbrand: HTTP %s — service error (HTTP %s), try again shortly."
+        }),
+        stubAjax: stubAjaxError("service_error", 503)
+      });
+
+      const text = $("#twoinc-merchant-invalid-notice").text();
+      expect(text).not.toContain("%s");
+      expect(text.match(/503/g)).toHaveLength(2);
+    });
+
+    test("an unreachable API names the overlay brand, not Two", async () => {
+      const { $ } = await loadAdmin({
+        apiKey: "an-old-stored-key",
+        checked: [30],
+        apiKeyNotices: OVERLAY_NOTICES,
+        stubAjax: stubAjaxError("unreachable", 0)
+      });
+
+      const text = $("#twoinc-merchant-invalid-notice").text();
+      expect(text).toContain("Could not reach Testbrand's API");
+      expect(text).not.toMatch(/\bTwo\b/);
+    });
+
+    test("an uncategorized failure with a status code names the overlay brand, not Two", async () => {
+      const { $ } = await loadAdmin({
+        apiKey: "an-old-stored-key",
+        checked: [30],
+        apiKeyNotices: OVERLAY_NOTICES,
+        stubAjax: stubAjaxError("error", 418)
+      });
+
+      const text = $("#twoinc-merchant-invalid-notice").text();
+      expect(text).toContain("Testbrand's API returned an unexpected response (HTTP 418).");
+      expect(text).not.toMatch(/\bTwo\b/);
+    });
+  });
+
+  // The fallback literals only render when the localisation never arrived, so
+  // they must not name a brand at all — this file ships unchanged to overlays.
+  test("the fallback copy used when localisation is absent names no brand", async () => {
+    const { $ } = await loadAdmin({
+      apiKey: "an-old-stored-key",
+      checked: [30],
+      stubAjax: stubAjaxError("service_error", 503)
+    });
+
+    const text = $("#twoinc-merchant-invalid-notice").text();
+    expect(text).toMatch(/service error/i);
+    expect(text).toContain("503");
+    expect(text).not.toMatch(/\bTwo\b/);
   });
 
   test("stored key that verifies successfully shows merchant info, not the invalid notice", async () => {

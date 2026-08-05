@@ -89,6 +89,30 @@ for po in "${po_files[@]}"; do
         continue
     fi
 
+    # A msgstr whose placeholder set differs from its msgid compiles fine and
+    # decodes fine, so nothing above can see it — but at runtime sprintf() gets
+    # a format string it has no arguments for. The plugin degrades rather than
+    # fataling on that (WC_Twoinc::format_api_key_notice), which means a broken
+    # translation would otherwise show generic copy in that locale forever with
+    # no other signal. Catch it here instead (TWO-25326).
+    #
+    # KNOWN GAP, deliberately not closed here: msgfmt only inspects entries
+    # xgettext flagged "#, php-format", and it flags an entry only when the
+    # SOURCE string carries a specifier. So a placeholder-free msgid whose
+    # translation invents one stays invisible to this gate. A hand-rolled
+    # msgid-vs-msgstr comparison was tried and reverted: it produced false
+    # positives on ordinary gettext (plural entries, URL-encoded text like
+    # %2F, fuzzy entries), and by this script's own header a gate that fails
+    # unrelated pull requests is worse than no gate. The runtime handles that
+    # case instead — WC_Twoinc::strip_unfilled_placeholders() drops a
+    # specifier nothing will substitute into rather than printing it.
+    if ! msgfmt --check-format -o /dev/null "$po" 2>"$tmp/fmt.err"; then
+        echo "::error file=$po::a translation's placeholders do not match its source string"
+        sed 's/^/  /' "$tmp/fmt.err"
+        status=1
+        continue
+    fi
+
     if ! msgunfmt -o "$tmp/committed.po" "$mo" 2>"$tmp/unfmt.err" ||
         ! msgunfmt -o "$tmp/generated.po" "$tmp/generated.mo" 2>>"$tmp/unfmt.err"; then
         echo "::error file=$mo::cannot decode this compiled catalogue"

@@ -1035,29 +1035,33 @@ msgstr "Het maximum geldt voor de hele fee: het percentage en het vaste bedrag s
 msgid "This API key is invalid or has expired."
 msgstr "Deze API-sleutel is ongeldig of verlopen."
 
-#. translators: %s: HTTP status code returned by Two's API (e.g. 502).
+#. translators: 1: product name (e.g. Two). 2: HTTP status code returned by the API (e.g. 502), substituted by admin.js.
 #: class/WC_Twoinc.php
 #, php-format
-msgid "Two's API returned a service error (HTTP %s). This is likely temporary on Two's side — try again shortly."
-msgstr "De API van Two gaf een servicefout terug (HTTP %s). Dit is waarschijnlijk tijdelijk aan de kant van Two — probeer het zo weer opnieuw."
+msgid "%1$s's API returned a service error (HTTP %2$s). This is likely temporary on %1$s's side — try again shortly."
+msgstr "De API van %1$s gaf een servicefout terug (HTTP %2$s). Dit is waarschijnlijk tijdelijk aan de kant van %1$s — probeer het zo weer opnieuw."
 
+#. translators: %s: product name (e.g. Two).
 #: class/WC_Twoinc.php
-msgid "Could not reach Two's API (network or connectivity error). Try again shortly."
-msgstr "Kon de API van Two niet bereiken (netwerk- of verbindingsfout). Probeer het zo weer opnieuw."
+#, php-format
+msgid "Could not reach %s's API (network or connectivity error). Try again shortly."
+msgstr "Kon de API van %s niet bereiken (netwerk- of verbindingsfout). Probeer het zo weer opnieuw."
 
+#. translators: %s: product name (e.g. Two).
 #: class/WC_Twoinc.php
-msgid "Enter an API key above to enable Two."
-msgstr "Voer hierboven een API-sleutel in om Two in te schakelen."
+#, php-format
+msgid "Enter an API key above to enable %s."
+msgstr "Voer hierboven een API-sleutel in om %s in te schakelen."
 
 #: class/WC_Twoinc.php
 msgid "Could not complete verification — try again shortly."
 msgstr "Verificatie kon niet worden voltooid — probeer het zo weer opnieuw."
 
-#. translators: %s: HTTP status code returned by Two's API (e.g. 418).
+#. translators: 1: product name (e.g. Two). 2: HTTP status code returned by the API (e.g. 418), substituted by admin.js.
 #: class/WC_Twoinc.php
 #, php-format
-msgid "Two's API returned an unexpected response (HTTP %s)."
-msgstr "De API van Two gaf een onverwacht antwoord terug (HTTP %s)."
+msgid "%1$s's API returned an unexpected response (HTTP %2$s)."
+msgstr "De API van %1$s gaf een onverwacht antwoord terug (HTTP %2$s)."
 
 #: class/WC_Twoinc.php
 msgid "This API key could not be verified."

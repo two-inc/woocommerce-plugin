@@ -262,6 +262,8 @@ function assertBootstrapped($) {
  *
  * @param {Object} [options] passed through to buildSettingsPage, plus
  *   `merchantTerms` for the backend-offered set admin.js intersects against,
+ *   `apiKeyNotices` for the localized, brand-resolved API-key notice copy PHP
+ *   normally supplies (omitted by default so the fallback path stays covered),
  *   and `stubAjax($)` — called right after jQuery is installed but before
  *   admin.js's ready callback can run, so a test can stub `$.ajax` ahead of
  *   the page-load `verifyApiKey()` call that fires when `options.apiKey` is
@@ -284,6 +286,13 @@ async function loadAdmin(options) {
     merchant_available_terms: opts.merchantTerms || [14, 30, 60, 90],
     surcharge_grid: opts.stored || {}
   };
+  // Only set when a test opts in, so the default world keeps exercising
+  // admin.js's brand-neutral fallback copy. WC_Twoinc::get_api_key_notices()
+  // is what resolves the product name in production, so a test asserting the
+  // brand reaches the notice supplies these the way that method would.
+  if (opts.apiKeyNotices) {
+    adminSettings.api_key_notices = opts.apiKeyNotices;
+  }
   global.twoinc_admin = adminSettings;
   global.window.twoinc_admin = adminSettings;
   loadAdminSource();

@@ -210,6 +210,12 @@ final class BrandConfigSpec
             'testVerifyApiKeyMalformedResponseNotMiscategorizedAsNotConfigured',
             'testAdminLiveVerificationWarmsCheckoutCache',
             'testCachedStatusMissTimeoutIsShortNotAdminDefault',
+            'testApiKeyNoticesCarryTwoProductNameAndStatusPlaceholder',
+            'testApiKeyNoticesUseOverlayProductNameNotTwo',
+            'testApiKeyNoticeCatalogueWithBadPlaceholdersDegradesNotFatals',
+            'testApiKeyNoticesNeverShipAnUnfillablePlaceholder',
+            'testApiKeyNoticeDroppingTheStatusPlaceholderDegrades',
+            'testApiKeyNoticeCopyIsTranslatedInEveryLocale',
         ];
         foreach ($tests as $test) {
             self::reset();
@@ -239,6 +245,7 @@ final class BrandConfigSpec
         WC_Twoinc_Sole_Trader::reset_cache();
         WC_Twoinc::reset_merchant_record_memo();
         WC_Twoinc_FX::reset_request_cache();
+        unset($GLOBALS['__twoinc_test_translations']);
         $GLOBALS['__twoinc_test_transients'] = [];
         $GLOBALS['__twoinc_test_logs'] = [];
         $GLOBALS['__twoinc_test_as_scheduled'] = [];
@@ -6494,6 +6501,284 @@ final class BrandConfigSpec
         $gateway->get_api_key_verification_status();
         TinyAssert::same(WC_Twoinc::API_KEY_VERIFICATION_TIMEOUT, $gateway->seen_timeout);
         TinyAssert::same(true, WC_Twoinc::API_KEY_VERIFICATION_TIMEOUT < 30);
+    }
+
+    private static function testApiKeyNoticesCarryTwoProductNameAndStatusPlaceholder(): void
+    {
+        $notices = self::gateway()->get_api_key_notices();
+
+        TinyAssert::same(
+            "Two's API returned a service error (HTTP %s). This is likely temporary on Two's side — try again shortly.",
+            $notices['service_error']
+        );
+        TinyAssert::same(
+            "Could not reach Two's API (network or connectivity error). Try again shortly.",
+            $notices['unreachable']
+        );
+        TinyAssert::same('Enter an API key above to enable Two.', $notices['not_configured']);
+        TinyAssert::same(
+            "Two's API returned an unexpected response (HTTP %s).",
+            $notices['unexpected_response']
+        );
+    }
+
+    private static function testApiKeyNoticesUseOverlayProductNameNotTwo(): void
+    {
+        // The brand overlay's admin must never be told to contact "Two":
+        // the notice copy carries the brand's product name, and the '%s'
+        // admin.js substitutes the HTTP status code into must survive the
+        // brand interpolation.
+        self::useTestbrand();
+
+        $notices = self::gateway()->get_api_key_notices();
+
+        foreach (['service_error', 'unreachable', 'not_configured', 'unexpected_response'] as $key) {
+            TinyAssert::true(
+                strpos($notices[$key], 'Testbrand') !== false,
+                "Notice '$key' must name the overlay brand, got: " . $notices[$key]
+            );
+            TinyAssert::true(
+                strpos($notices[$key], 'Two') === false,
+                "Notice '$key' must not name Two, got: " . $notices[$key]
+            );
+        }
+
+        TinyAssert::same(
+            "Testbrand's API returned a service error (HTTP %s). This is likely temporary on Testbrand's side — try again shortly.",
+            $notices['service_error']
+        );
+        TinyAssert::same(
+            "Testbrand's API returned an unexpected response (HTTP %s).",
+            $notices['unexpected_response']
+        );
+    }
+
+    private static function testApiKeyNoticeCatalogueWithBadPlaceholdersDegradesNotFatals(): void
+    {
+        $templates = WC_Twoinc::api_key_notice_templates();
+        // A runtime-installed catalogue is not gated by this repo's msgfmt
+        // check: translate.wordpress.org imports and Loco-edited .mo files can
+        // carry a placeholder the source never had. On PHP 8 sprintf() throws
+        // for that, and this runs inside admin_enqueue_scripts — unhandled it
+        // would take the whole gateway settings page down.
+        $GLOBALS['__twoinc_test_translations'] = [
+            // One placeholder more than the source declares.
+            $templates['service_error'] => 'Tjenestefeil hos %1$s (HTTP %2$s) — %3$s.',
+            // A status placeholder in a template that has none: nothing would
+            // substitute it, so this must degrade rather than render a raw %s.
+            $templates['unreachable'] => 'Nådde ikke %1$s (HTTP %2$s).',
+            // Same shortfall expressed with bare rather than numbered
+            // placeholders. (An outright invalid specifier such as a stray
+            // "100% klar" is deliberately NOT asserted on: PHP 7.4 silently
+            // drops the bad conversion and returns a string where PHP 8
+            // throws, so the two supported floors disagree — and a mangled
+            // sentence is not the failure this guard exists for.)
+            $templates['not_configured'] => 'Skriv inn en nøkkel for %s (%s).',
+        ];
+
+        $notices = self::gateway()->get_api_key_notices();
+
+        TinyAssert::same($templates['unverified'], $notices['service_error']);
+        TinyAssert::same($templates['unverified'], $notices['unreachable']);
+        TinyAssert::same($templates['unverified'], $notices['not_configured']);
+        // Only the broken categories degrade; the rest render normally.
+        TinyAssert::same(
+            "Two's API returned an unexpected response (HTTP %s).",
+            $notices['unexpected_response']
+        );
+        TinyAssert::same('This API key is invalid or has expired.', $notices['invalid_key']);
+        // And no degraded notice carries a placeholder nothing will fill.
+        foreach ($notices as $key => $notice) {
+            if ($key === 'service_error' || $key === 'unexpected_response') {
+                continue; // admin.js substitutes the status code into these two
+            }
+            TinyAssert::true(
+                strpos($notice, '%s') === false,
+                "the '$key' notice must not reach the admin with an unsubstituted placeholder"
+            );
+        }
+        // And the failure is not swallowed silently. Match the message rather
+        // than counting every log line, so an unrelated log cannot satisfy it —
+        // and expect one line PER broken category, naming it: four can break at
+        // once and a single line naming none of them is not diagnosable.
+        TinyAssert::same(3, self::countNoticeMismatchLogs(), 'each broken category must be logged');
+        foreach (['service_error', 'unreachable', 'not_configured'] as $key) {
+            TinyAssert::same(1, self::countNoticeMismatchLogs($key), "the '$key' failure must name itself");
+        }
+
+        // ...but only once per category. These notices are rebuilt on every
+        // wp-admin page view and a bad catalogue stays bad, so an unthrottled
+        // log would grow without bound.
+        self::gateway()->get_api_key_notices();
+        self::gateway()->get_api_key_notices();
+        TinyAssert::same(3, self::countNoticeMismatchLogs(), 'the mismatch log must be throttled per category');
+
+        // Assert the TRANSIENT, not just the count: a per-request static would
+        // satisfy the repeat-call assertion above and still write a line on
+        // every wp-admin page view, which is the thing that has to stop. The
+        // transient is the only observable difference between the two.
+        foreach (['service_error', 'unreachable', 'not_configured'] as $key) {
+            TinyAssert::true(
+                (bool) get_transient(WC_Twoinc_Brand::prefixed_name('notice_format_logged_' . $key)),
+                "the '$key' log must be throttled by a transient that outlives the request"
+            );
+        }
+        // A category whose translation is fine must not be throttled — that
+        // would suppress its first real failure.
+        TinyAssert::same(
+            false,
+            get_transient(WC_Twoinc_Brand::prefixed_name('notice_format_logged_unexpected_response'))
+        );
+    }
+
+    private static function countNoticeMismatchLogs(string $category = ''): int
+    {
+        $needle = $category === ''
+            ? 'does not match the source placeholders'
+            : 'the "' . $category . '" API key notice does not match';
+
+        return count(array_filter(
+            $GLOBALS['__twoinc_test_logs'],
+            static function ($entry) use ($needle) {
+                return strpos($entry['message'] ?? '', $needle) !== false;
+            }
+        ));
+    }
+
+    private static function testApiKeyNoticeDroppingTheStatusPlaceholderDegrades(): void
+    {
+        $templates = WC_Twoinc::api_key_notice_templates();
+        // vsprintf accepts a format string that uses fewer arguments than it is
+        // given, so a translation that simply omits the status placeholder
+        // formats cleanly — and the notice loses the HTTP status code, the one
+        // detail that tells an admin which failure they are looking at. There is
+        // no error to catch here; only the missing placeholder reveals it.
+        $GLOBALS['__twoinc_test_translations'] = [
+            $templates['service_error'] => 'Tjenestefeil hos %1$s. Prøv igjen snart.',
+        ];
+
+        $notices = self::gateway()->get_api_key_notices();
+
+        TinyAssert::same($templates['unverified'], $notices['service_error']);
+        TinyAssert::same(1, self::countNoticeMismatchLogs('service_error'));
+        // A translation that KEEPS the placeholder is untouched.
+        TinyAssert::same(
+            "Two's API returned an unexpected response (HTTP %s).",
+            $notices['unexpected_response']
+        );
+        TinyAssert::same(0, self::countNoticeMismatchLogs('unexpected_response'));
+    }
+
+    private static function testApiKeyNoticesNeverShipAnUnfillablePlaceholder(): void
+    {
+        $templates = WC_Twoinc::api_key_notice_templates();
+        // The three notices the plugin does not format, and the fallback the
+        // degraded path returns, are all translated strings too — nothing
+        // downstream substitutes into them, so a catalogue that invented a
+        // specifier would otherwise print it verbatim at the admin. Covers the
+        // shapes str_replace('%s') alone would have missed.
+        $GLOBALS['__twoinc_test_translations'] = [
+            $templates['invalid_key'] => 'Nøkkelen er ugyldig %s.',
+            $templates['request_failed'] => 'Kunne ikke fullføre %1$s.',
+            $templates['unverified'] => 'Kunne ikke verifisere %d.',
+        ];
+
+        $notices = self::gateway()->get_api_key_notices();
+
+        TinyAssert::same('Nøkkelen er ugyldig .', $notices['invalid_key']);
+        TinyAssert::same('Kunne ikke fullføre .', $notices['request_failed']);
+        TinyAssert::same('Kunne ikke verifisere .', $notices['unverified']);
+
+        // An escaped percent and a literal percent in prose both survive on the
+        // notices the plugin does not format at all.
+        $GLOBALS['__twoinc_test_translations'] = [
+            $templates['invalid_key'] => 'Bare 100% av nøklene, 50%% av tiden.',
+        ];
+        TinyAssert::same(
+            'Bare 100% av nøklene, 50%% av tiden.',
+            self::gateway()->get_api_key_notices()['invalid_key']
+        );
+
+        // The two status-free categories ARE formatted, and formatting
+        // UNescapes '%%s' into a literal '%s'. Nothing downstream substitutes
+        // into those two — admin.js only fills the status code in the other
+        // two — so it would render verbatim at the admin unless the formatted
+        // result is stripped as well.
+        $GLOBALS['__twoinc_test_translations'] = [
+            $templates['unreachable'] => 'Nådde ikke %1$s (%%s).',
+            $templates['not_configured'] => 'Skriv inn en nøkkel for %1$s (%%d).',
+        ];
+        $notices = self::gateway()->get_api_key_notices();
+        TinyAssert::same('Nådde ikke Two ().', $notices['unreachable']);
+        TinyAssert::same('Skriv inn en nøkkel for Two ().', $notices['not_configured']);
+    }
+
+    private static function testApiKeyNoticeCopyIsTranslatedInEveryLocale(): void
+    {
+        $languages = dirname(__DIR__, 2) . '/languages/';
+
+        // Read the msgids off the live source rather than retyping them: the
+        // regression this exists to catch is the copy being reworded without
+        // the catalogues being regenerated, and a hardcoded copy of the
+        // literal cannot see that. __() is stubbed to identity here, so
+        // api_key_notice_templates() carries the untranslated source strings.
+        $msgids = WC_Twoinc::api_key_notice_templates();
+        // The four brand-bearing entries are the point of TWO-25326's fix; the
+        // other three carry no placeholder and are checked alongside them.
+        foreach (['service_error', 'unreachable', 'not_configured', 'unexpected_response'] as $key) {
+            TinyAssert::true(
+                strpos($msgids[$key], '%') !== false,
+                "the '$key' msgid must carry a placeholder for the brand, not a hardcoded product name"
+            );
+            TinyAssert::true(
+                strpos($msgids[$key], 'Two') === false,
+                "the '$key' msgid must not hardcode a product name"
+            );
+        }
+
+        $pot = file_get_contents($languages . 'twoinc-payment-gateway.pot');
+        foreach ($msgids as $key => $msgid) {
+            // The length floor is load-bearing: a degenerate short msgid would
+            // make every strpos() below vacuously true.
+            TinyAssert::true(
+                is_string($msgid) && strlen($msgid) > 20,
+                "the '$key' notice must carry copy to translate"
+            );
+            TinyAssert::true(
+                strpos($pot, $msgid) !== false,
+                "the .pot is missing the '$key' API-key notice msgid — regenerate it"
+            );
+        }
+
+        // One recognisable fragment per locale is enough: the msgid assertion
+        // pins the lookup, and a fragment survives any later rewording of the
+        // rest of the sentence.
+        $fragments = [
+            'nb_NO' => ['returnerte en tjenestefeil', 'Kunne ikke nå API-et til %s'],
+            'nl_NL' => ['gaf een servicefout terug', 'Kon de API van %s niet bereiken'],
+            'sv_SE' => ['returnerade ett tjänstefel', 'Det gick inte att nå API:et för %s'],
+        ];
+
+        foreach ($fragments as $locale => $expected) {
+            $mo = file_get_contents($languages . 'twoinc-payment-gateway-' . $locale . '.mo');
+            foreach ($msgids as $key => $msgid) {
+                // A msgid that has drifted from the source literal misses the
+                // lookup and renders English however good the msgstr is. __()
+                // is stubbed to identity here, so nothing else can see that.
+                TinyAssert::true(
+                    strpos($mo, $msgid) !== false,
+                    "compiled $locale msgid for '$key' has drifted from the source literal "
+                        . '(recompile with msgfmt after editing the .po?)'
+                );
+            }
+            foreach ($expected as $fragment) {
+                TinyAssert::true(
+                    strpos($mo, $fragment) !== false,
+                    "compiled $locale catalogue is missing the API-key notice copy — "
+                        . 'that shop would render English'
+                );
+            }
+        }
     }
 }
 
