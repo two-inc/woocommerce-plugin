@@ -6001,7 +6001,10 @@ final class BrandConfigSpec
             TinyAssert::same(
                 1,
                 preg_match(
-                    '#<div class="twoinc-pay-box ' . preg_quote($class, '#') . ' hidden"[^>]*>[^<]*</div>#',
+                    // `[^<]+`, not `[^<]*`: an EMPTY box passed the star form
+                    // (review round 2), and a verdict box with no sentence in it
+                    // is exactly as broken as one with a heading above it.
+                    '#<div class="twoinc-pay-box ' . preg_quote($class, '#') . ' hidden"[^>]*>[^<]+</div>#',
                     $html
                 ),
                 $label . ' must hold a bare sentence, with no title or nested markup'
@@ -6943,16 +6946,14 @@ final class BrandConfigSpec
                 "the $locale catalogue does not pair the loader sentence with its translation"
             );
 
-            // And the compiled catalogue is what WordPress reads. The full
-            // .po/.mo agreement check is .github/scripts/check-catalogues.sh;
-            // this only pins that this entry made it through msgfmt, because a
-            // .po edited without recompiling renders English.
-            $mo = (string) file_get_contents(substr($po, 0, -3) . '.mo');
-            TinyAssert::true(
-                strpos($mo, $msgid) !== false && strpos($mo, $expected[$locale]) !== false,
-                "compiled $locale catalogue is missing the loader sentence — "
-                    . 'recompile with msgfmt after editing the .po'
-            );
+            // No assertion on the compiled .mo here (review round 2). The obvious
+            // one — two independent strpos over the binary — has exactly the
+            // non-pairing flaw the .po check above was fixed for: it passes with
+            // this msgid's own msgstr empty and the expected text belonging to a
+            // different entry. .github/scripts/check-catalogues.sh already decodes
+            // every .mo with msgunfmt and diffs it against its .po, so "the .po is
+            // right" plus that gate IS "the .mo is right" — and that is a real
+            // gate rather than a substring search over binary.
         }
     }
 
@@ -6967,13 +6968,43 @@ final class BrandConfigSpec
      */
     private static function poTranslation(string $po, string $msgid): string
     {
-        $pattern = '/^msgid "' . preg_quote(addcslashes($msgid, '"\\'), '/') . '"\R'
-            . 'msgstr "(.*)"$/m';
-        if (preg_match($pattern, $po, $m) !== 1) {
-            return '';
+        // Split into entries on blank lines and read each one's fields, rather
+        // than pattern-matching a msgid/msgstr pair out of the whole file.
+        //
+        // Round 2 tried the regex and it could not be made safe: every attempt to
+        // require that the line above the msgid is not a `msgctxt` was defeated by
+        // the newline-matching alternative sliding forward one line. A `msgctxt`
+        // entry sharing this msgid MUST NOT be matched — gettext treats it as a
+        // different message and __() with no context resolves the context-less
+        // entry, so the bad case is the context-less one sitting at `msgstr ""`
+        // while the contextual one carries the translation: a shop rendering
+        // English with this test saying translated.
+        //
+        // Deliberately minimal beyond that: single-line `msgid`/`msgstr` only,
+        // which is the shape every entry this is used for has. A multi-line or
+        // plural entry yields '' and fails the caller's assertion loudly rather
+        // than being silently mis-read — a wrong-but-plausible answer is the one
+        // outcome a catalogue check must not produce.
+        //
+        // `\R` throughout so a CRLF catalogue (a Windows checkout, core.autocrlf)
+        // parses identically; a mystery '' there would be a real time sink.
+        foreach (preg_split('/(?:\R)(?:[[:blank:]]*\R)+/', $po) as $entry) {
+            $fields = [];
+            foreach (preg_split('/\R/', $entry) as $line) {
+                if (preg_match('/^(msgctxt|msgid|msgstr) "(.*)"[[:blank:]]*$/', $line, $m) === 1) {
+                    // First occurrence wins, so a continuation line cannot
+                    // overwrite the field it continues.
+                    $fields[$m[1]] = $fields[$m[1]] ?? $m[2];
+                }
+            }
+            if (isset($fields['msgctxt']) || ($fields['msgid'] ?? null) !== addcslashes($msgid, '"\\')) {
+                continue;
+            }
+
+            return stripcslashes($fields['msgstr'] ?? '');
         }
 
-        return stripcslashes($m[1]);
+        return '';
     }
 }
 

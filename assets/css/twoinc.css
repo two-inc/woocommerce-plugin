@@ -64,6 +64,19 @@
   gap: 8px;
   padding: 12px 16px;
 }
+/*
+ * Its own hiding rule, following the same idiom as `.twoinc-term-chips.hidden`
+ * and `.twoinc-sole-trader-toggle.hidden` below (review round 2). The blanket
+ * `.hidden` at the top of this file is `display: none !important`, so it does
+ * beat the `display: flex` above — but only on the strength of that
+ * `!important`, since the two declarations have equal specificity and this one
+ * comes later. Two classes beats one whatever the source order, so the loader
+ * stays hidden if the `!important` is ever tidied away, which is exactly the
+ * kind of edit nobody would connect to a permanently visible spinner.
+ */
+.twoinc-pay-box.twoinc-loader.hidden {
+  display: none;
+}
 .twoinc-loader__spinner {
   display: inline-block;
   flex-shrink: 0;

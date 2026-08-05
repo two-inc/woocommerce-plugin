@@ -2861,6 +2861,15 @@ let twoincDomHelper = {
         if (intentBox.data("twoincDefaultText") === undefined) {
           intentBox.data("twoincDefaultText", intentBox.text());
         }
+        // Unhidden BEFORE its text is written, not after (review round 2).
+        // `role="status"`/`role="alert"` only announce a content change made
+        // while the region is IN the accessibility tree, and the first line of
+        // this function hides every pay-box — so writing the sentence first and
+        // revealing second mutated a region that was not in the tree, then
+        // revealed a region whose content had not changed. Most likely outcome:
+        // no announcement at all. Both happen in the same task, so the tree is
+        // computed once at the end of it and this is one announcement, not two.
+        intentBox.removeClass("hidden");
         let companyTemplate = intentBox.attr("data-company-template");
         let captured = twoincSelectWooHelper.readCapturedCompany();
         let companyText = twoincDomHelper.getCompanyLabelText(
@@ -2882,13 +2891,16 @@ let twoincDomHelper = {
         } else {
           intentBox.text(intentBox.data("twoincDefaultText"));
         }
-        intentBox.removeClass("hidden");
       } else if (action === "errored") {
         // TWO-25326 §7.3: the "not available" box carries the same
         // data-company-template/token mechanism as the approved notice
         // above, but ONLY on `.twoinc-err-payment-default` — the phone-number
         // box is a fixed, unrelated message and never gets one.
         let $errBox = jQuery(".twoinc-pay-box" + errSelector);
+        // Unhidden first, for the announcement reason given in the approved
+        // branch above (review round 2). The phone-number box has no text to
+        // rewrite, so for it this is simply the reveal.
+        $errBox.removeClass("hidden");
         if (errSelector === ".twoinc-err-payment-default") {
           if ($errBox.data("twoincDefaultText") === undefined) {
             $errBox.data("twoincDefaultText", $errBox.text());
@@ -2909,7 +2921,6 @@ let twoincDomHelper = {
             $errBox.text($errBox.data("twoincDefaultText"));
           }
         }
-        $errBox.removeClass("hidden");
       }
     }
   },
@@ -4030,8 +4041,18 @@ class Twoinc {
       // Ticks spent waiting for a readable cart total. The interval body
       // cannot proceed without one and used to retry forever; now that the
       // loading state goes up when a check is ARMED, forever means a spinner
-      // that never resolves. See the `!gross_amount` branch.
-      priceWaitTicks: 0
+      // that never resolves. See the `!gross_amount` branch. Reset in exactly
+      // one place — where a check is armed — because that is the only place it
+      // can be stale by the time it matters (review round 2 found three further
+      // resets that no test could distinguish from their absence).
+      priceWaitTicks: 0,
+      // The timer that waits out a WooCommerce checkout re-render before
+      // painting a verdict. Held here rather than in a local, so that
+      // abandonOrderIntentCheck() can cancel it: it used to be unreachable, and
+      // an orphan copy of it would paint a verdict onto a tile that had already
+      // been reset — after Place Order, on a checkout mid-submit (review round
+      // 2).
+      renderInterval: null
     };
     this.orderIntentLog = {};
     this.customerCompany = {
@@ -4424,11 +4445,27 @@ class Twoinc {
    * changed.
    */
   abandonOrderIntentCheck() {
+    // Only touch the UI when there was actually something in flight (review
+    // round 2). `#place_order` fires on clicks that never submit — an HTML5
+    // constraint failure, WooCommerce's own client-side validation — and
+    // `checkout_error` fires for errors that have nothing to do with this
+    // gateway, such as a missing postcode. Resetting unconditionally wiped a
+    // perfectly good verdict in both cases, and neither fires
+    // `updated_checkout`, so nothing brought it back.
+    const wasRunning =
+      this.orderIntentCheck.interval !== null ||
+      this.orderIntentCheck.renderInterval !== null ||
+      this.orderIntentCheck.pendingCheck;
+
     clearInterval(this.orderIntentCheck.interval);
     this.orderIntentCheck.interval = null;
+    clearInterval(this.orderIntentCheck.renderInterval);
+    this.orderIntentCheck.renderInterval = null;
     this.orderIntentCheck.pendingCheck = false;
-    this.orderIntentCheck.priceWaitTicks = 0;
-    twoincDomHelper.togglePaySubtitleDesc();
+
+    if (wasRunning) {
+      twoincDomHelper.togglePaySubtitleDesc();
+    }
   }
 
   /**
@@ -4546,14 +4583,11 @@ class Twoinc {
         clearInterval(Twoinc.getInstance().orderIntentCheck.interval);
         Twoinc.getInstance().orderIntentCheck.interval = null;
         Twoinc.getInstance().orderIntentCheck.pendingCheck = false;
-        Twoinc.getInstance().orderIntentCheck.priceWaitTicks = 0;
         twoincDomHelper.togglePaySubtitleDesc(
           ...Twoinc.getInstance().orderIntentLog[hashedBody].split("|")
         );
         return;
       }
-      Twoinc.getInstance().orderIntentCheck["lastCheckHash"] = hashedBody;
-
       if (!Twoinc.getInstance().isReadyApprovalCheck()) {
         // The loading state went up when this check was armed, so abandoning it
         // here has to take it down again — otherwise "Checking availability"
@@ -4567,7 +4601,6 @@ class Twoinc {
       clearInterval(Twoinc.getInstance().orderIntentCheck.interval);
       Twoinc.getInstance().orderIntentCheck.interval = null;
       Twoinc.getInstance().orderIntentCheck.pendingCheck = false;
-      Twoinc.getInstance().orderIntentCheck.priceWaitTicks = 0;
 
       // Re-asserted rather than relied upon from getApproval(): a `pendingCheck`
       // re-arm comes straight back here, and the run of ticks spent waiting for
@@ -4597,8 +4630,15 @@ class Twoinc {
           document.querySelector("#tracking_id").value = response.tracking_id;
         }
 
-        // Display messages and update order intent logs
-        Twoinc.getInstance().processOrderIntentResponse(response);
+        // Display messages and update order intent logs. The hash is passed
+        // rather than read back off the instance (review round 2): it used to
+        // live in a single `lastCheckHash` slot, and because the interval is
+        // disarmed BEFORE the request goes out, a second check could be armed
+        // and overwrite that slot while the first was still in flight — so the
+        // first response was cached under the second request's body. With the
+        // cached branch now disarming, that mis-filed entry would be served
+        // forever with no request ever issued again.
+        Twoinc.getInstance().processOrderIntentResponse(response, hashedBody);
       });
 
       approvalResponse.fail(function (response) {
@@ -4608,7 +4648,7 @@ class Twoinc {
         twoincDomHelper.deselectPaymentMethod();
 
         // Display messages and update order intent logs
-        Twoinc.getInstance().processOrderIntentResponse(response);
+        Twoinc.getInstance().processOrderIntentResponse(response, hashedBody);
       });
     }, 1000);
   }
@@ -4616,7 +4656,7 @@ class Twoinc {
   /**
    * Update page after order intent request complete
    */
-  processOrderIntentResponse(response) {
+  processOrderIntentResponse(response, hashedBody) {
     let displayMsgId = "";
     let invalidFields = [];
 
@@ -4655,21 +4695,51 @@ class Twoinc {
         }
       }
 
-      // Update order intent log
       this.orderIntentCheck["lastCheckOk"] = response.approved;
-      // this.orderIntentLog = {}
-      this.orderIntentLog[this.orderIntentCheck["lastCheckHash"]] = displayMsgId;
+
+      // Cache the verdict against the request body that produced it — but only
+      // when it IS a verdict (review round 2).
+      //
+      // A `.done` response carries no `status` (jQuery hands the parsed body to
+      // the callback), and a 4xx is the backend declining with a reason. Those
+      // are answers. A `status` of 0 (offline blip, timeout) or a 5xx is the
+      // request having failed, and caching one of those declined this cart and
+      // company for the rest of the page — permanently, since the cached branch
+      // disarms the timer and no request is ever retried. One dropped
+      // connection would lose the sale.
+      const settled =
+        response.status === undefined || (response.status >= 400 && response.status < 500);
+      if (hashedBody && settled) {
+        this.orderIntentLog[hashedBody] = displayMsgId;
+      }
     }
 
-    // Update twoinc message
-    let twoincSubtitleExistCheck = setInterval(function () {
+    // Paint the verdict, once WooCommerce is not mid-re-render — its own
+    // `updated_checkout` rebuilds the payment box and would discard anything
+    // written into it.
+    //
+    // Bounded, and cancellable (review round 2). This is the ONLY code that
+    // takes the loading state down, so an overlay that never clears used to mean
+    // "Checking availability" for the rest of the page — the same defect the
+    // cart-total wait was bounded for. And the timer used to be a local, so
+    // abandonOrderIntentCheck() could not reach it: a Place Order click reset the
+    // tile and an orphan copy of this then painted a verdict back onto a
+    // checkout that was already mid-submit, with the gateway radio already
+    // deselected.
+    let renderWaitTicks = 0;
+    clearInterval(this.orderIntentCheck.renderInterval);
+    this.orderIntentCheck.renderInterval = setInterval(() => {
       if (jQuery("#payment .blockOverlay").length === 0) {
-        // woocommerce's update_checkout is not running
         twoincDomHelper.togglePaySubtitleDesc(...displayMsgId.split("|"));
         for (let fld of invalidFields) {
           twoincDomHelper.markFieldInvalid(fld);
         }
-        clearInterval(twoincSubtitleExistCheck);
+        clearInterval(this.orderIntentCheck.renderInterval);
+        this.orderIntentCheck.renderInterval = null;
+        return;
+      }
+      if (++renderWaitTicks >= 10) {
+        this.abandonOrderIntentCheck();
       }
     }, 1000);
   }

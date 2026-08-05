@@ -94,17 +94,24 @@ describe("order-intent loading state and stale-verdict clearing", () => {
   function buildPaymentTile() {
     $(document.body).append(
       '<li class="wc_payment_method"><div class="payment_box">' +
+        // The ARIA roles are the ones the PHP renderer emits, so the reveal
+        // ordering that makes them announce anything is exercised on real
+        // markup (review round 2).
         '<div class="twoinc-pay-box twoinc-loader hidden" role="status">' +
         '<span class="twoinc-loader__spinner" aria-hidden="true"></span>' +
         '<span class="twoinc-loader__text">Checking availability</span>' +
         "</div>" +
-        '<div class="twoinc-pay-box twoinc-intent-approved hidden" data-company-template="{company}">' +
+        '<div class="twoinc-pay-box twoinc-intent-approved hidden" role="status" ' +
+        'data-company-template="{company}">' +
         "NO_COMPANY_APPROVED" +
         "</div>" +
-        '<div class="twoinc-pay-box twoinc-err-payment-default hidden" data-company-template="{company}">' +
+        '<div class="twoinc-pay-box twoinc-err-payment-default hidden" role="alert" ' +
+        'data-company-template="{company}">' +
         "NO_COMPANY_DECLINED" +
         "</div>" +
-        '<div class="twoinc-pay-box twoinc-err-phone-number hidden">Phone number is invalid.</div>' +
+        '<div class="twoinc-pay-box twoinc-err-phone-number hidden" role="alert">' +
+        "Phone number is invalid." +
+        "</div>" +
         "</div></li>"
     );
     $("form[name='checkout']").append(
@@ -231,6 +238,11 @@ describe("order-intent loading state and stale-verdict clearing", () => {
 
   describe("the loader survives the paths that reset every pay-box", () => {
     test("updateElements() leaves the loader on screen, not blank", () => {
+      // Positive control (review round 2): `shown()` is false for a hidden box
+      // AND for one that is not there, so the loader has to be proven absent
+      // before it is proven present, or a selector typo passes.
+      expect(shown(".twoinc-loader")).toBe(false);
+
       // `updateElements()` runs a blanket hide-everything reset and arms an
       // approval pass. Run in the old order — approval first — the reset
       // immediately hid the loader the approval pass had just shown, and the
@@ -277,6 +289,9 @@ describe("order-intent loading state and stale-verdict clearing", () => {
         jest.advanceTimersByTime(1000);
 
         expect(shown(".twoinc-loader")).toBe(false);
+        // Proof the box is still THERE, so the assertion above is about it being
+        // hidden and not about a mistyped selector (review round 2).
+        expect($(".twoinc-pay-box.twoinc-loader").length).toBe(1);
         expect(ajax.calls.length).toBe(0);
       } finally {
         ajax.restore();
@@ -316,6 +331,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
         // Loader-up asserted here too, not only on the approved path (review
         // round 1) — otherwise "loader down afterwards" is one-sided.
         expect(shown(".twoinc-loader")).toBe(true);
+        expect($(":input[value='" + GATEWAY_ID + "']").prop("checked")).toBe(true);
 
         ajax.last().succeed({ approved: false });
         jest.advanceTimersByTime(1000);
@@ -325,6 +341,12 @@ describe("order-intent loading state and stale-verdict clearing", () => {
         expect($(".twoinc-pay-box.twoinc-err-payment-default").text()).toBe(
           "ACME Widgets Ltd (12345678)"
         );
+        // The gateway is deselected under the buyer (review round 2). This is
+        // the behaviour the failure boxes' `role="alert"` — assertive, not
+        // polite — is justified by, and it was asserted nowhere: settling
+        // through the real deferred is what reaches it, since
+        // processOrderIntentResponse() alone does not deselect.
+        expect($(":input[value='" + GATEWAY_ID + "']").prop("checked")).toBe(false);
       } finally {
         ajax.restore();
       }
@@ -373,6 +395,46 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       }
     });
 
+    test("an error_code-only failure body still routes to the phone box", () => {
+      // The `error_code` fallback was rewritten in round 1 (`"x" in obj && obj.x`
+      // -> `obj.x`) and covered by nothing — deleting the whole branch passed
+      // every test (review round 2).
+      const ajax = harness.stubAjax($);
+      try {
+        failTheCheckWith(ajax, {
+          approved: false,
+          status: 400,
+          responseJSON: { error_code: "Invalid phone number" }
+        });
+
+        expect(shown(".twoinc-err-phone-number")).toBe(true);
+        expect(shown(".twoinc-err-payment-default")).toBe(false);
+      } finally {
+        ajax.restore();
+      }
+    });
+
+    test("a real transport failure deselects the gateway", () => {
+      // The fail handler's own deselection, reached through the real deferred —
+      // `failTheCheckWith()` calls processOrderIntentResponse() directly and so
+      // cannot see it (review round 2).
+      const ajax = harness.stubAjax($);
+      try {
+        instance.getApproval();
+        jest.advanceTimersByTime(1000);
+        expect($(":input[value='" + GATEWAY_ID + "']").prop("checked")).toBe(true);
+
+        ajax.last().fail("error", "error");
+        jest.advanceTimersByTime(1000);
+
+        expect($(":input[value='" + GATEWAY_ID + "']").prop("checked")).toBe(false);
+        expect(shown(".twoinc-loader")).toBe(false);
+        expect(shown(".twoinc-err-payment-default")).toBe(true);
+      } finally {
+        ajax.restore();
+      }
+    });
+
     test("an invalid-phone-number failure shows the phone box, not the generic one", () => {
       // The ONLY route to `.twoinc-err-phone-number` called
       // `invalidFields.append()`, which Array does not have — so it threw every
@@ -388,7 +450,11 @@ describe("order-intent loading state and stale-verdict clearing", () => {
         });
 
         expect(shown(".twoinc-err-phone-number")).toBe(true);
+        // Positive controls, so "the generic box is not showing" cannot pass on a
+        // missing element (review round 2).
+        expect($(".twoinc-pay-box.twoinc-err-payment-default").length).toBe(1);
         expect(shown(".twoinc-err-payment-default")).toBe(false);
+        expect($(".twoinc-pay-box.twoinc-loader").length).toBe(1);
         expect(shown(".twoinc-loader")).toBe(false);
         // The field the message is about is marked up as invalid alongside it.
         expect($("#billing_phone_field").hasClass("woocommerce-invalid")).toBe(true);
@@ -416,6 +482,15 @@ describe("order-intent loading state and stale-verdict clearing", () => {
         expect(shown(".twoinc-loader")).toBe(false);
         expect(instance.orderIntentCheck.interval).toBeNull();
         expect(ajax.calls.length).toBe(0);
+
+        // And the counter is reset for the NEXT check, which is the only reason
+        // the reset in getApproval() exists (review round 2). Left at 10, a
+        // second price wait would give up after a single tick.
+        instance.getApproval();
+        jest.advanceTimersByTime(9000);
+        expect(shown(".twoinc-loader")).toBe(true);
+        jest.advanceTimersByTime(1000);
+        expect(shown(".twoinc-loader")).toBe(false);
       } finally {
         ajax.restore();
       }
@@ -585,16 +660,300 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     }
   });
 
+  describe("the verdict paint waits out a checkout re-render, but not forever", () => {
+    /** Put WooCommerce's own blocking overlay up, which is what the wait is for. */
+    function blockCheckout() {
+      $(document.body).append('<div id="payment"><div class="blockOverlay"></div></div>');
+    }
+
+    test("a verdict is held back while the overlay is up", () => {
+      const ajax = harness.stubAjax($);
+      try {
+        blockCheckout();
+        instance.getApproval();
+        jest.advanceTimersByTime(1000);
+        ajax.last().succeed({ approved: true });
+
+        jest.advanceTimersByTime(5000);
+
+        // Painting into the payment box mid-re-render loses the verdict:
+        // `updated_checkout` rebuilds that box.
+        expect(shown(".twoinc-intent-approved")).toBe(false);
+        expect(shown(".twoinc-loader")).toBe(true);
+
+        $("#payment .blockOverlay").remove();
+        jest.advanceTimersByTime(1000);
+
+        expect(shown(".twoinc-intent-approved")).toBe(true);
+        expect(shown(".twoinc-loader")).toBe(false);
+      } finally {
+        ajax.restore();
+      }
+    });
+
+    test("an overlay that never clears gives up rather than spinning forever", () => {
+      // This wait is the ONLY code that takes the loading state down, so an
+      // overlay stuck up meant "Checking availability" for the rest of the page —
+      // the same defect the cart-total wait was bounded for in round 1, left
+      // unbounded here (review round 2).
+      const ajax = harness.stubAjax($);
+      try {
+        blockCheckout();
+        instance.getApproval();
+        jest.advanceTimersByTime(1000);
+        ajax.last().succeed({ approved: true });
+
+        jest.advanceTimersByTime(9000);
+        expect(shown(".twoinc-loader")).toBe(true);
+
+        jest.advanceTimersByTime(1000);
+        expect(shown(".twoinc-loader")).toBe(false);
+        expect(shown(".twoinc-intent-approved")).toBe(false);
+        expect(instance.orderIntentCheck.renderInterval).toBeNull();
+      } finally {
+        ajax.restore();
+      }
+    });
+
+    test("abandoning the check cancels a pending paint, so no verdict lands afterwards", () => {
+      // The wait used to be held in a local, unreachable from
+      // abandonOrderIntentCheck(): a Place Order click reset the tile and an
+      // orphan copy of the wait then painted a verdict back onto a checkout
+      // already mid-submit, with the gateway radio already deselected (review
+      // round 2).
+      const ajax = harness.stubAjax($);
+      try {
+        blockCheckout();
+        instance.getApproval();
+        jest.advanceTimersByTime(1000);
+        ajax.last().succeed({ approved: true });
+        expect(instance.orderIntentCheck.renderInterval).not.toBeNull();
+
+        instance.abandonOrderIntentCheck();
+        $("#payment .blockOverlay").remove();
+        jest.advanceTimersByTime(10000);
+
+        expect(shown(".twoinc-intent-approved")).toBe(false);
+        expect($(".twoinc-pay-box.twoinc-intent-approved").length).toBe(1);
+        expect(shown(".twoinc-loader")).toBe(false);
+      } finally {
+        ajax.restore();
+      }
+    });
+  });
+
+  describe("what gets cached, and against which request", () => {
+    test("two overlapping checks cache their verdicts under their own bodies", () => {
+      // `lastCheckHash` was one slot shared by every request, and the interval is
+      // disarmed BEFORE the request goes out — so a second check armed while the
+      // first was in flight overwrote it, and the first response was filed under
+      // the second body. With the cached branch now disarming, that mis-filed
+      // entry would be served forever (review round 2).
+      const ajax = harness.stubAjax($);
+      try {
+        instance.getApproval();
+        jest.advanceTimersByTime(1000);
+        expect(ajax.calls.length).toBe(1);
+
+        // A different cart total => a different request body => a different hash.
+        $(".order-total .woocommerce-Price-amount").text("250.00");
+        instance.getApproval();
+        jest.advanceTimersByTime(1000);
+        expect(ajax.calls.length).toBe(2);
+
+        // First response settles LAST, which is the ordering that mis-filed it.
+        ajax.calls[1].succeed({ approved: false });
+        ajax.calls[0].succeed({ approved: false });
+        jest.advanceTimersByTime(1000);
+
+        expect(Object.keys(instance.orderIntentLog).length).toBe(2);
+      } finally {
+        ajax.restore();
+      }
+    });
+
+    test("a transport failure is not cached, so the next check retries", () => {
+      // A dropped connection is not a verdict. Cached, it declined this cart and
+      // company for the rest of the page — permanently, since the cached branch
+      // disarms and no request is ever retried. One blip would lose the sale
+      // (review round 2).
+      const ajax = harness.stubAjax($);
+      try {
+        instance.getApproval();
+        jest.advanceTimersByTime(1000);
+        ajax.last().fail("error", "error");
+        jest.advanceTimersByTime(1000);
+
+        expect(shown(".twoinc-err-payment-default")).toBe(true);
+        expect(Object.keys(instance.orderIntentLog).length).toBe(0);
+
+        // Same body as before: a cached entry would answer it without a request.
+        instance.getApproval();
+        jest.advanceTimersByTime(1000);
+        expect(ajax.calls.length).toBe(2);
+      } finally {
+        ajax.restore();
+      }
+    });
+
+    test("a 4xx business decline IS cached", () => {
+      // The backend declining with a reason is an answer, and re-asking it on
+      // every checkout re-render is what the cache exists to avoid. Pinned so the
+      // guard above cannot be widened into "never cache".
+      const ajax = harness.stubAjax($);
+      try {
+        instance.getApproval();
+        jest.advanceTimersByTime(1000);
+        instance.processOrderIntentResponse(
+          { approved: false, status: 422, responseJSON: { error_code: "TOO_BIG" } },
+          "hash-422"
+        );
+
+        expect(instance.orderIntentLog["hash-422"]).toBe("errored|.twoinc-err-payment-default");
+      } finally {
+        ajax.restore();
+      }
+    });
+  });
+
+  describe("nothing in flight means nothing to reset", () => {
+    test("a checkout error unrelated to this gateway leaves a good verdict alone", () => {
+      // `#place_order` fires on clicks that never submit (an HTML5 constraint
+      // failure, WooCommerce's own validation) and `checkout_error` fires for a
+      // missing postcode. Resetting unconditionally wiped a perfectly good
+      // verdict, and neither event fires `updated_checkout`, so nothing brought
+      // it back (review round 2).
+      dom.togglePaySubtitleDesc("intent-approved");
+      expect(shown(".twoinc-intent-approved")).toBe(true);
+      expect(instance.orderIntentCheck.interval).toBeNull();
+
+      instance.abandonOrderIntentCheck();
+
+      expect(shown(".twoinc-intent-approved")).toBe(true);
+    });
+
+    test("but a check that WAS in flight is still reset", () => {
+      instance.getApproval();
+      expect(shown(".twoinc-loader")).toBe(true);
+
+      instance.abandonOrderIntentCheck();
+
+      expect(shown(".twoinc-loader")).toBe(false);
+    });
+  });
+
+  describe("a verdict is announced, not silently swapped in", () => {
+    /**
+     * Record the order of mutations to one box: `attributes` when the `hidden`
+     * class moves, `childList`/`characterData` when its sentence is written.
+     *
+     * @param {Element} node
+     * @returns {{records: Array, stop: Function}}
+     */
+    function watch(node) {
+      const records = [];
+      const observer = new MutationObserver(function (list) {
+        for (const record of list) records.push(record.type);
+      });
+      observer.observe(node, {
+        attributes: true,
+        childList: true,
+        characterData: true,
+        subtree: true
+      });
+      return {
+        records: records,
+        stop: function () {
+          observer.takeRecords().forEach((r) => records.push(r.type));
+          observer.disconnect();
+        }
+      };
+    }
+
+    test("the box is revealed BEFORE its sentence is written", () => {
+      // `role="status"`/`role="alert"` only announce a content change made while
+      // the region is in the accessibility tree. Writing the sentence first and
+      // revealing second mutated a region that was not in the tree, then revealed
+      // one whose content had not changed — most likely no announcement at all
+      // (review round 2). Both happen in one task, so the tree is computed once
+      // and this is one announcement, not two.
+      const box = document.querySelector(".twoinc-pay-box.twoinc-intent-approved");
+      const seen = watch(box);
+
+      dom.togglePaySubtitleDesc("intent-approved");
+      seen.stop();
+
+      const firstText = seen.records.findIndex((t) => t !== "attributes");
+      const lastAttr = seen.records.lastIndexOf("attributes");
+      expect(firstText).toBeGreaterThan(-1);
+      expect(lastAttr).toBeLessThan(firstText);
+      expect(box.classList.contains("hidden")).toBe(false);
+      expect(box.textContent).toBe("ACME Widgets Ltd (12345678)");
+    });
+
+    test("the same holds for the declined box", () => {
+      const box = document.querySelector(".twoinc-pay-box.twoinc-err-payment-default");
+      const seen = watch(box);
+
+      dom.togglePaySubtitleDesc("errored", ".twoinc-err-payment-default");
+      seen.stop();
+
+      const firstText = seen.records.findIndex((t) => t !== "attributes");
+      const lastAttr = seen.records.lastIndexOf("attributes");
+      expect(firstText).toBeGreaterThan(-1);
+      expect(lastAttr).toBeLessThan(firstText);
+      expect(box.textContent).toBe("ACME Widgets Ltd (12345678)");
+    });
+  });
+
   describe("the stylesheet paints what the classes promise", () => {
     // Against jsdom's REAL cascade rather than a grep over the CSS source
-    // (review round 1). Three separate mutations passed a source-text check:
-    // commenting out a declaration, adding a later overriding rule, and wrapping
-    // a rule in an at-rule. jsdom resolves all three correctly. What it cannot
-    // tell you is whether the result is visible or whether the GIF animates —
-    // see tests/js/README.md's known gaps.
+    // (review round 1). Three mutations passed a source-text check and fail
+    // here: commenting out a declaration, adding a later overriding rule, and
+    // wrapping a rule in an at-rule.
+    //
+    // TWO known gaps, both of which have already produced a green-but-wrong
+    // assertion in this file, so do not assume a third one is safe:
+    //
+    //  - jsdom does NOT honour `!important` from an EARLIER rule. It resolved
+    //    `.twoinc-loader.hidden` as `display: flex`, because the blanket
+    //    `.hidden { display: none !important }` sits at the top of the
+    //    stylesheet and the loader's `display: flex` below it — so the layout
+    //    assertion below was measuring a state that never exists in a browser.
+    //    Hence `unhidden()`, and hence the loader's own two-class hiding rule.
+    //  - it does not lay out or animate anything. Whether the box is visible,
+    //    whether the GIF moves — beyond this suite, needs a real browser. See
+    //    the known gaps in tests/js/README.md.
+    let injected;
+
     beforeEach(() => {
-      harness.injectStylesheet();
+      injected = harness.injectStylesheet();
     });
+
+    afterEach(() => {
+      // One <style> per test otherwise accumulates and outlives
+      // `document.body.innerHTML = ""`, which is latent ordering coupling for
+      // whichever describe runs next.
+      injected.remove();
+    });
+
+    /**
+     * The computed style of a pay-box with `hidden` taken OFF.
+     *
+     * Every box in the fixture starts hidden, which is what production serves —
+     * but `display: none` is not the state whose layout is being asserted, and
+     * jsdom's `!important` gap means it does not even resolve to `none`
+     * reliably. Unhide, then measure.
+     *
+     * @param {string} selector
+     * @returns {CSSStyleDeclaration}
+     */
+    function unhidden(selector) {
+      const node = document.querySelector(selector);
+      expect(node).not.toBeNull();
+      node.classList.remove("hidden");
+      return window.getComputedStyle(node);
+    }
 
     /**
      * @param {string} selector
@@ -606,29 +965,77 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       return window.getComputedStyle(node);
     }
 
+    /**
+     * `#rrggbb` as the `rgb(r, g, b)` jsdom normalises background and text
+     * colours to.
+     *
+     * Border colours come back RAW from jsdom, unlike those two, so asserting
+     * the hex literal made an equivalent `rgb()` notation in the stylesheet —
+     * identical paint — fail the test. Normalising both sides asserts the
+     * colour rather than how it was typed.
+     *
+     * @param {string} hex
+     * @returns {string}
+     */
+    function rgb(hex) {
+      const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
+      expect(m).not.toBeNull();
+      return (
+        "rgb(" + parseInt(m[1], 16) + ", " + parseInt(m[2], 16) + ", " + parseInt(m[3], 16) + ")"
+      );
+    }
+
+    /**
+     * @param {CSSStyleDeclaration} style
+     * @returns {string} the top border colour, normalised
+     */
+    function borderColour(style) {
+      const raw = style.borderTopColor;
+      return raw.charAt(0) === "#" ? rgb(raw) : raw;
+    }
+
+    test("the loader is hidden by a rule of its own, not only by an !important", () => {
+      // The blanket `.hidden` is `display: none !important`, and the loader's
+      // `display: flex` is a same-specificity declaration LATER in the file — so
+      // without a two-class rule the loader's hiding rests entirely on that
+      // `!important`, and tidying it away would leave a permanently visible
+      // spinner on every checkout. jsdom resolves the two-class rule correctly,
+      // which is what makes this assertable at all.
+      expect(styleOf(".twoinc-pay-box.twoinc-loader").display).toBe("none");
+    });
+
     test("the loader is a centred row: spinner, gap, sentence", () => {
-      const row = styleOf(".twoinc-pay-box.twoinc-loader");
+      const row = unhidden(".twoinc-pay-box.twoinc-loader");
       expect(row.display).toBe("flex");
       expect(row.alignItems).toBe("center");
       expect(row.justifyContent).toBe("center");
       expect(row.gap).toBe("8px");
+      expect(row.padding).toBe("12px 16px");
     });
 
-    test("the spinner paints the shared GIF at its native size", () => {
+    test("the spinner paints the shared GIF, once, at its native size", () => {
       const spinner = styleOf(".twoinc-loader__spinner");
       expect(spinner.backgroundImage).toContain("loader.gif");
-      // Native 16x16 — scaling it with an em-relative box would blur it.
+      // Native 16x16, painted once and unscaled: an em-relative box would blur
+      // it, and a tiled or resized background is a different (wrong) picture
+      // that the URL assertion alone cannot see.
       expect(spinner.width).toBe("16px");
       expect(spinner.height).toBe("16px");
+      expect(spinner.backgroundRepeat).toBe("no-repeat");
+      expect(spinner.backgroundSize).toBe("16px 16px");
+    });
+
+    test("the sentence beside it is weighted to read as a status, not body copy", () => {
+      expect(styleOf(".twoinc-loader__text").fontWeight).toBe("500");
     });
 
     test("the approved verdict is a green bordered box", () => {
-      const box = styleOf(".twoinc-pay-box.twoinc-intent-approved");
-      expect(box.backgroundColor).toBe("rgb(212, 237, 218)");
-      expect(box.color).toBe("rgb(21, 87, 36)");
+      const box = unhidden(".twoinc-pay-box.twoinc-intent-approved");
+      expect(box.backgroundColor).toBe(rgb("#d4edda"));
+      expect(box.color).toBe(rgb("#155724"));
       expect(box.borderTopWidth).toBe("2px");
       expect(box.borderTopStyle).toBe("solid");
-      expect(box.borderTopColor).toBe("#28a745");
+      expect(borderColour(box)).toBe(rgb("#28a745"));
     });
 
     test("both failure verdicts are red bordered boxes", () => {
@@ -639,12 +1046,12 @@ describe("order-intent loading state and stale-verdict clearing", () => {
         ".twoinc-pay-box.twoinc-err-payment-default",
         ".twoinc-pay-box.twoinc-err-phone-number"
       ]) {
-        const box = styleOf(selector);
-        expect(box.backgroundColor).toBe("rgb(248, 215, 218)");
-        expect(box.color).toBe("rgb(114, 28, 36)");
+        const box = unhidden(selector);
+        expect(box.backgroundColor).toBe(rgb("#f8d7da"));
+        expect(box.color).toBe(rgb("#721c24"));
         expect(box.borderTopWidth).toBe("2px");
         expect(box.borderTopStyle).toBe("solid");
-        expect(box.borderTopColor).toBe("#dc3545");
+        expect(borderColour(box)).toBe(rgb("#dc3545"));
       }
     });
 
@@ -654,11 +1061,13 @@ describe("order-intent loading state and stale-verdict clearing", () => {
         ".twoinc-pay-box.twoinc-err-payment-default",
         ".twoinc-pay-box.twoinc-err-phone-number"
       ]) {
-        const box = styleOf(selector);
+        const box = unhidden(selector);
         expect(box.padding).toBe("16px");
         expect(box.borderRadius).toBe("8px");
         expect(box.marginTop).toBe("12px");
         expect(box.lineHeight).toBe("1.4");
+        expect(box.fontSize).toBe("14px");
+        expect(box.fontWeight).toBe("500");
       }
     });
 
@@ -666,8 +1075,8 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       // Registry names in DE/NL/NO routinely contain a single unbroken token
       // wider than the tile column, and these two hold the company in their own
       // sentence (TWO-25326 §7.3).
-      expect(styleOf(".twoinc-pay-box.twoinc-intent-approved").overflowWrap).toBe("anywhere");
-      expect(styleOf(".twoinc-pay-box.twoinc-err-payment-default").overflowWrap).toBe("anywhere");
+      expect(unhidden(".twoinc-pay-box.twoinc-intent-approved").overflowWrap).toBe("anywhere");
+      expect(unhidden(".twoinc-pay-box.twoinc-err-payment-default").overflowWrap).toBe("anywhere");
     });
   });
 });

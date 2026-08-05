@@ -503,17 +503,53 @@ verdict disappears (TWO-25326, 2026-08-04):
   and are killed by this: commenting a declaration out, adding a later overriding rule, and
   wrapping a rule in an at-rule. The same limits as the company-search spinner apply — see
   Known gaps: the URL and the box metrics are assertable, "does it animate" and "is it
-  visible" are not.
+  visible" are not. **And one more: jsdom does not honour `!important` from an earlier rule**,
+  which made the loader's layout assertion measure a state that never exists in a browser (see
+  Known gaps).
+- **the verdict paint waits out a WooCommerce re-render, bounded and cancellable.** That wait
+  is the only code that takes the loading state down, so an overlay stuck up meant a permanent
+  spinner; and it used to be held in a local, unreachable from `abandonOrderIntentCheck()`, so
+  an orphan copy of it painted a verdict back onto a checkout already mid-submit.
+- **what gets cached, and against which request.** A transport failure (`status` 0 or 5xx) is
+  not a verdict — cached, one dropped connection declined that cart and company for the rest
+  of the page, permanently, because the cached branch disarms and nothing retries. A 4xx
+  business decline IS cached, pinned separately so the guard cannot be widened into "never
+  cache". And two overlapping checks are asserted to file their verdicts under their own
+  request bodies: the hash lived in one shared slot, and the interval is disarmed before the
+  request goes out, so a second check armed mid-flight filed the first response under the
+  second body.
+- **a verdict is announced, not silently swapped in.** `role="status"`/`role="alert"` only
+  announce a content change made while the region is in the accessibility tree, and the first
+  thing `togglePaySubtitleDesc()` does is hide every box — so writing the sentence and then
+  revealing the box announced nothing at all. A `MutationObserver` pins the order: the reveal
+  precedes the text, both in one task.
+- **nothing in flight means nothing to reset.** `#place_order` fires on clicks that never
+  submit and `checkout_error` fires for errors that have nothing to do with this gateway, and
+  neither fires `updated_checkout` — so resetting unconditionally wiped a good verdict with
+  nothing to bring it back.
 
-Verified by mutation, per the rule below. Sixteen were checked. On `assets/js/twoinc.js`:
-removing the clearing from `getApproval()` fails seven, re-swapping `updateElements()`'s two
-calls fails one, dropping the abandoned-check reset fails one, leaving the cached branch armed
-fails two, removing the price-wait bound fails one, reverting `push` to `append` fails one,
-removing the `responseJSON` guard fails one, reverting the two abandon handlers to their inline
-disarm fails two, and deleting the tick's re-asserted loading state fails one. On
-`assets/css/twoinc.css`, all six of commenting out a colour, a later overriding rule, an
-at-rule wrap, commenting out the spinner's `background-image`, dropping the loader's flex
-layout, and dropping the phone-number box from the red group fail at least one.
+Verified by mutation, per the rule below — twenty-eight of them, and every one kills at least
+one test.
+
+On `assets/js/twoinc.js`: removing the clearing from `getApproval()` fails seven; re-swapping
+`updateElements()`'s two calls, dropping the abandoned-tick reset, removing the price-wait
+bound, removing its reset in `getApproval()`, reverting `push` to `append`, removing the
+`responseJSON` guard, deleting the tick's re-asserted loading state, unbounding the render wait,
+reading the hash back off the shared slot, resetting the tile unconditionally in
+`abandonOrderIntentCheck()`, and writing a box's text before revealing it (each branch
+separately) each fail one; leaving the cached branch armed, reverting the two abandon handlers
+to their inline disarm, and putting the render wait back in a local each fail two.
+
+On `assets/css/twoinc.css`: commenting out a colour, a later overriding rule, an at-rule wrap,
+commenting out the spinner's `background-image`, dropping the loader's flex layout, dropping the
+phone-number box from the red group, deleting the loader's own two-class hiding rule, tiling and
+resizing the spinner background, and deleting the `.twoinc-loader__text` rule. Writing a border
+colour as an equivalent `rgb()` must NOT fail, and does not — the assertions normalise.
+
+On `class/WC_Twoinc.php` and the catalogues: dropping either ARIA role, injecting an `<h4>` into
+a verdict box, rendering an EMPTY verdict box, swapping the loader's two spans, mis-pairing a
+translation, emptying a `msgstr`, and shadowing the entry with a `msgctxt`-scoped one. Rewriting
+a catalogue with CRLF line endings must NOT fail, and does not.
 
 ### Two defects these tests found, now fixed
 
@@ -567,6 +603,15 @@ and whether the image animates are all beyond it, and the multi-value `backgroun
 shorthand does not resolve at all (it reads back empty however the rule is written, so do
 not assert on it). The asset's own bytes are checked instead — dimensions and frame count —
 which pins that the file could animate, not that the browser animates it.
+
+**jsdom does not honour `!important` from an earlier rule.** It resolved the intent loader —
+`.twoinc-pay-box.twoinc-loader.hidden`, with `.hidden { display: none !important }` at the top
+of the stylesheet and `.twoinc-loader { display: flex }` below it — as `display: flex`, while
+correctly resolving a sibling box with no `display` declaration to `none`. It DOES honour a
+later overriding rule, which is what makes the cascade assertions worth having, so this is a
+narrow gap rather than a reason to distrust them. Two consequences, both live in the code today:
+the loader carries its own two-class hiding rule so its correctness does not rest on that
+`!important` at all, and layout is asserted with `hidden` taken off the node.
 
 Treat a change to the spinner's appearance as needing a real browser. This gap has bitten
 once already: an earlier attempt on TWO-25288 drew the figure in CSS and shipped for one
