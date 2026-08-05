@@ -157,7 +157,7 @@ function buildSettingsPage(options) {
   const apiKeyBlock =
     opts.apiKey === undefined
       ? ""
-      : '    <tr><td>' +
+      : "    <tr><td>" +
         '<input type="text" id="' +
         FIELD_PREFIX +
         'api_key" value="' +
