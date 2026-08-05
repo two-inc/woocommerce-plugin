@@ -1027,3 +1027,19 @@ msgstr ""
 #: class/WC_Twoinc.php
 msgid "This API key could not be verified."
 msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "Surcharge tax treatment"
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "How the surcharge line is taxed. Standard applies your store's default tax rules to the fee. Specific tax class taxes the fee under a WooCommerce tax class you select below — to leave the fee untaxed, create a tax class with a 0% rate and select it here."
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "Surcharge tax class"
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "The WooCommerce tax class applied to the surcharge when the tax treatment is \"Specific tax class\". Manage tax classes under WooCommerce → Settings → Tax."
+msgstr ""

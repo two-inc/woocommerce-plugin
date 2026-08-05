@@ -1062,3 +1062,19 @@ msgstr "De API van Two gaf een onverwacht antwoord terug (HTTP %s)."
 #: class/WC_Twoinc.php
 msgid "This API key could not be verified."
 msgstr "Deze API-sleutel kon niet worden geverifieerd."
+
+#: class/WC_Twoinc.php
+msgid "Surcharge tax treatment"
+msgstr "Btw-behandeling van de toeslag"
+
+#: class/WC_Twoinc.php
+msgid "How the surcharge line is taxed. Standard applies your store's default tax rules to the fee. Specific tax class taxes the fee under a WooCommerce tax class you select below — to leave the fee untaxed, create a tax class with a 0% rate and select it here."
+msgstr "Hoe de toeslagregel wordt belast. Standaard past de standaard btw-regels van uw winkel toe op het bedrag. Specifieke btw-klasse belast het bedrag onder een WooCommerce-btw-klasse die u hieronder selecteert — om het bedrag onbelast te laten, maakt u een btw-klasse met een tarief van 0% en selecteert u die hier."
+
+#: class/WC_Twoinc.php
+msgid "Surcharge tax class"
+msgstr "Btw-klasse van de toeslag"
+
+#: class/WC_Twoinc.php
+msgid "The WooCommerce tax class applied to the surcharge when the tax treatment is \"Specific tax class\". Manage tax classes under WooCommerce → Settings → Tax."
+msgstr "De WooCommerce-btw-klasse die wordt toegepast op de toeslag wanneer de btw-behandeling \"Specifieke btw-klasse\" is. Beheer btw-klassen onder WooCommerce → Instellingen → Belastingen."

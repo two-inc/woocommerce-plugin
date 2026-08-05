@@ -703,3 +703,19 @@ msgstr "Twos API returnerte et uventet svar (HTTP %s)."
 #: class/WC_Twoinc.php
 msgid "This API key could not be verified."
 msgstr "Denne API-nøkkelen kunne ikke verifiseres."
+
+#: class/WC_Twoinc.php
+msgid "Surcharge tax treatment"
+msgstr "Skattebehandling av tillegg"
+
+#: class/WC_Twoinc.php
+msgid "How the surcharge line is taxed. Standard applies your store's default tax rules to the fee. Specific tax class taxes the fee under a WooCommerce tax class you select below — to leave the fee untaxed, create a tax class with a 0% rate and select it here."
+msgstr "Hvordan tilleggslinjen skattlegges. Standard bruker butikkens standard skatteregler på gebyret. Bestemt skatteklasse skattlegger gebyret under en WooCommerce-skatteklasse du velger nedenfor — for å la gebyret være uten skatt, opprett en skatteklasse med 0 % sats og velg den her."
+
+#: class/WC_Twoinc.php
+msgid "Surcharge tax class"
+msgstr "Skatteklasse for tillegg"
+
+#: class/WC_Twoinc.php
+msgid "The WooCommerce tax class applied to the surcharge when the tax treatment is \"Specific tax class\". Manage tax classes under WooCommerce → Settings → Tax."
+msgstr "WooCommerce-skatteklassen som brukes på tillegget når skattebehandlingen er «Bestemt skatteklasse». Administrer skatteklasser under WooCommerce → Innstillinger → Skatt."
