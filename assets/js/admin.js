@@ -130,7 +130,10 @@ jQuery(function ($) {
           "Two's API returned a service error (HTTP %s). This is likely temporary on Two's side — try again shortly."
         ).replace("%s", code);
       case "unreachable":
-        return notices.unreachable || "Could not reach Two's API (network or connectivity error). Try again shortly.";
+        return (
+          notices.unreachable ||
+          "Could not reach Two's API (network or connectivity error). Try again shortly."
+        );
       case "not_configured":
         return notices.not_configured || "Enter an API key above to enable Two.";
       case "request_failed":
@@ -143,7 +146,9 @@ jQuery(function ($) {
         return notices.request_failed || "Could not complete verification — try again shortly.";
       default:
         return code
-          ? (notices.unexpected_response || "Two's API returned an unexpected response (HTTP %s).").replace("%s", code)
+          ? (
+              notices.unexpected_response || "Two's API returned an unexpected response (HTTP %s)."
+            ).replace("%s", code)
           : notices.unverified || "This API key could not be verified.";
     }
   }
