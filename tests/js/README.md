@@ -483,6 +483,22 @@ verdict disappears (TWO-25326, 2026-08-04):
   disarmed (the buyer is leaving); `checkout_error` re-arms, because it does NOT fire
   `updated_checkout`, so nothing else would run another check and the tile sat blank — no verdict,
   no spinner — while the buyer corrected a field.
+- **the verdict names the company the request was ABOUT.** These sentences carry the captured
+  company (TWO-25326 §7.3) and were built by re-reading the DOM at PAINT time — but supersession
+  only begins when the next request is issued, up to a second after the buyer changes company, so
+  a response for company A painted A's verdict with B's name in it. Snapshotted at request time;
+  the live read stays as the fallback for callers that are re-rendering rather than reporting, and
+  both sides are pinned.
+- **a paint cannot outlive the check that produced it.** Neither the issue path nor the cached
+  branch cleared `renderInterval`, so a pending paint fired afterwards and put a stale verdict
+  over the newer check's loader.
+- **the cart-total give-up is quiet.** No loading state is up during the price wait, so there is
+  nothing of that check's to remove — the blanket reset erased whatever else was on screen, with
+  nothing left to re-arm.
+- **four sites that blanket-hid should have cleared verdicts only** — the picker's `select2:select`,
+  the `#billing_company` change handler, the container change handler (which was also bound by
+  reference, so jQuery passed it an Event as its `action`), and the 3s deferred re-read. Each took
+  the spinner down for a request still in flight.
 - **`clearSelectedCompany()`'s 3s deferred re-read is guarded** by the company-search counter.
   Three seconds is long enough to pick a company, and the closure overwrote `customerCompany`
   from the DOM and undid the newer capture. Both sides pinned: a superseded re-read is skipped,
@@ -591,8 +607,11 @@ verdict disappears (TWO-25326, 2026-08-04):
   "not available for this order" on every field blur. Pinned both ways: identical text is
   silent, changed text still announces.
 
-Verified by mutation, per the rule below — sixty-seven of them, and every one kills at least one
-test. That count is itself the argument for the round-5 revert: rounds 2-4 spent most of their
+Verified by mutation, per the rule below — eighty of them, and every one kills at least one test.
+Mutation is carrying more of the weight than review by now: round 5 alone had five survivors that
+reading had not flagged (`updateElements()`'s own clear, `pendingCheck` being cleared on abandon,
+the deferred re-read's guard AND its tile call, the picker's blanket hide, and `inFlightXhr` being
+released), each of which is a real property with a real failure mode. That count is itself the argument for the round-5 revert: rounds 2-4 spent most of their
 mutations pinning invariants that only existed because the loading state had been decoupled from
 the request, and the revert deleted the need for them. Mutation, not review, is what found the last four gaps: the `isFailure` gate on the
 HTTP-status branch, the `inFlightSeq` release, the pre-arm paint cancel, and the approved-verdict
@@ -638,6 +657,18 @@ One mutation SURVIVED and was acted on rather than papered over: an explicit
 `clearSelectedCompany()` empties the record and the following `getApproval()` retires the request
 through its own readiness guard. The unreachable copy was deleted and the test rewritten to assert
 the outcome rather than the mechanism.
+
+Round 5's second pass added: removing `updateElements()`'s clear (three), removing `pendingCheck
+= false` from the abandon, removing the deferred re-read's seq guard, putting the blanket hide back
+in the deferred re-read, removing the paint's `paintSeq` guard, restoring the blanket reset at the
+cart-total give-up, dropping the pending-paint arm of the readiness guard, reading the company
+label at paint time, restoring the blanket hide in `select2:select`, and not releasing
+`inFlightXhr`.
+
+Note on the harness: `record.aborted` flips even when `abort()` lands on an already-settled
+deferred, where a real jqXHR does nothing — so it proves the call was MADE, not that a live request
+was cancelled. `record.abortedWhilePending` is the one to assert; `aborted` is still there and is
+what pins that a settled request is NOT aborted.
 
 On `class/WC_Twoinc.php` and the catalogues: dropping either ARIA role, injecting an `<h4>` into
 a verdict box, rendering an EMPTY verdict box, swapping the loader's two spans, mis-pairing a

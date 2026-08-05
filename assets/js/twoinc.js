@@ -1846,7 +1846,14 @@ class TwoCompanySearch {
       if (seq !== twoincSelectWooHelper.companySearchSeq) return;
       Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData();
       twoincSelectWooHelper.renderCompanySummary();
-      twoincDomHelper.togglePaySubtitleDesc();
+      // Verdicts only (review round 5). The blanket hide that was here is purely
+      // destructive now that nothing in this closure re-renders a verdict, and it
+      // fires three seconds late — long enough to hide the loader for a request
+      // still outstanding, or to wipe a verdict painted a second and a half ago,
+      // with nothing left to re-arm afterwards. The seq guard above does not cover
+      // it: the country-change path bumps the counter BEFORE this closure captures
+      // it, so on that path the guard always passes.
+      twoincDomHelper.clearIntentVerdicts();
     }, 3000);
   }
 
@@ -2459,9 +2466,11 @@ class TwoCompanySearch {
       // Display the picked company read-only, synchronously.
       self.renderCompanySummary(data.id, data.company_id);
 
-      // Update the company name in agreement sentence and text in
-      // subtitle/description
-      twoincDomHelper.togglePaySubtitleDesc();
+      // Clear the previous verdict, and leave any loader alone (review round 5):
+      // `getApproval()` below only ARMS a check, so the replacement request is a
+      // second away, and blanket-hiding here took down the spinner for a request
+      // still in flight. This is the site the helper was written for.
+      twoincDomHelper.clearIntentVerdicts();
 
       // Get the company approval status
       instance.getApproval();
@@ -2874,6 +2883,41 @@ let twoincDomHelper = {
     });
   },
   /**
+   * The company label a verdict should name: the snapshot taken when the request
+   * was issued, or a live DOM read when there is no snapshot.
+   *
+   * The snapshot is what fixes a wrong-company verdict (review round 5). These
+   * sentences carry the captured company since TWO-25326 §7.3, and they were
+   * built by re-reading the DOM at PAINT time — but supersession only begins when
+   * the next request is issued, up to a second after the buyer changes company.
+   * A response for company A landing inside that window painted A's verdict with
+   * B's name and number in it, which is the most misleading thing this tile can
+   * do: a decline attributed to the wrong company, or an approval.
+   *
+   * The live read stays as the fallback, for every caller that is re-rendering
+   * rather than reporting a response — `updateElements()` and the picker's own
+   * handlers, where the DOM IS the current truth.
+   *
+   * @param {string} [snapshot] label captured when the request went out
+   * @returns {string}
+   */
+  resolveCompanyLabel: function (snapshot) {
+    if (typeof snapshot === "string") return snapshot;
+    return twoincDomHelper.readCompanyLabelFromDom();
+  },
+  /**
+   * `<name> (<number>)` as the intent sentences want it, read from the live DOM.
+   *
+   * @returns {string}
+   */
+  readCompanyLabelFromDom: function () {
+    const captured = twoincSelectWooHelper.readCapturedCompany();
+    return twoincDomHelper.getCompanyLabelText(
+      twoincUtilHelper.blankToEmpty(captured.company_name),
+      twoincUtilHelper.blankToEmpty(captured.organization_number)
+    );
+  },
+  /**
    * Take any previous order-intent VERDICT off screen, and nothing else.
    *
    * The loading state is deliberately left alone (review round 5). This runs
@@ -2898,7 +2942,7 @@ let twoincDomHelper = {
   /**
    * Toggle payment text in subtitle and description
    */
-  togglePaySubtitleDesc: function (action, errSelector) {
+  togglePaySubtitleDesc: function (action, errSelector, companyLabel) {
     jQuery(".twoinc-pay-box").addClass("hidden");
     if (["checking-intent", "intent-approved", "errored"].includes(action)) {
       if (action === "checking-intent") {
@@ -2933,11 +2977,7 @@ let twoincDomHelper = {
         // computed once at the end of it and this is one announcement, not two.
         intentBox.removeClass("hidden");
         let companyTemplate = intentBox.attr("data-company-template");
-        let captured = twoincSelectWooHelper.readCapturedCompany();
-        let companyText = twoincDomHelper.getCompanyLabelText(
-          twoincUtilHelper.blankToEmpty(captured.company_name),
-          twoincUtilHelper.blankToEmpty(captured.organization_number)
-        );
+        let companyText = twoincDomHelper.resolveCompanyLabel(companyLabel);
         if (companyTemplate && companyText) {
           twoincDomHelper.setPayBoxText(
             intentBox,
@@ -2969,11 +3009,7 @@ let twoincDomHelper = {
             $errBox.data("twoincDefaultText", $errBox.text());
           }
           let declinedTemplate = $errBox.attr("data-company-template");
-          let captured = twoincSelectWooHelper.readCapturedCompany();
-          let companyText = twoincDomHelper.getCompanyLabelText(
-            twoincUtilHelper.blankToEmpty(captured.company_name),
-            twoincUtilHelper.blankToEmpty(captured.organization_number)
-          );
+          let companyText = twoincDomHelper.resolveCompanyLabel(companyLabel);
           if (declinedTemplate && companyText) {
             twoincDomHelper.setPayBoxText(
               $errBox,
@@ -4128,10 +4164,10 @@ class Twoinc {
       // outstanding requests, all but the last of them already known to be
       // unwanted.
       inFlightXhr: null,
-      // Ticks spent waiting for a readable cart total. The interval body
-      // cannot proceed without one and used to retry forever; now that the
-      // loading state goes up when a check is ARMED, forever means a spinner
-      // that never resolves. See the `!gross_amount` branch. Reset in exactly
+      // Ticks spent waiting for a readable cart total. The interval body cannot
+      // proceed without one and used to retry forever, leaking a 1s timer for the
+      // life of the page and keeping `pendingCheck` alive with it. See the
+      // `!gross_amount` branch. Reset in exactly
       // one place — where a check is armed — because that is the only place it
       // can be stale by the time it matters (review round 2 found three further
       // resets that no test could distinguish from their absence).
@@ -4377,15 +4413,19 @@ class Twoinc {
     $body.on("blur", "#company_id, #billing_company_display", self.onCompanyManualInputBlur);
 
     // Handle the company inputs change event
-    $body.on(
-      "change",
-      "#select2-billing_company_display-container",
-      twoincDomHelper.togglePaySubtitleDesc
-    );
+    // Wrapped, not passed by reference (review round 5). Bound directly, jQuery
+    // hands the handler its Event object as the `action` argument — which happened
+    // to degenerate to the blanket hide, because no action name matches an Event,
+    // so it did the right thing by accident and would break the moment
+    // togglePaySubtitleDesc grew a truthy-action branch.
+    $body.on("change", "#select2-billing_company_display-container", function () {
+      twoincDomHelper.clearIntentVerdicts();
+    });
     $body.on("change", "#billing_company", function () {
       Twoinc.getInstance().customerCompany.company_name = twoincSelectWooHelper.getCompanyName();
       twoincSelectWooHelper.renderCompanySummary();
-      twoincDomHelper.togglePaySubtitleDesc();
+      // Verdicts only — same mid-request blanking as the picker's own handler.
+      twoincDomHelper.clearIntentVerdicts();
     });
 
     // Handle the country inputs change event. The tracker behind it is seeded
@@ -4403,6 +4443,12 @@ class Twoinc {
     // state down with it — see abandonOrderIntentCheck()'s own comment for why
     // `checkout_error` is the worse of the two to leave spinning.
     $body.on("click", "#place_order", function () {
+      // This now ABORTS an outstanding order-intent POST, where it used to only
+      // disarm the timer (review round 5 noted the change). That response is the
+      // only writer of `#tracking_id`, so in principle a tracking id could be lost
+      // — in practice it could not: WooCommerce serialises the form after this
+      // handler runs, so a response that had not already landed would have missed
+      // the submission anyway. Recorded because it IS a behaviour change.
       Twoinc.getInstance().abandonOrderIntentCheck();
     });
 
@@ -4515,28 +4561,6 @@ class Twoinc {
   }
 
   /**
-   * Stop the armed order-intent check and take the tile back to neutral.
-   *
-   * Added in review round 1, because "the loading state goes up when a check
-   * is armed" only holds together if EVERY way a check can end also takes it
-   * down. There are four such ways beyond a settled response, and each one used
-   * to disarm the timer and say nothing about the UI — invisible while the
-   * loader only appeared once a request was already in flight, a permanent
-   * spinner now:
-   *
-   *   - the buyer clicked Place Order inside the arming window;
-   *   - `checkout_error` fired (and it does NOT trigger `updated_checkout`, so
-   *     nothing re-renders the tile afterwards — the spinner would sit beside
-   *     the validation errors for the rest of the page);
-   *   - no cart total became readable (see the interval body);
-   *   - the buyer emptied a required field before the tick.
-   *
-   * `togglePaySubtitleDesc()` with no argument is the blanket hide-every-pay-box
-   * reset, which is the right end state: there is no verdict to show, and
-   * whatever verdict was on screen before belonged to a question that has since
-   * changed.
-   */
-  /**
    * Retire whatever order-intent request is in flight (review round 5).
    *
    * Bumping the counter is what makes the response a no-op; the abort is purely
@@ -4555,6 +4579,29 @@ class Twoinc {
     if (xhr && typeof xhr.abort === "function") xhr.abort();
   }
 
+  /**
+   * Stop the armed order-intent check and take the tile back to neutral.
+   *
+   * Used where a check ends with a REQUEST outstanding, or with its verdict paint
+   * still pending — the two states in which something of this check's is on screen
+   * and nothing else will take it down:
+   *
+   *   - Place Order clicked, or `checkout_error` fired, mid-request (and
+   *     `checkout_error` does NOT trigger `updated_checkout`, so nothing
+   *     re-renders the tile afterwards — the spinner would sit beside the
+   *     validation errors for the rest of the page);
+   *   - the form went incomplete while a request was in flight or a paint pending.
+   *
+   * NOT used where a check ends before its request goes out: no loading state is
+   * up then, so there is nothing to take down and the blanket reset below would
+   * only wipe whatever else the tile was showing. The cart-total give-up disarms
+   * quietly for exactly that reason.
+   *
+   * `togglePaySubtitleDesc()` with no argument is the blanket hide-every-pay-box
+   * reset, which is the right end state: there is no verdict to show, and
+   * whatever verdict was on screen before belonged to a question that has since
+   * changed.
+   */
   abandonOrderIntentCheck() {
     // Only touch the UI when there was actually something in flight (review
     // round 2). `#place_order` fires on clicks that never submit — an HTML5
@@ -4598,7 +4645,16 @@ class Twoinc {
       // buyer no longer has (review round 5). Orphan it, and take the loading
       // state down with it — otherwise the spinner runs until a response the
       // checkout will refuse to use finally arrives.
-      if (this.orderIntentCheck.inFlightSeq !== null) this.abandonOrderIntentCheck();
+      // A pending PAINT counts as well as a request in flight (review round 5):
+      // once `stillCurrent()` has released `inFlightSeq` the response is banked and
+      // only the paint is left, and letting it land writes a verdict about a form
+      // the buyer has since emptied.
+      if (
+        this.orderIntentCheck.inFlightSeq !== null ||
+        this.orderIntentCheck.renderInterval !== null
+      ) {
+        this.abandonOrderIntentCheck();
+      }
       return;
     }
 
@@ -4635,13 +4691,12 @@ class Twoinc {
       let gross_amount = twoincDomHelper.getPrice("order-total");
       let tax_amount = twoincDomHelper.getPrice("tax-rate");
       if (!gross_amount) {
-        // Bounded, not forever (review round 1). No cart total, no request —
-        // but this used to retry indefinitely, and there are carts where it can
-        // never succeed: a 100%-discounted order's total of 0 is falsy every
-        // tick, and a theme whose totals markup `getPrice()` cannot read never
-        // yields one at all. Since the loading state now goes up when the check
-        // is ARMED rather than when the request is issued, retrying forever
-        // means "Checking availability" on screen forever.
+        // Bounded, not forever (review round 1). No cart total, no request — but
+        // this used to retry indefinitely, and there are carts where it can never
+        // succeed: a 100%-discounted order's total of 0 is falsy every tick, and a
+        // theme whose totals markup `getPrice()` cannot read never yields one at
+        // all. An unbounded 1s interval is a leak for the life of the page, and it
+        // holds `pendingCheck` with it, which keeps the 3s poller re-entering.
         //
         // Ten ticks because the only legitimate reason to wait is a totals
         // block WooCommerce is still re-rendering, which is sub-second; ten
@@ -4649,7 +4704,17 @@ class Twoinc {
         // looking. Giving up costs nothing — the next blur or `updated_checkout`
         // arms a fresh check.
         if (++Twoinc.getInstance().orderIntentCheck.priceWaitTicks < 10) return;
-        Twoinc.getInstance().abandonOrderIntentCheck();
+        // Disarm QUIETLY (review round 5). No loading state is up during the price
+        // wait — it goes up with the request, which is downstream of reading the
+        // total — so there is nothing of this check's to take off screen, and
+        // abandonOrderIntentCheck()'s blanket reset instead wiped whatever else was
+        // there. Reachable with a verdict on screen: an earlier request lands and
+        // paints while this interval is still counting, and the give-up erased it
+        // with nothing left to re-arm. Deliberately does NOT touch an outstanding
+        // request either — that is a live question this wait knows nothing about.
+        clearInterval(Twoinc.getInstance().orderIntentCheck.interval);
+        Twoinc.getInstance().orderIntentCheck.interval = null;
+        Twoinc.getInstance().orderIntentCheck.pendingCheck = false;
         return;
       }
       if (!tax_amount) {
@@ -4698,13 +4763,10 @@ class Twoinc {
         // This body has already been answered — render the cached verdict and
         // DISARM (review round 1). This branch used to return with the interval
         // still running, which had two consequences: the cached verdict was
-        // re-rendered every second forever, and `pendingCheck` — set by the
-        // guard in getApproval() whenever an interval is armed — could never be
-        // cleared, so the 3s poller in initialize() re-entered getApproval()
-        // indefinitely. Invisible before, because getApproval() touched no DOM
-        // on that path; with the loading state now entered there it became a
-        // permanent loader/verdict flicker on a ~3s cycle with no request behind
-        // it. Disarming is also just correct: the answer is in hand.
+        // re-rendered every second forever, and `pendingCheck` — set by the guard
+        // in getApproval() whenever an interval is armed — could never be cleared,
+        // so the 3s poller in initialize() re-entered getApproval() indefinitely.
+        // Disarming is also just correct: the answer is in hand.
         clearInterval(Twoinc.getInstance().orderIntentCheck.interval);
         Twoinc.getInstance().orderIntentCheck.interval = null;
         Twoinc.getInstance().orderIntentCheck.pendingCheck = false;
@@ -4720,11 +4782,12 @@ class Twoinc {
         return;
       }
       if (!Twoinc.getInstance().isReadyApprovalCheck()) {
-        // The loading state went up when this check was armed, so abandoning it
-        // here has to take it down again — otherwise "Checking availability"
-        // sits there permanently with nothing running behind it. Reachable
-        // whenever the buyer empties a required field in the second between
-        // arming and this tick.
+        // Nothing of this check is on screen yet — the loading state goes up with
+        // the request, below — so this is a disarm, and abandonOrderIntentCheck()'s
+        // reset is a no-op via its own `wasRunning` gate unless an EARLIER check
+        // left a request or a paint outstanding, which is precisely when the reset
+        // is wanted. Reachable whenever the buyer empties a required field in the
+        // second between arming and this tick.
         Twoinc.getInstance().abandonOrderIntentCheck();
         return;
       }
@@ -4748,6 +4811,9 @@ class Twoinc {
       Twoinc.getInstance().supersedeInFlightOrderIntent();
       const seq = Twoinc.getInstance().orderIntentCheck.seq;
       Twoinc.getInstance().orderIntentCheck.inFlightSeq = seq;
+      // The company this request is ABOUT, captured now rather than re-read when
+      // its verdict is painted (review round 5). See resolveCompanyLabel().
+      const companyLabel = twoincDomHelper.readCompanyLabelFromDom();
 
       /**
        * Is this response still the one the checkout is waiting for?
@@ -4812,7 +4878,7 @@ class Twoinc {
         // are IN rather than sniffed off the payload (review round 3). jQuery
         // hands `.done` the parsed response BODY, so a `status` field in that
         // body was being read as an HTTP status.
-        Twoinc.getInstance().processOrderIntentResponse(response, hashedBody, false);
+        Twoinc.getInstance().processOrderIntentResponse(response, hashedBody, false, companyLabel);
       });
 
       approvalResponse.fail(function (response) {
@@ -4824,7 +4890,7 @@ class Twoinc {
         twoincDomHelper.deselectPaymentMethod();
 
         // Display messages and update order intent logs
-        Twoinc.getInstance().processOrderIntentResponse(response, hashedBody, true);
+        Twoinc.getInstance().processOrderIntentResponse(response, hashedBody, true, companyLabel);
       });
     }, 1000);
   }
@@ -4832,7 +4898,7 @@ class Twoinc {
   /**
    * Update page after order intent request complete
    */
-  processOrderIntentResponse(response, hashedBody, isFailure) {
+  processOrderIntentResponse(response, hashedBody, isFailure, companyLabel) {
     let displayMsgId = "";
     let invalidFields = [];
 
@@ -4912,10 +4978,23 @@ class Twoinc {
     // checkout that was already mid-submit, with the gateway radio already
     // deselected.
     let renderWaitTicks = 0;
+    // The paint is tied to the check that produced it (review round 5). Neither
+    // the issue path nor the cached branch clears `renderInterval`, so a paint
+    // still pending from an earlier response would fire afterwards and put a stale
+    // verdict over the loader — or over the verdict — of the check that superseded
+    // it. Reachable with an `updated_checkout` arriving in the second between a
+    // response and its paint, which is routine.
+    const paintSeq = this.orderIntentCheck.seq;
     clearInterval(this.orderIntentCheck.renderInterval);
     this.orderIntentCheck.renderInterval = setInterval(() => {
+      if (paintSeq !== this.orderIntentCheck.seq) {
+        clearInterval(this.orderIntentCheck.renderInterval);
+        this.orderIntentCheck.renderInterval = null;
+        return;
+      }
       if (jQuery("#payment .blockOverlay").length === 0) {
-        twoincDomHelper.togglePaySubtitleDesc(...displayMsgId.split("|"));
+        const parts = displayMsgId.split("|");
+        twoincDomHelper.togglePaySubtitleDesc(parts[0], parts[1], companyLabel);
         for (let fld of invalidFields) {
           twoincDomHelper.markFieldInvalid(fld);
         }
@@ -5280,10 +5359,10 @@ class Twoinc {
     // would be a line no test can distinguish from its absence. The OUTCOME — a
     // response for the outgoing country cannot paint — is asserted in
     // tests/js/intent-loading-state.test.js.
-    // Belt and braces, and DELIBERATELY not covered by a test — there is no
-    // reachable case that fails without it today, so a test asserting the
-    // spinner is gone afterwards would pass either way and be worse than
-    // none. The reasoning for keeping the line anyway: the transport hands
+    // The company-search SPINNER, below — belt and braces, and DELIBERATELY not
+    // covered by a test: there is no reachable case that fails without it today,
+    // so a test asserting the spinner is gone afterwards would pass either way and
+    // be worse than none. The reasoning for keeping the line anyway: the transport hands
     // the spinner off to whichever request is newest, so bumping the counter
     // above orphans the one an in-flight search is showing (its `always()`
     // now sees a stale sequence and returns before hiding it). What actually

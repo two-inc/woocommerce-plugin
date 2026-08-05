@@ -291,8 +291,17 @@ function stubAjax($) {
       url: settings && settings.url,
       timeout: settings && settings.timeout,
       aborted: false,
+      // Whether `abort()` landed on a request that had NOT already settled —
+      // which is the only case in which a real XHR is actually cancelled.
+      // `aborted` alone flips even for an abort of a completed request, where
+      // jQuery's own `abort()` is a no-op, so a test asserting `aborted` proves
+      // only that the call was MADE. Assert this one to prove a live request was
+      // dropped (review round 5).
+      abortedWhilePending: false,
+      settled: false,
       /** Resolve as HTTP 200 with `data`. */
       succeed: function (data) {
+        record.settled = true;
         deferred.resolveWith(jqXHR, [data, "success", jqXHR]);
       },
       /**
@@ -305,12 +314,17 @@ function stubAjax($) {
        * handler and keys off textStatus instead.
        */
       fail: function (textStatus, error) {
+        record.settled = true;
         jqXHR.status = 0;
         deferred.rejectWith(jqXHR, [jqXHR, textStatus, error || textStatus]);
       }
     };
     jqXHR.abort = function () {
       record.aborted = true;
+      // A real jqXHR's `abort()` does nothing once the request has settled — no
+      // state change, no callback — so neither does this (review round 5).
+      if (record.settled) return;
+      record.abortedWhilePending = true;
       // jQuery reports an aborted request through the failure path with
       // textStatus 'abort', synchronously.
       record.fail("abort", "abort");

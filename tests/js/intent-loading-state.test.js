@@ -159,9 +159,13 @@ describe("order-intent loading state and stale-verdict clearing", () => {
    * @returns {void}
    */
   function issueACheck(ajax) {
+    // Exact delta, not `> 0` (review round 5): a regression that issues an extra
+    // request per arming is precisely what "one request at a time" exists to stop,
+    // and a floor would let it through every precondition in this file.
+    const before = ajax.calls.length;
     instance.getApproval();
     jest.advanceTimersByTime(1000);
-    expect(ajax.calls.length).toBeGreaterThan(0);
+    expect(ajax.calls.length).toBe(before + 1);
     expect(shown(".twoinc-loader")).toBe(true);
   }
 
@@ -296,7 +300,13 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     });
 
     test("updateElements() still clears a stale verdict", () => {
+      // On an INCOMPLETE form, deliberately (review round 5). With a complete one
+      // this passed with `updateElements()`'s own clear deleted, because
+      // `getApproval()` clears too — so it pinned nothing. Incomplete, getApproval()
+      // takes its readiness early-return and this call is the only thing left that
+      // can hide the box.
       showStaleDecline();
+      instance.customerCompany.organization_number = "";
 
       instance.updateElements();
 
@@ -309,10 +319,30 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       // element (review round 1).
       dom.togglePaySubtitleDesc("intent-approved");
       expect(shown(".twoinc-intent-approved")).toBe(true);
+      instance.customerCompany.organization_number = "";
 
       instance.updateElements();
 
       expect(shown(".twoinc-intent-approved")).toBe(false);
+    });
+
+    test("a verdict about a form the buyer has since broken does not survive", () => {
+      // This is the behaviour the two tests above depend on, stated as its own
+      // property (review round 5 asked whether it was wanted). It is: the verdict
+      // named a company that is no longer captured, so leaving it up would have the
+      // tile asserting something about a company the buyer has removed. The tile
+      // going blank is correct and self-correcting — completing the form arms a
+      // fresh check.
+      showStaleDecline();
+      $("#company_id").val("");
+      instance.customerCompany.organization_number = "";
+
+      instance.updateElements();
+      jest.advanceTimersByTime(10000);
+
+      expect(shown(".twoinc-err-payment-default")).toBe(false);
+      expect(shown(".twoinc-intent-approved")).toBe(false);
+      expect(shown(".twoinc-loader")).toBe(false);
     });
   });
 
@@ -740,13 +770,35 @@ describe("order-intent loading state and stale-verdict clearing", () => {
 
         // The superseded request is dropped rather than left running for an answer
         // nobody will read (review round 5).
-        expect(ajax.calls[issued - 1].aborted).toBe(true);
+        expect(ajax.calls[issued - 1].abortedWhilePending).toBe(true);
 
         // What happens NEXT differs between the two and is asserted separately
         // below: Place Order leaves the check disarmed (the buyer is leaving),
         // `checkout_error` re-arms (they are staying to fix a field).
       });
     }
+
+    test("Place Order clicked BEFORE the first tick issues nothing at all", () => {
+      // The parametrised tests above go through `issueACheck()`, which advances a
+      // second first — so none of them is actually in the arming window, and
+      // deleting `pendingCheck = false` from abandonOrderIntentCheck() survived the
+      // whole suite (review round 5). Unset, the 3s poller re-arms a check on a
+      // checkout already mid-submit.
+      instance.getApproval();
+      instance.getApproval();
+      expect(instance.orderIntentCheck.pendingCheck).toBe(true);
+      expect(ajax.calls.length).toBe(0);
+
+      $("#place_order").trigger("click");
+
+      expect(instance.orderIntentCheck.pendingCheck).toBe(false);
+      expect(instance.orderIntentCheck.interval).toBeNull();
+
+      // Ten seconds covers the 1s interval and three turns of the 3s poller.
+      jest.advanceTimersByTime(10000);
+      expect(ajax.calls.length).toBe(0);
+      expect(shown(".twoinc-loader")).toBe(false);
+    });
 
     test("Place Order leaves the check disarmed — nothing re-arms it", () => {
       // The buyer is leaving the page. There is no reason to ask again, and a
@@ -1098,7 +1150,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
         jest.advanceTimersByTime(1000);
 
         expect(ajax.calls.length).toBe(2);
-        expect(ajax.calls[0].aborted).toBe(true);
+        expect(ajax.calls[0].abortedWhilePending).toBe(true);
         expect(ajax.calls[1].aborted).toBe(false);
         // Exactly one outstanding, and it is the newest.
         expect(instance.orderIntentCheck.inFlightSeq).toBe(instance.orderIntentCheck.seq);
@@ -1132,7 +1184,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
         instance.getApproval();
         jest.advanceTimersByTime(1000);
 
-        expect(ajax.calls[stale].aborted).toBe(true);
+        expect(ajax.calls[stale].abortedWhilePending).toBe(true);
         expect(shown(".twoinc-err-payment-default")).toBe(true);
 
         // The retired request answering approved must not repaint the tile.
@@ -1174,7 +1226,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
         expect(ctx.helper.currentCountry()).toBe("NO");
         instance.syncBillingCountry();
 
-        expect(ajax.calls[issued].aborted).toBe(true);
+        expect(ajax.calls[issued].abortedWhilePending).toBe(true);
         expect(instance.orderIntentCheck.inFlightSeq).toBeNull();
 
         ajax.calls[issued].succeed({ approved: true });
@@ -1186,20 +1238,238 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     });
   });
 
+  describe("the verdict names the company the request was ABOUT", () => {
+    test("a company changed while a request is in flight does not rename its verdict", () => {
+      // These sentences carry the captured company (TWO-25326 §7.3) and were built
+      // by re-reading the DOM at PAINT time. Supersession only begins when the NEXT
+      // request is issued, up to a second after the buyer changes company — so a
+      // response for company A landing inside that window painted A's verdict with
+      // B's name and number in it. A decline attributed to the wrong company is the
+      // most misleading thing this tile can do (review round 5).
+      const ajax = harness.stubAjax($);
+      try {
+        issueACheck(ajax);
+
+        // The buyer switches company while A's request is still out.
+        $("#billing_company").val("Beta Traders Ltd");
+        $("#company_id").val("87654321");
+
+        ajax.last().succeed({ approved: false });
+        jest.advanceTimersByTime(1000);
+
+        expect(shown(".twoinc-err-payment-default")).toBe(true);
+        expect($(".twoinc-pay-box.twoinc-err-payment-default").text()).toBe(
+          "ACME Widgets Ltd (12345678)"
+        );
+      } finally {
+        ajax.restore();
+      }
+    });
+
+    test("a re-render with no response still reads the live company", () => {
+      // The DOM read stays as the fallback for callers that are RE-rendering rather
+      // than reporting a response — there the DOM is the current truth, and pinning
+      // it stops the snapshot being wired in everywhere.
+      dom.togglePaySubtitleDesc("intent-approved");
+      expect($(".twoinc-pay-box.twoinc-intent-approved").text()).toBe(
+        "ACME Widgets Ltd (12345678)"
+      );
+
+      $("#billing_company").val("Beta Traders Ltd");
+      $("#company_id").val("87654321");
+      dom.togglePaySubtitleDesc("intent-approved");
+
+      expect($(".twoinc-pay-box.twoinc-intent-approved").text()).toBe(
+        "Beta Traders Ltd (87654321)"
+      );
+    });
+
+    test("a cached verdict names the company it was cached for", () => {
+      // The cached branch passes no snapshot on purpose: a cache hit means the
+      // request body matches, which means the company matches, so the live read is
+      // right there.
+      const ajax = harness.stubAjax($);
+      try {
+        issueACheck(ajax);
+        ajax.last().succeed({ approved: false });
+        jest.advanceTimersByTime(1000);
+
+        instance.getApproval();
+        jest.advanceTimersByTime(1000);
+
+        expect(ajax.calls.length).toBe(1);
+        expect($(".twoinc-pay-box.twoinc-err-payment-default").text()).toBe(
+          "ACME Widgets Ltd (12345678)"
+        );
+      } finally {
+        ajax.restore();
+      }
+    });
+  });
+
+  describe("a paint cannot outlive the check that produced it", () => {
+    test("a pending paint is dropped when a newer check supersedes it", () => {
+      // Neither the issue path nor the cached branch clears `renderInterval`, so a
+      // paint still pending from an earlier response fired afterwards and put a
+      // stale verdict over the newer check's loader. Reachable with an
+      // `updated_checkout` landing in the second between a response and its paint
+      // (review round 5).
+      const ajax = harness.stubAjax($);
+      try {
+        $(document.body).append('<div id="payment"><div class="blockOverlay"></div></div>');
+        issueACheck(ajax);
+        ajax.last().succeed({ approved: true });
+        expect(instance.orderIntentCheck.renderInterval).not.toBeNull();
+
+        // A newer check is armed and issued before the paint gets its chance.
+        $(".order-total .woocommerce-Price-amount").text("250.00");
+        instance.getApproval();
+        jest.advanceTimersByTime(1000);
+        expect(ajax.calls.length).toBe(2);
+
+        // The overlay clears; the superseded paint must not fire.
+        $("#payment .blockOverlay").remove();
+        jest.advanceTimersByTime(10000);
+
+        expect(shown(".twoinc-intent-approved")).toBe(false);
+        expect($(".twoinc-pay-box.twoinc-intent-approved").length).toBe(1);
+      } finally {
+        ajax.restore();
+      }
+    });
+
+    test("a form that goes incomplete cancels a pending paint too", () => {
+      // Once `stillCurrent()` has released `inFlightSeq` the response is banked and
+      // only the paint is left — so the readiness guard has to count a pending paint
+      // as well, or it writes a verdict about a form the buyer has since emptied.
+      const ajax = harness.stubAjax($);
+      try {
+        $(document.body).append('<div id="payment"><div class="blockOverlay"></div></div>');
+        issueACheck(ajax);
+        ajax.last().succeed({ approved: true });
+        expect(instance.orderIntentCheck.inFlightSeq).toBeNull();
+        expect(instance.orderIntentCheck.renderInterval).not.toBeNull();
+
+        instance.customerCompany.organization_number = "";
+        instance.getApproval();
+
+        expect(instance.orderIntentCheck.renderInterval).toBeNull();
+        $("#payment .blockOverlay").remove();
+        jest.advanceTimersByTime(10000);
+        expect(shown(".twoinc-intent-approved")).toBe(false);
+      } finally {
+        ajax.restore();
+      }
+    });
+  });
+
+  describe("the cart-total give-up is quiet", () => {
+    test("giving up does not wipe a verdict painted meanwhile", () => {
+      // No loading state is up during the price wait, so there is nothing of this
+      // check's to take down — and the blanket reset instead erased whatever else
+      // the tile was showing, with nothing left to re-arm. Reachable on a
+      // 100%-discount cart or a theme getPrice() cannot read (review round 5).
+      const ajax = harness.stubAjax($);
+      try {
+        issueACheck(ajax);
+
+        // A second check is armed, and its cart total then becomes unreadable.
+        instance.getApproval();
+        $(".order-total").remove();
+
+        // The first request answers and paints while the price wait counts.
+        ajax.last().succeed({ approved: false });
+        jest.advanceTimersByTime(2000);
+        expect(shown(".twoinc-err-payment-default")).toBe(true);
+
+        // Ten ticks in, the price wait gives up — quietly.
+        jest.advanceTimersByTime(10000);
+
+        expect(shown(".twoinc-err-payment-default")).toBe(true);
+        expect(instance.orderIntentCheck.interval).toBeNull();
+      } finally {
+        ajax.restore();
+      }
+    });
+  });
+
+  describe("picking a company does not blank a live loader", () => {
+    test("select2:select clears the verdict and leaves an in-flight loader up", () => {
+      // The picker's own handler blanket-hid before calling `getApproval()`, which
+      // only ARMS — so the spinner for a request already in flight went down and the
+      // replacement was a second away. Mutation, not review, is what proved this
+      // needed a test: swapping the helper back for the blanket hide survived the
+      // whole suite (review round 5).
+      // No stale verdict staged here on purpose: painting one hides the loader, by
+      // design — a verdict REPLACES the spinner. So the scenario is a request in
+      // flight with no verdict yet, which is the live one: the buyer picks a
+      // different company while the first check is still running.
+      const ajax = harness.stubAjax($);
+      try {
+        issueACheck(ajax);
+
+        instance.enableCompanySearch();
+        // The <option> select2's array adapter would append for a chosen result.
+        $("#billing_company_display").append(
+          '<option value="Beta Traders Ltd" selected>Beta Traders Ltd</option>'
+        );
+        $("#billing_company_display").trigger({
+          type: "select2:select",
+          params: { data: { id: "Beta Traders Ltd", company_id: "87654321" } }
+        });
+
+        // The checkout still shows that it is working. Under the blanket hide this
+        // was false, and stayed false until the replacement request went out a
+        // second later.
+        expect(shown(".twoinc-loader")).toBe(true);
+        expect(shown(".twoinc-err-payment-default")).toBe(false);
+        expect(shown(".twoinc-intent-approved")).toBe(false);
+      } finally {
+        ajax.restore();
+      }
+    });
+  });
+
   describe("clearSelectedCompany's deferred re-read", () => {
-    test("a stale 3s re-read cannot undo a newer capture", () => {
-      // clearSelectedCompany() re-reads the DOM 3s later to put the country prefix
-      // back (TWO-24867). Three seconds is long enough for the buyer to pick a
-      // company, and the closure then overwrote `customerCompany` from whatever the
-      // DOM held at that moment and re-rendered from it — undoing the newer capture
-      // (review round 5). Guarded by the company-search counter, which every
-      // country change and every search bumps.
+    test("a second country change inside the 3s window supersedes the first re-read", () => {
+      // Driven through the REAL bump, `syncBillingCountry()` — hand-incrementing
+      // `companySearchSeq` proved only that the guard compares two numbers (review
+      // round 5).
+      ctx.helper.countryDidChange("GB");
+      $("#billing_country").append('<option value="NO">Norway</option>');
+      $("#billing_country").append('<option value="SE">Sweden</option>');
+
+      $("#billing_country").val("NO");
+      instance.syncBillingCountry();
+
+      // A second real change one second in. Its own re-read is the one that should
+      // win; the first must not fire at t+3s and overwrite from a DOM that has
+      // moved on.
+      jest.advanceTimersByTime(1000);
+      $("#billing_country").val("SE");
+      instance.syncBillingCountry();
+      $("#company_id").val("87654321");
+
+      // t+3s: the FIRST closure's deadline. Superseded, so nothing happens.
+      jest.advanceTimersByTime(2000);
+      expect(instance.customerCompany.organization_number).not.toBe("87654321");
+
+      // t+4s: the second closure's deadline, which is allowed to read.
+      jest.advanceTimersByTime(1000);
+      expect(instance.customerCompany.organization_number).toBe("87654321");
+    });
+
+    test("a capture inside the window is left alone, because the DOM is its source", () => {
+      // No capture path bumps `companySearchSeq` — `select2:select`, sole trader and
+      // manual entry all write `customerCompany` and the two mirror inputs and bump
+      // nothing (review round 5 flagged this as only incidentally guarded).
+      //
+      // It needs no bump: every capture mode writes `#billing_company` and
+      // `#company_id`, which is exactly what the re-read reads back, so the re-read
+      // is a no-op against a capture rather than a clobber. Pinned so that stays
+      // true — a capture path that stopped mirroring to the DOM would fail here.
       ctx.helper.clearSelectedCompany();
 
-      // A newer capture lands inside the 3s window, and bumps the counter the way
-      // a real search or country change does.
-      ctx.helper.companySearchSeq += 1;
-      $("#billing_company").val("Beta Traders Ltd");
       $("#company_id").val("87654321");
       instance.customerCompany = {
         company_name: "Beta Traders Ltd",
@@ -1209,8 +1479,31 @@ describe("order-intent loading state and stale-verdict clearing", () => {
 
       jest.advanceTimersByTime(3000);
 
-      expect(instance.customerCompany.company_name).toBe("Beta Traders Ltd");
       expect(instance.customerCompany.organization_number).toBe("87654321");
+    });
+
+    test("the deferred re-read cannot blank a loader for a live request", () => {
+      // The third statement in that closure was the blanket hide, pinned by nothing
+      // (review round 5). Firing three seconds late, it took the spinner down for a
+      // request still outstanding and nothing re-armed.
+      const ajax = harness.stubAjax($);
+      try {
+        ctx.helper.clearSelectedCompany();
+
+        // Put the record back and get a request out inside the 3s window.
+        instance.customerCompany = {
+          company_name: "ACME Widgets Ltd",
+          organization_number: "12345678",
+          country_prefix: "GB"
+        };
+        issueACheck(ajax);
+
+        jest.advanceTimersByTime(3000);
+
+        expect(shown(".twoinc-loader")).toBe(true);
+      } finally {
+        ajax.restore();
+      }
     });
 
     test("but an unsuperseded re-read still runs", () => {
@@ -1318,7 +1611,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
 
         expect(instance.orderIntentCheck.seq).toBeGreaterThan(seqInFlight);
         expect(instance.orderIntentCheck.inFlightSeq).toBeNull();
-        expect(ajax.calls[0].aborted).toBe(true);
+        expect(ajax.calls[0].abortedWhilePending).toBe(true);
         // The abort's synchronous `.fail` changed nothing.
         expect(shown(".twoinc-err-payment-default")).toBe(false);
         expect($(":input[value='" + GATEWAY_ID + "']").prop("checked")).toBe(true);
@@ -1412,6 +1705,26 @@ describe("order-intent loading state and stale-verdict clearing", () => {
         instance.abandonOrderIntentCheck();
 
         expect(shown(".twoinc-err-payment-default")).toBe(true);
+      } finally {
+        ajax.restore();
+      }
+    });
+
+    test("a settled request is not aborted by a later abandon", () => {
+      // `stillCurrent()` releases `inFlightXhr` as well as `inFlightSeq`. Left set,
+      // a later abandon calls `abort()` on a jqXHR that has already settled — a
+      // no-op on a real XHR, but it also means the page holds a reference to every
+      // response for its lifetime. Mutation found this unpinned (review round 5).
+      const ajax = harness.stubAjax($);
+      try {
+        issueACheck(ajax);
+        ajax.last().succeed({ approved: false });
+        jest.advanceTimersByTime(1000);
+        expect(instance.orderIntentCheck.inFlightXhr).toBeNull();
+
+        instance.abandonOrderIntentCheck();
+
+        expect(ajax.calls[0].aborted).toBe(false);
       } finally {
         ajax.restore();
       }
