@@ -752,18 +752,25 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * The order-intent check's loading state: the same three-dot pulse
-         * the term chips use for their fee quote (.twoinc-dots), which is
-         * the only Two-owned loading idiom across the checkout surfaces.
-         * It replaces a rotating SVG spinner — no image, no dependency on a
-         * theme's spinner, and nothing borrowed from another platform's
-         * core (notably not a full-screen blocking mask).
+         * The order-intent check's loading state: the shared spinner GIF
+         * (assets/images/loader.gif, already in this repo for the
+         * company-search field) beside the VISIBLE words "Checking
+         * availability".
          *
-         * The dots are decorative, so aria-hidden; the accessible name is
-         * the visually hidden sentence, and role="status" lets assistive
-         * technology announce the wait when the box is unhidden. The old
-         * spinner was a CSS ::before with content "" and no role, so it
-         * announced nothing at all.
+         * Both halves are the cross-platform target agreed 2026-08-04 for
+         * TWO-25326: the same spokes asset and the same sentence on all four
+         * checkouts. It replaces the three-dot pulse this box used to borrow
+         * from the term chips — that pulse said "something is happening" and
+         * nothing about what, and it was the only one of the four platforms
+         * showing no words at all. The dots rule stays in the stylesheet
+         * because the term-chip fee quote still uses it; this box no longer
+         * does.
+         *
+         * The spinner is decorative, so aria-hidden. The sentence is now
+         * on screen rather than in a `.twoinc-sr-only` span — visible text
+         * is its own accessible name, so there is nothing to keep in step —
+         * and role="status" still lets assistive technology announce the
+         * wait when the box is unhidden.
          *
          * Returns '' when the brand suppressed the intent-approved notice
          * (TWO-25224). That switch turns off the *reassurance messaging*
@@ -789,10 +796,10 @@ if (!class_exists('WC_Twoinc')) {
 
             return sprintf(
                 '<div class="twoinc-pay-box twoinc-loader hidden" role="status">'
-                . '<span class="twoinc-sr-only">%s</span>'
-                . '<span class="twoinc-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span>'
+                . '<span class="twoinc-loader__spinner" aria-hidden="true"></span>'
+                . '<span class="twoinc-loader__text">%s</span>'
                 . '</div>',
-                esc_html(__('Checking your order, one moment.', 'twoinc-payment-gateway'))
+                esc_html(__('Checking availability', 'twoinc-payment-gateway'))
             );
         }
 
