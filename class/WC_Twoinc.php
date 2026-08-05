@@ -2797,25 +2797,31 @@ if (!class_exists('WC_Twoinc')) {
 
             return [
                 'invalid_key' => $templates['invalid_key'],
+                // The '%s' passed as the status argument is a literal that
+                // survives into the output for admin.js to replace with the
+                // real HTTP status code; only the two templates that declare a
+                // status placeholder are given one, so a translation of the
+                // other two that invents an extra placeholder is caught as the
+                // mismatch it is rather than quietly rendering a raw '%s'.
                 'service_error' => self::format_api_key_notice(
                     $templates['service_error'],
-                    $product_name,
+                    [$product_name, '%s'],
                     $templates['unverified']
                 ),
                 'unreachable' => self::format_api_key_notice(
                     $templates['unreachable'],
-                    $product_name,
+                    [$product_name],
                     $templates['unverified']
                 ),
                 'not_configured' => self::format_api_key_notice(
                     $templates['not_configured'],
-                    $product_name,
+                    [$product_name],
                     $templates['unverified']
                 ),
                 'request_failed' => $templates['request_failed'],
                 'unexpected_response' => self::format_api_key_notice(
                     $templates['unexpected_response'],
-                    $product_name,
+                    [$product_name, '%s'],
                     $templates['unverified']
                 ),
                 'unverified' => $templates['unverified'],
@@ -2826,40 +2832,56 @@ if (!class_exists('WC_Twoinc')) {
          * Interpolate the brand into one notice template, degrading rather
          * than fataling on a catalogue that does not match the source.
          *
-         * The status-code argument is always the literal '%s' so admin.js can
-         * substitute the real code later; templates that carry no status
-         * placeholder simply ignore the extra argument. The try/catch is the
-         * point of the helper: these strings pass through __(), so the format
-         * string is whatever catalogue is installed at runtime — a Loco-edited
-         * .mo or a translate.wordpress.org import can carry a placeholder the
-         * source never had, and on PHP 8 sprintf() throws for that. Thrown
-         * from admin_enqueue_scripts that would take down the whole gateway
-         * settings page, so fall back to the placeholder-free notice instead
-         * (the copy shown before the failures were categorized at all).
+         * These strings pass through __(), so the format string is whatever
+         * catalogue is installed at RUNTIME — a Loco-edited .mo or a
+         * translate.wordpress.org import can carry a placeholder the source
+         * never had, which this repo's msgfmt gate cannot see. Both failure
+         * shapes are handled because the plugin supports PHP 7.4 as well as 8:
+         * PHP 8 throws ArgumentCountError/ValueError, PHP 7.4 emits a warning
+         * and returns false. Unhandled, from admin_enqueue_scripts, the PHP 8
+         * shape takes down the whole gateway settings page and the 7.4 shape
+         * puts a bare `false` into the notice, so a non-string result degrades
+         * to the placeholder-free copy (what was shown before the failures
+         * were categorized at all).
          *
          * @param string $template
-         * @param string $product_name
+         * @param array  $args     arguments for the template's placeholders
          * @param string $fallback placeholder-free notice text
          *
          * @return string
          */
-        private static function format_api_key_notice($template, $product_name, $fallback)
+        private static function format_api_key_notice($template, array $args, $fallback)
         {
+            $reason = 'sprintf() rejected the format string';
             try {
-                return sprintf($template, $product_name, '%s');
-            } catch (Throwable $e) {
-                if (function_exists('wc_get_logger')) {
-                    wc_get_logger()->error(
-                        sprintf(
-                            'Installed translation of an API key notice does not match the'
-                            . ' source placeholders (%s); showing the generic notice instead',
-                            $e->getMessage()
-                        ),
-                        ['source' => 'twoinc-payment-gateway']
-                    );
+                // Silenced deliberately: PHP 7.4 reports the mismatch as a
+                // warning and returns false, and the is_string() check below is
+                // what acts on it. The warning itself would otherwise print
+                // into the admin page's output.
+                $formatted = @vsprintf($template, $args);
+                if (is_string($formatted)) {
+                    return $formatted;
                 }
-                return $fallback;
+            } catch (Throwable $e) {
+                $reason = $e->getMessage();
             }
+
+            if (function_exists('wc_get_logger')) {
+                wc_get_logger()->error(
+                    sprintf(
+                        'Installed translation of an API key notice does not match the'
+                        . ' source placeholders (%s); showing the generic notice instead',
+                        $reason
+                    ),
+                    ['source' => 'twoinc-payment-gateway']
+                );
+            }
+
+            // The fallback is a translated string too, so a catalogue broken
+            // enough to reach this branch could have put a placeholder in it as
+            // well. Nothing substitutes one there, so drop it rather than print
+            // it; a literal '%' elsewhere in the sentence is left alone.
+            return str_replace('%s', '', $fallback);
         }
 
         /**

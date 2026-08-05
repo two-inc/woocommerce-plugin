@@ -6560,25 +6560,50 @@ final class BrandConfigSpec
         // for that, and this runs inside admin_enqueue_scripts — unhandled it
         // would take the whole gateway settings page down.
         $GLOBALS['__twoinc_test_translations'] = [
+            // One placeholder more than the source declares.
             $templates['service_error'] => 'Tjenestefeil hos %1$s (HTTP %2$s) — %3$s.',
-            $templates['unreachable'] => 'Nådde ikke 100% av %1$s.',
+            // A status placeholder in a template that has none: nothing would
+            // substitute it, so this must degrade rather than render a raw %s.
+            $templates['unreachable'] => 'Nådde ikke %1$s (HTTP %2$s).',
+            // Same shortfall expressed with bare rather than numbered
+            // placeholders. (An outright invalid specifier such as a stray
+            // "100% klar" is deliberately NOT asserted on: PHP 7.4 silently
+            // drops the bad conversion and returns a string where PHP 8
+            // throws, so the two supported floors disagree — and a mangled
+            // sentence is not the failure this guard exists for.)
+            $templates['not_configured'] => 'Skriv inn en nøkkel for %s (%s).',
         ];
 
         $notices = self::gateway()->get_api_key_notices();
 
         TinyAssert::same($templates['unverified'], $notices['service_error']);
         TinyAssert::same($templates['unverified'], $notices['unreachable']);
+        TinyAssert::same($templates['unverified'], $notices['not_configured']);
         // Only the broken categories degrade; the rest render normally.
-        TinyAssert::same('Enter an API key above to enable Two.', $notices['not_configured']);
         TinyAssert::same(
             "Two's API returned an unexpected response (HTTP %s).",
             $notices['unexpected_response']
         );
-        // And the failure is not swallowed silently.
-        TinyAssert::true(
-            count($GLOBALS['__twoinc_test_logs']) >= 2,
-            'a catalogue mismatch must be logged, not silently swallowed'
+        TinyAssert::same('This API key is invalid or has expired.', $notices['invalid_key']);
+        // And no degraded notice carries a placeholder nothing will fill.
+        foreach ($notices as $key => $notice) {
+            if ($key === 'service_error' || $key === 'unexpected_response') {
+                continue; // admin.js substitutes the status code into these two
+            }
+            TinyAssert::true(
+                strpos($notice, '%s') === false,
+                "the '$key' notice must not reach the admin with an unsubstituted placeholder"
+            );
+        }
+        // And the failure is not swallowed silently. Match the message rather
+        // than counting every log line, so an unrelated log cannot satisfy it.
+        $mismatch_logs = array_filter(
+            $GLOBALS['__twoinc_test_logs'],
+            static function ($entry) {
+                return strpos($entry['message'] ?? '', 'does not match the source placeholders') !== false;
+            }
         );
+        TinyAssert::same(3, count($mismatch_logs), 'each catalogue mismatch must be logged');
     }
 
     private static function testApiKeyNoticeCopyIsTranslatedInEveryLocale(): void
