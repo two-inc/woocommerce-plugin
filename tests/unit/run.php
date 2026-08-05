@@ -193,7 +193,8 @@ final class BrandConfigSpec
             'testIntentApprovedNoticeOverlayDeclaringNothingKeepsNoticeOn',
             'testIntentApprovedNoticeInvalidSwitchReportsAndDefaultsOn',
             'testIntentLoaderRendersTheSharedSpinnerAndVisibleText',
-            'testIntentVerdictBoxesAreColouredAndBordered',
+            'testIntentVerdictBoxesHoldABareSentence',
+            'testIntentVerdictBoxesAreAnnounced',
             'testIntentLoaderCopyIsTranslatedInEveryLocale',
             'testIntentLoaderSuppressedWithTheNoticeButErrorBoxesSurvive',
             'testCompanySearchTileSlotAndDeclinedTemplateSurviveNoticeSuppression',
@@ -5511,7 +5512,7 @@ final class BrandConfigSpec
         TinyAssert::true(
             strpos(
                 $html,
-                'twoinc-pay-box twoinc-err-payment-default hidden" data-company-template="Taglinebrand is not'
+                'twoinc-pay-box twoinc-err-payment-default hidden" role="alert" data-company-template="Taglinebrand is not'
                 . ' available for this order by {company}"'
             ) !== false,
             'the declined box must carry the company template, brand name resolved, company tokenised'
@@ -5544,7 +5545,7 @@ final class BrandConfigSpec
         TinyAssert::true(
             strpos(
                 $html,
-                'twoinc-pay-box twoinc-err-payment-default hidden" data-company-template="Decidedoverridebrand'
+                'twoinc-pay-box twoinc-err-payment-default hidden" role="alert" data-company-template="Decidedoverridebrand'
                 . ' is not available for this order by {company}"'
             ) !== false,
             'the declined box must render the platform default copy, ignoring the brand override key'
@@ -5919,17 +5920,19 @@ final class BrandConfigSpec
     private static function testIntentLoaderRendersTheSharedSpinnerAndVisibleText(): void
     {
         $html = self::gateway()->build_payment_description();
+        // Asserted as ONE composed string rather than three independent
+        // substring checks (review round 1): separate checks pass however the
+        // nodes are ordered or nested, and "spinner, then sentence, both direct
+        // children of the announced region" is the thing being pinned.
         TinyAssert::true(
-            strpos($html, '<div class="twoinc-pay-box twoinc-loader hidden" role="status">') !== false,
-            'the loader keeps its pay-box state class and announces itself'
-        );
-        TinyAssert::true(
-            strpos($html, '<span class="twoinc-loader__spinner" aria-hidden="true"></span>') !== false,
-            'the loader must render the spinner node, hidden from assistive technology'
-        );
-        TinyAssert::true(
-            strpos($html, '<span class="twoinc-loader__text">Checking availability</span>') !== false,
-            'the loader must render the shared sentence as VISIBLE text'
+            strpos(
+                $html,
+                '<div class="twoinc-pay-box twoinc-loader hidden" role="status">'
+                . '<span class="twoinc-loader__spinner" aria-hidden="true"></span>'
+                . '<span class="twoinc-loader__text">Checking availability</span>'
+                . '</div>'
+            ) !== false,
+            'the loader must render the spinner then the visible sentence, inside the announced region'
         );
         TinyAssert::true(
             strpos($html, 'twoinc-dots') === false,
@@ -5940,20 +5943,22 @@ final class BrandConfigSpec
             'and the sentence must no longer be hidden behind a screen-reader-only span'
         );
 
-        $css = (string) file_get_contents(dirname(__DIR__, 2) . '/assets/css/twoinc.css');
-        // The spinner is the SAME asset the company-search field paints, so
-        // the stylesheet must reference it from both rules and the file must
-        // actually be in the release tree. A background-image URL pointing at
-        // nothing fails silently — no console error, just no motion.
-        TinyAssert::same(
-            2,
-            preg_match_all('#url\("\.\./images/loader\.gif"\)#', $css),
-            'the intent loader and the company-search field must paint the one shared GIF'
-        );
+        // What the STYLESHEET does with these classes — the spinner's paint, the
+        // verdict colours, the loader's layout — is asserted in
+        // tests/js/intent-loading-state.test.js against jsdom's real cascade.
+        // Raw-text greps over the CSS were tried here first and were wrong three
+        // ways (review round 1): blind to a commented-out declaration, blind to a
+        // later overriding rule, and blind to an at-rule-wrapped copy.
+        //
+        // The asset's existence still belongs here, though: it is a file in the
+        // release tree, not a computed style, and a background-image URL pointing
+        // at nothing fails silently — no console error, just no motion.
         TinyAssert::true(
             is_file(dirname(__DIR__, 2) . '/assets/images/loader.gif'),
             'the spinner asset must exist in the tree the stylesheet resolves against'
         );
+
+        $css = (string) file_get_contents(dirname(__DIR__, 2) . '/assets/css/twoinc.css');
         TinyAssert::true(
             strpos($css, '.twoinc-dots {') !== false,
             'the shared dot rule must survive for the term-chip fee quote'
@@ -5971,120 +5976,72 @@ final class BrandConfigSpec
     }
 
     /**
-     * The intent verdict renders inside a coloured, bordered box — green for
-     * approved, red for the two failure boxes (TWO-25326, 2026-08-04).
+     * The verdict boxes hold a bare sentence — no title, no nested markup — on
+     * all three (TWO-25326, 2026-08-04).
      *
-     * Asserted against the shipped declarations rather than a computed style
-     * because there is no layout engine in this suite: the declarations ARE
-     * the change. Until this pass the three boxes carried no styling at all
-     * beyond `overflow-wrap`, so a decline read as ordinary tile copy.
-     *
-     * The palette is the PrestaShop module's, deliberately — the point of the
-     * pass is that a merchant running two of our plugins sees one design — so
-     * these literals are what has to stay in step with it, and changing one
-     * without the other is the regression this test exists to catch.
+     * The colour and border that make them read as verdicts rather than as tile
+     * copy live in the stylesheet, and are asserted against jsdom's real
+     * cascade in tests/js/intent-loading-state.test.js. What is markup, and so
+     * belongs here: the PrestaShop box grew a marketing heading above its
+     * sentence, that heading is dropped in the same pass, and this platform must
+     * not grow one. Round 1 checked only the phone-number box, which is the one
+     * box a heading would never have been added to.
      */
-    private static function testIntentVerdictBoxesAreColouredAndBordered(): void
+    private static function testIntentVerdictBoxesHoldABareSentence(): void
     {
-        $css = (string) file_get_contents(dirname(__DIR__, 2) . '/assets/css/twoinc.css');
+        $html = self::gateway()->build_payment_description();
 
-        $approved = self::cssDeclarationsFor($css, '.twoinc-pay-box.twoinc-intent-approved');
-        TinyAssert::true(strpos($approved, 'background: #d4edda') !== false, 'approved must be green-filled');
-        TinyAssert::true(strpos($approved, 'border: 2px solid #28a745') !== false, 'approved must be green-bordered');
-        TinyAssert::true(strpos($approved, 'color: #155724') !== false, 'approved text must be dark green');
-
-        // BOTH failure boxes, checked separately rather than as one grouped
-        // rule: the phone-number box is easy to leave behind — it is the one
-        // box with no company template and no overflow-wrap, so it drops out
-        // of most selector groups in this file legitimately.
-        foreach (['.twoinc-err-payment-default', '.twoinc-err-phone-number'] as $failure) {
-            $declined = self::cssDeclarationsFor($css, '.twoinc-pay-box' . $failure);
-            TinyAssert::true(
-                strpos($declined, 'background: #f8d7da') !== false,
-                "$failure must be red-filled"
-            );
-            TinyAssert::true(
-                strpos($declined, 'border: 2px solid #dc3545') !== false,
-                "$failure must be red-bordered"
-            );
-            TinyAssert::true(strpos($declined, 'color: #721c24') !== false, "$failure text must be dark red");
-        }
-
-        // One box shape across all three, so a verdict never changes size as
-        // it changes colour.
         foreach (
             [
-                '.twoinc-intent-approved',
-                '.twoinc-err-payment-default',
-                '.twoinc-err-phone-number',
-            ] as $box
+                'twoinc-intent-approved' => 'the approved notice',
+                'twoinc-err-payment-default' => 'the "not available" box',
+                'twoinc-err-phone-number' => 'the phone-number box',
+            ] as $class => $label
         ) {
-            $shape = self::cssDeclarationsFor($css, '.twoinc-pay-box' . $box);
-            TinyAssert::true(strpos($shape, 'padding: 16px') !== false, "$box must carry the shared padding");
-            TinyAssert::true(
-                strpos($shape, 'border-radius: 8px') !== false,
-                "$box must carry the shared radius"
+            TinyAssert::same(
+                1,
+                preg_match(
+                    '#<div class="twoinc-pay-box ' . preg_quote($class, '#') . ' hidden"[^>]*>[^<]*</div>#',
+                    $html
+                ),
+                $label . ' must hold a bare sentence, with no title or nested markup'
             );
         }
-
-        // No title element inside any of them: the PrestaShop box's marketing
-        // heading is dropped in this same pass, and this platform must not grow
-        // one either. The rendered boxes carry their sentence as the div's own
-        // text, nothing else.
-        $html = self::gateway()->build_payment_description();
-        TinyAssert::same(
-            1,
-            preg_match(
-                '#<div class="twoinc-pay-box twoinc-err-phone-number hidden">[^<]*</div>#',
-                $html
-            ),
-            'the verdict boxes hold a bare sentence, with no title or nested markup'
-        );
     }
 
     /**
-     * Every declaration the stylesheet applies to one selector, concatenated.
+     * Every verdict box is announced (review round 1).
      *
-     * A selector in this file routinely appears in several rules — its own,
-     * plus one or more grouped ones sharing a shape — so matching a single
-     * `selector { ... }` block picks whichever happens to come first and
-     * silently misses the rest. Worse, a naive pattern for a two-selector
-     * group also matches the tail of a three-selector group that ends with
-     * the same two, which is how this test first passed against the wrong
-     * body entirely.
-     *
-     * So: split into rules, keep the ones whose selector LIST contains this
-     * selector as a whole comma-separated entry, and return the union — which
-     * is what a browser applies. Comma-splitting is also what makes the
-     * containment check exact: `strpos` alone would match
-     * `.twoinc-err-payment-default` inside a longer hypothetical
-     * `.twoinc-err-payment-default-compact`.
-     *
-     * Good enough deliberately, not a CSS parser: this stylesheet has no
-     * at-rule-nested blocks around these selectors, and `[^{}]` for the
-     * selector list is what keeps a preceding rule's body out of it.
+     * The loader carried role="status" and the three boxes carried nothing, so a
+     * screen-reader buyer heard that a check had started and never heard how it
+     * ended — and the colour this pass adds does nothing for them. Asserted per
+     * box because the failure mode is one of the three being missed, and
+     * asserted on the role NAME because polite/assertive is a deliberate split:
+     * an approval can wait for a gap in speech, a decline has just deselected
+     * the payment method under the buyer.
      */
-    private static function cssDeclarationsFor(string $css, string $selector): string
+    private static function testIntentVerdictBoxesAreAnnounced(): void
     {
-        preg_match_all('/([^{}]+)\{([^}]*)\}/', $css, $rules, PREG_SET_ORDER);
+        $html = self::gateway()->build_payment_description();
 
-        $bodies = [];
-        foreach ($rules as $rule) {
-            // Strip any comment block sitting between the previous rule and
-            // this selector list — it can contain commas and braces-free prose
-            // that would otherwise read as selectors.
-            $selectors = (string) preg_replace('#/\*.*?\*/#s', '', $rule[1]);
-            foreach (explode(',', $selectors) as $candidate) {
-                if (trim($candidate) === $selector) {
-                    $bodies[] = $rule[2];
-                    break;
-                }
-            }
+        foreach (
+            [
+                'twoinc-loader' => 'status',
+                'twoinc-intent-approved' => 'status',
+                'twoinc-err-payment-default' => 'alert',
+                'twoinc-err-phone-number' => 'alert',
+            ] as $class => $role
+        ) {
+            TinyAssert::same(
+                1,
+                preg_match(
+                    '#<div class="twoinc-pay-box ' . preg_quote($class, '#') . ' hidden" role="'
+                        . $role . '"#',
+                    $html
+                ),
+                $class . ' must carry role="' . $role . '"'
+            );
         }
-
-        TinyAssert::true($bodies !== [], "the stylesheet has no rule for $selector at all");
-
-        return implode("\n", $bodies);
     }
 
     /**
@@ -6160,7 +6117,7 @@ final class BrandConfigSpec
         TinyAssert::true(
             strpos(
                 $html,
-                'twoinc-pay-box twoinc-err-payment-default hidden" data-company-template="Suppressednoticebrand'
+                'twoinc-pay-box twoinc-err-payment-default hidden" role="alert" data-company-template="Suppressednoticebrand'
                 . ' is not available for this order by {company}"'
             ) !== false,
             'the declined box\'s company template must survive the approved notice being suppressed'
@@ -6958,23 +6915,65 @@ final class BrandConfigSpec
             'the .pot is missing the loader sentence — regenerate it'
         );
 
-        $translations = [
+        // Every locale the plugin ships, discovered rather than listed (review
+        // round 1): a hardcoded list silently exempts a catalogue added later.
+        $expected = [
             'nb_NO' => 'Sjekker tilgjengelighet',
             'nl_NL' => 'Beschikbaarheid controleren',
             'sv_SE' => 'Kontrollerar tillgänglighet',
         ];
-        foreach ($translations as $locale => $expected) {
-            $mo = (string) file_get_contents($languages . 'twoinc-payment-gateway-' . $locale . '.mo');
+        $catalogues = glob($languages . 'twoinc-payment-gateway-*.po');
+        TinyAssert::true($catalogues !== false && $catalogues !== [], 'no .po catalogues found at all');
+        foreach ($catalogues as $po) {
+            preg_match('/twoinc-payment-gateway-(.+)\.po$/', $po, $m);
+            $locale = $m[1];
             TinyAssert::true(
-                strpos($mo, $msgid) !== false,
-                "compiled $locale msgid for the loader sentence has drifted from the source literal "
-                    . '(recompile with msgfmt after editing the .po?)'
+                isset($expected[$locale]),
+                "locale $locale has no expected loader translation in this test — add one"
             );
+
+            // PAIRING, not two independent searches (review round 1). Searching
+            // the catalogue for the msgid and for the translation separately
+            // passes when the translation is attached to some OTHER msgid, and
+            // that shop then renders the wrong sentence. Read the msgstr that
+            // actually follows this msgid.
+            TinyAssert::same(
+                $expected[$locale],
+                self::poTranslation((string) file_get_contents($po), $msgid),
+                "the $locale catalogue does not pair the loader sentence with its translation"
+            );
+
+            // And the compiled catalogue is what WordPress reads. The full
+            // .po/.mo agreement check is .github/scripts/check-catalogues.sh;
+            // this only pins that this entry made it through msgfmt, because a
+            // .po edited without recompiling renders English.
+            $mo = (string) file_get_contents(substr($po, 0, -3) . '.mo');
             TinyAssert::true(
-                strpos($mo, $expected) !== false,
-                "compiled $locale catalogue is missing the loader sentence — that shop would render English"
+                strpos($mo, $msgid) !== false && strpos($mo, $expected[$locale]) !== false,
+                "compiled $locale catalogue is missing the loader sentence — "
+                    . 'recompile with msgfmt after editing the .po'
             );
         }
+    }
+
+    /**
+     * The msgstr a .po pairs with one msgid, or '' when there is no such entry.
+     *
+     * Deliberately minimal: single-line `msgid "..."` / `msgstr "..."` only,
+     * which is the shape every entry this is used for has. A multi-line or
+     * plural entry returns '' and fails the caller's assertion loudly rather
+     * than being silently mis-read — the wrong-but-plausible answer is the one
+     * outcome a catalogue check must not produce.
+     */
+    private static function poTranslation(string $po, string $msgid): string
+    {
+        $pattern = '/^msgid "' . preg_quote(addcslashes($msgid, '"\\'), '/') . '"\R'
+            . 'msgstr "(.*)"$/m';
+        if (preg_match($pattern, $po, $m) !== 1) {
+            return '';
+        }
+
+        return stripcslashes($m[1]);
     }
 }
 

@@ -799,6 +799,7 @@ if (!class_exists('WC_Twoinc')) {
                 . '<span class="twoinc-loader__spinner" aria-hidden="true"></span>'
                 . '<span class="twoinc-loader__text">%s</span>'
                 . '</div>',
+                /* translators: shown beside the spinner while the order-intent availability check runs. */
                 esc_html(__('Checking availability', 'twoinc-payment-gateway'))
             );
         }
@@ -921,8 +922,15 @@ if (!class_exists('WC_Twoinc')) {
                 $product_name
             );
 
+            // role="status" (review round 1): this box is unhidden by the
+            // checkout JS when the verdict lands, and until now nothing
+            // announced it. The loader carries a role and the verdict did not,
+            // so a screen-reader buyer heard that a check had started and never
+            // heard how it ended — and the colour and border this pass adds are
+            // no help to them at all. Polite rather than assertive: an approval
+            // is good news that can wait for a gap in speech.
             return sprintf(
-                '<div class="twoinc-pay-box twoinc-intent-approved hidden" data-company-template="%s">%s</div>',
+                '<div class="twoinc-pay-box twoinc-intent-approved hidden" role="status" data-company-template="%s">%s</div>',
                 esc_attr($with_company),
                 esc_html($without_company)
             );
@@ -1031,6 +1039,12 @@ if (!class_exists('WC_Twoinc')) {
             // "the slot doesn't exist yet" against "the setting is off".
             $company_search_tile_slot = '<div class="twoinc-company-search-tile-slot hidden"></div>';
 
+            // The two failure boxes carry role="alert" (review round 1), where
+            // the approved notice carries role="status". Both were silent to
+            // assistive technology until now — the loader announced that a check
+            // had started and nothing announced how it ended. Assertive for
+            // these two rather than polite: this payment method has just been
+            // deselected under the buyer, so it should interrupt.
             return sprintf(
                 '<div>
                     %s
@@ -1040,8 +1054,8 @@ if (!class_exists('WC_Twoinc')) {
                     %s
                     %s
                     %s
-                    <div class="twoinc-pay-box twoinc-err-payment-default hidden" data-company-template="%s">%s</div>
-                    <div class="twoinc-pay-box twoinc-err-phone-number hidden">%s</div>
+                    <div class="twoinc-pay-box twoinc-err-payment-default hidden" role="alert" data-company-template="%s">%s</div>
+                    <div class="twoinc-pay-box twoinc-err-phone-number hidden" role="alert">%s</div>
                 </div>',
                 $term_input,
                 $company_search_tile_slot,

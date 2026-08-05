@@ -132,15 +132,6 @@
   color: #721c24;
 }
 
-/*
- * `.twoinc-sr-only` (visually hidden, readable by assistive technology) is
- * gone with the loader sentence it existed for: that sentence is on-screen
- * text now, and nothing else in this plugin renders screen-reader-only copy.
- * Reinstate it here rather than leaning on the theme's .screen-reader-text if
- * something needs it again — not every theme ships that rule, and a missing
- * one renders the text visibly.
- */
-
 .twoinc-source,
 .twoinc-target {
   display: none;

@@ -481,9 +481,39 @@ verdict disappears (TWO-25326, 2026-08-04):
   hide-every-pay-box reset and arms a check, and in the old order the reset wiped the loader
   the check had just shown. Swapping the two calls back fails that test and nothing else.
 
-Verified by mutation, per the rule below: removing the clearing from `getApproval()` fails
-seven of the eleven, re-swapping `updateElements()`'s two calls fails exactly one, and dropping
-the abandoned-check reset fails exactly one.
+- **every way a check can end takes the loading state down with it.** Round 1 of review found
+  four routes that disarmed the timer and said nothing about the UI — invisible while the
+  loader only went up once a request was in flight, a permanent spinner once it went up on
+  arming. All four are pinned: `#place_order` and `checkout_error` (through the REAL delegated
+  handlers, via `initialize()`, because a test calling `abandonOrderIntentCheck()` directly
+  would pass with the handlers still wired to the old inline disarm), a cart total that never
+  becomes readable, and a required field emptied before the tick.
+- **a cached verdict disarms the check.** That branch used to return with the interval still
+  armed, which left `pendingCheck` permanently true and had the 3s poller re-entering
+  `getApproval()` forever — a loader/verdict flicker with no request behind it. Pinned by the
+  flags, by the absence of a second request, and by ten seconds of quiet after hiding the box
+  by hand.
+- **two response paths that used to throw before rendering anything**, both stranding the
+  loader: a `status >= 400` with no `responseJSON` (proxy 502 with an HTML body), and the only
+  route to the phone-number box, which called `Array.prototype.append`. Both driven by handing
+  `processOrderIntentResponse()` a synthetic jqXHR — `stubAjax()`'s `fail()` models a jQuery
+  timeout and reports `status: 0`, so it cannot reach either branch.
+- **the stylesheet is asserted through jsdom's real cascade** (`injectStylesheet()` +
+  `getComputedStyle`), not by grepping the CSS source. Three mutations defeated a source grep
+  and are killed by this: commenting a declaration out, adding a later overriding rule, and
+  wrapping a rule in an at-rule. The same limits as the company-search spinner apply — see
+  Known gaps: the URL and the box metrics are assertable, "does it animate" and "is it
+  visible" are not.
+
+Verified by mutation, per the rule below. Sixteen were checked. On `assets/js/twoinc.js`:
+removing the clearing from `getApproval()` fails seven, re-swapping `updateElements()`'s two
+calls fails one, dropping the abandoned-check reset fails one, leaving the cached branch armed
+fails two, removing the price-wait bound fails one, reverting `push` to `append` fails one,
+removing the `responseJSON` guard fails one, reverting the two abandon handlers to their inline
+disarm fails two, and deleting the tick's re-asserted loading state fails one. On
+`assets/css/twoinc.css`, all six of commenting out a colour, a later overriding rule, an
+at-rule wrap, commenting out the spinner's `background-image`, dropping the loader's flex
+layout, and dropping the phone-number box from the red group fail at least one.
 
 ### Two defects these tests found, now fixed
 

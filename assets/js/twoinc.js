@@ -4026,7 +4026,12 @@ class Twoinc {
       interval: null,
       pendingCheck: false,
       lastCheckOk: false,
-      lastCheckHash: null
+      lastCheckHash: null,
+      // Ticks spent waiting for a readable cart total. The interval body
+      // cannot proceed without one and used to retry forever; now that the
+      // loading state goes up when a check is ARMED, forever means a spinner
+      // that never resolves. See the `!gross_amount` branch.
+      priceWaitTicks: 0
     };
     this.orderIntentLog = {};
     this.customerCompany = {
@@ -4283,16 +4288,15 @@ class Twoinc {
       twoincSoleTrader.onEmailChanged();
     });
 
+    // Both of these disarm an in-flight check, so both have to take the loading
+    // state down with it — see abandonOrderIntentCheck()'s own comment for why
+    // `checkout_error` is the worse of the two to leave spinning.
     $body.on("click", "#place_order", function () {
-      clearInterval(Twoinc.getInstance().orderIntentCheck.interval);
-      Twoinc.getInstance().orderIntentCheck.interval = null;
-      Twoinc.getInstance().orderIntentCheck.pendingCheck = false;
+      Twoinc.getInstance().abandonOrderIntentCheck();
     });
 
     $body.on("checkout_error", function () {
-      clearInterval(Twoinc.getInstance().orderIntentCheck.interval);
-      Twoinc.getInstance().orderIntentCheck.interval = null;
-      Twoinc.getInstance().orderIntentCheck.pendingCheck = false;
+      Twoinc.getInstance().abandonOrderIntentCheck();
     });
 
     setInterval(function () {
@@ -4398,6 +4402,36 @@ class Twoinc {
   }
 
   /**
+   * Stop the armed order-intent check and take the tile back to neutral.
+   *
+   * Added in review round 1, because "the loading state goes up when a check
+   * is armed" only holds together if EVERY way a check can end also takes it
+   * down. There are four such ways beyond a settled response, and each one used
+   * to disarm the timer and say nothing about the UI — invisible while the
+   * loader only appeared once a request was already in flight, a permanent
+   * spinner now:
+   *
+   *   - the buyer clicked Place Order inside the arming window;
+   *   - `checkout_error` fired (and it does NOT trigger `updated_checkout`, so
+   *     nothing re-renders the tile afterwards — the spinner would sit beside
+   *     the validation errors for the rest of the page);
+   *   - no cart total became readable (see the interval body);
+   *   - the buyer emptied a required field before the tick.
+   *
+   * `togglePaySubtitleDesc()` with no argument is the blanket hide-every-pay-box
+   * reset, which is the right end state: there is no verdict to show, and
+   * whatever verdict was on screen before belonged to a question that has since
+   * changed.
+   */
+  abandonOrderIntentCheck() {
+    clearInterval(this.orderIntentCheck.interval);
+    this.orderIntentCheck.interval = null;
+    this.orderIntentCheck.pendingCheck = false;
+    this.orderIntentCheck.priceWaitTicks = 0;
+    twoincDomHelper.togglePaySubtitleDesc();
+  }
+
+  /**
    * Check the company approval status by creating an order intent
    */
   getApproval() {
@@ -4434,10 +4468,26 @@ class Twoinc {
       return;
     }
 
+    this.orderIntentCheck.priceWaitTicks = 0;
     this.orderIntentCheck.interval = setInterval(function () {
       let gross_amount = twoincDomHelper.getPrice("order-total");
       let tax_amount = twoincDomHelper.getPrice("tax-rate");
       if (!gross_amount) {
+        // Bounded, not forever (review round 1). No cart total, no request —
+        // but this used to retry indefinitely, and there are carts where it can
+        // never succeed: a 100%-discounted order's total of 0 is falsy every
+        // tick, and a theme whose totals markup `getPrice()` cannot read never
+        // yields one at all. Since the loading state now goes up when the check
+        // is ARMED rather than when the request is issued, retrying forever
+        // means "Checking availability" on screen forever.
+        //
+        // Ten ticks because the only legitimate reason to wait is a totals
+        // block WooCommerce is still re-rendering, which is sub-second; ten
+        // seconds is generous for that and short enough that the buyer is still
+        // looking. Giving up costs nothing — the next blur or `updated_checkout`
+        // arms a fresh check.
+        if (++Twoinc.getInstance().orderIntentCheck.priceWaitTicks < 10) return;
+        Twoinc.getInstance().abandonOrderIntentCheck();
         return;
       }
       if (!tax_amount) {
@@ -4483,6 +4533,20 @@ class Twoinc {
 
       let hashedBody = twoincUtilHelper.getUnsecuredHash(jsonBody);
       if (Twoinc.getInstance().orderIntentLog[hashedBody]) {
+        // This body has already been answered — render the cached verdict and
+        // DISARM (review round 1). This branch used to return with the interval
+        // still running, which had two consequences: the cached verdict was
+        // re-rendered every second forever, and `pendingCheck` — set by the
+        // guard in getApproval() whenever an interval is armed — could never be
+        // cleared, so the 3s poller in initialize() re-entered getApproval()
+        // indefinitely. Invisible before, because getApproval() touched no DOM
+        // on that path; with the loading state now entered there it became a
+        // permanent loader/verdict flicker on a ~3s cycle with no request behind
+        // it. Disarming is also just correct: the answer is in hand.
+        clearInterval(Twoinc.getInstance().orderIntentCheck.interval);
+        Twoinc.getInstance().orderIntentCheck.interval = null;
+        Twoinc.getInstance().orderIntentCheck.pendingCheck = false;
+        Twoinc.getInstance().orderIntentCheck.priceWaitTicks = 0;
         twoincDomHelper.togglePaySubtitleDesc(
           ...Twoinc.getInstance().orderIntentLog[hashedBody].split("|")
         );
@@ -4490,23 +4554,24 @@ class Twoinc {
       }
       Twoinc.getInstance().orderIntentCheck["lastCheckHash"] = hashedBody;
 
-      clearInterval(Twoinc.getInstance().orderIntentCheck.interval);
-      Twoinc.getInstance().orderIntentCheck.interval = null;
-      Twoinc.getInstance().orderIntentCheck.pendingCheck = false;
-
       if (!Twoinc.getInstance().isReadyApprovalCheck()) {
-        // The loader went on screen when this check was armed, so abandoning
-        // the check here has to take it off again — otherwise "Checking
-        // availability" sits there permanently with nothing running behind
-        // it. Reachable whenever the buyer empties a required field in the
-        // second between arming and this tick.
-        twoincDomHelper.togglePaySubtitleDesc();
+        // The loading state went up when this check was armed, so abandoning it
+        // here has to take it down again — otherwise "Checking availability"
+        // sits there permanently with nothing running behind it. Reachable
+        // whenever the buyer empties a required field in the second between
+        // arming and this tick.
+        Twoinc.getInstance().abandonOrderIntentCheck();
         return;
       }
 
-      // Re-asserted rather than relied upon from getApproval(): the cached-hash
-      // branch above can have shown a verdict and returned on an earlier tick,
-      // and a `pendingCheck` re-arm comes straight back here.
+      clearInterval(Twoinc.getInstance().orderIntentCheck.interval);
+      Twoinc.getInstance().orderIntentCheck.interval = null;
+      Twoinc.getInstance().orderIntentCheck.pendingCheck = false;
+      Twoinc.getInstance().orderIntentCheck.priceWaitTicks = 0;
+
+      // Re-asserted rather than relied upon from getApproval(): a `pendingCheck`
+      // re-arm comes straight back here, and the run of ticks spent waiting for
+      // a cart total sits between the two.
       twoincDomHelper.togglePaySubtitleDesc("checking-intent");
 
       // Create an order intent
@@ -4562,18 +4627,31 @@ class Twoinc {
       displayMsgId = "errored|.twoinc-err-payment-default";
       if (response.status >= 400) {
         // @TODO: use the error code returned by the API
+        //
+        // Two fixes here, both found in review round 1 and both about this
+        // function throwing before it reaches the render below — which is the
+        // ONLY thing that takes the loading state down, so a throw here now
+        // leaves "Checking availability" on screen for the rest of the page.
+        //
+        // 1. `responseJSON` is undefined for any failure that did not carry a
+        //    JSON body — a proxy 502 with an HTML error page, a parse error —
+        //    and `"error_details" in undefined` is a TypeError. Guarded by
+        //    reading the field off the object only when there is an object.
+        // 2. `invalidFields.append(...)` — Array has no `append`, so the ONE
+        //    route to the phone-number box has always thrown, which is why that
+        //    box has never been seen. `push`.
         let errMsg = response.responseJSON;
-        if (typeof response.responseJSON !== "string") {
-          if ("error_details" in response.responseJSON && response.responseJSON["error_details"]) {
-            errMsg = response.responseJSON["error_details"];
-          } else if ("error_code" in response.responseJSON && response.responseJSON["error_code"]) {
-            errMsg = response.responseJSON["error_code"];
+        if (errMsg && typeof errMsg !== "string") {
+          if (errMsg["error_details"]) {
+            errMsg = errMsg["error_details"];
+          } else if (errMsg["error_code"]) {
+            errMsg = errMsg["error_code"];
           }
         }
 
-        if (errMsg.includes("Invalid phone number")) {
+        if (typeof errMsg === "string" && errMsg.includes("Invalid phone number")) {
           displayMsgId = "errored|.twoinc-err-phone-number";
-          invalidFields.append("billing_phone_field");
+          invalidFields.push("billing_phone_field");
         }
       }
 
