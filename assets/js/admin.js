@@ -107,6 +107,18 @@ jQuery(function ($) {
     $("#twoinc-merchant-short-name").text(shortName ? " · " + shortName : "");
     $("#twoinc-merchant-info").show();
     $("#twoinc-signup-prompt").hide();
+    $("#twoinc-merchant-invalid-notice").hide();
+  }
+
+  // A failed verification must not leave the previously fetched Merchant ID
+  // on screen — that reads as "the integration is fine" when it isn't. Swap
+  // it for an explicit invalid-key notice instead (this call site is the fix
+  // for the settings page silently keeping stale merchant info on a broken
+  // key).
+  function showMerchantInfoInvalid() {
+    $("#twoinc-merchant-info").hide();
+    $("#twoinc-signup-prompt").hide();
+    $("#twoinc-merchant-invalid-notice").show();
   }
 
   function verifyApiKey(apiKey) {
@@ -131,10 +143,12 @@ jQuery(function ($) {
           updateMerchantInfo(response.data);
         } else {
           showVerificationStatus("invalid");
+          showMerchantInfoInvalid();
         }
       },
       error: function () {
         showVerificationStatus("invalid");
+        showMerchantInfoInvalid();
       }
     });
   }
