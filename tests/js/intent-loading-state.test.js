@@ -765,7 +765,12 @@ describe("order-intent loading state and stale-verdict clearing", () => {
         jest.advanceTimersByTime(1000);
         expect(ajax.calls.length).toBe(1);
 
-        // A different cart total => a different request body => a different hash.
+        // A different cart total, so the two checks are genuinely different
+        // questions. Note this test proves SUPERSESSION, not hash separation —
+        // nothing is cached until a response settles, so it passes either way if
+        // the two share a hash (review round 4). Hash separation is not something
+        // this suite can pin, and the filing it used to guard is now moot: a
+        // superseded response is never filed at all.
         $(".order-total .woocommerce-Price-amount").text("250.00");
         instance.getApproval();
         jest.advanceTimersByTime(1000);
@@ -792,12 +797,17 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       }
     });
 
-    test("a request that never settles times out rather than spinning forever", () => {
-      // Both the loader coming down and the verdict appearing hang off the ajax
-      // handlers, and a request that never settles calls neither — so a hung
-      // connection meant "Checking availability" for the rest of the page. The
-      // company-search transport was already bounded; this one was not (review
-      // round 3).
+    test("the request is issued with a timeout, so it cannot hang unbounded", () => {
+      // Named for what it asserts (review round 4): the CONFIG, not the
+      // behaviour. Both the loader coming down and the verdict appearing hang off
+      // the ajax handlers, and a request that never settles calls neither — so a
+      // hung connection meant "Checking availability" for the rest of the page.
+      // jQuery honours `timeout` by aborting the XHR, which is beyond this
+      // harness; what is assertable here is that the option is passed at all, and
+      // the settled-timeout path is covered by the transport-failure test below
+      // (production's `.fail` handler cannot distinguish a timeout from any other
+      // transport failure — it never reads `textStatus` — so a separate
+      // "timed out" test was a duplicate of it).
       const ajax = harness.stubAjax($);
       try {
         instance.getApproval();
@@ -810,25 +820,6 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       }
     });
 
-    test("a timed-out request paints a decline and is not cached", () => {
-      // jQuery reports a timeout as a `.fail` with status 0, which must reach the
-      // buyer as the generic "not available" — but must NOT be remembered as one.
-      const ajax = harness.stubAjax($);
-      try {
-        instance.getApproval();
-        jest.advanceTimersByTime(1000);
-
-        ajax.last().fail("timeout", "timeout");
-        jest.advanceTimersByTime(1000);
-
-        expect(shown(".twoinc-loader")).toBe(false);
-        expect(shown(".twoinc-err-payment-default")).toBe(true);
-        expect(Object.keys(instance.orderIntentLog).length).toBe(0);
-      } finally {
-        ajax.restore();
-      }
-    });
-
     for (const status of [401, 403, 408, 429]) {
       test("a " + status + " means ask again, so it is not cached", () => {
         // Round 2 cached the whole 4xx range as verdicts. These four mean "ask
@@ -836,16 +827,13 @@ describe("order-intent loading state and stale-verdict clearing", () => {
         // timeout, rate limiting — and caching one froze the decline in place for
         // the rest of the page, because the cached branch issues no request
         // (review round 3).
-        const ajax = harness.stubAjax($);
-        try {
-          instance.getApproval();
-          jest.advanceTimersByTime(1000);
-          instance.processOrderIntentResponse({ approved: false, status: status }, "h", true);
+        // No getApproval() preamble: it issued a real request under a different
+        // hash than the one under test, so it proved nothing (review round 4).
+        // The positive controls for "the guard is not just 'never cache'" are the
+        // 422 and the declining-200 tests below.
+        instance.processOrderIntentResponse({ approved: false, status: status }, "h", true);
 
-          expect(instance.orderIntentLog["h"]).toBeUndefined();
-        } finally {
-          ajax.restore();
-        }
+        expect(instance.orderIntentLog["h"]).toBeUndefined();
       });
     }
 
@@ -893,6 +881,46 @@ describe("order-intent loading state and stale-verdict clearing", () => {
 
         expect(shown(".twoinc-err-payment-default")).toBe(true);
         expect(Object.keys(instance.orderIntentLog).length).toBe(1);
+      } finally {
+        ajax.restore();
+      }
+    });
+
+    test("an APPROVED verdict is deliberately not cached", () => {
+      // The cache exists so a decline is not re-asked on every checkout
+      // re-render; an approval is left to be re-checked, because the cart can
+      // change under it. Only the `else` branch writes the log, and nothing pinned
+      // that — adding a write to the approved branch passed every test (review
+      // round 4).
+      const ajax = harness.stubAjax($);
+      try {
+        instance.getApproval();
+        jest.advanceTimersByTime(1000);
+
+        ajax.last().succeed({ approved: true });
+        jest.advanceTimersByTime(1000);
+
+        expect(shown(".twoinc-intent-approved")).toBe(true);
+        expect(Object.keys(instance.orderIntentLog).length).toBe(0);
+      } finally {
+        ajax.restore();
+      }
+    });
+
+    test("the tracking id from the response reaches the order field", () => {
+      // Merchant-visible and covered by nothing: deleting both lines passed the
+      // whole suite (review round 4).
+      $("form[name='checkout']").append(
+        "<input type='hidden' id='tracking_id' name='tracking_id' value='' />"
+      );
+      const ajax = harness.stubAjax($);
+      try {
+        instance.getApproval();
+        jest.advanceTimersByTime(1000);
+
+        ajax.last().succeed({ approved: true, tracking_id: "trk-123" });
+
+        expect($("#tracking_id").val()).toBe("trk-123");
       } finally {
         ajax.restore();
       }
@@ -1007,17 +1035,27 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       }
     });
 
-    test("the request is left to complete rather than aborted", () => {
-      // Aborting would run `.fail`, which deselects the gateway and paints a
-      // decline — doing that to a checkout the buyer has just submitted is worse
-      // than letting the request finish unheard.
+    test("abandoning orphans by superseding, and leaves the request to complete", () => {
+      // `expect(record.aborted).toBe(false)` was here and could not fail: the
+      // harness initialises it false and no production path calls `abort()`, so
+      // blanking abandonOrderIntentCheck() entirely still passed (review round 4).
+      //
+      // What IS observable is the mechanism: the counter moves past the in-flight
+      // request, `inFlightSeq` is released, and the still-pending deferred is
+      // therefore ignored when it settles — which the test above asserts from the
+      // outside. Aborting instead would run `.fail`, deselecting the gateway and
+      // painting a decline onto a checkout the buyer has just submitted.
       const ajax = harness.stubAjax($);
       try {
         instance.getApproval();
         jest.advanceTimersByTime(1000);
+        const seqInFlight = instance.orderIntentCheck.inFlightSeq;
+        expect(seqInFlight).not.toBeNull();
 
         instance.abandonOrderIntentCheck();
 
+        expect(instance.orderIntentCheck.seq).toBeGreaterThan(seqInFlight);
+        expect(instance.orderIntentCheck.inFlightSeq).toBeNull();
         expect(ajax.calls[0].aborted).toBe(false);
       } finally {
         ajax.restore();
@@ -1042,9 +1080,13 @@ describe("order-intent loading state and stale-verdict clearing", () => {
         expect(ajax.calls.length).toBe(2);
         const seqInFlight = instance.orderIntentCheck.seq;
 
-        // The blocked paint reaches its tenth tick and gives up.
+        // The blocked paint reaches its tenth tick and gives up. The tile is
+        // handed BACK to the newer check rather than blanked (review round 4 — the
+        // round-3 expectation here was `false`, which enshrined the defect: the
+        // give-up wiped the newer check's own loading state and the tile sat blank
+        // until its response landed).
         jest.advanceTimersByTime(9000);
-        expect(shown(".twoinc-loader")).toBe(false);
+        expect(shown(".twoinc-loader")).toBe(true);
 
         // The newer request has NOT been superseded by that give-up, so its
         // verdict still lands. Calling abandonOrderIntentCheck() here bumped the
@@ -1055,6 +1097,86 @@ describe("order-intent loading state and stale-verdict clearing", () => {
         jest.advanceTimersByTime(1000);
 
         expect(shown(".twoinc-err-payment-default")).toBe(true);
+      } finally {
+        ajax.restore();
+      }
+    });
+
+    test("a stuck overlay with nothing else running does reset the tile", () => {
+      // The other side of the branch above: with no newer check to hand the tile
+      // back to, giving up must leave it neutral rather than spinning.
+      const ajax = harness.stubAjax($);
+      try {
+        $(document.body).append('<div id="payment"><div class="blockOverlay"></div></div>');
+        instance.getApproval();
+        jest.advanceTimersByTime(1000);
+        ajax.last().succeed({ approved: true });
+
+        jest.advanceTimersByTime(10000);
+
+        expect(instance.orderIntentCheck.interval).toBeNull();
+        expect(instance.orderIntentCheck.inFlightSeq).toBeNull();
+        expect(instance.orderIntentCheck.pendingCheck).toBe(false);
+        expect(shown(".twoinc-loader")).toBe(false);
+        expect(shown(".twoinc-intent-approved")).toBe(false);
+      } finally {
+        ajax.restore();
+      }
+    });
+  });
+
+  describe("state released when a response settles", () => {
+    test("a settled response releases inFlightSeq, so a later abandon spares the verdict", () => {
+      // `stillCurrent()` clears `inFlightSeq` as its side effect, and deleting
+      // that line passed the whole suite (review round 4). Left non-null, the
+      // abandon gate reads `wasRunning` as permanently true — so the next
+      // non-submitting Place Order click or unrelated `checkout_error` blanket-hides
+      // a perfectly good verdict, which is the exact defect the gate exists to
+      // prevent. Every other abandon test uses a path that never issues a request,
+      // so none of them reach it.
+      const ajax = harness.stubAjax($);
+      try {
+        instance.getApproval();
+        jest.advanceTimersByTime(1000);
+        ajax.last().succeed({ approved: false });
+        jest.advanceTimersByTime(1000);
+        expect(shown(".twoinc-err-payment-default")).toBe(true);
+
+        expect(instance.orderIntentCheck.inFlightSeq).toBeNull();
+
+        instance.abandonOrderIntentCheck();
+
+        expect(shown(".twoinc-err-payment-default")).toBe(true);
+      } finally {
+        ajax.restore();
+      }
+    });
+
+    test("a second response supersedes the first paint instead of leaking its timer", () => {
+      // processOrderIntentResponse() clears any pending paint before arming its
+      // own. Without that the older interval's handle is overwritten, its own
+      // `clearInterval` then targets the NEWER handle, and the orphan repaints
+      // every second forever. Deleting the pre-arm clear passed the suite (review
+      // round 4).
+      const ajax = harness.stubAjax($);
+      try {
+        $(document.body).append('<div id="payment"><div class="blockOverlay"></div></div>');
+        instance.getApproval();
+        jest.advanceTimersByTime(1000);
+        ajax.last().succeed({ approved: false });
+
+        // A second response lands while the first paint is still blocked.
+        instance.processOrderIntentResponse({ approved: true }, "second", false);
+
+        $("#payment .blockOverlay").remove();
+        jest.advanceTimersByTime(1000);
+        expect(shown(".twoinc-intent-approved")).toBe(true);
+        expect(instance.orderIntentCheck.renderInterval).toBeNull();
+
+        // Nothing left ticking: hide it by hand and it must stay hidden.
+        $(".twoinc-pay-box").addClass("hidden");
+        jest.advanceTimersByTime(10000);
+        expect(shown(".twoinc-intent-approved")).toBe(false);
       } finally {
         ajax.restore();
       }
@@ -1145,6 +1267,33 @@ describe("order-intent loading state and stale-verdict clearing", () => {
 
       expect(seen.records.filter((t) => t !== "attributes").length).toBeGreaterThan(0);
       expect(box.textContent).toBe("Beta Traders Ltd (87654321)");
+    });
+
+    test("a duplicated verdict box is written, not skipped", () => {
+      // `.text()` on a multi-element set returns the CONCATENATION, so comparing
+      // the set's text to the desired sentence read as "already correct" when only
+      // the FIRST copy carried it — leaving the second visibly empty. Reachable if
+      // a fragment swap ever leaves two copies of the gateway description live.
+      // Found by mutation, not review (review round 4).
+      dom.togglePaySubtitleDesc("errored", ".twoinc-err-payment-default");
+      const sentence = "ACME Widgets Ltd (12345678)";
+      expect($(".twoinc-pay-box.twoinc-err-payment-default").text()).toBe(sentence);
+
+      // A second, empty copy appears beside the first.
+      $(document.body)
+        .find(".payment_box")
+        .append(
+          '<div class="twoinc-pay-box twoinc-err-payment-default hidden" role="alert" ' +
+            'data-company-template="{company}"></div>'
+        );
+
+      dom.togglePaySubtitleDesc("errored", ".twoinc-err-payment-default");
+
+      const boxes = $(".twoinc-pay-box.twoinc-err-payment-default");
+      expect(boxes.length).toBe(2);
+      boxes.each(function () {
+        expect($(this).text()).toBe(sentence);
+      });
     });
 
     test("the same holds for the declined box", () => {

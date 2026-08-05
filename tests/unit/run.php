@@ -6990,14 +6990,29 @@ final class BrandConfigSpec
         // parses identically; a mystery '' there would be a real time sink.
         foreach (preg_split('/(?:\R)(?:[[:blank:]]*\R)+/', $po) as $entry) {
             $fields = [];
+            $fuzzy = false;
             foreach (preg_split('/\R/', $entry) as $line) {
+                // A fuzzy entry is NOT a translation (review round 4). msgfmt
+                // excludes it from the .mo by default, so the shop renders English
+                // while a naive read of the .po says translated — the identical
+                // failure shape as the msgctxt case above. And check-catalogues.sh
+                // cannot catch it: msgfmt drops fuzzy entries from BOTH sides of
+                // its diff, so that gate stays green. Latent today (no fuzzy
+                // entries in languages/), which is exactly when to close it.
+                if (preg_match('/^#,[[:blank:]]*(.*)$/', $line, $flags) === 1) {
+                    $fuzzy = $fuzzy || in_array('fuzzy', preg_split('/[[:blank:]]*,[[:blank:]]*/', $flags[1]), true);
+                }
                 if (preg_match('/^(msgctxt|msgid|msgstr) "(.*)"[[:blank:]]*$/', $line, $m) === 1) {
                     // First occurrence wins, so a continuation line cannot
                     // overwrite the field it continues.
                     $fields[$m[1]] = $fields[$m[1]] ?? $m[2];
                 }
             }
-            if (isset($fields['msgctxt']) || ($fields['msgid'] ?? null) !== addcslashes($msgid, '"\\')) {
+            if (
+                $fuzzy
+                || isset($fields['msgctxt'])
+                || ($fields['msgid'] ?? null) !== addcslashes($msgid, '"\\')
+            ) {
                 continue;
             }
 

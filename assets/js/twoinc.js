@@ -2849,8 +2849,20 @@ let twoincDomHelper = {
    * @returns {void}
    */
   setPayBoxText: function ($box, text) {
-    if ($box.text() === text) return;
-    $box.text(text);
+    // Per ELEMENT, not per set. `.text()` on a multi-element set returns the
+    // CONCATENATION of all of them, so a set whose first copy already carried the
+    // sentence and whose second was empty compared unequal, and `$box.text(text)`
+    // then rewrote BOTH — re-announcing on the first. Comparing `.first()`
+    // instead made it deterministic but skipped the second copy entirely, leaving
+    // a visibly empty verdict box. Only an element-wise walk gets both halves
+    // right: every copy ends up carrying the sentence, and none of them is
+    // mutated unless it has to be. Reachable if a fragment swap ever leaves two
+    // copies of the gateway description live.
+    $box.each(function () {
+      const $one = jQuery(this);
+      if ($one.text() === text) return;
+      $one.text(text);
+    });
   },
   /**
    * Toggle payment text in subtitle and description
@@ -4057,7 +4069,6 @@ class Twoinc {
     this.orderIntentCheck = {
       interval: null,
       pendingCheck: false,
-      lastCheckOk: false,
       // Monotonic supersession counter for the order-intent request, the same
       // idiom `addressLookupSeq` above uses and for the same reason (review
       // round 3). Bumped when a request is issued and by every abandon, so a
@@ -4792,8 +4803,6 @@ class Twoinc {
         }
       }
 
-      this.orderIntentCheck["lastCheckOk"] = response.approved;
-
       // Cache the verdict against the request body that produced it — but only
       // when it IS a verdict (review round 2, narrowed round 3).
       //
@@ -4847,11 +4856,25 @@ class Twoinc {
         // supersession counter and clears `pendingCheck`, neither of which has
         // anything to do with an overlay refusing to clear — and bumping the
         // counter here would silently orphan a newer check that had already been
-        // armed while this paint was waiting. Cancel the timer, reset the tile,
-        // leave the rest of the lifecycle alone.
+        // armed while this paint was waiting.
         clearInterval(this.orderIntentCheck.renderInterval);
         this.orderIntentCheck.renderInterval = null;
-        twoincDomHelper.togglePaySubtitleDesc();
+
+        // A newer check can have been armed during the up-to-ten seconds this
+        // paint spent blocked. Round 3 reset the tile unconditionally here, which
+        // wiped that check's OWN loading state and left the tile blank until its
+        // response landed — it stopped the give-up orphaning a newer check but
+        // not the give-up blanking it (review round 4). So: hand the tile back to
+        // whatever is still running, and only reset when nothing is.
+        if (
+          this.orderIntentCheck.interval !== null ||
+          this.orderIntentCheck.inFlightSeq !== null ||
+          this.orderIntentCheck.pendingCheck
+        ) {
+          twoincDomHelper.togglePaySubtitleDesc("checking-intent");
+        } else {
+          twoincDomHelper.togglePaySubtitleDesc();
+        }
       }
     }, 1000);
   }

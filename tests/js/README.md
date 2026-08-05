@@ -544,14 +544,29 @@ verdict disappears (TWO-25326, 2026-08-04):
   Both halves are pinned: a body-level `status` must not route, and must not block caching.
 - **the retryable 4xx codes are not cached.** 401, 403, 408 and 429 mean "ask again", and a
   cached answer is permanent for the page. One per code, so narrowing the list fails.
+- **a duplicated verdict box is written, not skipped.** `.text()` on a multi-element set
+  returns the concatenation, so comparing the SET rewrote every copy (re-announcing on the
+  first) and comparing `.first()` skipped the second entirely. Only an element-wise walk gets
+  both halves right, and all three variants are pinned.
+- **a stuck overlay hands the tile back to a newer check** rather than blanking it. Both sides
+  of that branch are pinned — with nothing else running the give-up does reset.
+- **a settled response releases `inFlightSeq`.** Left set, the abandon gate reads as permanently
+  running and the next non-submitting Place Order click blanket-hides a good verdict.
+- **a second response supersedes the first paint** instead of leaking its timer into a permanent
+  repaint loop.
+- **an approved verdict is deliberately NOT cached**, and the tracking id reaches the order
+  field. Both were unpinned; a mutation added a cache write and another deleted the tracking-id
+  write, and the whole suite stayed green.
 - **a repeated verdict is not re-announced.** `.text()` replaces the child text node whether or
   not the string differs, and that mutation inside an assertive live region had it repeating
   "not available for this order" on every field blur. Pinned both ways: identical text is
   silent, changed text still announces.
 
-Verified by mutation, per the rule below — thirty-nine of them, and every one kills at least
-one test. One survivor was found this way rather than by review (dropping the `isFailure` gate
-on the HTTP-status branch failed nothing) and is now covered.
+Verified by mutation, per the rule below — fifty-four of them, and every one kills at least one
+test. Mutation, not review, is what found the last four gaps: the `isFailure` gate on the
+HTTP-status branch, the `inFlightSeq` release, the pre-arm paint cancel, and the approved-verdict
+and tracking-id writes all failed nothing when deleted. Two negative controls (an equivalent
+`rgb()` border notation, a CRLF catalogue) are confirmed NOT to fail.
 
 On `assets/js/twoinc.js`: removing the clearing from `getApproval()` fails seven; re-swapping
 `updateElements()`'s two calls, dropping the abandoned-tick reset, removing the price-wait
@@ -574,9 +589,18 @@ removing the ajax timeout, reverting the render give-up to a global abandon, dro
 `isFailure` gate, and writing box text unconditionally each fail one; reverting the cache guard
 to sniffing `response.status` fails five; emptying the retryable-status list fails four.
 
+Round 4 added, on `assets/js/twoinc.js`: blanking the tile unconditionally at the render give-up,
+always re-asserting the loader there, removing the pre-arm paint cancel, caching an approved
+verdict, deleting the tracking-id write each fail one; removing `stillCurrent()`'s `inFlightSeq`
+release fails three; and all three wrong shapes of the `setPayBoxText` comparison (whole-set,
+`.first()`, no guard) fail one each.
+
 On `class/WC_Twoinc.php` and the catalogues: dropping either ARIA role, injecting an `<h4>` into
 a verdict box, rendering an EMPTY verdict box, swapping the loader's two spans, mis-pairing a
-translation, emptying a `msgstr`, and shadowing the entry with a `msgctxt`-scoped one. Rewriting
+translation, emptying a `msgstr`, shadowing the entry with a `msgctxt`-scoped one, and marking it `#, fuzzy`
+— which `msgfmt` drops from the `.mo`, so the shop renders English while a naive read of the
+`.po` says translated, and `check-catalogues.sh` cannot see it because msgfmt drops fuzzy entries
+from both sides of its diff. Rewriting
 a catalogue with CRLF line endings must NOT fail, and does not.
 
 ### Two defects these tests found, now fixed
