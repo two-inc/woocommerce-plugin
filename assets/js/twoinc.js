@@ -1833,8 +1833,17 @@ class TwoCompanySearch {
     twoincSelectWooHelper.renderCompanySummary();
     twoincDomHelper.togglePaySubtitleDesc();
 
-    // Update again after all elements are updated
+    // Update again after all elements are updated.
+    //
+    // Guarded by the company-search counter (review round 5). Three seconds is
+    // long enough for the buyer to change country again, or to pick a company —
+    // and this closure then overwrote `customerCompany` from whatever the DOM
+    // held at that moment and re-rendered from it, undoing the newer capture. The
+    // counter is bumped by every country change and every search, so a stale
+    // deferred read is exactly what it is there to catch.
+    const seq = twoincSelectWooHelper.companySearchSeq;
     setTimeout(function () {
+      if (seq !== twoincSelectWooHelper.companySearchSeq) return;
       Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData();
       twoincSelectWooHelper.renderCompanySummary();
       twoincDomHelper.togglePaySubtitleDesc();
@@ -2863,6 +2872,28 @@ let twoincDomHelper = {
       if ($one.text() === text) return;
       $one.text(text);
     });
+  },
+  /**
+   * Take any previous order-intent VERDICT off screen, and nothing else.
+   *
+   * The loading state is deliberately left alone (review round 5). This runs
+   * when a new check is armed, and at that moment a request from an earlier
+   * check may still be in flight with the loader up for it — blanket-hiding
+   * every pay-box there would blink the spinner off and leave the tile empty
+   * until the new request was actually issued a second later.
+   *
+   * This is the whole of TWO-25326's "clear the message when the buyer changes
+   * company while a new search is in flight": the verdict goes, the fact that
+   * something is being checked stays.
+   *
+   * @returns {void}
+   */
+  clearIntentVerdicts: function () {
+    jQuery(
+      ".twoinc-pay-box.twoinc-intent-approved," +
+        ".twoinc-pay-box.twoinc-err-payment-default," +
+        ".twoinc-pay-box.twoinc-err-phone-number"
+    ).addClass("hidden");
   },
   /**
    * Toggle payment text in subtitle and description
@@ -4091,6 +4122,12 @@ class Twoinc {
       // `wasRunning` gate therefore skipped the reset and left the loader on
       // screen for the rest of the page.
       inFlightSeq: null,
+      // The jqXHR of the request in flight, so a superseded one can be dropped
+      // instead of left to run (review round 5). Without this, rapid edits
+      // stacked one POST per second against a 30s timeout — up to thirty
+      // outstanding requests, all but the last of them already known to be
+      // unwanted.
+      inFlightXhr: null,
       // Ticks spent waiting for a readable cart total. The interval body
       // cannot proceed without one and used to retry forever; now that the
       // loading state goes up when a check is ARMED, forever means a spinner
@@ -4370,7 +4407,14 @@ class Twoinc {
     });
 
     $body.on("checkout_error", function () {
+      // Abandon, then re-arm (review round 5). The buyer is still on the page and
+      // about to correct a field, but `checkout_error` does NOT fire
+      // `updated_checkout`, so nothing else would run another check — the tile sat
+      // blank, with no verdict and no spinner, for the rest of the page.
+      // getApproval() no-ops when the form is not ready, so this costs nothing on
+      // the errors that have nothing to do with this gateway.
       Twoinc.getInstance().abandonOrderIntentCheck();
+      Twoinc.getInstance().getApproval();
     });
 
     setInterval(function () {
@@ -4434,17 +4478,12 @@ class Twoinc {
    * @returns {boolean}
    */
   updateElements() {
-    // Reset every pay-box to hidden FIRST, then arm the approval pass.
-    //
-    // This ordering is load-bearing as of the loading-state fix below:
-    // getApproval() now shows the "Checking availability" loader the moment a
-    // check is armed, and the no-argument togglePaySubtitleDesc() call is a
-    // blanket "hide every pay-box" reset. Run in the old order (approval
-    // first) the reset immediately hid the loader getApproval() had just put
-    // on screen, and the buyer saw nothing until the interval's own call a
-    // second later. Nothing in getApproval() reads which boxes are visible,
-    // so moving the reset ahead of it is safe.
-    twoincDomHelper.togglePaySubtitleDesc();
+    // Clear the VERDICT, not the loading state (review round 5). This runs on
+    // every `updated_checkout`, and WooCommerce fires that for a shipping-method
+    // change or a coupon — neither of which has any bearing on a request already
+    // in flight. The blanket hide that used to be here blinked the spinner off
+    // mid-request and left the tile blank until the response landed.
+    twoincDomHelper.clearIntentVerdicts();
 
     // Check approval again
     this.getApproval();
@@ -4497,6 +4536,25 @@ class Twoinc {
    * whatever verdict was on screen before belonged to a question that has since
    * changed.
    */
+  /**
+   * Retire whatever order-intent request is in flight (review round 5).
+   *
+   * Bumping the counter is what makes the response a no-op; the abort is purely
+   * so the connection is not held open for an answer nobody will read. The order
+   * matters: the counter moves FIRST, so the `.fail` that jQuery synchronously
+   * runs for an abort already fails its own `stillCurrent()` check and cannot
+   * deselect the gateway or paint a decline.
+   *
+   * @returns {void}
+   */
+  supersedeInFlightOrderIntent() {
+    this.orderIntentCheck.seq += 1;
+    this.orderIntentCheck.inFlightSeq = null;
+    const xhr = this.orderIntentCheck.inFlightXhr;
+    this.orderIntentCheck.inFlightXhr = null;
+    if (xhr && typeof xhr.abort === "function") xhr.abort();
+  }
+
   abandonOrderIntentCheck() {
     // Only touch the UI when there was actually something in flight (review
     // round 2). `#place_order` fires on clicks that never submit — an HTML5
@@ -4523,13 +4581,7 @@ class Twoinc {
     this.orderIntentCheck.renderInterval = null;
     this.orderIntentCheck.pendingCheck = false;
 
-    // Orphan any response still in flight rather than cancelling the request.
-    // Bumping the counter is what makes the handlers no-op: an aborted jqXHR
-    // would still run `.fail`, which deselects the gateway and paints a decline,
-    // and doing that to a checkout the buyer has just submitted is worse than
-    // the request completing unheard.
-    this.orderIntentCheck.seq += 1;
-    this.orderIntentCheck.inFlightSeq = null;
+    this.supersedeInFlightOrderIntent();
 
     if (wasRunning) {
       twoincDomHelper.togglePaySubtitleDesc();
@@ -4540,33 +4592,38 @@ class Twoinc {
    * Check the company approval status by creating an order intent
    */
   getApproval() {
-    if (!this.isReadyApprovalCheck()) return;
+    if (!this.isReadyApprovalCheck()) {
+      // A form that has become incomplete cannot answer the question a request
+      // in flight is asking, and that request's answer describes a form the
+      // buyer no longer has (review round 5). Orphan it, and take the loading
+      // state down with it — otherwise the spinner runs until a response the
+      // checkout will refuse to use finally arrives.
+      if (this.orderIntentCheck.inFlightSeq !== null) this.abandonOrderIntentCheck();
+      return;
+    }
 
-    // Enter the loading state HERE, where the check is committed to, not a
-    // second later inside the interval body (TWO-25326, 2026-08-04).
+    // CLEAR the previous verdict here — and only clear it. The loading state
+    // goes up where the request is actually issued, in the interval body below.
     //
-    // togglePaySubtitleDesc() hides every pay-box before unhiding the loader,
-    // so this is also what clears a previous verdict. That is the point: the
-    // buyer changing their selected company used to keep reading "<old
-    // company> is not available for this order" for as long as the new check
-    // took, because the only thing that cleared it was the new RESULT
-    // arriving. Four of the five routes into getApproval() —
-    // setSoleTraderCompany(), onCompanyInputBlur(), onRepresentativeInputBlur()
-    // and onCountryChange() — did no clearing of their own at all; only the
-    // company picker's select2:select handler did, and even it left a second
-    // of stale message on screen because the interval fires at 1000ms.
-    // Putting it in this one choke point covers every route, including any
-    // added later.
+    // Clearing at this one choke point is the whole of TWO-25326's third
+    // requirement, and it has to be here rather than per-caller: four of the
+    // five routes in — setSoleTraderCompany(), onCompanyInputBlur(),
+    // onRepresentativeInputBlur() and onCountryChange() — did no clearing of
+    // their own at all, so the buyer changing company kept reading "<old
+    // company> is not available for this order" until the new RESULT arrived.
     //
-    // Above the interval guard on purpose: a call that arrives while a check
-    // is already armed is a NEWER question than the one in flight, so its
-    // answer is what will be rendered, and the older verdict is stale from
+    // Showing the LOADER here as well was tried and reverted (review round 5).
+    // It read better — no gap between the old verdict going and the spinner
+    // appearing — but it decoupled the loading state's lifetime from the
+    // request's, and four review rounds of stranded, blanked and duplicated
+    // spinners followed from that one change. Tied to the request, the loader
+    // is up exactly while a request is outstanding, which is a property that
+    // holds by construction instead of by patching every exit.
+    //
+    // Above the interval guard on purpose: a call arriving while a check is
+    // already armed is a NEWER question, so the older verdict is stale from
     // this moment either way.
-    //
-    // A brand that suppressed the notice has no loader div (TWO-25224), so
-    // this degrades to the hide-everything reset — which is still the clearing
-    // half, and still an improvement on holding a stale verdict.
-    twoincDomHelper.togglePaySubtitleDesc("checking-intent");
+    twoincDomHelper.clearIntentVerdicts();
 
     if (this.orderIntentCheck.interval) {
       this.orderIntentCheck.pendingCheck = true;
@@ -4651,6 +4708,12 @@ class Twoinc {
         clearInterval(Twoinc.getInstance().orderIntentCheck.interval);
         Twoinc.getInstance().orderIntentCheck.interval = null;
         Twoinc.getInstance().orderIntentCheck.pendingCheck = false;
+        // And retire anything in flight (review round 5). A request issued for an
+        // EARLIER body can still be outstanding here, and its answer would land
+        // afterwards and paint over the verdict this branch is about to show —
+        // the cached one being, by construction, the answer to the body the form
+        // holds right now.
+        Twoinc.getInstance().supersedeInFlightOrderIntent();
         twoincDomHelper.togglePaySubtitleDesc(
           ...Twoinc.getInstance().orderIntentLog[hashedBody].split("|")
         );
@@ -4675,10 +4738,15 @@ class Twoinc {
       // a cart total sits between the two.
       twoincDomHelper.togglePaySubtitleDesc("checking-intent");
 
-      // Claim this request's place in the queue BEFORE issuing it, so both
-      // handlers can tell whether they are still the newest question asked
-      // (review round 3 — see `seq`/`inFlightSeq`).
-      const seq = (Twoinc.getInstance().orderIntentCheck.seq += 1);
+      // Retire the previous request before issuing this one (review round 5).
+      // The interval is disarmed before a request goes out, so nothing stopped a
+      // second check arming and POSTing while the first was still outstanding —
+      // at one per second against a 30s timeout, up to thirty in flight, all but
+      // the last already superseded. This also claims this request's place in
+      // the queue, so both handlers can tell whether they are still the newest
+      // question asked (see `seq`/`inFlightSeq`).
+      Twoinc.getInstance().supersedeInFlightOrderIntent();
+      const seq = Twoinc.getInstance().orderIntentCheck.seq;
       Twoinc.getInstance().orderIntentCheck.inFlightSeq = seq;
 
       /**
@@ -4692,6 +4760,10 @@ class Twoinc {
       const stillCurrent = function () {
         if (seq !== Twoinc.getInstance().orderIntentCheck.seq) return false;
         Twoinc.getInstance().orderIntentCheck.inFlightSeq = null;
+        // Released with it, or the abort in supersedeInFlightOrderIntent() would
+        // be aimed at a jqXHR that has already settled — harmless, but it would
+        // also keep a reference to every response for the life of the page.
+        Twoinc.getInstance().orderIntentCheck.inFlightXhr = null;
         return true;
       };
 
@@ -4711,6 +4783,7 @@ class Twoinc {
         timeout: 30000,
         data: jsonBody
       });
+      Twoinc.getInstance().orderIntentCheck.inFlightXhr = approvalResponse;
 
       approvalResponse.done(function (response) {
         if (!stillCurrent()) return;
@@ -5198,6 +5271,15 @@ class Twoinc {
     // enough — the guard has to sit on the handler.
     twoincSelectWooHelper.companySearchSeq += 1;
     self.addressLookupSeq += 1;
+    // The order-intent request is retired on this path too, but NOT from here
+    // (review round 5). An explicit `supersedeInFlightOrderIntent()` was added
+    // here first and no mutation could kill it: `clearSelectedCompany()` below
+    // resets `customerCompany` wholesale, so the `self.getApproval()` at the end
+    // of this function finds an incomplete form and retires the in-flight request
+    // through its own readiness guard. Keeping a second, unreachable copy of that
+    // would be a line no test can distinguish from its absence. The OUTCOME — a
+    // response for the outgoing country cannot paint — is asserted in
+    // tests/js/intent-loading-state.test.js.
     // Belt and braces, and DELIBERATELY not covered by a test — there is no
     // reachable case that fails without it today, so a test asserting the
     // spinner is gone afterwards would pass either way and be worse than

@@ -150,6 +150,21 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     return $box.length > 0 && !$box.hasClass("hidden");
   }
 
+  /**
+   * Arm a check AND let the interval issue its request, which is when the loading
+   * state goes up (review round 5 reverted showing it on arming — see
+   * `getApproval()`'s own comment for why).
+   *
+   * @param {Object} ajax the stubAjax recorder
+   * @returns {void}
+   */
+  function issueACheck(ajax) {
+    instance.getApproval();
+    jest.advanceTimersByTime(1000);
+    expect(ajax.calls.length).toBeGreaterThan(0);
+    expect(shown(".twoinc-loader")).toBe(true);
+  }
+
   /** Put a declined verdict on screen, as a completed earlier check would. */
   function showStaleDecline() {
     dom.togglePaySubtitleDesc("errored", ".twoinc-err-payment-default");
@@ -157,16 +172,42 @@ describe("order-intent loading state and stale-verdict clearing", () => {
   }
 
   describe("a new check clears the previous verdict immediately", () => {
-    test("arming a check hides a stale decline and shows the loader in the same call", () => {
+    test("arming a check hides a stale decline in the same call", () => {
       showStaleDecline();
 
       instance.getApproval();
 
-      // No timer advanced: this is the point. Before the fix the decline
-      // stayed until the RESPONSE came back, which is at best two ticks and a
-      // round trip away.
+      // No timer advanced: this is the point. Before the fix the decline stayed
+      // until the RESPONSE came back, which is at best two ticks and a round trip
+      // away.
       expect(shown(".twoinc-err-payment-default")).toBe(false);
-      expect(shown(".twoinc-loader")).toBe(true);
+      // Positive control: the box is still there, so the line above is about it
+      // being hidden and not about a mistyped selector.
+      expect($(".twoinc-pay-box.twoinc-err-payment-default").length).toBe(1);
+    });
+
+    test("the loader follows with the request, not with the arming", () => {
+      // Round 5 reverted showing the loader on arming: it decoupled the loading
+      // state's lifetime from the request's, and four review rounds of stranded,
+      // blanked and duplicated spinners came out of that one change. Tied to the
+      // request, "the loader is up exactly while a request is outstanding" holds
+      // by construction. The visible cost is this gap, which is why it is pinned
+      // rather than left implicit.
+      const ajax = harness.stubAjax($);
+      try {
+        showStaleDecline();
+
+        instance.getApproval();
+        expect(shown(".twoinc-loader")).toBe(false);
+        expect(ajax.calls.length).toBe(0);
+
+        jest.advanceTimersByTime(1000);
+
+        expect(shown(".twoinc-loader")).toBe(true);
+        expect(ajax.calls.length).toBe(1);
+      } finally {
+        ajax.restore();
+      }
     });
 
     test("arming a check hides a stale approval too", () => {
@@ -176,7 +217,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       instance.getApproval();
 
       expect(shown(".twoinc-intent-approved")).toBe(false);
-      expect(shown(".twoinc-loader")).toBe(true);
+      expect($(".twoinc-pay-box.twoinc-intent-approved").length).toBe(1);
     });
 
     test("and hides a stale phone-number error", () => {
@@ -204,7 +245,6 @@ describe("order-intent loading state and stale-verdict clearing", () => {
 
       expect(instance.orderIntentCheck.pendingCheck).toBe(true);
       expect(shown(".twoinc-err-payment-default")).toBe(false);
-      expect(shown(".twoinc-loader")).toBe(true);
     });
 
     test("a brand with the notice suppressed has no loader, and still gets the clearing", () => {
@@ -236,21 +276,23 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     });
   });
 
-  describe("the loader survives the paths that reset every pay-box", () => {
-    test("updateElements() leaves the loader on screen, not blank", () => {
-      // Positive control (review round 2): `shown()` is false for a hidden box
-      // AND for one that is not there, so the loader has to be proven absent
-      // before it is proven present, or a selector typo passes.
-      expect(shown(".twoinc-loader")).toBe(false);
+  describe("a checkout re-render clears the verdict, not the loading state", () => {
+    test("updateElements() does not blink off a loader for a request in flight", () => {
+      // `updateElements()` runs on every `updated_checkout`, which WooCommerce
+      // fires for a shipping-method change or a coupon — neither of which has any
+      // bearing on a request already outstanding. The blanket hide-every-pay-box
+      // that used to be here blinked the spinner off mid-request and left the tile
+      // blank until the response landed (review round 5).
+      const ajax = harness.stubAjax($);
+      try {
+        issueACheck(ajax);
 
-      // `updateElements()` runs a blanket hide-everything reset and arms an
-      // approval pass. Run in the old order — approval first — the reset
-      // immediately hid the loader the approval pass had just shown, and the
-      // buyer saw nothing for a second. This is the ordering assertion; it
-      // fails if the two calls are swapped back.
-      instance.updateElements();
+        instance.updateElements();
 
-      expect(shown(".twoinc-loader")).toBe(true);
+        expect(shown(".twoinc-loader")).toBe(true);
+      } finally {
+        ajax.restore();
+      }
     });
 
     test("updateElements() still clears a stale verdict", () => {
@@ -275,24 +317,47 @@ describe("order-intent loading state and stale-verdict clearing", () => {
   });
 
   describe("the loader is not left running when the check is not", () => {
-    test("a check abandoned at the tick takes the loader down with it", () => {
+    test("a check abandoned before its request goes out issues nothing", () => {
+      // The buyer empties a required field in the second between the check being
+      // armed and the tick firing. No loader is up yet — it goes up with the
+      // request — so what matters here is that no request is made and nothing is
+      // left ticking.
       const ajax = harness.stubAjax($);
       try {
         instance.getApproval();
-        expect(shown(".twoinc-loader")).toBe(true);
+        expect(shown(".twoinc-loader")).toBe(false);
 
-        // The buyer empties a required field in the second between the check
-        // being armed and the tick firing. Without the reset the tile reads
-        // "Checking availability" for the rest of the page, with nothing
-        // running behind it.
         instance.customerCompany.organization_number = "";
         jest.advanceTimersByTime(1000);
 
         expect(shown(".twoinc-loader")).toBe(false);
-        // Proof the box is still THERE, so the assertion above is about it being
-        // hidden and not about a mistyped selector (review round 2).
         expect($(".twoinc-pay-box.twoinc-loader").length).toBe(1);
         expect(ajax.calls.length).toBe(0);
+        expect(instance.orderIntentCheck.interval).toBeNull();
+      } finally {
+        ajax.restore();
+      }
+    });
+
+    test("a form that goes incomplete mid-request orphans it and clears the loader", () => {
+      // The other half, and the one that strands a spinner: the request is already
+      // out when the buyer empties a field. Its answer describes a form that no
+      // longer exists, so it must not paint — and the loader must not sit there
+      // waiting for it (review round 5).
+      const ajax = harness.stubAjax($);
+      try {
+        issueACheck(ajax);
+
+        instance.customerCompany.organization_number = "";
+        instance.getApproval();
+
+        expect(shown(".twoinc-loader")).toBe(false);
+        expect(instance.orderIntentCheck.inFlightSeq).toBeNull();
+
+        ajax.last().succeed({ approved: true });
+        jest.advanceTimersByTime(10000);
+
+        expect(shown(".twoinc-intent-approved")).toBe(false);
       } finally {
         ajax.restore();
       }
@@ -470,32 +535,32 @@ describe("order-intent loading state and stale-verdict clearing", () => {
 
     test("no readable cart total gives up rather than spinning forever", () => {
       // A 100%-discounted cart reads a total of 0, which is falsy on every tick,
-      // and a theme whose totals markup getPrice() cannot read never yields one
-      // at all. The interval retried indefinitely — invisible before, a spinner
-      // that never resolves now (review round 1).
+      // and a theme whose totals markup getPrice() cannot read never yields one at
+      // all. The interval retried indefinitely — a leaked 1s timer for the life of
+      // the page, and one that keeps `pendingCheck` alive with it (review round 1).
+      // No loader is involved: it goes up with the request, which is downstream of
+      // reading the total.
       const ajax = harness.stubAjax($);
       try {
         $(".order-total").remove();
         instance.getApproval();
-        expect(shown(".twoinc-loader")).toBe(true);
 
         jest.advanceTimersByTime(9000);
-        expect(shown(".twoinc-loader")).toBe(true);
         expect(instance.orderIntentCheck.interval).not.toBeNull();
 
         jest.advanceTimersByTime(1000);
-        expect(shown(".twoinc-loader")).toBe(false);
         expect(instance.orderIntentCheck.interval).toBeNull();
         expect(ajax.calls.length).toBe(0);
+        expect(shown(".twoinc-loader")).toBe(false);
 
         // And the counter is reset for the NEXT check, which is the only reason
-        // the reset in getApproval() exists (review round 2). Left at 10, a
-        // second price wait would give up after a single tick.
+        // the reset in getApproval() exists (review round 2). Left at 10, a second
+        // price wait would give up after a single tick.
         instance.getApproval();
         jest.advanceTimersByTime(9000);
-        expect(shown(".twoinc-loader")).toBe(true);
+        expect(instance.orderIntentCheck.interval).not.toBeNull();
         jest.advanceTimersByTime(1000);
-        expect(shown(".twoinc-loader")).toBe(false);
+        expect(instance.orderIntentCheck.interval).toBeNull();
       } finally {
         ajax.restore();
       }
@@ -531,7 +596,6 @@ describe("order-intent loading state and stale-verdict clearing", () => {
 
         // Same company, same cart => same request body => cache hit.
         instance.getApproval();
-        expect(shown(".twoinc-loader")).toBe(true);
         expect(shown(".twoinc-err-payment-default")).toBe(false);
 
         jest.advanceTimersByTime(1000);
@@ -624,6 +688,25 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       // for the network, and arms its own 1s bootstrap pass.
       ajax = harness.stubAjax($);
       instance.initialize(false);
+
+      // Flush initialize()'s own 1s bootstrap BEFORE re-seeding. That pass
+      // overwrites customerCompany/customerRepresentative from the DOM, and this
+      // fixture carries no representative fields — so left to fire inside a test
+      // it silently emptied the record and every later getApproval() no-opped on
+      // an incomplete form, issuing no request at all.
+      jest.advanceTimersByTime(1000);
+      instance.customerCompany = {
+        company_name: "ACME Widgets Ltd",
+        organization_number: "12345678",
+        country_prefix: "GB"
+      };
+      instance.customerRepresentative = {
+        email: "buyer@example.test",
+        first_name: "Ada",
+        last_name: "Lovelace",
+        phone_number: "+4471234567"
+      };
+
       // Take the tile back to a known state: initialize()'s own passes may have
       // armed a check of their own.
       instance.abandonOrderIntentCheck();
@@ -645,24 +728,53 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       { name: "checkout_error fires", fire: () => $(document.body).trigger("checkout_error") }
     ]) {
       test("the loader comes down when " + trigger.name, () => {
-        instance.getApproval();
-        expect(shown(".twoinc-loader")).toBe(true);
+        // The request has to be OUT for a loader to exist to take down: it goes up
+        // with the request, not with the arming (review round 5).
+        issueACheck(ajax);
+        const issued = ajax.calls.length;
 
         trigger.fire();
 
         expect(shown(".twoinc-loader")).toBe(false);
-        expect(instance.orderIntentCheck.interval).toBeNull();
-        expect(instance.orderIntentCheck.pendingCheck).toBe(false);
+        expect(instance.orderIntentCheck.inFlightSeq).toBeNull();
 
-        // And nothing is left ticking behind it. `checkout_error` is the worse of
-        // the two to get wrong: it does not trigger `updated_checkout`, so
-        // nothing re-renders the tile afterwards and the spinner would sit beside
-        // the validation errors for the rest of the page.
-        jest.advanceTimersByTime(10000);
-        expect(shown(".twoinc-loader")).toBe(false);
-        expect(ajax.calls.length).toBe(0);
+        // The superseded request is dropped rather than left running for an answer
+        // nobody will read (review round 5).
+        expect(ajax.calls[issued - 1].aborted).toBe(true);
+
+        // What happens NEXT differs between the two and is asserted separately
+        // below: Place Order leaves the check disarmed (the buyer is leaving),
+        // `checkout_error` re-arms (they are staying to fix a field).
       });
     }
+
+    test("Place Order leaves the check disarmed — nothing re-arms it", () => {
+      // The buyer is leaving the page. There is no reason to ask again, and a
+      // request racing the submit is what disarming here has always been about.
+      issueACheck(ajax);
+
+      $("#place_order").trigger("click");
+      jest.advanceTimersByTime(10000);
+
+      expect(instance.orderIntentCheck.interval).toBeNull();
+      expect(shown(".twoinc-loader")).toBe(false);
+    });
+
+    test("checkout_error re-arms, so the tile is not left blank", () => {
+      // `checkout_error` does NOT fire `updated_checkout`, so nothing else would
+      // run another check — the tile sat blank, no verdict and no spinner, for the
+      // rest of the page while the buyer corrected a field (review round 5).
+      issueACheck(ajax);
+      const issued = ajax.calls.length;
+
+      $(document.body).trigger("checkout_error");
+      expect(shown(".twoinc-loader")).toBe(false);
+
+      jest.advanceTimersByTime(1000);
+
+      expect(ajax.calls.length).toBe(issued + 1);
+      expect(shown(".twoinc-loader")).toBe(true);
+    });
   });
 
   describe("the verdict paint waits out a checkout re-render, but not forever", () => {
@@ -971,6 +1083,157 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     });
   });
 
+  describe("one request at a time", () => {
+    test("arming a new check drops the previous request instead of stacking one", () => {
+      // The interval is disarmed before a request goes out, so nothing stopped a
+      // second check arming and POSTing while the first was still outstanding — at
+      // one per second against a 30s timeout, up to thirty in flight, all but the
+      // last already superseded (review round 5).
+      const ajax = harness.stubAjax($);
+      try {
+        issueACheck(ajax);
+
+        $(".order-total .woocommerce-Price-amount").text("250.00");
+        instance.getApproval();
+        jest.advanceTimersByTime(1000);
+
+        expect(ajax.calls.length).toBe(2);
+        expect(ajax.calls[0].aborted).toBe(true);
+        expect(ajax.calls[1].aborted).toBe(false);
+        // Exactly one outstanding, and it is the newest.
+        expect(instance.orderIntentCheck.inFlightSeq).toBe(instance.orderIntentCheck.seq);
+        // The loader stays up across the swap — one question replaced another, the
+        // checkout is still waiting.
+        expect(shown(".twoinc-loader")).toBe(true);
+      } finally {
+        ajax.restore();
+      }
+    });
+
+    test("a cache hit retires a request still in flight for an earlier body", () => {
+      // The cached verdict is by construction the answer to the body the form
+      // holds now; the outstanding request is for an older one, and its answer
+      // would land afterwards and paint over it (review round 5).
+      const ajax = harness.stubAjax($);
+      try {
+        // Cache a decline for the 120.00 cart.
+        issueACheck(ajax);
+        ajax.last().succeed({ approved: false });
+        jest.advanceTimersByTime(1000);
+        expect(Object.keys(instance.orderIntentLog).length).toBe(1);
+
+        // A request goes out for a DIFFERENT cart...
+        $(".order-total .woocommerce-Price-amount").text("250.00");
+        issueACheck(ajax);
+        const stale = ajax.calls.length - 1;
+
+        // ...and the cart returns to the cached one before it answers.
+        $(".order-total .woocommerce-Price-amount").text("120.00");
+        instance.getApproval();
+        jest.advanceTimersByTime(1000);
+
+        expect(ajax.calls[stale].aborted).toBe(true);
+        expect(shown(".twoinc-err-payment-default")).toBe(true);
+
+        // The retired request answering approved must not repaint the tile.
+        ajax.calls[stale].succeed({ approved: true });
+        jest.advanceTimersByTime(10000);
+        expect(shown(".twoinc-intent-approved")).toBe(false);
+        expect(shown(".twoinc-err-payment-default")).toBe(true);
+      } finally {
+        ajax.restore();
+      }
+    });
+
+    test("a country change retires the request issued under the old country", () => {
+      // The request carries the company AND the country it was captured under, so
+      // an answer for the outgoing country would land on a tile whose company the
+      // country handler has just cleared, and approve or decline an order that no
+      // longer exists (review round 5).
+      //
+      // What retires it is the readiness guard in getApproval(): the country
+      // handler resets `customerCompany` wholesale via clearSelectedCompany() and
+      // then calls getApproval(), which finds an incomplete form. Asserted as the
+      // outcome rather than the mechanism, so it holds whichever way that is
+      // arranged.
+      const ajax = harness.stubAjax($);
+      try {
+        // Seed the country tracker. Unseeded, the FIRST country it sees is adopted
+        // rather than acted on (TWO-24867), so syncBillingCountry() would take its
+        // "not a real change" early return and the test would pass on nothing
+        // having happened.
+        ctx.helper.countryDidChange("GB");
+        issueACheck(ajax);
+        const issued = ajax.calls.length - 1;
+
+        // The option has to EXIST first: jQuery cannot select a value a <select>
+        // does not offer, so `.val("NO")` alone leaves the field reading "" — and
+        // an empty reading is deliberately not a country change (TWO-24867), so
+        // syncBillingCountry() would early-return and prove nothing.
+        $("#billing_country").append('<option value="NO">Norway</option>').val("NO");
+        expect(ctx.helper.currentCountry()).toBe("NO");
+        instance.syncBillingCountry();
+
+        expect(ajax.calls[issued].aborted).toBe(true);
+        expect(instance.orderIntentCheck.inFlightSeq).toBeNull();
+
+        ajax.calls[issued].succeed({ approved: true });
+        jest.advanceTimersByTime(10000);
+        expect(shown(".twoinc-intent-approved")).toBe(false);
+      } finally {
+        ajax.restore();
+      }
+    });
+  });
+
+  describe("clearSelectedCompany's deferred re-read", () => {
+    test("a stale 3s re-read cannot undo a newer capture", () => {
+      // clearSelectedCompany() re-reads the DOM 3s later to put the country prefix
+      // back (TWO-24867). Three seconds is long enough for the buyer to pick a
+      // company, and the closure then overwrote `customerCompany` from whatever the
+      // DOM held at that moment and re-rendered from it — undoing the newer capture
+      // (review round 5). Guarded by the company-search counter, which every
+      // country change and every search bumps.
+      ctx.helper.clearSelectedCompany();
+
+      // A newer capture lands inside the 3s window, and bumps the counter the way
+      // a real search or country change does.
+      ctx.helper.companySearchSeq += 1;
+      $("#billing_company").val("Beta Traders Ltd");
+      $("#company_id").val("87654321");
+      instance.customerCompany = {
+        company_name: "Beta Traders Ltd",
+        organization_number: "87654321",
+        country_prefix: "GB"
+      };
+
+      jest.advanceTimersByTime(3000);
+
+      expect(instance.customerCompany.company_name).toBe("Beta Traders Ltd");
+      expect(instance.customerCompany.organization_number).toBe("87654321");
+    });
+
+    test("but an unsuperseded re-read still runs", () => {
+      // The guard must not be so broad that the re-read never happens — putting the
+      // country prefix back is what it exists for.
+      //
+      // Asserted on the NUMBER and the country, not the name: with company search
+      // on, `getCompanyData()` reads the name out of the select2 container via the
+      // checkout-inputs snapshot rather than from `#billing_company`, so the name
+      // is not a usable signal here. The number comes straight from `#company_id`.
+      // Written after the clear, which empties those fields itself, and with the
+      // counter left alone so nothing supersedes the re-read.
+      ctx.helper.clearSelectedCompany();
+      instance.customerCompany = {};
+      $("#company_id").val("12345678");
+
+      jest.advanceTimersByTime(3000);
+
+      expect(instance.customerCompany.organization_number).toBe("12345678");
+      expect(instance.customerCompany.country_prefix).toBe("GB");
+    });
+  });
+
   describe("nothing in flight means nothing to reset", () => {
     test("a checkout error unrelated to this gateway leaves a good verdict alone", () => {
       // `#place_order` fires on clicks that never submit (an HTML5 constraint
@@ -988,12 +1251,16 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     });
 
     test("but a check that WAS in flight is still reset", () => {
-      instance.getApproval();
-      expect(shown(".twoinc-loader")).toBe(true);
+      const ajax = harness.stubAjax($);
+      try {
+        issueACheck(ajax);
 
-      instance.abandonOrderIntentCheck();
+        instance.abandonOrderIntentCheck();
 
-      expect(shown(".twoinc-loader")).toBe(false);
+        expect(shown(".twoinc-loader")).toBe(false);
+      } finally {
+        ajax.restore();
+      }
     });
   });
 
@@ -1035,20 +1302,15 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       }
     });
 
-    test("abandoning orphans by superseding, and leaves the request to complete", () => {
-      // `expect(record.aborted).toBe(false)` was here and could not fail: the
-      // harness initialises it false and no production path calls `abort()`, so
-      // blanking abandonOrderIntentCheck() entirely still passed (review round 4).
-      //
-      // What IS observable is the mechanism: the counter moves past the in-flight
-      // request, `inFlightSeq` is released, and the still-pending deferred is
-      // therefore ignored when it settles — which the test above asserts from the
-      // outside. Aborting instead would run `.fail`, deselecting the gateway and
-      // painting a decline onto a checkout the buyer has just submitted.
+    test("abandoning supersedes FIRST, then aborts, so the abort cannot paint", () => {
+      // Ordering is the whole of it (review round 5). jQuery runs `.fail`
+      // synchronously for an abort, and that handler deselects the gateway and
+      // paints a decline. Because the counter has already moved, the aborted
+      // request's own `stillCurrent()` check fails and it does neither — which is
+      // what makes aborting safe here at all.
       const ajax = harness.stubAjax($);
       try {
-        instance.getApproval();
-        jest.advanceTimersByTime(1000);
+        issueACheck(ajax);
         const seqInFlight = instance.orderIntentCheck.inFlightSeq;
         expect(seqInFlight).not.toBeNull();
 
@@ -1056,7 +1318,10 @@ describe("order-intent loading state and stale-verdict clearing", () => {
 
         expect(instance.orderIntentCheck.seq).toBeGreaterThan(seqInFlight);
         expect(instance.orderIntentCheck.inFlightSeq).toBeNull();
-        expect(ajax.calls[0].aborted).toBe(false);
+        expect(ajax.calls[0].aborted).toBe(true);
+        // The abort's synchronous `.fail` changed nothing.
+        expect(shown(".twoinc-err-payment-default")).toBe(false);
+        expect($(":input[value='" + GATEWAY_ID + "']").prop("checked")).toBe(true);
       } finally {
         ajax.restore();
       }

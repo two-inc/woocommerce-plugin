@@ -459,6 +459,35 @@ which is worse than no test.
 `intent-loading-state.test.js` — when the order-intent loader appears and when a previous
 verdict disappears (TWO-25326, 2026-08-04):
 
+- **the loading state is tied to the REQUEST, not to arming a check.** Round 5 reverted the
+  original design here, and it is the single most load-bearing thing in this suite. Showing the
+  loader when a check was armed decoupled its lifetime from the request's, and four review rounds
+  of stranded, blanked, looping and duplicated spinners came out of that one change — every fix
+  adding an invariant the next round attacked. Tied to the request, "the loader is up exactly
+  while a request is outstanding" holds by construction. `getApproval()` only CLEARS the previous
+  verdict; the visible cost is a gap between the clear and the spinner, which is pinned rather
+  than left implicit so nobody "fixes" it back.
+- **`clearIntentVerdicts()` vs the blanket hide.** Verdict boxes only, loader untouched — used by
+  `getApproval()` and by `updateElements()`, which runs on every `updated_checkout` (a
+  shipping-method change, a coupon) and used to blink the spinner off mid-request.
+- **one request at a time.** Arming a new check retires the previous one — abort included, so the
+  connection is not held for an answer nobody reads. Without it, rapid edits stacked one POST per
+  second against a 30s timeout. Superseding happens on four paths and each is pinned: a newer
+  check, a cache hit (whose verdict is by construction the answer to the body the form holds now),
+  a country change, and a form that goes incomplete mid-request.
+- **supersede FIRST, then abort.** jQuery runs `.fail` synchronously for an abort, and that
+  handler deselects the gateway and paints a decline — so the counter has to move before the
+  abort, or aborting would do the very thing aborting is meant to avoid. Both orderings are
+  pinned.
+- **`#place_order` and `checkout_error` are not the same event.** Place Order leaves the check
+  disarmed (the buyer is leaving); `checkout_error` re-arms, because it does NOT fire
+  `updated_checkout`, so nothing else would run another check and the tile sat blank — no verdict,
+  no spinner — while the buyer corrected a field.
+- **`clearSelectedCompany()`'s 3s deferred re-read is guarded** by the company-search counter.
+  Three seconds is long enough to pick a company, and the closure overwrote `customerCompany`
+  from the DOM and undid the newer capture. Both sides pinned: a superseded re-read is skipped,
+  an unsuperseded one still runs.
+
 - **a new check clears the previous verdict in the same call**, with no timer advanced. The
   bug: the buyer picked a different company and the tile kept showing the old company's
   "not available for this order" for the whole of the new check, because the only thing that
@@ -562,8 +591,10 @@ verdict disappears (TWO-25326, 2026-08-04):
   "not available for this order" on every field blur. Pinned both ways: identical text is
   silent, changed text still announces.
 
-Verified by mutation, per the rule below — fifty-four of them, and every one kills at least one
-test. Mutation, not review, is what found the last four gaps: the `isFailure` gate on the
+Verified by mutation, per the rule below — sixty-seven of them, and every one kills at least one
+test. That count is itself the argument for the round-5 revert: rounds 2-4 spent most of their
+mutations pinning invariants that only existed because the loading state had been decoupled from
+the request, and the revert deleted the need for them. Mutation, not review, is what found the last four gaps: the `isFailure` gate on the
 HTTP-status branch, the `inFlightSeq` release, the pre-arm paint cancel, and the approved-verdict
 and tracking-id writes all failed nothing when deleted. Two negative controls (an equivalent
 `rgb()` border notation, a CRLF catalogue) are confirmed NOT to fail.
@@ -594,6 +625,19 @@ always re-asserting the loader there, removing the pre-arm paint cancel, caching
 verdict, deleting the tracking-id write each fail one; removing `stillCurrent()`'s `inFlightSeq`
 release fails three; and all three wrong shapes of the `setPayBoxText` comparison (whole-set,
 `.first()`, no guard) fail one each.
+
+Round 5 added, on `assets/js/twoinc.js`: showing the loader on arming again fails four; making
+`getApproval()` clear nothing fails six; removing the abort from the supersede primitive fails
+six; aborting before bumping the counter fails two; and `clearIntentVerdicts()` hiding the loader
+too, `updateElements()` back to the blanket reset, the readiness early-return not abandoning, the
+issue path not superseding, the cached branch not superseding, `checkout_error` not re-arming,
+`#place_order` re-arming as well, and the deferred 3s re-read left unguarded each fail one.
+
+One mutation SURVIVED and was acted on rather than papered over: an explicit
+`supersedeInFlightOrderIntent()` on the country-change path could not be killed, because
+`clearSelectedCompany()` empties the record and the following `getApproval()` retires the request
+through its own readiness guard. The unreachable copy was deleted and the test rewritten to assert
+the outcome rather than the mechanism.
 
 On `class/WC_Twoinc.php` and the catalogues: dropping either ARIA role, injecting an `<h4>` into
 a verdict box, rendering an EMPTY verdict box, swapping the loader's two spans, mis-pairing a
