@@ -56,7 +56,7 @@ describe("API key verification — categorized failure display", () => {
     expect(text).not.toMatch(/invalid or has expired/i);
   });
 
-  test("a transport-level (network) error also shows an unreachable message, distinct from invalid key", async () => {
+  test("a transport-level failure talking to admin-ajax.php shows a neutral message — it hasn't reached Two yet, so it must not blame Two's API", async () => {
     const { $ } = await loadAdmin({
       apiKey: "an-old-stored-key",
       checked: [30],
@@ -69,8 +69,9 @@ describe("API key verification — categorized failure display", () => {
     });
 
     const text = $("#twoinc-merchant-invalid-notice").text();
-    expect(text).toMatch(/could not reach/i);
+    expect(text).toMatch(/could not complete verification/i);
     expect(text).not.toMatch(/invalid or has expired/i);
+    expect(text).not.toMatch(/two's api/i);
     expect($("#twoinc-merchant-info").css("display")).toBe("none");
   });
 

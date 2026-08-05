@@ -555,9 +555,15 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             // itself on a broken integration, for ANY verification failure
             // (invalid key, Two 5xx, network/routing failure — TWO-25326
             // follow-up). Uses the same cached check as is_available(), so
-            // "payment method hidden" and "company search hidden" can never
-            // disagree with each other, and this stops firing a live HTTP
-            // call on every checkout render.
+            // on CLASSIC checkout — this hook only fires there; there is no
+            // WooCommerce Blocks/Store API integration in this plugin today
+            // — "payment method hidden" and "company search hidden" can
+            // never disagree with each other. On block-based checkout,
+            // is_available() alone still hides the payment method; this
+            // suppression has no block-checkout equivalent to disagree
+            // with, since window.twoinc was never injected there before
+            // this PR either (review round 1). This also stops firing a
+            // live HTTP call on every checkout render.
             $status = $this->wc_twoinc->get_api_key_verification_status();
             if ($status['status'] !== 'ok') {
                 return;

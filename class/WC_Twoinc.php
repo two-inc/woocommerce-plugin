@@ -2109,10 +2109,29 @@ if (!class_exists('WC_Twoinc')) {
          */
         public function verify_api_key_action()
         {
-            $this->verify_api_key();
+            $result = $this->verify_api_key();
+            // This admin-page load is a fresh, live re-check of the STORED
+            // key — strictly more current than whatever the checkout-side
+            // cache (get_api_key_verification_status()) might be holding.
+            // Feed it forward so a merchant who just fixed a broken key
+            // doesn't have to wait out API_KEY_VERIFICATION_TTL for
+            // checkout to notice (TWO-25326 follow-up, review round 1).
+            $this->cache_verification_result($this->get_option('api_key'), $result);
         }
 
-        public function verify_api_key($api_key = null)
+        /**
+         * @param mixed $api_key  string|null, as verify_api_key() takes.
+         * @param int   $timeout  seconds. Callers evaluated inline in a
+         *   customer-facing request (get_api_key_verification_status() on a
+         *   cache miss) must pass a short timeout — WordPress's own
+         *   wp_remote_request() default the underlying make_request() falls
+         *   back to is 30s, which would otherwise block that page render for
+         *   up to 30s while Two is unreachable (TWO-25326 follow-up, review
+         *   round 1). Admin-initiated checks (the settings page, on load or
+         *   on typing) keep the longer default since a slower-but-certain
+         *   answer is the right trade there.
+         */
+        public function verify_api_key($api_key = null, $timeout = 30)
         {
             $api_key_to_use = $api_key ?: $this->get_option('api_key');
 
@@ -2125,7 +2144,7 @@ if (!class_exists('WC_Twoinc')) {
                 return;
             }
 
-            $response = $this->make_request("/v1/merchant/verify_api_key", [], 'GET', [], $api_key_to_use);
+            $response = $this->make_request("/v1/merchant/verify_api_key", [], 'GET', [], $api_key_to_use, $timeout);
 
             if (!$response || is_wp_error($response)) {
                 // Transport-level failure (network/timeout/no response) —
@@ -2151,6 +2170,15 @@ if (!class_exists('WC_Twoinc')) {
                 }
                 return ['body' => $body, 'code' => $code];
             }
+            // A truthy, non-WP_Error response that lacks a 'body' key at all
+            // is malformed/unexpected — NOT the same as "not configured"
+            // (categorize_verification_result() would otherwise conflate
+            // the two, since both fell through to an implicit null return
+            // before this branch existed — TWO-25326 follow-up, review
+            // round 1). Not reproducible via a real wp_remote_request()
+            // response today, but a mocked/future make_request() could hit
+            // it, and the distinction is free to make explicit.
+            return ['error' => 'malformed_response', 'code' => null];
         }
 
         /**
@@ -2208,6 +2236,17 @@ if (!class_exists('WC_Twoinc')) {
         const API_KEY_VERIFICATION_TTL = 300;
 
         /**
+         * Timeout (seconds) for the live call get_api_key_verification_status()
+         * makes on a cache miss. Short and explicit because that call can
+         * land inline in a customer-facing request — unlike the admin
+         * settings page's own re-verification, which can afford
+         * verify_api_key()'s longer default (TWO-25326 follow-up, review
+         * round 1). Mirrors WC_Twoinc_FX::FETCH_TIMEOUT's reasoning for the
+         * same constraint.
+         */
+        const API_KEY_VERIFICATION_TIMEOUT = 5;
+
+        /**
          * Request-scoped memo so a single page load never reads the
          * transient (or fires a live call) more than once. Instance
          * property (not static): the gateway is a per-request singleton in
@@ -2238,34 +2277,64 @@ if (!class_exists('WC_Twoinc')) {
                 return $this->api_key_verification_memo = ['status' => 'not_configured', 'code' => null, 'body' => null];
             }
 
-            $cache_key = 'twoinc_api_key_status_' . md5($api_key);
-            $cached = get_transient($cache_key);
+            $cached = get_transient(self::verification_cache_key($api_key));
             if (is_array($cached) && isset($cached['status'])) {
                 return $this->api_key_verification_memo = $cached;
             }
 
-            $result = $this->verify_api_key();
-            $status = self::categorize_verification_result($result);
-            $status['body'] = ($status['status'] === 'ok' && isset($result['body'])) ? $result['body'] : null;
-            set_transient($cache_key, $status, self::API_KEY_VERIFICATION_TTL);
-            return $this->api_key_verification_memo = $status;
+            // Short, explicit timeout: this can run inline in a
+            // customer-facing request (cart/checkout/mini-cart — anywhere
+            // WooCommerce core evaluates is_available()) on a cold cache.
+            // The transient above only bounds how OFTEN this fires, not how
+            // LONG a single miss can take — inheriting verify_api_key()'s
+            // 30s admin-page default would let one unreachable-Two request
+            // block that render for up to 30s (TWO-25326 follow-up, review
+            // round 1). Mirrors WC_Twoinc_FX::FETCH_TIMEOUT's reasoning for
+            // the same "inline in a request path" constraint.
+            $result = $this->verify_api_key(null, self::API_KEY_VERIFICATION_TIMEOUT);
+            return $this->cache_verification_result($api_key, $result);
         }
 
         /**
-         * Whether the currently stored API key is confirmed live-usable
-         * right now (subject to the TTL cache above). Both gates that must
-         * not trust a merely-present key — is_available() and the
-         * checkout-side company-search/payment-tile bootstrap — key off
-         * this, not off get_option('api_key') / get_merchant_id() alone
-         * (TWO-25326 follow-up: a key that verified successfully in the
-         * past leaves merchant_id cached in options indefinitely, so that
-         * alone cannot tell "still valid" from "was valid").
+         * Categorizes $result and stores it under $api_key's cache slot —
+         * the single place both the cache-miss path above AND a fresher
+         * live check elsewhere (verify_api_key_action() on the settings
+         * page, twoinc_ajax_verify_api_key()) feed their outcome into, so a
+         * merchant who just fixed their key on the settings page doesn't
+         * have to wait out the TTL for checkout to notice (TWO-25326
+         * follow-up, review round 1).
          *
-         * @return bool
+         * @param string     $api_key
+         * @param array|null $result verify_api_key()'s return value.
+         *
+         * @return array{status: string, code: int|null, body: array|null}
          */
-        public function is_api_key_verified()
+        public function cache_verification_result($api_key, $result)
         {
-            return $this->get_api_key_verification_status()['status'] === 'ok';
+            $status = self::categorize_verification_result($result);
+            $status['body'] = ($status['status'] === 'ok' && isset($result['body'])) ? $result['body'] : null;
+            if ($api_key) {
+                set_transient(self::verification_cache_key($api_key), $status, self::API_KEY_VERIFICATION_TTL);
+            }
+            if ($api_key === $this->get_option('api_key')) {
+                $this->api_key_verification_memo = $status;
+            }
+            return $status;
+        }
+
+        /**
+         * Brand-scoped transient key for one API key's cached verification
+         * status. Routed through WC_Twoinc_Brand::prefixed_name() to match
+         * the naming convention the plugin's other transient/option keys
+         * already follow (see WC_Twoinc_FX), rather than a bare literal.
+         *
+         * @param string $api_key
+         *
+         * @return string
+         */
+        private static function verification_cache_key($api_key)
+        {
+            return WC_Twoinc_Brand::prefixed_name('api_key_status_' . md5($api_key));
         }
 
         /**
@@ -2283,7 +2352,31 @@ if (!class_exists('WC_Twoinc')) {
             if (!parent::is_available()) {
                 return false;
             }
-            return $this->is_api_key_verified();
+            $status = $this->get_api_key_verification_status();
+            if ($status['status'] === 'ok') {
+                return true;
+            }
+            // Removing the gateway is invisible to the merchant — log the
+            // reason once per request so a verification failure doesn't
+            // read as the gateway simply vanishing (mirrors
+            // apply_brand_availability_gate()'s own "log once" pattern
+            // below; TWO-25326 follow-up, review round 1 — this is exactly
+            // the "couldn't tell why" gap the rest of this PR fixes on the
+            // admin page, so it must not reappear unlogged here).
+            static $logged = false;
+            if (!$logged && function_exists('wc_get_logger')) {
+                $logged = true;
+                wc_get_logger()->info(
+                    sprintf(
+                        '%s hidden from checkout: API key verification status "%s"%s',
+                        $this->id,
+                        $status['status'],
+                        $status['code'] ? " (HTTP {$status['code']})" : ''
+                    ),
+                    ['source' => 'twoinc-payment-gateway']
+                );
+            }
+            return false;
         }
 
 
