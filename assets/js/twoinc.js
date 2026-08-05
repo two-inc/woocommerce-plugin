@@ -4356,11 +4356,20 @@ class Twoinc {
    * @returns {boolean}
    */
   updateElements() {
+    // Reset every pay-box to hidden FIRST, then arm the approval pass.
+    //
+    // This ordering is load-bearing as of the loading-state fix below:
+    // getApproval() now shows the "Checking availability" loader the moment a
+    // check is armed, and the no-argument togglePaySubtitleDesc() call is a
+    // blanket "hide every pay-box" reset. Run in the old order (approval
+    // first) the reset immediately hid the loader getApproval() had just put
+    // on screen, and the buyer saw nothing until the interval's own call a
+    // second later. Nothing in getApproval() reads which boxes are visible,
+    // so moving the reset ahead of it is safe.
+    twoincDomHelper.togglePaySubtitleDesc();
+
     // Check approval again
     this.getApproval();
-
-    // Update the text in subtitle and description
-    twoincDomHelper.togglePaySubtitleDesc();
 
     // Rearrange the DOMs in Twoinc payment
     twoincDomHelper.rearrangeDescription();
@@ -4393,6 +4402,32 @@ class Twoinc {
    */
   getApproval() {
     if (!this.isReadyApprovalCheck()) return;
+
+    // Enter the loading state HERE, where the check is committed to, not a
+    // second later inside the interval body (TWO-25326, 2026-08-04).
+    //
+    // togglePaySubtitleDesc() hides every pay-box before unhiding the loader,
+    // so this is also what clears a previous verdict. That is the point: the
+    // buyer changing their selected company used to keep reading "<old
+    // company> is not available for this order" for as long as the new check
+    // took, because the only thing that cleared it was the new RESULT
+    // arriving. Four of the five routes into getApproval() —
+    // setSoleTraderCompany(), onCompanyInputBlur(), onRepresentativeInputBlur()
+    // and onCountryChange() — did no clearing of their own at all; only the
+    // company picker's select2:select handler did, and even it left a second
+    // of stale message on screen because the interval fires at 1000ms.
+    // Putting it in this one choke point covers every route, including any
+    // added later.
+    //
+    // Above the interval guard on purpose: a call that arrives while a check
+    // is already armed is a NEWER question than the one in flight, so its
+    // answer is what will be rendered, and the older verdict is stale from
+    // this moment either way.
+    //
+    // A brand that suppressed the notice has no loader div (TWO-25224), so
+    // this degrades to the hide-everything reset — which is still the clearing
+    // half, and still an improvement on holding a stale verdict.
+    twoincDomHelper.togglePaySubtitleDesc("checking-intent");
 
     if (this.orderIntentCheck.interval) {
       this.orderIntentCheck.pendingCheck = true;
@@ -4459,8 +4494,19 @@ class Twoinc {
       Twoinc.getInstance().orderIntentCheck.interval = null;
       Twoinc.getInstance().orderIntentCheck.pendingCheck = false;
 
-      if (!Twoinc.getInstance().isReadyApprovalCheck()) return;
+      if (!Twoinc.getInstance().isReadyApprovalCheck()) {
+        // The loader went on screen when this check was armed, so abandoning
+        // the check here has to take it off again — otherwise "Checking
+        // availability" sits there permanently with nothing running behind
+        // it. Reachable whenever the buyer empties a required field in the
+        // second between arming and this tick.
+        twoincDomHelper.togglePaySubtitleDesc();
+        return;
+      }
 
+      // Re-asserted rather than relied upon from getApproval(): the cached-hash
+      // branch above can have shown a verdict and returned on an earlier tick,
+      // and a `pendingCheck` re-arm comes straight back here.
       twoincDomHelper.togglePaySubtitleDesc("checking-intent");
 
       // Create an order intent

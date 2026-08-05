@@ -456,6 +456,35 @@ the spinner today is `clearSelectedCompany()` re-attaching the widget and taking
 dropdown with it — so a test asserting the spinner is gone afterwards would pass either way,
 which is worse than no test.
 
+`intent-loading-state.test.js` — when the order-intent loader appears and when a previous
+verdict disappears (TWO-25326, 2026-08-04):
+
+- **a new check clears the previous verdict in the same call**, with no timer advanced. The
+  bug: the buyer picked a different company and the tile kept showing the old company's
+  "not available for this order" for the whole of the new check, because the only thing that
+  cleared it was the new result arriving.
+- driven through `getApproval()` rather than through each caller, deliberately. That is the
+  one choke point every route into a check passes, and four of the five routes
+  (`setSoleTraderCompany`, `onCompanyInputBlur`, `onRepresentativeInputBlur`,
+  `onCountryChange`) cleared nothing of their own — a test per route would have missed exactly
+  those. A route added later inherits the behaviour and the coverage.
+- all three verdict boxes are pinned separately (approved, "not available", phone-number),
+  plus the `pendingCheck` path where a second call arrives while a check is already armed —
+  the clearing sits ABOVE that guard, so the early return must not skip it.
+- the two cases where nothing should change: an incomplete company arms no check and leaves
+  whatever is on screen alone (the clearing sits below the readiness guard), and a brand that
+  suppressed the notice has no loader div at all yet still gets the clearing half.
+- **the loader is never left running without a check behind it.** A check abandoned at the
+  tick — the buyer emptied a required field in the intervening second — resets the tile, and a
+  settled response replaces the loader with its verdict.
+- `updateElements()`'s ordering is pinned as its own assertion: it runs a blanket
+  hide-every-pay-box reset and arms a check, and in the old order the reset wiped the loader
+  the check had just shown. Swapping the two calls back fails that test and nothing else.
+
+Verified by mutation, per the rule below: removing the clearing from `getApproval()` fails
+seven of the eleven, re-swapping `updateElements()`'s two calls fails exactly one, and dropping
+the abandoned-check reset fails exactly one.
+
 ### Two defects these tests found, now fixed
 
 Both were pinned as characterisation tests when this suite landed, and both were fixed
