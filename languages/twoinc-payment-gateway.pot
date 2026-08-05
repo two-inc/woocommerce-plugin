@@ -1000,6 +1000,7 @@ msgstr ""
 msgid "This API key is invalid or has expired."
 msgstr ""
 
+#. translators: %s: HTTP status code returned by Two's API (e.g. 502).
 #: class/WC_Twoinc.php
 #, php-format
 msgid "Two's API returned a service error (HTTP %s). This is likely temporary on Two's side — try again shortly."
@@ -1017,6 +1018,7 @@ msgstr ""
 msgid "Could not complete verification — try again shortly."
 msgstr ""
 
+#. translators: %s: HTTP status code returned by Two's API (e.g. 418).
 #: class/WC_Twoinc.php
 #, php-format
 msgid "Two's API returned an unexpected response (HTTP %s)."

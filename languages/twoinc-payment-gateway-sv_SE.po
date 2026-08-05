@@ -676,6 +676,7 @@ msgstr "Maxbeloppet gäller hela avgiften: procenten och den fasta avgiften till
 msgid "This API key is invalid or has expired."
 msgstr "Den här API-nyckeln är ogiltig eller har upphört att gälla."
 
+#. translators: %s: HTTP status code returned by Two's API (e.g. 502).
 #: class/WC_Twoinc.php
 #, php-format
 msgid "Two's API returned a service error (HTTP %s). This is likely temporary on Two's side — try again shortly."
@@ -693,6 +694,7 @@ msgstr "Ange en API-nyckel ovan för att aktivera Two."
 msgid "Could not complete verification — try again shortly."
 msgstr "Det gick inte att slutföra verifieringen — försök igen strax."
 
+#. translators: %s: HTTP status code returned by Two's API (e.g. 418).
 #: class/WC_Twoinc.php
 #, php-format
 msgid "Two's API returned an unexpected response (HTTP %s)."
