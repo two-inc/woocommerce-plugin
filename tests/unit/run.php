@@ -6608,10 +6608,27 @@ final class BrandConfigSpec
 
         // ...but only once per category. These notices are rebuilt on every
         // wp-admin page view and a bad catalogue stays bad, so an unthrottled
-        // log would grow without bound; the throttle outlives the request.
+        // log would grow without bound.
         self::gateway()->get_api_key_notices();
         self::gateway()->get_api_key_notices();
         TinyAssert::same(3, self::countNoticeMismatchLogs(), 'the mismatch log must be throttled per category');
+
+        // Assert the TRANSIENT, not just the count: a per-request static would
+        // satisfy the repeat-call assertion above and still write a line on
+        // every wp-admin page view, which is the thing that has to stop. The
+        // transient is the only observable difference between the two.
+        foreach (['service_error', 'unreachable', 'not_configured'] as $key) {
+            TinyAssert::true(
+                (bool) get_transient(WC_Twoinc_Brand::prefixed_name('notice_format_logged_' . $key)),
+                "the '$key' log must be throttled by a transient that outlives the request"
+            );
+        }
+        // A category whose translation is fine must not be throttled — that
+        // would suppress its first real failure.
+        TinyAssert::same(
+            false,
+            get_transient(WC_Twoinc_Brand::prefixed_name('notice_format_logged_unexpected_response'))
+        );
     }
 
     private static function countNoticeMismatchLogs(string $category = ''): int
@@ -6672,7 +6689,8 @@ final class BrandConfigSpec
         TinyAssert::same('Kunne ikke fullføre .', $notices['request_failed']);
         TinyAssert::same('Kunne ikke verifisere .', $notices['unverified']);
 
-        // An escaped percent and a literal percent in prose both survive.
+        // An escaped percent and a literal percent in prose both survive on the
+        // notices the plugin does not format at all.
         $GLOBALS['__twoinc_test_translations'] = [
             $templates['invalid_key'] => 'Bare 100% av nøklene, 50%% av tiden.',
         ];
@@ -6680,6 +6698,19 @@ final class BrandConfigSpec
             'Bare 100% av nøklene, 50%% av tiden.',
             self::gateway()->get_api_key_notices()['invalid_key']
         );
+
+        // The two status-free categories ARE formatted, and formatting
+        // UNescapes '%%s' into a literal '%s'. Nothing downstream substitutes
+        // into those two — admin.js only fills the status code in the other
+        // two — so it would render verbatim at the admin unless the formatted
+        // result is stripped as well.
+        $GLOBALS['__twoinc_test_translations'] = [
+            $templates['unreachable'] => 'Nådde ikke %1$s (%%s).',
+            $templates['not_configured'] => 'Skriv inn en nøkkel for %1$s (%%d).',
+        ];
+        $notices = self::gateway()->get_api_key_notices();
+        TinyAssert::same('Nådde ikke Two ().', $notices['unreachable']);
+        TinyAssert::same('Skriv inn en nøkkel for Two ().', $notices['not_configured']);
     }
 
     private static function testApiKeyNoticeCopyIsTranslatedInEveryLocale(): void

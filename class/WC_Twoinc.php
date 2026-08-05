@@ -2816,26 +2816,30 @@ if (!class_exists('WC_Twoinc')) {
                     'service_error',
                     $templates['service_error'],
                     [$product_name, '%s'],
-                    $templates['unverified']
+                    $templates['unverified'],
+                    true
                 ),
                 'unreachable' => self::format_api_key_notice(
                     'unreachable',
                     $templates['unreachable'],
                     [$product_name],
-                    $templates['unverified']
+                    $templates['unverified'],
+                    false
                 ),
                 'not_configured' => self::format_api_key_notice(
                     'not_configured',
                     $templates['not_configured'],
                     [$product_name],
-                    $templates['unverified']
+                    $templates['unverified'],
+                    false
                 ),
                 'request_failed' => self::strip_unfilled_placeholders($templates['request_failed']),
                 'unexpected_response' => self::format_api_key_notice(
                     'unexpected_response',
                     $templates['unexpected_response'],
                     [$product_name, '%s'],
-                    $templates['unverified']
+                    $templates['unverified'],
+                    true
                 ),
                 'unverified' => self::strip_unfilled_placeholders($templates['unverified']),
             ];
@@ -2887,18 +2891,19 @@ if (!class_exists('WC_Twoinc')) {
          * to the placeholder-free copy (what was shown before the failures
          * were categorized at all).
          *
-         * @param string $key      notice category, for the log
+         * @param string $key            notice category, for the log
          * @param string $template
-         * @param array  $args     arguments for the template's placeholders
-         * @param string $fallback placeholder-free notice text
+         * @param array  $args           arguments for the template's placeholders
+         * @param string $fallback       placeholder-free notice text
+         * @param bool   $expects_status whether this category's copy declares a
+         *                               status placeholder for admin.js to fill,
+         *                               stated by the caller rather than inferred
+         *                               from the argument count
          *
          * @return string
          */
-        private static function format_api_key_notice($key, $template, array $args, $fallback)
+        private static function format_api_key_notice($key, $template, array $args, $fallback, $expects_status)
         {
-            // More than one argument means the second is the literal '%s' that
-            // must survive into the output for admin.js to substitute.
-            $expects_status = count($args) > 1;
             $reason = 'sprintf() rejected the format string';
             try {
                 // Silenced deliberately: PHP 7.4 reports the mismatch as a
@@ -2907,7 +2912,14 @@ if (!class_exists('WC_Twoinc')) {
                 // into the admin page's output.
                 $formatted = @vsprintf($template, $args);
                 if (is_string($formatted)) {
-                    if (!$expects_status || strpos($formatted, '%s') !== false) {
+                    if (!$expects_status) {
+                        // Nothing downstream substitutes into these, and
+                        // formatting does not remove an escaped '%%s' — it
+                        // UNescapes it into a literal '%s' that would render
+                        // verbatim at the admin. Strip whatever survived.
+                        return self::strip_unfilled_placeholders($formatted);
+                    }
+                    if (strpos($formatted, '%s') !== false) {
                         return $formatted;
                     }
                     // vsprintf accepts a format string that uses FEWER

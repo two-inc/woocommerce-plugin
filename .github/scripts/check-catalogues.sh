@@ -93,54 +93,22 @@ for po in "${po_files[@]}"; do
     # decodes fine, so nothing above can see it — but at runtime sprintf() gets
     # a format string it has no arguments for. The plugin degrades rather than
     # fataling on that (WC_Twoinc::format_api_key_notice), which means a broken
-    # translation would silently show generic copy in that locale forever with
+    # translation would otherwise show generic copy in that locale forever with
     # no other signal. Catch it here instead (TWO-25326).
+    #
+    # KNOWN GAP, deliberately not closed here: msgfmt only inspects entries
+    # xgettext flagged "#, php-format", and it flags an entry only when the
+    # SOURCE string carries a specifier. So a placeholder-free msgid whose
+    # translation invents one stays invisible to this gate. A hand-rolled
+    # msgid-vs-msgstr comparison was tried and reverted: it produced false
+    # positives on ordinary gettext (plural entries, URL-encoded text like
+    # %2F, fuzzy entries), and by this script's own header a gate that fails
+    # unrelated pull requests is worse than no gate. The runtime handles that
+    # case instead — WC_Twoinc::strip_unfilled_placeholders() drops a
+    # specifier nothing will substitute into rather than printing it.
     if ! msgfmt --check-format -o /dev/null "$po" 2>"$tmp/fmt.err"; then
         echo "::error file=$po::a translation's placeholders do not match its source string"
         sed 's/^/  /' "$tmp/fmt.err"
-        status=1
-        continue
-    fi
-
-    # --check-format above only inspects entries xgettext flagged "#, php-format",
-    # and it flags an entry only when the SOURCE string carries a specifier. So a
-    # placeholder-free msgid whose translation invents one is invisible to it —
-    # and nothing at runtime substitutes into those, so the specifier would print
-    # verbatim at a merchant (the plugin strips it defensively, which turns it
-    # into a silently missing word instead). Catch it here: any entry whose
-    # msgstr introduces a conversion specifier its msgid does not have.
-    if ! awk '
-        function specs(s,    out, n, i, parts) {
-            out = ""
-            # Drop escaped percents first so "50%%" is not read as a specifier.
-            gsub(/%%/, "", s)
-            n = split(s, parts, /%/)
-            for (i = 2; i <= n; i++) {
-                if (match(parts[i], /^[0-9]*\$?[0-9.]*[bcdeEfFgGosuxX]/)) {
-                    out = out "%" substr(parts[i], 1, RLENGTH) " "
-                }
-            }
-            return out
-        }
-        function flush() {
-            if (id != "" && str != "") {
-                a = specs(id); b = specs(str)
-                if (a == "" && b != "") {
-                    printf "%s:%d: translation adds placeholder(s) %sthe source string does not have\n", FILENAME, line, b
-                    bad = 1
-                }
-            }
-            id = ""; str = ""; mode = ""
-        }
-        /^msgid / { flush(); mode = "id"; line = FNR; id = $0; sub(/^msgid /, "", id); next }
-        /^msgid_plural / { mode = "skip"; next }
-        /^msgstr/ { mode = "str"; str = $0; sub(/^msgstr(\[[0-9]+\])? /, "", str); next }
-        /^"/ { if (mode == "id") { id = id $0 } else if (mode == "str") { str = str $0 } next }
-        /^[[:space:]]*$/ { flush() }
-        END { flush(); exit bad }
-    ' "$po" >"$tmp/prose.err"; then
-        echo "::error file=$po::a translation introduces a placeholder its source string does not have"
-        sed 's/^/  /' "$tmp/prose.err"
         status=1
         continue
     fi
