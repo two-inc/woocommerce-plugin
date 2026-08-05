@@ -31,7 +31,9 @@
  *   - `wp.media` is referenced only inside a click handler, never at load.
  *   - the inline-fee AJAX returns early unless the term container carries
  *     `data-fees`, and the API-key check returns early unless the key field
- *     holds a value. Neither is set, so no network call is ever attempted.
+ *     holds a value. Neither is set, so no network call is ever attempted —
+ *     UNLESS `options.apiKey` is passed (see buildSettingsPage), which opts a
+ *     test into the API-key markup and value on purpose.
  */
 
 "use strict";
@@ -148,9 +150,36 @@ function buildSettingsPage(options) {
     })
     .join("\n");
 
+  // Mirrors generate_api_key_with_verification_html()'s markup — only built
+  // when a test opts in via options.apiKey, so the default page stays free of
+  // the API-key field and admin.js's page-load verifyApiKey() never fires for
+  // suites that don't want it.
+  const apiKeyBlock =
+    opts.apiKey === undefined
+      ? ""
+      : '    <tr><td>' +
+        '<input type="text" id="' +
+        FIELD_PREFIX +
+        'api_key" value="' +
+        opts.apiKey +
+        '" />' +
+        '<span id="api-key-verification-icon" style="display:none">' +
+        '<span id="api-key-valid" style="display:none"></span>' +
+        '<span id="api-key-invalid" style="display:none"></span>' +
+        '<span id="api-key-loading" style="display:none"></span>' +
+        "</span>" +
+        '<div id="twoinc-merchant-info" style="display:none">' +
+        '<span id="twoinc-merchant-id"></span>' +
+        '<span id="twoinc-merchant-short-name"></span>' +
+        "</div>" +
+        '<div id="twoinc-signup-prompt"></div>' +
+        '<div id="twoinc-merchant-invalid-notice" style="display:none"></div>' +
+        "</td></tr>";
+
   document.body.innerHTML = [
     '<form method="post">',
     '  <table class="form-table"><tbody>',
+    apiKeyBlock,
     '    <tr><td><div class="twoinc-term-checkboxes">' + checkboxes + "</div></td></tr>",
     '    <tr><td><input type="text" id="' +
       FIELD_PREFIX +
@@ -232,12 +261,19 @@ function assertBootstrapped($) {
  * against it, and wait for its jQuery-ready bootstrap to complete.
  *
  * @param {Object} [options] passed through to buildSettingsPage, plus
- *   `merchantTerms` for the backend-offered set admin.js intersects against
+ *   `merchantTerms` for the backend-offered set admin.js intersects against,
+ *   and `stubAjax($)` — called right after jQuery is installed but before
+ *   admin.js's ready callback can run, so a test can stub `$.ajax` ahead of
+ *   the page-load `verifyApiKey()` call that fires when `options.apiKey` is
+ *   set (see buildSettingsPage).
  * @returns {Promise<{$: Function, adminSettings: Object}>}
  */
 async function loadAdmin(options) {
   const opts = options || {};
   const $ = installJQuery();
+  if (typeof opts.stubAjax === "function") {
+    opts.stubAjax($);
+  }
   buildSettingsPage(opts);
   const adminSettings = {
     gateway_id: GATEWAY_ID,
