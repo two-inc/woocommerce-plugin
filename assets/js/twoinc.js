@@ -1322,9 +1322,19 @@ class TwoCompanySearch {
               // shared composer, which drops an internally minted number along
               // with the brackets that would otherwise be left empty around it.
               // `item.highlight` is the response's pre-highlighted HTML, so it
-              // is passed as an already-escaped fragment (composeCompanyLabel
-              // does not touch it) — the identifier is registry-issued digits.
-              html: twoincUtilHelper.composeCompanyLabel(item.highlight, identifier),
+              // is passed through as an already-marked-up fragment rather than
+              // being re-encoded (composeCompanyLabel does not touch its label).
+              //
+              // Falling back to the plain name for the same reason the
+              // identifier is read defensively above: `highlight` is the
+              // server's presentation of the match and this loop is written to
+              // survive a response that omits a field. Without the fallback a
+              // hit missing `highlight` composes to `undefined`, and select2
+              // renders a blank-but-selectable row.
+              html: twoincUtilHelper.composeCompanyLabel(
+                item.highlight || item.name || "",
+                identifier
+              ),
               company_id: identifier,
               lookup_id: item.lookup_id,
               approved: false
@@ -3204,6 +3214,17 @@ let twoincDomHelper = {
     if (document.querySelector("#company_id") && window.twoinc.company_id) {
       document.querySelector("#company_id").value = window.twoinc.company_id;
     }
+
+    // Re-evaluate the company fields, because the write just above changes
+    // what `#company_id`'s visibility depends on (TWO-25326 §12).
+    //
+    // Deliberately here rather than at the initialize() call site: this is the
+    // function that performs the write, so the re-toggle cannot be separated
+    // from it by a later reordering. A returning sole trader's user meta holds
+    // a minted `TWO:…` identifier, and initialize() has already toggled the
+    // fields once by this point — against an empty input — so without this the
+    // identifier is restored into a visible field on every page load.
+    twoincDomHelper.toggleBusinessFields();
   },
   /**
    * Get id of current or parent theme, return null if not found
@@ -3812,9 +3833,26 @@ let twoincSoleTrader = {
     if (companyId) {
       instance.customerCompany.country_prefix = twoincSelectWooHelper.currentCountry();
     }
+    // Re-evaluate which company fields are shown, AFTER the write above
+    // (TWO-25326 §12).
+    //
+    // `#company_id`'s visibility depends on the value it now holds, and this
+    // is the function that changes that value. Every route into sole-trader
+    // capture toggles the fields BEFORE the autofill lands — setMode() runs
+    // while the input is still empty, and the hosted-signup postMessage
+    // handler reaches here with no toggle of its own at all — so without this
+    // the minted `TWO:…` identifier lands in a field that was made visible on
+    // the strength of it being empty, and stays on screen until some
+    // unrelated country or payment-method switch happens to re-toggle. That
+    // is the exact surface §12 exists to close.
+    //
+    // Not re-entrant: toggleBusinessFields() reads the inputs and reassigns
+    // classes, and calls nothing that comes back here.
+    twoincDomHelper.toggleBusinessFields();
     // Explicit rather than DOM-read: this function is the authority on what was
     // just captured, so the summary should not depend on the order the mirrors
-    // above are written in (TWO-25288).
+    // above are written in (TWO-25288). Also re-renders after the toggle above,
+    // whose own trailing renderCompanySummary() reads the DOM.
     twoincSelectWooHelper.renderCompanySummary(companyName, companyId);
     if (companyId) {
       instance.getApproval();
@@ -4265,6 +4303,9 @@ class Twoinc {
     // Add customization for current theme if any
     twoincDomHelper.insertCustomCss();
 
+    // Both of these re-toggle the company fields themselves, at the point they
+    // write `#company_id` (TWO-25326 §12) — the toggle earlier in this function
+    // ran before either of them, against an empty input.
     twoincDomHelper.loadUserMetaInputs();
     if (loadSavedInputs) twoincDomHelper.loadStorageInputs();
 

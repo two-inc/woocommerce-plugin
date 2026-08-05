@@ -141,6 +141,19 @@ describe("TWO:-prefixed organisation numbers", () => {
         "<em>Example</em> Ltd"
       );
     });
+
+    test("an empty label yields no orphan parens", () => {
+      expect(util.composeCompanyLabel("", "11111111")).toBe("");
+    });
+
+    test("returns its label verbatim when there is nothing to append", () => {
+      // The contract callers rely on: whatever went in comes back out
+      // untouched, so a caller that passed a string always gets a string. The
+      // dropdown guarantees that by defaulting its fragment before calling in
+      // — a search hit missing `highlight` must not compose to `undefined`.
+      expect(util.composeCompanyLabel("", SYNTHETIC)).toBe("");
+      expect(util.composeCompanyLabel("Example Ltd", "")).toBe("Example Ltd");
+    });
   });
 
   describe("the search-results dropdown", () => {
@@ -188,6 +201,25 @@ describe("TWO:-prefixed organisation numbers", () => {
 
       expect(out.results[0].html).toBe("<em>Example Trading Co</em> (11111111)");
       expect(out.results[0].company_id).toBe("11111111");
+    });
+
+    test("a hit with no highlight falls back to the plain name", () => {
+      // This loop is written to survive a response that omits a field — the
+      // identifier is already read defensively. Without the same tolerance for
+      // `highlight` the row composes to `undefined` and select2 renders a
+      // blank-but-selectable entry.
+      const withoutHighlight = hit("Example Trading Co", "11111111");
+      delete withoutHighlight.highlight;
+
+      const out = processResults()({ items: [withoutHighlight] }, {});
+
+      expect(out.results[0].html).toBe("Example Trading Co (11111111)");
+    });
+
+    test("a hit with neither highlight nor name yields a string, not undefined", () => {
+      const out = processResults()({ items: [{ national_identifier: { id: "11111111" } }] }, {});
+
+      expect(typeof out.results[0].html).toBe("string");
     });
   });
 
@@ -289,13 +321,30 @@ describe("TWO:-prefixed organisation numbers", () => {
       expect($box.text()).not.toContain("TWO:");
       expect($box.text()).not.toContain("()");
     });
+  });
 
-    test("the submitted field still holds the raw identifier throughout", () => {
-      stageNotice("twoinc-intent-approved", SYNTHETIC);
+  describe("the data the server is sent", () => {
+    beforeEach(() => {
+      harness.buildCheckoutForm();
+    });
 
-      ctx.dom.togglePaySubtitleDesc("intent-approved");
+    // This is the half the display filter must NOT reach. Asserting that
+    // `#company_id` still holds what the test itself typed into it would be a
+    // tautology — nothing in the display path writes that input — so the
+    // assertions here are on the payload builder instead, which is what a
+    // careless "just filter it at the source" fix would break.
+    test("getCompanyData carries the raw minted identifier", () => {
+      $("#billing_company").val("Example Ltd");
+      $("#company_id").val(SYNTHETIC);
 
-      expect($("#company_id").val()).toBe(SYNTHETIC);
+      expect(ctx.dom.getCompanyData().organization_number).toBe(SYNTHETIC);
+    });
+
+    test("getCompanyData carries a registry number unchanged", () => {
+      $("#billing_company").val("Example Ltd");
+      $("#company_id").val("11111111");
+
+      expect(ctx.dom.getCompanyData().organization_number).toBe("11111111");
     });
   });
 
@@ -351,7 +400,6 @@ describe("TWO:-prefixed organisation numbers", () => {
       // in a visible text box. Hiding the field is the fix rather than
       // blanking it: the value is what WooCommerce posts.
       expect($("#company_id_field").hasClass("hidden")).toBe(true);
-      expect($("#company_id").val()).toBe(SYNTHETIC);
     });
 
     test("carries no required cue while hidden", () => {
@@ -361,8 +409,105 @@ describe("TWO:-prefixed organisation numbers", () => {
       ctx.dom.toggleBusinessFields();
 
       // A required cue on a field nobody can see is how a checkout becomes
-      // unsubmittable with no visible reason why.
-      expect($("#company_id_field").hasClass("validate-required")).toBe(false);
+      // unsubmittable with no visible reason why. Asserted against what
+      // toggleRequiredCues actually does — set the `required` attribute and
+      // append an `<abbr class="twoinc-required">` to the label. An earlier
+      // draft asserted a `validate-required` class that nothing in this
+      // codebase sets, so it passed no matter what the production code did.
+      expect($("#company_id").attr("required")).toBeFalsy();
+      expect($("#company_id_field").find("label .twoinc-required").length).toBe(0);
+    });
+
+    test("keeps the required cue when a registry number is expected", () => {
+      // The counterweight to the test above: proves the cue is genuinely
+      // driven by the filter, not simply absent in this fixture.
+      loadWithSearchOff();
+      $("#company_id").val("11111111");
+
+      ctx.dom.toggleBusinessFields();
+
+      expect($("#company_id").attr("required")).toBeTruthy();
+    });
+
+    describe("driven through the real sole-trader flow", () => {
+      // The ordering that matters, and the one the assertions above cannot
+      // reach: production toggles the fields BEFORE the autofill lands, so
+      // `#company_id` is empty at toggle time and the field is shown on the
+      // strength of that. Setting the value first and toggling afterwards —
+      // as the tests above do — inverts it, and would certify a guarantee
+      // the real flow does not deliver. So drive the actual capture entry
+      // point and assert the end state.
+      test("enrolling a sole trader leaves no minted number on screen", () => {
+        loadWithSearchOff();
+
+        ctx.soleTrader.setCompany(SYNTHETIC, "Example Ltd");
+
+        expect($("#company_id_field").hasClass("hidden")).toBe(true);
+        expect($("#company_id").attr("required")).toBeFalsy();
+        // Still posted — the whole point of hiding rather than blanking.
+        expect($("#company_id").val()).toBe(SYNTHETIC);
+        expect(ctx.dom.getCompanyData().organization_number).toBe(SYNTHETIC);
+      });
+
+      test("capturing a registry company still shows the field", () => {
+        loadWithSearchOff();
+
+        ctx.soleTrader.setCompany("11111111", "Example Ltd");
+
+        expect($("#company_id_field").hasClass("hidden")).toBe(false);
+      });
+
+      test("the summary label shows no minted number after enrollment", () => {
+        loadWithSearchOff();
+
+        ctx.soleTrader.setCompany(SYNTHETIC, "Example Ltd");
+
+        const $summary = $("#" + ctx.helper.companySummaryId);
+        expect($summary.find(".twoinc-company-summary-id").text()).toBe("");
+        expect($summary.hasClass("hidden")).toBe(true);
+      });
+    });
+
+    describe("restored from a previous visit", () => {
+      // The other ordering trap: initialize() toggles the fields before the
+      // restore passes run, so both of them write `#company_id` after the
+      // decision was taken against an empty input. A returning sole trader's
+      // user meta holds a minted identifier, so this is the every-page-load
+      // case rather than an edge case.
+      test("user-meta restore leaves no minted number on screen", () => {
+        loadWithSearchOff();
+        ctx.dom.toggleBusinessFields();
+        // The state initialize() is in when it reaches the restore: fields
+        // already toggled, input still empty.
+        expect($("#company_id_field").hasClass("hidden")).toBe(false);
+
+        ctx.twoinc.billing_company = "Example Ltd";
+        ctx.twoinc.company_id = SYNTHETIC;
+        ctx.dom.loadUserMetaInputs();
+
+        expect($("#company_id").val()).toBe(SYNTHETIC);
+        expect($("#company_id_field").hasClass("hidden")).toBe(true);
+      });
+
+      test("user-meta restore of a registry number still shows the field", () => {
+        loadWithSearchOff();
+        ctx.dom.toggleBusinessFields();
+
+        ctx.twoinc.billing_company = "Example Ltd";
+        ctx.twoinc.company_id = "11111111";
+        ctx.dom.loadUserMetaInputs();
+
+        expect($("#company_id_field").hasClass("hidden")).toBe(false);
+      });
+
+      // No equivalent for loadStorageInputs(): that replay is deliberately
+      // NOT made to re-toggle. It runs from initialize() before the country
+      // configuration is guaranteed to be populated (an existing suite drives
+      // it with a minimal fixture and toggleBusinessFields() throws there), and
+      // it only ever replays the current session's own inputs — which the
+      // capture path that produced them has already toggled for. The
+      // cross-visit case, which is the one that actually persists a minted
+      // identifier, is the user-meta pass covered above.
     });
   });
 });
