@@ -110,15 +110,50 @@ jQuery(function ($) {
     $("#twoinc-merchant-invalid-notice").hide();
   }
 
+  // Maps the categorized failure the AJAX handler reports (see
+  // WC_Twoinc::categorize_verification_result()) to admin-facing text — no
+  // raw response body/content, just enough to tell "my key is wrong" apart
+  // from "Two's API is down" (TWO-25326 follow-up: today's incident showed
+  // every non-200 response, 5xx and network failures included, displayed
+  // identically as "API key is invalid").
+  function invalidNoticeText(status, code) {
+    switch (status) {
+      case "invalid_key":
+        return "This API key is invalid or has expired.";
+      case "service_error":
+        return (
+          "Two's API returned a service error (HTTP " +
+          code +
+          "). This is likely temporary on Two's side — try again shortly."
+        );
+      case "unreachable":
+        return "Could not reach Two's API (network or connectivity error). Try again shortly.";
+      case "not_configured":
+        return "Enter an API key above to enable Two.";
+      case "request_failed":
+        // The AJAX request to THIS SITE's admin-ajax.php failed before Two
+        // was ever contacted (jQuery's error callback fires on any
+        // transport-level failure — a WordPress-side 500, an expired
+        // nonce, a proxy/WAF block — not specifically "Two is
+        // unreachable"). Reviewed round 1: the "unreachable" wording here
+        // would have wrongly pointed an admin at Two for a WP-side problem.
+        return "Could not complete verification — try again shortly.";
+      default:
+        return code
+          ? "Two's API returned an unexpected response (HTTP " + code + ")."
+          : "This API key could not be verified.";
+    }
+  }
+
   // A failed verification must not leave the previously fetched Merchant ID
-  // on screen — that reads as "the integration is fine" when it isn't. Swap
-  // it for an explicit invalid-key notice instead (this call site is the fix
-  // for the settings page silently keeping stale merchant info on a broken
-  // key).
-  function showMerchantInfoInvalid() {
+  // on screen — that reads as "the integration is fine" when it isn't.
+  // Swap it for the categorized invalid-key notice instead (this call site
+  // is also the fix for the settings page silently keeping stale merchant
+  // info on a broken key).
+  function showMerchantInfoInvalid(status, code) {
     $("#twoinc-merchant-info").hide();
     $("#twoinc-signup-prompt").hide();
-    $("#twoinc-merchant-invalid-notice").show();
+    $("#twoinc-merchant-invalid-notice").text(invalidNoticeText(status, code)).show();
   }
 
   function verifyApiKey(apiKey) {
@@ -143,12 +178,13 @@ jQuery(function ($) {
           updateMerchantInfo(response.data);
         } else {
           showVerificationStatus("invalid");
-          showMerchantInfoInvalid();
+          const data = response.data || {};
+          showMerchantInfoInvalid(data.status, data.code);
         }
       },
       error: function () {
         showVerificationStatus("invalid");
-        showMerchantInfoInvalid();
+        showMerchantInfoInvalid("request_failed", null);
       }
     });
   }

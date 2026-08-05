@@ -2117,13 +2117,22 @@ if (!class_exists('WC_Twoinc')) {
             $api_key_to_use = $api_key ?: $this->get_option('api_key');
 
             if (!$api_key_to_use || !$this->get_twoinc_checkout_host()) {
+                // Nothing configured to verify — distinct from an actual
+                // network failure below (TWO-25326 follow-up: an admin
+                // needs to tell "not set up" apart from "Two is
+                // unreachable"). categorize_verification_result() reads
+                // this null the same way it always has.
                 return;
             }
 
             $response = $this->make_request("/v1/merchant/verify_api_key", [], 'GET', [], $api_key_to_use);
 
             if (!$response || is_wp_error($response)) {
-                return;
+                // Transport-level failure (network/timeout/no response) —
+                // never a 401/403, so it must not be reported as "invalid
+                // key" (TWO-25326 follow-up). categorize_verification_result()
+                // maps this to 'unreachable'.
+                return ['error' => 'unreachable', 'code' => null];
             }
             if (isset($response['body'])) {
                 $body = json_decode($response['body'], true);
@@ -2142,6 +2151,139 @@ if (!class_exists('WC_Twoinc')) {
                 }
                 return ['body' => $body, 'code' => $code];
             }
+        }
+
+        /**
+         * Categorizes verify_api_key()'s return value into buckets an admin
+         * can act on ("is my key wrong, or is Two down") without exposing
+         * the raw response body anywhere (TWO-25326 follow-up — today's
+         * incident showed every non-200 response, including 5xx and
+         * network failures, was reported identically as "API key is
+         * invalid", which sent the admin chasing the wrong fix).
+         *
+         * Shared by the settings-page AJAX handler
+         * (twoinc_ajax_verify_api_key in tillit-payment-gateway.php) and
+         * get_api_key_verification_status() below, so both surfaces agree.
+         *
+         * @param array|null $result verify_api_key()'s return value.
+         *
+         * @return array{status: string, code: int|null} status is one of:
+         *   'ok', 'invalid_key' (401/403), 'service_error' (5xx),
+         *   'unreachable' (network/timeout/no response), 'error' (any
+         *   other non-200 code), 'not_configured' (no key/host set).
+         */
+        public static function categorize_verification_result($result)
+        {
+            if (!is_array($result)) {
+                return ['status' => 'not_configured', 'code' => null];
+            }
+            if (isset($result['error']) && $result['error'] === 'unreachable') {
+                return ['status' => 'unreachable', 'code' => null];
+            }
+            $code = isset($result['code']) ? (int) $result['code'] : null;
+            if ($code === 200) {
+                return ['status' => 'ok', 'code' => $code];
+            }
+            if ($code === 401 || $code === 403) {
+                return ['status' => 'invalid_key', 'code' => $code];
+            }
+            if ($code !== null && $code >= 500) {
+                return ['status' => 'service_error', 'code' => $code];
+            }
+            return ['status' => 'error', 'code' => $code];
+        }
+
+        /**
+         * TTL for the cached verification status consulted by
+         * is_available() and the checkout script bootstrap
+         * (WC_Twoinc_Checkout::inject_cart_details()) — both can be
+         * evaluated many times per page load (cart totals, order-review
+         * refreshes), and a live HTTP call on every evaluation would be
+         * needlessly expensive (TWO-25326 follow-up). Mirrors the
+         * TTL-cache shape already used for sole-trader company types
+         * (WC_Twoinc_Sole_Trader::CACHE_TTL_SECONDS), scaled down since a
+         * wrong key or an outage should surface within minutes, not an
+         * hour.
+         */
+        const API_KEY_VERIFICATION_TTL = 300;
+
+        /**
+         * Request-scoped memo so a single page load never reads the
+         * transient (or fires a live call) more than once. Instance
+         * property (not static): the gateway is a per-request singleton in
+         * production, so this is equivalent there, but a static property
+         * shared by name across every WC_Twoinc instance would leak one
+         * test's (or, in theory, one API key's) cached verdict into
+         * another's.
+         */
+        private $api_key_verification_memo = null;
+
+        /**
+         * Cached, categorized outcome of a live verify_api_key() call
+         * against the CURRENTLY STORED api_key. Keyed by a hash of the key
+         * itself, so a changed key always misses the cache and re-verifies
+         * immediately; an unchanged key that starts failing (or recovers)
+         * is re-checked at most every API_KEY_VERIFICATION_TTL seconds.
+         *
+         * @return array{status: string, code: int|null, body: array|null}
+         */
+        public function get_api_key_verification_status()
+        {
+            if ($this->api_key_verification_memo !== null) {
+                return $this->api_key_verification_memo;
+            }
+
+            $api_key = $this->get_option('api_key');
+            if (!$api_key) {
+                return $this->api_key_verification_memo = ['status' => 'not_configured', 'code' => null, 'body' => null];
+            }
+
+            $cache_key = 'twoinc_api_key_status_' . md5($api_key);
+            $cached = get_transient($cache_key);
+            if (is_array($cached) && isset($cached['status'])) {
+                return $this->api_key_verification_memo = $cached;
+            }
+
+            $result = $this->verify_api_key();
+            $status = self::categorize_verification_result($result);
+            $status['body'] = ($status['status'] === 'ok' && isset($result['body'])) ? $result['body'] : null;
+            set_transient($cache_key, $status, self::API_KEY_VERIFICATION_TTL);
+            return $this->api_key_verification_memo = $status;
+        }
+
+        /**
+         * Whether the currently stored API key is confirmed live-usable
+         * right now (subject to the TTL cache above). Both gates that must
+         * not trust a merely-present key — is_available() and the
+         * checkout-side company-search/payment-tile bootstrap — key off
+         * this, not off get_option('api_key') / get_merchant_id() alone
+         * (TWO-25326 follow-up: a key that verified successfully in the
+         * past leaves merchant_id cached in options indefinitely, so that
+         * alone cannot tell "still valid" from "was valid").
+         *
+         * @return bool
+         */
+        public function is_api_key_verified()
+        {
+            return $this->get_api_key_verification_status()['status'] === 'ok';
+        }
+
+        /**
+         * The Two payment method must not be offered at checkout when the
+         * stored API key cannot currently be verified — for ANY reason
+         * (invalid/expired key, Two's API returning 5xx, a network/routing
+         * failure reaching it, …). A buyer could otherwise select a
+         * payment method that is not actually functional (TWO-25326
+         * follow-up, from today's routing-failure incident).
+         *
+         * @return bool
+         */
+        public function is_available()
+        {
+            if (!parent::is_available()) {
+                return false;
+            }
+            return $this->is_api_key_verified();
         }
 
 
@@ -4173,10 +4315,8 @@ if (!class_exists('WC_Twoinc')) {
                         <div id="twoinc-signup-prompt" style="margin-top: 8px; color: #666; font-size: 13px;<?php echo $merchant_id ? ' display: none;' : ''; ?>">
                             <strong><?php printf(__('Don\'t have an API key? Get one by signing up <a href=\'%s\'>here</a>.', 'twoinc-payment-gateway'), esc_url(WC_Twoinc_Brand::get('sign_up_url'))); ?></strong>
                         </div>
-                        <?php // Hidden by default; shown by admin.js in place of the merchant info above when the live re-verification (always run on page load) finds the stored key no longer valid, so a broken key can't hide behind a stale cached Merchant ID (TWO-25326 follow-up). ?>
-                        <div id="twoinc-merchant-invalid-notice" style="margin-top: 8px; color: #dc3232; font-size: 13px; display: none;">
-                            <strong><?php printf(__('This API key could not be verified. It may be invalid, or %s may be temporarily unreachable.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')); ?></strong>
-                        </div>
+                        <?php // Hidden by default; populated + shown by admin.js when the live re-verification on page load (or on typing a new key) cannot confirm the key. Text is set dynamically per failure category — invalid key vs Two service error vs unreachable — so an admin isn't stuck guessing "is my key wrong or is Two down" (TWO-25326 follow-up, supersedes an earlier static-text version of this same notice). ?>
+                        <div id="twoinc-merchant-invalid-notice" style="margin-top: 8px; color: #dc3232; font-size: 13px; display: none;"></div>
                         <?php echo $this->get_description_html($data); // WPCS: XSS ok.
                         ?>
                     </fieldset>

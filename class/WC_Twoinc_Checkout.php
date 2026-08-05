@@ -546,13 +546,24 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 return;
             }
 
-            // Ensure that the API key valid
-            $result = $this->wc_twoinc->verify_api_key();
-            if (isset($result['code']) && $result['code'] !== 200) {
+            // window.twoinc must not be printed at all when the stored API
+            // key cannot currently be verified — the payment-tile bootstrap
+            // AND the address-block company-search widget are both gated
+            // entirely behind window.twoinc's presence (see the top-level
+            // `if (window.twoinc)` guard in twoinc.js), so withholding it
+            // here is what stops company search from rendering/enabling
+            // itself on a broken integration, for ANY verification failure
+            // (invalid key, Two 5xx, network/routing failure — TWO-25326
+            // follow-up). Uses the same cached check as is_available(), so
+            // "payment method hidden" and "company search hidden" can never
+            // disagree with each other, and this stops firing a live HTTP
+            // call on every checkout render.
+            $status = $this->wc_twoinc->get_api_key_verification_status();
+            if ($status['status'] !== 'ok') {
                 return;
             }
 
-            $twoinc_obj = json_encode(WC_Twoinc_Helper::utf8ize($this->prepare_twoinc_object($result['body'])), JSON_UNESCAPED_UNICODE);
+            $twoinc_obj = json_encode(WC_Twoinc_Helper::utf8ize($this->prepare_twoinc_object($status['body'])), JSON_UNESCAPED_UNICODE);
             if ($twoinc_obj) {
                 printf('<script>window.twoinc = %s;</script>', $twoinc_obj);
             }

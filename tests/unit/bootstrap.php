@@ -382,6 +382,13 @@ class WC_Payment_Gateway
 
     public $plugin_id = 'woocommerce_';
 
+    // Mirrors WC_Settings_API::get_option's own $enabled semantics closely
+    // enough for is_available() below: core defaults an unset gateway to
+    // disabled, not enabled, so this stub does too rather than defaulting to
+    // 'yes' and silently making every gateway "available" in tests that
+    // never touch it.
+    public $enabled = 'no';
+
     // Mirrors WC_Settings_API::get_post_data (the submitted settings form),
     // injectable per test for cross-field save validation.
     public $test_post_data = [];
@@ -389,6 +396,15 @@ class WC_Payment_Gateway
     // Declared rather than left dynamic: get_option() below reads it for the
     // field defaults, and WC_Twoinc::init_form_fields() assigns it.
     public $form_fields = [];
+
+    // Mirrors core's own is_available() closely enough for WC_Twoinc's
+    // override to call parent::is_available() safely — core also checks
+    // cart totals/needs_setup, deliberately not reproduced here since no
+    // test in this suite depends on that path.
+    public function is_available()
+    {
+        return 'yes' === $this->enabled;
+    }
 
     public function get_post_data()
     {
@@ -893,6 +909,14 @@ function set_transient($key, $value, $expiration = 0)
 function get_transient($key)
 {
     return $GLOBALS['__twoinc_test_transients'][$key] ?? false;
+}
+
+// Defaults to true: most tests exercising checkout-hooked methods do so
+// AS IF on the checkout page, and only a test specifically about the
+// is_checkout() guard needs to override it.
+function is_checkout()
+{
+    return $GLOBALS['__twoinc_test_is_checkout'] ?? true;
 }
 
 function delete_transient($key)
