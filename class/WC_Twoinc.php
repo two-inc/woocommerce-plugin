@@ -2797,13 +2797,69 @@ if (!class_exists('WC_Twoinc')) {
 
             return [
                 'invalid_key' => $templates['invalid_key'],
-                'service_error' => sprintf($templates['service_error'], $product_name, '%s'),
-                'unreachable' => sprintf($templates['unreachable'], $product_name),
-                'not_configured' => sprintf($templates['not_configured'], $product_name),
+                'service_error' => self::format_api_key_notice(
+                    $templates['service_error'],
+                    $product_name,
+                    $templates['unverified']
+                ),
+                'unreachable' => self::format_api_key_notice(
+                    $templates['unreachable'],
+                    $product_name,
+                    $templates['unverified']
+                ),
+                'not_configured' => self::format_api_key_notice(
+                    $templates['not_configured'],
+                    $product_name,
+                    $templates['unverified']
+                ),
                 'request_failed' => $templates['request_failed'],
-                'unexpected_response' => sprintf($templates['unexpected_response'], $product_name, '%s'),
+                'unexpected_response' => self::format_api_key_notice(
+                    $templates['unexpected_response'],
+                    $product_name,
+                    $templates['unverified']
+                ),
                 'unverified' => $templates['unverified'],
             ];
+        }
+
+        /**
+         * Interpolate the brand into one notice template, degrading rather
+         * than fataling on a catalogue that does not match the source.
+         *
+         * The status-code argument is always the literal '%s' so admin.js can
+         * substitute the real code later; templates that carry no status
+         * placeholder simply ignore the extra argument. The try/catch is the
+         * point of the helper: these strings pass through __(), so the format
+         * string is whatever catalogue is installed at runtime — a Loco-edited
+         * .mo or a translate.wordpress.org import can carry a placeholder the
+         * source never had, and on PHP 8 sprintf() throws for that. Thrown
+         * from admin_enqueue_scripts that would take down the whole gateway
+         * settings page, so fall back to the placeholder-free notice instead
+         * (the copy shown before the failures were categorized at all).
+         *
+         * @param string $template
+         * @param string $product_name
+         * @param string $fallback placeholder-free notice text
+         *
+         * @return string
+         */
+        private static function format_api_key_notice($template, $product_name, $fallback)
+        {
+            try {
+                return sprintf($template, $product_name, '%s');
+            } catch (Throwable $e) {
+                if (function_exists('wc_get_logger')) {
+                    wc_get_logger()->error(
+                        sprintf(
+                            'Installed translation of an API key notice does not match the'
+                            . ' source placeholders (%s); showing the generic notice instead',
+                            $e->getMessage()
+                        ),
+                        ['source' => 'twoinc-payment-gateway']
+                    );
+                }
+                return $fallback;
+            }
         }
 
         /**

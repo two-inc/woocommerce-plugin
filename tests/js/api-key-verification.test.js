@@ -108,6 +108,24 @@ describe("API key verification — categorized failure display", () => {
       expect(text).not.toMatch(/\bTwo\b/);
     });
 
+    // A translator may legitimately reference %2$s (the status code) more than
+    // once — msgfmt accepts it — so PHP hands admin.js a string with two %s.
+    // Replacing only the first left a raw "%s" on screen.
+    test("a translation that repeats the status placeholder substitutes every occurrence", async () => {
+      const { $ } = await loadAdmin({
+        apiKey: "an-old-stored-key",
+        checked: [30],
+        apiKeyNotices: Object.assign({}, OVERLAY_NOTICES, {
+          service_error: "Testbrand: HTTP %s — service error (HTTP %s), try again shortly."
+        }),
+        stubAjax: stubAjaxError("service_error", 503)
+      });
+
+      const text = $("#twoinc-merchant-invalid-notice").text();
+      expect(text).not.toContain("%s");
+      expect(text.match(/503/g)).toHaveLength(2);
+    });
+
     test("an unreachable API names the overlay brand, not Two", async () => {
       const { $ } = await loadAdmin({
         apiKey: "an-old-stored-key",

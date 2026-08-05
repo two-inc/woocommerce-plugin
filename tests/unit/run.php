@@ -212,6 +212,7 @@ final class BrandConfigSpec
             'testCachedStatusMissTimeoutIsShortNotAdminDefault',
             'testApiKeyNoticesCarryTwoProductNameAndStatusPlaceholder',
             'testApiKeyNoticesUseOverlayProductNameNotTwo',
+            'testApiKeyNoticeCatalogueWithBadPlaceholdersDegradesNotFatals',
             'testApiKeyNoticeCopyIsTranslatedInEveryLocale',
         ];
         foreach ($tests as $test) {
@@ -242,6 +243,7 @@ final class BrandConfigSpec
         WC_Twoinc_Sole_Trader::reset_cache();
         WC_Twoinc::reset_merchant_record_memo();
         WC_Twoinc_FX::reset_request_cache();
+        unset($GLOBALS['__twoinc_test_translations']);
         $GLOBALS['__twoinc_test_transients'] = [];
         $GLOBALS['__twoinc_test_logs'] = [];
         $GLOBALS['__twoinc_test_as_scheduled'] = [];
@@ -6546,6 +6548,36 @@ final class BrandConfigSpec
         TinyAssert::same(
             "Testbrand's API returned an unexpected response (HTTP %s).",
             $notices['unexpected_response']
+        );
+    }
+
+    private static function testApiKeyNoticeCatalogueWithBadPlaceholdersDegradesNotFatals(): void
+    {
+        $templates = WC_Twoinc::api_key_notice_templates();
+        // A runtime-installed catalogue is not gated by this repo's msgfmt
+        // check: translate.wordpress.org imports and Loco-edited .mo files can
+        // carry a placeholder the source never had. On PHP 8 sprintf() throws
+        // for that, and this runs inside admin_enqueue_scripts — unhandled it
+        // would take the whole gateway settings page down.
+        $GLOBALS['__twoinc_test_translations'] = [
+            $templates['service_error'] => 'Tjenestefeil hos %1$s (HTTP %2$s) — %3$s.',
+            $templates['unreachable'] => 'Nådde ikke 100% av %1$s.',
+        ];
+
+        $notices = self::gateway()->get_api_key_notices();
+
+        TinyAssert::same($templates['unverified'], $notices['service_error']);
+        TinyAssert::same($templates['unverified'], $notices['unreachable']);
+        // Only the broken categories degrade; the rest render normally.
+        TinyAssert::same('Enter an API key above to enable Two.', $notices['not_configured']);
+        TinyAssert::same(
+            "Two's API returned an unexpected response (HTTP %s).",
+            $notices['unexpected_response']
+        );
+        // And the failure is not swallowed silently.
+        TinyAssert::true(
+            count($GLOBALS['__twoinc_test_logs']) >= 2,
+            'a catalogue mismatch must be logged, not silently swallowed'
         );
     }
 

@@ -81,7 +81,11 @@ function wc_get_logger()
 
 function __($text, $domain = 'default')
 {
-    return $text;
+    // Identity by default, so every other spec sees the untranslated source
+    // string. A test that needs a specific msgid to come back "translated" —
+    // e.g. to exercise a runtime catalogue whose placeholders do not match the
+    // source — stands one in through this map; reset() clears it.
+    return $GLOBALS['__twoinc_test_translations'][$text] ?? $text;
 }
 
 function esc_html($text)

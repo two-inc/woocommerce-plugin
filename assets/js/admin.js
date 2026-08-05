@@ -132,7 +132,7 @@ jQuery(function ($) {
         return (
           notices.service_error ||
           "The payment API returned a service error (HTTP %s). This is likely temporary on the provider's side — try again shortly."
-        ).replace("%s", code);
+        ).replace(/%s/g, code);
       case "unreachable":
         return (
           notices.unreachable ||
@@ -153,7 +153,7 @@ jQuery(function ($) {
           ? (
               notices.unexpected_response ||
               "The payment API returned an unexpected response (HTTP %s)."
-            ).replace("%s", code)
+            ).replace(/%s/g, code)
           : notices.unverified || "This API key could not be verified.";
     }
   }
