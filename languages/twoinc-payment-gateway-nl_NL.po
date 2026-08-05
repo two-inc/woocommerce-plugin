@@ -1030,3 +1030,33 @@ msgstr "Een maximum van 0 is niet toegestaan. Als je voor een termijn niets in r
 #: class/WC_Twoinc.php
 msgid "The cap applies to the whole fee: the percentage and the fixed fee together, not the percentage alone."
 msgstr "Het maximum geldt voor de hele fee: het percentage en het vaste bedrag samen, niet alleen het percentage."
+
+#: class/WC_Twoinc.php
+msgid "This API key is invalid or has expired."
+msgstr "Deze API-sleutel is ongeldig of verlopen."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Two's API returned a service error (HTTP %s). This is likely temporary on Two's side — try again shortly."
+msgstr "De API van Two gaf een servicefout terug (HTTP %s). Dit is waarschijnlijk tijdelijk aan de kant van Two — probeer het zo weer opnieuw."
+
+#: class/WC_Twoinc.php
+msgid "Could not reach Two's API (network or connectivity error). Try again shortly."
+msgstr "Kon de API van Two niet bereiken (netwerk- of verbindingsfout). Probeer het zo weer opnieuw."
+
+#: class/WC_Twoinc.php
+msgid "Enter an API key above to enable Two."
+msgstr "Voer hierboven een API-sleutel in om Two in te schakelen."
+
+#: class/WC_Twoinc.php
+msgid "Could not complete verification — try again shortly."
+msgstr "Verificatie kon niet worden voltooid — probeer het zo weer opnieuw."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Two's API returned an unexpected response (HTTP %s)."
+msgstr "De API van Two gaf een onverwacht antwoord terug (HTTP %s)."
+
+#: class/WC_Twoinc.php
+msgid "This API key could not be verified."
+msgstr "Deze API-sleutel kon niet worden geverifieerd."

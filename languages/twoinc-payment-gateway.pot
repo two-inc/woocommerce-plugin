@@ -995,3 +995,33 @@ msgstr ""
 #: class/WC_Twoinc.php
 msgid "The cap applies to the whole fee: the percentage and the fixed fee together, not the percentage alone."
 msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "This API key is invalid or has expired."
+msgstr ""
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Two's API returned a service error (HTTP %s). This is likely temporary on Two's side — try again shortly."
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "Could not reach Two's API (network or connectivity error). Try again shortly."
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "Enter an API key above to enable Two."
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "Could not complete verification — try again shortly."
+msgstr ""
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Two's API returned an unexpected response (HTTP %s)."
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "This API key could not be verified."
+msgstr ""

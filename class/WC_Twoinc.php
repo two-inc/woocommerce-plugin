@@ -2766,6 +2766,21 @@ if (!class_exists('WC_Twoinc')) {
                 // blank cells and wipe the stored row on save (the validator
                 // treats rendered-and-blank as a deliberate clear).
                 'surcharge_grid' => (array) $this->get_option('surcharge_grid', []),
+                // Categorized API-key verification failure text (TWO-25326
+                // follow-up) — admin.js's invalidNoticeText() renders these
+                // instead of hardcoded English so the notice is translatable.
+                // service_error/unexpected_response carry a literal %s that
+                // JS substitutes with the HTTP status code (mirrors days_label
+                // above).
+                'api_key_notices' => [
+                    'invalid_key' => __('This API key is invalid or has expired.', 'twoinc-payment-gateway'),
+                    'service_error' => __("Two's API returned a service error (HTTP %s). This is likely temporary on Two's side — try again shortly.", 'twoinc-payment-gateway'),
+                    'unreachable' => __("Could not reach Two's API (network or connectivity error). Try again shortly.", 'twoinc-payment-gateway'),
+                    'not_configured' => __('Enter an API key above to enable Two.', 'twoinc-payment-gateway'),
+                    'request_failed' => __('Could not complete verification — try again shortly.', 'twoinc-payment-gateway'),
+                    'unexpected_response' => __("Two's API returned an unexpected response (HTTP %s).", 'twoinc-payment-gateway'),
+                    'unverified' => __('This API key could not be verified.', 'twoinc-payment-gateway'),
+                ],
             ]);
         }
 
