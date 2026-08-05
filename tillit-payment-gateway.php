@@ -336,11 +336,17 @@ function twoinc_ajax_verify_api_key()
         return;
     }
 
-    // Get the Two instance and verify the API key
+    // Get the Two instance and verify the API key. cache_verification_result()
+    // both categorizes the outcome AND warms the checkout-side cache
+    // (get_api_key_verification_status()) — this is the freshest live check
+    // this key has had, so a merchant who just fixed it here shouldn't have
+    // to wait out the checkout cache's TTL to see it take effect (TWO-25326
+    // follow-up, review round 1).
     $twoinc_instance = WC_Twoinc::get_instance();
     $result = $twoinc_instance->verify_api_key($api_key);
+    $category = $twoinc_instance->cache_verification_result($api_key, $result);
 
-    if ($result && isset($result['code']) && $result['code'] == 200) {
+    if ($category['status'] === 'ok') {
         // Echo the merchant identity back so the settings page can refresh the
         // displayed Merchant ID + short name as soon as validation completes,
         // without a reload (the key being typed is not persisted here).
@@ -351,12 +357,15 @@ function twoinc_ajax_verify_api_key()
             'merchant_short_name' => isset($body['short_name']) ? (string) $body['short_name'] : '',
         ]);
     } else {
-        $debug_info = [
-            'result' => $result,
-            'api_key_length' => strlen($api_key),
-            'host' => $twoinc_instance->get_twoinc_checkout_host()
-        ];
-        wp_send_json_error(['message' => 'API key is invalid', 'debug' => $debug_info]);
+        // Surface the failure category + HTTP status so the settings page
+        // can tell "key is wrong" apart from "Two is down" (TWO-25326
+        // follow-up) — deliberately no response body/content here, only
+        // the categorized status and code.
+        wp_send_json_error([
+            'message' => 'API key could not be verified',
+            'status' => $category['status'],
+            'code' => $category['code'],
+        ]);
     }
 }
 

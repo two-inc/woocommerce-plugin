@@ -201,6 +201,15 @@ final class BrandConfigSpec
             'testCompanySearchLocationFallsBackToPaymentTileOnNullOrEmpty',
             'testCompanySearchLocationSettingDroppedFromUpgradedInstalls',
             'testEnableCompanySearchForOthersSettingDroppedFromUpgradedInstalls',
+            'testCategorizeVerificationResultDistinguishesFailureReasons',
+            'testVerifyApiKeyDistinguishesUnreachableFromNotConfigured',
+            'testApiKeyVerificationStatusCachedAcrossCallsWithinTtl',
+            'testIsAvailableFalseWhenApiKeyVerificationFails',
+            'testIsAvailableTrueOnlyWhenEnabledAndVerified',
+            'testCheckoutWindowTwoincSuppressedOnVerificationFailure',
+            'testVerifyApiKeyMalformedResponseNotMiscategorizedAsNotConfigured',
+            'testAdminLiveVerificationWarmsCheckoutCache',
+            'testCachedStatusMissTimeoutIsShortNotAdminDefault',
         ];
         foreach ($tests as $test) {
             self::reset();
@@ -6047,6 +6056,444 @@ final class BrandConfigSpec
         } finally {
             unset($GLOBALS['__twoinc_test_plugin_version']);
         }
+    }
+
+    /**
+     * TWO-25326 follow-up (2026-08-05 incident). Before this change, EVERY
+     * non-200 response — an actual 401/403, a Two 5xx, or a network
+     * failure that never got a response at all — was treated identically
+     * as "invalid key" everywhere this plugin surfaces the outcome. These
+     * assert categorize_verification_result() actually tells them apart.
+     */
+    private static function testCategorizeVerificationResultDistinguishesFailureReasons(): void
+    {
+        TinyAssert::same('ok', WC_Twoinc::categorize_verification_result(['body' => ['id' => '1'], 'code' => 200])['status']);
+        TinyAssert::same('invalid_key', WC_Twoinc::categorize_verification_result(['body' => [], 'code' => 401])['status']);
+        TinyAssert::same('invalid_key', WC_Twoinc::categorize_verification_result(['body' => [], 'code' => 403])['status']);
+        TinyAssert::same('service_error', WC_Twoinc::categorize_verification_result(['body' => [], 'code' => 500])['status']);
+        TinyAssert::same('service_error', WC_Twoinc::categorize_verification_result(['body' => [], 'code' => 503])['status']);
+        TinyAssert::same('unreachable', WC_Twoinc::categorize_verification_result(['error' => 'unreachable', 'code' => null])['status']);
+        TinyAssert::same('not_configured', WC_Twoinc::categorize_verification_result(null)['status']);
+        $other = WC_Twoinc::categorize_verification_result(['body' => [], 'code' => 404]);
+        TinyAssert::same('error', $other['status']);
+        TinyAssert::same(404, $other['code']);
+    }
+
+    /**
+     * verify_api_key() itself must not collapse "not configured" (no
+     * key/host) and "unreachable" (a real network/timeout failure talking
+     * to Two) into the same falsy return — that is exactly the distinction
+     * an admin diagnosing today's routing incident needed.
+     */
+    private static function testVerifyApiKeyDistinguishesUnreachableFromNotConfigured(): void
+    {
+        $gateway = new class () extends WC_Twoinc {
+            public $options = ['api_key' => 'key'];
+            public $host = 'https://api.example';
+            public $wp_error_response = true;
+
+            public function __construct()
+            {
+            }
+
+            public function get_twoinc_checkout_host()
+            {
+                return $this->host;
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                return $this->options[$key] ?? $empty_value ?? '';
+            }
+
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            {
+                return $this->wp_error_response ? new WP_Error('http_request_failed', 'timed out') : false;
+            }
+        };
+
+        TinyAssert::same('unreachable', WC_Twoinc::categorize_verification_result($gateway->verify_api_key())['status']);
+
+        // No host configured at all: a fundamentally different situation
+        // from a reachable host that times out, and must stay distinct.
+        $gateway->host = '';
+        TinyAssert::same(null, $gateway->verify_api_key());
+        TinyAssert::same('not_configured', WC_Twoinc::categorize_verification_result($gateway->verify_api_key())['status']);
+    }
+
+    /**
+     * is_available() / the checkout bootstrap must not fire a live
+     * verify_api_key() HTTP call on every evaluation — get_api_key_verification_status()
+     * is expected to serve the second call from its transient cache
+     * without touching make_request() again.
+     */
+    private static function testApiKeyVerificationStatusCachedAcrossCallsWithinTtl(): void
+    {
+        $gateway = new class () extends WC_Twoinc {
+            public $options = ['api_key' => 'key'];
+            public $responses = [];
+            public $make_request_calls = 0;
+
+            public function __construct()
+            {
+            }
+
+            public function get_twoinc_checkout_host()
+            {
+                return 'https://api.example';
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                return $this->options[$key] ?? $empty_value ?? '';
+            }
+
+            public function update_option($key, $value = '')
+            {
+                $this->options[$key] = $value;
+                return true;
+            }
+
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            {
+                $this->make_request_calls++;
+                return array_shift($this->responses);
+            }
+        };
+
+        $gateway->responses[] = ['response' => ['code' => 200], 'body' => json_encode(['id' => '42', 'short_name' => 'Acme'])];
+
+        $first = $gateway->get_api_key_verification_status();
+        TinyAssert::same('ok', $first['status']);
+        TinyAssert::same(1, $gateway->make_request_calls);
+
+        $second = $gateway->get_api_key_verification_status();
+        TinyAssert::same('ok', $second['status']);
+        TinyAssert::same(1, $gateway->make_request_calls); // still 1: served from cache, no second HTTP call
+
+        // A different gateway instance (a fresh api_key => a different
+        // cache key) is NOT served from the first instance's cache.
+        $other = new class () extends WC_Twoinc {
+            public $options = ['api_key' => 'a-different-key'];
+            public $responses = [];
+            public $make_request_calls = 0;
+
+            public function __construct()
+            {
+            }
+
+            public function get_twoinc_checkout_host()
+            {
+                return 'https://api.example';
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                return $this->options[$key] ?? $empty_value ?? '';
+            }
+
+            public function update_option($key, $value = '')
+            {
+                $this->options[$key] = $value;
+                return true;
+            }
+
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            {
+                $this->make_request_calls++;
+                return array_shift($this->responses);
+            }
+        };
+        $other->responses[] = new WP_Error('http_request_failed', 'timed out');
+        $other_status = $other->get_api_key_verification_status();
+        TinyAssert::same('unreachable', $other_status['status']);
+        TinyAssert::same(1, $other->make_request_calls);
+    }
+
+    /**
+     * The Two payment method must not be listed as available when the
+     * stored key cannot currently be verified — for ANY of the failure
+     * categories, not only an actual 401/403 (TWO-25326 follow-up: today's
+     * incident was a routing failure, which must hide the gateway exactly
+     * as an actually-invalid key would).
+     */
+    private static function testIsAvailableFalseWhenApiKeyVerificationFails(): void
+    {
+        $make_gateway = static function ($response) {
+            return new class ($response) extends WC_Twoinc {
+                public $options = ['api_key' => 'key'];
+                public $enabled = 'yes';
+                private $response;
+
+                public function __construct($response)
+                {
+                    $this->response = $response;
+                }
+
+                public function get_twoinc_checkout_host()
+                {
+                    return 'https://api.example';
+                }
+
+                public function get_option($key, $empty_value = null)
+                {
+                    return $this->options[$key] ?? $empty_value ?? '';
+                }
+
+                public function update_option($key, $value = '')
+                {
+                    $this->options[$key] = $value;
+                    return true;
+                }
+
+                public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+                {
+                    return $this->response;
+                }
+            };
+        };
+
+        TinyAssert::same(false, $make_gateway(['response' => ['code' => 401], 'body' => json_encode([])])->is_available());
+        $GLOBALS['__twoinc_test_transients'] = [];
+        TinyAssert::same(false, $make_gateway(['response' => ['code' => 503], 'body' => json_encode([])])->is_available());
+        $GLOBALS['__twoinc_test_transients'] = [];
+        TinyAssert::same(false, $make_gateway(new WP_Error('http_request_failed', 'timed out'))->is_available());
+    }
+
+    /**
+     * is_available() must AND the two independent conditions together: a
+     * disabled-but-verified gateway stays hidden (unchanged core
+     * behaviour), and an enabled gateway with a verified key is the only
+     * combination that is actually available.
+     */
+    private static function testIsAvailableTrueOnlyWhenEnabledAndVerified(): void
+    {
+        $gateway = new class () extends WC_Twoinc {
+            public $options = ['api_key' => 'key'];
+            public $enabled = 'no';
+
+            public function __construct()
+            {
+            }
+
+            public function get_twoinc_checkout_host()
+            {
+                return 'https://api.example';
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                return $this->options[$key] ?? $empty_value ?? '';
+            }
+
+            public function update_option($key, $value = '')
+            {
+                $this->options[$key] = $value;
+                return true;
+            }
+
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            {
+                return ['response' => ['code' => 200], 'body' => json_encode(['id' => '42'])];
+            }
+        };
+
+        // Verified key, but the merchant has disabled the gateway itself.
+        TinyAssert::same(false, $gateway->is_available());
+
+        $gateway->enabled = 'yes';
+        $GLOBALS['__twoinc_test_transients'] = [];
+        TinyAssert::same(true, $gateway->is_available());
+    }
+
+    /**
+     * `window.twoinc` is what the payment-tile bootstrap AND the
+     * address-block company-search widget both gate on entirely (see the
+     * top-level `if (window.twoinc)` guard in twoinc.js) — so withholding
+     * it on a verification failure is what stops company search from
+     * rendering/enabling itself on a broken integration, for ANY failure
+     * reason (TWO-25326 follow-up).
+     */
+    private static function testCheckoutWindowTwoincSuppressedOnVerificationFailure(): void
+    {
+        $GLOBALS['__twoinc_test_is_checkout'] = true;
+
+        $gateway = new class () extends WC_Twoinc {
+            public $options = ['api_key' => 'key'];
+            public $responses = [];
+
+            public function __construct()
+            {
+            }
+
+            public function get_twoinc_checkout_host()
+            {
+                return 'https://api.example';
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                return $this->options[$key] ?? $empty_value ?? '';
+            }
+
+            public function update_option($key, $value = '')
+            {
+                $this->options[$key] = $value;
+                return true;
+            }
+
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            {
+                return array_shift($this->responses);
+            }
+        };
+        $gateway->responses[] = ['response' => ['code' => 401], 'body' => json_encode(['message' => 'invalid'])];
+
+        $checkout = new WC_Twoinc_Checkout($gateway);
+        ob_start();
+        $checkout->inject_cart_details();
+        $output = ob_get_clean();
+
+        TinyAssert::same('', trim($output));
+        unset($GLOBALS['__twoinc_test_is_checkout']);
+    }
+
+    /**
+     * Review round 1 (Vader): a truthy, non-WP_Error response that lacks a
+     * 'body' key at all must not fall through to the same null
+     * verify_api_key() returns for "not configured" — that would tell an
+     * admin to "enter an API key" when one is already configured and a
+     * response WAS received, just an unexpected/malformed one.
+     */
+    private static function testVerifyApiKeyMalformedResponseNotMiscategorizedAsNotConfigured(): void
+    {
+        $gateway = new class () extends WC_Twoinc {
+            public $options = ['api_key' => 'key'];
+
+            public function __construct()
+            {
+            }
+
+            public function get_twoinc_checkout_host()
+            {
+                return 'https://api.example';
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                return $this->options[$key] ?? $empty_value ?? '';
+            }
+
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            {
+                // Truthy, not a WP_Error, but no 'body' key — the
+                // malformed/unexpected shape probed in review round 1.
+                return ['response' => ['code' => 503]];
+            }
+        };
+
+        $result = $gateway->verify_api_key();
+        $category = WC_Twoinc::categorize_verification_result($result)['status'];
+        TinyAssert::same(false, $category === 'not_configured');
+        TinyAssert::same('error', $category);
+    }
+
+    /**
+     * Review round 1 (Han): the settings page's own live re-check
+     * (verify_api_key_action() / the AJAX handler, via
+     * cache_verification_result()) must feed the SAME cache
+     * get_api_key_verification_status() reads, so a merchant who just
+     * fixed their key doesn't wait out API_KEY_VERIFICATION_TTL for
+     * checkout to notice.
+     */
+    private static function testAdminLiveVerificationWarmsCheckoutCache(): void
+    {
+        $gateway = new class () extends WC_Twoinc {
+            public $options = ['api_key' => 'key'];
+            public $make_request_calls = 0;
+
+            public function __construct()
+            {
+            }
+
+            public function get_twoinc_checkout_host()
+            {
+                return 'https://api.example';
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                return $this->options[$key] ?? $empty_value ?? '';
+            }
+
+            public function update_option($key, $value = '')
+            {
+                $this->options[$key] = $value;
+                return true;
+            }
+
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            {
+                $this->make_request_calls++;
+                return ['response' => ['code' => 200], 'body' => json_encode(['id' => '42', 'short_name' => 'Acme'])];
+            }
+        };
+
+        // Simulates the settings-page load: a fresh, live, uncached check —
+        // exactly what verify_api_key_action() does.
+        $gateway->verify_api_key_action();
+        TinyAssert::same(1, $gateway->make_request_calls);
+
+        // The checkout-facing cache must already be warm from that — no
+        // second HTTP call.
+        $status = $gateway->get_api_key_verification_status();
+        TinyAssert::same('ok', $status['status']);
+        TinyAssert::same(1, $gateway->make_request_calls);
+    }
+
+    /**
+     * Review round 1 (Yoda): a cache-miss check evaluated inline in a
+     * customer-facing request (is_available(), inject_cart_details()) must
+     * use a short, explicit timeout — not verify_api_key()'s 30s
+     * admin-page default, which would block that page render for up to
+     * 30s while Two is unreachable.
+     */
+    private static function testCachedStatusMissTimeoutIsShortNotAdminDefault(): void
+    {
+        $gateway = new class () extends WC_Twoinc {
+            public $options = ['api_key' => 'key'];
+            public $seen_timeout = null;
+
+            public function __construct()
+            {
+            }
+
+            public function get_twoinc_checkout_host()
+            {
+                return 'https://api.example';
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                return $this->options[$key] ?? $empty_value ?? '';
+            }
+
+            public function update_option($key, $value = '')
+            {
+                $this->options[$key] = $value;
+                return true;
+            }
+
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            {
+                $this->seen_timeout = $timeout;
+                return ['response' => ['code' => 200], 'body' => json_encode(['id' => '42'])];
+            }
+        };
+
+        $gateway->get_api_key_verification_status();
+        TinyAssert::same(WC_Twoinc::API_KEY_VERIFICATION_TIMEOUT, $gateway->seen_timeout);
+        TinyAssert::same(true, WC_Twoinc::API_KEY_VERIFICATION_TIMEOUT < 30);
     }
 }
 
