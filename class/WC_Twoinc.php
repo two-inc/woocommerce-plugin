@@ -4252,7 +4252,7 @@ if (!class_exists('WC_Twoinc')) {
                     'default'     => ''
                 ],
                 'surcharge_tax_treatment' => [
-                    'title'       => __('Surcharge Tax Treatment', 'twoinc-payment-gateway'),
+                    'title'       => __('Surcharge tax treatment', 'twoinc-payment-gateway'),
                     'desc_tip'    => __('How the surcharge line is taxed. Standard applies your store\'s default tax rules to the fee. Specific tax class taxes the fee under a WooCommerce tax class you select below — to leave the fee untaxed, create a tax class with a 0% rate and select it here.', 'twoinc-payment-gateway'),
                     // Visible (non-tooltip) description: carries the loud
                     // never-taxed error when the stored treatment is one this
@@ -4277,7 +4277,7 @@ if (!class_exists('WC_Twoinc')) {
                     'default'     => ''
                 ],
                 'surcharge_tax_class' => [
-                    'title'       => __('Surcharge Tax Class', 'twoinc-payment-gateway'),
+                    'title'       => __('Surcharge tax class', 'twoinc-payment-gateway'),
                     'desc_tip'    => __('The WooCommerce tax class applied to the surcharge when the tax treatment is "Specific tax class". Manage tax classes under WooCommerce → Settings → Tax.', 'twoinc-payment-gateway'),
                     // Visible (non-tooltip) description: carries the stale-
                     // selection warning when the stored class has been
