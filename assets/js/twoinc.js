@@ -36,6 +36,105 @@ let twoincUtilHelper = {
   },
 
   /**
+   * Prefix marking an organisation number as internally minted rather than
+   * issued by a company registry (TWO-25326 §12).
+   *
+   * Sole-trader enrollment mints one of these for a buyer who has no registry
+   * identifier of their own; it carries the company-type semantics the backend
+   * derives on its side. It is a protocol value, not a number the buyer's own
+   * authorities would recognise, so showing it to them is meaningless at best
+   * and reads as a corrupted field at worst.
+   *
+   * Matched as a literal, case-sensitive prefix: it is a string the plugin's
+   * own backend mints, not something a buyer or a registry ever types, so
+   * there is no case or spacing variant to be liberal about. A real
+   * organisation number that merely CONTAINS these characters somewhere other
+   * than the start is not one of these and stays visible.
+   */
+  SYNTHETIC_NUMBER_PREFIX: "TWO:",
+
+  /**
+   * Is this organisation number internally minted, i.e. one §12 forbids
+   * showing (TWO-25326 §12)?
+   *
+   * For the callers that need to branch on the fact itself rather than just
+   * render the filtered value — hiding a whole field, say. Empty is NOT
+   * synthetic: "no number captured yet" is a different state from "a number
+   * that must not be shown", and only the latter suppresses a field the buyer
+   * would otherwise type into.
+   *
+   * @param {*} value
+   * @returns {boolean}
+   */
+  isSyntheticCompanyNumber: function (value) {
+    return twoincUtilHelper
+      .blankToEmpty(value)
+      .startsWith(twoincUtilHelper.SYNTHETIC_NUMBER_PREFIX);
+  },
+
+  /**
+   * Normalise an organisation number for DISPLAY (TWO-25326 §12).
+   *
+   * Returns `""` — never the prefixed value — for an internally minted
+   * identifier, so every caller's existing "is there a number" truthiness
+   * check doubles as the suppression: a label keyed on it hides itself, a
+   * bracketed composition drops its brackets, and no call site needs a filter
+   * of its own.
+   *
+   * DISPLAY ONLY. The value still has to be posted and sent to the API —
+   * Two's payment method cannot authorise an order without it — so the
+   * submitted `#company_id` input, the instance state and the order-intent
+   * payload all keep the raw value. Anything reading this function's result
+   * is, by construction, about to put it in front of a human.
+   *
+   * @param {*} value
+   * @returns {string} the number to show, or `""` if it must not be shown
+   */
+  formatCompanyNumber: function (value) {
+    if (twoincUtilHelper.isSyntheticCompanyNumber(value)) return "";
+    return twoincUtilHelper.blankToEmpty(value);
+  },
+
+  /**
+   * Compose the "<label> (<number>)" chunk both company displays use, with
+   * the number filtered through formatCompanyNumber (TWO-25326 §12).
+   *
+   * The brackets belong to the number, not to the composition: when the
+   * number resolves to nothing the label is returned bare, never with an
+   * empty pair of parens trailing it. That is the whole reason this is one
+   * function rather than a filter applied at each call site — two of the
+   * three sites had already written the parens as literal text around a
+   * value that can now come back empty.
+   *
+   * `label` is passed through untouched, NOT blank-collapsed, because the
+   * two callers disagree about what it contains: the intent notices pass
+   * plain text destined for `.text()`, while the search dropdown passes the
+   * search response's pre-highlighted HTML fragment destined for innerHTML.
+   * Trimming or re-encoding here would have to pick one contract and break
+   * the other. Callers that hold plain text collapse it themselves — see
+   * formatCompanyLabel below.
+   *
+   * @param {string} label already in its caller's own escaping contract
+   * @param {*} value raw organisation number
+   * @returns {string}
+   */
+  composeCompanyLabel: function (label, value) {
+    const number = twoincUtilHelper.formatCompanyNumber(value);
+    return label && number ? label + " (" + number + ")" : label;
+  },
+
+  /**
+   * composeCompanyLabel for a plain-text company name (TWO-25326 §12).
+   *
+   * @param {*} name
+   * @param {*} value
+   * @returns {string}
+   */
+  formatCompanyLabel: function (name, value) {
+    return twoincUtilHelper.composeCompanyLabel(twoincUtilHelper.blankToEmpty(name), value);
+  },
+
+  /**
    * Construct url to Twoinc checkout api.
    *
    * `client` / `client_v` identify this plugin and its version to the API, and
@@ -1217,7 +1316,15 @@ class TwoCompanySearch {
             items.push({
               id: item.name,
               text: item.name,
-              html: identifier ? item.highlight + " (" + identifier + ")" : item.highlight,
+              // TWO-25326 §12: `identifier` stays raw on `company_id` below —
+              // that is the value the picker writes to the submitted field and
+              // sends to the API — while what the buyer READS goes through the
+              // shared composer, which drops an internally minted number along
+              // with the brackets that would otherwise be left empty around it.
+              // `item.highlight` is the response's pre-highlighted HTML, so it
+              // is passed as an already-escaped fragment (composeCompanyLabel
+              // does not touch it) — the identifier is registry-issued digits.
+              html: twoincUtilHelper.composeCompanyLabel(item.highlight, identifier),
               company_id: identifier,
               lookup_id: item.lookup_id,
               approved: false
@@ -1868,7 +1975,13 @@ class TwoCompanySearch {
     // unselected picker reads back as " " rather than "" — which would
     // render as a label with an invisible value in it.
     const name = twoincUtilHelper.blankToEmpty(data.company_name);
-    const number = twoincUtilHelper.blankToEmpty(data.organization_number);
+    // TWO-25326 §12: display-normalised, so an internally minted number reads
+    // back as "" here. Everything below is already keyed on this being empty —
+    // the element renders nothing and the block hides itself — so a sole
+    // trader's captured company shows no number label rather than a protocol
+    // string. The raw value is untouched on `#company_id` and in the instance
+    // state, which is what gets posted.
+    const number = twoincUtilHelper.formatCompanyNumber(data.organization_number);
 
     // The tile no longer carries a separate company label to keep in sync
     // here (TWO-25326 §7.2/§7.3, ruling 2026-08-03: `.twoinc-company-tile-label`
@@ -2567,7 +2680,23 @@ let twoincDomHelper = {
         // by enterManualCompanyEntry/exitManualCompanyEntry specifically so
         // this branch can tell "manual entry" apart from the other two
         // routes into it.
-        if (!window.twoinc.manual_company_entry_active) {
+        //
+        // TWO-25326 §12: and left out again when the number currently held is
+        // an internally minted one. This branch is the ONE place `#company_id`
+        // is a field the buyer can see — a merchant with company search off,
+        // in a country whose registry supports sole traders, puts an enrolled
+        // sole trader here with `TWO:…` sitting in a visible text box. Hiding
+        // the field is the fix rather than blanking its value, because the
+        // value is what WooCommerce posts and what the order intent is
+        // authorised against: there is nothing for the buyer to type (the
+        // enrollment already supplied it) so the field has no job left beyond
+        // displaying a string §12 says must not be displayed. Dropping it from
+        // requiredTargets too — a required cue on a field nobody can see is how
+        // a checkout becomes unsubmittable with no visible reason why.
+        if (
+          !window.twoinc.manual_company_entry_active &&
+          !twoincUtilHelper.isSyntheticCompanyNumber(jQuery("#company_id").val())
+        ) {
           visibleTargets.push("#company_id_field");
           requiredTargets.push("#company_id_field");
         }
@@ -2686,7 +2815,13 @@ let twoincDomHelper = {
    * @returns {string}
    */
   getCompanyLabelText: function (name, number) {
-    return name && number ? name + " (" + number + ")" : name;
+    // TWO-25326 §12: the bracket composition, and the suppression of an
+    // internally minted number inside it, both live in twoincUtilHelper now —
+    // the search dropdown needs the identical rule with a different escaping
+    // contract, and the two must not drift. A sole trader's captured company
+    // reaches here with a `TWO:`-prefixed number, and comes out as the bare
+    // name with no empty parens after it.
+    return twoincUtilHelper.formatCompanyLabel(name, number);
   },
   /**
    * Toggle payment text in subtitle and description
