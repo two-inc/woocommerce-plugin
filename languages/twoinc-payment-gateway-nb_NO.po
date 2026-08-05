@@ -671,3 +671,35 @@ msgstr "Et maksbeløp på 0 er ikke tillatt. Hvis du ikke vil belaste noe for en
 #: class/WC_Twoinc.php
 msgid "The cap applies to the whole fee: the percentage and the fixed fee together, not the percentage alone."
 msgstr "Maksbeløpet gjelder hele gebyret: prosenten og det faste gebyret til sammen, ikke bare prosenten."
+
+#: class/WC_Twoinc.php
+msgid "This API key is invalid or has expired."
+msgstr "Denne API-nøkkelen er ugyldig eller har utløpt."
+
+#. translators: %s: HTTP status code returned by Two's API (e.g. 502).
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Two's API returned a service error (HTTP %s). This is likely temporary on Two's side — try again shortly."
+msgstr "Twos API returnerte en tjenestefeil (HTTP %s). Dette er sannsynligvis midlertidig på Twos side — prøv igjen om litt."
+
+#: class/WC_Twoinc.php
+msgid "Could not reach Two's API (network or connectivity error). Try again shortly."
+msgstr "Kunne ikke nå Twos API (nettverks- eller tilkoblingsfeil). Prøv igjen om litt."
+
+#: class/WC_Twoinc.php
+msgid "Enter an API key above to enable Two."
+msgstr "Skriv inn en API-nøkkel over for å aktivere Two."
+
+#: class/WC_Twoinc.php
+msgid "Could not complete verification — try again shortly."
+msgstr "Kunne ikke fullføre verifiseringen — prøv igjen om litt."
+
+#. translators: %s: HTTP status code returned by Two's API (e.g. 418).
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Two's API returned an unexpected response (HTTP %s)."
+msgstr "Twos API returnerte et uventet svar (HTTP %s)."
+
+#: class/WC_Twoinc.php
+msgid "This API key could not be verified."
+msgstr "Denne API-nøkkelen kunne ikke verifiseres."
