@@ -102,6 +102,49 @@ for po in "${po_files[@]}"; do
         continue
     fi
 
+    # --check-format above only inspects entries xgettext flagged "#, php-format",
+    # and it flags an entry only when the SOURCE string carries a specifier. So a
+    # placeholder-free msgid whose translation invents one is invisible to it —
+    # and nothing at runtime substitutes into those, so the specifier would print
+    # verbatim at a merchant (the plugin strips it defensively, which turns it
+    # into a silently missing word instead). Catch it here: any entry whose
+    # msgstr introduces a conversion specifier its msgid does not have.
+    if ! awk '
+        function specs(s,    out, n, i, parts) {
+            out = ""
+            # Drop escaped percents first so "50%%" is not read as a specifier.
+            gsub(/%%/, "", s)
+            n = split(s, parts, /%/)
+            for (i = 2; i <= n; i++) {
+                if (match(parts[i], /^[0-9]*\$?[0-9.]*[bcdeEfFgGosuxX]/)) {
+                    out = out "%" substr(parts[i], 1, RLENGTH) " "
+                }
+            }
+            return out
+        }
+        function flush() {
+            if (id != "" && str != "") {
+                a = specs(id); b = specs(str)
+                if (a == "" && b != "") {
+                    printf "%s:%d: translation adds placeholder(s) %sthe source string does not have\n", FILENAME, line, b
+                    bad = 1
+                }
+            }
+            id = ""; str = ""; mode = ""
+        }
+        /^msgid / { flush(); mode = "id"; line = FNR; id = $0; sub(/^msgid /, "", id); next }
+        /^msgid_plural / { mode = "skip"; next }
+        /^msgstr/ { mode = "str"; str = $0; sub(/^msgstr(\[[0-9]+\])? /, "", str); next }
+        /^"/ { if (mode == "id") { id = id $0 } else if (mode == "str") { str = str $0 } next }
+        /^[[:space:]]*$/ { flush() }
+        END { flush(); exit bad }
+    ' "$po" >"$tmp/prose.err"; then
+        echo "::error file=$po::a translation introduces a placeholder its source string does not have"
+        sed 's/^/  /' "$tmp/prose.err"
+        status=1
+        continue
+    fi
+
     if ! msgunfmt -o "$tmp/committed.po" "$mo" 2>"$tmp/unfmt.err" ||
         ! msgunfmt -o "$tmp/generated.po" "$tmp/generated.mo" 2>>"$tmp/unfmt.err"; then
         echo "::error file=$mo::cannot decode this compiled catalogue"

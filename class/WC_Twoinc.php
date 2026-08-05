@@ -21,10 +21,11 @@ if (!class_exists('WC_Twoinc')) {
         private static $merchant_record = null;
         private static $merchant_record_fetched = false;
 
-        // Log-once guard for a runtime catalogue whose API-key notice
-        // placeholders do not match the source: the notices are rebuilt on
-        // every wp-admin page view, and a bad catalogue stays bad.
-        private static $api_key_notice_mismatch_logged = false;
+        // How long to suppress a repeat of the "installed translation of an
+        // API key notice does not match the source" log, per category. A bad
+        // catalogue stays bad and the notices are rebuilt on every wp-admin
+        // page view, so this is what keeps the log bounded.
+        public const NOTICE_FORMAT_LOG_THROTTLE = 86400;
 
         // BC-frozen: external integrations may read these constants, but all
         // runtime reads go through WC_Twoinc_Brand so overlays can rebrand.
@@ -337,16 +338,6 @@ if (!class_exists('WC_Twoinc')) {
         {
             self::$merchant_record = null;
             self::$merchant_record_fetched = false;
-        }
-
-        /**
-         * Reset the per-request log-once guard for API-key notice catalogue
-         * mismatches. Production has no reason to call this — a request is the
-         * boundary — but the unit harness runs the whole suite in one process.
-         */
-        public static function reset_api_key_notice_log_guard(): void
-        {
-            self::$api_key_notice_mismatch_logged = false;
         }
 
         /**
@@ -2822,22 +2813,26 @@ if (!class_exists('WC_Twoinc')) {
                 // other two that invents an extra placeholder is caught as the
                 // mismatch it is rather than quietly rendering a raw '%s'.
                 'service_error' => self::format_api_key_notice(
+                    'service_error',
                     $templates['service_error'],
                     [$product_name, '%s'],
                     $templates['unverified']
                 ),
                 'unreachable' => self::format_api_key_notice(
+                    'unreachable',
                     $templates['unreachable'],
                     [$product_name],
                     $templates['unverified']
                 ),
                 'not_configured' => self::format_api_key_notice(
+                    'not_configured',
                     $templates['not_configured'],
                     [$product_name],
                     $templates['unverified']
                 ),
                 'request_failed' => self::strip_unfilled_placeholders($templates['request_failed']),
                 'unexpected_response' => self::format_api_key_notice(
+                    'unexpected_response',
                     $templates['unexpected_response'],
                     [$product_name, '%s'],
                     $templates['unverified']
@@ -2856,10 +2851,16 @@ if (!class_exists('WC_Twoinc')) {
          * rest, so any specifier here is catalogue damage.
          *
          * Numbered ('%1$s') and width-qualified ('%05d') specifiers are
-         * matched; an escaped '%%' and a percent sign used as prose ('100% of
-         * the time') are deliberately NOT, which is why the flag characters
-         * sprintf also accepts — a space among them — are left out of the
-         * pattern: including them would eat '% o' out of a real sentence.
+         * matched. Deliberately NOT matched: an escaped '%%', and a percent
+         * sign used as prose ('100% of the time'). That is why sprintf's flag
+         * characters are left out of the pattern — the space flag would make
+         * '% o' in a real sentence look like a specifier, and stripping it
+         * mangles the sentence worse than leaving a stray specifier visible.
+         * The trade is deliberate and the residue it accepts is narrow: a
+         * flagged specifier ('%-5s'), and an escaped percent immediately
+         * followed by a real one ('%%%s'), both survive. Neither is reachable
+         * for the copy this actually runs on — the three notices with no
+         * arguments, which contain no percent sign in any shipped locale.
          *
          * @param string $text
          *
@@ -2886,14 +2887,18 @@ if (!class_exists('WC_Twoinc')) {
          * to the placeholder-free copy (what was shown before the failures
          * were categorized at all).
          *
+         * @param string $key      notice category, for the log
          * @param string $template
          * @param array  $args     arguments for the template's placeholders
          * @param string $fallback placeholder-free notice text
          *
          * @return string
          */
-        private static function format_api_key_notice($template, array $args, $fallback)
+        private static function format_api_key_notice($key, $template, array $args, $fallback)
         {
+            // More than one argument means the second is the literal '%s' that
+            // must survive into the output for admin.js to substitute.
+            $expects_status = count($args) > 1;
             $reason = 'sprintf() rejected the format string';
             try {
                 // Silenced deliberately: PHP 7.4 reports the mismatch as a
@@ -2902,24 +2907,36 @@ if (!class_exists('WC_Twoinc')) {
                 // into the admin page's output.
                 $formatted = @vsprintf($template, $args);
                 if (is_string($formatted)) {
-                    return $formatted;
+                    if (!$expects_status || strpos($formatted, '%s') !== false) {
+                        return $formatted;
+                    }
+                    // vsprintf accepts a format string that uses FEWER
+                    // arguments than it was given, so a translation that
+                    // dropped the status placeholder formats cleanly and simply
+                    // loses the HTTP status code — the one detail that tells a
+                    // merchant which failure they are looking at. Treat it as
+                    // the mismatch it is rather than shipping a notice that
+                    // silently says less than it should.
+                    $reason = 'the translation dropped the HTTP status placeholder';
                 }
             } catch (Throwable $e) {
                 $reason = $e->getMessage();
             }
 
-            // Log once per request, mirroring the "log once" pattern the FX
-            // failure path and apply_brand_availability_gate() already use. The
-            // notices are rebuilt on EVERY wp-admin page view (this hook has no
-            // screen check), and a bad catalogue stays bad, so logging each
-            // failed category each time would fill the WooCommerce log with
-            // thousands of copies of the same line.
-            if (!self::$api_key_notice_mismatch_logged && function_exists('wc_get_logger')) {
-                self::$api_key_notice_mismatch_logged = true;
+            // Throttled per category through a transient, not just a static:
+            // these notices are rebuilt on EVERY wp-admin page view (the hook
+            // has no screen check) and a bad catalogue stays bad, so a
+            // per-request guard would still write a line per page view forever.
+            // Per category, because four can break at once and one line naming
+            // none of them is not diagnosable.
+            $throttle_key = WC_Twoinc_Brand::prefixed_name('notice_format_logged_' . $key);
+            if (!get_transient($throttle_key) && function_exists('wc_get_logger')) {
+                set_transient($throttle_key, 1, self::NOTICE_FORMAT_LOG_THROTTLE);
                 wc_get_logger()->error(
                     sprintf(
-                        'Installed translation of an API key notice does not match the'
+                        'Installed translation of the "%s" API key notice does not match the'
                         . ' source placeholders (%s); showing the generic notice instead',
+                        $key,
                         $reason
                     ),
                     ['source' => 'twoinc-payment-gateway']

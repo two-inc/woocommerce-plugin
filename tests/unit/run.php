@@ -214,6 +214,7 @@ final class BrandConfigSpec
             'testApiKeyNoticesUseOverlayProductNameNotTwo',
             'testApiKeyNoticeCatalogueWithBadPlaceholdersDegradesNotFatals',
             'testApiKeyNoticesNeverShipAnUnfillablePlaceholder',
+            'testApiKeyNoticeDroppingTheStatusPlaceholderDegrades',
             'testApiKeyNoticeCopyIsTranslatedInEveryLocale',
         ];
         foreach ($tests as $test) {
@@ -243,7 +244,6 @@ final class BrandConfigSpec
         WC_Twoinc_Payment_Terms::reset_fee_cache();
         WC_Twoinc_Sole_Trader::reset_cache();
         WC_Twoinc::reset_merchant_record_memo();
-        WC_Twoinc::reset_api_key_notice_log_guard();
         WC_Twoinc_FX::reset_request_cache();
         unset($GLOBALS['__twoinc_test_translations']);
         $GLOBALS['__twoinc_test_transients'] = [];
@@ -6598,25 +6598,58 @@ final class BrandConfigSpec
             );
         }
         // And the failure is not swallowed silently. Match the message rather
-        // than counting every log line, so an unrelated log cannot satisfy it.
-        TinyAssert::same(1, self::countNoticeMismatchLogs(), 'a catalogue mismatch must be logged');
+        // than counting every log line, so an unrelated log cannot satisfy it —
+        // and expect one line PER broken category, naming it: four can break at
+        // once and a single line naming none of them is not diagnosable.
+        TinyAssert::same(3, self::countNoticeMismatchLogs(), 'each broken category must be logged');
+        foreach (['service_error', 'unreachable', 'not_configured'] as $key) {
+            TinyAssert::same(1, self::countNoticeMismatchLogs($key), "the '$key' failure must name itself");
+        }
 
-        // ...but exactly once. These notices are rebuilt on every wp-admin page
-        // view and a bad catalogue stays bad, so an unthrottled log would grow
-        // without bound.
+        // ...but only once per category. These notices are rebuilt on every
+        // wp-admin page view and a bad catalogue stays bad, so an unthrottled
+        // log would grow without bound; the throttle outlives the request.
         self::gateway()->get_api_key_notices();
         self::gateway()->get_api_key_notices();
-        TinyAssert::same(1, self::countNoticeMismatchLogs(), 'the mismatch log must fire once per request');
+        TinyAssert::same(3, self::countNoticeMismatchLogs(), 'the mismatch log must be throttled per category');
     }
 
-    private static function countNoticeMismatchLogs(): int
+    private static function countNoticeMismatchLogs(string $category = ''): int
     {
+        $needle = $category === ''
+            ? 'does not match the source placeholders'
+            : 'the "' . $category . '" API key notice does not match';
+
         return count(array_filter(
             $GLOBALS['__twoinc_test_logs'],
-            static function ($entry) {
-                return strpos($entry['message'] ?? '', 'does not match the source placeholders') !== false;
+            static function ($entry) use ($needle) {
+                return strpos($entry['message'] ?? '', $needle) !== false;
             }
         ));
+    }
+
+    private static function testApiKeyNoticeDroppingTheStatusPlaceholderDegrades(): void
+    {
+        $templates = WC_Twoinc::api_key_notice_templates();
+        // vsprintf accepts a format string that uses fewer arguments than it is
+        // given, so a translation that simply omits the status placeholder
+        // formats cleanly — and the notice loses the HTTP status code, the one
+        // detail that tells an admin which failure they are looking at. There is
+        // no error to catch here; only the missing placeholder reveals it.
+        $GLOBALS['__twoinc_test_translations'] = [
+            $templates['service_error'] => 'Tjenestefeil hos %1$s. Prøv igjen snart.',
+        ];
+
+        $notices = self::gateway()->get_api_key_notices();
+
+        TinyAssert::same($templates['unverified'], $notices['service_error']);
+        TinyAssert::same(1, self::countNoticeMismatchLogs('service_error'));
+        // A translation that KEEPS the placeholder is untouched.
+        TinyAssert::same(
+            "Two's API returned an unexpected response (HTTP %s).",
+            $notices['unexpected_response']
+        );
+        TinyAssert::same(0, self::countNoticeMismatchLogs('unexpected_response'));
     }
 
     private static function testApiKeyNoticesNeverShipAnUnfillablePlaceholder(): void
