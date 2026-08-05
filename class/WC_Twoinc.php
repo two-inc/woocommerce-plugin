@@ -4175,7 +4175,7 @@ if (!class_exists('WC_Twoinc')) {
                         </div>
                         <?php // Hidden by default; shown by admin.js in place of the merchant info above when the live re-verification (always run on page load) finds the stored key no longer valid, so a broken key can't hide behind a stale cached Merchant ID (TWO-25326 follow-up). ?>
                         <div id="twoinc-merchant-invalid-notice" style="margin-top: 8px; color: #dc3232; font-size: 13px; display: none;">
-                            <strong><?php _e('This API key could not be verified. It may be invalid, or Two may be temporarily unreachable.', 'twoinc-payment-gateway'); ?></strong>
+                            <strong><?php printf(__('This API key could not be verified. It may be invalid, or %s may be temporarily unreachable.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')); ?></strong>
                         </div>
                         <?php echo $this->get_description_html($data); // WPCS: XSS ok.
                         ?>
