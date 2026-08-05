@@ -117,9 +117,13 @@ jQuery(function ($) {
   // every non-200 response, 5xx and network failures included, displayed
   // identically as "API key is invalid").
   function invalidNoticeText(status, code) {
-    // Translated per-category text comes from PHP via wp_localize_script
-    // (mirrors the days_label pattern above) — the hardcoded English
-    // literals here are only the fallback if that data didn't arrive.
+    // Translated, brand-resolved per-category text comes from PHP via
+    // wp_localize_script (mirrors the days_label pattern above) — see
+    // WC_Twoinc::get_api_key_notices(), which is where the product name is
+    // interpolated from WC_Twoinc_Brand. The literals here are only the
+    // fallback if that data didn't arrive, so they must stay brand-neutral:
+    // this file ships unchanged to brand overlays, and a hardcoded product
+    // name here would show the wrong brand in an overlay's admin.
     const notices = twoinc_admin.api_key_notices || {};
     switch (status) {
       case "invalid_key":
@@ -127,15 +131,15 @@ jQuery(function ($) {
       case "service_error":
         return (
           notices.service_error ||
-          "Two's API returned a service error (HTTP %s). This is likely temporary on Two's side — try again shortly."
+          "The payment API returned a service error (HTTP %s). This is likely temporary on the provider's side — try again shortly."
         ).replace("%s", code);
       case "unreachable":
         return (
           notices.unreachable ||
-          "Could not reach Two's API (network or connectivity error). Try again shortly."
+          "Could not reach the payment API (network or connectivity error). Try again shortly."
         );
       case "not_configured":
-        return notices.not_configured || "Enter an API key above to enable Two.";
+        return notices.not_configured || "Enter an API key above to enable this payment method.";
       case "request_failed":
         // The AJAX request to THIS SITE's admin-ajax.php failed before Two
         // was ever contacted (jQuery's error callback fires on any
@@ -147,7 +151,8 @@ jQuery(function ($) {
       default:
         return code
           ? (
-              notices.unexpected_response || "Two's API returned an unexpected response (HTTP %s)."
+              notices.unexpected_response ||
+              "The payment API returned an unexpected response (HTTP %s)."
             ).replace("%s", code)
           : notices.unverified || "This API key could not be verified.";
     }

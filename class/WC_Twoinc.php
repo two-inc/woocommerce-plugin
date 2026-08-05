@@ -2769,19 +2769,70 @@ if (!class_exists('WC_Twoinc')) {
                 // Categorized API-key verification failure text (TWO-25326
                 // follow-up) — admin.js's invalidNoticeText() renders these
                 // instead of hardcoded English so the notice is translatable.
-                // service_error/unexpected_response carry a literal %s that
-                // JS substitutes with the HTTP status code (mirrors days_label
-                // above).
-                'api_key_notices' => [
-                    'invalid_key' => __('This API key is invalid or has expired.', 'twoinc-payment-gateway'),
-                    'service_error' => __("Two's API returned a service error (HTTP %s). This is likely temporary on Two's side — try again shortly.", 'twoinc-payment-gateway'),
-                    'unreachable' => __("Could not reach Two's API (network or connectivity error). Try again shortly.", 'twoinc-payment-gateway'),
-                    'not_configured' => __('Enter an API key above to enable Two.', 'twoinc-payment-gateway'),
-                    'request_failed' => __('Could not complete verification — try again shortly.', 'twoinc-payment-gateway'),
-                    'unexpected_response' => __("Two's API returned an unexpected response (HTTP %s).", 'twoinc-payment-gateway'),
-                    'unverified' => __('This API key could not be verified.', 'twoinc-payment-gateway'),
-                ],
+                'api_key_notices' => $this->get_api_key_notices(),
             ]);
+        }
+
+        /**
+         * Categorized API-key verification failure text for admin.js's
+         * invalidNoticeText(), keyed by the category
+         * categorize_verification_result() reports.
+         *
+         * The product name is resolved through WC_Twoinc_Brand rather than
+         * written into the copy, so a brand overlay's admin sees its own
+         * name — the same convention every other user-facing string in this
+         * file follows. The HTTP status code is NOT available at localize
+         * time (it arrives with the AJAX response), so service_error and
+         * unexpected_response deliberately pass a literal '%s' as their
+         * status argument: sprintf() does not rescan its own output, so the
+         * brand is substituted here and the '%s' survives for admin.js to
+         * replace with the status code (mirrors the days_label pattern).
+         *
+         * @return array
+         */
+        public function get_api_key_notices()
+        {
+            $product_name = WC_Twoinc_Brand::get('product_name');
+            $templates = self::api_key_notice_templates();
+
+            return [
+                'invalid_key' => $templates['invalid_key'],
+                'service_error' => sprintf($templates['service_error'], $product_name, '%s'),
+                'unreachable' => sprintf($templates['unreachable'], $product_name),
+                'not_configured' => sprintf($templates['not_configured'], $product_name),
+                'request_failed' => $templates['request_failed'],
+                'unexpected_response' => sprintf($templates['unexpected_response'], $product_name, '%s'),
+                'unverified' => $templates['unverified'],
+            ];
+        }
+
+        /**
+         * The translated source copy behind get_api_key_notices(), before the
+         * brand and status-code placeholders are filled in.
+         *
+         * Separate from get_api_key_notices() so a catalogue-drift test can
+         * read the msgids off the live source instead of retyping them (see
+         * the skip_confirm_auth precedent in the unit suite): a retyped copy
+         * of a literal cannot see the source being reworded without the
+         * catalogues being regenerated, which is the regression that matters.
+         *
+         * @return array
+         */
+        public static function api_key_notice_templates()
+        {
+            return [
+                'invalid_key' => __('This API key is invalid or has expired.', 'twoinc-payment-gateway'),
+                /* translators: 1: product name (e.g. Two). 2: HTTP status code returned by the API (e.g. 502), substituted by admin.js. */
+                'service_error' => __("%1\$s's API returned a service error (HTTP %2\$s). This is likely temporary on %1\$s's side — try again shortly.", 'twoinc-payment-gateway'),
+                /* translators: %s: product name (e.g. Two). */
+                'unreachable' => __("Could not reach %s's API (network or connectivity error). Try again shortly.", 'twoinc-payment-gateway'),
+                /* translators: %s: product name (e.g. Two). */
+                'not_configured' => __('Enter an API key above to enable %s.', 'twoinc-payment-gateway'),
+                'request_failed' => __('Could not complete verification — try again shortly.', 'twoinc-payment-gateway'),
+                /* translators: 1: product name (e.g. Two). 2: HTTP status code returned by the API (e.g. 418), substituted by admin.js. */
+                'unexpected_response' => __("%1\$s's API returned an unexpected response (HTTP %2\$s).", 'twoinc-payment-gateway'),
+                'unverified' => __('This API key could not be verified.', 'twoinc-payment-gateway'),
+            ];
         }
 
         /**

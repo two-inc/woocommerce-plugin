@@ -676,29 +676,33 @@ msgstr "Maxbeloppet gäller hela avgiften: procenten och den fasta avgiften till
 msgid "This API key is invalid or has expired."
 msgstr "Den här API-nyckeln är ogiltig eller har upphört att gälla."
 
-#. translators: %s: HTTP status code returned by Two's API (e.g. 502).
+#. translators: 1: product name (e.g. Two). 2: HTTP status code returned by the API (e.g. 502), substituted by admin.js.
 #: class/WC_Twoinc.php
 #, php-format
-msgid "Two's API returned a service error (HTTP %s). This is likely temporary on Two's side — try again shortly."
-msgstr "Twos API returnerade ett tjänstefel (HTTP %s). Detta är troligen tillfälligt på Twos sida — försök igen strax."
+msgid "%1$s's API returned a service error (HTTP %2$s). This is likely temporary on %1$s's side — try again shortly."
+msgstr "API:et för %1$s returnerade ett tjänstefel (HTTP %2$s). Detta är troligen tillfälligt hos %1$s — försök igen strax."
 
+#. translators: %s: product name (e.g. Two).
 #: class/WC_Twoinc.php
-msgid "Could not reach Two's API (network or connectivity error). Try again shortly."
-msgstr "Det gick inte att nå Twos API (nätverks- eller anslutningsfel). Försök igen strax."
+#, php-format
+msgid "Could not reach %s's API (network or connectivity error). Try again shortly."
+msgstr "Det gick inte att nå API:et för %s (nätverks- eller anslutningsfel). Försök igen strax."
 
+#. translators: %s: product name (e.g. Two).
 #: class/WC_Twoinc.php
-msgid "Enter an API key above to enable Two."
-msgstr "Ange en API-nyckel ovan för att aktivera Two."
+#, php-format
+msgid "Enter an API key above to enable %s."
+msgstr "Ange en API-nyckel ovan för att aktivera %s."
 
 #: class/WC_Twoinc.php
 msgid "Could not complete verification — try again shortly."
 msgstr "Det gick inte att slutföra verifieringen — försök igen strax."
 
-#. translators: %s: HTTP status code returned by Two's API (e.g. 418).
+#. translators: 1: product name (e.g. Two). 2: HTTP status code returned by the API (e.g. 418), substituted by admin.js.
 #: class/WC_Twoinc.php
 #, php-format
-msgid "Two's API returned an unexpected response (HTTP %s)."
-msgstr "Twos API returnerade ett oväntat svar (HTTP %s)."
+msgid "%1$s's API returned an unexpected response (HTTP %2$s)."
+msgstr "API:et för %1$s returnerade ett oväntat svar (HTTP %2$s)."
 
 #: class/WC_Twoinc.php
 msgid "This API key could not be verified."
