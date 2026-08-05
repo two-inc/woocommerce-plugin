@@ -527,9 +527,31 @@ verdict disappears (TWO-25326, 2026-08-04):
   submit and `checkout_error` fires for errors that have nothing to do with this gateway, and
   neither fires `updated_checkout` — so resetting unconditionally wiped a good verdict with
   nothing to bring it back.
+- **supersession, the same idiom `addressLookupSeq` already uses here.** The interval is
+  disarmed _before_ the request goes out, so two checks can overlap and arrive in either order.
+  Three separate defects hung off that: the older response won when it arrived last (the buyer
+  read a verdict about a cart they had already changed); a response arriving after Place Order
+  deselected the gateway and painted onto a checkout mid-submit; and for the whole duration of
+  the XHR every "is a check running" flag read falsy, so an abandon in that window skipped the
+  reset and stranded the loader. `seq`/`inFlightSeq` closes all three, and the request is left
+  to complete rather than aborted — an abort runs `.fail`, which deselects and declines.
+- **the request is bounded.** A request that never settles calls neither handler, and both the
+  loader coming down and the verdict appearing hang off them. `timeout: 30000`, matching the
+  company-search transport.
+- **which jQuery callback a response came from is passed, never sniffed.** jQuery hands `.done`
+  the parsed response _body_, so a field called `status` in a good 200 was being read as an HTTP
+  status — routing a declining 200 to the phone-number box and marking `billing_phone` invalid.
+  Both halves are pinned: a body-level `status` must not route, and must not block caching.
+- **the retryable 4xx codes are not cached.** 401, 403, 408 and 429 mean "ask again", and a
+  cached answer is permanent for the page. One per code, so narrowing the list fails.
+- **a repeated verdict is not re-announced.** `.text()` replaces the child text node whether or
+  not the string differs, and that mutation inside an assertive live region had it repeating
+  "not available for this order" on every field blur. Pinned both ways: identical text is
+  silent, changed text still announces.
 
-Verified by mutation, per the rule below — twenty-eight of them, and every one kills at least
-one test.
+Verified by mutation, per the rule below — thirty-nine of them, and every one kills at least
+one test. One survivor was found this way rather than by review (dropping the `isFailure` gate
+on the HTTP-status branch failed nothing) and is now covered.
 
 On `assets/js/twoinc.js`: removing the clearing from `getApproval()` fails seven; re-swapping
 `updateElements()`'s two calls, dropping the abandoned-tick reset, removing the price-wait
@@ -545,6 +567,12 @@ commenting out the spinner's `background-image`, dropping the loader's flex layo
 phone-number box from the red group, deleting the loader's own two-class hiding rule, tiling and
 resizing the spinner background, and deleting the `.twoinc-loader__text` rule. Writing a border
 colour as an equivalent `rgb()` must NOT fail, and does not — the assertions normalise.
+
+Round 3 added, on `assets/js/twoinc.js`: removing the supersession guard from both handlers
+fails two; dropping `inFlightSeq` from the abandon gate, removing the `seq` bump on abandon,
+removing the ajax timeout, reverting the render give-up to a global abandon, dropping the
+`isFailure` gate, and writing box text unconditionally each fail one; reverting the cache guard
+to sniffing `response.status` fails five; emptying the retryable-status list fails four.
 
 On `class/WC_Twoinc.php` and the catalogues: dropping either ARIA role, injecting an `<h4>` into
 a verdict box, rendering an EMPTY verdict box, swapping the loader's two spans, mis-pairing a

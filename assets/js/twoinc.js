@@ -2834,6 +2834,25 @@ let twoincDomHelper = {
     return twoincUtilHelper.formatCompanyLabel(name, number);
   },
   /**
+   * Write a verdict box's sentence, but only when it is not already that
+   * sentence (review round 3).
+   *
+   * `.text()` replaces the box's child text node whether or not the string
+   * differs, and that is a DOM mutation inside a `role="status"`/`role="alert"`
+   * region — so assistive technology re-announced the same verdict on every
+   * `updated_checkout` and every field blur that re-ran the pass. An assertive
+   * region repeating "not available for this order" each time the buyer edits a
+   * field is worse than the silence this replaced.
+   *
+   * @param {Object} $box jQuery set, possibly empty (brand suppressed the notice)
+   * @param {string} text the sentence the box should be carrying
+   * @returns {void}
+   */
+  setPayBoxText: function ($box, text) {
+    if ($box.text() === text) return;
+    $box.text(text);
+  },
+  /**
    * Toggle payment text in subtitle and description
    */
   togglePaySubtitleDesc: function (action, errSelector) {
@@ -2877,7 +2896,8 @@ let twoincDomHelper = {
           twoincUtilHelper.blankToEmpty(captured.organization_number)
         );
         if (companyTemplate && companyText) {
-          intentBox.text(
+          twoincDomHelper.setPayBoxText(
+            intentBox,
             companyTemplate.replace("{company}", function () {
               // Function replacer (Vader, round 1 review): a string replacer
               // honours special patterns like `$&`/`$$` inside the SECOND
@@ -2889,7 +2909,7 @@ let twoincDomHelper = {
             })
           );
         } else {
-          intentBox.text(intentBox.data("twoincDefaultText"));
+          twoincDomHelper.setPayBoxText(intentBox, intentBox.data("twoincDefaultText"));
         }
       } else if (action === "errored") {
         // TWO-25326 §7.3: the "not available" box carries the same
@@ -2912,13 +2932,14 @@ let twoincDomHelper = {
             twoincUtilHelper.blankToEmpty(captured.organization_number)
           );
           if (declinedTemplate && companyText) {
-            $errBox.text(
+            twoincDomHelper.setPayBoxText(
+              $errBox,
               declinedTemplate.replace("{company}", function () {
                 return companyText;
               })
             );
           } else {
-            $errBox.text($errBox.data("twoincDefaultText"));
+            twoincDomHelper.setPayBoxText($errBox, $errBox.data("twoincDefaultText"));
           }
         }
       }
@@ -4037,7 +4058,28 @@ class Twoinc {
       interval: null,
       pendingCheck: false,
       lastCheckOk: false,
-      lastCheckHash: null,
+      // Monotonic supersession counter for the order-intent request, the same
+      // idiom `addressLookupSeq` above uses and for the same reason (review
+      // round 3). Bumped when a request is issued and by every abandon, so a
+      // response is only allowed to act if it is still the newest question
+      // asked. Without it BOTH of these painted:
+      //
+      //   - two checks overlapping (the interval is disarmed before the request
+      //     goes out, so a second can be armed while the first is in flight) and
+      //     arriving in reverse order — the older verdict won, and the buyer
+      //     read an answer about a company or cart they had already moved on
+      //     from;
+      //   - a response arriving after the check was abandoned — a Place Order
+      //     click — which deselected the gateway and painted a verdict onto a
+      //     checkout already mid-submit.
+      seq: 0,
+      // The seq of the request currently in flight, or null. This is the ONLY
+      // record that a check is running between the interval being disarmed and
+      // the response arriving, so abandonOrderIntentCheck() has to consult it:
+      // during that window every other flag reads falsy, and round 2's
+      // `wasRunning` gate therefore skipped the reset and left the loader on
+      // screen for the rest of the page.
+      inFlightSeq: null,
       // Ticks spent waiting for a readable cart total. The interval body
       // cannot proceed without one and used to retry forever; now that the
       // loading state goes up when a check is ARMED, forever means a spinner
@@ -4452,9 +4494,16 @@ class Twoinc {
     // gateway, such as a missing postcode. Resetting unconditionally wiped a
     // perfectly good verdict in both cases, and neither fires
     // `updated_checkout`, so nothing brought it back.
+    // `inFlightSeq` is in the list because of a hole round 2's gate had (found
+    // round 3): the interval is disarmed BEFORE the request goes out, so for the
+    // whole duration of the XHR every other flag here reads falsy. An abandon in
+    // that window therefore skipped the reset and left the loader on screen with
+    // its response orphaned below — the exact defect the gate was added to avoid,
+    // reintroduced through its own condition.
     const wasRunning =
       this.orderIntentCheck.interval !== null ||
       this.orderIntentCheck.renderInterval !== null ||
+      this.orderIntentCheck.inFlightSeq !== null ||
       this.orderIntentCheck.pendingCheck;
 
     clearInterval(this.orderIntentCheck.interval);
@@ -4462,6 +4511,14 @@ class Twoinc {
     clearInterval(this.orderIntentCheck.renderInterval);
     this.orderIntentCheck.renderInterval = null;
     this.orderIntentCheck.pendingCheck = false;
+
+    // Orphan any response still in flight rather than cancelling the request.
+    // Bumping the counter is what makes the handlers no-op: an aborted jqXHR
+    // would still run `.fail`, which deselects the gateway and paints a decline,
+    // and doing that to a checkout the buyer has just submitted is worse than
+    // the request completing unheard.
+    this.orderIntentCheck.seq += 1;
+    this.orderIntentCheck.inFlightSeq = null;
 
     if (wasRunning) {
       twoincDomHelper.togglePaySubtitleDesc();
@@ -4607,6 +4664,26 @@ class Twoinc {
       // a cart total sits between the two.
       twoincDomHelper.togglePaySubtitleDesc("checking-intent");
 
+      // Claim this request's place in the queue BEFORE issuing it, so both
+      // handlers can tell whether they are still the newest question asked
+      // (review round 3 — see `seq`/`inFlightSeq`).
+      const seq = (Twoinc.getInstance().orderIntentCheck.seq += 1);
+      Twoinc.getInstance().orderIntentCheck.inFlightSeq = seq;
+
+      /**
+       * Is this response still the one the checkout is waiting for?
+       *
+       * Also clears `inFlightSeq` when it is, so the abandon gate stops counting
+       * this request as running.
+       *
+       * @returns {boolean}
+       */
+      const stillCurrent = function () {
+        if (seq !== Twoinc.getInstance().orderIntentCheck.seq) return false;
+        Twoinc.getInstance().orderIntentCheck.inFlightSeq = null;
+        return true;
+      };
+
       // Create an order intent
       const approvalResponse = jQuery.ajax({
         url: twoincUtilHelper.constructTwoincUrl("/v1/order_intent"),
@@ -4614,10 +4691,19 @@ class Twoinc {
         dataType: "json",
         method: "POST",
         xhrFields: { withCredentials: true },
+        // Bounded, like the company-search transport already is (review round
+        // 3). A request that never settles calls neither handler, and both the
+        // loader coming down and the verdict appearing hang off those handlers —
+        // so a hung connection meant "Checking availability" for the rest of the
+        // page. A timeout arrives as a `.fail` with status 0, which paints the
+        // generic decline and is deliberately not cached.
+        timeout: 30000,
         data: jsonBody
       });
 
       approvalResponse.done(function (response) {
+        if (!stillCurrent()) return;
+
         // Store the approved state
         Twoinc.getInstance().isTwoincApproved = response.approved;
 
@@ -4631,24 +4717,30 @@ class Twoinc {
         }
 
         // Display messages and update order intent logs. The hash is passed
-        // rather than read back off the instance (review round 2): it used to
-        // live in a single `lastCheckHash` slot, and because the interval is
-        // disarmed BEFORE the request goes out, a second check could be armed
-        // and overwrite that slot while the first was still in flight — so the
-        // first response was cached under the second request's body. With the
-        // cached branch now disarming, that mis-filed entry would be served
+        // rather than read back off a shared slot (review round 2): because the
+        // interval is disarmed BEFORE the request goes out, a second check could
+        // be armed and overwrite that slot while the first was still in flight —
+        // so the first response was cached under the second request's body. With
+        // the cached branch now disarming, that mis-filed entry would be served
         // forever with no request ever issued again.
-        Twoinc.getInstance().processOrderIntentResponse(response, hashedBody);
+        //
+        // `false` is "this is not a failure" — read from the jQuery callback we
+        // are IN rather than sniffed off the payload (review round 3). jQuery
+        // hands `.done` the parsed response BODY, so a `status` field in that
+        // body was being read as an HTTP status.
+        Twoinc.getInstance().processOrderIntentResponse(response, hashedBody, false);
       });
 
       approvalResponse.fail(function (response) {
+        if (!stillCurrent()) return;
+
         // Store the approved state
         Twoinc.getInstance().isTwoincApproved = false;
 
         twoincDomHelper.deselectPaymentMethod();
 
         // Display messages and update order intent logs
-        Twoinc.getInstance().processOrderIntentResponse(response, hashedBody);
+        Twoinc.getInstance().processOrderIntentResponse(response, hashedBody, true);
       });
     }, 1000);
   }
@@ -4656,7 +4748,7 @@ class Twoinc {
   /**
    * Update page after order intent request complete
    */
-  processOrderIntentResponse(response, hashedBody) {
+  processOrderIntentResponse(response, hashedBody, isFailure) {
     let displayMsgId = "";
     let invalidFields = [];
 
@@ -4665,7 +4757,12 @@ class Twoinc {
     } else {
       // Display error messages
       displayMsgId = "errored|.twoinc-err-payment-default";
-      if (response.status >= 400) {
+      // `isFailure &&` (review round 3): on the success path `response` is the
+      // parsed response BODY, so an API that returns a field called `status`
+      // would send a perfectly good 200 down the HTTP-error branch below. Which
+      // callback we were invoked from is the fact being tested, and only the
+      // caller knows it.
+      if (isFailure && response.status >= 400) {
         // @TODO: use the error code returned by the API
         //
         // Two fixes here, both found in review round 1 and both about this
@@ -4698,18 +4795,24 @@ class Twoinc {
       this.orderIntentCheck["lastCheckOk"] = response.approved;
 
       // Cache the verdict against the request body that produced it — but only
-      // when it IS a verdict (review round 2).
+      // when it IS a verdict (review round 2, narrowed round 3).
       //
-      // A `.done` response carries no `status` (jQuery hands the parsed body to
-      // the callback), and a 4xx is the backend declining with a reason. Those
-      // are answers. A `status` of 0 (offline blip, timeout) or a 5xx is the
-      // request having failed, and caching one of those declined this cart and
-      // company for the rest of the page — permanently, since the cached branch
-      // disarms the timer and no request is ever retried. One dropped
-      // connection would lose the sale.
-      const settled =
-        response.status === undefined || (response.status >= 400 && response.status < 500);
-      if (hashedBody && settled) {
+      // The cached branch disarms the timer and issues no request, so a cached
+      // answer is permanent for the rest of the page. That is right for an
+      // answer and catastrophic for a hiccup: one dropped connection would
+      // decline this cart and company until the buyer reloaded.
+      //
+      // A declining 200 is an answer. So is most of the 4xx range — the backend
+      // refusing this order with a reason. Not cacheable: anything on the
+      // transport (status 0, our own timeout), any 5xx, and the four 4xx codes
+      // that mean "ask again" rather than "no" — 401 and 403 (a session or key
+      // that can be refreshed), 408 (a timeout the server noticed first) and 429
+      // (rate limiting, where re-asking later is the documented remedy).
+      const RETRYABLE = [401, 403, 408, 429];
+      const cacheable =
+        !isFailure ||
+        (response.status >= 400 && response.status < 500 && !RETRYABLE.includes(response.status));
+      if (hashedBody && cacheable) {
         this.orderIntentLog[hashedBody] = displayMsgId;
       }
     }
@@ -4739,7 +4842,16 @@ class Twoinc {
         return;
       }
       if (++renderWaitTicks >= 10) {
-        this.abandonOrderIntentCheck();
+        // Give up on THIS paint only, rather than calling
+        // abandonOrderIntentCheck() (review round 3). That helper also bumps the
+        // supersession counter and clears `pendingCheck`, neither of which has
+        // anything to do with an overlay refusing to clear — and bumping the
+        // counter here would silently orphan a newer check that had already been
+        // armed while this paint was waiting. Cancel the timer, reset the tile,
+        // leave the rest of the lifecycle alone.
+        clearInterval(this.orderIntentCheck.renderInterval);
+        this.orderIntentCheck.renderInterval = null;
+        twoincDomHelper.togglePaySubtitleDesc();
       }
     }, 1000);
   }

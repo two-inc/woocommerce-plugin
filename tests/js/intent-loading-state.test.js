@@ -362,6 +362,11 @@ describe("order-intent loading state and stale-verdict clearing", () => {
      * would take the generic path and prove nothing. What is passed is the same
      * object shape the real `.fail` handler passes on — the jqXHR itself.
      *
+     * The third argument is the failure flag the real `.fail` handler passes:
+     * which jQuery callback we came from is a fact only the caller has, and
+     * sniffing it off the payload read a `status` field in a 200 response BODY as
+     * an HTTP status (review round 3).
+     *
      * @param {Object} ajax the stubAjax recorder
      * @param {Object} response synthetic jqXHR
      * @returns {void}
@@ -372,7 +377,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       expect(ajax.calls.length).toBe(1);
       expect(shown(".twoinc-loader")).toBe(true);
 
-      instance.processOrderIntentResponse(response);
+      instance.processOrderIntentResponse(response, "hash-" + response.status, true);
       jest.advanceTimersByTime(1000);
     }
 
@@ -743,12 +748,17 @@ describe("order-intent loading state and stale-verdict clearing", () => {
   });
 
   describe("what gets cached, and against which request", () => {
-    test("two overlapping checks cache their verdicts under their own bodies", () => {
-      // `lastCheckHash` was one slot shared by every request, and the interval is
-      // disarmed BEFORE the request goes out — so a second check armed while the
-      // first was in flight overwrote it, and the first response was filed under
-      // the second body. With the cached branch now disarming, that mis-filed
-      // entry would be served forever (review round 2).
+    test("a superseded response is ignored outright — not painted, not cached", () => {
+      // The interval is disarmed BEFORE the request goes out, so a second check
+      // can be armed while the first is in flight, and the two can arrive in
+      // either order.
+      //
+      // Round 2 fixed only the FILING of this (the hash used to be one shared
+      // slot, so the first response was cached under the second body). Round 3
+      // found the older response was still being ACTED on: arriving last it won,
+      // and the buyer read a verdict about a cart they had already changed. So
+      // the assertion is not "two entries" any more — it is that the stale answer
+      // has no effect at all, and only the newest one paints.
       const ajax = harness.stubAjax($);
       try {
         instance.getApproval();
@@ -761,12 +771,128 @@ describe("order-intent loading state and stale-verdict clearing", () => {
         jest.advanceTimersByTime(1000);
         expect(ajax.calls.length).toBe(2);
 
-        // First response settles LAST, which is the ordering that mis-filed it.
+        // Newest settles first, and is what the buyer must end up reading.
         ajax.calls[1].succeed({ approved: false });
-        ajax.calls[0].succeed({ approved: false });
+        jest.advanceTimersByTime(1000);
+        expect(shown(".twoinc-err-payment-default")).toBe(true);
+        expect(Object.keys(instance.orderIntentLog).length).toBe(1);
+
+        // The superseded one settles afterwards, approving. Before round 3 this
+        // repainted the tile as APPROVED — the buyer would have been told a cart
+        // total they no longer had was fine.
+        ajax.calls[0].succeed({ approved: true });
         jest.advanceTimersByTime(1000);
 
-        expect(Object.keys(instance.orderIntentLog).length).toBe(2);
+        expect(shown(".twoinc-intent-approved")).toBe(false);
+        expect($(".twoinc-pay-box.twoinc-intent-approved").length).toBe(1);
+        expect(shown(".twoinc-err-payment-default")).toBe(true);
+        expect(Object.keys(instance.orderIntentLog).length).toBe(1);
+      } finally {
+        ajax.restore();
+      }
+    });
+
+    test("a request that never settles times out rather than spinning forever", () => {
+      // Both the loader coming down and the verdict appearing hang off the ajax
+      // handlers, and a request that never settles calls neither — so a hung
+      // connection meant "Checking availability" for the rest of the page. The
+      // company-search transport was already bounded; this one was not (review
+      // round 3).
+      const ajax = harness.stubAjax($);
+      try {
+        instance.getApproval();
+        jest.advanceTimersByTime(1000);
+
+        expect(ajax.calls.length).toBe(1);
+        expect(ajax.calls[0].timeout).toBe(30000);
+      } finally {
+        ajax.restore();
+      }
+    });
+
+    test("a timed-out request paints a decline and is not cached", () => {
+      // jQuery reports a timeout as a `.fail` with status 0, which must reach the
+      // buyer as the generic "not available" — but must NOT be remembered as one.
+      const ajax = harness.stubAjax($);
+      try {
+        instance.getApproval();
+        jest.advanceTimersByTime(1000);
+
+        ajax.last().fail("timeout", "timeout");
+        jest.advanceTimersByTime(1000);
+
+        expect(shown(".twoinc-loader")).toBe(false);
+        expect(shown(".twoinc-err-payment-default")).toBe(true);
+        expect(Object.keys(instance.orderIntentLog).length).toBe(0);
+      } finally {
+        ajax.restore();
+      }
+    });
+
+    for (const status of [401, 403, 408, 429]) {
+      test("a " + status + " means ask again, so it is not cached", () => {
+        // Round 2 cached the whole 4xx range as verdicts. These four mean "ask
+        // again" rather than "no" — a refreshable session or key, a server-side
+        // timeout, rate limiting — and caching one froze the decline in place for
+        // the rest of the page, because the cached branch issues no request
+        // (review round 3).
+        const ajax = harness.stubAjax($);
+        try {
+          instance.getApproval();
+          jest.advanceTimersByTime(1000);
+          instance.processOrderIntentResponse({ approved: false, status: status }, "h", true);
+
+          expect(instance.orderIntentLog["h"]).toBeUndefined();
+        } finally {
+          ajax.restore();
+        }
+      });
+    }
+
+    test("a declining 200 is never routed by its body's own `status` field", () => {
+      // Mutation survivor found while verifying round 3: dropping the `isFailure`
+      // gate on the HTTP-status branch failed nothing. A 200 response BODY
+      // carrying `status: 400` and an `error_details` string was being read as an
+      // HTTP 400 and routed to the phone-number box — a wrong message on a
+      // perfectly good response, and `billing_phone` marked invalid for no reason.
+      const ajax = harness.stubAjax($);
+      try {
+        instance.getApproval();
+        jest.advanceTimersByTime(1000);
+
+        ajax.last().succeed({
+          approved: false,
+          status: 400,
+          error_details: "Invalid phone number",
+          responseJSON: { error_details: "Invalid phone number" }
+        });
+        jest.advanceTimersByTime(1000);
+
+        expect(shown(".twoinc-err-payment-default")).toBe(true);
+        expect($(".twoinc-pay-box.twoinc-err-phone-number").length).toBe(1);
+        expect(shown(".twoinc-err-phone-number")).toBe(false);
+        expect($("#billing_phone_field").hasClass("woocommerce-invalid")).toBe(false);
+      } finally {
+        ajax.restore();
+      }
+    });
+
+    test("a declining 200 whose body happens to carry a `status` field is still cached", () => {
+      // jQuery hands `.done` the parsed response BODY, so a field called `status`
+      // in a perfectly good 200 was being read as an HTTP status — routing it down
+      // the HTTP-error branch and, for a 5xx-looking value, refusing to cache a
+      // real verdict (review round 3). Which callback we came from is the fact
+      // that decides this, and only the caller knows it.
+      const ajax = harness.stubAjax($);
+      try {
+        instance.getApproval();
+        jest.advanceTimersByTime(1000);
+
+        ajax.last().succeed({ approved: false, status: 503 });
+        jest.advanceTimersByTime(1000);
+
+        expect(shown(".twoinc-err-payment-default")).toBe(true);
+        expect(Object.keys(instance.orderIntentLog).length).toBe(1);
       } finally {
         ajax.restore();
       }
@@ -806,7 +932,8 @@ describe("order-intent loading state and stale-verdict clearing", () => {
         jest.advanceTimersByTime(1000);
         instance.processOrderIntentResponse(
           { approved: false, status: 422, responseJSON: { error_code: "TOO_BIG" } },
-          "hash-422"
+          "hash-422",
+          true
         );
 
         expect(instance.orderIntentLog["hash-422"]).toBe("errored|.twoinc-err-payment-default");
@@ -839,6 +966,98 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       instance.abandonOrderIntentCheck();
 
       expect(shown(".twoinc-loader")).toBe(false);
+    });
+  });
+
+  describe("a response arriving after the check was abandoned does nothing", () => {
+    test("Place Order orphans the in-flight response instead of painting it", () => {
+      // The window between the interval being disarmed and the response arriving
+      // is the whole duration of the XHR, and round 2's `wasRunning` gate read
+      // every flag as falsy across it — so an abandon there skipped the reset and
+      // left the loader up, then the response landed and deselected the gateway on
+      // a checkout already mid-submit (review round 3).
+      const ajax = harness.stubAjax($);
+      try {
+        instance.getApproval();
+        jest.advanceTimersByTime(1000);
+        expect(ajax.calls.length).toBe(1);
+        expect(shown(".twoinc-loader")).toBe(true);
+
+        // Nothing is ticking now — the interval is disarmed and the render wait
+        // has not been armed — which is exactly why the gate needed a fourth flag.
+        expect(instance.orderIntentCheck.interval).toBeNull();
+        expect(instance.orderIntentCheck.renderInterval).toBeNull();
+        expect(instance.orderIntentCheck.pendingCheck).toBe(false);
+
+        instance.abandonOrderIntentCheck();
+        expect(shown(".twoinc-loader")).toBe(false);
+
+        // The orphaned response settles afterwards and must change nothing: no
+        // verdict, no deselection, no cache entry.
+        ajax.last().succeed({ approved: false });
+        jest.advanceTimersByTime(10000);
+
+        expect(shown(".twoinc-err-payment-default")).toBe(false);
+        expect($(".twoinc-pay-box.twoinc-err-payment-default").length).toBe(1);
+        expect(shown(".twoinc-loader")).toBe(false);
+        expect($(":input[value='" + GATEWAY_ID + "']").prop("checked")).toBe(true);
+        expect(Object.keys(instance.orderIntentLog).length).toBe(0);
+      } finally {
+        ajax.restore();
+      }
+    });
+
+    test("the request is left to complete rather than aborted", () => {
+      // Aborting would run `.fail`, which deselects the gateway and paints a
+      // decline — doing that to a checkout the buyer has just submitted is worse
+      // than letting the request finish unheard.
+      const ajax = harness.stubAjax($);
+      try {
+        instance.getApproval();
+        jest.advanceTimersByTime(1000);
+
+        instance.abandonOrderIntentCheck();
+
+        expect(ajax.calls[0].aborted).toBe(false);
+      } finally {
+        ajax.restore();
+      }
+    });
+
+    test("a stuck overlay gives up on the paint without orphaning a newer check", () => {
+      // The give-up used to call abandonOrderIntentCheck(), which also bumps the
+      // supersession counter — so a newer check armed while this paint was waiting
+      // was silently killed by an unrelated timeout (review round 3).
+      const ajax = harness.stubAjax($);
+      try {
+        $(document.body).append('<div id="payment"><div class="blockOverlay"></div></div>');
+        instance.getApproval();
+        jest.advanceTimersByTime(1000);
+        ajax.last().succeed({ approved: true });
+
+        // A newer check is armed and issued while the first paint is blocked.
+        $(".order-total .woocommerce-Price-amount").text("250.00");
+        instance.getApproval();
+        jest.advanceTimersByTime(1000);
+        expect(ajax.calls.length).toBe(2);
+        const seqInFlight = instance.orderIntentCheck.seq;
+
+        // The blocked paint reaches its tenth tick and gives up.
+        jest.advanceTimersByTime(9000);
+        expect(shown(".twoinc-loader")).toBe(false);
+
+        // The newer request has NOT been superseded by that give-up, so its
+        // verdict still lands. Calling abandonOrderIntentCheck() here bumped the
+        // counter and the buyer got no answer at all.
+        expect(instance.orderIntentCheck.seq).toBe(seqInFlight);
+        $("#payment .blockOverlay").remove();
+        ajax.calls[1].succeed({ approved: false });
+        jest.advanceTimersByTime(1000);
+
+        expect(shown(".twoinc-err-payment-default")).toBe(true);
+      } finally {
+        ajax.restore();
+      }
     });
   });
 
@@ -889,6 +1108,43 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       expect(lastAttr).toBeLessThan(firstText);
       expect(box.classList.contains("hidden")).toBe(false);
       expect(box.textContent).toBe("ACME Widgets Ltd (12345678)");
+    });
+
+    test("re-showing the same verdict does not re-announce it", () => {
+      // `.text()` replaces the child text node whether or not the string differs,
+      // and that is a DOM mutation inside a live region — so the same verdict was
+      // re-announced on every `updated_checkout` and every field blur that re-ran
+      // the pass. An assertive region repeating "not available for this order"
+      // each time the buyer edits a field is worse than the silence it replaced
+      // (review round 3).
+      dom.togglePaySubtitleDesc("errored", ".twoinc-err-payment-default");
+      const box = document.querySelector(".twoinc-pay-box.twoinc-err-payment-default");
+      expect(box.textContent).toBe("ACME Widgets Ltd (12345678)");
+
+      const seen = watch(box);
+      dom.togglePaySubtitleDesc("errored", ".twoinc-err-payment-default");
+      seen.stop();
+
+      // The class churn within one task is fine — it nets to no change, so the
+      // accessibility tree is not disturbed. A text mutation is not.
+      expect(seen.records.filter((t) => t !== "attributes")).toEqual([]);
+      expect(box.textContent).toBe("ACME Widgets Ltd (12345678)");
+    });
+
+    test("but a CHANGED verdict is announced", () => {
+      // The guard must not be so broad that a genuinely different sentence goes
+      // out silently.
+      dom.togglePaySubtitleDesc("errored", ".twoinc-err-payment-default");
+      const box = document.querySelector(".twoinc-pay-box.twoinc-err-payment-default");
+
+      $("#billing_company").val("Beta Traders Ltd");
+      $("#company_id").val("87654321");
+      const seen = watch(box);
+      dom.togglePaySubtitleDesc("errored", ".twoinc-err-payment-default");
+      seen.stop();
+
+      expect(seen.records.filter((t) => t !== "attributes").length).toBeGreaterThan(0);
+      expect(box.textContent).toBe("Beta Traders Ltd (87654321)");
     });
 
     test("the same holds for the declined box", () => {
