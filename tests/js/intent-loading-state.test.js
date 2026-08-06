@@ -1284,6 +1284,64 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       );
     });
 
+    test("a blank snapshot falls back to the live read, not to the no-company sentence", () => {
+      // `readCapturedCompany()` reads the INPUTS, and WooCommerce empties them for
+      // an instant while it replaces the billing fields — so a request issued in
+      // that window snapshots "". Honouring that printed the served no-company
+      // fallback over a verdict for a company the buyer certainly had, because
+      // `isReadyApprovalCheck()` had already proved `customerCompany` complete
+      // (review round 6).
+      const ajax = harness.stubAjax($);
+      try {
+        $("#billing_company").val("");
+        $("#company_id").val("");
+        issueACheck(ajax);
+
+        // The fields come back, as the re-render completes.
+        $("#billing_company").val("ACME Widgets Ltd");
+        $("#company_id").val("12345678");
+
+        ajax.last().succeed({ approved: false });
+        jest.advanceTimersByTime(1000);
+
+        expect($(".twoinc-pay-box.twoinc-err-payment-default").text()).toBe(
+          "ACME Widgets Ltd (12345678)"
+        );
+      } finally {
+        ajax.restore();
+      }
+    });
+
+    test("a fourth verdict box added later is cleared too", () => {
+      // `clearIntentVerdicts()` says "every pay-box except the loader" rather than
+      // listing the three verdict classes, so a box added by a brand overlay or a
+      // later ticket is covered without editing it. A list would leave one stale box
+      // surviving every clear, a long way from its cause (review round 6).
+      $(document.body)
+        .find(".payment_box")
+        .append('<div class="twoinc-pay-box twoinc-err-future-thing">SOMETHING NEW</div>');
+      expect($(".twoinc-pay-box.twoinc-err-future-thing").hasClass("hidden")).toBe(false);
+
+      dom.clearIntentVerdicts();
+
+      expect($(".twoinc-pay-box.twoinc-err-future-thing").hasClass("hidden")).toBe(true);
+      // And the loader is still the one exception.
+      expect($(".twoinc-pay-box.twoinc-loader").length).toBe(1);
+    });
+
+    test("clearing verdicts never touches the loader", () => {
+      const ajax = harness.stubAjax($);
+      try {
+        issueACheck(ajax);
+
+        dom.clearIntentVerdicts();
+
+        expect(shown(".twoinc-loader")).toBe(true);
+      } finally {
+        ajax.restore();
+      }
+    });
+
     test("a cached verdict names the company it was cached for", () => {
       // The cached branch passes no snapshot on purpose: a cache hit means the
       // request body matches, which means the company matches, so the live read is

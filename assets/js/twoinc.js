@@ -2902,7 +2902,16 @@ let twoincDomHelper = {
    * @returns {string}
    */
   resolveCompanyLabel: function (snapshot) {
-    if (typeof snapshot === "string") return snapshot;
+    // An EMPTY snapshot is treated as no snapshot (review round 6). It is not the
+    // same fact as "this company has no label": it means the DOM read at request
+    // time came back blank, which happens while WooCommerce is mid-replacement of
+    // the billing fields — `readCapturedCompany()` reads the inputs, and those can
+    // be empty for an instant even though `customerCompany` (which
+    // `isReadyApprovalCheck()` proved complete) is not. Honouring "" there printed
+    // the no-company fallback sentence over a verdict for a company the buyer
+    // certainly had. A blank snapshot carries no information, so the live read at
+    // paint time is strictly the better guess.
+    if (typeof snapshot === "string" && snapshot !== "") return snapshot;
     return twoincDomHelper.readCompanyLabelFromDom();
   },
   /**
@@ -2933,11 +2942,13 @@ let twoincDomHelper = {
    * @returns {void}
    */
   clearIntentVerdicts: function () {
-    jQuery(
-      ".twoinc-pay-box.twoinc-intent-approved," +
-        ".twoinc-pay-box.twoinc-err-payment-default," +
-        ".twoinc-pay-box.twoinc-err-phone-number"
-    ).addClass("hidden");
+    // "Every pay-box except the loading state", rather than a list of the three
+    // verdict classes (review round 6). Same result today — those three plus the
+    // loader are all this plugin renders — but a brand overlay or a later ticket
+    // adding a fourth verdict box would silently not be cleared by a list, and the
+    // symptom (one stale box surviving every clear) is a long way from the cause.
+    // The loader is the only pay-box that must survive, so name that instead.
+    jQuery(".twoinc-pay-box").not(".twoinc-loader").addClass("hidden");
   },
   /**
    * Toggle payment text in subtitle and description

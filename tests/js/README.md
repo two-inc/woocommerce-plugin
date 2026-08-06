@@ -483,6 +483,13 @@ verdict disappears (TWO-25326, 2026-08-04):
   disarmed (the buyer is leaving); `checkout_error` re-arms, because it does NOT fire
   `updated_checkout`, so nothing else would run another check and the tile sat blank — no verdict,
   no spinner — while the buyer corrected a field.
+- **`clearIntentVerdicts()` says "every pay-box except the loader"**, not a list of the three
+  verdict classes — a fourth box from a brand overlay or a later ticket is covered without editing
+  it, and both halves are pinned (a synthetic fourth box IS cleared; the loader is not).
+- **a BLANK company snapshot falls back to the live read.** `readCapturedCompany()` reads the
+  inputs, which WooCommerce empties for an instant while replacing the billing fields — so a
+  request issued in that window snapshots `""`, and honouring it printed the served no-company
+  sentence over a verdict for a company the buyer certainly had.
 - **the verdict names the company the request was ABOUT.** These sentences carry the captured
   company (TWO-25326 §7.3) and were built by re-reading the DOM at PAINT time — but supersession
   only begins when the next request is issued, up to a second after the buyer changes company, so
@@ -607,7 +614,8 @@ verdict disappears (TWO-25326, 2026-08-04):
   "not available for this order" on every field blur. Pinned both ways: identical text is
   silent, changed text still announces.
 
-Verified by mutation, per the rule below — eighty of them, and every one kills at least one test.
+Verified by mutation, per the rule below — eighty-three of them, and every one kills at least one
+test.
 Mutation is carrying more of the weight than review by now: round 5 alone had five survivors that
 reading had not flagged (`updateElements()`'s own clear, `pendingCheck` being cleared on abandon,
 the deferred re-read's guard AND its tile call, the picker's blanket hide, and `inFlightXhr` being
