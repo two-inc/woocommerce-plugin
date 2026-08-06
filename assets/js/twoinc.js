@@ -2902,16 +2902,16 @@ let twoincDomHelper = {
    * @returns {string}
    */
   resolveCompanyLabel: function (snapshot) {
-    // An EMPTY snapshot is treated as no snapshot (review round 6). It is not the
-    // same fact as "this company has no label": it means the DOM read at request
-    // time came back blank, which happens while WooCommerce is mid-replacement of
-    // the billing fields — `readCapturedCompany()` reads the inputs, and those can
-    // be empty for an instant even though `customerCompany` (which
-    // `isReadyApprovalCheck()` proved complete) is not. Honouring "" there printed
-    // the no-company fallback sentence over a verdict for a company the buyer
-    // certainly had. A blank snapshot carries no information, so the live read at
-    // paint time is strictly the better guess.
-    if (typeof snapshot === "string" && snapshot !== "") return snapshot;
+    // An EMPTY snapshot is honoured, deliberately — `typeof`, not truthiness.
+    //
+    // "" means the capture read blank when the request went out, and the served
+    // no-company sentence is the right thing to print for that. Falling back to a
+    // live read instead was tried and REVERTED: by paint time the buyer may have
+    // moved to another company, so it substitutes a name that has nothing to do
+    // with the verdict — precisely the wrong-company defect the snapshot exists to
+    // prevent, reintroduced through its own fallback. A generic sentence is a small
+    // loss; a decline or an approval naming the wrong company is not.
+    if (typeof snapshot === "string") return snapshot;
     return twoincDomHelper.readCompanyLabelFromDom();
   },
   /**
@@ -2921,6 +2921,12 @@ let twoincDomHelper = {
    */
   readCompanyLabelFromDom: function () {
     const captured = twoincSelectWooHelper.readCapturedCompany();
+    // The `blankToEmpty()` on the NAME is redundant — `formatCompanyLabel()` applies
+    // it again downstream — so removing it changes nothing, and a mutation sweep
+    // will show it surviving. Kept to honour `getCompanyLabelText()`'s documented
+    // "already blank-collapsed" contract for both arguments rather than only one,
+    // and recorded here so the survival reads as equivalence and not as a gap. The
+    // collapse itself IS pinned, on the whitespace-only-name test.
     return twoincDomHelper.getCompanyLabelText(
       twoincUtilHelper.blankToEmpty(captured.company_name),
       twoincUtilHelper.blankToEmpty(captured.organization_number)
@@ -2943,11 +2949,11 @@ let twoincDomHelper = {
    */
   clearIntentVerdicts: function () {
     // "Every pay-box except the loading state", rather than a list of the three
-    // verdict classes (review round 6). Same result today — those three plus the
-    // loader are all this plugin renders — but a brand overlay or a later ticket
-    // adding a fourth verdict box would silently not be cleared by a list, and the
-    // symptom (one stale box surviving every clear) is a long way from the cause.
-    // The loader is the only pay-box that must survive, so name that instead.
+    // verdict classes. Same result today — those three plus the loader are all this
+    // plugin renders — but a brand overlay or a later ticket adding a fourth verdict
+    // box would silently not be cleared by a list, and the symptom (one stale box
+    // surviving every clear) is a long way from the cause. The loader is the only
+    // pay-box that must survive, so name that instead.
     jQuery(".twoinc-pay-box").not(".twoinc-loader").addClass("hidden");
   },
   /**

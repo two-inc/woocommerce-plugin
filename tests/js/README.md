@@ -486,10 +486,18 @@ verdict disappears (TWO-25326, 2026-08-04):
 - **`clearIntentVerdicts()` says "every pay-box except the loader"**, not a list of the three
   verdict classes — a fourth box from a brand overlay or a later ticket is covered without editing
   it, and both halves are pinned (a synthetic fourth box IS cleared; the loader is not).
-- **a BLANK company snapshot falls back to the live read.** `readCapturedCompany()` reads the
-  inputs, which WooCommerce empties for an instant while replacing the billing fields — so a
-  request issued in that window snapshots `""`, and honouring it printed the served no-company
-  sentence over a verdict for a company the buyer certainly had.
+- **a BLANK company snapshot prints the generic sentence**, and deliberately does not fall back
+  to a live read. `readCapturedCompany()` reads the inputs, which WooCommerce empties for an
+  instant while replacing the billing fields, so a request issued in that window snapshots `""`.
+  Falling back was tried and reverted: by paint time the buyer may have moved to another company,
+  so it substitutes a name unrelated to the verdict — the wrong-company defect, restored through
+  its own fallback.
+- **both directions of the wrong-company defect.** The approve path was unpinned for a round: the
+  only test used `approved: false`, so an APPROVAL naming the wrong company — the more damaging
+  direction — was uncovered.
+- **both company-field change handlers.** `#billing_company` (the manual-entry path a buyer types
+  into) and the select2 container. Both were entirely untested for a round: swapping either to the
+  blanket hide, and deleting either's clear, all survived.
 - **the verdict names the company the request was ABOUT.** These sentences carry the captured
   company (TWO-25326 §7.3) and were built by re-reading the DOM at PAINT time — but supersession
   only begins when the next request is issued, up to a second after the buyer changes company, so
@@ -614,8 +622,16 @@ verdict disappears (TWO-25326, 2026-08-04):
   "not available for this order" on every field blur. Pinned both ways: identical text is
   silent, changed text still announces.
 
-Verified by mutation, per the rule below — eighty-three of them, and every one kills at least one
-test.
+`wc-harness.test.js` — the harness's own abort bookkeeping. `stubAjax()`'s `settled` guard,
+behind `record.abortedWhilePending`, was unreachable from the suites that depend on it (no
+production path aborts an already-settled request), so all three of its mutations survived while
+five tests asserted the flag. Pinned directly instead: aborting a PENDING request sets both flags
+and fails the deferred; aborting a SETTLED one sets only `aborted` and does not re-reject.
+
+Verified by mutation, per the rule below — one hundred and one of them, and every one kills at
+least one test, with two documented exceptions that are equivalent mutations rather than gaps (the
+redundant `blankToEmpty()` on the company name, and widening `resolveCompanyLabel`'s `typeof` test
+to truthiness now that the empty case is handled the same way).
 Mutation is carrying more of the weight than review by now: round 5 alone had five survivors that
 reading had not flagged (`updateElements()`'s own clear, `pendingCheck` being cleared on abandon,
 the deferred re-read's guard AND its tile call, the picker's blanket hide, and `inFlightXhr` being
@@ -677,6 +693,15 @@ Note on the harness: `record.aborted` flips even when `abort()` lands on an alre
 deferred, where a real jqXHR does nothing — so it proves the call was MADE, not that a live request
 was cancelled. `record.abortedWhilePending` is the one to assert; `aborted` is still there and is
 what pins that a settled request is NOT aborted.
+
+Round 6 added, on `tests/unit/run.php`: all EIGHT mutations of `poTranslation()` — the parser
+rounds 1-4 built to replace a raw regex — survived, so every safety property its docblock claims
+was unverifiable, including the fuzzy case its own comment described as "latent today". It now has
+direct cases against inline `.po` fixtures: fuzzy (alone and inside a multi-flag list, plus a
+non-fuzzy flag that must NOT reject), `msgctxt`, CRLF **across an entry boundary** (a single-entry
+fixture leaves the entry splitter unexercised, which one mutation proved), plurals,
+first-occurrence-wins, escaped quotes round-tripping both ways, and a shorter msgid not matching a
+longer one.
 
 On `class/WC_Twoinc.php` and the catalogues: dropping either ARIA role, injecting an `<h4>` into
 a verdict box, rendering an EMPTY verdict box, swapping the loader's two spans, mis-pairing a

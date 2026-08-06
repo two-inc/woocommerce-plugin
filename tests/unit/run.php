@@ -196,6 +196,7 @@ final class BrandConfigSpec
             'testIntentVerdictBoxesHoldABareSentence',
             'testIntentVerdictBoxesAreAnnounced',
             'testIntentLoaderCopyIsTranslatedInEveryLocale',
+            'testPoTranslationParserRejectsWhatItMustReject',
             'testIntentLoaderSuppressedWithTheNoticeButErrorBoxesSurvive',
             'testCompanySearchTileSlotAndDeclinedTemplateSurviveNoticeSuppression',
             'testAssetVersionTracksFileMtimeNotPluginVersion',
@@ -6966,6 +6967,123 @@ final class BrandConfigSpec
      * than being silently mis-read — the wrong-but-plausible answer is the one
      * outcome a catalogue check must not produce.
      */
+    /**
+     * Direct cases for poTranslation(), which every safety property in its docblock
+     * needed and none had: all eight mutations of that parser survived the suite
+     * (review round 6, found by mutation, not by reading).
+     *
+     * The live catalogues cannot exercise any of this — they contain no fuzzy entry,
+     * no msgctxt, no plural and no CRLF — which is exactly why the parser's own
+     * docblock said the fuzzy case was "latent today". Latent is not covered.
+     * Inline .po fixtures instead, one per property.
+     */
+    private static function testPoTranslationParserRejectsWhatItMustReject(): void
+    {
+        $entry = "#: class/WC_Twoinc.php\nmsgid \"Checking availability\"\nmsgstr \"Sjekker\"\n";
+
+        TinyAssert::same(
+            'Sjekker',
+            self::poTranslation("\n" . $entry, 'Checking availability'),
+            'the plain case must resolve, or every rejection below is vacuous'
+        );
+
+        // A fuzzy entry is not a translation: msgfmt drops it from the .mo, so the
+        // shop renders English. check-catalogues.sh cannot see it either — msgfmt
+        // drops fuzzy from BOTH sides of its diff.
+        TinyAssert::same(
+            '',
+            self::poTranslation("\n#, fuzzy\n" . $entry, 'Checking availability'),
+            'a fuzzy entry must not count as a translation'
+        );
+        // Flag lists carry more than one entry.
+        TinyAssert::same(
+            '',
+            self::poTranslation("\n#, php-format, fuzzy\n" . $entry, 'Checking availability'),
+            'fuzzy must be found inside a multi-flag list'
+        );
+        // ...but a non-fuzzy flag must NOT reject, or the guard is just "reject any
+        // flagged entry".
+        TinyAssert::same(
+            'Sjekker',
+            self::poTranslation("\n#, php-format\n" . $entry, 'Checking availability'),
+            'a non-fuzzy flag must not reject the entry'
+        );
+
+        // A msgctxt entry is a DIFFERENT message; __() with no context resolves the
+        // context-less one, so matching this would report a translation the shop
+        // never renders.
+        TinyAssert::same(
+            '',
+            self::poTranslation(
+                "\n#: class/WC_Twoinc.php\nmsgctxt \"admin\"\nmsgid \"Checking availability\"\nmsgstr \"Sjekker\"\n",
+                'Checking availability'
+            ),
+            'a msgctxt-scoped entry must not be matched'
+        );
+
+        // CRLF, so a Windows checkout parses identically rather than mysteriously
+        // returning ''. TWO entries separated by a blank line, deliberately: with one
+        // entry the ENTRY splitter never has to match a blank line at all, and
+        // narrowing it from `\R` to `\n` survived a single-entry fixture (review
+        // round 6, found by mutation).
+        $other = "#: class/WC_Twoinc.php\nmsgid \"Something else\"\nmsgstr \"Noe annet\"\n";
+        TinyAssert::same(
+            'Sjekker',
+            self::poTranslation(
+                str_replace("\n", "\r\n", "\n" . $other . "\n" . $entry),
+                'Checking availability'
+            ),
+            'a CRLF catalogue must parse the same as LF, across an entry boundary'
+        );
+        // And the LF equivalent, so the assertion above is about line endings rather
+        // than about which entry is found.
+        TinyAssert::same(
+            'Sjekker',
+            self::poTranslation("\n" . $other . "\n" . $entry, 'Checking availability'),
+            'the second entry of a multi-entry catalogue must be found'
+        );
+
+        // A plural entry has no single msgstr; yielding '' fails the caller loudly
+        // rather than half-reading it.
+        TinyAssert::same(
+            '',
+            self::poTranslation(
+                "\nmsgid \"Checking availability\"\nmsgid_plural \"Checking\"\nmsgstr[0] \"Sjekker\"\n",
+                'Checking availability'
+            ),
+            'a plural entry must not be half-read'
+        );
+
+        // First occurrence wins, so a continuation line cannot overwrite the field
+        // it continues.
+        TinyAssert::same(
+            'first',
+            self::poTranslation(
+                "\nmsgid \"Checking availability\"\nmsgstr \"first\"\nmsgstr \"second\"\n",
+                'Checking availability'
+            ),
+            'the first msgstr must win'
+        );
+
+        // Escapes survive the round trip both ways: a quote in the msgid is matched
+        // through addcslashes, and one in the msgstr comes back unescaped.
+        TinyAssert::same(
+            'He said "hi"',
+            self::poTranslation(
+                "\nmsgid \"Say \\\"hi\\\"\"\nmsgstr \"He said \\\"hi\\\"\"\n",
+                'Say "hi"'
+            ),
+            'escaped quotes must round-trip in both msgid and msgstr'
+        );
+
+        // A msgid that is a PREFIX of this one must not match it, and vice versa.
+        TinyAssert::same(
+            '',
+            self::poTranslation("\nmsgid \"Checking\"\nmsgstr \"Sjekker\"\n", 'Checking availability'),
+            'a shorter msgid must not match a longer one'
+        );
+    }
+
     private static function poTranslation(string $po, string $msgid): string
     {
         // Split into entries on blank lines and read each one's fields, rather
