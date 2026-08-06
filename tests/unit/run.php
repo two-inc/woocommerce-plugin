@@ -192,7 +192,11 @@ final class BrandConfigSpec
             'testIntentApprovedNoticeSwitchAbsentDefaultsOn',
             'testIntentApprovedNoticeOverlayDeclaringNothingKeepsNoticeOn',
             'testIntentApprovedNoticeInvalidSwitchReportsAndDefaultsOn',
-            'testIntentLoaderRendersTheOneSharedDotPulse',
+            'testIntentLoaderRendersTheSharedSpinnerAndVisibleText',
+            'testIntentVerdictBoxesHoldABareSentence',
+            'testIntentVerdictBoxesAreAnnounced',
+            'testIntentLoaderCopyIsTranslatedInEveryLocale',
+            'testPoTranslationParserRejectsWhatItMustReject',
             'testIntentLoaderSuppressedWithTheNoticeButErrorBoxesSurvive',
             'testCompanySearchTileSlotAndDeclinedTemplateSurviveNoticeSuppression',
             'testAssetVersionTracksFileMtimeNotPluginVersion',
@@ -5509,7 +5513,7 @@ final class BrandConfigSpec
         TinyAssert::true(
             strpos(
                 $html,
-                'twoinc-pay-box twoinc-err-payment-default hidden" data-company-template="Taglinebrand is not'
+                'twoinc-pay-box twoinc-err-payment-default hidden" role="alert" data-company-template="Taglinebrand is not'
                 . ' available for this order by {company}"'
             ) !== false,
             'the declined box must carry the company template, brand name resolved, company tokenised'
@@ -5542,7 +5546,7 @@ final class BrandConfigSpec
         TinyAssert::true(
             strpos(
                 $html,
-                'twoinc-pay-box twoinc-err-payment-default hidden" data-company-template="Decidedoverridebrand'
+                'twoinc-pay-box twoinc-err-payment-default hidden" role="alert" data-company-template="Decidedoverridebrand'
                 . ' is not available for this order by {company}"'
             ) !== false,
             'the declined box must render the platform default copy, ignoring the brand override key'
@@ -5901,29 +5905,64 @@ final class BrandConfigSpec
     }
 
     /**
-     * The order-intent loading state renders the shared three-dot pulse,
-     * decorative dots plus an announced accessible name — not the old
-     * rotating image, and not a second copy of the dot animation. The CSS
-     * assertions are the point of the refactor: one .twoinc-dots rule and
-     * one keyframes block serve both the term chips and this loader.
+     * The order-intent loading state renders the shared spinner GIF beside
+     * the VISIBLE words "Checking availability" — the cross-platform target
+     * agreed 2026-08-04 for TWO-25326, the same asset and the same sentence
+     * on all four checkouts.
+     *
+     * Both halves of the thing this replaces are asserted gone, because
+     * either surviving reproduces the reported bug: the three dots (this
+     * checkout was the only one of the four showing no words at all) and the
+     * `.twoinc-sr-only` wrapper that kept the sentence off screen. The dot
+     * RULE must survive in the stylesheet, though — the term-chip fee quote
+     * still uses it, and deleting it with this markup would take the chips'
+     * loading state out with it.
      */
-    private static function testIntentLoaderRendersTheOneSharedDotPulse(): void
+    private static function testIntentLoaderRendersTheSharedSpinnerAndVisibleText(): void
     {
         $html = self::gateway()->build_payment_description();
+        // Asserted as ONE composed string rather than three independent
+        // substring checks (review round 1): separate checks pass however the
+        // nodes are ordered or nested, and "spinner, then sentence, both direct
+        // children of the announced region" is the thing being pinned.
         TinyAssert::true(
-            strpos($html, '<div class="twoinc-pay-box twoinc-loader hidden" role="status">') !== false,
-            'the loader keeps its pay-box state class and announces itself'
+            strpos(
+                $html,
+                '<div class="twoinc-pay-box twoinc-loader hidden" role="status">'
+                . '<span class="twoinc-loader__spinner" aria-hidden="true"></span>'
+                . '<span class="twoinc-loader__text">Checking availability</span>'
+                . '</div>'
+            ) !== false,
+            'the loader must render the spinner then the visible sentence, inside the announced region'
         );
         TinyAssert::true(
-            strpos($html, '<span class="twoinc-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span>')
-                !== false,
-            'the loader must render the shared dot markup, dots hidden from assistive technology'
+            strpos($html, 'twoinc-dots') === false,
+            'the wordless three-dot pulse must be gone from the loader markup'
+        );
+        TinyAssert::true(
+            strpos($html, 'twoinc-sr-only') === false,
+            'and the sentence must no longer be hidden behind a screen-reader-only span'
+        );
+
+        // What the STYLESHEET does with these classes — the spinner's paint, the
+        // verdict colours, the loader's layout — is asserted in
+        // tests/js/intent-loading-state.test.js against jsdom's real cascade.
+        // Raw-text greps over the CSS were tried here first and were wrong three
+        // ways (review round 1): blind to a commented-out declaration, blind to a
+        // later overriding rule, and blind to an at-rule-wrapped copy.
+        //
+        // The asset's existence still belongs here, though: it is a file in the
+        // release tree, not a computed style, and a background-image URL pointing
+        // at nothing fails silently — no console error, just no motion.
+        TinyAssert::true(
+            is_file(dirname(__DIR__, 2) . '/assets/images/loader.gif'),
+            'the spinner asset must exist in the tree the stylesheet resolves against'
         );
 
         $css = (string) file_get_contents(dirname(__DIR__, 2) . '/assets/css/twoinc.css');
         TinyAssert::true(
             strpos($css, '.twoinc-dots {') !== false,
-            'the shared dot rule must exist'
+            'the shared dot rule must survive for the term-chip fee quote'
         );
         TinyAssert::same(
             1,
@@ -5938,10 +5977,82 @@ final class BrandConfigSpec
     }
 
     /**
+     * The verdict boxes hold a bare sentence — no title, no nested markup — on
+     * all three (TWO-25326, 2026-08-04).
+     *
+     * The colour and border that make them read as verdicts rather than as tile
+     * copy live in the stylesheet, and are asserted against jsdom's real
+     * cascade in tests/js/intent-loading-state.test.js. What is markup, and so
+     * belongs here: the PrestaShop box grew a marketing heading above its
+     * sentence, that heading is dropped in the same pass, and this platform must
+     * not grow one. Round 1 checked only the phone-number box, which is the one
+     * box a heading would never have been added to.
+     */
+    private static function testIntentVerdictBoxesHoldABareSentence(): void
+    {
+        $html = self::gateway()->build_payment_description();
+
+        foreach (
+            [
+                'twoinc-intent-approved' => 'the approved notice',
+                'twoinc-err-payment-default' => 'the "not available" box',
+                'twoinc-err-phone-number' => 'the phone-number box',
+            ] as $class => $label
+        ) {
+            TinyAssert::same(
+                1,
+                preg_match(
+                    // `[^<]+`, not `[^<]*`: an EMPTY box passed the star form
+                    // (review round 2), and a verdict box with no sentence in it
+                    // is exactly as broken as one with a heading above it.
+                    '#<div class="twoinc-pay-box ' . preg_quote($class, '#') . ' hidden"[^>]*>[^<]+</div>#',
+                    $html
+                ),
+                $label . ' must hold a bare sentence, with no title or nested markup'
+            );
+        }
+    }
+
+    /**
+     * Every verdict box is announced (review round 1).
+     *
+     * The loader carried role="status" and the three boxes carried nothing, so a
+     * screen-reader buyer heard that a check had started and never heard how it
+     * ended — and the colour this pass adds does nothing for them. Asserted per
+     * box because the failure mode is one of the three being missed, and
+     * asserted on the role NAME because polite/assertive is a deliberate split:
+     * an approval can wait for a gap in speech, a decline has just deselected
+     * the payment method under the buyer.
+     */
+    private static function testIntentVerdictBoxesAreAnnounced(): void
+    {
+        $html = self::gateway()->build_payment_description();
+
+        foreach (
+            [
+                'twoinc-loader' => 'status',
+                'twoinc-intent-approved' => 'status',
+                'twoinc-err-payment-default' => 'alert',
+                'twoinc-err-phone-number' => 'alert',
+            ] as $class => $role
+        ) {
+            TinyAssert::same(
+                1,
+                preg_match(
+                    '#<div class="twoinc-pay-box ' . preg_quote($class, '#') . ' hidden" role="'
+                        . $role . '"#',
+                    $html
+                ),
+                $class . ' must carry role="' . $role . '"'
+            );
+        }
+    }
+
+    /**
      * TWO-25224: the switch governs the reassurance messaging around the
      * order-intent pre-check, and the loading state is part of that — a
      * brand that declined the approval sentence was still announcing
-     * "Checking your order, one moment." while the check ran.
+     * "Checking availability" while the check ran.
      *
      * The two ERROR boxes are deliberately NOT gated: a merchant who wants
      * no reassurance still needs failures surfaced, or a declined buyer
@@ -5961,8 +6072,8 @@ final class BrandConfigSpec
             'a brand disabling the notice must emit no order-intent loading state'
         );
         TinyAssert::true(
-            strpos($html, 'Checking your order') === false,
-            'and none of the loading copy either, not even as a screen-reader name'
+            strpos($html, 'Checking availability') === false,
+            'and none of the loading copy either — it is on-screen text now, so it would be plainly visible'
         );
         TinyAssert::true(
             strpos($html, 'twoinc-pay-box twoinc-err-payment-default hidden') !== false,
@@ -6010,7 +6121,7 @@ final class BrandConfigSpec
         TinyAssert::true(
             strpos(
                 $html,
-                'twoinc-pay-box twoinc-err-payment-default hidden" data-company-template="Suppressednoticebrand'
+                'twoinc-pay-box twoinc-err-payment-default hidden" role="alert" data-company-template="Suppressednoticebrand'
                 . ' is not available for this order by {company}"'
             ) !== false,
             'the declined box\'s company template must survive the approved notice being suppressed'
@@ -6779,6 +6890,270 @@ final class BrandConfigSpec
                 );
             }
         }
+    }
+
+    /**
+     * "Checking availability" is now VISIBLE buyer-facing copy on every
+     * checkout, so an untranslated catalogue is now a visible English string
+     * on a Norwegian, Dutch or Swedish shop rather than a screen-reader-only
+     * one. Same shape as the API-key notice check above and for the same
+     * reason: the msgid is read back off the rendered markup rather than
+     * retyped, so rewording the sentence without regenerating the catalogues
+     * fails here instead of shipping.
+     */
+    private static function testIntentLoaderCopyIsTranslatedInEveryLocale(): void
+    {
+        $languages = dirname(__DIR__, 2) . '/languages/';
+        $msgid = 'Checking availability';
+
+        // __() is stubbed to identity in this suite, so the rendered markup
+        // carries the untranslated source string — which is the msgid the
+        // catalogues have to match exactly.
+        TinyAssert::true(
+            strpos(self::gateway()->build_payment_description(), '>' . $msgid . '<') !== false,
+            'the loader sentence has been reworded — update this msgid and the catalogues with it'
+        );
+
+        TinyAssert::true(
+            strpos((string) file_get_contents($languages . 'twoinc-payment-gateway.pot'), $msgid) !== false,
+            'the .pot is missing the loader sentence — regenerate it'
+        );
+
+        // Every locale the plugin ships, discovered rather than listed (review
+        // round 1): a hardcoded list silently exempts a catalogue added later.
+        $expected = [
+            'nb_NO' => 'Sjekker tilgjengelighet',
+            'nl_NL' => 'Beschikbaarheid controleren',
+            'sv_SE' => 'Kontrollerar tillgänglighet',
+        ];
+        $catalogues = glob($languages . 'twoinc-payment-gateway-*.po');
+        TinyAssert::true($catalogues !== false && $catalogues !== [], 'no .po catalogues found at all');
+        $visited = [];
+        foreach ($catalogues as $po) {
+            preg_match('/twoinc-payment-gateway-(.+)\.po$/', $po, $m);
+            $locale = $m[1];
+            $visited[] = $locale;
+            TinyAssert::true(
+                isset($expected[$locale]),
+                "locale $locale has no expected loader translation in this test — add one"
+            );
+
+            // PAIRING, not two independent searches (review round 1). Searching
+            // the catalogue for the msgid and for the translation separately
+            // passes when the translation is attached to some OTHER msgid, and
+            // that shop then renders the wrong sentence. Read the msgstr that
+            // actually follows this msgid.
+            TinyAssert::same(
+                $expected[$locale],
+                self::poTranslation((string) file_get_contents($po), $msgid),
+                "the $locale catalogue does not pair the loader sentence with its translation"
+            );
+
+            // No assertion on the compiled .mo here (review round 2). The obvious
+            // one — two independent strpos over the binary — has exactly the
+            // non-pairing flaw the .po check above was fixed for: it passes with
+            // this msgid's own msgstr empty and the expected text belonging to a
+            // different entry. .github/scripts/check-catalogues.sh already decodes
+            // every .mo with msgunfmt and diffs it against its .po, so "the .po is
+            // right" plus that gate IS "the .mo is right" — and that is a real
+            // gate rather than a substring search over binary.
+        }
+
+        // Prove the DISCOVERY, not just the loop body (review round 8). The glob
+        // exists so a catalogue added later cannot be silently exempted — but nothing
+        // asserted which locales it actually found, so narrowing it to a single
+        // hardcoded filename passed identically, which is the exact failure the glob
+        // was introduced to prevent.
+        sort($visited);
+        $wanted = array_keys($expected);
+        sort($wanted);
+        TinyAssert::same(
+            implode(',', $wanted),
+            implode(',', $visited),
+            'the catalogue discovery did not visit every locale this plugin ships'
+        );
+    }
+
+    /**
+     * The msgstr a .po pairs with one msgid, or '' when there is no such entry.
+     *
+     * Deliberately minimal: single-line `msgid "..."` / `msgstr "..."` only,
+     * which is the shape every entry this is used for has. A multi-line or
+     * plural entry returns '' and fails the caller's assertion loudly rather
+     * than being silently mis-read — the wrong-but-plausible answer is the one
+     * outcome a catalogue check must not produce.
+     */
+    /**
+     * Direct cases for poTranslation(), which every safety property in its docblock
+     * needed and none had: all eight mutations of that parser survived the suite
+     * (review round 6, found by mutation, not by reading).
+     *
+     * The live catalogues cannot exercise any of this — they contain no fuzzy entry,
+     * no msgctxt, no plural and no CRLF — which is exactly why the parser's own
+     * docblock said the fuzzy case was "latent today". Latent is not covered.
+     * Inline .po fixtures instead, one per property.
+     */
+    private static function testPoTranslationParserRejectsWhatItMustReject(): void
+    {
+        $entry = "#: class/WC_Twoinc.php\nmsgid \"Checking availability\"\nmsgstr \"Sjekker\"\n";
+
+        TinyAssert::same(
+            'Sjekker',
+            self::poTranslation("\n" . $entry, 'Checking availability'),
+            'the plain case must resolve, or every rejection below is vacuous'
+        );
+
+        // A fuzzy entry is not a translation: msgfmt drops it from the .mo, so the
+        // shop renders English. check-catalogues.sh cannot see it either — msgfmt
+        // drops fuzzy from BOTH sides of its diff.
+        TinyAssert::same(
+            '',
+            self::poTranslation("\n#, fuzzy\n" . $entry, 'Checking availability'),
+            'a fuzzy entry must not count as a translation'
+        );
+        // Flag lists carry more than one entry.
+        TinyAssert::same(
+            '',
+            self::poTranslation("\n#, php-format, fuzzy\n" . $entry, 'Checking availability'),
+            'fuzzy must be found inside a multi-flag list'
+        );
+        // ...but a non-fuzzy flag must NOT reject, or the guard is just "reject any
+        // flagged entry".
+        TinyAssert::same(
+            'Sjekker',
+            self::poTranslation("\n#, php-format\n" . $entry, 'Checking availability'),
+            'a non-fuzzy flag must not reject the entry'
+        );
+
+        // A msgctxt entry is a DIFFERENT message; __() with no context resolves the
+        // context-less one, so matching this would report a translation the shop
+        // never renders.
+        TinyAssert::same(
+            '',
+            self::poTranslation(
+                "\n#: class/WC_Twoinc.php\nmsgctxt \"admin\"\nmsgid \"Checking availability\"\nmsgstr \"Sjekker\"\n",
+                'Checking availability'
+            ),
+            'a msgctxt-scoped entry must not be matched'
+        );
+
+        // CRLF, so a Windows checkout parses identically rather than mysteriously
+        // returning ''. TWO entries separated by a blank line, deliberately: with one
+        // entry the ENTRY splitter never has to match a blank line at all, and
+        // narrowing it from `\R` to `\n` survived a single-entry fixture (review
+        // round 6, found by mutation).
+        $other = "#: class/WC_Twoinc.php\nmsgid \"Something else\"\nmsgstr \"Noe annet\"\n";
+        TinyAssert::same(
+            'Sjekker',
+            self::poTranslation(
+                str_replace("\n", "\r\n", "\n" . $other . "\n" . $entry),
+                'Checking availability'
+            ),
+            'a CRLF catalogue must parse the same as LF, across an entry boundary'
+        );
+        // And the LF equivalent, so the assertion above is about line endings rather
+        // than about which entry is found.
+        TinyAssert::same(
+            'Sjekker',
+            self::poTranslation("\n" . $other . "\n" . $entry, 'Checking availability'),
+            'the second entry of a multi-entry catalogue must be found'
+        );
+
+        // A plural entry has no single msgstr; yielding '' fails the caller loudly
+        // rather than half-reading it.
+        TinyAssert::same(
+            '',
+            self::poTranslation(
+                "\nmsgid \"Checking availability\"\nmsgid_plural \"Checking\"\nmsgstr[0] \"Sjekker\"\n",
+                'Checking availability'
+            ),
+            'a plural entry must not be half-read'
+        );
+
+        // First occurrence wins, so a continuation line cannot overwrite the field
+        // it continues.
+        TinyAssert::same(
+            'first',
+            self::poTranslation(
+                "\nmsgid \"Checking availability\"\nmsgstr \"first\"\nmsgstr \"second\"\n",
+                'Checking availability'
+            ),
+            'the first msgstr must win'
+        );
+
+        // Escapes survive the round trip both ways: a quote in the msgid is matched
+        // through addcslashes, and one in the msgstr comes back unescaped.
+        TinyAssert::same(
+            'He said "hi"',
+            self::poTranslation(
+                "\nmsgid \"Say \\\"hi\\\"\"\nmsgstr \"He said \\\"hi\\\"\"\n",
+                'Say "hi"'
+            ),
+            'escaped quotes must round-trip in both msgid and msgstr'
+        );
+
+        // A msgid that is a PREFIX of this one must not match it, and vice versa.
+        TinyAssert::same(
+            '',
+            self::poTranslation("\nmsgid \"Checking\"\nmsgstr \"Sjekker\"\n", 'Checking availability'),
+            'a shorter msgid must not match a longer one'
+        );
+    }
+
+    private static function poTranslation(string $po, string $msgid): string
+    {
+        // Split into entries on blank lines and read each one's fields, rather
+        // than pattern-matching a msgid/msgstr pair out of the whole file.
+        //
+        // Round 2 tried the regex and it could not be made safe: every attempt to
+        // require that the line above the msgid is not a `msgctxt` was defeated by
+        // the newline-matching alternative sliding forward one line. A `msgctxt`
+        // entry sharing this msgid MUST NOT be matched — gettext treats it as a
+        // different message and __() with no context resolves the context-less
+        // entry, so the bad case is the context-less one sitting at `msgstr ""`
+        // while the contextual one carries the translation: a shop rendering
+        // English with this test saying translated.
+        //
+        // Deliberately minimal beyond that: single-line `msgid`/`msgstr` only,
+        // which is the shape every entry this is used for has. A multi-line or
+        // plural entry yields '' and fails the caller's assertion loudly rather
+        // than being silently mis-read — a wrong-but-plausible answer is the one
+        // outcome a catalogue check must not produce.
+        //
+        // `\R` throughout so a CRLF catalogue (a Windows checkout, core.autocrlf)
+        // parses identically; a mystery '' there would be a real time sink.
+        foreach (preg_split('/(?:\R)(?:[[:blank:]]*\R)+/', $po) as $entry) {
+            $fields = [];
+            $fuzzy = false;
+            foreach (preg_split('/\R/', $entry) as $line) {
+                // A fuzzy entry is NOT a translation (review round 4). msgfmt
+                // excludes it from the .mo by default, so the shop renders English
+                // while a naive read of the .po says translated — the identical
+                // failure shape as the msgctxt case above. And check-catalogues.sh
+                // cannot catch it: msgfmt drops fuzzy entries from BOTH sides of
+                // its diff, so that gate stays green. Latent today (no fuzzy
+                // entries in languages/), which is exactly when to close it.
+                if (preg_match('/^#,[[:blank:]]*(.*)$/', $line, $flags) === 1) {
+                    $fuzzy = $fuzzy || in_array('fuzzy', preg_split('/[[:blank:]]*,[[:blank:]]*/', $flags[1]), true);
+                }
+                if (preg_match('/^(msgctxt|msgid|msgstr) "(.*)"[[:blank:]]*$/', $line, $m) === 1) {
+                    // First occurrence wins, so a continuation line cannot
+                    // overwrite the field it continues.
+                    $fields[$m[1]] = $fields[$m[1]] ?? $m[2];
+                }
+            }
+            if (
+                $fuzzy
+                || isset($fields['msgctxt'])
+                || ($fields['msgid'] ?? null) !== addcslashes($msgid, '"\\')
+            ) {
+                continue;
+            }
+
+            return stripcslashes($fields['msgstr'] ?? '');
+        }
+
+        return '';
     }
 }
 

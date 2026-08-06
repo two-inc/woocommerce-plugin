@@ -456,6 +456,296 @@ the spinner today is `clearSelectedCompany()` re-attaching the widget and taking
 dropdown with it — so a test asserting the spinner is gone afterwards would pass either way,
 which is worse than no test.
 
+`intent-loading-state.test.js` — when the order-intent loader appears and when a previous
+verdict disappears (TWO-25326, 2026-08-04):
+
+- **the loading state is tied to the REQUEST, not to arming a check.** Round 5 reverted the
+  original design here, and it is the single most load-bearing thing in this suite. Showing the
+  loader when a check was armed decoupled its lifetime from the request's, and four review rounds
+  of stranded, blanked, looping and duplicated spinners came out of that one change — every fix
+  adding an invariant the next round attacked. Tied to the request, "the loader is up exactly
+  while a request is outstanding" holds by construction. `getApproval()` only CLEARS the previous
+  verdict; the visible cost is a gap between the clear and the spinner, which is pinned rather
+  than left implicit so nobody "fixes" it back.
+- **`clearIntentVerdicts()` vs the blanket hide.** Verdict boxes only, loader untouched — used by
+  `getApproval()` and by `updateElements()`, which runs on every `updated_checkout` (a
+  shipping-method change, a coupon) and used to blink the spinner off mid-request.
+- **one request at a time.** Arming a new check retires the previous one — abort included, so the
+  connection is not held for an answer nobody reads. Without it, rapid edits stacked one POST per
+  second against a 30s timeout. Superseding happens on four paths and each is pinned: a newer
+  check, a cache hit (whose verdict is by construction the answer to the body the form holds now),
+  a country change, and a form that goes incomplete mid-request.
+- **supersede FIRST, then abort.** jQuery runs `.fail` synchronously for an abort, and that
+  handler deselects the gateway and paints a decline — so the counter has to move before the
+  abort, or aborting would do the very thing aborting is meant to avoid. Both orderings are
+  pinned.
+- **`#place_order` and `checkout_error` are not the same event.** Place Order leaves the check
+  disarmed (the buyer is leaving); `checkout_error` re-arms, because it does NOT fire
+  `updated_checkout`, so nothing else would run another check and the tile sat blank — no verdict,
+  no spinner — while the buyer corrected a field.
+- **`clearIntentVerdicts()` says "every pay-box except the loader"**, not a list of the three
+  verdict classes — a fourth box from a brand overlay or a later ticket is covered without editing
+  it, and both halves are pinned (a synthetic fourth box IS cleared; the loader is not).
+- **a BLANK company snapshot prints the generic sentence**, and deliberately does not fall back
+  to a live read. `readCapturedCompany()` reads the inputs, which WooCommerce empties for an
+  instant while replacing the billing fields, so a request issued in that window snapshots `""`.
+  Falling back was tried and reverted: by paint time the buyer may have moved to another company,
+  so it substitutes a name unrelated to the verdict — the wrong-company defect, restored through
+  its own fallback.
+- **both directions of the wrong-company defect.** The approve path was unpinned for a round: the
+  only test used `approved: false`, so an APPROVAL naming the wrong company — the more damaging
+  direction — was uncovered.
+- **both company-field change handlers.** `#billing_company` (the manual-entry path a buyer types
+  into) and the select2 container. Both were entirely untested for a round: swapping either to the
+  blanket hide, and deleting either's clear, all survived.
+- **the verdict names the company the request was ABOUT.** These sentences carry the captured
+  company (TWO-25326 §7.3) and were built by re-reading the DOM at PAINT time — but supersession
+  only begins when the next request is issued, up to a second after the buyer changes company, so
+  a response for company A painted A's verdict with B's name in it. Snapshotted at request time;
+  the live read stays as the fallback for callers that are re-rendering rather than reporting, and
+  both sides are pinned.
+- **the cache window's boundaries, exactly.** 400, 422 and 499 must be cached; 500 and 503 must
+  not. Adding 400 to the retryable list, narrowing `>= 400`, and widening `< 500` all survived for
+  a round because the only cacheable control was 422 and the 5xx cases used 502/503 — never a
+  boundary.
+- **two different request bodies of the SAME LENGTH get different cache keys.** `getUnsecuredHash`
+  returning `inp.length` survived every test, so the cache had only ever been exercised on bodies
+  of differing length. Merchant-visible shape: swap one 8-digit org number for another and be
+  served the previous company's verdict.
+- **a paint cannot outlive the check that produced it.** Neither the issue path nor the cached
+  branch cleared `renderInterval`, so a pending paint fired afterwards and put a stale verdict
+  over the newer check's loader.
+- **the cart-total give-up is quiet.** No loading state is up during the price wait, so there is
+  nothing of that check's to remove — the blanket reset erased whatever else was on screen, with
+  nothing left to re-arm.
+- **four sites that blanket-hid should have cleared verdicts only** — the picker's `select2:select`,
+  the `#billing_company` change handler, the container change handler (which was also bound by
+  reference, so jQuery passed it an Event as its `action`), and the 3s deferred re-read. Each took
+  the spinner down for a request still in flight.
+- **`clearSelectedCompany()`'s 3s deferred re-read is guarded** by the company-search counter.
+  Three seconds is long enough to pick a company, and the closure overwrote `customerCompany`
+  from the DOM and undid the newer capture. Both sides pinned: a superseded re-read is skipped,
+  an unsuperseded one still runs.
+
+- **a new check clears the previous verdict in the same call**, with no timer advanced. The
+  bug: the buyer picked a different company and the tile kept showing the old company's
+  "not available for this order" for the whole of the new check, because the only thing that
+  cleared it was the new result arriving.
+- driven through `getApproval()` rather than through each caller, deliberately. That is the
+  one choke point every route into a check passes, and four of the five routes
+  (`setSoleTraderCompany`, `onCompanyInputBlur`, `onRepresentativeInputBlur`,
+  `onCountryChange`) cleared nothing of their own — a test per route would have missed exactly
+  those. A route added later inherits the behaviour and the coverage.
+- all three verdict boxes are pinned separately (approved, "not available", phone-number),
+  plus the `pendingCheck` path where a second call arrives while a check is already armed —
+  the clearing sits ABOVE that guard, so the early return must not skip it.
+- the two cases where nothing should change: an incomplete company arms no check and leaves
+  whatever is on screen alone (the clearing sits below the readiness guard), and a brand that
+  suppressed the notice has no loader div at all yet still gets the clearing half.
+- **the loader is never left running without a check behind it.** A check abandoned at the
+  tick — the buyer emptied a required field in the intervening second — resets the tile, and a
+  settled response replaces the loader with its verdict.
+- `updateElements()`'s ordering is pinned as its own assertion: it runs a blanket
+  hide-every-pay-box reset and arms a check, and in the old order the reset wiped the loader
+  the check had just shown. Swapping the two calls back fails that test and nothing else.
+
+- **every way a check can end takes the loading state down with it.** Round 1 of review found
+  four routes that disarmed the timer and said nothing about the UI — invisible while the
+  loader only went up once a request was in flight, a permanent spinner once it went up on
+  arming. All four are pinned: `#place_order` and `checkout_error` (through the REAL delegated
+  handlers, via `initialize()`, because a test calling `abandonOrderIntentCheck()` directly
+  would pass with the handlers still wired to the old inline disarm), a cart total that never
+  becomes readable, and a required field emptied before the tick.
+- **a cached verdict disarms the check.** That branch used to return with the interval still
+  armed, which left `pendingCheck` permanently true and had the 3s poller re-entering
+  `getApproval()` forever — a loader/verdict flicker with no request behind it. Pinned by the
+  flags, by the absence of a second request, and by ten seconds of quiet after hiding the box
+  by hand.
+- **two response paths that used to throw before rendering anything**, both stranding the
+  loader: a `status >= 400` with no `responseJSON` (proxy 502 with an HTML body), and the only
+  route to the phone-number box, which called `Array.prototype.append`. Both driven by handing
+  `processOrderIntentResponse()` a synthetic jqXHR — `stubAjax()`'s `fail()` models a jQuery
+  timeout and reports `status: 0`, so it cannot reach either branch.
+- **the stylesheet is asserted through jsdom's real cascade** (`injectStylesheet()` +
+  `getComputedStyle`), not by grepping the CSS source. Three mutations defeated a source grep
+  and are killed by this: commenting a declaration out, adding a later overriding rule, and
+  wrapping a rule in an at-rule. The same limits as the company-search spinner apply — see
+  Known gaps: the URL and the box metrics are assertable, "does it animate" and "is it
+  visible" are not. **And one more: jsdom does not honour `!important` from an earlier rule**,
+  which made the loader's layout assertion measure a state that never exists in a browser (see
+  Known gaps).
+- **the verdict paint waits out a WooCommerce re-render, bounded and cancellable.** That wait
+  is the only code that takes the loading state down, so an overlay stuck up meant a permanent
+  spinner; and it used to be held in a local, unreachable from `abandonOrderIntentCheck()`, so
+  an orphan copy of it painted a verdict back onto a checkout already mid-submit.
+- **what gets cached, and against which request.** A transport failure (`status` 0 or 5xx) is
+  not a verdict — cached, one dropped connection declined that cart and company for the rest
+  of the page, permanently, because the cached branch disarms and nothing retries. A 4xx
+  business decline IS cached, pinned separately so the guard cannot be widened into "never
+  cache". And two overlapping checks are asserted to file their verdicts under their own
+  request bodies: the hash lived in one shared slot, and the interval is disarmed before the
+  request goes out, so a second check armed mid-flight filed the first response under the
+  second body.
+- **a verdict is announced, not silently swapped in.** `role="status"`/`role="alert"` only
+  announce a content change made while the region is in the accessibility tree, and the first
+  thing `togglePaySubtitleDesc()` does is hide every box — so writing the sentence and then
+  revealing the box announced nothing at all. A `MutationObserver` pins the order: the reveal
+  precedes the text, both in one task.
+- **nothing in flight means nothing to reset.** `#place_order` fires on clicks that never
+  submit and `checkout_error` fires for errors that have nothing to do with this gateway, and
+  neither fires `updated_checkout` — so resetting unconditionally wiped a good verdict with
+  nothing to bring it back.
+- **supersession, the same idiom `addressLookupSeq` already uses here.** The interval is
+  disarmed _before_ the request goes out, so two checks can overlap and arrive in either order.
+  Three separate defects hung off that: the older response won when it arrived last (the buyer
+  read a verdict about a cart they had already changed); a response arriving after Place Order
+  deselected the gateway and painted onto a checkout mid-submit; and for the whole duration of
+  the XHR every "is a check running" flag read falsy, so an abandon in that window skipped the
+  reset and stranded the loader. `seq`/`inFlightSeq` closes all three, and the request is left
+  to complete rather than aborted — an abort runs `.fail`, which deselects and declines.
+- **the request is bounded.** A request that never settles calls neither handler, and both the
+  loader coming down and the verdict appearing hang off them. `timeout: 30000`, matching the
+  company-search transport.
+- **which jQuery callback a response came from is passed, never sniffed.** jQuery hands `.done`
+  the parsed response _body_, so a field called `status` in a good 200 was being read as an HTTP
+  status — routing a declining 200 to the phone-number box and marking `billing_phone` invalid.
+  Both halves are pinned: a body-level `status` must not route, and must not block caching.
+- **the retryable 4xx codes are not cached.** 401, 403, 408 and 429 mean "ask again", and a
+  cached answer is permanent for the page. One per code, so narrowing the list fails.
+- **a duplicated verdict box is written, not skipped.** `.text()` on a multi-element set
+  returns the concatenation, so comparing the SET rewrote every copy (re-announcing on the
+  first) and comparing `.first()` skipped the second entirely. Only an element-wise walk gets
+  both halves right, and all three variants are pinned.
+- **a stuck overlay hands the tile back to a newer check** rather than blanking it. Both sides
+  of that branch are pinned — with nothing else running the give-up does reset.
+- **a settled response releases `inFlightSeq`.** Left set, the abandon gate reads as permanently
+  running and the next non-submitting Place Order click blanket-hides a good verdict.
+- **a second response supersedes the first paint** instead of leaking its timer into a permanent
+  repaint loop.
+- **an approved verdict is deliberately NOT cached**, and the tracking id reaches the order
+  field. Both were unpinned; a mutation added a cache write and another deleted the tracking-id
+  write, and the whole suite stayed green.
+- **a repeated verdict is not re-announced.** `.text()` replaces the child text node whether or
+  not the string differs, and that mutation inside an assertive live region had it repeating
+  "not available for this order" on every field blur. Pinned both ways: identical text is
+  silent, changed text still announces.
+
+`wc-harness.test.js` — the harness's own abort bookkeeping. `stubAjax()`'s `settled` guard,
+behind `record.abortedWhilePending`, was unreachable from the suites that depend on it (no
+production path aborts an already-settled request), so all three of its mutations survived while
+five tests asserted the flag. Pinned directly instead: aborting a PENDING request sets both flags
+and fails the deferred; aborting a SETTLED one sets only `aborted` and does not re-reject.
+
+Verified by mutation, per the rule below — one hundred and ninety of them, and every one kills at
+least one test, with several documented exceptions that are equivalent mutations rather than gaps (the
+redundant `blankToEmpty()` on the company name, and widening `resolveCompanyLabel`'s `typeof` test
+to truthiness now that the empty case is handled the same way).
+Mutation is carrying more of the weight than review by now: round 5 alone had five survivors that
+reading had not flagged (`updateElements()`'s own clear, `pendingCheck` being cleared on abandon,
+the deferred re-read's guard AND its tile call, the picker's blanket hide, and `inFlightXhr` being
+released), each of which is a real property with a real failure mode. That count is itself the argument for the round-5 revert: rounds 2-4 spent most of their
+mutations pinning invariants that only existed because the loading state had been decoupled from
+the request, and the revert deleted the need for them. Mutation, not review, is what found the last four gaps: the `isFailure` gate on the
+HTTP-status branch, the `inFlightSeq` release, the pre-arm paint cancel, and the approved-verdict
+and tracking-id writes all failed nothing when deleted. Two negative controls (an equivalent
+`rgb()` border notation, a CRLF catalogue) are confirmed NOT to fail.
+
+On `assets/js/twoinc.js`: removing the clearing from `getApproval()` fails seven; re-swapping
+`updateElements()`'s two calls, dropping the abandoned-tick reset, removing the price-wait
+bound, removing its reset in `getApproval()`, reverting `push` to `append`, removing the
+`responseJSON` guard, deleting the tick's re-asserted loading state, unbounding the render wait,
+reading the hash back off the shared slot, resetting the tile unconditionally in
+`abandonOrderIntentCheck()`, and writing a box's text before revealing it (each branch
+separately) each fail one; leaving the cached branch armed, reverting the two abandon handlers
+to their inline disarm, and putting the render wait back in a local each fail two.
+
+On `assets/css/twoinc.css`: commenting out a colour, a later overriding rule, an at-rule wrap,
+commenting out the spinner's `background-image`, dropping the loader's flex layout, dropping the
+phone-number box from the red group, deleting the loader's own two-class hiding rule, tiling and
+resizing the spinner background, and deleting the `.twoinc-loader__text` rule. Writing a border
+colour as an equivalent `rgb()` must NOT fail, and does not — the assertions normalise.
+
+Round 3 added, on `assets/js/twoinc.js`: removing the supersession guard from both handlers
+fails two; dropping `inFlightSeq` from the abandon gate, removing the `seq` bump on abandon,
+removing the ajax timeout, reverting the render give-up to a global abandon, dropping the
+`isFailure` gate, and writing box text unconditionally each fail one; reverting the cache guard
+to sniffing `response.status` fails five; emptying the retryable-status list fails four.
+
+Round 4 added, on `assets/js/twoinc.js`: blanking the tile unconditionally at the render give-up,
+always re-asserting the loader there, removing the pre-arm paint cancel, caching an approved
+verdict, deleting the tracking-id write each fail one; removing `stillCurrent()`'s `inFlightSeq`
+release fails three; and all three wrong shapes of the `setPayBoxText` comparison (whole-set,
+`.first()`, no guard) fail one each.
+
+Round 5 added, on `assets/js/twoinc.js`: showing the loader on arming again fails four; making
+`getApproval()` clear nothing fails six; removing the abort from the supersede primitive fails
+six; aborting before bumping the counter fails two; and `clearIntentVerdicts()` hiding the loader
+too, `updateElements()` back to the blanket reset, the readiness early-return not abandoning, the
+issue path not superseding, the cached branch not superseding, `checkout_error` not re-arming,
+`#place_order` re-arming as well, and the deferred 3s re-read left unguarded each fail one.
+
+One mutation SURVIVED and was acted on rather than papered over: an explicit
+`supersedeInFlightOrderIntent()` on the country-change path could not be killed, because
+`clearSelectedCompany()` empties the record and the following `getApproval()` retires the request
+through its own readiness guard. The unreachable copy was deleted and the test rewritten to assert
+the outcome rather than the mechanism.
+
+Round 5's second pass added: removing `updateElements()`'s clear (three), removing `pendingCheck
+= false` from the abandon, removing the deferred re-read's seq guard, putting the blanket hide back
+in the deferred re-read, removing the paint's `paintSeq` guard, restoring the blanket reset at the
+cart-total give-up, dropping the pending-paint arm of the readiness guard, reading the company
+label at paint time, restoring the blanket hide in `select2:select`, and not releasing
+`inFlightXhr`.
+
+Note on the harness: `record.aborted` flips even when `abort()` lands on an already-settled
+deferred, where a real jqXHR does nothing — so it proves the call was MADE, not that a live request
+was cancelled. `record.abortedWhilePending` is the one to assert; `aborted` is still there and is
+what pins that a settled request is NOT aborted.
+
+Round 6 added, on `tests/unit/run.php`: all EIGHT mutations of `poTranslation()` — the parser
+rounds 1-4 built to replace a raw regex — survived, so every safety property its docblock claims
+was unverifiable, including the fuzzy case its own comment described as "latent today". It now has
+direct cases against inline `.po` fixtures: fuzzy (alone and inside a multi-flag list, plus a
+non-fuzzy flag that must NOT reject), `msgctxt`, CRLF **across an entry boundary** (a single-entry
+fixture leaves the entry splitter unexercised, which one mutation proved), plurals,
+first-occurrence-wins, escaped quotes round-tripping both ways, and a shorter msgid not matching a
+longer one.
+
+Round 7's sweep also retired a branch rather than testing it. The paint give-up's "hand the tile
+back to a newer check" had been rewritten three times across rounds 3, 4 and 7; a mutation
+replacing it with `if (false)` survived everything, which is what exposed it as unreachable —
+reaching that branch requires `paintSeq === seq`, and an outstanding request implies `paintSeq !==
+seq`. It is now an unconditional reset, and the behaviour it was reaching for is delivered by the
+`paintSeq` guard, which is separately pinned.
+
+Round 8 added the feature's own switch (`enable_order_intent: "no"` — the gate was entirely
+unpinned, with no suite anywhere setting it to anything but `"yes"`), a company complete except for
+its name (the `isAnyElementEmpty` arm of `isReadyApprovalCheck`, unreachable through the
+organisation-number guard that was already pinned), a 200 whose body parses to `null` (a throw on
+the SUCCESS path, which round 1's guards never covered, stranding the loader), the spinner's
+`flex-shrink`, and — in `tests/unit/run.php` — an assertion on WHICH locales the catalogue glob
+actually visited, since narrowing it to one hardcoded filename had passed identically.
+
+Two things round 8 got wrong, recorded because the record is the point:
+
+- a `wasShowing`/`wasRunning` split was added to `abandonOrderIntentCheck()` and then REVERTED. The
+  verdict-wipe it was meant to prevent cannot happen — every route that arms a check calls
+  `clearIntentVerdicts()` in the same breath, so "armed" already implies "nothing of ours on
+  screen". Same reasoning as round 7 deleting the paint give-up's hand-back: a distinction no test
+  can exhibit is an invariant to maintain and nothing else.
+- narrowing `!gross_amount` to `=== undefined` is an EQUIVALENT mutation, not a gap: `getPrice()`
+  cannot return 0, because `getPriceRecursively()` gates recursion on `if (val)` and discards a
+  "0.00" text node as falsy. Verified directly. What that leaves is a real pre-existing behaviour,
+  now pinned and flagged for its own ticket — a fully-discounted order can never obtain a verdict.
+
+On `class/WC_Twoinc.php` and the catalogues: dropping either ARIA role, injecting an `<h4>` into
+a verdict box, rendering an EMPTY verdict box, swapping the loader's two spans, mis-pairing a
+translation, emptying a `msgstr`, shadowing the entry with a `msgctxt`-scoped one, and marking it `#, fuzzy`
+— which `msgfmt` drops from the `.mo`, so the shop renders English while a naive read of the
+`.po` says translated, and `check-catalogues.sh` cannot see it because msgfmt drops fuzzy entries
+from both sides of its diff. Rewriting
+a catalogue with CRLF line endings must NOT fail, and does not.
+
 ### Two defects these tests found, now fixed
 
 Both were pinned as characterisation tests when this suite landed, and both were fixed
@@ -508,6 +798,15 @@ and whether the image animates are all beyond it, and the multi-value `backgroun
 shorthand does not resolve at all (it reads back empty however the rule is written, so do
 not assert on it). The asset's own bytes are checked instead — dimensions and frame count —
 which pins that the file could animate, not that the browser animates it.
+
+**jsdom does not honour `!important` from an earlier rule.** It resolved the intent loader —
+`.twoinc-pay-box.twoinc-loader.hidden`, with `.hidden { display: none !important }` at the top
+of the stylesheet and `.twoinc-loader { display: flex }` below it — as `display: flex`, while
+correctly resolving a sibling box with no `display` declaration to `none`. It DOES honour a
+later overriding rule, which is what makes the cascade assertions worth having, so this is a
+narrow gap rather than a reason to distrust them. Two consequences, both live in the code today:
+the loader carries its own two-class hiding rule so its correctness does not rest on that
+`!important` at all, and layout is asserted with `hidden` taken off the node.
 
 Treat a change to the spinner's appearance as needing a real browser. This gap has bitten
 once already: an earlier attempt on TWO-25288 drew the figure in CSS and shipped for one
