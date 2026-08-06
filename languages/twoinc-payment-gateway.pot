@@ -102,7 +102,7 @@ msgid "Address"
 msgstr ""
 
 #: class/WC_Twoinc.php:1742
-msgid "Address auto-complete"
+msgid "Autofill company address"
 msgstr ""
 
 #: class/WC_Twoinc.php:1697

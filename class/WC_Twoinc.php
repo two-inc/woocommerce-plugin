@@ -4394,7 +4394,7 @@ if (!class_exists('WC_Twoinc')) {
                     'default'     => 'yes'
                 ],
                 'enable_address_lookup' => [
-                    'title'       => __('Address auto-complete', 'twoinc-payment-gateway'),
+                    'title'       => __('Autofill company address', 'twoinc-payment-gateway'),
                     'description' => __('Enables automatically filling in the registered address from the national registry.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'label'       => ' ',
