@@ -2925,6 +2925,20 @@ let twoincDomHelper = {
    *
    * @returns {string}
    */
+  /**
+   * `<name> (<number>)` from the order-intent RECORD — the same `customerCompany` the
+   * request body is built from, so a verdict's sentence and the question it answers
+   * can never name different companies (review round 8).
+   *
+   * @returns {string}
+   */
+  readCompanyLabelFromRecord: function () {
+    const record = Twoinc.getInstance().customerCompany || {};
+    return twoincDomHelper.getCompanyLabelText(
+      twoincUtilHelper.blankToEmpty(record.company_name),
+      twoincUtilHelper.blankToEmpty(record.organization_number)
+    );
+  },
   readCompanyLabelFromDom: function () {
     const captured = twoincSelectWooHelper.readCapturedCompany();
     // The `blankToEmpty()` on the NAME is redundant — `formatCompanyLabel()` applies
@@ -3508,9 +3522,10 @@ let twoincTermChips = {
         // Fee quote in flight: show animated loading dots instead of a
         // blank chip. Never render the configured rate — only the real
         // quoted amount once it arrives.
-        // twoinc-dots carries the shared dot-pulse styling (also used by
-        // the order-intent loader); the BEM class stays as the chip-scoped
-        // hook. Appearance is unchanged.
+        // twoinc-dots carries the shared dot-pulse styling; the BEM class stays
+        // as the chip-scoped hook. Appearance is unchanged. It used to be
+        // shared with the order-intent loader, which paints the spinner GIF
+        // now — this is its only consumer (review round 8).
         const $loading = jQuery("<span>", {
           class: "twoinc-term-chip__loading twoinc-dots",
           "aria-hidden": "true"
@@ -4646,6 +4661,16 @@ class Twoinc {
     // that window therefore skipped the reset and left the loader on screen with
     // its response orphaned below — the exact defect the gate was added to avoid,
     // reintroduced through its own condition.
+    // One question, not two. Round 8 split this into `wasShowing` (an outstanding
+    // request or a pending paint) to gate the reset, and `wasRunning` to gate the
+    // caller's re-arm, on the theory that resetting for a merely ARMED check wipes an
+    // earlier verdict. It cannot: every route that arms a check calls
+    // `clearIntentVerdicts()` in the same breath — `getApproval()` at its head,
+    // `updateElements()` before it — so "armed" already implies "nothing of ours is on
+    // screen", and the reset is a no-op there rather than a hazard. The split was
+    // reverted for the reason round 7 deleted the paint give-up's hand-back: a
+    // distinction no test can exhibit is one more invariant to maintain and nothing
+    // else.
     const wasRunning =
       this.orderIntentCheck.interval !== null ||
       this.orderIntentCheck.renderInterval !== null ||
@@ -4845,9 +4870,14 @@ class Twoinc {
       Twoinc.getInstance().supersedeInFlightOrderIntent();
       const seq = Twoinc.getInstance().orderIntentCheck.seq;
       Twoinc.getInstance().orderIntentCheck.inFlightSeq = seq;
-      // The company this request is ABOUT, captured now rather than re-read when
-      // its verdict is painted (review round 5). See resolveCompanyLabel().
-      const companyLabel = twoincDomHelper.readCompanyLabelFromDom();
+      // The company this request is ABOUT, captured now rather than re-read when its
+      // verdict is painted (review round 5) — and read from `customerCompany`, the
+      // same record the request BODY above is built from (review round 8). It used to
+      // come off `#billing_company`/`#company_id`, which can diverge from the record:
+      // `clearCompanyIfCountryStale()` exists because of that divergence and
+      // documents it as reachable (a number typed into `#company_id` with no blur).
+      // Divergent, the sentence named a company the API was never asked about.
+      const companyLabel = twoincDomHelper.readCompanyLabelFromRecord();
 
       /**
        * Is this response still the one the checkout is waiting for?
@@ -4888,16 +4918,27 @@ class Twoinc {
       approvalResponse.done(function (response) {
         if (!stillCurrent()) return;
 
-        // Store the approved state
-        Twoinc.getInstance().isTwoincApproved = response.approved;
+        // A 200 whose JSON body parses to `null` — or to anything that is not an
+        // object — makes every read below a TypeError (review round 8). It throws
+        // AFTER `stillCurrent()` has released `inFlightSeq`/`inFlightXhr` and BEFORE
+        // the paint is armed, so the loader is stranded for the rest of the page with
+        // nothing left able to reset it: `abandonOrderIntentCheck()`'s gate reads
+        // false on every flag by then. Same class as the `responseJSON` and
+        // `Array.append` throws round 1 fixed, but on the SUCCESS path, which those
+        // guards never covered. Normalising to `{}` sends it down the not-approved
+        // branch, which is the right reading of an unusable body.
+        const body = response && typeof response === "object" ? response : {};
 
-        if (!response.approved) {
+        // Store the approved state
+        Twoinc.getInstance().isTwoincApproved = body.approved;
+
+        if (!body.approved) {
           twoincDomHelper.deselectPaymentMethod();
         }
 
         // Update tracking number
-        if (response.tracking_id && document.querySelector("#tracking_id")) {
-          document.querySelector("#tracking_id").value = response.tracking_id;
+        if (body.tracking_id && document.querySelector("#tracking_id")) {
+          document.querySelector("#tracking_id").value = body.tracking_id;
         }
 
         // Display messages and update order intent logs. The hash is passed
@@ -4912,7 +4953,7 @@ class Twoinc {
         // are IN rather than sniffed off the payload (review round 3). jQuery
         // hands `.done` the parsed response BODY, so a `status` field in that
         // body was being read as an HTTP status.
-        Twoinc.getInstance().processOrderIntentResponse(response, hashedBody, false, companyLabel);
+        Twoinc.getInstance().processOrderIntentResponse(body, hashedBody, false, companyLabel);
       });
 
       approvalResponse.fail(function (response) {

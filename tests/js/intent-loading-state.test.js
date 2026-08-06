@@ -192,6 +192,56 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     expect(shown(".twoinc-err-payment-default")).toBe(true);
   }
 
+  describe("the order-intent feature switch", () => {
+    test("with order intent disabled, no check is ever armed or issued", () => {
+      // The `enable_order_intent !== "yes"` gate was entirely unpinned: deleting the
+      // block, and loosening it to a truthiness test, both survived. No suite anywhere
+      // set the flag to anything but "yes" (review round 8). It is the merchant switch
+      // for the whole of this ticket's UI, so "off stays off" is worth a test.
+      const ajax = harness.stubAjax($);
+      try {
+        window.twoinc.enable_order_intent = "no";
+        showStaleDecline();
+
+        instance.getApproval();
+        jest.advanceTimersByTime(10000);
+
+        expect(ajax.calls.length).toBe(0);
+        expect(instance.orderIntentCheck.interval).toBeNull();
+        expect(shown(".twoinc-loader")).toBe(false);
+        // And the tile is left exactly as it was — the switch being off is not a
+        // reason to clear what is on screen.
+        expect(shown(".twoinc-err-payment-default")).toBe(true);
+      } finally {
+        window.twoinc.enable_order_intent = "yes";
+        ajax.restore();
+      }
+    });
+
+    test("a company with a number but no name is not complete enough to check", () => {
+      // `isReadyApprovalCheck()` ends in `!isAnyElementEmpty(values)`, and replacing
+      // that with `return true` survived: the organisation-number guard above it is
+      // pinned, so nothing exercised the array check — which exists for exactly this
+      // case, a number present but the name or country blank (review round 8).
+      const ajax = harness.stubAjax($);
+      try {
+        instance.customerCompany = {
+          company_name: "",
+          organization_number: "12345678",
+          country_prefix: "GB"
+        };
+
+        instance.getApproval();
+        jest.advanceTimersByTime(10000);
+
+        expect(ajax.calls.length).toBe(0);
+        expect(instance.orderIntentCheck.interval).toBeNull();
+      } finally {
+        ajax.restore();
+      }
+    });
+  });
+
   describe("a new check clears the previous verdict immediately", () => {
     test("arming a check hides a stale decline in the same call", () => {
       showStaleDecline();
@@ -493,6 +543,29 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       jest.advanceTimersByTime(1000);
     }
 
+    test("a 200 whose body is null does not strand the loader", () => {
+      // Every read of the response would be a TypeError, thrown AFTER
+      // `stillCurrent()` has released `inFlightSeq`/`inFlightXhr` and BEFORE the paint
+      // is armed — so the loader was up for the rest of the page with nothing able to
+      // reset it, since the abandon gate reads false on every flag by then. Same class
+      // as the round-1 `responseJSON` and `Array.append` throws, but on the SUCCESS
+      // path, which those guards never covered (review round 8).
+      const ajax = harness.stubAjax($);
+      try {
+        issueACheck(ajax);
+
+        ajax.last().succeed(null);
+        jest.advanceTimersByTime(1000);
+
+        expect(shown(".twoinc-loader")).toBe(false);
+        expect($(".twoinc-pay-box.twoinc-loader").length).toBe(1);
+        // An unusable body is not an approval, so it reads as declined.
+        expect(shown(".twoinc-err-payment-default")).toBe(true);
+      } finally {
+        ajax.restore();
+      }
+    });
+
     test("a 502 with no JSON body still lands a verdict, and does not strand the loader", () => {
       // A proxy 502 carrying an HTML error page reaches the handler with
       // `responseJSON` undefined, and `"error_details" in undefined` is a
@@ -580,11 +653,44 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       }
     });
 
+    test("a cart total of ZERO gives up too, and posts nothing", () => {
+      // The give-up tests claimed this case in their comments from round 1 and only
+      // ever exercised MISSING markup, so it is pinned here for the first time.
+      //
+      // Worth knowing WHY narrowing `!gross_amount` to `gross_amount === undefined`
+      // does not fail: `getPrice()` cannot return 0. `getPriceRecursively()` gates its
+      // recursion on `if (val)`, so a text node reading "0.00" is discarded as falsy
+      // and the walk falls through to `undefined` — verified directly, a 0.00 total and
+      // absent totals markup are indistinguishable at that boundary. The mutation is
+      // therefore equivalent, not a gap.
+      //
+      // The behaviour that leaves is a real, PRE-EXISTING one and this test records it:
+      // a fully-discounted order can never obtain an order-intent verdict. Out of scope
+      // to change here — it lives in `getPrice`, which this branch does not touch — and
+      // reported for its own ticket.
+      const ajax = harness.stubAjax($);
+      try {
+        $(".order-total .woocommerce-Price-amount").text("0.00");
+        instance.getApproval();
+
+        jest.advanceTimersByTime(9000);
+        expect(instance.orderIntentCheck.interval).not.toBeNull();
+
+        jest.advanceTimersByTime(1000);
+        expect(instance.orderIntentCheck.interval).toBeNull();
+        expect(ajax.calls.length).toBe(0);
+        expect(shown(".twoinc-loader")).toBe(false);
+      } finally {
+        ajax.restore();
+      }
+    });
+
     test("no readable cart total gives up rather than spinning forever", () => {
-      // A 100%-discounted cart reads a total of 0, which is falsy on every tick,
-      // and a theme whose totals markup getPrice() cannot read never yields one at
-      // all. The interval retried indefinitely — a leaked 1s timer for the life of
-      // the page, and one that keeps `pendingCheck` alive with it (review round 1).
+      // Absent totals markup — a theme `getPrice()` cannot read. The zero-total cart
+      // is its own test above; this comment used to claim both and cover only this one
+      // (review round 8). The interval retried indefinitely for either — a leaked 1s
+      // timer for the life of the page, keeping `pendingCheck` alive with it
+      // (review round 1).
       // No loader is involved: it goes up with the request, which is downstream of
       // reading the total.
       const ajax = harness.stubAjax($);
@@ -1461,9 +1567,13 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       // round 6's sweep saw it survive. Kept there anyway to honour
       // `getCompanyLabelText()`'s documented "already blank-collapsed" contract, and
       // recorded here so the survival is not read as a coverage hole.
+      // Set on the RECORD, not the input: the label is read from `customerCompany` now,
+      // the same source the request body is built from (review round 8). A
+      // whitespace-only name still passes `isReadyApprovalCheck()` — truthy, non-zero
+      // length — so this stays reachable.
       const ajax = harness.stubAjax($);
       try {
-        $("#billing_company").val("   ");
+        instance.customerCompany.company_name = "   ";
         issueACheck(ajax);
         ajax.last().succeed({ approved: false });
         jest.advanceTimersByTime(1000);
@@ -1476,27 +1586,51 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       }
     });
 
-    test("a blank snapshot prints the generic sentence, NOT the buyer's current company", () => {
-      // `readCapturedCompany()` reads the INPUTS, which WooCommerce empties for an
-      // instant while it replaces the billing fields — so a request issued in that
-      // window snapshots "". The snapshot is honoured by `typeof`, not truthiness,
-      // and this is why: a live read at paint time would substitute whatever company
-      // the buyer has by THEN, which is the wrong-company defect the snapshot exists
-      // to prevent. A generic sentence is the safe output for "no capture recorded".
+    test("an empty snapshot is honoured, not replaced by a live read", () => {
+      // A UNIT test, because sourcing the label from `customerCompany` made this
+      // unreachable end to end (review round 8): `isReadyApprovalCheck()` refuses to
+      // issue a request unless every field of the record is non-empty, so a request in
+      // flight always has a company. That is a better invariant than the one this used
+      // to assert against blanked DOM inputs — but the contract still has to hold,
+      // because it is what stops a live re-read at paint time substituting whatever
+      // company the buyer has moved to by then.
+      //
+      // `typeof`, not truthiness: "" means "no company recorded when the request went
+      // out", and the served no-company sentence is the right output for that.
+      $("#billing_company").val("Beta Traders Ltd");
+      $("#company_id").val("87654321");
+
+      expect(dom.resolveCompanyLabel("")).toBe("");
+      // ...whereas no snapshot at all DOES fall through to the live read, which is
+      // what the re-render callers rely on.
+      expect(dom.resolveCompanyLabel(undefined)).toBe("Beta Traders Ltd (87654321)");
+    });
+
+    test("the label and the request body name the same company", () => {
+      // They used to come from different places — the body from `customerCompany`, the
+      // label from `#billing_company`/`#company_id` — and `clearCompanyIfCountryStale()`
+      // exists precisely because those two diverge (a number typed with no blur).
+      // Divergent, the verdict named a company the API was never asked about (review
+      // round 8).
       const ajax = harness.stubAjax($);
       try {
-        $("#billing_company").val("");
-        $("#company_id").val("");
-        issueACheck(ajax);
-
-        // The buyer's fields fill in — with a DIFFERENT company — before the answer.
+        // The record says ACME; the inputs say something else entirely.
         $("#billing_company").val("Beta Traders Ltd");
         $("#company_id").val("87654321");
+        issueACheck(ajax);
+
+        // The body was built from the record...
+        expect(JSON.parse(ajax.last().settings.data).buyer.company.company_name).toBe(
+          "ACME Widgets Ltd"
+        );
 
         ajax.last().succeed({ approved: false });
         jest.advanceTimersByTime(1000);
 
-        expect($(".twoinc-pay-box.twoinc-err-payment-default").text()).toBe("NO_COMPANY_DECLINED");
+        // ...so the sentence must name the record's company too.
+        expect($(".twoinc-pay-box.twoinc-err-payment-default").text()).toBe(
+          "ACME Widgets Ltd (12345678)"
+        );
       } finally {
         ajax.restore();
       }
@@ -1646,9 +1780,10 @@ describe("order-intent loading state and stale-verdict clearing", () => {
   describe("the cart-total give-up is quiet", () => {
     test("giving up does not wipe a verdict painted meanwhile", () => {
       // No loading state is up during the price wait, so there is nothing of this
-      // check's to take down — and the blanket reset instead erased whatever else
-      // the tile was showing, with nothing left to re-arm. Reachable on a
-      // 100%-discount cart or a theme getPrice() cannot read (review round 5).
+      // check's to take down — and the blanket reset instead erased whatever else the
+      // tile was showing, with nothing left to re-arm (review round 5). Driven here
+      // with absent totals markup; the zero-total cart takes the same branch and is
+      // covered in its own test.
       const ajax = harness.stubAjax($);
       try {
         // Request 1 goes out and is left UNSETTLED on purpose (review round 6):
@@ -1925,6 +2060,25 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       instance.abandonOrderIntentCheck();
 
       expect(shown(".twoinc-intent-approved")).toBe(true);
+    });
+
+    test("an armed-but-unissued check still counts as RUNNING, so checkout_error re-arms", () => {
+      // The return value answers "was anything running", which is what `checkout_error`
+      // needs — an armed-but-unissued check is the most likely state to be in when a
+      // submit fails validation, and the buyer is still there to retry. Narrowing the
+      // return to "was anything on screen" silently stopped re-arming for it (review
+      // round 8).
+      const ajax = harness.stubAjax($);
+      try {
+        instance.getApproval();
+        expect(instance.orderIntentCheck.interval).not.toBeNull();
+        expect(instance.orderIntentCheck.inFlightSeq).toBeNull();
+        expect(instance.orderIntentCheck.renderInterval).toBeNull();
+
+        expect(instance.abandonOrderIntentCheck()).toBe(true);
+      } finally {
+        ajax.restore();
+      }
     });
 
     test("but a check that WAS in flight is still reset", () => {
@@ -2397,6 +2551,9 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       expect(spinner.height).toBe("16px");
       expect(spinner.backgroundRepeat).toBe("no-repeat");
       expect(spinner.backgroundSize).toBe("16px 16px");
+      // It is a flex item beside a sentence that is longer in every locale this ships
+      // — nb_NO's is 23 characters — so it must not be allowed to shrink (round 8).
+      expect(spinner.flexShrink).toBe("0");
     });
 
     test("the sentence beside it is weighted to read as a status, not body copy", () => {

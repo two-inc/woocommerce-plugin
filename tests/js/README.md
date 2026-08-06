@@ -636,8 +636,8 @@ production path aborts an already-settled request), so all three of its mutation
 five tests asserted the flag. Pinned directly instead: aborting a PENDING request sets both flags
 and fails the deferred; aborting a SETTLED one sets only `aborted` and does not re-reject.
 
-Verified by mutation, per the rule below — one hundred and forty-four of them, and every one kills
-at least one test, with two documented exceptions that are equivalent mutations rather than gaps (the
+Verified by mutation, per the rule below — one hundred and ninety of them, and every one kills at
+least one test, with several documented exceptions that are equivalent mutations rather than gaps (the
 redundant `blankToEmpty()` on the company name, and widening `resolveCompanyLabel`'s `typeof` test
 to truthiness now that the empty case is handled the same way).
 Mutation is carrying more of the weight than review by now: round 5 alone had five survivors that
@@ -717,6 +717,26 @@ replacing it with `if (false)` survived everything, which is what exposed it as 
 reaching that branch requires `paintSeq === seq`, and an outstanding request implies `paintSeq !==
 seq`. It is now an unconditional reset, and the behaviour it was reaching for is delivered by the
 `paintSeq` guard, which is separately pinned.
+
+Round 8 added the feature's own switch (`enable_order_intent: "no"` — the gate was entirely
+unpinned, with no suite anywhere setting it to anything but `"yes"`), a company complete except for
+its name (the `isAnyElementEmpty` arm of `isReadyApprovalCheck`, unreachable through the
+organisation-number guard that was already pinned), a 200 whose body parses to `null` (a throw on
+the SUCCESS path, which round 1's guards never covered, stranding the loader), the spinner's
+`flex-shrink`, and — in `tests/unit/run.php` — an assertion on WHICH locales the catalogue glob
+actually visited, since narrowing it to one hardcoded filename had passed identically.
+
+Two things round 8 got wrong, recorded because the record is the point:
+
+- a `wasShowing`/`wasRunning` split was added to `abandonOrderIntentCheck()` and then REVERTED. The
+  verdict-wipe it was meant to prevent cannot happen — every route that arms a check calls
+  `clearIntentVerdicts()` in the same breath, so "armed" already implies "nothing of ours on
+  screen". Same reasoning as round 7 deleting the paint give-up's hand-back: a distinction no test
+  can exhibit is an invariant to maintain and nothing else.
+- narrowing `!gross_amount` to `=== undefined` is an EQUIVALENT mutation, not a gap: `getPrice()`
+  cannot return 0, because `getPriceRecursively()` gates recursion on `if (val)` and discards a
+  "0.00" text node as falsy. Verified directly. What that leaves is a real pre-existing behaviour,
+  now pinned and flagged for its own ticket — a fully-discounted order can never obtain a verdict.
 
 On `class/WC_Twoinc.php` and the catalogues: dropping either ARIA role, injecting an `<h4>` into
 a verdict box, rendering an EMPTY verdict box, swapping the loader's two spans, mis-pairing a

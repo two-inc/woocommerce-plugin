@@ -6928,9 +6928,11 @@ final class BrandConfigSpec
         ];
         $catalogues = glob($languages . 'twoinc-payment-gateway-*.po');
         TinyAssert::true($catalogues !== false && $catalogues !== [], 'no .po catalogues found at all');
+        $visited = [];
         foreach ($catalogues as $po) {
             preg_match('/twoinc-payment-gateway-(.+)\.po$/', $po, $m);
             $locale = $m[1];
+            $visited[] = $locale;
             TinyAssert::true(
                 isset($expected[$locale]),
                 "locale $locale has no expected loader translation in this test — add one"
@@ -6956,6 +6958,20 @@ final class BrandConfigSpec
             // right" plus that gate IS "the .mo is right" — and that is a real
             // gate rather than a substring search over binary.
         }
+
+        // Prove the DISCOVERY, not just the loop body (review round 8). The glob
+        // exists so a catalogue added later cannot be silently exempted — but nothing
+        // asserted which locales it actually found, so narrowing it to a single
+        // hardcoded filename passed identically, which is the exact failure the glob
+        // was introduced to prevent.
+        sort($visited);
+        $wanted = array_keys($expected);
+        sort($wanted);
+        TinyAssert::same(
+            implode(',', $wanted),
+            implode(',', $visited),
+            'the catalogue discovery did not visit every locale this plugin ships'
+        );
     }
 
     /**

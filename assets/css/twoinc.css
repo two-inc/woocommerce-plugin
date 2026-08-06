@@ -539,8 +539,9 @@
 /*
  * The dot-pulse loading idiom: a 1.4s staggered three-dot opacity
  * pulse, timing mirroring the Magento checkout's .two-term-chip__loading.
- * Shared by the term-chip fee quote and the order-intent check
- * (.twoinc-loader) — one element, one keyframes block, no duplication.
+ * Used by the term-chip fee quote. The order-intent loader used to share it and no
+ * longer does — it paints the spinner GIF instead (see .twoinc-loader above) — so
+ * this rule has one consumer, not two.
  * Markup: <span class="twoinc-dots" aria-hidden="true"><span>.</span>x3.
  */
 .twoinc-dots {
