@@ -1846,14 +1846,20 @@ class TwoCompanySearch {
       if (seq !== twoincSelectWooHelper.companySearchSeq) return;
       Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData();
       twoincSelectWooHelper.renderCompanySummary();
-      // Verdicts only (review round 5). The blanket hide that was here is purely
-      // destructive now that nothing in this closure re-renders a verdict, and it
-      // fires three seconds late — long enough to hide the loader for a request
-      // still outstanding, or to wipe a verdict painted a second and a half ago,
-      // with nothing left to re-arm afterwards. The seq guard above does not cover
-      // it: the country-change path bumps the counter BEFORE this closure captures
-      // it, so on that path the guard always passes.
-      twoincDomHelper.clearIntentVerdicts();
+      // This closure touches the TILE not at all (review round 7). It re-reads the
+      // company record and re-renders the summary; the verdict is not its business.
+      //
+      // It carried a blanket hide, then a verdicts-only clear, and both were wrong
+      // for the same reason: it fires three seconds late, by which time a check
+      // armed by the `getApproval()` at the end of the country handler has issued
+      // (~1s) and painted (~1.5-2s). Clearing then wipes a correct, current verdict
+      // — and `interval` is null and `pendingCheck` false by then, and neither a
+      // country change nor `checkout_error` fires `updated_checkout`, so nothing
+      // repaints it. The buyer changed country and got a blank tile.
+      //
+      // Nothing is lost by removing it: the synchronous `togglePaySubtitleDesc()`
+      // above already retired the outgoing verdict at t=0, which is the only moment
+      // at which it was the stale one.
     }, 3000);
   }
 
@@ -4476,8 +4482,15 @@ class Twoinc {
       // blank, with no verdict and no spinner, for the rest of the page.
       // getApproval() no-ops when the form is not ready, so this costs nothing on
       // the errors that have nothing to do with this gateway.
-      Twoinc.getInstance().abandonOrderIntentCheck();
-      Twoinc.getInstance().getApproval();
+      // Re-arm ONLY if a check was actually interrupted (review round 7).
+      // Unconditionally, `getApproval()`'s own clear wiped a perfectly good verdict
+      // that the abandon had just been careful to leave alone, and could not repaint
+      // it for at least a second — or at all quickly for an approval, which is never
+      // cached. Every failed submit for an unrelated reason, a missing postcode say,
+      // flickered the box.
+      if (Twoinc.getInstance().abandonOrderIntentCheck()) {
+        Twoinc.getInstance().getApproval();
+      }
     });
 
     setInterval(function () {
@@ -4650,6 +4663,10 @@ class Twoinc {
     if (wasRunning) {
       twoincDomHelper.togglePaySubtitleDesc();
     }
+
+    // Returned so callers can tell "I stopped something" from "there was nothing to
+    // stop" (review round 7) — `checkout_error` re-arms only in the first case.
+    return wasRunning;
   }
 
   /**
@@ -5029,21 +5046,23 @@ class Twoinc {
         clearInterval(this.orderIntentCheck.renderInterval);
         this.orderIntentCheck.renderInterval = null;
 
-        // A newer check can have been armed during the up-to-ten seconds this
-        // paint spent blocked. Round 3 reset the tile unconditionally here, which
-        // wiped that check's OWN loading state and left the tile blank until its
-        // response landed — it stopped the give-up orphaning a newer check but
-        // not the give-up blanking it (review round 4). So: hand the tile back to
-        // whatever is still running, and only reset when nothing is.
-        if (
-          this.orderIntentCheck.interval !== null ||
-          this.orderIntentCheck.inFlightSeq !== null ||
-          this.orderIntentCheck.pendingCheck
-        ) {
-          twoincDomHelper.togglePaySubtitleDesc("checking-intent");
-        } else {
-          twoincDomHelper.togglePaySubtitleDesc();
-        }
+        // Reset, unconditionally. Rounds 3-7 went round this branch three times —
+        // reset, then hand the tile back to anything still running, then hand it
+        // back only for an outstanding request — and the last pass showed the
+        // hand-back is UNREACHABLE, so the simplest form is also the correct one.
+        //
+        // Why unreachable: getting here at all means `paintSeq === seq`, or the
+        // guard above would have returned. A request is outstanding only if it was
+        // issued, issuing bumps `seq`, and this paint's `paintSeq` was captured
+        // before that — so "outstanding request" implies `paintSeq !== seq` and we
+        // never arrive. `inFlightSeq` is therefore always null at this line.
+        //
+        // The behaviour the hand-back was reaching for is real, and the `paintSeq`
+        // guard is what delivers it: when a newer check has superseded this paint,
+        // the guard retires the paint and touches the tile not at all, leaving the
+        // newer check's own loading state exactly where it is. This branch only ever
+        // runs when nothing else is in play, and then a neutral tile is right.
+        twoincDomHelper.togglePaySubtitleDesc();
       }
     }, 1000);
   }

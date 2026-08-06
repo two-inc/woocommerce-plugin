@@ -829,6 +829,23 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       expect(shown(".twoinc-loader")).toBe(false);
     });
 
+    test("checkout_error with nothing running leaves a good verdict alone", () => {
+      // `abandonOrderIntentCheck()` is careful not to reset the tile when nothing was
+      // running — and the unconditional re-arm then had `getApproval()`'s own clear
+      // wipe the verdict anyway, with no repaint for at least a second, or at all
+      // quickly for an approval (never cached). Every failed submit for an unrelated
+      // reason — a missing postcode — flickered the box (review round 7).
+      dom.togglePaySubtitleDesc("intent-approved");
+      expect(shown(".twoinc-intent-approved")).toBe(true);
+      expect(instance.orderIntentCheck.interval).toBeNull();
+      expect(instance.orderIntentCheck.inFlightSeq).toBeNull();
+
+      $(document.body).trigger("checkout_error");
+
+      expect(shown(".twoinc-intent-approved")).toBe(true);
+      expect(ajax.calls.length).toBe(0);
+    });
+
     test("checkout_error re-arms, so the tile is not left blank", () => {
       // `checkout_error` does NOT fire `updated_checkout`, so nothing else would
       // run another check — the tile sat blank, no verdict and no spinner, for the
@@ -922,6 +939,42 @@ describe("order-intent loading state and stale-verdict clearing", () => {
         expect(shown(".twoinc-intent-approved")).toBe(false);
         expect($(".twoinc-pay-box.twoinc-intent-approved").length).toBe(1);
         expect(shown(".twoinc-loader")).toBe(false);
+      } finally {
+        ajax.restore();
+      }
+    });
+  });
+
+  describe("the loading state is never handed to a check that has not asked yet", () => {
+    test("a stuck-overlay give-up does not raise the loader for a merely ARMED check", () => {
+      // The give-up used to hand the tile to a check that was only armed — no request
+      // issued — and raise the loader for it. That check then died in the cart-total
+      // give-up, which disarms with NO UI touch because it is entitled to assume no
+      // loading state of its own is up. Nothing could lower it afterwards:
+      // `clearIntentVerdicts()` excludes the loader, and the abandon gate reads false
+      // on every flag. On exactly the carts the bound exists for, the spinner stuck
+      // for the rest of the page (review round 7).
+      const ajax = harness.stubAjax($);
+      try {
+        $(document.body).append('<div id="payment"><div class="blockOverlay"></div></div>');
+        issueACheck(ajax);
+        ajax.last().succeed({ approved: true });
+        expect(instance.orderIntentCheck.renderInterval).not.toBeNull();
+
+        // A newer check is ARMED but never issues, because the total goes unreadable.
+        $(".order-total").remove();
+        instance.getApproval();
+        expect(instance.orderIntentCheck.interval).not.toBeNull();
+        expect(instance.orderIntentCheck.inFlightSeq).toBeNull();
+
+        // The blocked paint gives up at its tenth tick, then the cart-total wait at
+        // its own. Nothing is outstanding at any point, so the loader must never be
+        // raised — and certainly must not survive.
+        jest.advanceTimersByTime(20000);
+
+        expect(shown(".twoinc-loader")).toBe(false);
+        expect(instance.orderIntentCheck.interval).toBeNull();
+        expect(ajax.calls.length).toBe(1);
       } finally {
         ajax.restore();
       }
@@ -1125,6 +1178,81 @@ describe("order-intent loading state and stale-verdict clearing", () => {
         // Same body as before: a cached entry would answer it without a request.
         instance.getApproval();
         jest.advanceTimersByTime(1000);
+        expect(ajax.calls.length).toBe(2);
+      } finally {
+        ajax.restore();
+      }
+    });
+
+    for (const status of [400, 422, 499]) {
+      test("a " + status + " business decline IS cached", () => {
+        // Parametrised over the window's LOWER boundary, its middle and its top
+        // (review round 7): adding 400 to RETRYABLE survived, and so did narrowing
+        // `>= 400` to `> 400`, because the only cacheable positive control was 422.
+        instance.processOrderIntentResponse(
+          { approved: false, status: status },
+          "h" + status,
+          true
+        );
+
+        expect(instance.orderIntentLog["h" + status]).toBe("errored|.twoinc-err-payment-default");
+      });
+    }
+
+    for (const status of [500, 503]) {
+      test("a " + status + " is a failure, not a verdict, so it is not cached", () => {
+        // 500 exactly: widening `< 500` to `<= 500` survived, because the 5xx tests
+        // used 502 and 503 and never the boundary itself (review round 7).
+        instance.processOrderIntentResponse(
+          { approved: false, status: status },
+          "h" + status,
+          true
+        );
+
+        expect(instance.orderIntentLog["h" + status]).toBeUndefined();
+      });
+    }
+
+    test("a cacheable verdict with no request hash is not filed under a blank key", () => {
+      // Dropping the `hashedBody &&` guard survived: the pre-existing kill exercised a
+      // falsy hash on a NON-cacheable response, where the other guard already
+      // rejected it (review round 7).
+      instance.processOrderIntentResponse({ approved: false, status: 422 }, undefined, true);
+
+      expect(Object.keys(instance.orderIntentLog).length).toBe(0);
+    });
+
+    test("two different bodies of the SAME LENGTH get different cache keys", () => {
+      // `getUnsecuredHash` returning `inp.length` survived every test, which means the
+      // cache had only ever been exercised with bodies whose lengths differ. The
+      // merchant-visible shape: a buyer swaps one 9-digit org number for another and
+      // is served the previous company's verdict (review round 7).
+      const a = JSON.stringify({ company: "111111111" });
+      const b = JSON.stringify({ company: "222222222" });
+      expect(a.length).toBe(b.length);
+
+      expect(ctx.util.getUnsecuredHash(a)).not.toBe(ctx.util.getUnsecuredHash(b));
+    });
+
+    test("a same-length company change issues a fresh check rather than replaying", () => {
+      // End to end, since the unit assertion above cannot show the cache actually
+      // missing.
+      const ajax = harness.stubAjax($);
+      try {
+        issueACheck(ajax);
+        ajax.last().succeed({ approved: false });
+        jest.advanceTimersByTime(1000);
+        expect(Object.keys(instance.orderIntentLog).length).toBe(1);
+
+        // Same length, different value — the case a length-based hash cannot tell
+        // apart.
+        expect(instance.customerCompany.organization_number).toHaveLength(8);
+        instance.customerCompany.organization_number = "87654321";
+        $("#company_id").val("87654321");
+
+        instance.getApproval();
+        jest.advanceTimersByTime(1000);
+
         expect(ajax.calls.length).toBe(2);
       } finally {
         ajax.restore();
@@ -1656,6 +1784,37 @@ describe("order-intent loading state and stale-verdict clearing", () => {
   });
 
   describe("clearSelectedCompany's deferred re-read", () => {
+    test("the 3s re-read does not wipe a verdict painted after the country change", () => {
+      // The closure carried a blanket hide, then a verdicts-only clear, and both were
+      // wrong for the same reason: it fires three seconds late, by which time the
+      // check armed by the country handler's own `getApproval()` has issued (~1s) and
+      // painted (~1.5-2s). Clearing then wipes a correct, current verdict — and
+      // nothing repaints it, because a country change fires no `updated_checkout`
+      // (review round 7). Its own comment named this failure while still causing it.
+      const ajax = harness.stubAjax($);
+      try {
+        ctx.helper.clearSelectedCompany();
+
+        // The record comes back and a check runs to a verdict, inside the 3s window.
+        instance.customerCompany = {
+          company_name: "ACME Widgets Ltd",
+          organization_number: "12345678",
+          country_prefix: "GB"
+        };
+        issueACheck(ajax);
+        ajax.last().succeed({ approved: false });
+        jest.advanceTimersByTime(1000);
+        expect(shown(".twoinc-err-payment-default")).toBe(true);
+
+        // t=3s: the deferred re-read fires and must leave the tile alone.
+        jest.advanceTimersByTime(2000);
+
+        expect(shown(".twoinc-err-payment-default")).toBe(true);
+      } finally {
+        ajax.restore();
+      }
+    });
+
     test("a second country change inside the 3s window supersedes the first re-read", () => {
       // Driven through the REAL bump, `syncBillingCountry()` — hand-incrementing
       // `companySearchSeq` proved only that the guard compares two numbers (review
@@ -1863,11 +2022,13 @@ describe("order-intent loading state and stale-verdict clearing", () => {
         expect(ajax.calls.length).toBe(2);
         const seqInFlight = instance.orderIntentCheck.seq;
 
-        // The blocked paint reaches its tenth tick and gives up. The tile is
-        // handed BACK to the newer check rather than blanked (review round 4 — the
-        // round-3 expectation here was `false`, which enshrined the defect: the
-        // give-up wiped the newer check's own loading state and the tile sat blank
-        // until its response landed).
+        // The blocked paint is superseded, so the `paintSeq` guard retires it and
+        // touches the tile not at all — leaving the newer check's own loading state
+        // exactly where it is. Round 3 reset here unconditionally and blanked it;
+        // round 4 "fixed" that with a hand-back that round 7 then showed to be
+        // unreachable, because superseded paints never reach the give-up branch at
+        // all. THIS is the assertion that matters, and it is the guard that satisfies
+        // it.
         jest.advanceTimersByTime(9000);
         expect(shown(".twoinc-loader")).toBe(true);
 

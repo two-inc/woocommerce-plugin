@@ -504,6 +504,14 @@ verdict disappears (TWO-25326, 2026-08-04):
   a response for company A painted A's verdict with B's name in it. Snapshotted at request time;
   the live read stays as the fallback for callers that are re-rendering rather than reporting, and
   both sides are pinned.
+- **the cache window's boundaries, exactly.** 400, 422 and 499 must be cached; 500 and 503 must
+  not. Adding 400 to the retryable list, narrowing `>= 400`, and widening `< 500` all survived for
+  a round because the only cacheable control was 422 and the 5xx cases used 502/503 — never a
+  boundary.
+- **two different request bodies of the SAME LENGTH get different cache keys.** `getUnsecuredHash`
+  returning `inp.length` survived every test, so the cache had only ever been exercised on bodies
+  of differing length. Merchant-visible shape: swap one 8-digit org number for another and be
+  served the previous company's verdict.
 - **a paint cannot outlive the check that produced it.** Neither the issue path nor the cached
   branch cleared `renderInterval`, so a pending paint fired afterwards and put a stale verdict
   over the newer check's loader.
@@ -628,8 +636,8 @@ production path aborts an already-settled request), so all three of its mutation
 five tests asserted the flag. Pinned directly instead: aborting a PENDING request sets both flags
 and fails the deferred; aborting a SETTLED one sets only `aborted` and does not re-reject.
 
-Verified by mutation, per the rule below — one hundred and one of them, and every one kills at
-least one test, with two documented exceptions that are equivalent mutations rather than gaps (the
+Verified by mutation, per the rule below — one hundred and forty-four of them, and every one kills
+at least one test, with two documented exceptions that are equivalent mutations rather than gaps (the
 redundant `blankToEmpty()` on the company name, and widening `resolveCompanyLabel`'s `typeof` test
 to truthiness now that the empty case is handled the same way).
 Mutation is carrying more of the weight than review by now: round 5 alone had five survivors that
@@ -702,6 +710,13 @@ non-fuzzy flag that must NOT reject), `msgctxt`, CRLF **across an entry boundary
 fixture leaves the entry splitter unexercised, which one mutation proved), plurals,
 first-occurrence-wins, escaped quotes round-tripping both ways, and a shorter msgid not matching a
 longer one.
+
+Round 7's sweep also retired a branch rather than testing it. The paint give-up's "hand the tile
+back to a newer check" had been rewritten three times across rounds 3, 4 and 7; a mutation
+replacing it with `if (false)` survived everything, which is what exposed it as unreachable —
+reaching that branch requires `paintSeq === seq`, and an outstanding request implies `paintSeq !==
+seq`. It is now an unconditional reset, and the behaviour it was reaching for is delivered by the
+`paintSeq` guard, which is separately pinned.
 
 On `class/WC_Twoinc.php` and the catalogues: dropping either ARIA role, injecting an `<h4>` into
 a verdict box, rendering an EMPTY verdict box, swapping the loader's two spans, mis-pairing a
