@@ -1047,3 +1047,8 @@ msgstr ""
 #: class/WC_Twoinc.php
 msgid "The WooCommerce tax class applied to the surcharge when the tax treatment is \"Specific tax class\". Manage tax classes under WooCommerce → Settings → Tax."
 msgstr ""
+
+#. translators: shown beside the spinner while the order-intent availability check runs.
+#: class/WC_Twoinc.php
+msgid "Checking availability"
+msgstr ""

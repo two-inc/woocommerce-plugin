@@ -36,46 +36,113 @@
 }
 
 /*
- * Order-intent check in flight. Renders the shared .twoinc-dots pulse (see
- * below) rather than a rotating image: the dot pulse is the only
- * Two-owned loading idiom on the other checkout surfaces, and it needs no
- * asset. Deliberately NOT Magento core's full-screen loading mask, which
- * the Luma checkout borrows — that is core CSS we do not own, and it
- * blocks the whole page.
+ * Order-intent check in flight (cross-platform target, TWO-25326,
+ * 2026-08-04): the shared spinner GIF beside the visible words "Checking
+ * availability", laid out as one centred row.
+ *
+ * The GIF is the SAME asset the company-search field already paints
+ * (assets/images/loader.gif, see .twoinc-search-spinner below), byte-identical
+ * to the one the Magento front ends ship — so converging on the shared spinner
+ * needed no new asset here, only a second rule pointing at the one already in
+ * the tree. It is painted as a background-image on a childless node for the
+ * same reason given at
+ * .twoinc-search-spinner: the URL then resolves relative to this stylesheet,
+ * so no asset URL has to be plumbed through WordPress's asset helper into the
+ * markup. Fixed 16px because the asset is natively 16x16 and an em-relative
+ * box would blur it.
+ *
+ * This replaces the .twoinc-dots pulse (still below, still used by the
+ * term-chip fee quote) — a wordless pulse was the reason this checkout was
+ * the only one of the four showing no text during the check. Deliberately
+ * still NOT Magento core's full-screen loading mask, which the Luma checkout
+ * borrows: that is core CSS we do not own, and it blocks the whole page.
  */
 .twoinc-loader {
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 16px;
+}
+/*
+ * Its own hiding rule, following the same idiom as `.twoinc-term-chips.hidden`
+ * and `.twoinc-sole-trader-toggle.hidden` below (review round 2). The blanket
+ * `.hidden` at the top of this file is `display: none !important`, so it does
+ * beat the `display: flex` above — but only on the strength of that
+ * `!important`, since the two declarations have equal specificity and this one
+ * comes later. Two classes beats one whatever the source order, so the loader
+ * stays hidden if the `!important` is ever tidied away, which is exactly the
+ * kind of edit nobody would connect to a permanently visible spinner.
+ */
+.twoinc-pay-box.twoinc-loader.hidden {
+  display: none;
+}
+.twoinc-loader__spinner {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  background-image: url("../images/loader.gif");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 16px 16px;
+}
+.twoinc-loader__text {
+  font-weight: 500;
 }
 
 /*
- * TWO-25326 §7.3 (ruling 2026-08-03): the approved and declined intent
- * messages now carry the captured company (`<name> (<number>)`) directly in
- * their sentence, where the standalone `.twoinc-company-tile-label` used to.
- * That label carried `overflow-wrap: anywhere` for exactly this reason —
- * registry names in DE/NL/NO routinely contain a single unbroken token wider
- * than the tile column — and these two boxes need the same protection now
- * that they are the ones holding the name.
+ * The intent result, as a coloured bordered box (cross-platform target,
+ * TWO-25326, 2026-08-04). Until now these three boxes carried NO styling at
+ * all in this stylesheet and rendered as bare paragraphs of theme text, so an
+ * "not available for this order" verdict read as ordinary tile copy.
+ *
+ * Colours, border weight, radius and padding are taken from the PrestaShop
+ * module's equivalent boxes, which is the reference implementation for this
+ * convergence — same palette, so a merchant running two of our plugins sees
+ * one design. They are the familiar green/red notice palette rather than
+ * WooCommerce core's own `.woocommerce-message` / `.woocommerce-error`
+ * conventions on purpose: those are top-border-only bars whose accent colour
+ * is themeable, so a themed shop would render a decline in the theme's brand
+ * colour, and they are laid out for full-width page notices rather than a box
+ * inside the payment tile.
+ *
+ * Message only, no title. The PrestaShop box grew a marketing heading above
+ * its sentence; that heading is being dropped in the same pass, and this
+ * platform must not grow one — the sentence already names the product.
+ *
+ * `overflow-wrap: anywhere` predates the colour (TWO-25326 §7.3, ruling
+ * 2026-08-03) and is why the two company-carrying boxes are grouped: they
+ * hold the captured company (`<name> (<number>)`) directly in their sentence,
+ * where the standalone `.twoinc-company-tile-label` used to, and registry
+ * names in DE/NL/NO routinely contain a single unbroken token wider than the
+ * tile column. The phone-number box carries a fixed short sentence and needs
+ * no such protection, which is the one declaration it does not share.
  */
 .twoinc-pay-box.twoinc-intent-approved,
 .twoinc-pay-box.twoinc-err-payment-default {
   overflow-wrap: anywhere;
 }
-
-/*
- * Visually hidden but readable by assistive technology. Defined here rather
- * than leaning on the theme's .screen-reader-text, which not every theme
- * ships — a missing rule there would render the text visibly.
- */
-.twoinc-sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
+.twoinc-pay-box.twoinc-intent-approved,
+.twoinc-pay-box.twoinc-err-payment-default,
+.twoinc-pay-box.twoinc-err-phone-number {
+  margin-top: 12px;
+  padding: 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+.twoinc-pay-box.twoinc-intent-approved {
+  background: #d4edda;
+  border: 2px solid #28a745;
+  color: #155724;
+}
+.twoinc-pay-box.twoinc-err-payment-default,
+.twoinc-pay-box.twoinc-err-phone-number {
+  background: #f8d7da;
+  border: 2px solid #dc3545;
+  color: #721c24;
 }
 
 .twoinc-source,
@@ -472,8 +539,9 @@
 /*
  * The dot-pulse loading idiom: a 1.4s staggered three-dot opacity
  * pulse, timing mirroring the Magento checkout's .two-term-chip__loading.
- * Shared by the term-chip fee quote and the order-intent check
- * (.twoinc-loader) — one element, one keyframes block, no duplication.
+ * Used by the term-chip fee quote. The order-intent loader used to share it and no
+ * longer does — it paints the spinner GIF instead (see .twoinc-loader above) — so
+ * this rule has one consumer, not two.
  * Markup: <span class="twoinc-dots" aria-hidden="true"><span>.</span>x3.
  */
 .twoinc-dots {

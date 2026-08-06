@@ -1082,3 +1082,8 @@ msgstr "Btw-klasse van de toeslag"
 #: class/WC_Twoinc.php
 msgid "The WooCommerce tax class applied to the surcharge when the tax treatment is \"Specific tax class\". Manage tax classes under WooCommerce → Settings → Tax."
 msgstr "De WooCommerce-btw-klasse die wordt toegepast op de toeslag wanneer de btw-behandeling \"Specifieke btw-klasse\" is. Beheer btw-klassen onder WooCommerce → Instellingen → Belastingen."
+
+#. translators: shown beside the spinner while the order-intent availability check runs.
+#: class/WC_Twoinc.php
+msgid "Checking availability"
+msgstr "Beschikbaarheid controleren"

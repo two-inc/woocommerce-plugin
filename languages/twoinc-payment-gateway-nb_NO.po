@@ -723,3 +723,8 @@ msgstr "Skatteklasse for tillegg"
 #: class/WC_Twoinc.php
 msgid "The WooCommerce tax class applied to the surcharge when the tax treatment is \"Specific tax class\". Manage tax classes under WooCommerce → Settings → Tax."
 msgstr "WooCommerce-skatteklassen som brukes på tillegget når skattebehandlingen er «Bestemt skatteklasse». Administrer skatteklasser under WooCommerce → Innstillinger → Skatt."
+
+#. translators: shown beside the spinner while the order-intent availability check runs.
+#: class/WC_Twoinc.php
+msgid "Checking availability"
+msgstr "Sjekker tilgjengelighet"
