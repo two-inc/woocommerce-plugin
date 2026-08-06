@@ -113,8 +113,8 @@ msgid "Address"
 msgstr "Adress"
 
 #: class/WC_Twoinc.php:1742
-msgid "Address auto-complete"
-msgstr "Autofyll av adress"
+msgid "Autofill company address"
+msgstr "Autofyll av företagsadress"
 
 #: class/WC_Twoinc.php:1697
 msgid ""
