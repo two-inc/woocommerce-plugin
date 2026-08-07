@@ -398,7 +398,6 @@ msgstr ""
 msgid "My company is not on the list"
 msgstr ""
 
-
 #: class/WC_Twoinc.php:1352
 #, php-format
 msgid "Order has already been fully refunded with %s."
