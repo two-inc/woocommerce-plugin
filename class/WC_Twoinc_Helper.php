@@ -973,13 +973,24 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Check if tax subtotals is required in twoinc order request body
+         * Check if tax subtotals is required in twoinc order request body.
+         *
+         * Always true for a Swedish base country (unconditional, pre-dates
+         * the merchant setting below). Also true when the merchant has
+         * opted in via the "Send tax subtotals in payload" setting
+         * (TWO-25386, ported from Magento/PrestaShop) — an explicit
+         * merchant choice never turns the Swedish requirement off, it only
+         * adds more shops that send tax_subtotals.
          *
          * @return bool
          */
         public static function is_tax_subtotals_required_by_twoinc()
         {
-            return strtolower(WC()->countries->get_base_country()) == 'se';
+            if (strtolower(WC()->countries->get_base_country()) == 'se') {
+                return true;
+            }
+            $gateway = WC_Twoinc::get_instance();
+            return $gateway && 'yes' === $gateway->get_option('enable_tax_subtotals');
         }
 
         /**
@@ -1052,14 +1063,20 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * host resolves to — which is not always the configured mode.
          *
          * On a dev-sniffed shop (see is_twoinc_development()) carrying the
-         * never-configured default mode, the API host comes from the free-text
-         * `test_checkout_host` option rather than from the brand template, so
-         * the configured mode ('production') is not the environment in use.
-         * Every host the gateway hands the browser has to follow the API host,
-         * or the shop mints tokens in one environment and sends the buyer to
-         * an app in another (TWO-25170: staging-minted delegation tokens
-         * rejected 401 by the production API behind the production hosted
-         * signup page). So read the environment back out of the test host.
+         * never-configured default mode, the configured mode ('production')
+         * is not the environment that should be in use — a dev-sniffed shop
+         * is by definition not a production shop. This used to be resolved
+         * by reading a merchant-editable free-text test-host override
+         * (TWO-25386 removed that MERCHANT-FACING admin control). Local/dev
+         * tooling that needs the API to resolve to an arbitrary host (e.g.
+         * `make install`'s docker-compose stack, which is not on a
+         * *.staging.two.inc-style domain) still needs an escape hatch, so
+         * this reads the TWOINC_DEV_API_HOST env var instead — a
+         * developer-set server env var, never a wp-admin field, so nothing
+         * a merchant can configure. Falls back to the fixed 'staging' mode
+         * when unset, the same safe direction the removed field's own
+         * unclassifiable-host fallback used: a test environment can neither
+         * take real money nor accept a production token.
          *
          * @param WC_Payment_Gateway $gateway
          *
@@ -1071,26 +1088,29 @@ if (!class_exists('WC_Twoinc_Helper')) {
             if ($mode !== 'production' || !self::is_twoinc_development()) {
                 return $mode;
             }
-            return self::environment_mode_of_host((string) $gateway->get_option('test_checkout_host'));
+            $dev_api_host = getenv('TWOINC_DEV_API_HOST');
+            if ($dev_api_host) {
+                return self::environment_mode_of_host($dev_api_host, $gateway);
+            }
+            return 'staging';
         }
 
         /**
-         * Classify an API host into an environment mode: the brand's
-         * production API host is 'production', a host whose leading labels are
-         * `api.<mode>` is that mode (any domain — dev shops legitimately point
-         * the test host off the brand's domains).
+         * Classify an arbitrary API host (from TWOINC_DEV_API_HOST) into an
+         * environment mode, so every OTHER host the gateway emits (checkout,
+         * signup) still lands in the same environment the dev-configured API
+         * host actually talks to (TWO-25170). The brand's production API
+         * host is 'production'; a host whose leading labels are `api.<mode>`
+         * is that mode; anything else (localhost, a bespoke tunnel) is
+         * 'staging' — a dev-sniffed shop is by definition not production, so
+         * an unclassifiable host must not resolve there.
          *
-         * A dev-sniffed shop is by definition not a production shop, so a host
-         * this cannot classify (localhost, a bespoke tunnel) falls back to
-         * 'staging' — the option's own default, and the safe direction: a test
-         * environment can neither take real money nor accept a production
-         * token.
-         *
-         * @param string $host
+         * @param string              $host
+         * @param WC_Payment_Gateway  $gateway
          *
          * @return string one of ENVIRONMENT_MODES
          */
-        private static function environment_mode_of_host($host)
+        private static function environment_mode_of_host($host, $gateway)
         {
             $hostname = (string) parse_url($host, PHP_URL_HOST);
             $production = (string) parse_url(

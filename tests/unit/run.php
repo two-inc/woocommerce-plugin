@@ -220,6 +220,18 @@ final class BrandConfigSpec
             'testApiKeyNoticesNeverShipAnUnfillablePlaceholder',
             'testApiKeyNoticeDroppingTheStatusPlaceholderDegrades',
             'testApiKeyNoticeCopyIsTranslatedInEveryLocale',
+            'testFulfilmentTriggerStatusesDefaultToCompleted',
+            'testFulfilmentTriggerStatusesNormalizeWcPrefix',
+            'testFulfilmentTriggerStatusHonoursMerchantConfiguredNonCompletedStatus',
+            'testFulfilmentTriggerStatusDoesNotFireForUnconfiguredStatus',
+            'testFulfilmentTriggerExcludesCancelledAndRefundedFromOptionsAndStoredValue',
+            'testCancelledOrderNeverMisdispatchesAsFulfilmentEvenIfConfiguredAsTrigger',
+            'testShouldDisableSslVerifyOffByDefault',
+            'testShouldDisableSslVerifyIgnoredInProduction',
+            'testShouldDisableSslVerifyHonouredOutsideProduction',
+            'testPaymentSubtitlePrefersMerchantFreeTextOverBrandTagline',
+            'testPaymentSubtitleFallsBackToBrandTaglineWhenBlank',
+            'testTaxSubtotalsRequiredWhenMerchantOptsIn',
         ];
         foreach ($tests as $test) {
             self::reset();
@@ -3637,18 +3649,19 @@ final class BrandConfigSpec
         $GLOBALS['test_home_url'] = 'https://shop.merchant.example';
         TinyAssert::same('https://api.two.inc', $make([])->get_twoinc_checkout_host());
 
-        // Dev-sniffed hostname (*.staging.two.inc) with the default mode:
-        // legacy behaviour, the configured test host wins.
+        // Dev-sniffed hostname (*.staging.two.inc) with the default mode: the
+        // free-text test-host override was removed (TWO-25386), so a
+        // dev-sniffed shop now always resolves to the brand's staging host.
         $GLOBALS['test_home_url'] = 'https://woocom.staging.two.inc';
         TinyAssert::same(
-            'https://api.staging.example',
-            $make(['test_checkout_host' => 'https://api.staging.example'])->get_twoinc_checkout_host()
+            'https://api.staging.two.inc',
+            $make([])->get_twoinc_checkout_host()
         );
 
         // An explicit mode beats the sniffer — even on a dev hostname.
         TinyAssert::same(
             'https://api.staging.two.inc',
-            $make(['checkout_env' => 'staging', 'test_checkout_host' => 'https://api.staging.example'])->get_twoinc_checkout_host()
+            $make(['checkout_env' => 'staging'])->get_twoinc_checkout_host()
         );
 
         // Non-dev brand shop with explicit staging mode: no sniffing needed.
@@ -3680,9 +3693,10 @@ final class BrandConfigSpec
             };
         };
 
-        // Dev-sniffed shop, default mode, default test host: staging both ways.
+        // Dev-sniffed shop, default mode: staging both ways (no test-host
+        // override to consult since TWO-25386 removed it).
         $GLOBALS['test_home_url'] = 'https://woocom.staging.two.inc';
-        $gateway = $make(['test_checkout_host' => 'https://api.staging.two.inc']);
+        $gateway = $make([]);
         TinyAssert::same('https://api.staging.two.inc', $gateway->get_twoinc_checkout_host());
         TinyAssert::same(
             'https://checkout.staging.two.inc',
@@ -3693,27 +3707,12 @@ final class BrandConfigSpec
             WC_Twoinc_Sole_Trader::get_signup_page_url($gateway)
         );
 
-        // The page host tracks whichever environment the test host names.
-        $gateway = $make(['test_checkout_host' => 'https://api.sandbox.two.inc']);
+        // A dev-sniffed shop with an explicit mode follows that mode, not
+        // the staging fallback.
+        $gateway = $make(['checkout_env' => 'sandbox']);
         TinyAssert::same('https://api.sandbox.two.inc', $gateway->get_twoinc_checkout_host());
         TinyAssert::same(
             'https://checkout.sandbox.two.inc',
-            WC_Twoinc_Helper::get_environment_host('checkout', $gateway)
-        );
-
-        // An unclassifiable test host (local tunnel) is still not production.
-        $gateway = $make(['test_checkout_host' => 'http://localhost:8080']);
-        TinyAssert::same(
-            'https://checkout.staging.two.inc',
-            WC_Twoinc_Helper::get_environment_host('checkout', $gateway)
-        );
-
-        // A dev shop deliberately pointed at the production API keeps the
-        // production page, so the pair stays consistent in that direction too.
-        $gateway = $make(['test_checkout_host' => 'https://api.two.inc']);
-        TinyAssert::same('https://api.two.inc', $gateway->get_twoinc_checkout_host());
-        TinyAssert::same(
-            'https://checkout.two.inc',
             WC_Twoinc_Helper::get_environment_host('checkout', $gateway)
         );
 
@@ -3731,12 +3730,221 @@ final class BrandConfigSpec
         WC_Twoinc_Brand::reset();
         self::useTestbrand();
         $GLOBALS['test_home_url'] = 'https://woocom-brand.staging.two.inc';
-        $gateway = $make(['test_checkout_host' => 'https://api.staging.testbrand.example']);
+        $gateway = $make([]);
         TinyAssert::same('https://api.staging.testbrand.example', $gateway->get_twoinc_checkout_host());
         TinyAssert::same(
             'https://checkout.staging.testbrand.example',
             WC_Twoinc_Helper::get_environment_host('checkout', $gateway)
         );
+    }
+
+    /**
+     * TWO-25386: stub gateway for the fulfilment-trigger, SSL-verify and
+     * subtitle tests below — same shape as the checkout-host stubs above,
+     * plus recording on_order_completed calls so the dispatch tests can
+     * assert without touching a real WC order.
+     */
+    private static function fulfilmentTriggerGateway(array $options)
+    {
+        return new class ($options) extends WC_Twoinc {
+            private $options;
+            public $completedCalls = [];
+            public $cancelledCalls = [];
+            public function __construct($options)
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+                $this->options = $options;
+            }
+            public function get_option($key, $empty_value = null)
+            {
+                return $this->options[$key] ?? $empty_value ?? '';
+            }
+            public function on_order_completed($order_id)
+            {
+                $this->completedCalls[] = $order_id;
+                return true;
+            }
+            public function on_order_cancelled($order_id)
+            {
+                $this->cancelledCalls[] = $order_id;
+                return true;
+            }
+        };
+    }
+
+    private static function testFulfilmentTriggerStatusesDefaultToCompleted(): void
+    {
+        $gateway = self::fulfilmentTriggerGateway([]);
+        TinyAssert::same(['completed'], $gateway->get_fulfilment_trigger_statuses());
+    }
+
+    private static function testFulfilmentTriggerStatusesNormalizeWcPrefix(): void
+    {
+        $gateway = self::fulfilmentTriggerGateway(['fulfilment_trigger_statuses' => ['wc-on-hold', 'processing']]);
+        TinyAssert::same(['on-hold', 'processing'], $gateway->get_fulfilment_trigger_statuses());
+    }
+
+    /**
+     * The real bug TWO-25386 closes: WooCommerce used to fire fulfilment
+     * only on the hardcoded 'completed' hook, silently desyncing any
+     * merchant whose workflow never reaches that status (e.g. a
+     * custom-order-status plugin). A merchant-configured non-'completed'
+     * status must now dispatch fulfilment via the woocommerce_order_edit_status
+     * fallback hook, the same path the constructor's per-status add_action
+     * loop uses for the primary WooCommerce core status hooks.
+     */
+    private static function testFulfilmentTriggerStatusHonoursMerchantConfiguredNonCompletedStatus(): void
+    {
+        $gateway = self::fulfilmentTriggerGateway(['fulfilment_trigger_statuses' => ['processing']]);
+
+        self::withGatewayInstance($gateway, function () {
+            WC_Twoinc::on_order_edit_status(501, 'processing');
+        });
+
+        TinyAssert::same(
+            [501],
+            $gateway->completedCalls,
+            'a merchant-configured non-completed status must trigger fulfilment'
+        );
+    }
+
+    /**
+     * The flip side: once a merchant has narrowed the trigger set, a status
+     * NOT in that set — including the old hardcoded 'completed' — must not
+     * fire fulfilment. Otherwise the setting is decorative.
+     */
+    private static function testFulfilmentTriggerStatusDoesNotFireForUnconfiguredStatus(): void
+    {
+        $gateway = self::fulfilmentTriggerGateway(['fulfilment_trigger_statuses' => ['processing']]);
+
+        self::withGatewayInstance($gateway, function () {
+            WC_Twoinc::on_order_edit_status(502, 'completed');
+        });
+
+        TinyAssert::same(
+            [],
+            $gateway->completedCalls,
+            'completed must not fire fulfilment when it is not the configured trigger status'
+        );
+    }
+
+    /**
+     * Adversarial-review finding (TWO-25386): 'cancelled' and 'refunded'
+     * have their own dedicated dispatch with different Two API semantics —
+     * they must never be selectable as a fulfilment trigger, or a merchant
+     * could configure "Cancelled" and have Two told a cancelled order was
+     * fulfilled.
+     */
+    private static function testFulfilmentTriggerExcludesCancelledAndRefundedFromOptionsAndStoredValue(): void
+    {
+        $gateway = self::fulfilmentTriggerGateway([]);
+        $method = new ReflectionMethod(WC_Twoinc::class, 'get_order_status_options');
+        $method->setAccessible(true);
+        $options = $method->invoke($gateway);
+        TinyAssert::true(!array_key_exists('cancelled', $options), 'cancelled must not be a selectable trigger status');
+        TinyAssert::true(!array_key_exists('refunded', $options), 'refunded must not be a selectable trigger status');
+
+        // Defensively stripped from the stored value too, in case a stale
+        // or hand-edited settings row contains one.
+        $gateway = self::fulfilmentTriggerGateway(['fulfilment_trigger_statuses' => ['cancelled', 'processing']]);
+        TinyAssert::same(['processing'], $gateway->get_fulfilment_trigger_statuses());
+
+        // If every configured status is excluded, fall back to 'completed'
+        // rather than leaving fulfilment un-triggerable.
+        $gateway = self::fulfilmentTriggerGateway(['fulfilment_trigger_statuses' => ['cancelled', 'refunded']]);
+        TinyAssert::same(['completed'], $gateway->get_fulfilment_trigger_statuses());
+    }
+
+    /**
+     * The actual safety net, independent of the multiselect's own options
+     * list: on_order_edit_status() checks cancelled/refunded FIRST and
+     * unconditionally, ahead of the merchant-configured trigger set, so a
+     * cancellation can never be mis-dispatched as a fulfilment even against
+     * a stale settings row.
+     */
+    private static function testCancelledOrderNeverMisdispatchesAsFulfilmentEvenIfConfiguredAsTrigger(): void
+    {
+        $gateway = self::fulfilmentTriggerGateway(['fulfilment_trigger_statuses' => ['cancelled']]);
+
+        self::withGatewayInstance($gateway, function () {
+            WC_Twoinc::on_order_edit_status(503, 'cancelled');
+        });
+
+        TinyAssert::same([503], $gateway->cancelledCalls, 'cancelled must still dispatch on_order_cancelled');
+        TinyAssert::same([], $gateway->completedCalls, 'cancelled must never dispatch on_order_completed');
+    }
+
+    private static function testShouldDisableSslVerifyOffByDefault(): void
+    {
+        $gateway = self::fulfilmentTriggerGateway([]);
+        $method = new ReflectionMethod(WC_Twoinc::class, 'should_disable_ssl_verify');
+        $method->setAccessible(true);
+        TinyAssert::same(false, $method->invoke($gateway));
+    }
+
+    /**
+     * Mirrors PrestaShop's production hardening: the flag is never honoured
+     * once the environment mode is production, however the merchant left
+     * the checkbox.
+     */
+    private static function testShouldDisableSslVerifyIgnoredInProduction(): void
+    {
+        $gateway = self::fulfilmentTriggerGateway(['disable_ssl_verify' => 'yes', 'checkout_env' => 'PROD']);
+        $method = new ReflectionMethod(WC_Twoinc::class, 'should_disable_ssl_verify');
+        $method->setAccessible(true);
+        TinyAssert::same(false, $method->invoke($gateway));
+    }
+
+    private static function testShouldDisableSslVerifyHonouredOutsideProduction(): void
+    {
+        $gateway = self::fulfilmentTriggerGateway(['disable_ssl_verify' => 'yes', 'checkout_env' => 'staging']);
+        $method = new ReflectionMethod(WC_Twoinc::class, 'should_disable_ssl_verify');
+        $method->setAccessible(true);
+        TinyAssert::same(true, $method->invoke($gateway));
+    }
+
+    private static function testPaymentSubtitlePrefersMerchantFreeTextOverBrandTagline(): void
+    {
+        self::useTaglineBrand();
+        $gateway = self::fulfilmentTriggerGateway(['payment_subtitle' => 'Buy now, pay in 30 days']);
+        TinyAssert::same(
+            '<div class="twoinc-payment-subtitle">Buy now, pay in 30 days</div>',
+            $gateway->get_pay_subtitle()
+        );
+    }
+
+    private static function testPaymentSubtitleFallsBackToBrandTaglineWhenBlank(): void
+    {
+        self::useTaglineBrand();
+        $gateway = self::fulfilmentTriggerGateway([]);
+        TinyAssert::same(
+            '<div class="twoinc-payment-subtitle">For all companies, '
+                . '<a href="https://taglinebrand.example/faq" target="_blank" rel="noopener">'
+                . 'read more</a>.</div>',
+            $gateway->get_pay_subtitle()
+        );
+    }
+
+    /**
+     * TWO-25386: the new "Send tax subtotals in payload" checkbox adds
+     * shops on top of the pre-existing unconditional Swedish requirement —
+     * it never turns that requirement off.
+     */
+    private static function testTaxSubtotalsRequiredWhenMerchantOptsIn(): void
+    {
+        // WC()->countries->get_base_country() is stubbed to 'NO' (not 'SE'),
+        // so the pre-existing unconditional requirement is off here and the
+        // merchant setting is the only thing this asserts.
+        $prop = new ReflectionProperty(WC_Twoinc::class, 'instance');
+        $prop->setAccessible(true);
+
+        $prop->setValue(null, self::fulfilmentTriggerGateway(['enable_tax_subtotals' => 'no']));
+        TinyAssert::same(false, WC_Twoinc_Helper::is_tax_subtotals_required_by_twoinc());
+
+        $prop->setValue(null, self::fulfilmentTriggerGateway(['enable_tax_subtotals' => 'yes']));
+        TinyAssert::same(true, WC_Twoinc_Helper::is_tax_subtotals_required_by_twoinc());
+
+        $prop->setValue(null, null);
     }
 
     private static function testCheckoutEnvOptionsPreserveStoredModeWithoutSettingsApi(): void

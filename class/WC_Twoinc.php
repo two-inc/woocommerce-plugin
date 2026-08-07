@@ -171,8 +171,15 @@ if (!class_exists('WC_Twoinc')) {
             }
 
 
-            // On order status changed to completed
-            add_action('woocommerce_order_status_completed', [$this, 'on_order_completed']);
+            // On order status changed to any of the merchant-configured
+            // fulfilment trigger statuses (TWO-25386 — used to be hardcoded
+            // to 'completed' only, which silently desynced any merchant
+            // whose workflow never sets that status, e.g. a custom-status
+            // plugin). Each status gets its own woocommerce_order_status_*
+            // hook since that is how WooCommerce core fires them.
+            foreach ($this->get_fulfilment_trigger_statuses() as $trigger_status) {
+                add_action('woocommerce_order_status_' . $trigger_status, [$this, 'on_order_completed']);
+            }
 
             // On order status changed to cancelled
             add_action('woocommerce_order_status_cancelled', [$this, 'on_order_cancelled']);
@@ -206,21 +213,25 @@ if (!class_exists('WC_Twoinc')) {
             // Deprecated dev-environment sniffing (localhost, the
             // TWOINC_DEV_HOSTNAMES env var, *.two.inc dev subdomains):
             // installs predating the explicit environment mode carry the
-            // default mode and rely on the sniffed test host. Consulted only
-            // while the mode resolves to production — an explicit
-            // non-production mode ('staging', 'sandbox') always wins, while
-            // an explicit Production selection is indistinguishable from the
-            // never-configured default, so the sniffer still applies there.
-            // Set checkout_env instead of extending the sniffer.
+            // default mode and rely on the sniffed environment. Set
+            // checkout_env instead of extending the sniffer.
             //
-            // WC_Twoinc_Helper::get_effective_environment_mode() encodes the
-            // same condition so that every other host the gateway emits lands
-            // in the environment this host picks; keep the two in step.
+            // The free-text test-host override that used to back this on
+            // sniffed dev shops was a merchant-editable wp-admin field,
+            // removed outright (TWO-25386). Local/dev tooling (this repo's
+            // own docker-compose stack) that needs the API to resolve to an
+            // arbitrary local host instead reads TWOINC_DEV_API_HOST — a
+            // server env var, never a wp-admin field. Any other sniffed dev
+            // shop on the default mode resolves to the brand's staging
+            // host, same as every other host the gateway emits.
             if (
                 WC_Twoinc_Helper::get_environment_mode($this) === 'production'
                 && WC_Twoinc_Helper::is_twoinc_development()
             ) {
-                return $this->get_option('test_checkout_host');
+                $dev_api_host = getenv('TWOINC_DEV_API_HOST');
+                if ($dev_api_host) {
+                    return $dev_api_host;
+                }
             }
             return WC_Twoinc_Helper::get_environment_host('api', $this);
         }
@@ -698,7 +709,11 @@ if (!class_exists('WC_Twoinc')) {
             // behaviour now follows that same checkbox directly (see
             // `WC_Twoinc_Checkout::prepare_twoinc_object()` and
             // `twoincDomHelper.toggleBusinessFields()` in twoinc.js).
-            $removed = ['enable_sole_trader', 'company_search_location', 'enable_company_search_for_others'];
+            // 'test_checkout_host' (TWO-25386, Doug's ruling): the dev-gated
+            // free-text test-host override was removed outright — sniffed
+            // dev shops on the default mode now resolve to the brand's
+            // staging host instead (see get_effective_environment_mode()).
+            $removed = ['enable_sole_trader', 'company_search_location', 'enable_company_search_for_others', 'test_checkout_host'];
             $present = [];
             foreach ($removed as $key) {
                 if (is_array($this->settings) && array_key_exists($key, $this->settings)) {
@@ -2066,6 +2081,22 @@ if (!class_exists('WC_Twoinc')) {
          */
         public function get_pay_subtitle()
         {
+            // Merchant-configured free-text subtitle (TWO-25386) takes
+            // priority over the brand's default FAQ tagline below — a
+            // single-field equivalent of PrestaShop's per-language subtitle.
+            // WooCommerce has no per-language multistore model the way
+            // PrestaShop does, so this is one field for the whole shop; a
+            // merchant needing per-language copy should use a string-
+            // translation plugin (WPML, Loco Translate) the same way the
+            // rest of this plugin's __() strings are made translatable.
+            $custom_subtitle = trim((string) $this->get_option('payment_subtitle'));
+            if ($custom_subtitle !== '') {
+                return sprintf(
+                    '<div class="twoinc-payment-subtitle">%s</div>',
+                    wp_kses_post($custom_subtitle)
+                );
+            }
+
             // Escape first, then test: esc_url returns '' for a disallowed
             // scheme, and a tagline whose "read more" points at the current
             // page is worse than no tagline. is_string guards a brand
@@ -3087,12 +3118,20 @@ if (!class_exists('WC_Twoinc')) {
             $wc_twoinc_instance = WC_Twoinc::get_instance();
 
             $to_status = strtolower($to_status);
-            if ($to_status == 'completed') {
-                $wc_twoinc_instance->on_order_completed($order_id);
-            } elseif ($to_status == 'cancelled') {
+            // Cancelled/refunded are checked FIRST and unconditionally,
+            // ahead of the merchant-configured trigger set (TWO-25386
+            // review finding): 'cancelled' and 'refunded' are excluded from
+            // the fulfilment-trigger multiselect's own options list, but
+            // this ordering is the actual safety net — it holds even
+            // against a stale/hand-edited settings row that somehow
+            // contains one of them, so a cancellation can never be
+            // mis-dispatched as a fulfilment.
+            if ($to_status == 'cancelled') {
                 $wc_twoinc_instance->on_order_cancelled($order_id);
             } elseif ($to_status == 'refunded') {
                 $wc_twoinc_instance->on_order_refunded($order_id);
+            } elseif (in_array($to_status, $wc_twoinc_instance->get_fulfilment_trigger_statuses(), true)) {
+                $wc_twoinc_instance->on_order_completed($order_id);
             }
         }
 
@@ -3196,6 +3235,76 @@ if (!class_exists('WC_Twoinc')) {
                     printf('<div id="message" class="notice notice-error is-dismissible"><p>' . $failure_notice . '</p></div>', WC_Twoinc_Brand::get('product_name'), $order_url);
                 }
             }
+        }
+
+        /**
+         * Statuses that must never appear as a fulfilment trigger: each has
+         * its own dedicated dispatch (on_order_cancelled / on_order_refunded)
+         * with different Two API semantics, and on_order_edit_status() checks
+         * them ahead of the trigger set specifically so a stale settings row
+         * containing one of these can never override that (TWO-25386 review
+         * finding — a merchant could otherwise select "Cancelled" in the
+         * multiselect and have a cancelled order reported to Two as
+         * fulfilled). Excluded from both the selectable options and the
+         * stored-value getter, belt and braces.
+         */
+        private const FULFILMENT_TRIGGER_EXCLUDED_STATUSES = ['cancelled', 'refunded'];
+
+        /**
+         * The order status(es) that should trigger fulfilment notification
+         * to Two (TWO-25386). Defaults to just 'completed' — the previous
+         * hardcoded behaviour — for merchants who have never touched the
+         * setting or fresh installs. Keys are normalised without any
+         * 'wc-' prefix so they match the string WooCommerce hooks and
+         * order objects actually hand back; blanks and cancelled/refunded
+         * are dropped defensively even though neither is a selectable
+         * option, in case of a stale or hand-edited settings row.
+         *
+         * @return string[]
+         */
+        public function get_fulfilment_trigger_statuses()
+        {
+            $statuses = $this->get_option('fulfilment_trigger_statuses', ['completed']);
+            if (!is_array($statuses) || count($statuses) === 0) {
+                return ['completed'];
+            }
+            $normalized = array_map([self::class, 'strip_wc_status_prefix'], $statuses);
+            $filtered = array_values(array_filter($normalized, static function ($status) {
+                return $status !== '' && !in_array($status, self::FULFILMENT_TRIGGER_EXCLUDED_STATUSES, true);
+            }));
+            return $filtered === [] ? ['completed'] : $filtered;
+        }
+
+        /**
+         * Order status options for the fulfilment-trigger multiselect,
+         * keyed without the 'wc-' prefix wc_get_order_statuses() returns.
+         * Excludes cancelled/refunded — see FULFILMENT_TRIGGER_EXCLUDED_STATUSES.
+         *
+         * @return array<string, string>
+         */
+        private function get_order_status_options()
+        {
+            $options = [];
+            foreach (wc_get_order_statuses() as $key => $label) {
+                $status = self::strip_wc_status_prefix($key);
+                if (in_array($status, self::FULFILMENT_TRIGGER_EXCLUDED_STATUSES, true)) {
+                    continue;
+                }
+                $options[$status] = $label;
+            }
+            return $options;
+        }
+
+        /**
+         * Strip WooCommerce's 'wc-' order-status key prefix, if present.
+         *
+         * @param string $status
+         *
+         * @return string
+         */
+        private static function strip_wc_status_prefix($status)
+        {
+            return preg_replace('/^wc-/', '', (string) $status);
         }
 
         /**
@@ -4283,6 +4392,13 @@ if (!class_exists('WC_Twoinc')) {
                     // brand's payment-method title, not the Two phrasing.
                     'default'     => __(WC_Twoinc_Brand::get('title_default'), 'twoinc-payment-gateway')
                 ],
+                'payment_subtitle' => [
+                    'title'       => __('Subtitle', 'twoinc-payment-gateway'),
+                    'type'        => 'text',
+                    'description' => __('Optional free-text subtitle shown directly under the payment method title at checkout. Leave blank to show the default tagline. WooCommerce has no per-language settings model like some other platforms — use a string-translation plugin (e.g. WPML, Loco Translate) if you need this to vary by language.', 'twoinc-payment-gateway'),
+                    'desc_tip'    => true,
+                    'default'     => ''
+                ],
                 'merchant_minimum_order' => [
                     // The value is interpreted in the store currency, so
                     // the label says which one applies.
@@ -4303,11 +4419,6 @@ if (!class_exists('WC_Twoinc')) {
                         'net'   => __('Excluding tax (net)', 'twoinc-payment-gateway'),
                     ],
                     'description' => __('Whether the basket is compared against the minimum including or excluding tax.', 'twoinc-payment-gateway'),
-                ],
-                'test_checkout_host' => [
-                    'type'        => 'text',
-                    'title'       => sprintf(__('%s Test Server', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')),
-                    'default'     => sprintf(WC_Twoinc_Brand::get('checkout_url_template'), 'api.staging')
                 ],
                 'checkout_env' => [
                     'type'        => 'select',
@@ -4561,6 +4672,24 @@ if (!class_exists('WC_Twoinc')) {
                     'options'     => $this->get_rounding_step_options(),
                     'default'     => ''
                 ],
+                'fulfilment_trigger_statuses' => [
+                    'title'       => __('Fulfilment trigger statuses', 'twoinc-payment-gateway'),
+                    'type'        => 'multiselect',
+                    'class'       => 'wc-enhanced-select',
+                    'css'         => 'width: 400px;',
+                    'options'     => $this->get_order_status_options(),
+                    'default'     => ['completed'],
+                    'description' => __('Which order status(es) tell Two an order is fulfilled. Defaults to "Completed" — add another status here (e.g. a custom status from another plugin) if your workflow never sets an order to Completed, otherwise Two is never notified and the order is left un-fulfilled indefinitely.', 'twoinc-payment-gateway'),
+                    'desc_tip'    => true,
+                ],
+                'enable_tax_subtotals' => [
+                    'title'       => __('Send tax subtotals in payload', 'twoinc-payment-gateway'),
+                    'label'       => ' ',
+                    'type'        => 'checkbox',
+                    'description' => __('When enabled, a breakdown of tax subtotals is included in the order payload sent to Two. Always sent for shops whose store base country is Sweden, regardless of this setting.', 'twoinc-payment-gateway'),
+                    'desc_tip'    => true,
+                    'default'     => 'no'
+                ],
                 'section_debug' => [
                     'type'  => 'title',
                     'title' => __('Debug Options', 'twoinc-payment-gateway'),
@@ -4575,6 +4704,13 @@ if (!class_exists('WC_Twoinc')) {
                     ),
                     'default'     => 'yes',
                 ],
+                'disable_ssl_verify' => [
+                    'title'       => __('Disable SSL verification', 'twoinc-payment-gateway'),
+                    'label'       => __('Skip SSL certificate verification on outbound API requests', 'twoinc-payment-gateway'),
+                    'type'        => 'checkbox',
+                    'description' => __('WARNING: this is unsafe for production and only intended for local/dev debugging behind a corporate proxy with custom SSL certificates. Ignored whenever the environment above is set to Production.', 'twoinc-payment-gateway'),
+                    'default'     => 'no'
+                ],
                 'skip_confirm_auth' => [
                     'title'       => __('Skip user validation at order confirmation', 'twoinc-payment-gateway'),
                     'label'       => __('Accept the confirmation callback without a valid WordPress nonce', 'twoinc-payment-gateway'),
@@ -4582,14 +4718,19 @@ if (!class_exists('WC_Twoinc')) {
                     'description' => __('The confirmation callback always checks the order\'s unique 64-character order reference; this option skips only the additional WordPress nonce, which typically expires 12 to 24 hours after the order was placed — and, for a signed-in customer, when their session changes — so a buyer who comes back to a legitimately authorised order can be rejected. The order reference must still match, so the callback is not left open, but the nonce\'s protection against a cross-site request is gone; leave this off unless you are seeing those false rejections.', 'twoinc-payment-gateway'),
                     'default'     => 'no'
                 ],
+                'view_error_log' => [
+                    'title' => __('Error log', 'twoinc-payment-gateway'),
+                    'type'  => 'two_view_log_link',
+                ],
+                'plugin_version' => [
+                    'title' => __('Plugin version', 'twoinc-payment-gateway'),
+                    'type'  => 'two_plugin_version',
+                ],
+                'health_checklist' => [
+                    'title' => __('Install health checklist', 'twoinc-payment-gateway'),
+                    'type'  => 'two_health_checklist',
+                ],
             ];
-
-            // checkout_env is always shown — it is the environment selector.
-            // The free-text test host only appears on sniffed dev
-            // environments, where it remains the legacy override.
-            if (!WC_Twoinc_Helper::is_twoinc_development()) {
-                unset($twoinc_form_fields['test_checkout_host']);
-            }
 
             $this->form_fields = apply_filters('wc_two_form_fields', $twoinc_form_fields);
         }
@@ -4743,6 +4884,116 @@ if (!class_exists('WC_Twoinc')) {
                         </div>
                         <button class="button-secondary woocommerce-twoinc-logo" type="button"><?php _e('Select image', 'twoinc-payment-gateway'); ?></button>
                     </fieldset>
+                </td>
+            </tr>
+            <?php
+            return ob_get_clean();
+        }
+
+        /**
+         * Read-only link to WooCommerce's own log viewer, filtered to this
+         * plugin's log source (TWO-25386, ported from Magento's "View error
+         * log" admin action). Errors are logged unconditionally at several
+         * call sites regardless of the "Enable API Logging" setting above,
+         * so this link is useful even when that setting is off.
+         */
+        public function generate_two_view_log_link_html($key, $data)
+        {
+            $url = admin_url('admin.php?page=wc-status&tab=logs&source=twoinc-payment-gateway');
+            ob_start();
+            ?>
+            <tr valign="top">
+                <th scope="row" class="titledesc"><?php echo wp_kses_post($data['title']); ?></th>
+                <td class="forminp">
+                    <a href="<?php echo esc_url($url); ?>" class="button" target="_blank" rel="noopener">
+                        <?php esc_html_e('View error log', 'twoinc-payment-gateway'); ?>
+                    </a>
+                    <p class="description">
+                        <?php esc_html_e('Opens the WooCommerce log viewer filtered to this plugin\'s log entries.', 'twoinc-payment-gateway'); ?>
+                    </p>
+                </td>
+            </tr>
+            <?php
+            return ob_get_clean();
+        }
+
+        /**
+         * Read-only display of the installed plugin version (TWO-25386,
+         * ported from Magento/PrestaShop).
+         */
+        public function generate_two_plugin_version_html($key, $data)
+        {
+            ob_start();
+            ?>
+            <tr valign="top">
+                <th scope="row" class="titledesc"><?php echo wp_kses_post($data['title']); ?></th>
+                <td class="forminp">
+                    <?php echo esc_html(get_twoinc_plugin_version()); ?>
+                </td>
+            </tr>
+            <?php
+            return ob_get_clean();
+        }
+
+        /**
+         * Read-only install health summary (TWO-25386, ported from
+         * PrestaShop's renderTwoPluginHealthChecklist): API key status,
+         * environment, SSL verification state, and the PHP curl extension
+         * WooCommerce's own HTTP API needs. A row reporting "OK" when it
+         * isn't is worse than no row, so these read the same live state the
+         * rest of the gateway acts on rather than a cached snapshot.
+         */
+        public function generate_two_health_checklist_html($key, $data)
+        {
+            $api_key = (string) $this->get_option('api_key');
+            $api_key_present = $api_key !== '';
+            $environment = WC_Twoinc_Helper::get_environment_mode($this);
+            $ssl_disabled = $this->should_disable_ssl_verify();
+            $curl_present = extension_loaded('curl');
+
+            $rows = [
+                [
+                    'label' => __('API key', 'twoinc-payment-gateway'),
+                    'value' => $api_key_present ? __('Configured', 'twoinc-payment-gateway') : __('Not configured', 'twoinc-payment-gateway'),
+                    'ok'    => $api_key_present,
+                ],
+                [
+                    'label' => __('Environment', 'twoinc-payment-gateway'),
+                    'value' => strtoupper($environment),
+                    'ok'    => true,
+                ],
+                [
+                    'label' => __('SSL verification', 'twoinc-payment-gateway'),
+                    'value' => $ssl_disabled ? __('Disabled', 'twoinc-payment-gateway') : __('Enabled', 'twoinc-payment-gateway'),
+                    'ok'    => !$ssl_disabled,
+                ],
+                [
+                    'label' => __('PHP curl extension', 'twoinc-payment-gateway'),
+                    'value' => $curl_present ? __('Present', 'twoinc-payment-gateway') : __('Missing', 'twoinc-payment-gateway'),
+                    'ok'    => $curl_present,
+                ],
+            ];
+
+            ob_start();
+            ?>
+            <tr valign="top">
+                <th scope="row" class="titledesc"><?php echo wp_kses_post($data['title']); ?></th>
+                <td class="forminp">
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:6px 16px;">
+                        <?php foreach ($rows as $row) : ?>
+                            <div>
+                                <strong><?php echo esc_html($row['label']); ?>:</strong>
+                                <span style="color:<?php echo $row['ok'] ? '#2a7f2a' : '#a94442'; ?>;">
+                                    <?php echo esc_html($row['value']); ?>
+                                </span>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                    <?php if ($environment === 'production' && $ssl_disabled) : ?>
+                        <p class="description" style="color:#a94442;">
+                            <?php esc_html_e('SSL verification is disabled while the environment is not production-hardened; re-check the "Disable SSL verification" setting.', 'twoinc-payment-gateway'); ?>
+                        </p>
+                    <?php endif; ?>
                 </td>
             </tr>
             <?php
@@ -5001,6 +5252,26 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
+         * Whether outbound API requests should skip SSL certificate
+         * verification (TWO-25386, ported from PrestaShop). Debug/dev
+         * escape hatch for corporate networks with custom certificates
+         * only — never honoured when the configured environment is
+         * production, matching PrestaShop's enforcement.
+         *
+         * @return bool
+         */
+        private function should_disable_ssl_verify()
+        {
+            if ('yes' !== $this->get_option('disable_ssl_verify')) {
+                return false;
+            }
+            if (WC_Twoinc_Helper::get_environment_mode($this) === 'production') {
+                return false;
+            }
+            return true;
+        }
+
+        /**
          * Make a request to Twoinc API
          *
          * @param $endpoint
@@ -5028,7 +5299,8 @@ if (!class_exists('WC_Twoinc')) {
                 'headers' => $headers,
                 'timeout' => $timeout,
                 'body' => empty($payload) ? '' : json_encode(WC_Twoinc_Helper::utf8ize($payload)),
-                'data_format' => 'body'
+                'data_format' => 'body',
+                'sslverify' => !$this->should_disable_ssl_verify()
             ]);
 
             // Log the response if logging is enabled

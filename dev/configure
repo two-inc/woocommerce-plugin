@@ -18,8 +18,11 @@ fi
 if [ -n "$TWO_API_KEY" ]; then
     wp option patch update "$OPTION_KEY" api_key "$TWO_API_KEY"
 fi
-if [ -n "$TWO_API_BASE_URL" ]; then
-    wp option patch update "$OPTION_KEY" test_checkout_host "$TWO_API_BASE_URL"
-fi
 
-echo "Configured $OPTION_KEY (test_checkout_host: $(wp option pluck "$OPTION_KEY" test_checkout_host || echo unset))"
+# TWO_API_BASE_URL is no longer written into a wp option (TWO-25386 removed
+# the merchant-facing test_checkout_host admin field entirely). It is passed
+# straight through docker-compose as the TWOINC_DEV_API_HOST env var on the
+# `wordpress` service instead — see docker-compose.yaml and
+# WC_Twoinc_Helper::get_effective_environment_mode().
+
+echo "Configured $OPTION_KEY (API host env var TWOINC_DEV_API_HOST: ${TWO_API_BASE_URL:-unset})"
