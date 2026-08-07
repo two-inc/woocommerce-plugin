@@ -4379,11 +4379,47 @@ if (!class_exists('WC_Twoinc')) {
         public function init_form_fields()
         {
             $twoinc_form_fields = [
+                // ── A. General ──────────────────────────────────────────
+                'section_general' => [
+                    'type'        => 'title',
+                    'title'       => __('General', 'twoinc-payment-gateway')
+                ],
                 'enabled' => [
                     'title'       => __('Turn on/off', 'twoinc-payment-gateway'),
                     'type'        => 'checkbox',
                     'label'       => sprintf(__('Enable %s Payments', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')),
                     'default'     => 'yes'
+                ],
+                'checkout_env' => [
+                    'type'        => 'select',
+                    'title'       => __('Choose your settings', 'twoinc-payment-gateway'),
+                    'default'     => 'PROD',
+                    'options'     => $this->get_checkout_env_options(),
+                ],
+                'api_key' => [
+                    'title'       => sprintf(__('%s API Key', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')),
+                    'type'        => 'api_key_with_verification',
+                    'description' => sprintf(
+                        /* translators: %s is the contact email address for obtaining production API keys */
+                        __('API key for the sandbox environment is available on your merchant portal (however please reach out to %s for access to production keys).', 'twoinc-payment-gateway'),
+                        esc_html(WC_Twoinc_Brand::get('production_key_contact_email'))
+                    ) . '<div id="api-key-status" style="margin-top: 5px;"></div>',
+                ],
+                'vendor_name' => [
+                    'title'       => __('Optional vendor name if there are multiple sites', 'twoinc-payment-gateway'),
+                    'type'        => 'text'
+                ],
+                'disable_ssl_verify' => [
+                    'title'       => __('Disable SSL verification', 'twoinc-payment-gateway'),
+                    'label'       => __('Skip SSL certificate verification on outbound API requests', 'twoinc-payment-gateway'),
+                    'type'        => 'checkbox',
+                    'description' => __('WARNING: this is unsafe for production and only intended for local/dev debugging behind a corporate proxy with custom SSL certificates. Ignored whenever the environment above is set to Production.', 'twoinc-payment-gateway'),
+                    'default'     => 'no'
+                ],
+                // ── B. Checkout Fields ──────────────────────────────────
+                'section_checkout_fields' => [
+                    'type'        => 'title',
+                    'title'       => __('Checkout Fields', 'twoinc-payment-gateway')
                 ],
                 'title' => [
                     'title'       => __('Title', 'twoinc-payment-gateway'),
@@ -4420,39 +4456,6 @@ if (!class_exists('WC_Twoinc')) {
                     ],
                     'description' => __('Whether the basket is compared against the minimum including or excluding tax.', 'twoinc-payment-gateway'),
                 ],
-                'checkout_env' => [
-                    'type'        => 'select',
-                    'title'       => __('Choose your settings', 'twoinc-payment-gateway'),
-                    'default'     => 'PROD',
-                    'options'     => $this->get_checkout_env_options(),
-                ],
-                'clear_options_on_deactivation' => [
-                    'title'       => __('Clear settings on deactivation of plug-in', 'twoinc-payment-gateway'),
-                    'label'       => ' ',
-                    'type'        => 'checkbox',
-                    'default'     => 'no'
-                ],
-                'section_api_credentials' => [
-                    'type'        => 'title',
-                    'title'       => __('API credentials', 'twoinc-payment-gateway')
-                ],
-                'api_key' => [
-                    'title'       => sprintf(__('%s API Key', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')),
-                    'type'        => 'api_key_with_verification',
-                    'description' => sprintf(
-                        /* translators: %s is the contact email address for obtaining production API keys */
-                        __('API key for the sandbox environment is available on your merchant portal (however please reach out to %s for access to production keys).', 'twoinc-payment-gateway'),
-                        esc_html(WC_Twoinc_Brand::get('production_key_contact_email'))
-                    ) . '<div id="api-key-status" style="margin-top: 5px;"></div>',
-                ],
-                'vendor_name' => [
-                    'title'       => __('Optional vendor name if there are multiple sites', 'twoinc-payment-gateway'),
-                    'type'        => 'text'
-                ],
-                'section_checkout_options' => [
-                    'type'        => 'title',
-                    'title'       => __('Checkout options', 'twoinc-payment-gateway')
-                ],
                 'enable_order_intent' => [
                     'title'       => __('Pre-approve buyer during checkout', 'twoinc-payment-gateway'),
                     'description' => __('Approve buyer when phone and company name is filled out.', 'twoinc-payment-gateway'),
@@ -4460,6 +4463,18 @@ if (!class_exists('WC_Twoinc')) {
                     'label'       => ' ',
                     'type'        => 'checkbox',
                     'default'     => 'yes'
+                ],
+                'show_abt_link' => [
+                    'title'       => sprintf(__('Show "What is %s" link in checkout', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')),
+                    'label'       => ' ',
+                    'type'        => 'checkbox',
+                    'default'     => 'yes'
+                ],
+                'display_tooltips' => [
+                    'title'       => __('Display input tooltips', 'twoinc-payment-gateway'),
+                    'label'       => ' ',
+                    'type'        => 'checkbox',
+                    'default'     => 'no'
                 ],
                 // Optional checkout fields. ORDER IS LOAD-BEARING: WooCommerce's
                 // WC_Settings_API renders form_fields in array order, so this
@@ -4501,21 +4516,10 @@ if (!class_exists('WC_Twoinc')) {
                     'type'        => 'checkbox',
                     'default'     => 'yes'
                 ],
-                'show_abt_link' => [
-                    'title'       => sprintf(__('Show "What is %s" link in checkout', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')),
-                    'label'       => ' ',
-                    'type'        => 'checkbox',
-                    'default'     => 'yes'
-                ],
-                'display_tooltips' => [
-                    'title'       => __('Display input tooltips', 'twoinc-payment-gateway'),
-                    'label'       => ' ',
-                    'type'        => 'checkbox',
-                    'default'     => 'no'
-                ],
-                'section_auto_complete_settings' => [
+                // ── C. Company Lookup ───────────────────────────────────
+                'section_company_lookup' => [
                     'type'        => 'title',
-                    'title'       => __('Auto-complete settings', 'twoinc-payment-gateway')
+                    'title'       => __('Company Lookup', 'twoinc-payment-gateway')
                 ],
                 'enable_company_search' => [
                     'title'       => __('Enable company search in address entry', 'twoinc-payment-gateway'),
@@ -4536,9 +4540,21 @@ if (!class_exists('WC_Twoinc')) {
                 // No sole-trader section: sole trader checkout is gated on the
                 // registry's answer for the billing country alone, with no
                 // merchant setting to configure (TWO-25163).
+                // ── D. Payment Terms ────────────────────────────────────
                 'section_payment_terms' => [
                     'type'  => 'title',
-                    'title' => __('Payment terms and offset pricing', 'twoinc-payment-gateway'),
+                    'title' => __('Payment Terms', 'twoinc-payment-gateway'),
+                ],
+                'payment_terms_type' => [
+                    'title'       => __('Payment Terms Type', 'twoinc-payment-gateway'),
+                    'description' => __('Standard counts the term days from the invoice date. End of month counts them from the end of the invoice month.', 'twoinc-payment-gateway'),
+                    'desc_tip'    => true,
+                    'type'        => 'select',
+                    'options'     => [
+                        'standard'     => __('Standard (from invoice date)', 'twoinc-payment-gateway'),
+                        'end_of_month' => __('End of month', 'twoinc-payment-gateway'),
+                    ],
+                    'default'     => 'standard'
                 ],
                 'payment_terms_days' => [
                     'title'       => __('Payment Terms', 'twoinc-payment-gateway'),
@@ -4553,17 +4569,6 @@ if (!class_exists('WC_Twoinc')) {
                     'type'              => 'number',
                     'custom_attributes' => ['min' => '0', 'step' => '1'],
                     'default'           => ''
-                ],
-                'payment_terms_type' => [
-                    'title'       => __('Payment Terms Type', 'twoinc-payment-gateway'),
-                    'description' => __('Standard counts the term days from the invoice date. End of month counts them from the end of the invoice month.', 'twoinc-payment-gateway'),
-                    'desc_tip'    => true,
-                    'type'        => 'select',
-                    'options'     => [
-                        'standard'     => __('Standard (from invoice date)', 'twoinc-payment-gateway'),
-                        'end_of_month' => __('End of month', 'twoinc-payment-gateway'),
-                    ],
-                    'default'     => 'standard'
                 ],
                 'default_payment_term' => [
                     'title'       => __('Default Payment Term', 'twoinc-payment-gateway'),
@@ -4672,6 +4677,11 @@ if (!class_exists('WC_Twoinc')) {
                     'options'     => $this->get_rounding_step_options(),
                     'default'     => ''
                 ],
+                // ── E. Order Management ─────────────────────────────────
+                'section_order_management' => [
+                    'type'  => 'title',
+                    'title' => __('Order Management', 'twoinc-payment-gateway'),
+                ],
                 'fulfilment_trigger_statuses' => [
                     'title'       => __('Fulfilment trigger statuses', 'twoinc-payment-gateway'),
                     'type'        => 'multiselect',
@@ -4690,9 +4700,10 @@ if (!class_exists('WC_Twoinc')) {
                     'desc_tip'    => true,
                     'default'     => 'no'
                 ],
-                'section_debug' => [
+                // ── F. Diagnostics ──────────────────────────────────────
+                'section_diagnostics' => [
                     'type'  => 'title',
-                    'title' => __('Debug Options', 'twoinc-payment-gateway'),
+                    'title' => __('Diagnostics', 'twoinc-payment-gateway'),
                 ],
                 'enable_api_logging' => [
                     'title'       => __('Enable API Logging', 'twoinc-payment-gateway'),
@@ -4704,12 +4715,9 @@ if (!class_exists('WC_Twoinc')) {
                     ),
                     'default'     => 'yes',
                 ],
-                'disable_ssl_verify' => [
-                    'title'       => __('Disable SSL verification', 'twoinc-payment-gateway'),
-                    'label'       => __('Skip SSL certificate verification on outbound API requests', 'twoinc-payment-gateway'),
-                    'type'        => 'checkbox',
-                    'description' => __('WARNING: this is unsafe for production and only intended for local/dev debugging behind a corporate proxy with custom SSL certificates. Ignored whenever the environment above is set to Production.', 'twoinc-payment-gateway'),
-                    'default'     => 'no'
+                'view_error_log' => [
+                    'title' => __('Error log', 'twoinc-payment-gateway'),
+                    'type'  => 'two_view_log_link',
                 ],
                 'skip_confirm_auth' => [
                     'title'       => __('Skip user validation at order confirmation', 'twoinc-payment-gateway'),
@@ -4718,9 +4726,11 @@ if (!class_exists('WC_Twoinc')) {
                     'description' => __('The confirmation callback always checks the order\'s unique 64-character order reference; this option skips only the additional WordPress nonce, which typically expires 12 to 24 hours after the order was placed — and, for a signed-in customer, when their session changes — so a buyer who comes back to a legitimately authorised order can be rejected. The order reference must still match, so the callback is not left open, but the nonce\'s protection against a cross-site request is gone; leave this off unless you are seeing those false rejections.', 'twoinc-payment-gateway'),
                     'default'     => 'no'
                 ],
-                'view_error_log' => [
-                    'title' => __('Error log', 'twoinc-payment-gateway'),
-                    'type'  => 'two_view_log_link',
+                'clear_options_on_deactivation' => [
+                    'title'       => __('Clear settings on deactivation of plug-in', 'twoinc-payment-gateway'),
+                    'label'       => ' ',
+                    'type'        => 'checkbox',
+                    'default'     => 'no'
                 ],
                 'plugin_version' => [
                     'title' => __('Plugin version', 'twoinc-payment-gateway'),

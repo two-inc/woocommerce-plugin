@@ -3265,19 +3265,19 @@ final class BrandConfigSpec
         }
 
         TinyAssert::same(
-            'section_debug',
+            'section_diagnostics',
             $sections['skip_confirm_auth'] ?? null,
-            'skip_confirm_auth must render under the Debug Options heading'
+            'skip_confirm_auth must render under the Diagnostics heading'
         );
         // Sanity on the walker itself, not on this field: if it reported
-        // 'section_debug' for everything the assertion above would pass
+        // 'section_diagnostics' for everything the assertion above would pass
         // vacuously, so pin one field known to live in another section.
         TinyAssert::same(
-            'section_checkout_options',
+            'section_checkout_fields',
             $sections['display_tooltips'] ?? null,
             'walker sanity check: display_tooltips is expected in the checkout '
-                . 'group — if that field was deliberately moved, repoint this '
-                . 'assertion at another non-debug field'
+                . 'fields group — if that field was deliberately moved, repoint '
+                . 'this assertion at another non-diagnostics field'
         );
         // And the option stays off by default wherever it is rendered.
         TinyAssert::same('no', $gateway->form_fields['skip_confirm_auth']['default']);
@@ -3311,8 +3311,8 @@ final class BrandConfigSpec
 
         // Section headings are pure presentation: they declare no stored
         // value, so which one a field sits under cannot reach the row.
-        TinyAssert::same('title', $gateway->form_fields['section_debug']['type']);
-        TinyAssert::same(false, array_key_exists('default', $gateway->form_fields['section_debug']));
+        TinyAssert::same('title', $gateway->form_fields['section_diagnostics']['type']);
+        TinyAssert::same(false, array_key_exists('default', $gateway->form_fields['section_diagnostics']));
 
         $GLOBALS['__twoinc_test_options'][$key] = ['skip_confirm_auth' => 'yes', 'api_key' => 'keep-me'];
         $gateway->init_settings();
