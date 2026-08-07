@@ -975,6 +975,22 @@ function wc_get_order($order_id)
     return $GLOBALS['__twoinc_test_wc_orders'][$order_id] ?? false;
 }
 
+// A minimal but representative status list — enough for the fulfilment-
+// trigger multiselect options builder (TWO-25386) to run during
+// init_form_fields() without a full WC install.
+function wc_get_order_statuses()
+{
+    return [
+        'wc-pending'    => 'Pending payment',
+        'wc-processing' => 'Processing',
+        'wc-on-hold'    => 'On hold',
+        'wc-completed'  => 'Completed',
+        'wc-cancelled'  => 'Cancelled',
+        'wc-refunded'   => 'Refunded',
+        'wc-failed'     => 'Failed',
+    ];
+}
+
 // ── wc-ajax handler stubs (sole-trader availability / token minting) ─
 // The real wp_send_json_* die; these record the outcome instead, which is
 // enough because every handler returns immediately after calling them.

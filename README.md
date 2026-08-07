@@ -116,7 +116,7 @@ cat > docker/config/staging.json <<EOF
   "enabled": "yes",
   "title": "Business invoice %s days",
   "subtitle": "Receive the invoice via PDF and email",
-  "test_checkout_host": "https://api.staging.two.inc",
+  "checkout_env": "staging",
   "clear_options_on_deactivation": "no",
   "section_api_credentials": "",
   "api_key": "secret_test_xxx",
