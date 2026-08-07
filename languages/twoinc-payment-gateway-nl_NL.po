@@ -433,9 +433,9 @@ msgstr "Bedrijfs-ID ontbreekt."
 msgid "My company is not on the list"
 msgstr "Mijn bedrijf staat niet op de lijst"
 
-#: class/WC_Twoinc.php:1656
-msgid "Optional vendor name if there are multiple sites"
-msgstr "Optionele leveranciersnaam als er meerdere sites zijn"
+#: class/WC_Twoinc.php:4408
+msgid "Vendor name (optional)"
+msgstr "Leveranciersnaam (optioneel)"
 
 #: class/WC_Twoinc.php:1352
 #, php-format
@@ -1087,3 +1087,15 @@ msgstr "De WooCommerce-btw-klasse die wordt toegepast op de toeslag wanneer de b
 #: class/WC_Twoinc.php
 msgid "Checking availability"
 msgstr "Beschikbaarheid controleren"
+
+#: class/WC_Twoinc.php:4413
+msgid "If this store represents one of several vendor sites sharing the same %1$s merchant account, enter a name here to identify this specific site/vendor on each order sent to %2$s. Leave blank if you only run a single site."
+msgstr "Als deze winkel een van meerdere leverancierssites is die dezelfde %1$s-handelaarsaccount delen, voer hier een naam in om deze specifieke site/leverancier te identificeren op elke bestelling die naar %2$s wordt verzonden. Laat leeg als u slechts één site beheert."
+
+#: class/WC_Twoinc.php:4693
+msgid "Which order status(es) tell %1$s an order is fulfilled. Defaults to \"Completed\" — add another status here (e.g. a custom status from another plugin) if your workflow never sets an order to Completed, otherwise %2$s is never notified and the order is left un-fulfilled indefinitely."
+msgstr "Welke bestelstatus(sen) %1$s vertellen dat een bestelling is afgehandeld. Standaard is \"Afgerond\" — voeg hier een andere status toe (bijv. een aangepaste status van een andere plugin) als uw workflow een bestelling nooit op Afgerond zet, anders wordt %2$s nooit op de hoogte gebracht en blijft de bestelling onbepaald onafgehandeld."
+
+#: class/WC_Twoinc.php:4705
+msgid "When enabled, a breakdown of tax subtotals is included in the order payload sent to %s. Always sent for shops whose store base country is Sweden, regardless of this setting."
+msgstr "Indien ingeschakeld wordt een overzicht van belastingsubtotalen opgenomen in de bestelgegevens die naar %s worden verzonden. Wordt altijd verzonden voor winkels waarvan het basisland Zweden is, ongeacht deze instelling."

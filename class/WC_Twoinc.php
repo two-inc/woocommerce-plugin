@@ -4406,15 +4406,14 @@ if (!class_exists('WC_Twoinc')) {
                     ) . '<div id="api-key-status" style="margin-top: 5px;"></div>',
                 ],
                 'vendor_name' => [
-                    'title'       => __('Optional vendor name if there are multiple sites', 'twoinc-payment-gateway'),
-                    'type'        => 'text'
-                ],
-                'disable_ssl_verify' => [
-                    'title'       => __('Disable SSL verification', 'twoinc-payment-gateway'),
-                    'label'       => __('Skip SSL certificate verification on outbound API requests', 'twoinc-payment-gateway'),
-                    'type'        => 'checkbox',
-                    'description' => __('WARNING: this is unsafe for production and only intended for local/dev debugging behind a corporate proxy with custom SSL certificates. Ignored whenever the environment above is set to Production.', 'twoinc-payment-gateway'),
-                    'default'     => 'no'
+                    'title'       => __('Vendor name (optional)', 'twoinc-payment-gateway'),
+                    'type'        => 'text',
+                    'description' => sprintf(
+                        /* translators: %1$s and %2$s are both the brand product name (e.g. "Two") */
+                        __('If this store represents one of several vendor sites sharing the same %1$s merchant account, enter a name here to identify this specific site/vendor on each order sent to %2$s. Leave blank if you only run a single site.', 'twoinc-payment-gateway'),
+                        WC_Twoinc_Brand::get('product_name'),
+                        WC_Twoinc_Brand::get('product_name')
+                    ),
                 ],
                 // ── B. Checkout Fields ──────────────────────────────────
                 'section_checkout_fields' => [
@@ -4689,14 +4688,23 @@ if (!class_exists('WC_Twoinc')) {
                     'css'         => 'width: 400px;',
                     'options'     => $this->get_order_status_options(),
                     'default'     => ['completed'],
-                    'description' => __('Which order status(es) tell Two an order is fulfilled. Defaults to "Completed" — add another status here (e.g. a custom status from another plugin) if your workflow never sets an order to Completed, otherwise Two is never notified and the order is left un-fulfilled indefinitely.', 'twoinc-payment-gateway'),
+                    'description' => sprintf(
+                        /* translators: %1$s and %2$s are both the brand product name (e.g. "Two") */
+                        __('Which order status(es) tell %1$s an order is fulfilled. Defaults to "Completed" — add another status here (e.g. a custom status from another plugin) if your workflow never sets an order to Completed, otherwise %2$s is never notified and the order is left un-fulfilled indefinitely.', 'twoinc-payment-gateway'),
+                        WC_Twoinc_Brand::get('product_name'),
+                        WC_Twoinc_Brand::get('product_name')
+                    ),
                     'desc_tip'    => true,
                 ],
                 'enable_tax_subtotals' => [
                     'title'       => __('Send tax subtotals in payload', 'twoinc-payment-gateway'),
                     'label'       => ' ',
                     'type'        => 'checkbox',
-                    'description' => __('When enabled, a breakdown of tax subtotals is included in the order payload sent to Two. Always sent for shops whose store base country is Sweden, regardless of this setting.', 'twoinc-payment-gateway'),
+                    'description' => sprintf(
+                        /* translators: %s is the brand product name (e.g. "Two") */
+                        __('When enabled, a breakdown of tax subtotals is included in the order payload sent to %s. Always sent for shops whose store base country is Sweden, regardless of this setting.', 'twoinc-payment-gateway'),
+                        WC_Twoinc_Brand::get('product_name')
+                    ),
                     'desc_tip'    => true,
                     'default'     => 'no'
                 ],
@@ -4704,6 +4712,13 @@ if (!class_exists('WC_Twoinc')) {
                 'section_diagnostics' => [
                     'type'  => 'title',
                     'title' => __('Diagnostics', 'twoinc-payment-gateway'),
+                ],
+                'disable_ssl_verify' => [
+                    'title'       => __('Disable SSL verification', 'twoinc-payment-gateway'),
+                    'label'       => __('Skip SSL certificate verification on outbound API requests', 'twoinc-payment-gateway'),
+                    'type'        => 'checkbox',
+                    'description' => __('WARNING: this is unsafe for production and only intended for local/dev debugging behind a corporate proxy with custom SSL certificates. Ignored whenever the environment (General section) is set to Production.', 'twoinc-payment-gateway'),
+                    'default'     => 'no'
                 ],
                 'enable_api_logging' => [
                     'title'       => __('Enable API Logging', 'twoinc-payment-gateway'),

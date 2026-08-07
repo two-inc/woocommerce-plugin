@@ -398,10 +398,6 @@ msgstr ""
 msgid "My company is not on the list"
 msgstr ""
 
-#: class/WC_Twoinc.php:1656
-msgid "Optional vendor name if there are multiple sites"
-msgstr ""
-
 #: class/WC_Twoinc.php:1352
 #, php-format
 msgid "Order has already been fully refunded with %s."
@@ -1051,4 +1047,23 @@ msgstr ""
 #. translators: shown beside the spinner while the order-intent availability check runs.
 #: class/WC_Twoinc.php
 msgid "Checking availability"
+msgstr ""
+
+#: class/WC_Twoinc.php:4408
+msgid "Vendor name (optional)"
+msgstr ""
+
+#. translators: %1$s and %2$s are both the brand product name (e.g. "Two")
+#: class/WC_Twoinc.php:4413
+msgid "If this store represents one of several vendor sites sharing the same %1$s merchant account, enter a name here to identify this specific site/vendor on each order sent to %2$s. Leave blank if you only run a single site."
+msgstr ""
+
+#. translators: %1$s and %2$s are both the brand product name (e.g. "Two")
+#: class/WC_Twoinc.php:4693
+msgid "Which order status(es) tell %1$s an order is fulfilled. Defaults to \"Completed\" — add another status here (e.g. a custom status from another plugin) if your workflow never sets an order to Completed, otherwise %2$s is never notified and the order is left un-fulfilled indefinitely."
+msgstr ""
+
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc.php:4705
+msgid "When enabled, a breakdown of tax subtotals is included in the order payload sent to %s. Always sent for shops whose store base country is Sweden, regardless of this setting."
 msgstr ""

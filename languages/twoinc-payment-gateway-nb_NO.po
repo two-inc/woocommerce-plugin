@@ -428,9 +428,9 @@ msgstr "Manglende firma-ID."
 msgid "My company is not on the list"
 msgstr "Selskapet mitt er ikke på listen"
 
-#: class/WC_Twoinc.php:1656
-msgid "Optional vendor name if there are multiple sites"
-msgstr "Valgfritt leverandørnavn hvis det er flere nettsteder"
+#: class/WC_Twoinc.php:4408
+msgid "Vendor name (optional)"
+msgstr "Leverandørnavn (valgfritt)"
 
 #: class/WC_Twoinc.php:1352
 #, php-format
@@ -728,3 +728,15 @@ msgstr "WooCommerce-skatteklassen som brukes på tillegget når skattebehandling
 #: class/WC_Twoinc.php
 msgid "Checking availability"
 msgstr "Sjekker tilgjengelighet"
+
+#: class/WC_Twoinc.php:4413
+msgid "If this store represents one of several vendor sites sharing the same %1$s merchant account, enter a name here to identify this specific site/vendor on each order sent to %2$s. Leave blank if you only run a single site."
+msgstr "Hvis denne butikken representerer ett av flere leverandørsteder som deler samme %1$s-forhandlerkonto, skriv inn et navn her for å identifisere dette bestemte stedet/leverandøren på hver bestilling som sendes til %2$s. La stå tomt hvis du bare driver ett sted."
+
+#: class/WC_Twoinc.php:4693
+msgid "Which order status(es) tell %1$s an order is fulfilled. Defaults to \"Completed\" — add another status here (e.g. a custom status from another plugin) if your workflow never sets an order to Completed, otherwise %2$s is never notified and the order is left un-fulfilled indefinitely."
+msgstr "Hvilken(e) bestillingsstatus(er) som forteller %1$s at en bestilling er fullført. Standard er «Fullført» — legg til en annen status her (f.eks. en tilpasset status fra et annet plugin) hvis arbeidsflyten din aldri setter en bestilling til Fullført, ellers blir %2$s aldri varslet og bestillingen forblir uoppfylt på ubestemt tid."
+
+#: class/WC_Twoinc.php:4705
+msgid "When enabled, a breakdown of tax subtotals is included in the order payload sent to %s. Always sent for shops whose store base country is Sweden, regardless of this setting."
+msgstr "Når aktivert, inkluderes en oversikt over skatte-delsummer i bestillingsdataene som sendes til %s. Sendes alltid for butikker hvis basisland er Sverige, uavhengig av denne innstillingen."
