@@ -4406,15 +4406,9 @@ if (!class_exists('WC_Twoinc')) {
                     ) . '<div id="api-key-status" style="margin-top: 5px;"></div>',
                 ],
                 'vendor_name' => [
-                    'title'       => __('Optional vendor name if there are multiple sites', 'twoinc-payment-gateway'),
-                    'type'        => 'text'
-                ],
-                'disable_ssl_verify' => [
-                    'title'       => __('Disable SSL verification', 'twoinc-payment-gateway'),
-                    'label'       => __('Skip SSL certificate verification on outbound API requests', 'twoinc-payment-gateway'),
-                    'type'        => 'checkbox',
-                    'description' => __('WARNING: this is unsafe for production and only intended for local/dev debugging behind a corporate proxy with custom SSL certificates. Ignored whenever the environment above is set to Production.', 'twoinc-payment-gateway'),
-                    'default'     => 'no'
+                    'title'       => __('Vendor name (optional)', 'twoinc-payment-gateway'),
+                    'type'        => 'text',
+                    'description' => __('If this store represents one of several vendor sites sharing the same Two merchant account, enter a name here to identify this specific site/vendor on each order sent to Two. Leave blank if you only run a single site.', 'twoinc-payment-gateway'),
                 ],
                 // ── B. Checkout Fields ──────────────────────────────────
                 'section_checkout_fields' => [
@@ -4704,6 +4698,13 @@ if (!class_exists('WC_Twoinc')) {
                 'section_diagnostics' => [
                     'type'  => 'title',
                     'title' => __('Diagnostics', 'twoinc-payment-gateway'),
+                ],
+                'disable_ssl_verify' => [
+                    'title'       => __('Disable SSL verification', 'twoinc-payment-gateway'),
+                    'label'       => __('Skip SSL certificate verification on outbound API requests', 'twoinc-payment-gateway'),
+                    'type'        => 'checkbox',
+                    'description' => __('WARNING: this is unsafe for production and only intended for local/dev debugging behind a corporate proxy with custom SSL certificates. Ignored whenever the environment (General section) is set to Production.', 'twoinc-payment-gateway'),
+                    'default'     => 'no'
                 ],
                 'enable_api_logging' => [
                     'title'       => __('Enable API Logging', 'twoinc-payment-gateway'),

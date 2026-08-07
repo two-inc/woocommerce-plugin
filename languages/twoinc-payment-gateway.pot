@@ -398,9 +398,6 @@ msgstr ""
 msgid "My company is not on the list"
 msgstr ""
 
-#: class/WC_Twoinc.php:1656
-msgid "Optional vendor name if there are multiple sites"
-msgstr ""
 
 #: class/WC_Twoinc.php:1352
 #, php-format
@@ -1051,4 +1048,12 @@ msgstr ""
 #. translators: shown beside the spinner while the order-intent availability check runs.
 #: class/WC_Twoinc.php
 msgid "Checking availability"
+msgstr ""
+
+#: class/WC_Twoinc.php:4408
+msgid "Vendor name (optional)"
+msgstr ""
+
+#: class/WC_Twoinc.php:4410
+msgid "If this store represents one of several vendor sites sharing the same Two merchant account, enter a name here to identify this specific site/vendor on each order sent to Two. Leave blank if you only run a single site."
 msgstr ""

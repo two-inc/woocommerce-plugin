@@ -428,9 +428,9 @@ msgstr "Företags-ID saknas."
 msgid "My company is not on the list"
 msgstr "Mitt företag finns inte med i listan"
 
-#: class/WC_Twoinc.php:1656
-msgid "Optional vendor name if there are multiple sites"
-msgstr "Valfritt leverantörsnamn om det finns flera webbplatser"
+#: class/WC_Twoinc.php:4408
+msgid "Vendor name (optional)"
+msgstr "Leverantörsnamn (valfritt)"
 
 #: class/WC_Twoinc.php:1352
 #, php-format
@@ -728,3 +728,7 @@ msgstr "Den WooCommerce-skatteklass som tillämpas på tillägget när skattehan
 #: class/WC_Twoinc.php
 msgid "Checking availability"
 msgstr "Kontrollerar tillgänglighet"
+
+#: class/WC_Twoinc.php:4410
+msgid "If this store represents one of several vendor sites sharing the same Two merchant account, enter a name here to identify this specific site/vendor on each order sent to Two. Leave blank if you only run a single site."
+msgstr "Om denna butik representerar en av flera leverantörssajter som delar samma Two-handlarkonto, ange ett namn här för att identifiera denna specifika sajt/leverantör på varje order som skickas till Two. Lämna tomt om du bara driver en sajt."

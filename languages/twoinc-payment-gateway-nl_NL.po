@@ -433,9 +433,9 @@ msgstr "Bedrijfs-ID ontbreekt."
 msgid "My company is not on the list"
 msgstr "Mijn bedrijf staat niet op de lijst"
 
-#: class/WC_Twoinc.php:1656
-msgid "Optional vendor name if there are multiple sites"
-msgstr "Optionele leveranciersnaam als er meerdere sites zijn"
+#: class/WC_Twoinc.php:4408
+msgid "Vendor name (optional)"
+msgstr "Leveranciersnaam (optioneel)"
 
 #: class/WC_Twoinc.php:1352
 #, php-format
@@ -1087,3 +1087,7 @@ msgstr "De WooCommerce-btw-klasse die wordt toegepast op de toeslag wanneer de b
 #: class/WC_Twoinc.php
 msgid "Checking availability"
 msgstr "Beschikbaarheid controleren"
+
+#: class/WC_Twoinc.php:4410
+msgid "If this store represents one of several vendor sites sharing the same Two merchant account, enter a name here to identify this specific site/vendor on each order sent to Two. Leave blank if you only run a single site."
+msgstr "Als deze winkel een van meerdere leverancierssites is die dezelfde Two-handelaarsaccount delen, voer hier een naam in om deze specifieke site/leverancier te identificeren op elke bestelling die naar Two wordt verzonden. Laat leeg als u slechts één site beheert."

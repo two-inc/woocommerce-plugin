@@ -106,6 +106,8 @@ final class BrandConfigSpec
             'testSkipConfirmAuthRendersUnderDebugOptions',
             'testSkipConfirmAuthStoredValueSurvivesSectionMove',
             'testSkipConfirmAuthCopyIsTranslatedInEveryLocale',
+            'testDisableSslVerifyRendersUnderDiagnostics',
+            'testVendorNameFieldHasCaptionAndHelpText',
             'testSoleTraderHiddenWhenRegistryOmitsIt',
             'testSoleTraderRegistryErrorFallsBackToNoSoleTrader',
             'testSoleTraderRegistryRejectsMalformedCountry',
@@ -3281,6 +3283,70 @@ final class BrandConfigSpec
         );
         // And the option stays off by default wherever it is rendered.
         TinyAssert::same('no', $gateway->form_fields['skip_confirm_auth']['default']);
+    }
+
+    /**
+     * disable_ssl_verify was moved out of General into Diagnostics
+     * (TWO-25386 follow-up) — assert the section it actually renders under,
+     * using the same array-walk approach as
+     * testSkipConfirmAuthRendersUnderDebugOptions, rather than just checking
+     * key presence.
+     */
+    private static function testDisableSslVerifyRendersUnderDiagnostics(): void
+    {
+        $gateway = new class () extends WC_Twoinc {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+        };
+        $gateway->init_form_fields();
+
+        $section = null;
+        $sections = [];
+        foreach ($gateway->form_fields as $name => $field) {
+            if (isset($field['type']) && $field['type'] === 'title') {
+                $section = $name;
+                continue;
+            }
+            $sections[$name] = $section;
+        }
+
+        TinyAssert::same(
+            'section_diagnostics',
+            $sections['disable_ssl_verify'] ?? null,
+            'disable_ssl_verify must render under the Diagnostics heading'
+        );
+        // Sanity on the walker itself, pin one field known to stay in General.
+        TinyAssert::same(
+            'section_general',
+            $sections['api_key'] ?? null,
+            'walker sanity check: api_key is expected in the General group'
+        );
+    }
+
+    /**
+     * vendor_name's caption and help text (TWO-25386 follow-up) — the field
+     * carries no default/config behaviour to pin, so this asserts only the
+     * copy: an accurate caption and a description explaining that the value
+     * is sent verbatim on order create/edit requests to identify the site.
+     */
+    private static function testVendorNameFieldHasCaptionAndHelpText(): void
+    {
+        $gateway = new class () extends WC_Twoinc {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+        };
+        $gateway->init_form_fields();
+        $field = $gateway->form_fields['vendor_name'] ?? [];
+
+        TinyAssert::same('Vendor name (optional)', $field['title'] ?? null);
+        TinyAssert::true(
+            isset($field['description']) && $field['description'] !== '',
+            'vendor_name must have help text explaining what it does'
+        );
     }
 
     /**
