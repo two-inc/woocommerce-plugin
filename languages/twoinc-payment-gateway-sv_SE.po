@@ -729,6 +729,14 @@ msgstr "Den WooCommerce-skatteklass som tillämpas på tillägget när skattehan
 msgid "Checking availability"
 msgstr "Kontrollerar tillgänglighet"
 
-#: class/WC_Twoinc.php:4410
-msgid "If this store represents one of several vendor sites sharing the same Two merchant account, enter a name here to identify this specific site/vendor on each order sent to Two. Leave blank if you only run a single site."
-msgstr "Om denna butik representerar en av flera leverantörssajter som delar samma Two-handlarkonto, ange ett namn här för att identifiera denna specifika sajt/leverantör på varje order som skickas till Two. Lämna tomt om du bara driver en sajt."
+#: class/WC_Twoinc.php:4413
+msgid "If this store represents one of several vendor sites sharing the same %1$s merchant account, enter a name here to identify this specific site/vendor on each order sent to %2$s. Leave blank if you only run a single site."
+msgstr "Om denna butik representerar en av flera leverantörssajter som delar samma %1$s-handlarkonto, ange ett namn här för att identifiera denna specifika sajt/leverantör på varje order som skickas till %2$s. Lämna tomt om du bara driver en sajt."
+
+#: class/WC_Twoinc.php:4693
+msgid "Which order status(es) tell %1$s an order is fulfilled. Defaults to \"Completed\" — add another status here (e.g. a custom status from another plugin) if your workflow never sets an order to Completed, otherwise %2$s is never notified and the order is left un-fulfilled indefinitely."
+msgstr "Vilken/vilka orderstatus(ar) som talar om för %1$s att en order är levererad. Standard är \"Slutförd\" — lägg till en annan status här (t.ex. en anpassad status från ett annat tillägg) om ditt arbetsflöde aldrig sätter en order till Slutförd, annars meddelas aldrig %2$s och ordern lämnas outfyllda på obestämd tid."
+
+#: class/WC_Twoinc.php:4705
+msgid "When enabled, a breakdown of tax subtotals is included in the order payload sent to %s. Always sent for shops whose store base country is Sweden, regardless of this setting."
+msgstr "Om aktiverat inkluderas en uppdelning av skattesummor i orderdatan som skickas till %s. Skickas alltid för butiker vars basland är Sverige, oavsett denna inställning."

@@ -108,6 +108,7 @@ final class BrandConfigSpec
             'testSkipConfirmAuthCopyIsTranslatedInEveryLocale',
             'testDisableSslVerifyRendersUnderDiagnostics',
             'testVendorNameFieldHasCaptionAndHelpText',
+            'testFormFieldDescriptionsUseOverlayProductNameNotTwo',
             'testSoleTraderHiddenWhenRegistryOmitsIt',
             'testSoleTraderRegistryErrorFallsBackToNoSoleTrader',
             'testSoleTraderRegistryRejectsMalformedCountry',
@@ -3347,6 +3348,39 @@ final class BrandConfigSpec
             isset($field['description']) && $field['description'] !== '',
             'vendor_name must have help text explaining what it does'
         );
+    }
+
+    /**
+     * TWO-25386 brand-name sweep: a batch of admin settings descriptions
+     * (vendor_name, fulfilment_trigger_statuses, enable_tax_subtotals) used
+     * to hardcode the literal "Two" instead of interpolating the brand's
+     * product name, same defect class as testApiKeyNoticesUseOverlayProductNameNotTwo.
+     * A white-label overlay would have had its own copy tell the merchant
+     * to contact "Two" instead of the overlay brand.
+     */
+    private static function testFormFieldDescriptionsUseOverlayProductNameNotTwo(): void
+    {
+        self::useTestbrand();
+
+        $gateway = new class () extends WC_Twoinc {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+        };
+        $gateway->init_form_fields();
+
+        foreach (['vendor_name', 'fulfilment_trigger_statuses', 'enable_tax_subtotals'] as $key) {
+            $description = $gateway->form_fields[$key]['description'] ?? '';
+            TinyAssert::true(
+                strpos($description, 'Testbrand') !== false,
+                "$key description must name the overlay brand, got: $description"
+            );
+            TinyAssert::true(
+                strpos($description, 'Two') === false,
+                "$key description must not name Two, got: $description"
+            );
+        }
     }
 
     /**
