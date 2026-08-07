@@ -224,6 +224,8 @@ final class BrandConfigSpec
             'testFulfilmentTriggerStatusesNormalizeWcPrefix',
             'testFulfilmentTriggerStatusHonoursMerchantConfiguredNonCompletedStatus',
             'testFulfilmentTriggerStatusDoesNotFireForUnconfiguredStatus',
+            'testFulfilmentTriggerExcludesCancelledAndRefundedFromOptionsAndStoredValue',
+            'testCancelledOrderNeverMisdispatchesAsFulfilmentEvenIfConfiguredAsTrigger',
             'testShouldDisableSslVerifyOffByDefault',
             'testShouldDisableSslVerifyIgnoredInProduction',
             'testShouldDisableSslVerifyHonouredOutsideProduction',
@@ -3747,6 +3749,7 @@ final class BrandConfigSpec
         return new class ($options) extends WC_Twoinc {
             private $options;
             public $completedCalls = [];
+            public $cancelledCalls = [];
             public function __construct($options)
             {
                 $this->id = WC_Twoinc_Brand::get('gateway_id');
@@ -3759,6 +3762,11 @@ final class BrandConfigSpec
             public function on_order_completed($order_id)
             {
                 $this->completedCalls[] = $order_id;
+                return true;
+            }
+            public function on_order_cancelled($order_id)
+            {
+                $this->cancelledCalls[] = $order_id;
                 return true;
             }
         };
@@ -3818,6 +3826,52 @@ final class BrandConfigSpec
             $gateway->completedCalls,
             'completed must not fire fulfilment when it is not the configured trigger status'
         );
+    }
+
+    /**
+     * Adversarial-review finding (TWO-25386): 'cancelled' and 'refunded'
+     * have their own dedicated dispatch with different Two API semantics —
+     * they must never be selectable as a fulfilment trigger, or a merchant
+     * could configure "Cancelled" and have Two told a cancelled order was
+     * fulfilled.
+     */
+    private static function testFulfilmentTriggerExcludesCancelledAndRefundedFromOptionsAndStoredValue(): void
+    {
+        $gateway = self::fulfilmentTriggerGateway([]);
+        $method = new ReflectionMethod(WC_Twoinc::class, 'get_order_status_options');
+        $method->setAccessible(true);
+        $options = $method->invoke($gateway);
+        TinyAssert::true(!array_key_exists('cancelled', $options), 'cancelled must not be a selectable trigger status');
+        TinyAssert::true(!array_key_exists('refunded', $options), 'refunded must not be a selectable trigger status');
+
+        // Defensively stripped from the stored value too, in case a stale
+        // or hand-edited settings row contains one.
+        $gateway = self::fulfilmentTriggerGateway(['fulfilment_trigger_statuses' => ['cancelled', 'processing']]);
+        TinyAssert::same(['processing'], $gateway->get_fulfilment_trigger_statuses());
+
+        // If every configured status is excluded, fall back to 'completed'
+        // rather than leaving fulfilment un-triggerable.
+        $gateway = self::fulfilmentTriggerGateway(['fulfilment_trigger_statuses' => ['cancelled', 'refunded']]);
+        TinyAssert::same(['completed'], $gateway->get_fulfilment_trigger_statuses());
+    }
+
+    /**
+     * The actual safety net, independent of the multiselect's own options
+     * list: on_order_edit_status() checks cancelled/refunded FIRST and
+     * unconditionally, ahead of the merchant-configured trigger set, so a
+     * cancellation can never be mis-dispatched as a fulfilment even against
+     * a stale settings row.
+     */
+    private static function testCancelledOrderNeverMisdispatchesAsFulfilmentEvenIfConfiguredAsTrigger(): void
+    {
+        $gateway = self::fulfilmentTriggerGateway(['fulfilment_trigger_statuses' => ['cancelled']]);
+
+        self::withGatewayInstance($gateway, function () {
+            WC_Twoinc::on_order_edit_status(503, 'cancelled');
+        });
+
+        TinyAssert::same([503], $gateway->cancelledCalls, 'cancelled must still dispatch on_order_cancelled');
+        TinyAssert::same([], $gateway->completedCalls, 'cancelled must never dispatch on_order_completed');
     }
 
     private static function testShouldDisableSslVerifyOffByDefault(): void

@@ -217,10 +217,22 @@ if (!class_exists('WC_Twoinc')) {
             // checkout_env instead of extending the sniffer.
             //
             // The free-text test-host override that used to back this on
-            // sniffed dev shops was removed (TWO-25386); a sniffed dev shop
-            // on the default mode now simply resolves to the brand's staging
-            // host via get_effective_environment_mode(), same as every other
-            // host the gateway emits.
+            // sniffed dev shops was a merchant-editable wp-admin field,
+            // removed outright (TWO-25386). Local/dev tooling (this repo's
+            // own docker-compose stack) that needs the API to resolve to an
+            // arbitrary local host instead reads TWOINC_DEV_API_HOST — a
+            // server env var, never a wp-admin field. Any other sniffed dev
+            // shop on the default mode resolves to the brand's staging
+            // host, same as every other host the gateway emits.
+            if (
+                WC_Twoinc_Helper::get_environment_mode($this) === 'production'
+                && WC_Twoinc_Helper::is_twoinc_development()
+            ) {
+                $dev_api_host = getenv('TWOINC_DEV_API_HOST');
+                if ($dev_api_host) {
+                    return $dev_api_host;
+                }
+            }
             return WC_Twoinc_Helper::get_environment_host('api', $this);
         }
 
@@ -3106,12 +3118,20 @@ if (!class_exists('WC_Twoinc')) {
             $wc_twoinc_instance = WC_Twoinc::get_instance();
 
             $to_status = strtolower($to_status);
-            if (in_array($to_status, $wc_twoinc_instance->get_fulfilment_trigger_statuses(), true)) {
-                $wc_twoinc_instance->on_order_completed($order_id);
-            } elseif ($to_status == 'cancelled') {
+            // Cancelled/refunded are checked FIRST and unconditionally,
+            // ahead of the merchant-configured trigger set (TWO-25386
+            // review finding): 'cancelled' and 'refunded' are excluded from
+            // the fulfilment-trigger multiselect's own options list, but
+            // this ordering is the actual safety net — it holds even
+            // against a stale/hand-edited settings row that somehow
+            // contains one of them, so a cancellation can never be
+            // mis-dispatched as a fulfilment.
+            if ($to_status == 'cancelled') {
                 $wc_twoinc_instance->on_order_cancelled($order_id);
             } elseif ($to_status == 'refunded') {
                 $wc_twoinc_instance->on_order_refunded($order_id);
+            } elseif (in_array($to_status, $wc_twoinc_instance->get_fulfilment_trigger_statuses(), true)) {
+                $wc_twoinc_instance->on_order_completed($order_id);
             }
         }
 
@@ -3218,29 +3238,47 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
+         * Statuses that must never appear as a fulfilment trigger: each has
+         * its own dedicated dispatch (on_order_cancelled / on_order_refunded)
+         * with different Two API semantics, and on_order_edit_status() checks
+         * them ahead of the trigger set specifically so a stale settings row
+         * containing one of these can never override that (TWO-25386 review
+         * finding — a merchant could otherwise select "Cancelled" in the
+         * multiselect and have a cancelled order reported to Two as
+         * fulfilled). Excluded from both the selectable options and the
+         * stored-value getter, belt and braces.
+         */
+        private const FULFILMENT_TRIGGER_EXCLUDED_STATUSES = ['cancelled', 'refunded'];
+
+        /**
          * The order status(es) that should trigger fulfilment notification
          * to Two (TWO-25386). Defaults to just 'completed' — the previous
          * hardcoded behaviour — for merchants who have never touched the
          * setting or fresh installs. Keys are normalised without any
          * 'wc-' prefix so they match the string WooCommerce hooks and
-         * order objects actually hand back.
+         * order objects actually hand back; blanks and cancelled/refunded
+         * are dropped defensively even though neither is a selectable
+         * option, in case of a stale or hand-edited settings row.
          *
          * @return string[]
          */
         public function get_fulfilment_trigger_statuses()
         {
             $statuses = $this->get_option('fulfilment_trigger_statuses', ['completed']);
-            if (!is_array($statuses) || empty($statuses)) {
+            if (!is_array($statuses) || count($statuses) === 0) {
                 return ['completed'];
             }
-            return array_values(array_map(static function ($status) {
-                return preg_replace('/^wc-/', '', (string) $status);
-            }, $statuses));
+            $normalized = array_map([self::class, 'strip_wc_status_prefix'], $statuses);
+            $filtered = array_values(array_filter($normalized, static function ($status) {
+                return $status !== '' && !in_array($status, self::FULFILMENT_TRIGGER_EXCLUDED_STATUSES, true);
+            }));
+            return $filtered === [] ? ['completed'] : $filtered;
         }
 
         /**
          * Order status options for the fulfilment-trigger multiselect,
          * keyed without the 'wc-' prefix wc_get_order_statuses() returns.
+         * Excludes cancelled/refunded — see FULFILMENT_TRIGGER_EXCLUDED_STATUSES.
          *
          * @return array<string, string>
          */
@@ -3248,9 +3286,25 @@ if (!class_exists('WC_Twoinc')) {
         {
             $options = [];
             foreach (wc_get_order_statuses() as $key => $label) {
-                $options[preg_replace('/^wc-/', '', $key)] = $label;
+                $status = self::strip_wc_status_prefix($key);
+                if (in_array($status, self::FULFILMENT_TRIGGER_EXCLUDED_STATUSES, true)) {
+                    continue;
+                }
+                $options[$status] = $label;
             }
             return $options;
+        }
+
+        /**
+         * Strip WooCommerce's 'wc-' order-status key prefix, if present.
+         *
+         * @param string $status
+         *
+         * @return string
+         */
+        private static function strip_wc_status_prefix($status)
+        {
+            return preg_replace('/^wc-/', '', (string) $status);
         }
 
         /**
@@ -5198,15 +5252,6 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * Make a request to Twoinc API
-         *
-         * @param $endpoint
-         * @param $payload
-         * @param string $method
-         *
-         * @return WP_Error|array
-         */
-        /**
          * Whether outbound API requests should skip SSL certificate
          * verification (TWO-25386, ported from PrestaShop). Debug/dev
          * escape hatch for corporate networks with custom certificates
@@ -5226,6 +5271,15 @@ if (!class_exists('WC_Twoinc')) {
             return true;
         }
 
+        /**
+         * Make a request to Twoinc API
+         *
+         * @param $endpoint
+         * @param $payload
+         * @param string $method
+         *
+         * @return WP_Error|array
+         */
         public function make_request($endpoint, $payload = [], $method = 'POST', $params = array(), $api_key_override = null, $timeout = 30)
         {
             $params['client'] = 'wp';
