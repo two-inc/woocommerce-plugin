@@ -4095,10 +4095,20 @@ let twoincSoleTrader = {
       encodeURIComponent(twoincSoleTrader.tokens.autofill_token) +
       "&autofillData=" +
       encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(prefill)))));
+    // Brand reaches this URL through the host, not a query parameter:
+    // signup_url is built server-side from the brand's own
+    // checkout_url_template, so an overlay brand swaps the hostname and
+    // needs nothing here. A ?brand=/&brandVersion= query fallback exists
+    // but is dev-loop-only, for when several brands temporarily share one
+    // non-prod domain — don't reach for it as the primary mechanism.
+    //
+    // 700 is a floor the hosted flow's layout needs, arrived at by looking at
+    // the rendered signup (TWO-40) — the flow is not served from this repo, so
+    // nothing here will notice if it ever needs more.
     return window.open(
       url,
       "_blank",
-      "location=yes,resizable=yes,scrollbars=yes,status=yes,height=805,width=610"
+      "location=yes,resizable=yes,scrollbars=yes,status=yes,height=805,width=700"
     );
   },
 
