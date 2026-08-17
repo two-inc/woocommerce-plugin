@@ -354,14 +354,24 @@ let twoincAddressMirror = {
     try {
       twoincAddressMirror.MIRRORED_FIELDS.forEach(function (name) {
         const value = twoincAddressRoles.value(invoice, name);
-        twoincAddressMirror.written[name] = value;
         const $field = jQuery(twoincAddressRoles.field(delivery, name));
-        if (!$field.length) return;
-        if (twoincAddressMirror.normalize($field.val()) === twoincAddressMirror.normalize(value)) {
+        if (!$field.length) {
+          twoincAddressMirror.written[name] = value;
           return;
         }
-        $field.val(value);
-        if (name === "country") $field.trigger("change");
+        if (twoincAddressMirror.normalize($field.val()) !== twoincAddressMirror.normalize(value)) {
+          $field.val(value);
+          if (name === "country") $field.trigger("change");
+        }
+        // Record what actually LANDED, not what was intended. A <select> given
+        // a value it has no option for keeps its current selection silently,
+        // and the delivery country select is exactly that: it lists the
+        // countries the store SHIPS to, which is not always the set it bills
+        // to. Recording the intended value there would leave the record
+        // disagreeing with the field, the next pin check would read that as a
+        // buyer edit, and the mirror would pin itself for the session over a
+        // write the buyer never made.
+        twoincAddressMirror.written[name] = twoincUtilHelper.blankToEmpty($field.val());
       });
     } finally {
       twoincAddressMirror.writing = false;
@@ -1464,6 +1474,60 @@ class TwoCompanySearch {
    * open, so add-then-remove keeps at most one node alive and leaves no
    * animating element running behind a closed dropdown.
    */
+  /**
+   * Who is currently holding the in-field search spinner up (TWO-40 §7).
+   *
+   * Two independent things can want it: a company-search request, and a
+   * sole-trader round trip. Before this they both drove
+   * `toggleCompanySearchSpinner` directly, so whichever finished FIRST took
+   * the spinner down under the other — a buyer who blurs the email field and
+   * then opens the company search inside the prefetch's window watched the
+   * search spinner vanish while results were still loading.
+   *
+   * A pair of named holds rather than a bare count, so an unbalanced release
+   * from one owner cannot free the other's hold.
+   */
+  spinnerOwners = { search: false, soleTrader: false };
+
+  /**
+   * Put the in-field spinner up on one owner's behalf.
+   *
+   * @param {string} owner key of spinnerOwners
+   * @returns {void}
+   */
+  holdCompanySearchSpinner(owner) {
+    twoincSelectWooHelper.spinnerOwners[owner] = true;
+    twoincSelectWooHelper.toggleCompanySearchSpinner(true);
+  }
+
+  /**
+   * Drop one owner's hold, taking the spinner down only once nobody holds it.
+   *
+   * @param {string} owner key of spinnerOwners
+   * @returns {void}
+   */
+  releaseCompanySearchSpinner(owner) {
+    twoincSelectWooHelper.spinnerOwners[owner] = false;
+    const owners = twoincSelectWooHelper.spinnerOwners;
+    if (!owners.search && !owners.soleTrader) {
+      twoincSelectWooHelper.toggleCompanySearchSpinner(false);
+    }
+  }
+
+  /**
+   * Drop every hold and take the spinner down.
+   *
+   * For the country-change path, which invalidates everything in flight at
+   * once: whatever either owner was waiting on belongs to a country the
+   * checkout has left.
+   *
+   * @returns {void}
+   */
+  resetCompanySearchSpinner() {
+    twoincSelectWooHelper.spinnerOwners = { search: false, soleTrader: false };
+    twoincSelectWooHelper.toggleCompanySearchSpinner(false);
+  }
+
   toggleCompanySearchSpinner(isSearching) {
     const $search = twoincSelectWooHelper.getCompanySearchFieldContainer();
     if ($search.length === 0) return;
@@ -1621,7 +1685,7 @@ class TwoCompanySearch {
          */
         transport: function (params, success) {
           const seq = ++twoincSelectWooHelper.companySearchSeq;
-          twoincSelectWooHelper.toggleCompanySearchSpinner(true);
+          twoincSelectWooHelper.holdCompanySearchSpinner("search");
 
           const request = jQuery.ajax(
             jQuery.extend({}, params, {
@@ -1660,7 +1724,9 @@ class TwoCompanySearch {
           request.always(function () {
             // Only the newest request owns the spinner (see companySearchSeq).
             if (seq !== twoincSelectWooHelper.companySearchSeq) return;
-            twoincSelectWooHelper.toggleCompanySearchSpinner(false);
+            // Releases the SEARCH hold only — a sole-trader round trip may
+            // still be waiting on the same spinner (TWO-40 §7).
+            twoincSelectWooHelper.releaseCompanySearchSpinner("search");
           });
 
           return request;
@@ -1804,13 +1870,13 @@ class TwoCompanySearch {
         billingCompanyDisplay.on("query", function (params) {
           const term = (params && params.term) || "";
           if (term.length < twoincSelectWooHelper.companySearchMinLength) return;
-          twoincSelectWooHelper.toggleCompanySearchSpinner(true);
+          twoincSelectWooHelper.holdCompanySearchSpinner("search");
         });
         billingCompanyDisplay.on("results:all", function () {
-          twoincSelectWooHelper.toggleCompanySearchSpinner(false);
+          twoincSelectWooHelper.releaseCompanySearchSpinner("search");
         });
         billingCompanyDisplay.on("results:message", function () {
-          twoincSelectWooHelper.toggleCompanySearchSpinner(false);
+          twoincSelectWooHelper.releaseCompanySearchSpinner("search");
         });
       }
     }
@@ -4239,7 +4305,7 @@ let twoincSoleTrader = {
     twoincSoleTrader.flightDepth += 1;
     if (twoincSoleTrader.flightDepth === 1) {
       jQuery(".twoinc-sole-trader-toggle").addClass("twoinc-sole-trader-toggle--busy");
-      twoincSelectWooHelper.toggleCompanySearchSpinner(true);
+      twoincSelectWooHelper.holdCompanySearchSpinner("soleTrader");
     }
   },
 
@@ -4256,7 +4322,7 @@ let twoincSoleTrader = {
     twoincSoleTrader.flightDepth = Math.max(0, twoincSoleTrader.flightDepth - 1);
     if (twoincSoleTrader.flightDepth === 0) {
       jQuery(".twoinc-sole-trader-toggle").removeClass("twoinc-sole-trader-toggle--busy");
-      twoincSelectWooHelper.toggleCompanySearchSpinner(false);
+      twoincSelectWooHelper.releaseCompanySearchSpinner("soleTrader");
     }
   },
 
@@ -4320,6 +4386,12 @@ let twoincSoleTrader = {
       twoincSoleTrader.mode === "sole_trader" &&
       !!twoincUtilHelper.blankToEmpty(jQuery("#company_id").val()) &&
       !!twoincSoleTrader.tokens;
+    // Built lazily, and only when it is about to be shown. This runs on every
+    // mode switch — including the setMode("business") a checkout with no
+    // sole-trader option ever reaches — and building it there would insert a
+    // hidden button (and, via the slot's self-heal, a wrapper element) into
+    // the address form of every merchant who never sees this feature.
+    if (!show && !jQuery("#" + twoincSoleTrader.differentSoleTraderBtnId).length) return;
     twoincSoleTrader.getDifferentSoleTraderBtnNode().toggle(show);
   },
 
@@ -6299,7 +6371,7 @@ class Twoinc {
     // clears it is `clearSelectedCompany()` below re-attaching the widget and
     // taking the dropdown — and the spinner node inside it — with it. That is
     // an incidental consequence of an unrelated call, not a guarantee.
-    twoincSelectWooHelper.toggleCompanySearchSpinner(false);
+    twoincSelectWooHelper.resetCompanySearchSpinner();
 
     twoincSelectWooHelper.clearSelectedCompany();
 

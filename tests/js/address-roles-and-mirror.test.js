@@ -315,6 +315,27 @@ describe("TWO-40 §2 — invoice→delivery mirror", () => {
     expect(mirror.sync()).toBe(false);
   });
 
+  test("a delivery country the store cannot ship to does not pin the mirror", () => {
+    // The delivery country <select> lists the countries the store SHIPS to,
+    // which is not always the set it BILLS to. Given a value it has no option
+    // for, a <select> keeps its current selection silently — so recording the
+    // INTENDED value would leave the record disagreeing with the field, and
+    // the next pin check would read that as a buyer edit the buyer never made.
+    mirror.seed();
+    $("#billing_country").append('<option value="JP">Japan</option>');
+    $("#billing_country").val("JP");
+    $("#billing_city").val("Kyoto");
+
+    expect(mirror.sync()).toBe(true);
+    // The select refused the value, as it must — no such option.
+    expect($("#shipping_country").val()).not.toBe("JP");
+    // And the mirror is still live rather than pinned on its own write.
+    expect(mirror.isPinned()).toBe(false);
+    $("#billing_city").val("Osaka");
+    expect(mirror.sync()).toBe(true);
+    expect($("#shipping_city").val()).toBe("Osaka");
+  });
+
   test("the mirror's own writes are not read back as buyer edits", () => {
     // Re-entrancy: writing #shipping_country fires `change`, which WooCommerce
     // turns into a checkout update, which re-enters sync().

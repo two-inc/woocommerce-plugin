@@ -151,6 +151,36 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       expect($(".twoinc-search-spinner").length).toBe(0);
     });
 
+    test("does not take down a spinner a company search is still holding", () => {
+      // Two independent owners want the same in-field spinner. Before the
+      // ownership split, whichever settled FIRST hid it under the other: a
+      // buyer who blurs the email field and then opens the company search
+      // inside the prefetch's window watched the search spinner vanish while
+      // results were still loading.
+      harness.openCompanyWidget($, ctx.helper);
+      ctx.helper.holdCompanySearchSpinner("search");
+      soleTrader.beginFlight();
+
+      soleTrader.settleFlight();
+      expect($(".twoinc-search-spinner").length).toBe(1);
+
+      ctx.helper.releaseCompanySearchSpinner("search");
+      expect($(".twoinc-search-spinner").length).toBe(0);
+    });
+
+    test("a country change drops every hold at once", () => {
+      // Everything either owner was waiting on belongs to a country the
+      // checkout has left.
+      harness.openCompanyWidget($, ctx.helper);
+      ctx.helper.holdCompanySearchSpinner("search");
+      soleTrader.beginFlight();
+
+      ctx.helper.resetCompanySearchSpinner();
+
+      expect($(".twoinc-search-spinner").length).toBe(0);
+      expect(ctx.helper.spinnerOwners).toEqual({ search: false, soleTrader: false });
+    });
+
     test.each([
       ["the token mint fails", false],
       ["the buyer lookup resolves", true]
