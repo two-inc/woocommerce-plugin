@@ -293,7 +293,9 @@ about the company-search helper, so the bootstrap is left to no-op.
   null until the first capture, and an empty field reading means mid-replacement), and the DOM
   already holding a **different** company from the one recorded, which means the record is what
   is stale rather than the fields, so it is re-synced from the fields instead of destroying a
-  company the re-render had just restored. That last one needs **both** mirrors to have moved and
+  company the re-render had just restored — and that re-sync adopts the name witness
+  (`pairedName`, below) from the pair it has just decided to trust, or the very next name event
+  would undo the restore it exists to protect. That last one needs **both** mirrors to have moved and
   both to be non-empty, and every leg of that is pinned: a diverged number alone is a buyer
   typing into `#company_id` without blurring, a diverged name alone is the mirror of it, and a
   diverged number with an empty `#billing_company` is trusted by neither of the two available
@@ -336,6 +338,37 @@ about the company-search helper, so the bootstrap is left to no-op.
   laundering by another route: a recorded number that arrived as a number rather than a string,
   a value differing only by stray whitespace, and emptying a populated number (which is not a
   capture and must leave no witness claiming one).
+- **the capture NAME is pinned the same way, and for the same class of reason** (TWO-40). An
+  organisation number is only ever captured against a company name, so `pairedName` records which
+  name that was, and `clearCompanyIfNameStale` drops the number when the name it was captured
+  under is no longer the name on the form. Without it, retyping the company name left the previous
+  company's number in `#company_id` beside the new name and the order posted that pair — the same
+  two-moment defect the country witness exists to catch, on the other axis. Both witnesses now
+  have exactly one writer, `writeCapturedCompany`, which the picker and the sole-trader setter
+  route through; a capture that wrote the number without the tag would be wiped by the guard on
+  the buyer's next keystroke, which is why the write is one call rather than the same four lines
+  repeated. Side effects stay at the call sites, which each need a different order around the
+  write. The guard runs from the **name-edit events** (`change` on `#billing_company`, blur on
+  `#billing_company_display`) rather than from `onUpdatedCheckout` where the country guard runs:
+  a re-render rewrites `#billing_company` from the same vintage as `#company_id`, so a name check
+  on that path would fire on a pair that never came apart and destroy it. Nothing in the file
+  triggers those events programmatically, so every arrival is a real edit. An **absent** tag counts
+  as a mismatch, not as permission — the deferred re-syncs flatten the record back from the DOM
+  without it, and "cannot vouch for this pair" has to fail closed. Pinned in both directions, with
+  the number surviving a no-op change and a padding-only difference, plus the hand-typed-number
+  case, which pairs against the name standing beside it at that moment.
+- **the name witness is NOT a `buyer.company` field, and two readers had to be taught that.**
+  `customerCompany` is read for two unrelated purposes — it becomes `buyer.company`
+  on `/v1/order_intent`, and `isReadyApprovalCheck()` scans `Object.values()` of it for emptiness
+  to decide whether to ask for an intent at all — so a bookkeeping key on it has to be absent from
+  both. `companyForIntent()` is the single accessor both now go through, rather than two ad-hoc
+  exclusions, because missing one fails severely and silently: `pairedName` is null on a fresh
+  record, so an emptiness scan that saw it would refuse **every** order intent and leave the
+  payment method unusable with no error anywhere. Both legs are pinned, the readiness one with a
+  record that is complete except for a null witness. The witness deliberately stays **on** the
+  record rather than beside it: being flattened away by the deferred DOM re-syncs is exactly what
+  makes the guard fail closed, and a copy held elsewhere would survive them and vouch for a pair
+  nothing witnessed.
 
 Normalising is load-bearing on **all four** compared values, not defensive, and two earlier
 versions of this note claimed otherwise — first that the recorded number's normaliser was
