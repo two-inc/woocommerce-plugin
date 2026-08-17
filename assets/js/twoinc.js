@@ -2547,20 +2547,35 @@ class TwoCompanySearch {
         twoincSelectWooHelper.exitManualCompanyEntry();
       });
 
+    twoincSelectWooHelper.companyFieldAffordanceSlot().append($btn);
+    return $btn;
+  }
+
+  /**
+   * The slot a company-field affordance button hangs in: WooCommerce core's
+   * own `.woocommerce-input-wrapper` around `#billing_company`'s input.
+   *
+   * Extracted so the "select a different sole trader" link (TWO-40 §7) lands
+   * in the SAME visual slot as the "search for company" link, from the same
+   * code, rather than growing a second near-copy of the self-heal below.
+   *
+   * Self-heals rather than silently degrading (found under adversarial
+   * review before merge, round 3): a plain "fall back to
+   * #billing_company_field" would append the button as a sibling of BOTH the
+   * label and the input, rather than immediately after the input alone —
+   * reintroducing the old overlap-with-the-field-label class of bug this
+   * wrapper exists to avoid. Instead, build an equivalent wrapper around just
+   * the <input>: the same DOM shape WooCommerce core's own
+   * woocommerce_form_field() would have produced, so the button always lands
+   * directly below the input regardless of which path got here. Falls through
+   * to #billing_company_field only if #billing_company itself is missing — a
+   * field this whole feature already depends on existing.
+   *
+   * @returns {Object} jQuery-wrapped slot
+   */
+  companyFieldAffordanceSlot() {
     let $wrapper = jQuery("#billing_company_field .woocommerce-input-wrapper");
 
-    // Self-heal rather than silently degrade (found under adversarial
-    // review before merge, round 3): a plain "fall back to
-    // #billing_company_field" here would append the button as a sibling of
-    // BOTH the label and the input, rather than immediately after the input
-    // alone — reintroducing the old overlap-with-the-field-label class of
-    // bug this wrapper exists to avoid. Instead, build an equivalent wrapper
-    // around just the <input> ourselves: same DOM shape WooCommerce core's
-    // own woocommerce_form_field() would have produced, so the button always
-    // lands directly below the input regardless of which path got here.
-    // Falls through to #billing_company_field only if #billing_company
-    // itself is missing — a field this whole feature already depends on
-    // existing.
     if (!$wrapper.length) {
       const $input = jQuery("#billing_company");
       if ($input.length) {
@@ -2569,8 +2584,7 @@ class TwoCompanySearch {
       }
     }
 
-    ($wrapper.length ? $wrapper : jQuery("#billing_company_field")).append($btn);
-    return $btn;
+    return $wrapper.length ? $wrapper : jQuery("#billing_company_field");
   }
 
   /**
@@ -4013,6 +4027,8 @@ let twoincSoleTrader = {
   // saved", distinct from the flag's own true/false/undefined values.
   savedManualEntryActive: null,
   messageListenerBound: false,
+  /** @type {Function|null} the bound `message` listener, so it can be removed */
+  messageHandler: null,
   // Result of the most recent autofill prefetch for the entered email.
   // ready=false until the first prefetch resolves; matches=true when the
   // buyer on the Two cookie owns the email currently typed at checkout.
@@ -4020,6 +4036,36 @@ let twoincSoleTrader = {
   // Email the prefetch last ran for, to dedupe repeated checkout re-renders
   // (and so a pre-filled email still prefetches once on first render).
   lastPrefetchEmail: null,
+
+  /**
+   * How many sole-trader round trips are outstanding (TWO-40 §7).
+   *
+   * A COUNT, not a boolean: the buyer can change email while a prefetch is
+   * still in the air, which starts a second flight before the first settles.
+   * A boolean would take the busy state down at the first settle and leave the
+   * second running invisibly.
+   *
+   * Wired to the real async duration — every terminal branch of the call graph
+   * settles its own flight — never to a fixed timeout. Adversarial review of
+   * this exact feature upstream found stuck-forever spinners on two separate
+   * abandon/retry paths, so every `cb(...)` below is a settle point.
+   */
+  flightDepth: 0,
+
+  /**
+   * Re-entrancy guard on the signup popup (TWO-40 §7).
+   *
+   * Without it a second activation — a double click on the chip, or the chip
+   * click landing on top of a prefetch that has just resolved to "no matching
+   * buyer" — opens a second popup over the first. Released when the popup call
+   * returns, not when the popup CLOSES: the guard exists to make two
+   * activations in one gesture idempotent, and holding it until the buyer
+   * finishes signup would strand them if they closed the window by hand.
+   */
+  openingSignup: false,
+
+  /** DOM id of the "select a different sole trader" link (TWO-40 §7). */
+  differentSoleTraderBtnId: "select_different_sole_trader_btn",
 
   config: function () {
     return (window.twoinc && window.twoinc.sole_trader) || {};
@@ -4101,6 +4147,7 @@ let twoincSoleTrader = {
 
   hide: function () {
     jQuery(".twoinc-sole-trader-toggle").addClass("hidden").empty();
+    jQuery("#" + twoincSoleTrader.differentSoleTraderBtnId).hide();
     // Re-show (e.g. country change) should prefetch afresh.
     twoincSoleTrader.lastPrefetchEmail = null;
     if (twoincSoleTrader.mode === "sole_trader") {
@@ -4177,6 +4224,106 @@ let twoincSoleTrader = {
   },
 
   /**
+   * A sole-trader round trip has started (TWO-40 §7).
+   *
+   * The busy state is shown IN the company-search control's own query field —
+   * the same in-field spinner an ordinary company search uses, not a separate
+   * overlay — and the control is left open rather than closed under the
+   * buyer. On WooCommerce the prefetch runs while the search widget is still
+   * live (the mode switch that tears it down happens only once the flight has
+   * resolved), so there is a field for the spinner to sit in.
+   *
+   * @returns {void}
+   */
+  beginFlight: function () {
+    twoincSoleTrader.flightDepth += 1;
+    if (twoincSoleTrader.flightDepth === 1) {
+      jQuery(".twoinc-sole-trader-toggle").addClass("twoinc-sole-trader-toggle--busy");
+      twoincSelectWooHelper.toggleCompanySearchSpinner(true);
+    }
+  },
+
+  /**
+   * A sole-trader round trip has reached a terminal state — success, failure,
+   * retry-exhausted or abandoned. Every branch that can end one calls this.
+   *
+   * Clamped at zero so an unbalanced settle cannot drive the count negative
+   * and make a subsequent genuine flight invisible.
+   *
+   * @returns {void}
+   */
+  settleFlight: function () {
+    twoincSoleTrader.flightDepth = Math.max(0, twoincSoleTrader.flightDepth - 1);
+    if (twoincSoleTrader.flightDepth === 0) {
+      jQuery(".twoinc-sole-trader-toggle").removeClass("twoinc-sole-trader-toggle--busy");
+      twoincSelectWooHelper.toggleCompanySearchSpinner(false);
+    }
+  },
+
+  /**
+   * The "select a different sole trader" link, built hidden on first use
+   * (TWO-40 §7).
+   *
+   * Same visual slot and the same shape as the "search for company" link that
+   * manual-entry mode already offers — one affordance pattern for "the
+   * identity I captured is not the one I want", whichever capture mode
+   * produced it.
+   *
+   * ONE link covers both "pick a different existing registration" and
+   * "register a new one": that choice happens inside the hosted signup's own
+   * UI once the popup is open, so the plugin does not distinguish the two.
+   *
+   * @returns {Object} jQuery-wrapped button
+   */
+  getDifferentSoleTraderBtnNode: function () {
+    const id = twoincSoleTrader.differentSoleTraderBtnId;
+    let $btn = jQuery("#" + id);
+    if ($btn.length) return $btn;
+
+    $btn = jQuery("<button></button>")
+      .attr({ id: id, type: "button" })
+      .text(
+        (twoincSoleTrader.config().text && twoincSoleTrader.config().text.select_different) ||
+          "Select a different sole trader"
+      )
+      .hide()
+      // Bound directly on the element, click AND Enter/Space, for the same
+      // reasons documented on getSearchCompanyBtnNode — a delegated click on
+      // document.body was proven not to reach that button live.
+      .on("click", function (event) {
+        event.preventDefault();
+        twoincSoleTrader.launchSignup({ autoselect: false });
+      })
+      .on("keydown", function (event) {
+        if (event.which !== 13 && event.which !== 32) return;
+        event.preventDefault();
+        event.stopPropagation();
+        twoincSoleTrader.launchSignup({ autoselect: false });
+      });
+
+    twoincSelectWooHelper.companyFieldAffordanceSlot().append($btn);
+    return $btn;
+  },
+
+  /**
+   * Show the "select a different sole trader" link only where it means
+   * something: sole-trader mode, with a company already adopted (TWO-40 §7).
+   *
+   * The same gating shape as the manual-entry link's — that one appears once
+   * the buyer is in manual entry, this one once they hold a sole-trader
+   * identity there is an alternative to.
+   *
+   * @returns {void}
+   */
+  syncDifferentSoleTraderLink: function () {
+    const show =
+      twoincSoleTrader.mode === "sole_trader" &&
+      !!twoincUtilHelper.blankToEmpty(jQuery("#company_id").val()) &&
+      !!twoincSoleTrader.tokens;
+    twoincSoleTrader.getDifferentSoleTraderBtnNode().toggle(show);
+  },
+
+  /**
    * A mode chip was clicked. Business is immediate; Sole trader switches
    * mode then acts on the prefetched autofill result so the signup popup
    * (when needed) opens in the same synchronous gesture as the click.
@@ -4209,6 +4356,7 @@ let twoincSoleTrader = {
   setMode: function (mode) {
     twoincSoleTrader.mode = mode;
     twoincSoleTrader.updateChips();
+    twoincSoleTrader.syncDifferentSoleTraderLink();
 
     if (mode === "sole_trader") {
       // Suppress company search by the same lever the manual-entry row uses,
@@ -4317,19 +4465,45 @@ let twoincSoleTrader = {
       }
       return;
     }
+    // One flight for the whole token-mint + buyer-lookup round trip, settled
+    // on EVERY terminal branch below (TWO-40 §7).
+    twoincSoleTrader.beginFlight();
     twoincSoleTrader.fetchTokens(function (ok) {
       if (!ok) {
         twoincSoleTrader.prefetched = { ready: true, buyer: null, matches: false };
+        twoincSoleTrader.settleFlight();
         twoincSoleTrader.applyPrefetch();
         return;
       }
       twoincSoleTrader.fetchCurrentBuyer(function (buyer) {
-        const entered = twoincSoleTrader.enteredEmail().toLowerCase();
-        const matches = !!(buyer && buyer.email && String(buyer.email).toLowerCase() === entered);
-        twoincSoleTrader.prefetched = { ready: true, buyer: buyer, matches: matches };
+        twoincSoleTrader.prefetched = {
+          ready: true,
+          buyer: buyer,
+          matches: twoincSoleTrader.buyerOwnsCheckoutEmail(buyer)
+        };
+        twoincSoleTrader.settleFlight();
         twoincSoleTrader.applyPrefetch();
       });
     });
+  },
+
+  /**
+   * Does the buyer on the Two cookie own the email currently typed at
+   * checkout?
+   *
+   * A PASSIVE, pre-authentication check, and correct only there: nothing has
+   * proved who the browser belongs to yet, so the cookie's buyer is trusted
+   * only as far as it agrees with what the buyer has typed.
+   *
+   * It must NOT be reused on a post-authentication path (TWO-40 §8) — see
+   * `bindPopupMessageListener`.
+   *
+   * @param {Object|null} buyer
+   * @returns {boolean}
+   */
+  buyerOwnsCheckoutEmail: function (buyer) {
+    const entered = twoincSoleTrader.enteredEmail().toLowerCase();
+    return !!(buyer && buyer.email && String(buyer.email).toLowerCase() === entered);
   },
 
   /**
@@ -4352,9 +4526,28 @@ let twoincSoleTrader = {
    * Open the hosted signup popup, falling back to the visible link if the
    * browser blocks the window (e.g. gesture lost after a slow prefetch).
    */
-  launchSignup: function () {
-    const win = twoincSoleTrader.openPopup();
-    twoincSoleTrader.showNote(!win);
+  /**
+   * Open the hosted signup popup, falling back to the visible link if the
+   * browser blocks the window (e.g. gesture lost after a slow prefetch).
+   *
+   * Re-entrancy-guarded (TWO-40 §7): a second activation while one is already
+   * being opened is dropped rather than stacking a second popup.
+   *
+   * @param {Object} [options] passed through to openPopup
+   * @returns {void}
+   */
+  launchSignup: function (options) {
+    if (twoincSoleTrader.openingSignup) return;
+    twoincSoleTrader.openingSignup = true;
+    try {
+      const win = twoincSoleTrader.openPopup(options);
+      twoincSoleTrader.showNote(!win);
+    } finally {
+      // Released once the synchronous open has returned, blocked or not — see
+      // the guard's own comment. Held any longer and a blocked popup would
+      // lock the buyer out of retrying via the fallback link.
+      twoincSoleTrader.openingSignup = false;
+    }
   },
 
   /**
@@ -4416,6 +4609,9 @@ let twoincSoleTrader = {
     // above are written in (TWO-25288). Also re-renders after the toggle above,
     // whose own trailing renderCompanySummary() reads the DOM.
     twoincSelectWooHelper.renderCompanySummary(companyName, companyId);
+    // The "select a different sole trader" link only means something once one
+    // is adopted, so its visibility is re-decided wherever that changes.
+    twoincSoleTrader.syncDifferentSoleTraderLink();
     if (companyId) {
       instance.getApproval();
     }
@@ -4482,10 +4678,37 @@ let twoincSoleTrader = {
       });
   },
 
-  openPopup: function () {
+  /**
+   * Open the hosted sole-trader signup in a real popup window (TWO-40 §7).
+   *
+   * `window.open()`, NOT an iframe-in-overlay. The signup/OTP flow depends on
+   * a third party that only works in a real popup window; the iframe rewrite
+   * would sidestep popup-blocker risk and was explicitly evaluated and
+   * rejected for that reason. The call stays SYNCHRONOUS with the click that
+   * triggered it — an async-delayed `window.open()` is blocker bait in every
+   * browser — which is why the chip-click path resolves against a prefetched
+   * result rather than issuing a request first.
+   *
+   * Brand overlays do not need anything added here. A branded deployment
+   * resolves this URL's HOST from the brand registry's own URL template
+   * (see WC_Twoinc_Helper::get_environment_host and the brand's
+   * `checkout_url_template`), so the host itself carries the brand in
+   * production. A `?brand=`/`?brandVersion=` query-string form also exists,
+   * but it is documented as a development-loop affordance for when several
+   * brands temporarily share one non-production domain — not the mechanism to
+   * build on.
+   *
+   * @param {Object} [options]
+   * @param {boolean} [options.autoselect] when false, appended to the URL so
+   *   the hosted flow offers a choice rather than adopting a known
+   *   registration silently
+   * @returns {Window|null}
+   */
+  openPopup: function (options) {
     if (!twoincSoleTrader.tokens) {
       return null;
     }
+    const opts = options || {};
     const invoice = twoincAddressRoles.invoice();
     const read = function (name) {
       return twoincAddressRoles.value(invoice, name);
@@ -4504,7 +4727,7 @@ let twoincSoleTrader = {
         country_code: twoincSoleTrader.currentCountry()
       }
     };
-    const url =
+    let url =
       twoincSoleTrader.tokens.signup_url +
       "?businessToken=" +
       encodeURIComponent(twoincSoleTrader.tokens.delegation_token) +
@@ -4512,10 +4735,15 @@ let twoincSoleTrader = {
       encodeURIComponent(twoincSoleTrader.tokens.autofill_token) +
       "&autofillData=" +
       encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(prefill)))));
+    // Wired through unconditionally when asked for, with no branching on what
+    // the hosted flow does with it — that is the flow's business, not this
+    // plugin's.
+    if (opts.autoselect === false) url += "&autoselect=false";
+    // 700 wide, not narrower: the hosted signup's own layout clips below that.
     return window.open(
       url,
       "_blank",
-      "location=yes,resizable=yes,scrollbars=yes,status=yes,height=805,width=610"
+      "location=yes,resizable=yes,scrollbars=yes,status=yes,height=805,width=700"
     );
   },
 
@@ -4529,7 +4757,11 @@ let twoincSoleTrader = {
       return;
     }
     twoincSoleTrader.messageListenerBound = true;
-    window.addEventListener("message", function (event) {
+    // Kept on the module so it can be unbound again. A `window` listener
+    // outlives everything else this module owns, so without a handle on it
+    // there is no way to take one down — which matters to any harness that
+    // re-evaluates this file against the same window.
+    twoincSoleTrader.messageHandler = function (event) {
       if (twoincSoleTrader.mode !== "sole_trader" || !twoincSoleTrader.tokens) {
         return;
       }
@@ -4538,19 +4770,38 @@ let twoincSoleTrader = {
         return;
       }
       if (event.data === "ACCEPTED") {
+        twoincSoleTrader.beginFlight();
         twoincSoleTrader.fetchCurrentBuyer(function (buyer) {
-          const entered = twoincSoleTrader.enteredEmail().toLowerCase();
-          const matches = !!(buyer && buyer.email && String(buyer.email).toLowerCase() === entered);
-          twoincSoleTrader.prefetched = { ready: true, buyer: buyer, matches: matches };
-          if (matches) {
+          // AUTHENTICATED path (TWO-40 §8). The server has just told this
+          // browser who the buyer is — the OTP step succeeded — so the email
+          // they authenticated with is the answer, full stop. Re-running the
+          // PASSIVE `buyerOwnsCheckoutEmail()` check here is a confirmed bug:
+          // a buyer who signs up under a different address from the one in the
+          // checkout's contact field completes OTP, the stale email match
+          // disagrees with the server, and the same popup reopens forever.
+          const resolved = !!buyer;
+          twoincSoleTrader.prefetched = { ready: true, buyer: buyer, matches: resolved };
+          twoincSoleTrader.settleFlight();
+          if (resolved) {
             twoincSoleTrader.setCompany(buyer.organization_number, buyer.company_name, buyer);
             twoincSoleTrader.showNote(false);
+          } else {
+            twoincSoleTrader.showError();
           }
         });
       } else {
         twoincSoleTrader.showError();
       }
-    });
+    };
+    window.addEventListener("message", twoincSoleTrader.messageHandler);
+  },
+
+  /** Test seam: take the hosted-signup listener back off the window. */
+  unbindPopupMessageListener: function () {
+    if (!twoincSoleTrader.messageHandler) return;
+    window.removeEventListener("message", twoincSoleTrader.messageHandler);
+    twoincSoleTrader.messageHandler = null;
+    twoincSoleTrader.messageListenerBound = false;
   },
 
   showError: function () {

@@ -519,6 +519,12 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                         'registered_business' => __('Registered company', 'twoinc-payment-gateway'),
                         'sole_trader' => __('Sole trader', 'twoinc-payment-gateway'),
                         'popup_prompt' => __('Click here to login or sign up as a sole trader.', 'twoinc-payment-gateway'),
+                        // One link covers both "pick a different existing
+                        // registration" and "register a new one" (TWO-40 §7):
+                        // that choice is made inside the hosted signup's own
+                        // UI once the popup is open, so the copy here must
+                        // not commit to either.
+                        'select_different' => __('Select a different sole trader', 'twoinc-payment-gateway'),
                         'error' => __('Something went wrong setting up sole trader checkout. Please try again.', 'twoinc-payment-gateway'),
                     ],
                 ],
