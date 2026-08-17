@@ -301,6 +301,7 @@ describe("autofill buyer trust levels", () => {
       expect(ctx.Twoinc.getInstance().orderIntentCheck.interval).not.toBeNull();
     });
   });
+
   describe("the buyer read's own contract", () => {
     // These exercise fetchCurrentBuyer directly rather than the message path.
     test("lets an adoption failure surface instead of blaming the buyer read", async () => {
@@ -351,10 +352,9 @@ describe("autofill buyer trust levels", () => {
     test("drains the body of a response it is not going to read", async () => {
       // Not politeness: an unread body leaves the request in flight as far as
       // the browser is concerned, so anything waiting on network-idle never
-      // sees it finish.
-      // Pins that the body IS read, which is what releases the request. It
-      // does not pin that the read is awaited before proceeding — a
-      // fire-and-forget text() would still pass, and still drains.
+      // sees it finish. What is pinned is that the body IS read — not that the
+      // read is awaited before proceeding, since a fire-and-forget text() would
+      // still pass here, and would still drain.
       let drained = 0;
       global.fetch = function () {
         return Promise.resolve({
