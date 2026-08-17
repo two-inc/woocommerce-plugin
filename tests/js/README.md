@@ -357,6 +357,18 @@ about the company-search helper, so the bootstrap is left to no-op.
   without it, and "cannot vouch for this pair" has to fail closed. Pinned in both directions, with
   the number surviving a no-op change and a padding-only difference, plus the hand-typed-number
   case, which pairs against the name standing beside it at that moment.
+- **the name witness is NOT a `buyer.company` field, and two readers had to be taught that.**
+  `customerCompany` is read for two unrelated purposes — it is POSTED verbatim as `buyer.company`
+  on `/v1/order_intent`, and `isReadyApprovalCheck()` scans `Object.values()` of it for emptiness
+  to decide whether to ask for an intent at all — so a bookkeeping key on it has to be absent from
+  both. `companyForIntent()` is the single accessor both now go through, rather than two ad-hoc
+  exclusions, because missing one fails severely and silently: `pairedName` is null on a fresh
+  record, so an emptiness scan that saw it would refuse **every** order intent and leave the
+  payment method unusable with no error anywhere. Both legs are pinned, the readiness one with a
+  record that is complete except for a null witness. The witness deliberately stays **on** the
+  record rather than beside it: being flattened away by the deferred DOM re-syncs is exactly what
+  makes the guard fail closed, and a copy held elsewhere would survive them and vouch for a pair
+  nothing witnessed.
 
 Normalising is load-bearing on **all four** compared values, not defensive, and two earlier
 versions of this note claimed otherwise — first that the recorded number's normaliser was
