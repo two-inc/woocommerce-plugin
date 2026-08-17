@@ -5538,8 +5538,9 @@ class Twoinc {
       // Stored RAW, deliberately. Normalising on the way in was written here
       // first, to remove the asymmetry between this one writer and the readers
       // that all normalise — and then reverted, because it would have changed
-      // the organisation number this plugin POSTS on the order intent
-      // (`customerCompany` goes into `buyer.company` verbatim in getApproval),
+      // the organisation number this plugin POSTS on the order intent (the
+      // record becomes `buyer.company` in getApproval, via companyForIntent(),
+      // which drops only the client-side witness and no real field),
       // which is a behaviour change nothing in this ticket asked for. No test in
       // this suite distinguishes the two, and that is a consequence of the
       // choice rather than a justification for it — a test trivially could,
@@ -5702,7 +5703,7 @@ class Twoinc {
    * clearing would destroy what the re-render just put back (TWO-24867 /
    * TWO-25326 — see there). But when the country really did move to something
    * the captured company does not belong to, that company survived and
-   * nothing downstream caught it: `getApproval()` posts `customerCompany`
+   * nothing downstream caught it: `getApproval()` posts the record
    * carrying the OLD `country_prefix` next to the OLD organisation number, so
    * the pair is internally consistent and the intent check approves it and
    * the buyer sees a green payment method; the order payload then pairs that
