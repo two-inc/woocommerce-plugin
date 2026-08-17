@@ -111,6 +111,7 @@ function loadPluginSource() {
   const exported = indirectEval(
     src +
       "\n;({ twoincUtilHelper, twoincAddressRoles, twoincAddressMirror," +
+      " twoincCompanyCapture," +
       " twoincSelectWooHelper, twoincDomHelper," +
       " twoincTermChips, twoincSoleTrader, Twoinc });"
   );
@@ -161,6 +162,7 @@ function loadTwoinc(twoinc) {
     util: exported.twoincUtilHelper,
     roles: exported.twoincAddressRoles,
     mirror: exported.twoincAddressMirror,
+    capture: exported.twoincCompanyCapture,
     dom: exported.twoincDomHelper,
     termChips: exported.twoincTermChips,
     soleTrader: exported.twoincSoleTrader,

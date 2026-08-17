@@ -377,6 +377,196 @@ let twoincAddressMirror = {
 };
 
 /**
+ * The ONE write path for a captured company, and the guard that keeps a stale
+ * organisation number from outliving the name it was captured with
+ * (TWO-40 §5).
+ *
+ * This state machine was the single most repeated bug source on the platform
+ * this ports from — write-backs, mirror writes and sole-trader adoption each
+ * grew their own copy of "set the number, set the name", and each one was
+ * fixed separately, more than once. Three pieces, and they only work together:
+ *
+ *  1. A PAIRING TAG on the company-name field, recording which organisation
+ *     number that particular name was captured under. On the next buyer input
+ *     to the name field, a tag that is absent or no longer describes the
+ *     name/number pair means the buyer has retyped the name and the number is
+ *     stale — so the number is wiped along with the state that depends on it.
+ *
+ *  2. This SINGLE WRITE HELPER, which sets the number, the name and the tag in
+ *     one call. That is not tidiness: any code that sets `#company_id` without
+ *     coming through here leaves a pair the tag does not describe, and the
+ *     guard wipes it on the buyer's very next keystroke. If a capture keeps
+ *     vanishing, look for a raw `.val()` write first.
+ *
+ *  3. A PROVENANCE MARKER, separate from the tag, recording that a field's
+ *     current value came from the plugin rather than from the buyer. The tag
+ *     answers "is this pair still consistent"; provenance answers "is this
+ *     still ours to overwrite", which is what the delivery-address mirror
+ *     needs and what the tag cannot tell it.
+ *
+ * The name and number fields are the INVOICE-role ones — they are what
+ * WooCommerce posts and what the order intent is authorised against.
+ */
+let twoincCompanyCapture = {
+  /** Attribute holding the name/number pairing tag. */
+  PAIRING_ATTR: "data-two-company-pairing",
+
+  /** Attribute marking a value as plugin-written rather than buyer-typed. */
+  PROVENANCE_ATTR: "data-two-plugin-written",
+
+  nameField: function () {
+    return jQuery(twoincAddressRoles.field(twoincAddressRoles.invoice(), "company"));
+  },
+
+  numberField: function () {
+    return jQuery("#company_id");
+  },
+
+  /**
+   * The tag describing one name/number pair.
+   *
+   * Both halves, not just the name: a tag keyed on the name alone would still
+   * match after some other code path replaced the number behind it, which is
+   * exactly the silent-stale-number case this exists to catch.
+   *
+   * @param {*} companyName
+   * @param {*} companyId
+   * @returns {string}
+   */
+  pairingTag: function (companyName, companyId) {
+    return (
+      twoincUtilHelper.blankToEmpty(companyName).toLowerCase() +
+      "|" +
+      twoincUtilHelper.blankToEmpty(companyId)
+    );
+  },
+
+  /**
+   * Write a captured company: number, name, pairing tag and provenance, in one
+   * call. THE only sanctioned writer of `#company_id`.
+   *
+   * @param {*} companyName
+   * @param {*} companyId
+   * @param {Object} [options]
+   * @param {string} [options.country] country the capture belongs to; defaults
+   *   to the invoice-role country the form currently holds
+   * @returns {void}
+   */
+  write: function (companyName, companyId, options) {
+    const opts = options || {};
+    const name = twoincUtilHelper.blankToEmpty(companyName);
+    const number = twoincUtilHelper.blankToEmpty(companyId);
+    const $name = twoincCompanyCapture.nameField();
+    const $number = twoincCompanyCapture.numberField();
+
+    // Written only when the value actually moves. Re-assigning an input's
+    // value to what it already holds resets the caret in some browsers, and
+    // one caller of this helper is the retype guard, which runs while the
+    // buyer has the caret in that very field.
+    if (twoincUtilHelper.blankToEmpty($number.val()) !== number) $number.val(number);
+    if (twoincUtilHelper.blankToEmpty($name.val()) !== name) $name.val(name);
+
+    if (number) {
+      $name.attr(
+        twoincCompanyCapture.PAIRING_ATTR,
+        twoincCompanyCapture.pairingTag(name, number)
+      );
+      $name.attr(twoincCompanyCapture.PROVENANCE_ATTR, "1");
+      $number.attr(twoincCompanyCapture.PROVENANCE_ATTR, "1");
+    } else {
+      // A name with no number is not a pair, so there is no tag to hold. The
+      // manual-entry mode captures exactly that, deliberately.
+      twoincCompanyCapture.forgetPairing();
+    }
+
+    const instance = Twoinc.getInstance();
+    // RAW onto the record, normalised onto the DOM. The record is what goes
+    // into `buyer.company` on the order intent verbatim, and normalising it
+    // here would change the organisation number this plugin POSTS — a
+    // behaviour change nothing in this port asked for. Every comparison
+    // against the record already normalises at the point of reading, which is
+    // why it can hold a padded string or a JSON number safely.
+    instance.customerCompany.company_name = companyName;
+    instance.customerCompany.organization_number = companyId;
+    // Pin the country the capture belongs to alongside the number, so the pair
+    // can never be assembled from two different moments (TWO-25333). Only on a
+    // capturing write: a clearing write has no capture for a country to belong
+    // to.
+    if (number) {
+      instance.customerCompany.country_prefix = opts.country || twoincSelectWooHelper.currentCountry();
+    }
+  },
+
+  /** Drop the pairing tag and both provenance markers. */
+  forgetPairing: function () {
+    twoincCompanyCapture
+      .nameField()
+      .removeAttr(twoincCompanyCapture.PAIRING_ATTR)
+      .removeAttr(twoincCompanyCapture.PROVENANCE_ATTR);
+    twoincCompanyCapture.numberField().removeAttr(twoincCompanyCapture.PROVENANCE_ATTR);
+  },
+
+  /**
+   * Whether a field still holds the value the plugin wrote into it.
+   *
+   * @param {Object} $field jQuery-wrapped field
+   * @returns {boolean}
+   */
+  isPluginWritten: function ($field) {
+    return $field.attr(twoincCompanyCapture.PROVENANCE_ATTR) === "1";
+  },
+
+  /**
+   * Buyer input on the company-name field: drop a now-stale organisation
+   * number, and the state that depends on it.
+   *
+   * Bound to `input`/`change`, which in this file only ever fire for a real
+   * buyer edit — every plugin write goes through `.val()`, which dispatches no
+   * event at all.
+   *
+   * Deliberately does NOT wipe the address fields. The registry address the
+   * outgoing company brought with it is stale, but it is also the only address
+   * on the form, and destroying an address mid-keystroke costs the buyer more
+   * than a stale line does. `registryAddressApplied` is cleared instead, so
+   * the next manual-entry switch or country change tidies it.
+   *
+   * @returns {boolean} whether a stale capture was dropped
+   */
+  guardCompanyRetype: function () {
+    const $name = twoincCompanyCapture.nameField();
+    const $number = twoincCompanyCapture.numberField();
+    const number = twoincUtilHelper.blankToEmpty($number.val());
+
+    // The buyer's own typing, whatever else follows.
+    $name.removeAttr(twoincCompanyCapture.PROVENANCE_ATTR);
+
+    // No number, nothing stale to drop — manual entry captures a name alone
+    // by design, and every keystroke there would otherwise take this path.
+    if (!number) {
+      $name.removeAttr(twoincCompanyCapture.PAIRING_ATTR);
+      return false;
+    }
+
+    const expected = twoincCompanyCapture.pairingTag($name.val(), number);
+    if ($name.attr(twoincCompanyCapture.PAIRING_ATTR) === expected) return false;
+
+    twoincCompanyCapture.write($name.val(), "");
+
+    const instance = Twoinc.getInstance();
+    instance.customerCompany.country_prefix = twoincSelectWooHelper.currentCountry();
+    instance.registryAddressApplied = false;
+
+    // `#company_id`'s own visibility depends on the value just cleared
+    // (TWO-25326 §12), and the verdict on screen was about the company that
+    // has just stopped being captured.
+    twoincDomHelper.clearIntentVerdicts();
+    twoincDomHelper.toggleBusinessFields();
+    twoincSelectWooHelper.renderCompanySummary();
+    return true;
+  }
+};
+
+/**
  * Company-search widget: search/dropdown/manual-entry/select2 lifecycle,
  * encapsulated (TWO-25326 architecture rebuild). Mirrors PrestaShop's
  * TwoCompanySearch class — a single class owns the ENTIRE search, dropdown,
@@ -2639,8 +2829,6 @@ class TwoCompanySearch {
     const self = this;
     const $body = jQuery(document.body);
     const $field = $body.find(self.companyFieldSelector);
-    const $billingCompany = $body.find("#billing_company");
-    const $companyId = $body.find("#company_id");
 
     const widget = $field.selectWoo(self.genSelectWooParams());
     twoincDomHelper.toggleTooltip(
@@ -2654,22 +2842,11 @@ class TwoCompanySearch {
       // Get the option data
       const data = e.params.data;
 
-      // Set the company name
-      instance.customerCompany.company_name = data.id;
-
-      // Set the company ID
-      instance.customerCompany.organization_number = data.company_id;
-
-      // Pin the country this company was captured UNDER, alongside the
-      // number (TWO-25333), so the pair can never be assembled from two
-      // different moments.
-      instance.customerCompany.country_prefix = self.currentCountry();
-
-      // Set the company ID to HTML DOM
-      $companyId.val(data.company_id);
-
-      // Set the company name to HTML DOM
-      $billingCompany.val(data.id);
+      // THE single write path (TWO-40 §5): posted fields, instance record,
+      // pairing tag and provenance in one call. Writing `#company_id` here
+      // directly, as this used to, leaves a pair the tag does not describe —
+      // and the retype guard then wipes it on the buyer's next keystroke.
+      twoincCompanyCapture.write(data.id, data.company_id, { country: self.currentCountry() });
 
       // Display the picked company read-only, synchronously.
       self.renderCompanySummary(data.id, data.company_id);
@@ -3566,12 +3743,17 @@ let twoincDomHelper = {
       document.querySelector("#project").value = window.twoinc.project;
     }
 
-    // Update the object values
-    if (document.querySelector("#billing_company") && window.twoinc.billing_company) {
-      document.querySelector("#billing_company").value = window.twoinc.billing_company;
-    }
-    if (document.querySelector("#company_id") && window.twoinc.company_id) {
-      document.querySelector("#company_id").value = window.twoinc.company_id;
+    // Restore the captured company through the ONE capture write path
+    // (TWO-40 §5), so the restored pair carries its pairing tag. Written
+    // raw, as this used to be, the pair has no tag — and the retype guard
+    // reads an absent tag as "this number no longer belongs to this name" and
+    // wipes a perfectly good restored capture on the buyer's first keystroke
+    // anywhere in the company field.
+    if (window.twoinc.billing_company || window.twoinc.company_id) {
+      twoincCompanyCapture.write(
+        window.twoinc.billing_company || jQuery("#billing_company").val(),
+        window.twoinc.company_id || jQuery("#company_id").val()
+      );
     }
 
     // Re-evaluate the company fields, because the write just above changes
@@ -4007,7 +4189,7 @@ let twoincSoleTrader = {
     twoincSoleTrader.setMode("sole_trader");
     const pf = twoincSoleTrader.prefetched;
     if (pf.ready && pf.matches && pf.buyer) {
-      twoincSoleTrader.setCompany(pf.buyer.organization_number, pf.buyer.company_name);
+      twoincSoleTrader.setCompany(pf.buyer.organization_number, pf.buyer.company_name, pf.buyer);
       twoincSoleTrader.showNote(false);
     } else if (pf.ready) {
       // Prefetch resolved with no matching buyer → signup. Opening here keeps
@@ -4159,7 +4341,7 @@ let twoincSoleTrader = {
     const pf = twoincSoleTrader.prefetched;
     if (pf.matches && pf.buyer) {
       twoincSoleTrader.setMode("sole_trader");
-      twoincSoleTrader.setCompany(pf.buyer.organization_number, pf.buyer.company_name);
+      twoincSoleTrader.setCompany(pf.buyer.organization_number, pf.buyer.company_name, pf.buyer);
       twoincSoleTrader.showNote(false);
     } else if (twoincSoleTrader.mode === "sole_trader") {
       twoincSoleTrader.setMode("business");
@@ -4175,9 +4357,23 @@ let twoincSoleTrader = {
     twoincSoleTrader.showNote(!win);
   },
 
-  setCompany: function (companyId, companyName) {
-    jQuery("#company_id").val(companyId);
-    jQuery("#billing_company").val(companyName);
+  /**
+   * Adopt an enrolled sole trader's company onto the checkout.
+   *
+   * Goes through the ONE capture write path (TWO-40 §5), which owns the posted
+   * fields, the instance record, the pairing tag and the provenance markers.
+   * A `TWO:`-prefixed identifier takes exactly the same path as any registry
+   * number — no branch here, none downstream. The only place it is treated
+   * specially is display, and that is `formatCompanyNumber`'s job.
+   *
+   * @param {string} companyId
+   * @param {string} companyName
+   * @param {Object} [buyer] the autofill buyer, when one was resolved; its
+   *   address is written too (§2.6, §5)
+   * @returns {void}
+   */
+  setCompany: function (companyId, companyName, buyer) {
+    twoincCompanyCapture.write(companyName, companyId);
     // The display select too, when this is the clearing call setMode("business")
     // makes. The picker appends an <option> per pick and select2("destroy")
     // leaves it selected, so without this a company picked before the sole-trader
@@ -4187,14 +4383,17 @@ let twoincSoleTrader = {
       jQuery("#billing_company_display").val("");
     }
     const instance = Twoinc.getInstance();
-    instance.customerCompany.organization_number = companyId;
-    instance.customerCompany.company_name = companyName;
-    // Pin the capture country next to the number, same as the picker's select
-    // handler does and for the same reason (TWO-25333 — see there). Only on
-    // the capturing call: setMode("business") reaches this with both arguments
-    // falsy to CLEAR, and there is no capture then for a country to belong to.
-    if (companyId) {
-      instance.customerCompany.country_prefix = twoincSelectWooHelper.currentCountry();
+    // The buyer's address, written REGARDLESS of the merchant's address-lookup
+    // switch (TWO-40 §5). That switch gates an ordinary company-search pick's
+    // address write, and routing sole-trader adoption through the same gate is
+    // the bug this bullet exists for: the switch is legitimately off in
+    // configurations that have nothing to do with sole-trader signup, and a
+    // buyer who has just enrolled must still have their address land. Explicit
+    // bypass rather than making the switch context-aware.
+    const buyerAddress = buyer && (buyer.billing_address || buyer.address);
+    if (companyId && buyerAddress) {
+      instance.setAddress(buyerAddress);
+      instance.registryAddressApplied = true;
     }
     // Re-evaluate which company fields are shown, AFTER the write above
     // (TWO-25326 §12).
@@ -4344,7 +4543,7 @@ let twoincSoleTrader = {
           const matches = !!(buyer && buyer.email && String(buyer.email).toLowerCase() === entered);
           twoincSoleTrader.prefetched = { ready: true, buyer: buyer, matches: matches };
           if (matches) {
-            twoincSoleTrader.setCompany(buyer.organization_number, buyer.company_name);
+            twoincSoleTrader.setCompany(buyer.organization_number, buyer.company_name, buyer);
             twoincSoleTrader.showNote(false);
           }
         });
@@ -4706,6 +4905,24 @@ class Twoinc {
       // Verdicts only — same mid-request blanking as the picker's own handler.
       twoincDomHelper.clearIntentVerdicts();
     });
+
+    // Retype guard (TWO-40 §5): a company name the buyer edits away from the
+    // organisation number it was captured under takes that number with it.
+    // Bound on `input` as well as `change` so the stale number is gone before
+    // the buyer can reach Place Order without ever blurring the field.
+    //
+    // Only ever fires for a real buyer edit: every plugin write in this file
+    // goes through `.val()` or `.value =`, neither of which dispatches an
+    // event.
+    $body
+      .off("input.twoincCompanyPairing change.twoincCompanyPairing", "#billing_company")
+      .on(
+        "input.twoincCompanyPairing change.twoincCompanyPairing",
+        "#billing_company",
+        function () {
+          twoincCompanyCapture.guardCompanyRetype();
+        }
+      );
 
     // Handle the country inputs change event. The tracker behind it is seeded
     // at the END of this function, not here — see the comment there.
