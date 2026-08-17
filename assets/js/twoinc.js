@@ -1812,8 +1812,9 @@ class TwoCompanySearch {
    * @returns {void}
    */
   discardStaleSoleTraderToggle() {
-    const tileScopeSelector = ".payment_box.payment_method_" + window.twoinc.gateway_id;
-    const $fresh = jQuery(tileScopeSelector + " .twoinc-sole-trader-toggle").first();
+    const $fresh = jQuery(
+      twoincSelectWooHelper.paymentTileScopeSelector() + " .twoinc-sole-trader-toggle"
+    ).first();
     if (!$fresh.length) return;
 
     jQuery(".twoinc-sole-trader-toggle").not($fresh).remove();
@@ -1859,13 +1860,26 @@ class TwoCompanySearch {
 
     const $companyField = jQuery("#billing_company_display_field").first();
     const $toggle = jQuery(
-      ".payment_box.payment_method_" + window.twoinc.gateway_id + " .twoinc-sole-trader-toggle"
+      twoincSelectWooHelper.paymentTileScopeSelector() + " .twoinc-sole-trader-toggle"
     ).first();
     if (!$companyField.length || !$toggle.length) return;
 
     if ($toggle.prev()[0] !== $companyField[0]) {
       $toggle.insertAfter($companyField);
     }
+  }
+
+  /**
+   * Selector for this gateway's own rendered payment box — the volatile
+   * fragment WooCommerce's checkout AJAX replaces wholesale
+   * (`.woocommerce-checkout-payment`'s descendant `.payment_box.payment_method_<gateway_id>`).
+   * Shared by `discardStaleSoleTraderToggle()` and `relocateSoleTraderToggle()`
+   * above so the two can't drift out of sync on what "inside the tile" means.
+   *
+   * @returns {string} CSS selector
+   */
+  paymentTileScopeSelector() {
+    return ".payment_box.payment_method_" + window.twoinc.gateway_id;
   }
 
   /**
