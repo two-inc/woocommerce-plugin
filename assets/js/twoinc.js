@@ -3612,6 +3612,9 @@ let twoincSoleTrader = {
   // saved", distinct from the flag's own true/false/undefined values.
   savedManualEntryActive: null,
   messageListenerBound: false,
+  // Whether this plugin has opened a signup popup on this page. Latches true
+  // and is never cleared; gates the postMessage listener (see there).
+  popupOpened: false,
   // Result of the most recent autofill prefetch for the entered email.
   // ready=false until the first prefetch resolves; matches=true when the
   // buyer on the Two cookie owns the email currently typed at checkout.
@@ -4127,11 +4130,15 @@ let twoincSoleTrader = {
     // 700 is a floor the hosted flow's layout needs, arrived at by looking at
     // the rendered signup (TWO-40) — the flow is not served from this repo, so
     // nothing here will notice if it ever needs more.
-    return window.open(
+    const win = window.open(
       url,
       "_blank",
       "location=yes,resizable=yes,scrollbars=yes,status=yes,height=805,width=700"
     );
+    if (win) {
+      twoincSoleTrader.popupOpened = true;
+    }
+    return win;
   },
 
   /**
@@ -4145,13 +4152,23 @@ let twoincSoleTrader = {
     }
     twoincSoleTrader.messageListenerBound = true;
     window.addEventListener("message", function (event) {
-      // Tokens are required to know the origin to trust, so their absence is
-      // the one thing that can still discard a message. The buyer's current
-      // MODE deliberately is not: an ACCEPTED signup has to be honoured even
-      // if the mode moved on while the popup was open, which it does whenever
-      // a passive prefetch resolves without a match in the meantime and
-      // applyPrefetch() reverts to business.
-      if (!twoincSoleTrader.tokens) {
+      // Three gates, and the buyer's current MODE is deliberately not one of
+      // them: an ACCEPTED signup has to be honoured even if the mode moved on
+      // while the popup was open, which it does whenever a passive prefetch
+      // resolves without a match in the meantime and applyPrefetch() reverts
+      // to business.
+      //
+      // `popupOpened` is what the mode check was incidentally providing.
+      // This listener is bound for the life of the page and never unbound, so
+      // without it a checkout where the buyer never went near sole trader
+      // stays willing to accept an ACCEPTED for the whole visit. Requiring
+      // that this plugin has actually opened a signup popup narrows that to
+      // buyers who engaged the flow, and it does not race: it latches on the
+      // open and is never cleared.
+      //
+      // Tokens are required to know which origin to trust, so their absence
+      // means the message cannot be authenticated at all.
+      if (!twoincSoleTrader.popupOpened || !twoincSoleTrader.tokens) {
         return;
       }
       const signupOrigin = new URL(twoincSoleTrader.tokens.signup_url).origin;
@@ -4171,9 +4188,11 @@ let twoincSoleTrader = {
             twoincSoleTrader.showError();
             return;
           }
-          // Completing a signup in a popup the buyer opened themselves is a
-          // live choice of sole trader, and a later one than any automatic
-          // revert, so re-assert the mode rather than dropping the result.
+          // Re-assert the mode over WHATEVER changed it, rather than dropping
+          // the result. An explicit chip click and applyPrefetch()'s automatic
+          // revert both just call setMode("business") and record nothing, so
+          // there is no way to tell them apart here — and a completed signup
+          // is the later action in either case.
           if (twoincSoleTrader.mode !== "sole_trader") {
             twoincSoleTrader.setMode("sole_trader");
           }

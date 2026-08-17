@@ -34,8 +34,25 @@ describe("autofill buyer trust levels", () => {
   let ctx;
   let $;
   let soleTrader;
+  let boundMessageListeners;
 
   beforeEach(() => {
+    // The plugin's re-entrancy flag lives on the module object, which the
+    // harness re-evaluates per test — but addEventListener targets the jsdom
+    // window, which does not reset. Left alone, every test's listener stays
+    // live and N of them run per dispatch, so the suite could never detect a
+    // double-adoption bug: it would already have N-fold adoption. Production
+    // is fine (one page load, one module, one listener); the harness is what
+    // needs the bookkeeping.
+    boundMessageListeners = [];
+    const realAdd = global.window.addEventListener.bind(global.window);
+    global.window.addEventListener = function (type, handler, options) {
+      if (type === "message") {
+        boundMessageListeners.push(handler);
+      }
+      return realAdd(type, handler, options);
+    };
+
     ctx = harness.loadTwoinc({
       supported_buyer_countries: ["GB"],
       enable_company_search: "yes",
@@ -66,9 +83,13 @@ describe("autofill buyer trust levels", () => {
   });
 
   afterEach(() => {
+    boundMessageListeners.forEach(function (handler) {
+      global.window.removeEventListener("message", handler);
+    });
     harness.releaseWidgets($);
     document.body.innerHTML = "";
     delete global.fetch;
+    delete window.twoinc.enable_order_intent;
   });
 
   describe("buyerIsAdoptable", () => {
@@ -111,6 +132,10 @@ describe("autofill buyer trust levels", () => {
       // is that the note stays visible.
       $("<div>", { class: "twoinc-sole-trader-toggle" }).appendTo(document.body);
       soleTrader.render();
+      // Stand in for the popup having been opened. The listener refuses
+      // messages otherwise, and these tests post to it directly rather than
+      // going through a click.
+      soleTrader.popupOpened = true;
     });
 
     /** Stub the buyer read the ACCEPTED handler performs. */
@@ -129,20 +154,33 @@ describe("autofill buyer trust levels", () => {
       };
     }
 
-    /** Deliver an ACCEPTED postMessage from the signup origin and settle it. */
-    function accept(data) {
+    /**
+     * Let every pending microtask run.
+     *
+     * A macrotask, deliberately, rather than a counted number of
+     * `Promise.resolve().then()` hops: `fetchCurrentBuyer` chains a
+     * response-handling `then` behind `fetch`, and counting the chain means
+     * the count is a hidden assumption about production code. Getting it one
+     * short makes a NEGATIVE test assert a state that has not been reached
+     * yet instead of one that was refused — which passes, and passes for a
+     * fix that does nothing.
+     */
+    function flush() {
+      return new Promise(function (resolve) {
+        setTimeout(resolve, 0);
+      });
+    }
+
+    /** Deliver a postMessage to the listener and let it settle. */
+    function post(data, origin) {
       soleTrader.bindPopupMessageListener();
       global.window.dispatchEvent(
         new global.window.MessageEvent("message", {
           data: data === undefined ? "ACCEPTED" : data,
-          origin: SIGNUP_ORIGIN
+          origin: origin === undefined ? SIGNUP_ORIGIN : origin
         })
       );
-      // Two chained promises inside fetchCurrentBuyer, then the callback.
-      return Promise.resolve()
-        .then(function () {})
-        .then(function () {})
-        .then(function () {});
+      return flush();
     }
 
     test("adopts the authenticated buyer even though the checkout email differs", async () => {
@@ -150,7 +188,7 @@ describe("autofill buyer trust levels", () => {
       soleTrader.mode = "sole_trader";
       stubBuyer(ENROLLED);
 
-      await accept();
+      await post();
 
       expect($("#company_id").val()).toBe(ENROLLED.organization_number);
       expect($("#billing_company").val()).toBe(ENROLLED.company_name);
@@ -165,7 +203,7 @@ describe("autofill buyer trust levels", () => {
       soleTrader.mode = "business";
       stubBuyer(ENROLLED);
 
-      await accept();
+      await post();
 
       expect($("#company_id").val()).toBe(ENROLLED.organization_number);
       expect(soleTrader.mode).toBe("sole_trader");
@@ -176,7 +214,7 @@ describe("autofill buyer trust levels", () => {
       soleTrader.mode = "sole_trader";
       stubBuyer(null);
 
-      await accept();
+      await post();
 
       expect($("#company_id").val()).toBe("");
       expect($(".twoinc-sole-trader-toggle__error").text()).toBe("Something went wrong");
@@ -185,17 +223,35 @@ describe("autofill buyer trust levels", () => {
     test("ignores a message from any other origin", async () => {
       soleTrader.mode = "sole_trader";
       stubBuyer(ENROLLED);
-      soleTrader.bindPopupMessageListener();
 
-      global.window.dispatchEvent(
-        new global.window.MessageEvent("message", {
-          data: "ACCEPTED",
-          origin: "https://not-the-signup.example.test"
-        })
-      );
-      await Promise.resolve();
+      await post("ACCEPTED", "https://not-the-signup.example.test");
 
       expect($("#company_id").val()).toBe("");
+    });
+
+    test("ignores a message when this plugin never opened a signup popup", async () => {
+      soleTrader.popupOpened = false;
+      soleTrader.mode = "sole_trader";
+      stubBuyer(ENROLLED);
+
+      await post();
+
+      expect($("#company_id").val()).toBe("");
+    });
+
+    test("arms the order-intent check once the company is adopted", async () => {
+      // The adoption's most consequential side effect. Without
+      // enable_order_intent the gate short-circuits and getApproval() is a
+      // no-op, so the rest of this describe never exercises it.
+      window.twoinc.enable_order_intent = "yes";
+      $("#billing_email").val("enrolled@example.test");
+      soleTrader.mode = "sole_trader";
+      stubBuyer(ENROLLED);
+
+      await post();
+
+      expect($("#company_id").val()).toBe(ENROLLED.organization_number);
+      expect(ctx.Twoinc.getInstance().orderIntentCheck.interval).not.toBeNull();
     });
   });
 });
