@@ -1768,9 +1768,10 @@ class TwoCompanySearch {
 
   /**
    * Discard a sole-trader toggle left parked outside the payment tile by a
-   * PREVIOUS call to `relocateSoleTraderToggle()` (porting guide §1: the
-   * chip is structurally part of the search control, not a separate widget
-   * bolted onto one fixed location — TWO-40).
+   * PREVIOUS call to `relocateSoleTraderToggle()`, but ONLY once a fresh
+   * in-tile copy exists to take its place (porting guide §1: the chip is
+   * structurally part of the search control, not a separate widget bolted
+   * onto one fixed location — TWO-40).
    *
    * Unlike `#billing_company_display_field`, `.twoinc-sole-trader-toggle`
    * has no "always registered, rendered once" guarantee: `get_pay_box_description()`
@@ -1780,32 +1781,42 @@ class TwoCompanySearch {
    * markup, not a relocatable checkout field). A copy parked in the
    * address area by a previous cycle survives that refresh untouched — the
    * address area is not one of the fragments WooCommerce replaces — so
-   * without this, `jQuery(".twoinc-sole-trader-toggle")` would match both
-   * the stale parked copy and the fresh in-tile one, and every method in
+   * without the "only if a fresh one exists" guard below,
+   * `jQuery(".twoinc-sole-trader-toggle")` would eventually match both the
+   * stale parked copy and a fresh in-tile one, and every method in
    * `twoincSoleTrader` that acts on "the container" would silently act on
    * both. Called from `twoincSoleTrader.refresh()`, before it reads that
    * selector, so it never sees more than one match.
    *
-   * Scoped by "is it inside the tile" rather than by a remembered wrapper
-   * id: the one PHP just rendered this cycle is always the one still
-   * inside `.payment_box.payment_method_<gateway_id>` (same scoping
-   * `twoincDomHelper.rearrangeDescription()` already uses elsewhere in
-   * this file); anything else matching the class is necessarily a stale
-   * leftover.
+   * The "only if fresh" guard (round-1 adversarial review — Leia and Han,
+   * independently) is load-bearing, not defensive dressing:
+   * `twoincSoleTrader.refresh()` is also called from `syncBillingCountry()`
+   * on the raw `#billing_country` `change` event, SYNCHRONOUSLY, before
+   * WooCommerce's own `update_checkout`/`updated_checkout` AJAX round-trip
+   * has re-rendered the tile at all. On that path there is no fresh in-tile
+   * copy yet — the only existing node is the one already correctly parked
+   * next to the search control by the previous cycle. An earlier version of
+   * this function discarded anything outside the tile unconditionally,
+   * which deleted that live, correctly-placed toggle on every country
+   * change, with nothing left to replace it until (if ever) a later AJAX
+   * cycle happened to re-render the tile.
    *
-   * A no-op in 'payment_tile' mode (nothing is ever parked there) and if
-   * nothing was ever relocated yet.
+   * `.first()` on the in-tile match (round 1 — Vader): a theme rendering
+   * this gateway's payment box twice on one page (unexpected, but no
+   * selector here guards against it) must not leave two "fresh" nodes
+   * fighting over the same single parked slot.
+   *
+   * A no-op in 'payment_tile' mode (nothing is ever parked outside the
+   * tile there, so there is never anything to discard).
    *
    * @returns {void}
    */
   discardStaleSoleTraderToggle() {
     const tileScopeSelector = ".payment_box.payment_method_" + window.twoinc.gateway_id;
-    jQuery(".twoinc-sole-trader-toggle").each(function () {
-      const $toggle = jQuery(this);
-      if (!$toggle.closest(tileScopeSelector).length) {
-        $toggle.remove();
-      }
-    });
+    const $fresh = jQuery(tileScopeSelector + " .twoinc-sole-trader-toggle").first();
+    if (!$fresh.length) return;
+
+    jQuery(".twoinc-sole-trader-toggle").not($fresh).remove();
   }
 
   /**
@@ -1831,17 +1842,25 @@ class TwoCompanySearch {
    *
    * Called from `twoincSoleTrader.apply()`, after either of its branches
    * (`render()` or `hide()`) has finished with the container — never
-   * before, or it would relocate a node mid-rebuild.
+   * before, or it would relocate a node mid-rebuild. `apply()` is now the
+   * SOLE path out of `refresh()` (round 1 review — Yoda and Leia: the two
+   * early-return branches used to call `hide()` directly, bypassing this
+   * function entirely and leaving a first-paint toggle stranded in the
+   * tile whenever the buyer's billing country was still empty).
+   *
+   * A `.first()` guard mirrors `discardStaleSoleTraderToggle()`'s, for the
+   * same reason: a theme rendering this gateway's payment box twice must
+   * still only ever move ONE toggle.
    *
    * @returns {void}
    */
   relocateSoleTraderToggle() {
     if (window.twoinc.company_search_location === "payment_tile") return;
 
-    const $companyField = jQuery("#billing_company_display_field");
+    const $companyField = jQuery("#billing_company_display_field").first();
     const $toggle = jQuery(
       ".payment_box.payment_method_" + window.twoinc.gateway_id + " .twoinc-sole-trader-toggle"
-    );
+    ).first();
     if (!$companyField.length || !$toggle.length) return;
 
     if ($toggle.prev()[0] !== $companyField[0]) {
@@ -3798,13 +3817,19 @@ let twoincSoleTrader = {
     twoincSelectWooHelper.discardStaleSoleTraderToggle();
     const cfg = twoincSoleTrader.config();
     const $container = jQuery(".twoinc-sole-trader-toggle");
+    // Both early returns below go through apply(false), not hide()
+    // directly (TWO-40, round 1 review — Yoda and Leia): apply() is the
+    // one place relocateSoleTraderToggle() is called, and a buyer whose
+    // billing country is still empty on first paint must not be left with
+    // the chip stranded in the tile until some LATER cycle happens to
+    // settle it through the other branches below.
     if (!cfg.availability_url || $container.length === 0) {
-      twoincSoleTrader.hide();
+      twoincSoleTrader.apply(false);
       return;
     }
     const country = twoincSoleTrader.currentCountry();
     if (!country) {
-      twoincSoleTrader.hide();
+      twoincSoleTrader.apply(false);
       return;
     }
     if (country in twoincSoleTrader.availabilityByCountry) {

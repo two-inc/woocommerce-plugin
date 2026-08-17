@@ -44,7 +44,6 @@ const SOLE_TRADER_CONFIG = {
 describe("sole-trader toggle follows the search control (TWO-40)", () => {
   let ctx;
   let $;
-  let helper;
   let soleTrader;
 
   beforeEach(() => {
@@ -103,7 +102,6 @@ describe("sole-trader toggle follows the search control (TWO-40)", () => {
         sole_trader: SOLE_TRADER_CONFIG
       });
       $ = ctx.$;
-      helper = ctx.helper;
       soleTrader = ctx.soleTrader;
       buildTile();
       soleTrader.availabilityByCountry.GB = true;
@@ -166,6 +164,34 @@ describe("sole-trader toggle follows the search control (TWO-40)", () => {
 
       expect(insertAfterSpy).not.toHaveBeenCalled();
       insertAfterSpy.mockRestore();
+      // The chip must still be there — a spy asserting "no move happened"
+      // passes just as well for "nothing left to move" as for "already
+      // correctly placed" (round 1 review — Leia and Han: this is exactly
+      // what let the bug below reach round 1 with a green suite).
+      expect($(".twoinc-sole-trader-toggle").length).toBe(1);
+    });
+
+    /**
+     * Round 1 adversarial review (Leia and Han, independently): a SECOND
+     * `refresh()` with NO WooCommerce fragment replace in between is not a
+     * hypothetical — it is exactly `syncBillingCountry()`'s call shape
+     * (`#billing_country`'s `change` handler calls `refresh()` directly,
+     * synchronously, before WooCommerce's own AJAX round-trip re-renders
+     * the tile). An earlier version of `discardStaleSoleTraderToggle()`
+     * discarded anything outside the tile unconditionally, which deleted
+     * the only (correctly parked) toggle on this exact path — and reset
+     * the buyer's sole-trader selection back to "business" as a side
+     * effect of `refresh()` then finding zero containers.
+     */
+    test("a second refresh with no fragment replace between (the syncBillingCountry call shape) does not delete the chip or reset an active sole-trader selection", () => {
+      soleTrader.refresh();
+      soleTrader.mode = "sole_trader";
+      soleTrader.explicitSoleTrader = true;
+
+      soleTrader.refresh();
+
+      expect($(".twoinc-sole-trader-toggle").length).toBe(1);
+      expect(soleTrader.mode).toBe("sole_trader");
     });
 
     test("unavailable in the buyer's country: still relocated (empty, hidden) rather than left behind in the tile", () => {
@@ -191,7 +217,6 @@ describe("sole-trader toggle follows the search control (TWO-40)", () => {
         sole_trader: SOLE_TRADER_CONFIG
       });
       $ = ctx.$;
-      helper = ctx.helper;
       soleTrader = ctx.soleTrader;
       buildTile();
       soleTrader.availabilityByCountry.GB = true;
