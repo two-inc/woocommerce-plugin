@@ -97,6 +97,22 @@ describe("autofill buyer trust levels", () => {
     delete window.twoinc.enable_order_intent;
   });
 
+  /** Stub the buyer read, as the endpoint would answer it. */
+  function stubBuyer(buyer) {
+    global.fetch = function () {
+      return Promise.resolve({
+        ok: buyer !== null,
+        status: buyer === null ? 404 : 200,
+        json: function () {
+          return Promise.resolve(buyer);
+        },
+        text: function () {
+          return Promise.resolve("");
+        }
+      });
+    };
+  }
+
   describe("buyerIsAdoptable", () => {
     // buyer email | entered email | authenticated | adoptable | description
     const cases = [
@@ -142,22 +158,6 @@ describe("autofill buyer trust levels", () => {
       // going through a click.
       soleTrader.popupOpened = true;
     });
-
-    /** Stub the buyer read the ACCEPTED handler performs. */
-    function stubBuyer(buyer) {
-      global.fetch = function () {
-        return Promise.resolve({
-          ok: buyer !== null,
-          status: buyer === null ? 404 : 200,
-          json: function () {
-            return Promise.resolve(buyer);
-          },
-          text: function () {
-            return Promise.resolve("");
-          }
-        });
-      };
-    }
 
     /**
      * Let every pending microtask run.
@@ -230,78 +230,6 @@ describe("autofill buyer trust levels", () => {
       expect($(".twoinc-sole-trader-toggle__error").text()).toBe("Something went wrong");
     });
 
-    test("lets an adoption failure surface instead of blaming the buyer read", async () => {
-      // The read succeeded; applying its result did not. Those are different
-      // failures. If the callback's exception were caught by the read's own
-      // handler it would re-invoke the callback with null — blaming the
-      // network for something that never went near it, and recording "no
-      // buyer" while one existed.
-      stubBuyer(ENROLLED);
-      const seen = [];
-      const boom = new Error("applying the buyer failed");
-
-      await expect(
-        soleTrader.fetchCurrentBuyer(function (buyer) {
-          seen.push(buyer);
-          throw boom;
-        })
-      ).rejects.toThrow("applying the buyer failed");
-
-      // THIS is the discriminating assertion, not the rejection above. Under
-      // the old shape the rejection happened too — the catch re-invoked the
-      // callback, which threw a second time, escaping with the same message.
-      // What separates the two shapes is how often the callback ran and with
-      // what: once with the buyer, or twice, the second time with a null that
-      // never came from the read. Do not delete this line as redundant.
-      expect(seen).toEqual([ENROLLED]);
-    });
-
-    test("resolves a thenable even when there are no tokens to read with", async () => {
-      // Both exits return a promise, so a caller can sequence after the read
-      // without knowing which path it took.
-      soleTrader.tokens = null;
-      const seen = [];
-
-      // Asserted on the RETURN VALUE, not by awaiting it: `await undefined`
-      // succeeds, so awaiting would pass whether or not this path returns
-      // anything at all.
-      const returned = soleTrader.fetchCurrentBuyer(function (buyer) {
-        seen.push(buyer);
-      });
-
-      expect(typeof (returned || {}).then).toBe("function");
-      await returned;
-      expect(seen).toEqual([null]);
-    });
-
-    test("drains the body of a response it is not going to read", async () => {
-      // Not politeness: an unread body leaves the request in flight as far as
-      // the browser is concerned, so anything waiting on network-idle never
-      // sees it finish.
-      let drained = 0;
-      global.fetch = function () {
-        return Promise.resolve({
-          ok: false,
-          status: 500,
-          json: function () {
-            throw new Error("must not read the body as JSON");
-          },
-          text: function () {
-            drained += 1;
-            return Promise.resolve("");
-          }
-        });
-      };
-      const seen = [];
-
-      await soleTrader.fetchCurrentBuyer(function (buyer) {
-        seen.push(buyer);
-      });
-
-      expect(drained).toBe(1);
-      expect(seen).toEqual([null]);
-    });
-
     test("ignores a message from any other origin", async () => {
       soleTrader.mode = "sole_trader";
       stubBuyer(ENROLLED);
@@ -371,6 +299,81 @@ describe("autofill buyer trust levels", () => {
 
       expect($("#company_id").val()).toBe(ENROLLED.organization_number);
       expect(ctx.Twoinc.getInstance().orderIntentCheck.interval).not.toBeNull();
+    });
+  });
+  describe("the buyer read's own contract", () => {
+    // These exercise fetchCurrentBuyer directly rather than the message path.
+    test("lets an adoption failure surface instead of blaming the buyer read", async () => {
+      // The read succeeded; applying its result did not. Those are different
+      // failures. If the callback's exception were caught by the read's own
+      // handler it would re-invoke the callback with null — blaming the
+      // network for something that never went near it, and recording "no
+      // buyer" while one existed.
+      stubBuyer(ENROLLED);
+      const seen = [];
+
+      // The message is buyer-conditional on purpose. Under the old shape the
+      // catch re-invoked the callback, so a rejection happened either way and
+      // matching on a fixed message proved nothing — but that second call
+      // arrives with a null the read never produced, so the two shapes reject
+      // with different messages and the assertion below can tell them apart on
+      // its own.
+      await expect(
+        soleTrader.fetchCurrentBuyer(function (buyer) {
+          seen.push(buyer);
+          throw new Error(
+            buyer ? "applying the buyer failed" : "re-invoked with a null the read never produced"
+          );
+        })
+      ).rejects.toThrow("applying the buyer failed");
+
+      expect(seen).toEqual([ENROLLED]);
+    });
+
+    test("resolves a thenable even when there are no tokens to read with", async () => {
+      // Both exits return a promise, so a caller can sequence after the read
+      // without knowing which path it took.
+      soleTrader.tokens = null;
+      const seen = [];
+
+      // Asserted on the RETURN VALUE, not by awaiting it: `await undefined`
+      // succeeds, so awaiting would pass whether or not this path returns
+      // anything at all.
+      const returned = soleTrader.fetchCurrentBuyer(function (buyer) {
+        seen.push(buyer);
+      });
+
+      expect(typeof (returned || {}).then).toBe("function");
+      await returned;
+      expect(seen).toEqual([null]);
+    });
+
+    test("drains the body of a response it is not going to read", async () => {
+      // Not politeness: an unread body leaves the request in flight as far as
+      // the browser is concerned, so anything waiting on network-idle never
+      // sees it finish.
+      // Pins that the body IS read, which is what releases the request. It
+      // does not pin that the read is awaited before proceeding — a
+      // fire-and-forget text() would still pass, and still drains.
+      let drained = 0;
+      global.fetch = function () {
+        return Promise.resolve({
+          ok: false,
+          status: 500,
+          text: function () {
+            drained += 1;
+            return Promise.resolve("");
+          }
+        });
+      };
+      const seen = [];
+
+      await soleTrader.fetchCurrentBuyer(function (buyer) {
+        seen.push(buyer);
+      });
+
+      expect(drained).toBe(1);
+      expect(seen).toEqual([null]);
     });
   });
 });

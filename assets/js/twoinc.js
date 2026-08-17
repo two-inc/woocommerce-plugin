@@ -4289,8 +4289,12 @@ let twoincSoleTrader = {
    */
   fetchCurrentBuyer: function (cb) {
     if (!twoincSoleTrader.tokens) {
-      cb(null);
-      return Promise.resolve();
+      // Deferred rather than called straight, so both exits really do behave
+      // alike: cb runs off a promise either way, and a throwing cb rejects the
+      // returned promise instead of throwing into this caller's frame.
+      return Promise.resolve().then(function () {
+        cb(null);
+      });
     }
     return (
       fetch(window.twoinc.twoinc_checkout_host + "/autofill/v1/buyer/current", {
@@ -4310,9 +4314,9 @@ let twoincSoleTrader = {
           });
         })
         // The callback runs OUTSIDE the catch, so only the read itself can
-        // resolve to "no buyer". Inside it, an exception thrown by the callback
-        // — which does real DOM and widget work on both paths, tearing down and
-        // rebuilding a select2 instance — was caught here and re-invoked the
+        // resolve to "no buyer". Inside the catch, an exception thrown by the
+        // callback — which does real DOM and widget work on both paths, tearing
+        // down and rebuilding a select2 instance — was caught and re-invoked the
         // callback with null. That both blamed the network for a failure that
         // was not the network's, and recorded "no buyer" while one existed.
         .then(function (json) {
