@@ -304,6 +304,34 @@ describe("TWO-40 §2 — invoice→delivery mirror", () => {
     expect($("#shipping_city").val()).toBe("Newtown");
   });
 
+  test("does not touch the delivery form while \"ship to a different address\" is unchecked", () => {
+    // WooCommerce keeps those fields in the DOM permanently and ignores every
+    // one of them on submit while the box is unchecked. This checkout is also
+    // live for other payment methods, so quietly rewriting a form with no
+    // bearing on the order is not something a payment gateway should do.
+    $("form[name=checkout]").append(
+      '<input type="checkbox" id="ship-to-different-address-checkbox" />'
+    );
+    mirror.seed();
+    givenInvoiceAddress();
+
+    expect(mirror.sync()).toBe(false);
+    expect($("#shipping_city").val()).toBe("");
+
+    // Ticking it fires WooCommerce's own checkout update, which is what runs
+    // this again — so the form is filled the moment it starts to matter.
+    $("#ship-to-different-address-checkbox").prop("checked", true);
+    expect(mirror.sync()).toBe(true);
+    expect($("#shipping_city").val()).toBe("Registryville");
+  });
+
+  test("a theme with no ship-to-different-address toggle counts as in play", () => {
+    // Absence of the checkbox means the delivery form is unconditional.
+    mirror.seed();
+    givenInvoiceAddress();
+    expect(mirror.sync()).toBe(true);
+  });
+
   test("a checkout with no delivery form at all is a no-op, not an error", () => {
     document.body.innerHTML = [
       '<form name="checkout">',

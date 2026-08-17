@@ -313,6 +313,31 @@ let twoincAddressMirror = {
   },
 
   /**
+   * Whether the delivery address is part of this order at all.
+   *
+   * WooCommerce keeps the shipping fields in the DOM permanently and gates
+   * them on "Ship to a different address?"; with that box unchecked it ignores
+   * every one of them on submit and uses the billing address. Writing into
+   * them then is pure noise — and noise with a cost, since this plugin's
+   * checkout is also live for other payment methods, and quietly rewriting a
+   * form that has no bearing on the order is not something a payment gateway
+   * should do.
+   *
+   * Absence of the checkbox means the delivery form is unconditional (a theme
+   * that always shows it), so that reads as in-play rather than out.
+   *
+   * Checking the box fires WooCommerce's own checkout update, and this runs
+   * again from `updated_checkout` — so the form is filled the moment it starts
+   * to matter, not before.
+   *
+   * @returns {boolean}
+   */
+  deliveryFormIsInPlay: function () {
+    const $toggle = jQuery("#ship-to-different-address-checkbox");
+    return $toggle.length === 0 || $toggle.is(":checked");
+  },
+
+  /**
    * Whether the buyer has taken the delivery address over.
    *
    * @returns {boolean}
@@ -347,6 +372,7 @@ let twoincAddressMirror = {
     // Nothing to mirror onto: a checkout with shipping fields switched off
     // entirely (virtual cart, or a store that does not ship).
     if (!jQuery(twoincAddressRoles.field(delivery, "country")).length) return false;
+    if (!twoincAddressMirror.deliveryFormIsInPlay()) return false;
     if (twoincAddressMirror.isPinned()) return false;
 
     const invoice = twoincAddressRoles.invoice();
