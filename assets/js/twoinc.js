@@ -3890,10 +3890,41 @@ let twoincSoleTrader = {
   },
 
   /**
+   * Whether an autofill buyer may be adopted onto this checkout. The answer
+   * depends on how the buyer was obtained, and the two cases are NOT
+   * interchangeable:
+   *
+   * - PASSIVE (`authenticated` false) — the buyer came off the Two cookie
+   *   with nothing proving the person at this checkout is that buyer. Only
+   *   safe to adopt when the buyer owns the email currently typed here;
+   *   anything looser would prefill one person's company onto another
+   *   person's order.
+   *
+   * - AUTHENTICATED (`authenticated` true) — the hosted signup's OTP step
+   *   has just succeeded, so the server has already established who this is.
+   *   The identity they authenticated as is the answer, and the checkout's
+   *   contact-email field does not get a veto over it: those two
+   *   legitimately differ whenever someone is enrolled under one address and
+   *   ordering with another. Re-applying the passive check here instead
+   *   rejects a buyer who did everything right, silently, leaving the signup
+   *   prompt up so the next click reopens the same popup — indefinitely.
+   */
+  buyerIsAdoptable: function (buyer, authenticated) {
+    if (!buyer) {
+      return false;
+    }
+    if (authenticated) {
+      return true;
+    }
+    const entered = twoincSoleTrader.enteredEmail().toLowerCase();
+    return !!(buyer.email && String(buyer.email).toLowerCase() === entered);
+  },
+
+  /**
    * Prefetch the autofill buyer for the entered email. Runs on every email
    * change so the chip click can resolve synchronously. Mints tokens (needed
-   * for the signup popup) then reads the buyer on the Two cookie; a match is
-   * when that buyer owns the email currently typed at checkout.
+   * for the signup popup) then reads the buyer on the Two cookie. This is the
+   * PASSIVE path — see buyerIsAdoptable().
    */
   onEmailChanged: function () {
     if (!twoincSoleTrader.isAvailable()) {
@@ -3920,8 +3951,7 @@ let twoincSoleTrader = {
         return;
       }
       twoincSoleTrader.fetchCurrentBuyer(function (buyer) {
-        const entered = twoincSoleTrader.enteredEmail().toLowerCase();
-        const matches = !!(buyer && buyer.email && String(buyer.email).toLowerCase() === entered);
+        const matches = twoincSoleTrader.buyerIsAdoptable(buyer, false);
         twoincSoleTrader.prefetched = { ready: true, buyer: buyer, matches: matches };
         twoincSoleTrader.applyPrefetch();
       });
@@ -4115,7 +4145,13 @@ let twoincSoleTrader = {
     }
     twoincSoleTrader.messageListenerBound = true;
     window.addEventListener("message", function (event) {
-      if (twoincSoleTrader.mode !== "sole_trader" || !twoincSoleTrader.tokens) {
+      // Tokens are required to know the origin to trust, so their absence is
+      // the one thing that can still discard a message. The buyer's current
+      // MODE deliberately is not: an ACCEPTED signup has to be honoured even
+      // if the mode moved on while the popup was open, which it does whenever
+      // a passive prefetch resolves without a match in the meantime and
+      // applyPrefetch() reverts to business.
+      if (!twoincSoleTrader.tokens) {
         return;
       }
       const signupOrigin = new URL(twoincSoleTrader.tokens.signup_url).origin;
@@ -4124,13 +4160,25 @@ let twoincSoleTrader = {
       }
       if (event.data === "ACCEPTED") {
         twoincSoleTrader.fetchCurrentBuyer(function (buyer) {
-          const entered = twoincSoleTrader.enteredEmail().toLowerCase();
-          const matches = !!(buyer && buyer.email && String(buyer.email).toLowerCase() === entered);
-          twoincSoleTrader.prefetched = { ready: true, buyer: buyer, matches: matches };
-          if (matches) {
-            twoincSoleTrader.setCompany(buyer.organization_number, buyer.company_name);
-            twoincSoleTrader.showNote(false);
+          // Authenticated path: the OTP step succeeded, so this identity is
+          // established and the checkout's contact email is not consulted.
+          const adoptable = twoincSoleTrader.buyerIsAdoptable(buyer, true);
+          twoincSoleTrader.prefetched = { ready: true, buyer: buyer, matches: adoptable };
+          if (!adoptable) {
+            // Signup succeeded but the buyer could not be read back. Say so —
+            // staying silent leaves the prompt up looking like nothing
+            // happened, which reads as "click me again".
+            twoincSoleTrader.showError();
+            return;
           }
+          // Completing a signup in a popup the buyer opened themselves is a
+          // live choice of sole trader, and a later one than any automatic
+          // revert, so re-assert the mode rather than dropping the result.
+          if (twoincSoleTrader.mode !== "sole_trader") {
+            twoincSoleTrader.setMode("sole_trader");
+          }
+          twoincSoleTrader.setCompany(buyer.organization_number, buyer.company_name);
+          twoincSoleTrader.showNote(false);
         });
       } else {
         twoincSoleTrader.showError();
