@@ -242,6 +242,32 @@ describe("company name/number pairing tag", () => {
     });
   });
 
+  describe("a capture through sole-trader adoption", () => {
+    test("sets the tag, so an adopted sole trader survives the next company event", () => {
+      // setCompany is the entry point every sole-trader route uses — the chip
+      // click, the prefetch, and the hosted signup's ACCEPTED callback. If it
+      // stopped setting the tag, a freshly adopted sole trader's minted number
+      // would be wiped by the guard on the buyer's next keystroke.
+      ctx.soleTrader.setCompany("TWO:ST:GB:0f8c2b1a", "Sole Trader Example");
+
+      expect(record().organization_number).toBe("TWO:ST:GB:0f8c2b1a");
+      expect(record().pairedName).toBe("Sole Trader Example");
+
+      ctx.Twoinc.getInstance().clearCompanyIfNameStale("Sole Trader Example");
+      expect(record().organization_number).toBe("TWO:ST:GB:0f8c2b1a");
+      expect($("#company_id").val()).toBe("TWO:ST:GB:0f8c2b1a");
+    });
+
+    test("the clearing call leaves no tag behind to vouch for the next name", () => {
+      ctx.soleTrader.setCompany("TWO:ST:GB:0f8c2b1a", "Sole Trader Example");
+
+      // What setMode("business") does on the way out of sole-trader mode.
+      ctx.soleTrader.setCompany("", "");
+
+      expect(record().pairedName).toBeNull();
+    });
+  });
+
   describe("the country guard's re-sync branch", () => {
     test("adopts the name it just decided to trust", () => {
       const instance = ctx.Twoinc.getInstance();
