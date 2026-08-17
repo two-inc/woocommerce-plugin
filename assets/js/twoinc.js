@@ -3612,6 +3612,9 @@ let twoincSoleTrader = {
   // saved", distinct from the flag's own true/false/undefined values.
   savedManualEntryActive: null,
   messageListenerBound: false,
+  // Whether this plugin has opened a signup popup on this page. Latches true
+  // and is never cleared; gates the postMessage listener (see there).
+  popupOpened: false,
   // Result of the most recent autofill prefetch for the entered email.
   // ready=false until the first prefetch resolves; matches=true when the
   // buyer on the Two cookie owns the email currently typed at checkout.
@@ -3890,10 +3893,41 @@ let twoincSoleTrader = {
   },
 
   /**
+   * Whether an autofill buyer may be adopted onto this checkout. The answer
+   * depends on how the buyer was obtained, and the two cases are NOT
+   * interchangeable:
+   *
+   * - PASSIVE (`authenticated` false) — the buyer came off the Two cookie
+   *   with nothing proving the person at this checkout is that buyer. Only
+   *   safe to adopt when the buyer owns the email currently typed here;
+   *   anything looser would prefill one person's company onto another
+   *   person's order.
+   *
+   * - AUTHENTICATED (`authenticated` true) — the hosted signup's OTP step
+   *   has just succeeded, so the server has already established who this is.
+   *   The identity they authenticated as is the answer, and the checkout's
+   *   contact-email field does not get a veto over it: those two
+   *   legitimately differ whenever someone is enrolled under one address and
+   *   ordering with another. Re-applying the passive check here instead
+   *   rejects a buyer who did everything right, silently, leaving the signup
+   *   prompt up so the next click reopens the same popup — indefinitely.
+   */
+  buyerIsAdoptable: function (buyer, authenticated) {
+    if (!buyer) {
+      return false;
+    }
+    if (authenticated) {
+      return true;
+    }
+    const entered = twoincSoleTrader.enteredEmail().toLowerCase();
+    return !!(buyer.email && String(buyer.email).toLowerCase() === entered);
+  },
+
+  /**
    * Prefetch the autofill buyer for the entered email. Runs on every email
    * change so the chip click can resolve synchronously. Mints tokens (needed
-   * for the signup popup) then reads the buyer on the Two cookie; a match is
-   * when that buyer owns the email currently typed at checkout.
+   * for the signup popup) then reads the buyer on the Two cookie. This is the
+   * PASSIVE path — see buyerIsAdoptable().
    */
   onEmailChanged: function () {
     if (!twoincSoleTrader.isAvailable()) {
@@ -3920,8 +3954,7 @@ let twoincSoleTrader = {
         return;
       }
       twoincSoleTrader.fetchCurrentBuyer(function (buyer) {
-        const entered = twoincSoleTrader.enteredEmail().toLowerCase();
-        const matches = !!(buyer && buyer.email && String(buyer.email).toLowerCase() === entered);
+        const matches = twoincSoleTrader.buyerIsAdoptable(buyer, false);
         twoincSoleTrader.prefetched = { ready: true, buyer: buyer, matches: matches };
         twoincSoleTrader.applyPrefetch();
       });
@@ -4097,11 +4130,15 @@ let twoincSoleTrader = {
     // 700 is a floor the hosted flow's layout needs, arrived at by looking at
     // the rendered signup (TWO-40) — the flow is not served from this repo, so
     // nothing here will notice if it ever needs more.
-    return window.open(
+    const win = window.open(
       url,
       "_blank",
       "location=yes,resizable=yes,scrollbars=yes,status=yes,height=805,width=700"
     );
+    if (win) {
+      twoincSoleTrader.popupOpened = true;
+    }
+    return win;
   },
 
   /**
@@ -4115,7 +4152,23 @@ let twoincSoleTrader = {
     }
     twoincSoleTrader.messageListenerBound = true;
     window.addEventListener("message", function (event) {
-      if (twoincSoleTrader.mode !== "sole_trader" || !twoincSoleTrader.tokens) {
+      // Three gates, and the buyer's current MODE is deliberately not one of
+      // them: an ACCEPTED signup has to be honoured even if the mode moved on
+      // while the popup was open, which it does whenever a passive prefetch
+      // resolves without a match in the meantime and applyPrefetch() reverts
+      // to business.
+      //
+      // `popupOpened` is what the mode check was incidentally providing.
+      // This listener is bound for the life of the page and never unbound, so
+      // without it a checkout where the buyer never went near sole trader
+      // stays willing to accept an ACCEPTED for the whole visit. Requiring
+      // that this plugin has actually opened a signup popup narrows that to
+      // buyers who engaged the flow, and it does not race: it latches on the
+      // open and is never cleared.
+      //
+      // Tokens are required to know which origin to trust, so their absence
+      // means the message cannot be authenticated at all.
+      if (!twoincSoleTrader.popupOpened || !twoincSoleTrader.tokens) {
         return;
       }
       const signupOrigin = new URL(twoincSoleTrader.tokens.signup_url).origin;
@@ -4124,13 +4177,27 @@ let twoincSoleTrader = {
       }
       if (event.data === "ACCEPTED") {
         twoincSoleTrader.fetchCurrentBuyer(function (buyer) {
-          const entered = twoincSoleTrader.enteredEmail().toLowerCase();
-          const matches = !!(buyer && buyer.email && String(buyer.email).toLowerCase() === entered);
-          twoincSoleTrader.prefetched = { ready: true, buyer: buyer, matches: matches };
-          if (matches) {
-            twoincSoleTrader.setCompany(buyer.organization_number, buyer.company_name);
-            twoincSoleTrader.showNote(false);
+          // Authenticated path: the OTP step succeeded, so this identity is
+          // established and the checkout's contact email is not consulted.
+          const adoptable = twoincSoleTrader.buyerIsAdoptable(buyer, true);
+          twoincSoleTrader.prefetched = { ready: true, buyer: buyer, matches: adoptable };
+          if (!adoptable) {
+            // Signup succeeded but the buyer could not be read back. Say so —
+            // staying silent leaves the prompt up looking like nothing
+            // happened, which reads as "click me again".
+            twoincSoleTrader.showError();
+            return;
           }
+          // Re-assert the mode over WHATEVER changed it, rather than dropping
+          // the result. An explicit chip click and applyPrefetch()'s automatic
+          // revert both just call setMode("business") and record nothing, so
+          // there is no way to tell them apart here — and a completed signup
+          // is the later action in either case.
+          if (twoincSoleTrader.mode !== "sole_trader") {
+            twoincSoleTrader.setMode("sole_trader");
+          }
+          twoincSoleTrader.setCompany(buyer.organization_number, buyer.company_name);
+          twoincSoleTrader.showNote(false);
         });
       } else {
         twoincSoleTrader.showError();
