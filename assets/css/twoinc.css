@@ -748,15 +748,17 @@
  * Wired to the real duration of the token-mint + buyer-lookup call graph, not
  * to a timeout, and paired with the in-field spinner the company-search
  * control already shows (.twoinc-search-spinner) rather than a separate
- * overlay. The chips stay visible and readable — this only takes the click
- * affordance away, so a second activation cannot stack a second popup on top
- * of the one being prepared. `wait` rather than `progress` because the buyer
- * has nothing to do here but wait.
+ * overlay.
+ *
+ * Deliberately INDICATIVE only — no `pointer-events: none`, no dimming. The
+ * prefetch runs in the background off an email change the buyer may not
+ * associate with the chips at all, so blocking the chips would leave them
+ * unable to pick "Registered company" for the duration of a request they
+ * never asked for. Stacking a second signup popup is prevented by the
+ * re-entrancy guard on the launch itself, which is where that belongs.
  */
 .twoinc-sole-trader-toggle--busy .twoinc-mode-item {
-  cursor: wait;
-  pointer-events: none;
-  opacity: 0.6;
+  cursor: progress;
 }
 
 /*
