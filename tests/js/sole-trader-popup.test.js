@@ -214,6 +214,13 @@ describe("sole-trader signup popup", () => {
         opened.length = 0;
         render();
         adopt();
+        // Only one signup window is allowed open at a time, so the window the
+        // previous iteration opened has to be gone before this one asks for
+        // another — otherwise the second key is refused for the right reason
+        // and this test reads as though it never activated.
+        if (ctx.soleTrader.popupWindow) {
+          ctx.soleTrader.popupWindow.closed = true;
+        }
 
         const event = ctx.$.Event("keydown");
         event.which = which;

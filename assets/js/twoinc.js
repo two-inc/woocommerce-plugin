@@ -3649,6 +3649,27 @@ let twoincSoleTrader = {
   // Whether this plugin has opened a signup popup on this page. Latches true
   // and is never cleared; gates the postMessage listener (see there).
   popupOpened: false,
+  // The popup this plugin most recently opened, kept so a second click can
+  // raise it instead of opening a rival window. Never nulled: a window that
+  // has been closed reports `closed`, which is the only release signal that
+  // cannot fire early.
+  popupWindow: null,
+  // Monotonic supersession counter for the autofill prefetch, the same idiom
+  // addressLookupSeq uses. Bumped whenever the answer in flight stops being
+  // the answer to the current question, so a stale flight settling cannot
+  // clear state a newer one owns.
+  flightSeq: 0,
+  // Whether a prefetch is in the air right now.
+  flightPending: false,
+  // Whether the buyer is WATCHING that prefetch — set only when they click the
+  // Sole trader chip while it is still running. The prefetch itself runs on
+  // every email edit, and nobody is waiting on those, so this is what keeps a
+  // spinner from appearing at someone who did not ask for anything.
+  awaitingFlight: false,
+  // Whether sole trader is the buyer's OWN choice (they clicked the chip)
+  // rather than a selection the prefetch made for them. Read by
+  // applyPrefetch(), which may undo its own selection but never theirs.
+  explicitSoleTrader: false,
   // Result of the most recent autofill prefetch for the entered email.
   // ready=false until the first prefetch resolves; matches=true when the
   // buyer on the Two cookie owns the email currently typed at checkout.
@@ -3736,6 +3757,11 @@ let twoincSoleTrader = {
     jQuery(".twoinc-sole-trader-toggle").addClass("hidden").empty();
     // Re-show (e.g. country change) should prefetch afresh.
     twoincSoleTrader.lastPrefetchEmail = null;
+    // The container the buyer clicked in is gone, so their choice of sole
+    // trader goes with it: a country where the option does not exist must not
+    // leave a selection behind that applyPrefetch() then refuses to withdraw.
+    twoincSoleTrader.explicitSoleTrader = false;
+    twoincSoleTrader.awaitingFlight = false;
     if (twoincSoleTrader.mode === "sole_trader") {
       twoincSoleTrader.setMode("business");
     }
@@ -3818,11 +3844,25 @@ let twoincSoleTrader = {
       });
     $container.append($change);
 
+    // Busy indicator for the one wait a buyer can actually experience here:
+    // clicking Sole trader before the email-driven prefetch has come back.
+    // role="status" rather than aria-hidden — the company-search spinner can
+    // be decorative because select2 announces its own search state, and there
+    // is nothing announcing anything in this container.
+    jQuery("<span></span>")
+      .attr({
+        class: "twoinc-sole-trader-toggle__spinner hidden",
+        role: "status",
+        "aria-label": cfg.text.checking
+      })
+      .appendTo($container);
+
     twoincSoleTrader.updateChips();
     // render() rebuilds this container from scratch on every checkout AJAX
     // refresh, so the change option has to be re-derived here and not only on
     // the transitions that adopt a company.
     twoincSoleTrader.syncChangeOption();
+    twoincSoleTrader.syncSpinner();
     // Prefetch for an already-filled email (returning/logged-in buyer), so a
     // known sole trader is auto-selected without waiting for an email edit.
     twoincSoleTrader.onEmailChanged();
@@ -3859,15 +3899,68 @@ let twoincSoleTrader = {
   },
 
   /**
+   * Paint the busy indicator from `awaitingFlight`, the same derive-don't-set
+   * shape as syncChangeOption above: one reader of the state means a spinner
+   * cannot be left behind by a transition that forgot to hide it.
+   */
+  syncSpinner: function () {
+    jQuery(".twoinc-sole-trader-toggle__spinner").toggleClass(
+      "hidden",
+      !twoincSoleTrader.awaitingFlight
+    );
+  },
+
+  /**
+   * Stop waiting on the prefetch, whatever the reason.
+   *
+   * @returns {void}
+   */
+  stopWaiting: function () {
+    twoincSoleTrader.awaitingFlight = false;
+    twoincSoleTrader.syncSpinner();
+  },
+
+  /**
+   * A prefetch reached a terminal branch. EVERY terminal branch of the call
+   * graph funnels here, which is what makes a stuck indicator impossible:
+   * fetchTokens' missing-config return, its non-success response and its
+   * transport failure all arrive on the `!ok` path, and fetchCurrentBuyer's
+   * success, its 404, its non-2xx throw and its transport rejection all
+   * arrive through its single callback.
+   *
+   * A superseded flight is dropped rather than applied: its answer is to a
+   * question about an email the buyer has since changed, so letting it settle
+   * would both clear an indicator a newer flight owns and act on a stale
+   * buyer.
+   *
+   * @param {number} seq the flightSeq this flight was started under
+   *
+   * @returns {void}
+   */
+  settleFlight: function (seq) {
+    if (seq !== twoincSoleTrader.flightSeq) {
+      return;
+    }
+    twoincSoleTrader.flightPending = false;
+    twoincSoleTrader.stopWaiting();
+    twoincSoleTrader.applyPrefetch();
+  },
+
+  /**
    * A mode chip was clicked. Business is immediate; Sole trader switches
    * mode then acts on the prefetched autofill result so the signup popup
    * (when needed) opens in the same synchronous gesture as the click.
    */
   onModeChipClick: function (mode) {
     if (mode === "business") {
+      twoincSoleTrader.explicitSoleTrader = false;
+      twoincSoleTrader.stopWaiting();
       twoincSoleTrader.setMode("business");
       return;
     }
+    // Their own choice, not the prefetch's. applyPrefetch() reads this and
+    // will not undo it.
+    twoincSoleTrader.explicitSoleTrader = true;
     twoincSoleTrader.setMode("sole_trader");
     const pf = twoincSoleTrader.prefetched;
     if (pf.ready && pf.matches && pf.buyer) {
@@ -3877,8 +3970,18 @@ let twoincSoleTrader = {
       // Prefetch resolved with no matching buyer → signup. Opening here keeps
       // the user gesture intact so the popup is not blocker-killed.
       twoincSoleTrader.launchSignup();
+    } else if (twoincSoleTrader.flightPending) {
+      // The answer that decides whether this buyer needs to register is still
+      // in the air. Show that something is happening; settleFlight() reveals
+      // the prompt once it lands. The popup cannot be opened from there — an
+      // async window.open is blocker-killed — so the buyer's next click is
+      // what opens it.
+      twoincSoleTrader.awaitingFlight = true;
+      twoincSoleTrader.syncSpinner();
+      twoincSoleTrader.showNote(false);
     } else {
-      // Prefetch not ready (e.g. no email entered yet): fall back to the link.
+      // Nothing in flight and nothing prefetched (e.g. no email entered yet):
+      // the link is the only next step.
       twoincSoleTrader.showNote(true);
     }
   },
@@ -4023,31 +4126,46 @@ let twoincSoleTrader = {
     }
     twoincSoleTrader.lastPrefetchEmail = email;
     twoincSoleTrader.prefetched = { ready: false, buyer: null, matches: false };
+    // Bumped before the early return below, not just before a request goes
+    // out: an answer already in flight is an answer about the previous email
+    // either way, so it stops being allowed to settle anything from here on.
+    const seq = ++twoincSoleTrader.flightSeq;
     if (!email) {
       // No email to match → cannot be a known sole trader; leave business.
+      // Nothing is in flight now, so nothing is left to wait for.
+      twoincSoleTrader.flightPending = false;
+      twoincSoleTrader.stopWaiting();
       if (twoincSoleTrader.mode === "sole_trader") {
         twoincSoleTrader.setMode("business");
       }
       return;
     }
+    twoincSoleTrader.flightPending = true;
     twoincSoleTrader.fetchTokens(function (ok) {
       if (!ok) {
         twoincSoleTrader.prefetched = { ready: true, buyer: null, matches: false };
-        twoincSoleTrader.applyPrefetch();
+        twoincSoleTrader.settleFlight(seq);
         return;
       }
       twoincSoleTrader.fetchCurrentBuyer(function (buyer) {
         const matches = twoincSoleTrader.buyerIsAdoptable(buyer, false);
         twoincSoleTrader.prefetched = { ready: true, buyer: buyer, matches: matches };
-        twoincSoleTrader.applyPrefetch();
+        twoincSoleTrader.settleFlight(seq);
       });
     });
   },
 
   /**
    * React to a resolved prefetch: a matching buyer auto-selects Sole trader
-   * and prefills the company; a non-match reverts an active Sole-trader
-   * selection back to Registered business (re-clicking then starts signup).
+   * and prefills the company.
+   *
+   * On a non-match, what happens depends on WHO selected sole trader. A
+   * selection this prefetch made on an earlier email is its own to withdraw.
+   * A selection the BUYER made by clicking the chip is not: withdrawing that
+   * silently flips the mode back and hides the prompt seconds after they
+   * clicked, which reads as the checkout undoing them for no stated reason.
+   * Finding nobody to adopt is precisely the case where registering is the
+   * next step, so the prompt goes up instead.
    */
   applyPrefetch: function () {
     const pf = twoincSoleTrader.prefetched;
@@ -4056,7 +4174,11 @@ let twoincSoleTrader = {
       twoincSoleTrader.setCompany(pf.buyer.organization_number, pf.buyer.company_name);
       twoincSoleTrader.showNote(false);
     } else if (twoincSoleTrader.mode === "sole_trader") {
-      twoincSoleTrader.setMode("business");
+      if (twoincSoleTrader.explicitSoleTrader) {
+        twoincSoleTrader.showNote(true);
+      } else {
+        twoincSoleTrader.setMode("business");
+      }
     }
   },
 
@@ -4180,6 +4302,23 @@ let twoincSoleTrader = {
     if (!twoincSoleTrader.tokens) {
       return null;
     }
+    // One signup window at a time. Both entry points here are buttons a buyer
+    // can click twice, and two hosted flows racing each other on the same
+    // delegated tokens is not a state either of them expects.
+    //
+    // Released by observing `closed` rather than by clearing a flag on some
+    // event: a "the buyer finished" signal can fire before the window really
+    // goes away, and a window that has gone away always reports closed.
+    if (twoincSoleTrader.popupWindow && !twoincSoleTrader.popupWindow.closed) {
+      // Raising the window is a courtesy; refusing to open a second one is the
+      // job. `focus` is checked rather than assumed because this reference is a
+      // cross-origin WindowProxy whose shape is the browser's to decide, and a
+      // throw here would take down the click handler that called us.
+      if (typeof twoincSoleTrader.popupWindow.focus === "function") {
+        twoincSoleTrader.popupWindow.focus();
+      }
+      return twoincSoleTrader.popupWindow;
+    }
     const prefill = {
       email: jQuery("#billing_email").val(),
       first_name: jQuery("#billing_first_name").val(),
@@ -4228,6 +4367,7 @@ let twoincSoleTrader = {
     );
     if (win) {
       twoincSoleTrader.popupOpened = true;
+      twoincSoleTrader.popupWindow = win;
     }
     return win;
   },
@@ -4280,10 +4420,10 @@ let twoincSoleTrader = {
             return;
           }
           // Re-assert the mode over WHATEVER changed it, rather than dropping
-          // the result. An explicit chip click and applyPrefetch()'s automatic
-          // revert both just call setMode("business") and record nothing, so
-          // there is no way to tell them apart here — and a completed signup
-          // is the later action in either case.
+          // the result. `explicitSoleTrader` does now distinguish a buyer's own
+          // chip click from applyPrefetch()'s automatic revert, but nothing
+          // here needs to: completing a signup in a popup is a later action
+          // than either of them, so both are overridden alike.
           if (twoincSoleTrader.mode !== "sole_trader") {
             twoincSoleTrader.setMode("sole_trader");
           }
