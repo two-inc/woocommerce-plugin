@@ -35,6 +35,7 @@ describe("autofill buyer trust levels", () => {
   let $;
   let soleTrader;
   let boundMessageListeners;
+  let realAddEventListener;
 
   beforeEach(() => {
     // The plugin's re-entrancy flag lives on the module object, which the
@@ -45,7 +46,8 @@ describe("autofill buyer trust levels", () => {
     // is fine (one page load, one module, one listener); the harness is what
     // needs the bookkeeping.
     boundMessageListeners = [];
-    const realAdd = global.window.addEventListener.bind(global.window);
+    realAddEventListener = global.window.addEventListener;
+    const realAdd = realAddEventListener.bind(global.window);
     global.window.addEventListener = function (type, handler, options) {
       if (type === "message") {
         boundMessageListeners.push(handler);
@@ -86,6 +88,9 @@ describe("autofill buyer trust levels", () => {
     boundMessageListeners.forEach(function (handler) {
       global.window.removeEventListener("message", handler);
     });
+    // Restored, or each beforeEach wraps the previous wrapper and the chain
+    // grows a layer per test.
+    global.window.addEventListener = realAddEventListener;
     harness.releaseWidgets($);
     document.body.innerHTML = "";
     delete global.fetch;
@@ -237,6 +242,43 @@ describe("autofill buyer trust levels", () => {
       await post();
 
       expect($("#company_id").val()).toBe("");
+    });
+
+    test("a blocked popup does not open the gate", async () => {
+      // The latch has to follow whether a window was actually created. A
+      // blocked window.open returns null, the buyer falls back to the prompt
+      // link, and until that link opens something there is no popup whose
+      // message this checkout should believe.
+      soleTrader.popupOpened = false;
+      const blocked = [];
+      const originalOpen = global.window.open;
+      global.window.open = function () {
+        blocked.push(1);
+        return null;
+      };
+      try {
+        soleTrader.openPopup();
+      } finally {
+        global.window.open = originalOpen;
+      }
+      expect(blocked).toHaveLength(1);
+      expect(soleTrader.popupOpened).toBe(false);
+
+      stubBuyer(ENROLLED);
+      soleTrader.mode = "sole_trader";
+      await post();
+
+      expect($("#company_id").val()).toBe("");
+    });
+
+    test("reports a signup the hosted flow did not accept", async () => {
+      soleTrader.mode = "sole_trader";
+      stubBuyer(ENROLLED);
+
+      await post("REJECTED");
+
+      expect($("#company_id").val()).toBe("");
+      expect($(".twoinc-sole-trader-toggle__error").text()).toBe("Something went wrong");
     });
 
     test("arms the order-intent check once the company is adopted", async () => {
