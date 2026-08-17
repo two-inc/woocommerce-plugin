@@ -230,6 +230,8 @@ final class BrandConfigSpec
             'testFulfilmentTriggerExcludesCancelledAndRefundedFromOptionsAndStoredValue',
             'testCancelledOrderNeverMisdispatchesAsFulfilmentEvenIfConfiguredAsTrigger',
             'testDevHostOverridesApplyPerServiceBehindTheDevelopmentGate',
+            'testGatewayApiHostHonoursTheOverrideOnlyOnADevelopmentInstall',
+            'testPortalOverrideKeepsQueryAndFragment',
             'testSoleTraderSignupFollowsTheCheckoutHostOverride',
             'testDevHostOverrideLeavesOtherBrandHostsIntact',
             'testShouldDisableSslVerifyOffByDefault',
@@ -4123,6 +4125,89 @@ final class BrandConfigSpec
             putenv($envVar);
         }
         unset($GLOBALS['test_environment_type']);
+    }
+
+    /**
+     * get_twoinc_checkout_host() is the method the gateway actually calls for
+     * every outbound API request, and it used to carry its own copy of the
+     * override branch behind the old sniffed gate. It now delegates, so the
+     * delegation is what needs pinning — including on a dev-SNIFFED shop that
+     * has not declared itself a development install, which is precisely the
+     * case the old gate honoured and this one does not.
+     */
+    private static function testGatewayApiHostHonoursTheOverrideOnlyOnADevelopmentInstall(): void
+    {
+        $make = static function (array $options) {
+            return new class ($options) extends WC_Twoinc {
+                private $options;
+                public function __construct($options)
+                {
+                    $this->id = WC_Twoinc_Brand::get('gateway_id');
+                    $this->options = $options;
+                }
+                public function get_option($key, $empty_value = null)
+                {
+                    return $this->options[$key] ?? $empty_value ?? '';
+                }
+            };
+        };
+
+        putenv('TWOINC_DEV_API_HOST=http://portal.localhost/api');
+        try {
+            // Declared development install: the raw override host, verbatim.
+            $GLOBALS['test_home_url'] = 'https://shop.merchant.example';
+            $GLOBALS['test_environment_type'] = 'development';
+            TinyAssert::same('http://portal.localhost/api', $make([])->get_twoinc_checkout_host());
+
+            // Undeclared install on a dev-sniffed hostname: the OLD gate
+            // honoured this, the new one must not. The sniffer still governs
+            // which environment it lands in, so the override host is
+            // classified into a mode and the brand's host for that mode is
+            // used instead — a brand host, never the arbitrary one.
+            unset($GLOBALS['test_environment_type']);
+            $GLOBALS['test_home_url'] = 'https://woocom.staging.two.inc';
+            TinyAssert::same(
+                'https://api.staging.two.inc',
+                $make([])->get_twoinc_checkout_host(),
+                'an undeclared install must fall back to a brand host, not the override'
+            );
+
+            // A real merchant shop with the variable leaked in: production.
+            $GLOBALS['test_home_url'] = 'https://shop.merchant.example';
+            TinyAssert::same(
+                'https://api.two.inc',
+                $make([])->get_twoinc_checkout_host(),
+                'a production shop must ignore a leaked override entirely'
+            );
+        } finally {
+            putenv('TWOINC_DEV_API_HOST');
+            unset($GLOBALS['test_environment_type']);
+            unset($GLOBALS['test_home_url']);
+        }
+    }
+
+    /**
+     * A brand whose portal signup URL carries a query must keep it when the
+     * origin is swapped — dropping it would send a developer to a subtly
+     * different portal route than production uses.
+     */
+    private static function testPortalOverrideKeepsQueryAndFragment(): void
+    {
+        $GLOBALS['test_environment_type'] = 'development';
+        putenv('TWOINC_DEV_PORTAL_HOST=http://portal.localhost');
+        WC_Twoinc_Brand::reset();
+        add_filter('twoinc_brand_file', static function ($file) {
+            return __DIR__ . '/fixtures/querysignupbrand.php';
+        });
+        try {
+            TinyAssert::same(
+                'http://portal.localhost/auth/merchant/signup?ref=wc#step1',
+                WC_Twoinc_Helper::get_merchant_portal_signup_url()
+            );
+        } finally {
+            putenv('TWOINC_DEV_PORTAL_HOST');
+            unset($GLOBALS['test_environment_type']);
+        }
     }
 
     /**

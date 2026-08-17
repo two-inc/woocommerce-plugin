@@ -1206,7 +1206,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * override is gated on the install declaring itself non-production
          * rather than on anything the gateway's own settings can reach.
          *
-         * @param string             $service 'api' or 'checkout'
+         * @param string             $service 'api' or 'checkout' (the portal
+         *                                    is not template-built; see
+         *                                    get_merchant_portal_signup_url)
          * @param WC_Payment_Gateway $gateway
          *
          * @return string
@@ -1224,8 +1226,10 @@ if (!class_exists('WC_Twoinc_Helper')) {
 
         /**
          * The merchant portal's signup URL. The brand registry owns the
-         * whole URL, so an override swaps its origin and keeps the path —
-         * a developer running the portal locally serves the same routes.
+         * whole URL, so an override swaps its origin and keeps everything
+         * after it — a developer running the portal locally serves the same
+         * routes, and a brand whose signup URL carries a query (a campaign
+         * or locale parameter) must not silently lose it.
          *
          * @return string
          */
@@ -1236,8 +1240,18 @@ if (!class_exists('WC_Twoinc_Helper')) {
             if ($override === null) {
                 return $url;
             }
-            $path = (string) parse_url($url, PHP_URL_PATH);
-            return $override . $path;
+            $parts = parse_url($url);
+            if ($parts === false) {
+                return $override;
+            }
+            $suffix = (string) ($parts['path'] ?? '');
+            if (isset($parts['query'])) {
+                $suffix .= '?' . $parts['query'];
+            }
+            if (isset($parts['fragment'])) {
+                $suffix .= '#' . $parts['fragment'];
+            }
+            return $override . $suffix;
         }
 
         /**

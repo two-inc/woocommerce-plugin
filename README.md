@@ -115,11 +115,11 @@ routinely need different hosts during a local loop. Each falls back on its
 own to the brand's host for the configured environment, so overriding one
 leaves the other two alone.
 
-| Env var                    | Service                                          | `.env` key             |
-| -------------------------- | ------------------------------------------------ | ---------------------- |
-| `TWOINC_DEV_API_HOST`      | Checkout / merchant API                          | `TWO_API_BASE_URL`     |
+| Env var                    | Service                                           | `.env` key              |
+| -------------------------- | ------------------------------------------------- | ----------------------- |
+| `TWOINC_DEV_API_HOST`      | Checkout / merchant API                           | `TWO_API_BASE_URL`      |
 | `TWOINC_DEV_CHECKOUT_HOST` | Hosted checkout-page app (company search, signup) | `TWO_CHECKOUT_BASE_URL` |
-| `TWOINC_DEV_PORTAL_HOST`   | Merchant portal (settings-screen signup link)     | `TWO_PORTAL_BASE_URL`  |
+| `TWOINC_DEV_PORTAL_HOST`   | Merchant portal (settings-screen signup link)     | `TWO_PORTAL_BASE_URL`   |
 
 These are server env vars on the container serving checkout requests, never
 wp-admin fields — the merchant-editable test-host control was removed
@@ -137,7 +137,7 @@ sets it to `development` for this stack; an existing local stack needs
 
 `TWOINC_DEV_HOSTNAMES` is separate and older: a comma-separated hostname
 allow-list feeding the legacy dev-environment sniffer, which still decides
-which *environment* an install predating the explicit `checkout_env` setting
+which _environment_ an install predating the explicit `checkout_env` setting
 resolves to. It has no say over the host overrides above.
 
 **Reaching a laptop-hosted checkout page.** `TWOINC_DEV_CHECKOUT_HOST` is the
