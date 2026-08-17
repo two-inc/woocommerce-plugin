@@ -290,6 +290,27 @@ describe("sole-trader prefetch in flight", () => {
       expect(spinnerVisible()).toBe(false);
     });
 
+    test("survives the checkout rebuilding the container mid-wait", async () => {
+      // render() empties and refills this container on every checkout AJAX
+      // refresh, and WooCommerce fires those for a coupon or a shipping-method
+      // change — neither of which has any bearing on a prefetch already in the
+      // air. The indicator has to come back with the rebuilt markup.
+      await setEmail("waiting@example.test");
+      soleTrader.onModeChipClick("sole_trader");
+      expect(spinnerVisible()).toBe(true);
+
+      soleTrader.render();
+
+      expect(spinnerVisible()).toBe(true);
+      // And the rebuild must not have started a second flight to settle it.
+      expect(pendingTokenRequests).toHaveLength(1);
+
+      stubBuyer(null);
+      await resolveTokens("ok");
+
+      expect(spinnerVisible()).toBe(false);
+    });
+
     test("a superseded flight cannot clear the indicator a newer one owns", async () => {
       await setEmail("first@example.test");
       soleTrader.onModeChipClick("sole_trader");
