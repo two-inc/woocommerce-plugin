@@ -4280,40 +4280,49 @@ let twoincSoleTrader = {
    * Read the buyer on the Two cookie. Invokes cb(buyer) with the buyer
    * details, or cb(null) when none exist (404) or on error. No UI side
    * effects — the caller decides what to do with the result.
+   *
+   * Only the READ resolves to cb(null). An exception thrown by cb itself
+   * propagates out of the returned promise, so a caller whose handling
+   * fails is not reported as a buyer who could not be read.
+   *
+   * @returns {Promise} settles when cb has run; rejects if cb threw
    */
   fetchCurrentBuyer: function (cb) {
     if (!twoincSoleTrader.tokens) {
       cb(null);
-      return;
+      return Promise.resolve();
     }
-    fetch(window.twoinc.twoinc_checkout_host + "/autofill/v1/buyer/current", {
-      credentials: "include",
-      headers: { "two-delegated-authority-token": twoincSoleTrader.tokens.autofill_token }
-    })
-      .then(function (response) {
-        if (response.ok) return response.json();
-        // Every non-2xx path must still drain the body. Abandoning an unread
-        // response leaves the request in flight as far as the browser is
-        // concerned, so the in-flight request count never returns to zero and
-        // anything waiting on network-idle (tooling, analytics, some themes)
-        // hangs.
-        return response.text().then(function () {
-          if (response.status === 404) return null;
-          throw new Error("autofill/v1/buyer/current failed");
-        });
+    return (
+      fetch(window.twoinc.twoinc_checkout_host + "/autofill/v1/buyer/current", {
+        credentials: "include",
+        headers: { "two-delegated-authority-token": twoincSoleTrader.tokens.autofill_token }
       })
-      // The callback runs OUTSIDE the catch, so only the read itself can
-      // resolve to "no buyer". Inside, an exception thrown by the callback —
-      // and it does real DOM and widget work — would be caught here and
-      // re-invoke it with null, turning a half-finished adoption into a
-      // "could not read the buyer" error that names the wrong cause.
-      .then(function (json) {
-        return json || null;
-      })
-      .catch(function () {
-        return null;
-      })
-      .then(cb);
+        .then(function (response) {
+          if (response.ok) return response.json();
+          // Every non-2xx path must still drain the body. Abandoning an unread
+          // response leaves the request in flight as far as the browser is
+          // concerned, so the in-flight request count never returns to zero and
+          // anything waiting on network-idle (tooling, analytics, some themes)
+          // hangs.
+          return response.text().then(function () {
+            if (response.status === 404) return null;
+            throw new Error("autofill/v1/buyer/current failed");
+          });
+        })
+        // The callback runs OUTSIDE the catch, so only the read itself can
+        // resolve to "no buyer". Inside it, an exception thrown by the callback
+        // — which does real DOM and widget work on both paths, tearing down and
+        // rebuilding a select2 instance — was caught here and re-invoked the
+        // callback with null. That both blamed the network for a failure that
+        // was not the network's, and recorded "no buyer" while one existed.
+        .then(function (json) {
+          return json || null;
+        })
+        .catch(function () {
+          return null;
+        })
+        .then(cb)
+    );
   },
 
   openPopup: function (intent) {

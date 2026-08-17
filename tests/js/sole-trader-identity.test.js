@@ -230,6 +230,26 @@ describe("autofill buyer trust levels", () => {
       expect($(".twoinc-sole-trader-toggle__error").text()).toBe("Something went wrong");
     });
 
+    test("lets an adoption failure surface instead of blaming the buyer read", async () => {
+      // The read succeeded; applying its result did not. Those are different
+      // failures. If the callback's exception were caught by the read's own
+      // handler it would re-invoke the callback with null — blaming the
+      // network for something that never went near it, and recording "no
+      // buyer" while one existed.
+      stubBuyer(ENROLLED);
+      const seen = [];
+      const boom = new Error("applying the buyer failed");
+
+      await expect(
+        soleTrader.fetchCurrentBuyer(function (buyer) {
+          seen.push(buyer);
+          throw boom;
+        })
+      ).rejects.toThrow("applying the buyer failed");
+
+      expect(seen).toEqual([ENROLLED]);
+    });
+
     test("ignores a message from any other origin", async () => {
       soleTrader.mode = "sole_trader";
       stubBuyer(ENROLLED);
