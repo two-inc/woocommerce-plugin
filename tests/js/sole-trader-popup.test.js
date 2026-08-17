@@ -2,12 +2,15 @@
  * TWO-40. The hosted sole-trader signup opens in a real popup window, at a
  * width the hosted flow's own layout does not clip.
  *
- * Both assertions are here because they fail independently and for unrelated
- * reasons. The width is a floor discovered by looking at the rendered signup
- * flow, so nothing in this repo would notice it drifting back down; and the
- * popup has to stay a `window.open()` call made synchronously from the click
- * that triggered it, because the flow it hosts only works in a real window
- * and a browser only honours a popup that is still inside a user gesture.
+ * Only the first test pins the change that added this file — the width was
+ * 610 and the flow clipped. The rest cover properties that were already true
+ * and had no test at all: they are here because they are the properties most
+ * likely to be broken by someone editing this function for an unrelated
+ * reason. The popup has to stay a `window.open()` call made synchronously
+ * from the click that triggered it (the hosted flow only works in a real
+ * window, and a browser only honours a popup still inside a user gesture),
+ * and the URL has to stay the one the server built, because that URL is how
+ * an overlay brand reaches its own hosted flow.
  */
 
 "use strict";

@@ -4102,8 +4102,9 @@ let twoincSoleTrader = {
     // but is dev-loop-only, for when several brands temporarily share one
     // non-prod domain — don't reach for it as the primary mechanism.
     //
-    // 700 wide is a floor, not a preference: the hosted signup flow's own
-    // layout clips below it.
+    // 700 is a floor the hosted flow's layout needs, arrived at by looking at
+    // the rendered signup (TWO-40) — the flow is not served from this repo, so
+    // nothing here will notice if it ever needs more.
     return window.open(
       url,
       "_blank",
