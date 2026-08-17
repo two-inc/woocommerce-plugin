@@ -97,6 +97,22 @@ describe("autofill buyer trust levels", () => {
     delete window.twoinc.enable_order_intent;
   });
 
+  /** Stub the buyer read, as the endpoint would answer it. */
+  function stubBuyer(buyer) {
+    global.fetch = function () {
+      return Promise.resolve({
+        ok: buyer !== null,
+        status: buyer === null ? 404 : 200,
+        json: function () {
+          return Promise.resolve(buyer);
+        },
+        text: function () {
+          return Promise.resolve("");
+        }
+      });
+    };
+  }
+
   describe("buyerIsAdoptable", () => {
     // buyer email | entered email | authenticated | adoptable | description
     const cases = [
@@ -143,22 +159,6 @@ describe("autofill buyer trust levels", () => {
       soleTrader.popupOpened = true;
     });
 
-    /** Stub the buyer read the ACCEPTED handler performs. */
-    function stubBuyer(buyer) {
-      global.fetch = function () {
-        return Promise.resolve({
-          ok: buyer !== null,
-          status: buyer === null ? 404 : 200,
-          json: function () {
-            return Promise.resolve(buyer);
-          },
-          text: function () {
-            return Promise.resolve("");
-          }
-        });
-      };
-    }
-
     /**
      * Let every pending microtask run.
      *
@@ -192,12 +192,17 @@ describe("autofill buyer trust levels", () => {
       $("#billing_email").val("ordering-from-elsewhere@example.test");
       soleTrader.mode = "sole_trader";
       stubBuyer(ENROLLED);
+      // Shown first, deliberately. render() leaves the note hidden, so
+      // asserting "hidden" after adoption against that initial state would
+      // hold whether or not anything hid it — and the prompt being left up is
+      // the reopen loop this whole file exists for. Assert the transition.
+      soleTrader.showNote(true);
+      expect($(".twoinc-sole-trader-note").hasClass("hidden")).toBe(false);
 
       await post();
 
       expect($("#company_id").val()).toBe(ENROLLED.organization_number);
       expect($("#billing_company").val()).toBe(ENROLLED.company_name);
-      // The prompt is the reopen affordance. Still visible means the loop.
       expect($(".twoinc-sole-trader-note").hasClass("hidden")).toBe(true);
     });
 
@@ -294,6 +299,81 @@ describe("autofill buyer trust levels", () => {
 
       expect($("#company_id").val()).toBe(ENROLLED.organization_number);
       expect(ctx.Twoinc.getInstance().orderIntentCheck.interval).not.toBeNull();
+    });
+  });
+
+  describe("the buyer read's own contract", () => {
+    // These exercise fetchCurrentBuyer directly rather than the message path.
+    test("lets an adoption failure surface instead of blaming the buyer read", async () => {
+      // The read succeeded; applying its result did not. Those are different
+      // failures. If the callback's exception were caught by the read's own
+      // handler it would re-invoke the callback with null — blaming the
+      // network for something that never went near it, and recording "no
+      // buyer" while one existed.
+      stubBuyer(ENROLLED);
+      const seen = [];
+
+      // The message is buyer-conditional on purpose. Under the old shape the
+      // catch re-invoked the callback, so a rejection happened either way and
+      // matching on a fixed message proved nothing — but that second call
+      // arrives with a null the read never produced, so the two shapes reject
+      // with different messages and the assertion below can tell them apart on
+      // its own.
+      await expect(
+        soleTrader.fetchCurrentBuyer(function (buyer) {
+          seen.push(buyer);
+          throw new Error(
+            buyer ? "applying the buyer failed" : "re-invoked with a null the read never produced"
+          );
+        })
+      ).rejects.toThrow("applying the buyer failed");
+
+      expect(seen).toEqual([ENROLLED]);
+    });
+
+    test("resolves a thenable even when there are no tokens to read with", async () => {
+      // Both exits return a promise, so a caller can sequence after the read
+      // without knowing which path it took.
+      soleTrader.tokens = null;
+      const seen = [];
+
+      // Asserted on the RETURN VALUE, not by awaiting it: `await undefined`
+      // succeeds, so awaiting would pass whether or not this path returns
+      // anything at all.
+      const returned = soleTrader.fetchCurrentBuyer(function (buyer) {
+        seen.push(buyer);
+      });
+
+      expect(typeof (returned || {}).then).toBe("function");
+      await returned;
+      expect(seen).toEqual([null]);
+    });
+
+    test("drains the body of a response it is not going to read", async () => {
+      // Not politeness: an unread body leaves the request in flight as far as
+      // the browser is concerned, so anything waiting on network-idle never
+      // sees it finish. What is pinned is that the body IS read — not that the
+      // read is awaited before proceeding, since a fire-and-forget text() would
+      // still pass here, and would still drain.
+      let drained = 0;
+      global.fetch = function () {
+        return Promise.resolve({
+          ok: false,
+          status: 500,
+          text: function () {
+            drained += 1;
+            return Promise.resolve("");
+          }
+        });
+      };
+      const seen = [];
+
+      await soleTrader.fetchCurrentBuyer(function (buyer) {
+        seen.push(buyer);
+      });
+
+      expect(drained).toBe(1);
+      expect(seen).toEqual([null]);
     });
   });
 });

@@ -4280,34 +4280,53 @@ let twoincSoleTrader = {
    * Read the buyer on the Two cookie. Invokes cb(buyer) with the buyer
    * details, or cb(null) when none exist (404) or on error. No UI side
    * effects — the caller decides what to do with the result.
+   *
+   * Only the READ resolves to cb(null). An exception thrown by cb itself
+   * propagates out of the returned promise, so a caller whose handling
+   * fails is not reported as a buyer who could not be read.
+   *
+   * @returns {Promise} settles when cb has run; rejects if cb threw
    */
   fetchCurrentBuyer: function (cb) {
     if (!twoincSoleTrader.tokens) {
-      cb(null);
-      return;
-    }
-    fetch(window.twoinc.twoinc_checkout_host + "/autofill/v1/buyer/current", {
-      credentials: "include",
-      headers: { "two-delegated-authority-token": twoincSoleTrader.tokens.autofill_token }
-    })
-      .then(function (response) {
-        if (response.ok) return response.json();
-        // Every non-2xx path must still drain the body. Abandoning an unread
-        // response leaves the request in flight as far as the browser is
-        // concerned, so the in-flight request count never returns to zero and
-        // anything waiting on network-idle (tooling, analytics, some themes)
-        // hangs.
-        return response.text().then(function () {
-          if (response.status === 404) return null;
-          throw new Error("autofill/v1/buyer/current failed");
-        });
-      })
-      .then(function (json) {
-        cb(json || null);
-      })
-      .catch(function () {
+      // Deferred rather than called straight, so both exits really do behave
+      // alike: cb runs off a promise either way, and a throwing cb rejects the
+      // returned promise instead of throwing into this caller's frame.
+      return Promise.resolve().then(function () {
         cb(null);
       });
+    }
+    return (
+      fetch(window.twoinc.twoinc_checkout_host + "/autofill/v1/buyer/current", {
+        credentials: "include",
+        headers: { "two-delegated-authority-token": twoincSoleTrader.tokens.autofill_token }
+      })
+        .then(function (response) {
+          if (response.ok) return response.json();
+          // Every non-2xx path must still drain the body. Abandoning an unread
+          // response leaves the request in flight as far as the browser is
+          // concerned, so the in-flight request count never returns to zero and
+          // anything waiting on network-idle (tooling, analytics, some themes)
+          // hangs.
+          return response.text().then(function () {
+            if (response.status === 404) return null;
+            throw new Error("autofill/v1/buyer/current failed");
+          });
+        })
+        // The callback runs OUTSIDE the catch, so only the read itself can
+        // resolve to "no buyer". Inside the catch, an exception thrown by the
+        // callback — which does real DOM and widget work on both paths, tearing
+        // down and rebuilding a select2 instance — was caught and re-invoked the
+        // callback with null. That both blamed the network for a failure that
+        // was not the network's, and recorded "no buyer" while one existed.
+        .then(function (json) {
+          return json || null;
+        })
+        .catch(function () {
+          return null;
+        })
+        .then(cb)
+    );
   },
 
   openPopup: function (intent) {
@@ -4395,8 +4414,8 @@ let twoincSoleTrader = {
     }
     twoincSoleTrader.messageListenerBound = true;
     window.addEventListener("message", function (event) {
-      // Three gates, and the buyer's current MODE is deliberately not one of
-      // them: an ACCEPTED signup has to be honoured even if the mode moved on
+      // The buyer's current MODE is deliberately not one of the gates below:
+      // an ACCEPTED signup has to be honoured even if the mode moved on
       // while the popup was open, which it does whenever a passive prefetch
       // resolves without a match in the meantime and applyPrefetch() reverts
       // to business.
