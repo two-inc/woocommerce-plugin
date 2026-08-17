@@ -737,6 +737,33 @@
   text-underline-offset: 2px;
   cursor: pointer;
 }
+/*
+ * "Select a different sole trader" — a real <button> reading as the link it
+ * looks like, so the native chrome has to be reset the same way
+ * #search_company_btn's is: `text-transform` because a host theme's generic
+ * `button { text-transform: uppercase; }` will otherwise claim it, and a
+ * transparent dotted border reserving the space the :focus rule below only
+ * recolours, so focus does not resize the box and nudge the text.
+ */
+.twoinc-sole-trader-change {
+  display: block;
+  margin-top: 10px;
+  padding: 0 2px;
+  cursor: pointer;
+  color: #3043d1;
+  background: none;
+  border: 1px dotted transparent;
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-transform: none !important;
+}
+.twoinc-sole-trader-change.hidden {
+  display: none;
+}
+.twoinc-sole-trader-change:focus {
+  border-color: #808080 !important;
+}
 .twoinc-sole-trader-toggle__error {
   flex-basis: 100%;
   color: #b00020;

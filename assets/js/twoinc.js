@@ -3756,7 +3756,39 @@ let twoincSoleTrader = {
       .appendTo($note);
     $container.append($note);
 
+    // The other half of the note above: that one asks a buyer with no sole
+    // trader to register, this offers a buyer who has one a way to swap it.
+    // Exactly one of the two is ever visible, which is why they are siblings
+    // with independent gating rather than one control that rewrites its text.
+    //
+    // A real <button>, with click AND Enter/Space bound directly on the
+    // element, for the reason documented at length on getSearchCompanyBtnNode:
+    // a delegated bubble-phase handler on document.body was live-observed not
+    // to run for a real mouse click on a button in this checkout, and the
+    // browser's own activation of a focused <button> did not deliver
+    // Enter/Space either. Same failure would apply here, so same binding.
+    const $change = jQuery("<button></button>")
+      .attr({ type: "button", class: "twoinc-sole-trader-change hidden" })
+      .text(cfg.text.change_prompt)
+      .on("click", function (event) {
+        event.preventDefault();
+        twoincSoleTrader.launchSignup("change");
+      })
+      .on("keydown", function (event) {
+        if (event.which !== 13 && event.which !== 32) {
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        twoincSoleTrader.launchSignup("change");
+      });
+    $container.append($change);
+
     twoincSoleTrader.updateChips();
+    // render() rebuilds this container from scratch on every checkout AJAX
+    // refresh, so the change option has to be re-derived here and not only on
+    // the transitions that adopt a company.
+    twoincSoleTrader.syncChangeOption();
     // Prefetch for an already-filled email (returning/logged-in buyer), so a
     // known sole trader is auto-selected without waiting for an email edit.
     twoincSoleTrader.onEmailChanged();
@@ -3773,6 +3805,23 @@ let twoincSoleTrader = {
 
   showNote: function (show) {
     jQuery(".twoinc-sole-trader-note").toggleClass("hidden", !show);
+    twoincSoleTrader.syncChangeOption();
+  },
+
+  /**
+   * Show the change option exactly when there is a sole trader to change:
+   * sole-trader mode with a company captured.
+   *
+   * Derived from the current state rather than set at each transition, and
+   * driven off showNote() because every place that settles whether the
+   * registration prompt belongs on screen has just settled this too. Reads
+   * `#company_id` rather than the customerCompany record so that a company
+   * cleared straight out of the field — by any of the several paths that do
+   * that — cannot leave a stale affordance behind.
+   */
+  syncChangeOption: function () {
+    const adopted = twoincSoleTrader.mode === "sole_trader" && !!jQuery("#company_id").val();
+    jQuery(".twoinc-sole-trader-change").toggleClass("hidden", !adopted);
   },
 
   /**
@@ -3981,8 +4030,15 @@ let twoincSoleTrader = {
    * Open the hosted signup popup, falling back to the visible link if the
    * browser blocks the window (e.g. gesture lost after a slow prefetch).
    */
-  launchSignup: function () {
-    const win = twoincSoleTrader.openPopup();
+  launchSignup: function (intent) {
+    const win = twoincSoleTrader.openPopup(intent);
+    if (intent === "change") {
+      // A blocked popup needs a visible affordance to retry from. On this path
+      // the button the buyer just clicked is still on screen and is that
+      // affordance; revealing the registration prompt as well would put both
+      // on screen at once, which is the one state they are siblings to avoid.
+      return;
+    }
     twoincSoleTrader.showNote(!win);
   },
 
@@ -4094,7 +4150,7 @@ let twoincSoleTrader = {
       });
   },
 
-  openPopup: function () {
+  openPopup: function (intent) {
     if (!twoincSoleTrader.tokens) {
       return null;
     }
@@ -4112,7 +4168,7 @@ let twoincSoleTrader = {
         country_code: twoincSoleTrader.currentCountry()
       }
     };
-    const url =
+    let url =
       twoincSoleTrader.tokens.signup_url +
       "?businessToken=" +
       encodeURIComponent(twoincSoleTrader.tokens.delegation_token) +
@@ -4120,6 +4176,15 @@ let twoincSoleTrader = {
       encodeURIComponent(twoincSoleTrader.tokens.autofill_token) +
       "&autofillData=" +
       encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(prefill)))));
+    if (intent === "change") {
+      // Asks the hosted flow to land on its own picker instead of silently
+      // re-selecting the registration this buyer already has — reaching that
+      // picker is the entire point of this entry point. Sent unconditionally
+      // on this path; the hosted flow is free to ignore it, and one control
+      // covers both picking another existing registration and creating a new
+      // one because that choice is made inside the popup.
+      url += "&autoselect=false";
+    }
     // Brand reaches this URL through the host, not a query parameter:
     // signup_url is built server-side from the brand's own
     // checkout_url_template, so an overlay brand swaps the hostname and

@@ -827,6 +827,10 @@ msgstr ""
 msgid "Sandbox"
 msgstr ""
 
+#: class/WC_Twoinc_Checkout.php
+msgid "Select a different sole trader"
+msgstr ""
+
 #: class/WC_Twoinc.php
 msgid "Select a method to surcharge your customer."
 msgstr ""
