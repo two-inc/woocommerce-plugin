@@ -122,6 +122,7 @@ final class BrandConfigSpec
             'testCheckoutHostPrefersExplicitModeOverDevSniffing',
             'testServiceHostsShareTheApiHostsEnvironment',
             'testDevHostOverridesAreIndependentAndProductionSafe',
+            'testOrderEditNeverCarriesTheOrganisationNumber',
             'testCheckoutEnvOptionsPreserveStoredModeWithoutSettingsApi',
             'testInvoiceDownloadStreamsPdf',
             'testInvoiceDownloadFulfillingIsInfoNotice',
@@ -3842,6 +3843,38 @@ final class BrandConfigSpec
         TinyAssert::same(
             'https://checkout.staging.testbrand.example',
             WC_Twoinc_Helper::get_environment_host('checkout', $gateway)
+        );
+    }
+
+    /**
+     * TWO-40 §4/§6. The organisation number is captured once, at checkout, on
+     * the invoice-role address, and stored on the order — and no later
+     * edit-time path can overwrite it with an empty value, because no
+     * edit-time path sends it at all.
+     *
+     * This is the WooCommerce audit the porting guide asks for. On the
+     * platform this ports from, the admin-edit and tracking-number-update
+     * paths DID send the buyer company, and both could send it empty once the
+     * checkout session that resolved it was gone. Here the edit body carries
+     * the addresses and the line items and no buyer company at all, so there
+     * is nothing for a session-less request to blank. Pinned as a test rather
+     * than left as a reading of the code, because "the edit body grew a buyer
+     * block" is exactly the change that would reintroduce it silently.
+     */
+    private static function testOrderEditNeverCarriesTheOrganisationNumber(): void
+    {
+        $create = self::composeOrder();
+        // Given: creation is where the number is carried
+        TinyAssert::same('912345678', $create['buyer']['company']['organization_number']);
+
+        // When: the same order is composed for an edit PUT
+        $edit = WC_Twoinc_Helper::compose_twoinc_edit_order(new StubOrder(), 'IT', 'Project X', '', '');
+
+        // Then: no buyer block at all, so no organisation number to blank
+        TinyAssert::same(false, array_key_exists('buyer', $edit));
+        TinyAssert::same(
+            false,
+            strpos(json_encode($edit), 'organization_number') !== false
         );
     }
 
