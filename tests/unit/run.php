@@ -123,6 +123,7 @@ final class BrandConfigSpec
             'testServiceHostsShareTheApiHostsEnvironment',
             'testDevHostOverridesAreIndependentAndProductionSafe',
             'testOrderEditNeverCarriesTheOrganisationNumber',
+            'testCompanyIdFieldHasNoFormatValidationToTripOverAPrefixedNumber',
             'testCheckoutEnvOptionsPreserveStoredModeWithoutSettingsApi',
             'testInvoiceDownloadStreamsPdf',
             'testInvoiceDownloadFulfillingIsInfoNotice',
@@ -3844,6 +3845,47 @@ final class BrandConfigSpec
             'https://checkout.staging.testbrand.example',
             WC_Twoinc_Helper::get_environment_host('checkout', $gateway)
         );
+    }
+
+    /**
+     * TWO-40 §3. An internally-minted `TWO:`-prefixed identifier travels the
+     * same single write/pairing/validation/submission path as any registry
+     * number — the ONE special case is display.
+     *
+     * The unavoidable platform wrinkle the guide warns about is a native
+     * "identification number"-style field with its own format validation, on
+     * which a colon-bearing value simply fails to save. WooCommerce has none:
+     * the org number rides a plugin-registered plain text field with no
+     * `validate` and no `type` coercion, and the prefix must never be stripped
+     * to make some field accept it. Asserted rather than assumed, because
+     * adding a `validate` here later would break sole-trader checkout silently
+     * and nowhere near this line.
+     */
+    private static function testCompanyIdFieldHasNoFormatValidationToTripOverAPrefixedNumber(): void
+    {
+        $gateway = new class extends WC_Twoinc {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                return '';
+            }
+        };
+
+        $field = (new WC_Twoinc_Checkout($gateway))->update_company_fields(['billing' => []])['billing']['company_id'];
+
+        TinyAssert::true(
+            !array_key_exists('validate', $field),
+            'company_id must carry no format validation — a TWO: value has to save verbatim'
+        );
+        TinyAssert::true(
+            !array_key_exists('maxlength', $field) && !array_key_exists('custom_attributes', $field),
+            'company_id must carry no length cap or input attributes to truncate a minted identifier'
+        );
+        TinyAssert::same(false, $field['required']);
     }
 
     /**

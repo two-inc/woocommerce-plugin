@@ -98,15 +98,39 @@ describe("billing country switch", () => {
    * @returns {void}
    */
   function captureCompany(name, id, country) {
+    // Through the ONE capture write path (TWO-40 §5), not by poking the two
+    // inputs: that is what a real pick, a sole-trader adoption and a user-meta
+    // restore all do, and it is what leaves the pairing tag and the provenance
+    // marker behind. Written raw here, the pair would be indistinguishable
+    // from a buyer's own typing — which is precisely the state the guard and
+    // the country-change clear are supposed to treat differently.
+    ctx.capture.write(name, id, { country: country || "GB" });
+    // The country the company was captured UNDER, which is not necessarily the
+    // one in the field by the time a test asserts (TWO-25333). Re-asserted for
+    // the callers that capture with no id, where the write path has no capture
+    // for a country to belong to.
+    ctx.Twoinc.getInstance().customerCompany.country_prefix = country || "GB";
+  }
+
+  /**
+   * The buyer typing a company into the plain fallback fields by hand, with no
+   * plugin write behind it.
+   *
+   * Distinct from `captureCompany` since TWO-40 §5: the two differ by
+   * PROVENANCE, and the country-change clear treats them differently on
+   * purpose — it drops what the plugin wrote and keeps what the buyer typed.
+   *
+   * @param {string} name
+   * @param {string} id
+   * @param {string} [country]
+   * @returns {void}
+   */
+  function typeCompanyByHand(name, id, country) {
     ctx.$("#billing_company").val(name);
     ctx.$("#company_id").val(id);
     ctx.Twoinc.getInstance().customerCompany = {
       company_name: name,
       organization_number: id,
-      // The country the company was captured UNDER, which is not necessarily
-      // the one in the field by the time a test asserts (TWO-25333). Defaults
-      // to the fixture's country so the callers that predate the parameter
-      // still describe a company captured under the country then selected.
       country_prefix: country || "GB"
     };
   }
@@ -967,10 +991,17 @@ describe("billing country switch", () => {
       // `#billing_company` (it is their own input, not a picked company) while
       // still blanking `#company_id`. So the assertion is not the same one the
       // search-mode tests make, and running only those left this leg unproven.
+      //
+      // Typed by hand rather than captured (TWO-40 §5): what decides this leg
+      // is PROVENANCE — did the plugin write this name — not the capture mode
+      // the flag names. `enable_company_search === "no"` was a proxy for that
+      // question, and a sole-trader name is plugin-written while reaching here
+      // with the flag reading "no", so the proxy kept a name whose number had
+      // already gone.
       ctx.twoinc.enable_company_search = "no";
       addAddressFields();
       initializeCheckout();
-      captureCompany("Example Co", "123456789", "GB");
+      typeCompanyByHand("Example Co", "123456789", "GB");
 
       moveCountrySilently("ES");
 

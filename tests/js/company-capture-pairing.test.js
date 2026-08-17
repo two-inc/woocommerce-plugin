@@ -324,6 +324,23 @@ describe("TWO-40 §5 — captured-company write path", () => {
       expect($("#company_id").val()).toBe("TWO:ST12345");
     });
 
+    test("a plugin-written name is dropped by a country change, a typed one is not", () => {
+      // The provenance marker's production consumer (TWO-40 §5).
+      // `clearSelectedCompany` used to gate this on the capture-mode flag,
+      // which got the sole-trader case wrong: that name is plugin-written but
+      // reaches the clear with the flag reading "no", so it survived a country
+      // change that had already taken its organisation number.
+      capture.write("Sole Trader Co", "TWO:ST12345");
+      ctx.helper.clearSelectedCompany();
+      expect($("#billing_company").val()).toBe("");
+      expect($("#company_id").val()).toBe("");
+
+      // A name the buyer typed themselves is theirs to keep.
+      $("#billing_company").val("Buyer's Own Ltd");
+      ctx.helper.clearSelectedCompany();
+      expect($("#billing_company").val()).toBe("Buyer's Own Ltd");
+    });
+
     test("the clearing call drops the capture and its tag", () => {
       capture.write("Sole Trader Co", "TWO:ST12345");
 

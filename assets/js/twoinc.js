@@ -2260,7 +2260,6 @@ class TwoCompanySearch {
       window.twoinc.text.tooltip_company
     );
     twoincSelectWooHelper.fixSelectWooPositionCompanyName();
-    jQuery("#company_id").val("");
     // The real company field too, matching what enterManualCompanyEntry does.
     // Without this the cleared company survives in #billing_company: it is the
     // field WooCommerce posts, so the order carried a company the buyer had
@@ -2268,13 +2267,19 @@ class TwoCompanySearch {
     // mirror the read-only summary reads — the summary reappeared showing it on
     // the next re-render (TWO-25288).
     //
-    // Gated on the picker being the capture mode, which is what this function
-    // is about clearing. In manual entry #billing_company is the buyer's own
-    // typed input, and this runs on every country change: clearing
-    // unconditionally would wipe a name they typed for reasons of their own.
-    if (window.twoinc.enable_company_search === "yes") {
-      jQuery("#billing_company").val("");
-    }
+    // Gated on PROVENANCE (TWO-40 §5), not on the capture mode. In manual entry
+    // #billing_company is the buyer's own typed input, and this runs on every
+    // country change: clearing unconditionally would wipe a name they typed for
+    // reasons of their own. `enable_company_search === "yes"` was a proxy for
+    // that question and got one case wrong — a sole-trader name is plugin-
+    // written but reaches here with the flag reading "no", so the name survived
+    // a country change that had already taken its organisation number, leaving
+    // the two halves of one capture disagreeing. The provenance marker answers
+    // the question directly instead of standing in for it.
+    const plugin_wrote_name = twoincCompanyCapture.isPluginWritten(
+      twoincCompanyCapture.nameField()
+    );
+    twoincCompanyCapture.write(plugin_wrote_name ? "" : jQuery("#billing_company").val(), "");
 
     // Clear the addresses, in case address get request fails.
     // `clearAddress()`, not a blank `setAddress()` payload: the latter now
