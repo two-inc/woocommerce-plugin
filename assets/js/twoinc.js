@@ -3905,11 +3905,15 @@ let twoincSoleTrader = {
    */
   syncSpinner: function () {
     const waiting = twoincSoleTrader.awaitingFlight;
+    // `text` treated as possibly absent, the same way showError does: config()
+    // falls back to an empty object, and this runs from paths that do not
+    // themselves prove the bootstrap arrived.
+    const label = (twoincSoleTrader.config().text || {}).checking || "";
     // Writing and clearing the text is what makes the live region speak; the
     // stylesheet keeps it out of the 16px box the GIF paints in.
     jQuery(".twoinc-sole-trader-toggle__spinner")
       .toggleClass("hidden", !waiting)
-      .text(waiting ? twoincSoleTrader.config().text.checking || "" : "");
+      .text(waiting ? label : "");
   },
 
   /**

@@ -363,6 +363,13 @@ describe("sole-trader prefetch in flight", () => {
       expect(noteVisible()).toBe(true);
       expect($("#company_id").val()).toBe("");
       expect($("#billing_company").val()).toBe("");
+      // The record and its pairing witness go with the field. Asserted rather
+      // than assumed, because the clear is delegated to the shared capture
+      // helper and this is the only caller that clears while STAYING in
+      // sole-trader mode.
+      const record = ctx.Twoinc.getInstance().customerCompany;
+      expect(record.organization_number).toBe("");
+      expect(record.pairedName).toBeNull();
     });
 
     test("switching to registered company withdraws the explicit choice", async () => {
