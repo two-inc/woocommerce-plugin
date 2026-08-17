@@ -131,6 +131,13 @@ describe("looked-up address field routing", () => {
         line1: "Example Street",
         line2: "Buyer's own line 2",
         description: "a whitespace-only sub-premise is not a sub-premise"
+      },
+      {
+        payload: { building: "   ", apartment: "Flat 12", street_address: "Example Street" },
+        startingLine2: "",
+        line1: "Flat 12",
+        line2: "Example Street",
+        description: "a blank building does not mask a real apartment"
       }
     ];
 
@@ -255,6 +262,25 @@ describe("looked-up address field routing", () => {
       instance.clearAddress();
 
       expect($("#billing_city").val()).toBe("");
+    });
+
+    test("drops the county the lookup selected, which setAddress would leave alone", () => {
+      givenAddressFields($, { city: "Ashford", state: "select" });
+      instance.setAddress({ street_address: "Example Street", city: "Ashford", region: "Kent" });
+      expect($("#billing_state").val()).toBe("KEN");
+
+      instance.clearAddress();
+
+      expect($("#billing_state").val()).toBe("");
+    });
+
+    test("a region-less payload keeps the buyer's own county", () => {
+      givenAddressFields($, { city: "Ashford", state: "select" });
+      $("#billing_state").val("ESS");
+
+      instance.setAddress({ street_address: "Example Street", city: "Ashford" });
+
+      expect($("#billing_state").val()).toBe("ESS");
     });
   });
 });

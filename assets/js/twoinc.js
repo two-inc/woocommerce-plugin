@@ -5166,7 +5166,11 @@ class Twoinc {
    * lose a line the registry deliberately sent twice.
    */
   setAddress(address) {
-    const subPremise = twoincUtilHelper.blankToEmpty(address.building || address.apartment);
+    // Trimmed before the choice, not after: a `building` that is present but
+    // blank would otherwise win the `||` and mask a real `apartment`.
+    const subPremise =
+      twoincUtilHelper.blankToEmpty(address.building) ||
+      twoincUtilHelper.blankToEmpty(address.apartment);
     const street = twoincUtilHelper.blankToEmpty(address.street_address);
     if (subPremise) {
       jQuery("#billing_address_1").val(subPremise);
@@ -5198,12 +5202,12 @@ class Twoinc {
     const $state = jQuery("#billing_state");
     const isSelect = $state.length > 0 && $state.is("select");
     if (isSelect) {
-      const wanted = value.trim().toLowerCase();
+      const wanted = value.toLowerCase();
       const $match = $state.find("option").filter(function () {
         const option = jQuery(this);
         return (
           option.val() !== "" &&
-          (jQuery.trim(option.text()).toLowerCase() === wanted ||
+          (String(option.text()).trim().toLowerCase() === wanted ||
             String(option.val()).trim().toLowerCase() === wanted)
         );
       });
@@ -5221,13 +5225,17 @@ class Twoinc {
   }
 
   /**
-   * Drop the address a registry lookup wrote, including its second line —
-   * `setAddress` leaves line 2 alone when the payload carries no
-   * sub-premise, so a clear has to say so explicitly or the disowned
-   * company's unit number rides along into the order.
+   * Drop the address a registry lookup wrote.
+   *
+   * Line 2 and the region have to be named explicitly, because `setAddress`
+   * deliberately leaves both alone when the payload says nothing about them
+   * — that protects a buyer's own typing on a write, but on a clear it would
+   * leave the disowned company's unit number and county attached to the
+   * order.
    */
   clearAddress() {
     jQuery("#billing_address_2").val("");
+    jQuery("#billing_state").val("").trigger("change");
     this.setAddress({
       street_address: "",
       city: "",
