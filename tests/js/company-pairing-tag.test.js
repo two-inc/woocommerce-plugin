@@ -268,6 +268,89 @@ describe("company name/number pairing tag", () => {
     });
   });
 
+  describe("the witness is not a buyer.company field", () => {
+    // Two readers treat `customerCompany` as the buyer.company value set: the
+    // order-intent body, and the emptiness scan that decides whether to ask for
+    // one at all. The witness has to be invisible to both, and the second is
+    // the dangerous one — it is null on a fresh record, so a scan that saw it
+    // would refuse every order intent and disable the payment method silently.
+
+    test("companyForIntent drops it and keeps everything else", () => {
+      const instance = ctx.Twoinc.getInstance();
+      ctx.helper.writeCapturedCompany(instance, "12345678", "Example Ltd", "GB");
+
+      const payload = instance.companyForIntent();
+
+      expect(payload).toEqual({
+        company_name: "Example Ltd",
+        country_prefix: "GB",
+        organization_number: "12345678"
+      });
+      expect("pairedName" in payload).toBe(false);
+      // And the record itself keeps it — dropping it there would break the
+      // guard that reads it.
+      expect(record().pairedName).toBe("Example Ltd");
+    });
+
+    test("it never reaches the posted order-intent body", () => {
+      // The direct companyForIntent test above pins the accessor; this one pins
+      // that the request actually goes THROUGH it, which is the half a revert
+      // of the payload line would break.
+      window.twoinc.enable_order_intent = "yes";
+      window.twoinc.merchant = { id: "m-1", short_name: "acme" };
+      window.twoinc.currency = "GBP";
+      // getApproval() reads the cart total off the totals markup and refuses to
+      // issue a request until it can.
+      $(document.body).append(
+        '<div class="order-total"><span class="woocommerce-Price-amount">120.00</span></div>' +
+          '<div class="tax-rate"><span class="woocommerce-Price-amount">20.00</span></div>'
+      );
+      const instance = ctx.Twoinc.getInstance();
+      ctx.helper.writeCapturedCompany(instance, "12345678", "Example Ltd", "GB");
+      instance.customerRepresentative = {
+        email: "buyer@example.test",
+        first_name: "Ada",
+        last_name: "Lovelace",
+        phone_number: "+4471234567"
+      };
+      const ajaxStub = harness.stubAjax($);
+      try {
+        instance.getApproval();
+        jest.advanceTimersByTime(2000);
+
+        const intent = ajaxStub.calls.filter(function (call) {
+          return String(call.url).indexOf("/v1/order_intent") !== -1;
+        });
+        expect(intent.length).toBeGreaterThan(0);
+        expect(intent[0].settings.data).not.toContain("pairedName");
+        // Positive control: without this the assertion above would pass just as
+        // happily against a body that never carried the company at all.
+        expect(intent[0].settings.data).toContain("12345678");
+      } finally {
+        ajaxStub.restore();
+      }
+    });
+
+    test("a tagged capture is still ready for an order intent", () => {
+      window.twoinc.enable_order_intent = "yes";
+      const instance = ctx.Twoinc.getInstance();
+      ctx.helper.writeCapturedCompany(instance, "12345678", "Example Ltd", "GB");
+
+      expect(instance.isReadyApprovalCheck()).toBe(true);
+    });
+
+    test("a null witness on an otherwise complete record does not block the intent", () => {
+      window.twoinc.enable_order_intent = "yes";
+      const instance = ctx.Twoinc.getInstance();
+      ctx.helper.writeCapturedCompany(instance, "12345678", "Example Ltd", "GB");
+      // The shape a fresh record has, and the one a future path could leave
+      // behind: every real field populated, the witness empty.
+      instance.customerCompany.pairedName = null;
+
+      expect(instance.isReadyApprovalCheck()).toBe(true);
+    });
+  });
+
   describe("the country guard's re-sync branch", () => {
     test("adopts the name it just decided to trust", () => {
       const instance = ctx.Twoinc.getInstance();

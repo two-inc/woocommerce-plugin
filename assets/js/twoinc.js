@@ -4706,9 +4706,35 @@ class Twoinc {
       return false;
     }
 
-    let values = [].concat(Object.values(this.customerCompany));
+    let values = [].concat(Object.values(this.companyForIntent()));
 
     return !twoincUtilHelper.isAnyElementEmpty(values);
+  }
+
+  /**
+   * The `buyer.company` value set: the record minus the client-side witnesses
+   * that are not fields of it.
+   *
+   * `customerCompany` is read for two unrelated purposes — it is POSTED as
+   * `buyer.company` on the order intent, and it is scanned for emptiness to
+   * decide whether the intent can be asked for at all — so a key on it that is
+   * not part of that value set has to be absent from BOTH. One accessor rather
+   * than two exclusions, because the failure mode of missing one is severe and
+   * silent: `pairedName` is null on a fresh record, and an emptiness scan that
+   * saw it would refuse every order intent, disabling the payment method with
+   * no error anywhere.
+   *
+   * The witness stays ON the record rather than beside it. Being flattened
+   * away by the deferred "re-sync from the DOM" paths is precisely what makes
+   * `clearCompanyIfNameStale` fail closed — a copy held off the record would
+   * survive those re-syncs and vouch for a pair nothing ever witnessed.
+   *
+   * @returns {Object}
+   */
+  companyForIntent() {
+    const company = Object.assign({}, this.customerCompany);
+    delete company.pairedName;
+    return company;
   }
 
   /**
@@ -4895,7 +4921,7 @@ class Twoinc {
         tax_amount: tax_amount.toFixed(2),
         invoice_type: "FUNDED_INVOICE",
         buyer: {
-          company: Twoinc.getInstance().customerCompany,
+          company: Twoinc.getInstance().companyForIntent(),
           representative: Twoinc.getInstance().customerRepresentative
         },
         currency: window.twoinc.currency,
