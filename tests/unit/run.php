@@ -121,6 +121,7 @@ final class BrandConfigSpec
             'testLocaleFollowsRequestLocaleWithEnglishFallback',
             'testCheckoutHostPrefersExplicitModeOverDevSniffing',
             'testServiceHostsShareTheApiHostsEnvironment',
+            'testDevHostOverridesAreIndependentAndProductionSafe',
             'testCheckoutEnvOptionsPreserveStoredModeWithoutSettingsApi',
             'testInvoiceDownloadStreamsPdf',
             'testInvoiceDownloadFulfillingIsInfoNotice',
@@ -258,6 +259,12 @@ final class BrandConfigSpec
         // failure into a cascade in unrelated specs. Reset both together.
         unset($GLOBALS['__twoinc_test_store_currency']);
         unset($GLOBALS['test_home_url']);
+        // Developer host overrides (TWO-40 §9). Real process env vars, so a
+        // test that sets one and then fails an assertion before its own
+        // cleanup would leak it into every test after it.
+        foreach (WC_Twoinc_Helper::DEV_HOST_ENV_VARS as $var) {
+            putenv($var);
+        }
         $GLOBALS['__twoinc_test_options'] = [];
         unset($_POST[WC_Twoinc_Payment_Terms::SESSION_KEY]);
         WC_Twoinc_Payment_Terms::reset_fee_cache();
@@ -3836,6 +3843,103 @@ final class BrandConfigSpec
             'https://checkout.staging.testbrand.example',
             WC_Twoinc_Helper::get_environment_host('checkout', $gateway)
         );
+    }
+
+    /**
+     * TWO-40 §9. Three service hosts, three INDEPENDENT developer overrides,
+     * every one of them refused on anything that could be a production shop.
+     *
+     * The checkout-page override matters on its own rather than riding on the
+     * API one: that host is loaded by the BUYER'S BROWSER (sole-trader signup,
+     * company search), so a value the shop's own server process can reach is
+     * not necessarily one the browser can.
+     */
+    private static function testDevHostOverridesAreIndependentAndProductionSafe(): void
+    {
+        $make = static function (array $options) {
+            return new class ($options) extends WC_Twoinc {
+                private $options;
+                public function __construct($options)
+                {
+                    $this->id = WC_Twoinc_Brand::get('gateway_id');
+                    $this->options = $options;
+                }
+                public function get_option($key, $empty_value = null)
+                {
+                    return $this->options[$key] ?? $empty_value ?? '';
+                }
+            };
+        };
+
+        // Given: a dev-sniffed shop carrying the never-configured default mode
+        $GLOBALS['test_home_url'] = 'https://woocom.staging.two.inc';
+        putenv('TWOINC_DEV_API_HOST=http://portal.localhost/api');
+        $gateway = $make([]);
+
+        // When: only the API override is set
+        // Then: only the API host moves. The other two fall back on their own
+        // rather than inheriting it — the whole point of them being separate.
+        TinyAssert::same('http://portal.localhost/api', $gateway->get_twoinc_checkout_host());
+        TinyAssert::same(
+            'https://checkout.staging.two.inc',
+            WC_Twoinc_Helper::get_environment_host('checkout', $gateway)
+        );
+        TinyAssert::same(
+            'https://portal.two.inc/auth/merchant/signup',
+            WC_Twoinc_Helper::get_merchant_portal_signup_url($gateway)
+        );
+
+        // When: the checkout-page override is set too
+        putenv('TWOINC_DEV_CHECKOUT_HOST=https://checkout.tunnel.example');
+        TinyAssert::same(
+            'https://checkout.tunnel.example',
+            WC_Twoinc_Helper::get_environment_host('checkout', $gateway)
+        );
+        // And the sole-trader signup page follows it, because it is built from
+        // that same host rather than from a second resolution of its own.
+        TinyAssert::same(
+            'https://checkout.tunnel.example/soletrader/signup',
+            WC_Twoinc_Sole_Trader::get_signup_page_url($gateway)
+        );
+        // The API host is unmoved by it.
+        TinyAssert::same('http://portal.localhost/api', $gateway->get_twoinc_checkout_host());
+
+        // When: the portal override is set
+        // Then: the ORIGIN is replaced and the brand's own signup path kept.
+        putenv('TWOINC_DEV_PORTAL_HOST=http://portal.localhost/');
+        TinyAssert::same(
+            'http://portal.localhost/auth/merchant/signup',
+            WC_Twoinc_Helper::get_merchant_portal_signup_url($gateway)
+        );
+
+        // When: the same variables leak into a real merchant shop's process
+        // Then: not one of them is honoured. This is the gate that has to hold
+        // even if a deployment accidentally inherits a developer's env.
+        $GLOBALS['test_home_url'] = 'https://shop.merchant.example';
+        $production = $make([]);
+        TinyAssert::same('https://api.two.inc', $production->get_twoinc_checkout_host());
+        TinyAssert::same(
+            'https://checkout.two.inc',
+            WC_Twoinc_Helper::get_environment_host('checkout', $production)
+        );
+        TinyAssert::same(
+            'https://portal.two.inc/auth/merchant/signup',
+            WC_Twoinc_Helper::get_merchant_portal_signup_url($production)
+        );
+
+        // And: a merchant who has explicitly chosen an environment has said
+        // which one they want, so an env var does not get to overrule that
+        // either — even back on the dev-sniffed hostname.
+        $GLOBALS['test_home_url'] = 'https://woocom.staging.two.inc';
+        $explicit = $make(['checkout_env' => 'sandbox']);
+        TinyAssert::same('https://api.sandbox.two.inc', $explicit->get_twoinc_checkout_host());
+        TinyAssert::same(
+            'https://checkout.sandbox.two.inc',
+            WC_Twoinc_Helper::get_environment_host('checkout', $explicit)
+        );
+
+        // And: an unknown service name never resolves to an override.
+        TinyAssert::same('', WC_Twoinc_Helper::get_dev_host_override('nonexistent', $gateway));
     }
 
     /**

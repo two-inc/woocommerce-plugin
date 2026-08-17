@@ -1149,9 +1149,91 @@ if (!class_exists('WC_Twoinc_Helper')) {
          */
         public static function get_environment_host($service, $gateway)
         {
+            $override = self::get_dev_host_override($service, $gateway);
+            if ($override !== '') {
+                return $override;
+            }
             $mode = self::get_effective_environment_mode($gateway);
             $prefix = $mode === 'production' ? $service : $service . '.' . $mode;
             return sprintf(WC_Twoinc_Brand::get('checkout_url_template'), $prefix);
+        }
+
+        /**
+         * Developer env var backing each service host this plugin talks to
+         * (TWO-40 §9).
+         *
+         * Three services, three INDEPENDENT overrides, each falling back on
+         * its own:
+         *
+         *   - 'api'      the checkout/merchant API
+         *   - 'checkout' the hosted checkout-page app (sole-trader signup and
+         *                company search) — the one the BROWSER loads, which is
+         *                why it needs an override of its own: a host the shop's
+         *                own server process can reach over a Docker network
+         *                alias is not necessarily one the buyer's browser can
+         *                resolve, and on a remotely-hosted shop it definitely
+         *                is not
+         *   - 'portal'   the merchant portal
+         *
+         * Server env vars, never wp-admin fields, so nothing here is anything
+         * a merchant can configure.
+         */
+        public const DEV_HOST_ENV_VARS = [
+            'api' => 'TWOINC_DEV_API_HOST',
+            'checkout' => 'TWOINC_DEV_CHECKOUT_HOST',
+            'portal' => 'TWOINC_DEV_PORTAL_HOST',
+        ];
+
+        /**
+         * A developer's override for one service host, or '' (TWO-40 §9).
+         *
+         * Gated so a production instance can never honour one even if the
+         * variable leaks into its process environment: the shop must BOTH
+         * sniff as a development site AND still carry the never-configured
+         * default mode. A merchant who has explicitly chosen an environment
+         * has said which one they want, and an env var does not get to
+         * override that either.
+         *
+         * @param string             $service key of DEV_HOST_ENV_VARS
+         * @param WC_Payment_Gateway $gateway
+         *
+         * @return string
+         */
+        public static function get_dev_host_override($service, $gateway)
+        {
+            if (!array_key_exists($service, self::DEV_HOST_ENV_VARS)) {
+                return '';
+            }
+            if (
+                self::get_environment_mode($gateway) !== 'production'
+                || !self::is_twoinc_development()
+            ) {
+                return '';
+            }
+            $host = getenv(self::DEV_HOST_ENV_VARS[$service]);
+            return is_string($host) && $host !== '' ? $host : '';
+        }
+
+        /**
+         * The brand's merchant-portal signup URL, with its host swapped for a
+         * developer override when one applies (TWO-40 §9).
+         *
+         * The path is the brand's, so a brand overlay pointing at a different
+         * signup route keeps it; only the origin is replaced.
+         *
+         * @param WC_Payment_Gateway $gateway
+         *
+         * @return string
+         */
+        public static function get_merchant_portal_signup_url($gateway)
+        {
+            $url = (string) WC_Twoinc_Brand::get('sign_up_url');
+            $override = self::get_dev_host_override('portal', $gateway);
+            if ($override === '') {
+                return $url;
+            }
+            $path = (string) parse_url($url, PHP_URL_PATH);
+            return rtrim($override, '/') . $path;
         }
 
         /**
