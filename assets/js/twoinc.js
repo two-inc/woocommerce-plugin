@@ -1969,6 +1969,53 @@ class TwoCompanySearch {
   }
 
   /**
+   * Write a CAPTURED company — a number and the name it was captured under —
+   * to both mirrors and to the record, pinning both witnesses on the same
+   * tick as the value they describe.
+   *
+   * Every capture route goes through here: the registry picker, sole-trader
+   * autofill, and the two handlers that write the name half on their own. The
+   * reason it has to be one call rather than the same four lines repeated is
+   * `pairedName`. It is the witness `clearCompanyIfNameStale` reads to decide
+   * whether a number still belongs to the name beside it, and a capture that
+   * set the number without setting the tag would be wiped by that guard on
+   * the buyer's very next keystroke in the company field.
+   *
+   * Side effects deliberately stay OUT of here. The capture sites each need a
+   * different order — the picker renders the summary before clearing its
+   * verdicts, sole-trader capture has to re-toggle the company fields between
+   * the write and the render because `#company_id`'s visibility depends on the
+   * value this just wrote — and a helper that owned that sequence would need a
+   * flag per site to express it. What is genuinely shared is the write, so
+   * that is all this owns.
+   *
+   * `instance` is passed rather than looked up: the picker holds a
+   * widget-scoped instance reference, and reaching for the singleton here
+   * instead would make this write to a different record than the rest of that
+   * handler.
+   *
+   * @param {Twoinc} instance
+   * @param {string} number organisation number, "" to clear
+   * @param {string} name company name the number was captured under
+   * @param {string} [country] ISO code to pin; defaults to the current reading
+   * @returns {void}
+   */
+  writeCapturedCompany(instance, number, name, country) {
+    jQuery("#company_id").val(number);
+    jQuery("#billing_company").val(name);
+    instance.customerCompany.organization_number = number;
+    instance.customerCompany.company_name = name;
+    if (number) {
+      instance.customerCompany.country_prefix = country || twoincSelectWooHelper.currentCountry();
+    }
+    // Normalised, because every reader compares through `blankToEmpty` and a
+    // tag holding raw padding would never match one of them. Nulled rather
+    // than left behind on a clear: a stale tag would vouch for whatever name
+    // is typed next into a pair that no longer has a number.
+    instance.customerCompany.pairedName = number ? twoincUtilHelper.blankToEmpty(name) : null;
+  }
+
+  /**
    * Render the captured company's name and number, read-only (TWO-25288).
    *
    * Supersedes the floating company-id overlay this used to be. That showed
@@ -2429,8 +2476,6 @@ class TwoCompanySearch {
     const self = this;
     const $body = jQuery(document.body);
     const $field = $body.find(self.companyFieldSelector);
-    const $billingCompany = $body.find("#billing_company");
-    const $companyId = $body.find("#company_id");
 
     const widget = $field.selectWoo(self.genSelectWooParams());
     twoincDomHelper.toggleTooltip(
@@ -2444,22 +2489,11 @@ class TwoCompanySearch {
       // Get the option data
       const data = e.params.data;
 
-      // Set the company name
-      instance.customerCompany.company_name = data.id;
-
-      // Set the company ID
-      instance.customerCompany.organization_number = data.company_id;
-
-      // Pin the country this company was captured UNDER, alongside the
-      // number (TWO-25333), so the pair can never be assembled from two
-      // different moments.
-      instance.customerCompany.country_prefix = self.currentCountry();
-
-      // Set the company ID to HTML DOM
-      $companyId.val(data.company_id);
-
-      // Set the company name to HTML DOM
-      $billingCompany.val(data.id);
+      // Both mirrors, the record, and both witnesses — the country this
+      // company was captured UNDER (TWO-25333) and the name its number is
+      // paired with — in one call, so the pair can never be assembled from
+      // two different moments.
+      self.writeCapturedCompany(instance, data.company_id, data.id, self.currentCountry());
 
       // Display the picked company read-only, synchronously.
       self.renderCompanySummary(data.id, data.company_id);
@@ -3987,8 +4021,10 @@ let twoincSoleTrader = {
   },
 
   setCompany: function (companyId, companyName) {
-    jQuery("#company_id").val(companyId);
-    jQuery("#billing_company").val(companyName);
+    // Both mirrors, the record, and both witnesses. setMode("business")
+    // reaches here with both arguments falsy to CLEAR, which the helper
+    // handles as the absence of a capture rather than as a capture of nothing.
+    twoincSelectWooHelper.writeCapturedCompany(Twoinc.getInstance(), companyId, companyName);
     // The display select too, when this is the clearing call setMode("business")
     // makes. The picker appends an <option> per pick and select2("destroy")
     // leaves it selected, so without this a company picked before the sole-trader
@@ -3996,16 +4032,6 @@ let twoincSoleTrader = {
     // (TWO-25288).
     if (!companyName) {
       jQuery("#billing_company_display").val("");
-    }
-    const instance = Twoinc.getInstance();
-    instance.customerCompany.organization_number = companyId;
-    instance.customerCompany.company_name = companyName;
-    // Pin the capture country next to the number, same as the picker's select
-    // handler does and for the same reason (TWO-25333 — see there). Only on
-    // the capturing call: setMode("business") reaches this with both arguments
-    // falsy to CLEAR, and there is no capture then for a country to belong to.
-    if (companyId) {
-      instance.customerCompany.country_prefix = twoincSelectWooHelper.currentCountry();
     }
     // Re-evaluate which company fields are shown, AFTER the write above
     // (TWO-25326 §12).
@@ -4029,7 +4055,7 @@ let twoincSoleTrader = {
     // whose own trailing renderCompanySummary() reads the DOM.
     twoincSelectWooHelper.renderCompanySummary(companyName, companyId);
     if (companyId) {
-      instance.getApproval();
+      Twoinc.getInstance().getApproval();
     }
   },
 
@@ -4291,7 +4317,11 @@ class Twoinc {
     this.customerCompany = {
       company_name: null,
       country_prefix: null,
-      organization_number: null
+      organization_number: null,
+      // Which company_name the organization_number above was captured under.
+      // Read by clearCompanyIfNameStale; null here means no capture to vouch
+      // for, which that guard treats as a mismatch.
+      pairedName: null
     };
     this.customerRepresentative = {
       email: null,
@@ -4529,7 +4559,14 @@ class Twoinc {
       twoincDomHelper.clearIntentVerdicts();
     });
     $body.on("change", "#billing_company", function () {
-      Twoinc.getInstance().customerCompany.company_name = twoincSelectWooHelper.getCompanyName();
+      const name = twoincSelectWooHelper.getCompanyName();
+      // BEFORE the name is written, while the record still holds the name the
+      // number was captured under. This is the manual-entry retype: with
+      // company search off, getCompanyName() reads #billing_company directly,
+      // so the buyer replacing one company's name would otherwise leave the
+      // other company's number posted beside it.
+      Twoinc.getInstance().clearCompanyIfNameStale(name);
+      Twoinc.getInstance().customerCompany.company_name = name;
       twoincSelectWooHelper.renderCompanySummary();
       // Verdicts only — same mid-request blanking as the picker's own handler.
       twoincDomHelper.clearIntentVerdicts();
@@ -5487,8 +5524,21 @@ class Twoinc {
       if (numberMoved && twoincUtilHelper.blankToEmpty(typed)) {
         Twoinc.getInstance().customerCompany.country_prefix =
           twoincSelectWooHelper.currentCountry();
+        // The name witness gets the same treatment as the country one, and for
+        // the same reason: a number the buyer entered by hand is paired with
+        // the name standing beside it at that moment. Written here rather than
+        // through writeCapturedCompany because the conditional re-pin above is
+        // the whole point of this branch — an unconditional write would launder
+        // a stale pair, which is what the comment above describes.
+        Twoinc.getInstance().customerCompany.pairedName = twoincUtilHelper.blankToEmpty(
+          Twoinc.getInstance().customerCompany.company_name
+        );
       }
     } else if (inputName === "billing_company_display") {
+      // Same ordering as the `change` handler on #billing_company: check the
+      // pair against the name the number was captured under before overwriting
+      // it.
+      Twoinc.getInstance().clearCompanyIfNameStale($input.val());
       Twoinc.getInstance().customerCompany.company_name = $input.val();
     }
 
@@ -5819,6 +5869,12 @@ class Twoinc {
         country_prefix: country,
         organization_number: domNumber
       };
+      // The pair this branch just decided to trust is self-consistent by the
+      // condition above, so the name witness is `domName`. Adopting it here
+      // rather than leaving it absent keeps `clearCompanyIfNameStale` from
+      // wiping a company the restore this branch exists to protect had only
+      // just put back.
+      this.customerCompany.pairedName = domName;
       return;
     }
 
@@ -5840,6 +5896,55 @@ class Twoinc {
     // getDueInDays() with no country for the three seconds until its deferred
     // re-read runs.
     this.customerCompany.country_prefix = country;
+  }
+
+  /**
+   * Drop an organisation number the company name no longer belongs to.
+   *
+   * A number is only ever captured against a name — a registry pick, a
+   * sole-trader autofill, or a number the buyer typed next to a name already
+   * on the form. `writeCapturedCompany` records which name that was, in
+   * `pairedName`. When the buyer then edits the company name, the number
+   * beside it is no longer a fact about anything: it is the previous company's
+   * number wearing the new company's name, and it would be posted on the order
+   * exactly like that.
+   *
+   * Called from the name-edit events themselves rather than from
+   * `onUpdatedCheckout`, which is where `clearCompanyIfCountryStale` runs. The
+   * two look alike and must not be merged. A checkout re-render legitimately
+   * rewrites `#billing_company` from the same vintage as `#company_id`, so a
+   * name check on that path would fire on a pair that never came apart and
+   * destroy it. The `change`/blur events are the moment the pair actually
+   * breaks, and nothing in this plugin triggers them programmatically — every
+   * arrival here is a buyer having edited the field.
+   *
+   * An ABSENT tag counts as a mismatch, not as permission. The record is
+   * flattened back from the DOM by several deferred re-syncs, which do not
+   * carry the witness, so absent means "cannot vouch for this pair" — and the
+   * only way to reach here with a number and no tag is one of those re-syncs
+   * followed by a real name edit, where clearing is the right answer anyway.
+   *
+   * The name the buyer just typed is left exactly as they typed it. Only the
+   * number side is dropped, and the fields are re-toggled because
+   * `#company_id`'s own visibility depends on the value this may have emptied.
+   *
+   * @param {string} name the company name as it now reads
+   * @returns {void}
+   */
+  clearCompanyIfNameStale(name) {
+    const company = this.customerCompany || {};
+    if (!twoincUtilHelper.blankToEmpty(company.organization_number)) return;
+
+    const paired = company.pairedName;
+    if (paired !== null && paired !== undefined && twoincUtilHelper.blankToEmpty(name) === paired) {
+      return;
+    }
+
+    jQuery("#company_id").val("");
+    company.organization_number = null;
+    company.country_prefix = null;
+    company.pairedName = null;
+    twoincDomHelper.toggleBusinessFields();
   }
 }
 
