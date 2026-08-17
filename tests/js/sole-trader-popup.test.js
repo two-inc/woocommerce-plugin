@@ -157,18 +157,15 @@ describe("sole-trader signup popup", () => {
       ["sole_trader", "TWO:ST:GB:0f8c2b1a", true, "sole trader adopted"]
     ];
 
-    test.each(visibility)(
-      "mode %s / company %s -> visible %s (%s)",
-      (mode, companyId, visible) => {
-        render();
-        soleTrader.mode = mode;
-        ctx.$("#company_id").val(companyId);
+    test.each(visibility)("mode %s / company %s -> visible %s (%s)", (mode, companyId, visible) => {
+      render();
+      soleTrader.mode = mode;
+      ctx.$("#company_id").val(companyId);
 
-        soleTrader.syncChangeOption();
+      soleTrader.syncChangeOption();
 
-        expect(ctx.$(SELECTOR).hasClass("hidden")).toBe(!visible);
-      }
-    );
+      expect(ctx.$(SELECTOR).hasClass("hidden")).toBe(!visible);
+    });
 
     test("survives the container being rebuilt by a checkout refresh", () => {
       render();

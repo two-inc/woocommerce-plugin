@@ -3825,8 +3825,7 @@ let twoincSoleTrader = {
    * that — cannot leave a stale affordance behind.
    */
   syncChangeOption: function () {
-    const adopted =
-      twoincSoleTrader.mode === "sole_trader" && !!jQuery("#company_id").val();
+    const adopted = twoincSoleTrader.mode === "sole_trader" && !!jQuery("#company_id").val();
     jQuery(".twoinc-sole-trader-change").toggleClass("hidden", !adopted);
   },
 
