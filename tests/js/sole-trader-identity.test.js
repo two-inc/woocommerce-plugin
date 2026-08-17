@@ -192,12 +192,17 @@ describe("autofill buyer trust levels", () => {
       $("#billing_email").val("ordering-from-elsewhere@example.test");
       soleTrader.mode = "sole_trader";
       stubBuyer(ENROLLED);
+      // Shown first, deliberately. render() leaves the note hidden, so
+      // asserting "hidden" after adoption against that initial state would
+      // hold whether or not anything hid it — and the prompt being left up is
+      // the reopen loop this whole file exists for. Assert the transition.
+      soleTrader.showNote(true);
+      expect($(".twoinc-sole-trader-note").hasClass("hidden")).toBe(false);
 
       await post();
 
       expect($("#company_id").val()).toBe(ENROLLED.organization_number);
       expect($("#billing_company").val()).toBe(ENROLLED.company_name);
-      // The prompt is the reopen affordance. Still visible means the loop.
       expect($(".twoinc-sole-trader-note").hasClass("hidden")).toBe(true);
     });
 

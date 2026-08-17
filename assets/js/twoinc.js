@@ -4302,12 +4302,18 @@ let twoincSoleTrader = {
           throw new Error("autofill/v1/buyer/current failed");
         });
       })
+      // The callback runs OUTSIDE the catch, so only the read itself can
+      // resolve to "no buyer". Inside, an exception thrown by the callback —
+      // and it does real DOM and widget work — would be caught here and
+      // re-invoke it with null, turning a half-finished adoption into a
+      // "could not read the buyer" error that names the wrong cause.
       .then(function (json) {
-        cb(json || null);
+        return json || null;
       })
       .catch(function () {
-        cb(null);
-      });
+        return null;
+      })
+      .then(cb);
   },
 
   openPopup: function (intent) {
@@ -4395,8 +4401,8 @@ let twoincSoleTrader = {
     }
     twoincSoleTrader.messageListenerBound = true;
     window.addEventListener("message", function (event) {
-      // Three gates, and the buyer's current MODE is deliberately not one of
-      // them: an ACCEPTED signup has to be honoured even if the mode moved on
+      // The buyer's current MODE is deliberately not one of the gates below:
+      // an ACCEPTED signup has to be honoured even if the mode moved on
       // while the popup was open, which it does whenever a passive prefetch
       // resolves without a match in the meantime and applyPrefetch() reverts
       // to business.
