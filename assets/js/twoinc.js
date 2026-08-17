@@ -3846,15 +3846,15 @@ let twoincSoleTrader = {
 
     // Busy indicator for the one wait a buyer can actually experience here:
     // clicking Sole trader before the email-driven prefetch has come back.
-    // role="status" rather than aria-hidden — the company-search spinner can
-    // be decorative because select2 announces its own search state, and there
-    // is nothing announcing anything in this container.
+    //
+    // A live region rather than the decorative aria-hidden the company-search
+    // spinner uses: that one can be decorative because select2 announces its
+    // own search state, and nothing announces anything in this container. Its
+    // text is written by syncSpinner rather than set once here, because a live
+    // region announces a change to its CONTENT — becoming visible with a
+    // static label is not an event a screen reader reports.
     jQuery("<span></span>")
-      .attr({
-        class: "twoinc-sole-trader-toggle__spinner hidden",
-        role: "status",
-        "aria-label": cfg.text.checking
-      })
+      .attr({ class: "twoinc-sole-trader-toggle__spinner hidden", role: "status" })
       .appendTo($container);
 
     twoincSoleTrader.updateChips();
@@ -3904,10 +3904,12 @@ let twoincSoleTrader = {
    * cannot be left behind by a transition that forgot to hide it.
    */
   syncSpinner: function () {
-    jQuery(".twoinc-sole-trader-toggle__spinner").toggleClass(
-      "hidden",
-      !twoincSoleTrader.awaitingFlight
-    );
+    const waiting = twoincSoleTrader.awaitingFlight;
+    // Writing and clearing the text is what makes the live region speak; the
+    // stylesheet keeps it out of the 16px box the GIF paints in.
+    jQuery(".twoinc-sole-trader-toggle__spinner")
+      .toggleClass("hidden", !waiting)
+      .text(waiting ? twoincSoleTrader.config().text.checking || "" : "");
   },
 
   /**
@@ -4175,6 +4177,12 @@ let twoincSoleTrader = {
       twoincSoleTrader.showNote(false);
     } else if (twoincSoleTrader.mode === "sole_trader") {
       if (twoincSoleTrader.explicitSoleTrader) {
+        // Clear before prompting. The mode survives, but the company does not:
+        // this branch is reached with whatever the LAST prefetch adopted still
+        // in the field, and "no buyer for this email" must not leave the
+        // previous buyer's organisation number on an order being placed by
+        // someone else. setMode("business") used to do this on the way past.
+        twoincSoleTrader.setCompany("", "");
         twoincSoleTrader.showNote(true);
       } else {
         twoincSoleTrader.setMode("business");

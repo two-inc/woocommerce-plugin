@@ -220,6 +220,25 @@ describe("sole-trader prefetch in flight", () => {
       expect(spinnerVisible()).toBe(false);
     });
 
+    test("announces the wait, rather than only painting it", async () => {
+      // A live region reports a change to its CONTENT. An empty one that merely
+      // becomes visible says nothing, so the text has to arrive with the wait
+      // and leave with it.
+      const $spinner = $(".twoinc-sole-trader-toggle__spinner");
+      expect($spinner.attr("role")).toBe("status");
+      expect($spinner.text()).toBe("");
+
+      await setEmail("waiting@example.test");
+      soleTrader.onModeChipClick("sole_trader");
+
+      expect($(".twoinc-sole-trader-toggle__spinner").text()).toBe("Checking your details");
+
+      stubBuyer(null);
+      await resolveTokens("ok");
+
+      expect($(".twoinc-sole-trader-toggle__spinner").text()).toBe("");
+    });
+
     // Every terminal branch of the flight's call graph. A stuck indicator is
     // the failure mode, so each row ends the flight a different way and
     // asserts it cleared.
@@ -294,24 +313,21 @@ describe("sole-trader prefetch in flight", () => {
       [false, false, "the prefetch selected it on an earlier email"]
     ];
 
-    test.each(cases)(
-      "explicit=%s -> keeps sole trader: %s (%s)",
-      async (explicit, survives) => {
-        await setEmail("waiting@example.test");
-        if (explicit) {
-          soleTrader.onModeChipClick("sole_trader");
-        } else {
-          // What applyPrefetch() does for a buyer it recognised earlier.
-          soleTrader.setMode("sole_trader");
-        }
-        expect(soleTrader.mode).toBe("sole_trader");
-
-        stubBuyer(null);
-        await resolveTokens("ok");
-
-        expect(soleTrader.mode).toBe(survives ? "sole_trader" : "business");
+    test.each(cases)("explicit=%s -> keeps sole trader: %s (%s)", async (explicit, survives) => {
+      await setEmail("waiting@example.test");
+      if (explicit) {
+        soleTrader.onModeChipClick("sole_trader");
+      } else {
+        // What applyPrefetch() does for a buyer it recognised earlier.
+        soleTrader.setMode("sole_trader");
       }
-    );
+      expect(soleTrader.mode).toBe("sole_trader");
+
+      stubBuyer(null);
+      await resolveTokens("ok");
+
+      expect(soleTrader.mode).toBe(survives ? "sole_trader" : "business");
+    });
 
     test("an explicit choice ends the wait with the prompt, not a silent revert", async () => {
       await setEmail("waiting@example.test");
@@ -327,6 +343,26 @@ describe("sole-trader prefetch in flight", () => {
       expect(noteVisible()).toBe(true);
       expect(spinnerVisible()).toBe(false);
       expect(opened).toHaveLength(0);
+    });
+
+    test("drops the previous buyer's company when the new email matches nobody", async () => {
+      // The mode survives an explicit choice; the company must not. Reaching
+      // this branch with the last adopted organisation number still in the
+      // field would put one buyer's identity on another buyer's order.
+      await setEmail("enrolled@example.test");
+      stubBuyer(ENROLLED);
+      await resolveTokens("ok");
+      expect($("#company_id").val()).toBe(ENROLLED.organization_number);
+
+      soleTrader.onModeChipClick("sole_trader");
+      await setEmail("someone-else@example.test");
+      stubBuyer(null);
+      await resolveTokens("ok");
+
+      expect(soleTrader.mode).toBe("sole_trader");
+      expect(noteVisible()).toBe(true);
+      expect($("#company_id").val()).toBe("");
+      expect($("#billing_company").val()).toBe("");
     });
 
     test("switching to registered company withdraws the explicit choice", async () => {

@@ -788,6 +788,15 @@
   background-repeat: no-repeat;
   background-position: center;
   background-size: 16px 16px;
+  /*
+   * The element carries the busy text for the live region to announce, which
+   * must stay in the accessibility tree — so it is pushed out of the painted
+   * box rather than hidden with display or visibility, either of which would
+   * take it out of that tree as well.
+   */
+  overflow: hidden;
+  text-indent: -9999px;
+  white-space: nowrap;
 }
 .twoinc-sole-trader-toggle__spinner.hidden {
   display: none;
