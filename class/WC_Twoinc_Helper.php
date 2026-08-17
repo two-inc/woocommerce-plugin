@@ -1133,6 +1133,63 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
+         * The env var carrying a local-dev host override, per service. One
+         * var each, so a developer can point the browser-facing checkout
+         * page at a tunnel while the shop's own server keeps reaching a
+         * shared API — the three services are reached by different clients
+         * and routinely need different hosts.
+         */
+        public const DEV_HOST_ENV_VARS = [
+            'api' => 'TWOINC_DEV_API_HOST',
+            'checkout' => 'TWOINC_DEV_CHECKOUT_HOST',
+            'portal' => 'TWOINC_DEV_PORTAL_HOST',
+        ];
+
+        /**
+         * Whether this install has declared itself a development install,
+         * via WordPress's own environment type (the WP_ENVIRONMENT_TYPE
+         * constant in wp-config.php, or WordPress's env var of the same
+         * name). This is the gate on every host override below.
+         *
+         * WordPress resolves an unset or unrecognised value to
+         * 'production', so an install that says nothing is production and
+         * honours no override. And because the signal is WordPress-wide
+         * rather than this plugin's own, a shop cannot arrive here by
+         * leaking one of the plugin's env vars into its process
+         * environment: it has to declare the whole install non-production,
+         * which changes WordPress core and every other plugin's behaviour
+         * too, and is a site-owner decision rather than a stray variable.
+         *
+         * @return bool
+         */
+        public static function is_development_install()
+        {
+            if (!function_exists('wp_get_environment_type')) {
+                return false;
+            }
+            return in_array(wp_get_environment_type(), ['development', 'local'], true);
+        }
+
+        /**
+         * The developer-supplied host for a service, or null when there
+         * isn't one. Arbitrary hosts are permitted here — a laptop-hosted
+         * dev server, a reverse tunnel — which is the whole point: these
+         * are hosts the brand's URL template cannot express.
+         *
+         * @param string $service one of DEV_HOST_ENV_VARS' keys
+         *
+         * @return string|null
+         */
+        public static function get_dev_host_override($service)
+        {
+            if (!isset(self::DEV_HOST_ENV_VARS[$service]) || !self::is_development_install()) {
+                return null;
+            }
+            $host = trim((string) getenv(self::DEV_HOST_ENV_VARS[$service]));
+            return $host === '' ? null : untrailingslashit($host);
+        }
+
+        /**
          * Build an environment host from the brand's URL template, mirroring
          * the Magento config repository: ('api', mode 'staging') on the Two
          * brand -> https://api.staging.two.inc; production drops the mode
@@ -1142,6 +1199,13 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * Resolves off the *effective* mode, so every service host the gateway
          * emits sits in the same environment as its API host.
          *
+         * A development install's override wins over the template. That
+         * deliberately breaks the same-environment invariant the effective
+         * mode exists to hold (TWO-25170) — overriding one host and not
+         * another is exactly what a local loop needs — which is why the
+         * override is gated on the install declaring itself non-production
+         * rather than on anything the gateway's own settings can reach.
+         *
          * @param string             $service 'api' or 'checkout'
          * @param WC_Payment_Gateway $gateway
          *
@@ -1149,9 +1213,31 @@ if (!class_exists('WC_Twoinc_Helper')) {
          */
         public static function get_environment_host($service, $gateway)
         {
+            $override = self::get_dev_host_override($service);
+            if ($override !== null) {
+                return $override;
+            }
             $mode = self::get_effective_environment_mode($gateway);
             $prefix = $mode === 'production' ? $service : $service . '.' . $mode;
             return sprintf(WC_Twoinc_Brand::get('checkout_url_template'), $prefix);
+        }
+
+        /**
+         * The merchant portal's signup URL. The brand registry owns the
+         * whole URL, so an override swaps its origin and keeps the path —
+         * a developer running the portal locally serves the same routes.
+         *
+         * @return string
+         */
+        public static function get_merchant_portal_signup_url()
+        {
+            $url = (string) WC_Twoinc_Brand::get('sign_up_url');
+            $override = self::get_dev_host_override('portal');
+            if ($override === null) {
+                return $url;
+            }
+            $path = (string) parse_url($url, PHP_URL_PATH);
+            return $override . $path;
         }
 
         /**

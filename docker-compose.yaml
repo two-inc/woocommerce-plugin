@@ -17,14 +17,21 @@ services:
       WORDPRESS_DEBUG: "true"
       # Brand override for the plugin's WC_Twoinc_Brand loader (dev only)
       TWO_BRAND_CODE: "${TWO_BRAND_CODE:-}"
-      # Dev-only API host override (TWO-25386) — read by
-      # WC_Twoinc_Helper::get_effective_environment_mode() /
-      # WC_Twoinc::get_twoinc_checkout_host() on a dev-sniffed shop. Not a
-      # wp-admin field (the merchant-facing test-host control was removed);
-      # this must be an actual PHP-visible env var on the container that
-      # serves checkout requests, not a WP option, so it lives here rather
-      # than only on the wpcli container.
+      # WordPress's own environment type, and the gate on all three host
+      # overrides below: the plugin honours them only where this says
+      # development or local. WordPress treats anything unset as
+      # production, so this line is what makes the stack's overrides
+      # effective at all.
+      WP_ENVIRONMENT_TYPE: "development"
+      # Dev-only host overrides, one per service the plugin talks to. Each
+      # falls back on its own to the brand's template host when unset.
+      # These must be PHP-visible env vars on the container that serves
+      # checkout requests, not WP options, so they live here rather than
+      # only on the wpcli container — and never as wp-admin fields (the
+      # merchant-facing test-host control was removed, TWO-25386).
       TWOINC_DEV_API_HOST: "${TWO_API_BASE_URL:-}"
+      TWOINC_DEV_CHECKOUT_HOST: "${TWO_CHECKOUT_BASE_URL:-}"
+      TWOINC_DEV_PORTAL_HOST: "${TWO_PORTAL_BASE_URL:-}"
     volumes:
       - ./volumes/wordpress:/var/www/html
       - .:/var/www/html/wp-content/plugins/tillit-payment-gateway

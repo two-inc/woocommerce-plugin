@@ -229,6 +229,9 @@ final class BrandConfigSpec
             'testFulfilmentTriggerStatusDoesNotFireForUnconfiguredStatus',
             'testFulfilmentTriggerExcludesCancelledAndRefundedFromOptionsAndStoredValue',
             'testCancelledOrderNeverMisdispatchesAsFulfilmentEvenIfConfiguredAsTrigger',
+            'testDevHostOverridesApplyPerServiceBehindTheDevelopmentGate',
+            'testSoleTraderSignupFollowsTheCheckoutHostOverride',
+            'testDevHostOverrideLeavesOtherBrandHostsIntact',
             'testShouldDisableSslVerifyOffByDefault',
             'testShouldDisableSslVerifyIgnoredInProduction',
             'testShouldDisableSslVerifyHonouredOutsideProduction',
@@ -258,6 +261,14 @@ final class BrandConfigSpec
         // failure into a cascade in unrelated specs. Reset both together.
         unset($GLOBALS['__twoinc_test_store_currency']);
         unset($GLOBALS['test_home_url']);
+        // The dev-host overrides and the install's declared environment type
+        // are read straight from the process env / a global, so a test that
+        // set either and then failed before its own cleanup would hand every
+        // later test a shop that silently honours an override.
+        unset($GLOBALS['test_environment_type']);
+        foreach (WC_Twoinc_Helper::DEV_HOST_ENV_VARS as $env_var) {
+            putenv($env_var);
+        }
         $GLOBALS['__twoinc_test_options'] = [];
         unset($_POST[WC_Twoinc_Payment_Terms::SESSION_KEY]);
         WC_Twoinc_Payment_Terms::reset_fee_cache();
@@ -3972,6 +3983,201 @@ final class BrandConfigSpec
 
         TinyAssert::same([503], $gateway->cancelledCalls, 'cancelled must still dispatch on_order_cancelled');
         TinyAssert::same([], $gateway->completedCalls, 'cancelled must never dispatch on_order_completed');
+    }
+
+    /**
+     * The three dev host overrides, as one table: which env vars are set,
+     * what the install declares itself to be, and the host each of the
+     * three services then resolves to.
+     *
+     * Every row asserts all three services, which is what makes the
+     * independence claim load-bearing — a fix that routed one override into
+     * a shared resolver and dragged the other two along with it would fail
+     * the rows that set exactly one var. The production rows are the
+     * security case: identical env vars, and every service still resolves
+     * to the brand's own host.
+     */
+    private static function testDevHostOverridesApplyPerServiceBehindTheDevelopmentGate(): void
+    {
+        $api = 'https://api.two.inc';
+        $checkout = 'https://checkout.two.inc';
+        $portal = 'https://portal.two.inc/auth/merchant/signup';
+        $tunnel = 'https://tunnel.example';
+        $localApi = 'http://portal.localhost/api';
+
+        $cases = [
+            [
+                'development',
+                [],
+                $api,
+                $checkout,
+                $portal,
+                'no override set: every service follows the brand template',
+            ],
+            [
+                'development',
+                ['TWOINC_DEV_API_HOST' => $localApi],
+                $localApi,
+                $checkout,
+                $portal,
+                'API override alone moves only the API host',
+            ],
+            [
+                'development',
+                ['TWOINC_DEV_CHECKOUT_HOST' => $tunnel],
+                $api,
+                $tunnel,
+                $portal,
+                'checkout override alone moves only the browser-facing host',
+            ],
+            [
+                'development',
+                ['TWOINC_DEV_PORTAL_HOST' => 'http://portal.localhost'],
+                $api,
+                $checkout,
+                'http://portal.localhost/auth/merchant/signup',
+                'portal override swaps the origin and keeps the signup path',
+            ],
+            [
+                'local',
+                ['TWOINC_DEV_CHECKOUT_HOST' => $tunnel . '/'],
+                $api,
+                $tunnel,
+                $portal,
+                'local counts as development, and a trailing slash is trimmed',
+            ],
+            [
+                'development',
+                [
+                    'TWOINC_DEV_API_HOST' => $localApi,
+                    'TWOINC_DEV_CHECKOUT_HOST' => $tunnel,
+                    'TWOINC_DEV_PORTAL_HOST' => 'http://portal.localhost',
+                ],
+                $localApi,
+                $tunnel,
+                'http://portal.localhost/auth/merchant/signup',
+                'all three at once, each to a different host',
+            ],
+            [
+                'production',
+                [
+                    'TWOINC_DEV_API_HOST' => $localApi,
+                    'TWOINC_DEV_CHECKOUT_HOST' => $tunnel,
+                    'TWOINC_DEV_PORTAL_HOST' => 'http://portal.localhost',
+                ],
+                $api,
+                $checkout,
+                $portal,
+                'a production install honours none of them, however they leak in',
+            ],
+            [
+                'staging',
+                ['TWOINC_DEV_CHECKOUT_HOST' => $tunnel],
+                $api,
+                $checkout,
+                $portal,
+                'staging is not development either: no override honoured',
+            ],
+            [
+                null,
+                ['TWOINC_DEV_CHECKOUT_HOST' => $tunnel],
+                $api,
+                $checkout,
+                $portal,
+                'an install that declares nothing is production and honours nothing',
+            ],
+        ];
+
+        foreach ($cases as [$environmentType, $envVars, $expectedApi, $expectedCheckout, $expectedPortal, $description]) {
+            foreach (WC_Twoinc_Helper::DEV_HOST_ENV_VARS as $envVar) {
+                putenv($envVar);
+            }
+            foreach ($envVars as $envVar => $value) {
+                putenv("$envVar=$value");
+            }
+            if ($environmentType === null) {
+                unset($GLOBALS['test_environment_type']);
+            } else {
+                $GLOBALS['test_environment_type'] = $environmentType;
+            }
+
+            $gateway = self::soleTraderGateway([], []);
+            TinyAssert::same(
+                $expectedApi,
+                WC_Twoinc_Helper::get_environment_host('api', $gateway),
+                "API host — $description"
+            );
+            TinyAssert::same(
+                $expectedCheckout,
+                WC_Twoinc_Helper::get_environment_host('checkout', $gateway),
+                "checkout host — $description"
+            );
+            TinyAssert::same(
+                $expectedPortal,
+                WC_Twoinc_Helper::get_merchant_portal_signup_url(),
+                "portal signup URL — $description"
+            );
+        }
+
+        foreach (WC_Twoinc_Helper::DEV_HOST_ENV_VARS as $envVar) {
+            putenv($envVar);
+        }
+        unset($GLOBALS['test_environment_type']);
+    }
+
+    /**
+     * The sole-trader signup page is the reason the checkout override has to
+     * accept an arbitrary host: the BROWSER opens it, so it has to be able
+     * to name a host only the browser can resolve. Pinned end-to-end
+     * through the URL the popup is actually given, not just the host helper.
+     */
+    private static function testSoleTraderSignupFollowsTheCheckoutHostOverride(): void
+    {
+        $gateway = self::soleTraderGateway([], []);
+        $GLOBALS['test_environment_type'] = 'development';
+        putenv('TWOINC_DEV_CHECKOUT_HOST=https://tunnel.example');
+        try {
+            TinyAssert::same(
+                'https://tunnel.example/soletrader/signup',
+                WC_Twoinc_Sole_Trader::get_signup_page_url($gateway)
+            );
+            $GLOBALS['test_environment_type'] = 'production';
+            TinyAssert::same(
+                'https://checkout.two.inc/soletrader/signup',
+                WC_Twoinc_Sole_Trader::get_signup_page_url($gateway),
+                'a production install must serve the brand signup page, not the tunnel'
+            );
+        } finally {
+            putenv('TWOINC_DEV_CHECKOUT_HOST');
+            unset($GLOBALS['test_environment_type']);
+        }
+    }
+
+    /**
+     * A brand overlay's own domains stay template-driven: an override moves
+     * the host it names and nothing else, on any brand.
+     */
+    private static function testDevHostOverrideLeavesOtherBrandHostsIntact(): void
+    {
+        WC_Twoinc_Brand::reset();
+        self::useTestbrand();
+        $gateway = self::soleTraderGateway([], []);
+        $GLOBALS['test_environment_type'] = 'development';
+        putenv('TWOINC_DEV_CHECKOUT_HOST=https://tunnel.example');
+        try {
+            TinyAssert::same(
+                'https://tunnel.example',
+                WC_Twoinc_Helper::get_environment_host('checkout', $gateway)
+            );
+            TinyAssert::same(
+                'https://api.testbrand.example',
+                WC_Twoinc_Helper::get_environment_host('api', $gateway),
+                'the overlay brand keeps its own API host'
+            );
+        } finally {
+            putenv('TWOINC_DEV_CHECKOUT_HOST');
+            unset($GLOBALS['test_environment_type']);
+        }
     }
 
     private static function testShouldDisableSslVerifyOffByDefault(): void
