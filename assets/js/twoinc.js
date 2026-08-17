@@ -1817,11 +1817,7 @@ class TwoCompanySearch {
 
     // Clear the addresses, in case address get request fails
     if (window.twoinc.enable_address_lookup === "yes") {
-      Twoinc.getInstance().setAddress({
-        street_address: "",
-        city: "",
-        postal_code: ""
-      });
+      Twoinc.getInstance().clearAddress();
     }
     Twoinc.getInstance().registryAddressApplied = false;
 
@@ -2233,11 +2229,7 @@ class TwoCompanySearch {
     // so this reads `registryAddressApplied` instead, which is set only on
     // the branch that actually writes looked-up data.
     if (Twoinc.getInstance().registryAddressApplied) {
-      Twoinc.getInstance().setAddress({
-        street_address: "",
-        city: "",
-        postal_code: ""
-      });
+      Twoinc.getInstance().clearAddress();
       Twoinc.getInstance().registryAddressApplied = false;
     }
 
@@ -5159,13 +5151,96 @@ class Twoinc {
     });
   }
 
+  /**
+   * Write a looked-up address into the billing fields.
+   *
+   * Line routing follows the registry's own shape rather than the field
+   * order: a sub-premise (`building`/`apartment`) is what identifies the
+   * unit, so it leads on line 1 and the street drops to line 2. With no
+   * sub-premise the street leads and line 2 is LEFT ALONE — a buyer who
+   * typed their own line 2 keeps it, and it reaches the API either way
+   * because the order payload joins the two lines.
+   *
+   * The two lines are never compared: real addresses exist whose street
+   * and sub-premise read identically, and dropping the duplicate would
+   * lose a line the registry deliberately sent twice.
+   */
   setAddress(address) {
-    jQuery("#billing_address_1").val(address.street_address);
-    jQuery("#billing_address_2").val("");
+    // Trimmed before the choice, not after: a `building` that is present but
+    // blank would otherwise win the `||` and mask a real `apartment`.
+    const subPremise =
+      twoincUtilHelper.blankToEmpty(address.building) ||
+      twoincUtilHelper.blankToEmpty(address.apartment);
+    const street = twoincUtilHelper.blankToEmpty(address.street_address);
+    if (subPremise) {
+      jQuery("#billing_address_1").val(subPremise);
+      jQuery("#billing_address_2").val(street);
+    } else {
+      jQuery("#billing_address_1").val(street);
+    }
     jQuery("#billing_city").val(address.city);
     jQuery("#billing_postcode").val(address.postal_code);
+    this.setRegion(address.region);
     // Update order review in case there is a shipping change
     jQuery(document.body).trigger("update_checkout");
+  }
+
+  /**
+   * Put the registry's region somewhere it survives to the order.
+   *
+   * WooCommerce only renders a state field for countries whose address
+   * format has one, and constrains it to a fixed option list when it does.
+   * So this is best-effort by necessity: match the option list by label or
+   * code and select it; write it verbatim into a free-text state field;
+   * and where the country has no state field at all, append it to the city
+   * ("Ashford, Kent") rather than drop it, because the API reads the
+   * region out of the address it is sent.
+   */
+  setRegion(region) {
+    const value = twoincUtilHelper.blankToEmpty(region);
+    if (!value) return;
+    const $state = jQuery("#billing_state");
+    const isSelect = $state.length > 0 && $state.is("select");
+    if (isSelect) {
+      const wanted = value.toLowerCase();
+      const $match = $state.find("option").filter(function () {
+        const option = jQuery(this);
+        return (
+          option.val() !== "" &&
+          (String(option.text()).trim().toLowerCase() === wanted ||
+            String(option.val()).trim().toLowerCase() === wanted)
+        );
+      });
+      if ($match.length > 0) {
+        $state.val($match.first().val()).trigger("change");
+        return;
+      }
+    } else if ($state.length > 0) {
+      $state.val(value).trigger("change");
+      return;
+    }
+    const $city = jQuery("#billing_city");
+    const city = twoincUtilHelper.blankToEmpty($city.val());
+    $city.val(city ? city + ", " + value : value);
+  }
+
+  /**
+   * Drop the address a registry lookup wrote.
+   *
+   * Line 2 and the region have to be named explicitly, because `setAddress`
+   * deliberately leaves both alone when the payload says nothing about them
+   * — that protects a buyer's own typing on a write, but on a clear it would
+   * leave the disowned company's unit number and county attached to the
+   * order.
+   */
+  clearAddress() {
+    jQuery("#billing_address_2").val("");
+    jQuery("#billing_state").val("").trigger("change");
+    this.setAddress({
+      street_address: "",
+      city: "",
+      postal_code: ""
+    });
   }
 
   /**
