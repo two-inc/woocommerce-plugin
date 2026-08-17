@@ -210,29 +210,12 @@ if (!class_exists('WC_Twoinc')) {
          */
         public function get_twoinc_checkout_host()
         {
-            // Deprecated dev-environment sniffing (localhost, the
-            // TWOINC_DEV_HOSTNAMES env var, *.two.inc dev subdomains):
-            // installs predating the explicit environment mode carry the
-            // default mode and rely on the sniffed environment. Set
-            // checkout_env instead of extending the sniffer.
-            //
-            // The free-text test-host override that used to back this on
-            // sniffed dev shops was a merchant-editable wp-admin field,
-            // removed outright (TWO-25386). Local/dev tooling (this repo's
-            // own docker-compose stack) that needs the API to resolve to an
-            // arbitrary local host instead reads TWOINC_DEV_API_HOST — a
-            // server env var, never a wp-admin field. Any other sniffed dev
-            // shop on the default mode resolves to the brand's staging
-            // host, same as every other host the gateway emits.
-            if (
-                WC_Twoinc_Helper::get_environment_mode($this) === 'production'
-                && WC_Twoinc_Helper::is_twoinc_development()
-            ) {
-                $dev_api_host = getenv('TWOINC_DEV_API_HOST');
-                if ($dev_api_host) {
-                    return $dev_api_host;
-                }
-            }
+            // TWOINC_DEV_API_HOST still points this at an arbitrary local
+            // host, but get_environment_host() now applies it — together
+            // with the checkout and portal overrides — behind the single
+            // development-install gate, so the three services can be
+            // steered independently and no shop that has not declared
+            // itself non-production honours any of them.
             return WC_Twoinc_Helper::get_environment_host('api', $this);
         }
 
@@ -4814,7 +4797,7 @@ if (!class_exists('WC_Twoinc')) {
                             <span id="twoinc-merchant-id"><?php echo esc_html($merchant_id); ?></span><span id="twoinc-merchant-short-name"><?php echo $merchant_short_name !== '' ? ' &middot; ' . esc_html($merchant_short_name) : ''; ?></span>
                         </div>
                         <div id="twoinc-signup-prompt" style="margin-top: 8px; color: #666; font-size: 13px;<?php echo $merchant_id ? ' display: none;' : ''; ?>">
-                            <strong><?php printf(__('Don\'t have an API key? Get one by signing up <a href=\'%s\'>here</a>.', 'twoinc-payment-gateway'), esc_url(WC_Twoinc_Brand::get('sign_up_url'))); ?></strong>
+                            <strong><?php printf(__('Don\'t have an API key? Get one by signing up <a href=\'%s\'>here</a>.', 'twoinc-payment-gateway'), esc_url(WC_Twoinc_Helper::get_merchant_portal_signup_url())); ?></strong>
                         </div>
                         <?php // Hidden by default; populated + shown by admin.js when the live re-verification on page load (or on typing a new key) cannot confirm the key. Text is set dynamically per failure category — invalid key vs Two service error vs unreachable — so an admin isn't stuck guessing "is my key wrong or is Two down" (TWO-25326 follow-up, supersedes an earlier static-text version of this same notice). ?>
                         <div id="twoinc-merchant-invalid-notice" style="margin-top: 8px; color: #dc3232; font-size: 13px; display: none;"></div>
