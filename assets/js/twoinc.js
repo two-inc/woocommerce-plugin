@@ -1767,6 +1767,89 @@ class TwoCompanySearch {
   }
 
   /**
+   * Discard a sole-trader toggle left parked outside the payment tile by a
+   * PREVIOUS call to `relocateSoleTraderToggle()` (porting guide §1: the
+   * chip is structurally part of the search control, not a separate widget
+   * bolted onto one fixed location — TWO-40).
+   *
+   * Unlike `#billing_company_display_field`, `.twoinc-sole-trader-toggle`
+   * has no "always registered, rendered once" guarantee: `get_pay_box_description()`
+   * re-emits a fresh, empty copy of it inside the payment tile on EVERY
+   * WooCommerce checkout AJAX refresh, unconditionally of
+   * `company_search_location` (it is hardcoded straight into the tile's
+   * markup, not a relocatable checkout field). A copy parked in the
+   * address area by a previous cycle survives that refresh untouched — the
+   * address area is not one of the fragments WooCommerce replaces — so
+   * without this, `jQuery(".twoinc-sole-trader-toggle")` would match both
+   * the stale parked copy and the fresh in-tile one, and every method in
+   * `twoincSoleTrader` that acts on "the container" would silently act on
+   * both. Called from `twoincSoleTrader.refresh()`, before it reads that
+   * selector, so it never sees more than one match.
+   *
+   * Scoped by "is it inside the tile" rather than by a remembered wrapper
+   * id: the one PHP just rendered this cycle is always the one still
+   * inside `.payment_box.payment_method_<gateway_id>` (same scoping
+   * `twoincDomHelper.rearrangeDescription()` already uses elsewhere in
+   * this file); anything else matching the class is necessarily a stale
+   * leftover.
+   *
+   * A no-op in 'payment_tile' mode (nothing is ever parked there) and if
+   * nothing was ever relocated yet.
+   *
+   * @returns {void}
+   */
+  discardStaleSoleTraderToggle() {
+    const tileScopeSelector = ".payment_box.payment_method_" + window.twoinc.gateway_id;
+    jQuery(".twoinc-sole-trader-toggle").each(function () {
+      const $toggle = jQuery(this);
+      if (!$toggle.closest(tileScopeSelector).length) {
+        $toggle.remove();
+      }
+    });
+  }
+
+  /**
+   * Move the sole-trader mode chip next to the company-search control
+   * whenever that control lives in the address area (TWO-40, porting guide
+   * §1 — the chip is structurally part of the same search control, not a
+   * separate widget). Pairs with `discardStaleSoleTraderToggle()` above:
+   * that one clears the way, this one does the move once
+   * `twoincSoleTrader.render()`/`hide()` has settled the container's
+   * content for this cycle.
+   *
+   * A no-op in 'payment_tile' mode: `get_pay_box_description()` already
+   * hardcodes the toggle immediately before `.twoinc-company-search-tile-slot`
+   * in that branch, so the two are already adjacent inside the tile and
+   * nothing needs to move.
+   *
+   * Guarded on the toggle's CURRENT previous sibling, same idempotency
+   * reasoning as `syncCompanySearchTileLocation()` above: an unconditional
+   * `insertAfter()` on every call would physically detach and reattach the
+   * container even when nothing has moved, which would drop focus/close an
+   * open mode-chip's keyboard interaction on every unrelated checkout
+   * refresh.
+   *
+   * Called from `twoincSoleTrader.apply()`, after either of its branches
+   * (`render()` or `hide()`) has finished with the container — never
+   * before, or it would relocate a node mid-rebuild.
+   *
+   * @returns {void}
+   */
+  relocateSoleTraderToggle() {
+    if (window.twoinc.company_search_location === "payment_tile") return;
+
+    const $companyField = jQuery("#billing_company_display_field");
+    const $toggle = jQuery(
+      ".payment_box.payment_method_" + window.twoinc.gateway_id + " .twoinc-sole-trader-toggle"
+    );
+    if (!$companyField.length || !$toggle.length) return;
+
+    if ($toggle.prev()[0] !== $companyField[0]) {
+      $toggle.insertAfter($companyField);
+    }
+  }
+
+  /**
    * Get company name string
    */
   getCompanyName() {
@@ -3706,6 +3789,13 @@ let twoincSoleTrader = {
    * are cached per country for the page's lifetime.
    */
   refresh: function () {
+    // BEFORE reading the selector below: discards any copy a previous
+    // cycle parked in the address area, so this selector — and every other
+    // bare `.twoinc-sole-trader-toggle` lookup this object makes below —
+    // can only ever match the one PHP just re-rendered inside the tile
+    // (TWO-40; see discardStaleSoleTraderToggle()'s own doc comment for why
+    // this container has no "rendered once" guarantee to rely on instead).
+    twoincSelectWooHelper.discardStaleSoleTraderToggle();
     const cfg = twoincSoleTrader.config();
     const $container = jQuery(".twoinc-sole-trader-toggle");
     if (!cfg.availability_url || $container.length === 0) {
@@ -3751,6 +3841,10 @@ let twoincSoleTrader = {
     } else {
       twoincSoleTrader.hide();
     }
+    // AFTER either branch above has settled the container's content for
+    // this cycle (TWO-40) — see relocateSoleTraderToggle()'s own doc
+    // comment for why this must run last, not before.
+    twoincSelectWooHelper.relocateSoleTraderToggle();
   },
 
   hide: function () {
