@@ -247,7 +247,59 @@ describe("autofill buyer trust levels", () => {
         })
       ).rejects.toThrow("applying the buyer failed");
 
+      // THIS is the discriminating assertion, not the rejection above. Under
+      // the old shape the rejection happened too — the catch re-invoked the
+      // callback, which threw a second time, escaping with the same message.
+      // What separates the two shapes is how often the callback ran and with
+      // what: once with the buyer, or twice, the second time with a null that
+      // never came from the read. Do not delete this line as redundant.
       expect(seen).toEqual([ENROLLED]);
+    });
+
+    test("resolves a thenable even when there are no tokens to read with", async () => {
+      // Both exits return a promise, so a caller can sequence after the read
+      // without knowing which path it took.
+      soleTrader.tokens = null;
+      const seen = [];
+
+      // Asserted on the RETURN VALUE, not by awaiting it: `await undefined`
+      // succeeds, so awaiting would pass whether or not this path returns
+      // anything at all.
+      const returned = soleTrader.fetchCurrentBuyer(function (buyer) {
+        seen.push(buyer);
+      });
+
+      expect(typeof (returned || {}).then).toBe("function");
+      await returned;
+      expect(seen).toEqual([null]);
+    });
+
+    test("drains the body of a response it is not going to read", async () => {
+      // Not politeness: an unread body leaves the request in flight as far as
+      // the browser is concerned, so anything waiting on network-idle never
+      // sees it finish.
+      let drained = 0;
+      global.fetch = function () {
+        return Promise.resolve({
+          ok: false,
+          status: 500,
+          json: function () {
+            throw new Error("must not read the body as JSON");
+          },
+          text: function () {
+            drained += 1;
+            return Promise.resolve("");
+          }
+        });
+      };
+      const seen = [];
+
+      await soleTrader.fetchCurrentBuyer(function (buyer) {
+        seen.push(buyer);
+      });
+
+      expect(drained).toBe(1);
+      expect(seen).toEqual([null]);
     });
 
     test("ignores a message from any other origin", async () => {
