@@ -405,6 +405,28 @@ describe("company-search manual-entry affordance", () => {
     });
 
     /**
+     * The sweep above must be scoped to THIS field's own results panel,
+     * never a blanket `.select2-results` query (round-3 review — Han):
+     * `syncManualEntryButton` runs from `twoincSoleTrader.apply()`, an
+     * async availability callback completely decoupled from whatever else
+     * the buyer has open — a buyer double-checking their country in its own
+     * open dropdown while that callback happens to land must not have it
+     * swept away from under them.
+     */
+    test("never removes an unrelated widget's own open dropdown elsewhere on the page", () => {
+      openWithAffordance();
+      const $country = $("#billing_country").selectWoo(helper.genSelectWooParams());
+      $country.select2("open");
+      expect($(".select2-results").length).toBe(2);
+
+      helper.syncManualEntryButton();
+
+      expect($country.data("select2").isOpen()).toBe(true);
+      expect($(".select2-results").length).toBe(2);
+      $country.select2("close").select2("destroy");
+    });
+
+    /**
      * The other half: even granting that a stale panel exists, does
      * `syncManualEntryButton` actually find and remove its wrapper?
      *

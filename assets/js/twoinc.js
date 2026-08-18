@@ -1024,16 +1024,27 @@ class TwoCompanySearch {
 
     const $list = picker.$results;
 
-    // Sweep away the ENTIRE panel, not just its chip wrapper, for any
-    // `.select2-results` that is not this widget's own (round-2 review —
-    // Vader: `closeCompanySearchBeforeCheckoutUpdate` deliberately skips
-    // closing while a sole-trader flight is outstanding — see its own
-    // comment — so a fragment replace during that window can still orphan
-    // a whole dropdown here, same as before that fix existed). Removing the
-    // dead panel itself, not only the wrapper inside it, is what stops that
-    // window from reopening the bug this file's own `syncManualEntryButton`
-    // comment below already describes in full.
-    jQuery(".select2-results")
+    // Sweep away the ENTIRE panel, not just its chip wrapper, for any STALE
+    // `.select2-results` belonging to THIS field (round-2 review — Vader:
+    // `closeCompanySearchBeforeCheckoutUpdate` deliberately skips closing
+    // while a sole-trader flight is outstanding — see its own comment — so
+    // a fragment replace during that window can still orphan a whole
+    // dropdown here, same as before that fix existed).
+    //
+    // Scoped by the results-list id, not a blanket `.select2-results` query
+    // (round-3 review — Han: an unscoped sweep found and removed WHATEVER
+    // select2/selectWoo dropdown happened to be open elsewhere on the page
+    // at the same moment — `#billing_country`'s, for one — since this
+    // function runs from `twoincSoleTrader.apply()`, an async availability
+    // callback with no relation to what else the buyer has open). selectWoo
+    // derives that id deterministically from the field's own id
+    // (`container.id + "-results"`, vendored `search.js`) — the SAME id on
+    // every re-init of THIS field, stale or fresh — so this only ever
+    // matches a duplicate for `#billing_company_display`, never another
+    // widget's.
+    const resultsIdPrefix = "select2-" + helper.companyFieldSelector.replace("#", "") + "-results";
+    jQuery("[id^='" + resultsIdPrefix + "']")
+      .closest(".select2-results")
       .not($list.closest(".select2-results"))
       .closest(".select2-container--open")
       .remove();
