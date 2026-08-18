@@ -4865,8 +4865,21 @@ let twoincSoleTrader = {
       return;
     }
     if (!twoincSoleTrader.enteredEmail()) {
-      // Nothing to autofill yet (no email entered): fall back to the link.
-      twoincSoleTrader.showNote(true);
+      // No email means there is nothing autofill could match, so the outcome is
+      // already known: signup (TWO-40 §7 correction — a chip click resolves to
+      // populated or popup, never to a note). Tokens normally already exist
+      // from the email-driven prefetch, and `openPopup` needs them, but that
+      // prefetch never runs without an email — so mint them here when they are
+      // missing, which is the only case that costs the click its gesture.
+      if (twoincSoleTrader.tokens) {
+        twoincSoleTrader.launchSignup();
+        return;
+      }
+      twoincSoleTrader.beginFlight();
+      twoincSoleTrader.fetchTokens(function () {
+        twoincSoleTrader.settleFlight();
+        if (twoincSoleTrader.mode === "sole_trader") twoincSoleTrader.launchSignup();
+      });
       return;
     }
     // An email is entered but the prefetch has not settled (live-reported by

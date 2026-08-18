@@ -499,12 +499,90 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         expect(soleTrader.mode).toBe("sole_trader");
       });
 
-      test("no email entered yet: falls back to the manual link, no popup, no wait", () => {
+    });
+
+    describe("a chip click resolves to populate or popup, never a note", () => {
+      const MATCHED_BUYER = {
+        organization_number: "TWO:ST1",
+        company_name: "Sole Co",
+        email: "buyer@example.test"
+      };
+
+      /**
+       * The note is the browser-blocked-popup fallback ONLY — never an outcome
+       * the chip click itself chooses. Asserted against a note that exists:
+       * `hasClass()` on an empty set reads back `false`, so a test that skips
+       * `render()` passes whatever the code does.
+       */
+      function expectNoNote() {
+        const $note = $(".twoinc-sole-trader-note");
+        expect($note).toHaveLength(1);
+        expect($note.hasClass("hidden")).toBe(true);
+      }
+
+      const cases = [
+        {
+          arrange: () => {
+            $("#billing_email").val(MATCHED_BUYER.email);
+            soleTrader.prefetched = { ready: true, matches: true, buyer: MATCHED_BUYER };
+          },
+          expectedCompanyId: "TWO:ST1",
+          expectedPopups: 0,
+          description: "autofill already resolved with a match"
+        },
+        {
+          arrange: () => {
+            $("#billing_email").val("buyer@example.test");
+            soleTrader.prefetched = { ready: true, matches: false, buyer: null };
+          },
+          expectedCompanyId: "",
+          expectedPopups: 1,
+          description: "autofill already resolved with no match"
+        },
+        {
+          arrange: () => {
+            $("#billing_email").val("");
+          },
+          expectedCompanyId: "",
+          expectedPopups: 1,
+          description: "no email entered, so nothing autofill could match"
+        }
+      ];
+
+      test.each(cases)("$description", ({ arrange, expectedCompanyId, expectedPopups }) => {
+        soleTrader.render();
+        arrange();
+
+        soleTrader.onModeChipClick("sole_trader");
+
+        expect(opened).toHaveLength(expectedPopups);
+        expect($("#company_id").val()).toBe(expectedCompanyId);
+        expectNoNote();
+      });
+
+      test("no email and no tokens yet: mints tokens, then opens the popup, still no note", () => {
+        soleTrader.render();
+        $("#billing_email").val("");
+        soleTrader.tokens = null;
+        let resolveTokens;
+        jest.spyOn(soleTrader, "fetchTokens").mockImplementation((cb) => {
+          resolveTokens = cb;
+        });
+
         soleTrader.onModeChipClick("sole_trader");
 
         expect(opened).toHaveLength(0);
-        expect(soleTrader.pendingChipDecisionEmail).toBe(null);
-        expect($(".twoinc-sole-trader-note").hasClass("hidden")).toBe(false);
+        expect(soleTrader.flightDepth).toBe(1);
+
+        soleTrader.tokens = {
+          delegation_token: "delegation",
+          autofill_token: "autofill",
+          signup_url: "https://checkout.example.test/soletrader/signup"
+        };
+        resolveTokens(true);
+
+        expect(opened).toHaveLength(1);
+        expectNoNote();
       });
     });
 
@@ -605,6 +683,32 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         $("#company_id").trigger("click");
 
         expect(soleTrader.mode).toBe("business");
+      });
+
+      test("clicking a picked REGISTERED company reopens the dropdown too", () => {
+        // Doug 2026-08-18: click-to-reopen is wanted in both capture modes,
+        // not only sole trader. Registered company keeps the live picker as
+        // the visible field, so its own combobox is the reopen trigger.
+        const ajax = harness.stubAjax($);
+        const $widget = harness.openCompanyWidget($, ctx.helper);
+        $widget.trigger({
+          type: "select2:select",
+          params: { data: { id: "A Registered Co", company_id: "12345678" } }
+        });
+        $widget.select2("close");
+        expect($widget.data("select2").isOpen()).toBe(false);
+        expect($("#company_id").val()).toBe("12345678");
+
+        // `which: 1` deliberately: the picker's own open-on-click handler
+        // early-returns on anything but a primary button, so a bare
+        // `trigger("mousedown")` never reaches it.
+        $("#billing_company_display_field .select2-selection").trigger({
+          type: "mousedown",
+          which: 1
+        });
+
+        expect($widget.data("select2").isOpen()).toBe(true);
+        ajax.restore();
       });
 
       test("clicking the field while still in business mode is a no-op", () => {
