@@ -457,7 +457,11 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         soleTrader.prefetched = {
           ready: true,
           matches: true,
-          buyer: { organization_number: "TWO:ST1", company_name: "Sole Co", email: "buyer@example.test" }
+          buyer: {
+            organization_number: "TWO:ST1",
+            company_name: "Sole Co",
+            email: "buyer@example.test"
+          }
         };
 
         soleTrader.onModeChipClick("sole_trader");
@@ -670,9 +674,15 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         expect(soleTrader.mode).toBe("sole_trader");
 
         // The popup posts ACCEPTED and completes normally.
-        jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) =>
-          cb({ organization_number: "TWO:ST1", company_name: "A Sole Trader", email: "buyer@example.test" })
-        );
+        jest
+          .spyOn(soleTrader, "fetchCurrentBuyer")
+          .mockImplementation((cb) =>
+            cb({
+              organization_number: "TWO:ST1",
+              company_name: "A Sole Trader",
+              email: "buyer@example.test"
+            })
+          );
         soleTrader.bindPopupMessageListener();
         window.dispatchEvent(
           new window.MessageEvent("message", {
@@ -716,7 +726,10 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         });
         soleTrader.bindPopupMessageListener();
         window.dispatchEvent(
-          new window.MessageEvent("message", { data: "ACCEPTED", origin: "https://checkout.example.test" })
+          new window.MessageEvent("message", {
+            data: "ACCEPTED",
+            origin: "https://checkout.example.test"
+          })
         );
 
         // The popup closes before that fetch resolves.
@@ -767,9 +780,15 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         expect(soleTrader.mode).toBe("sole_trader");
 
         // The popup completes normally afterwards.
-        jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) =>
-          cb({ organization_number: "TWO:ST1", company_name: "A Sole Trader", email: "buyer@example.test" })
-        );
+        jest
+          .spyOn(soleTrader, "fetchCurrentBuyer")
+          .mockImplementation((cb) =>
+            cb({
+              organization_number: "TWO:ST1",
+              company_name: "A Sole Trader",
+              email: "buyer@example.test"
+            })
+          );
         soleTrader.bindPopupMessageListener();
         window.dispatchEvent(
           new window.MessageEvent("message", {

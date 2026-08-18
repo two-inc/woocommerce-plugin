@@ -5055,7 +5055,8 @@ let twoincSoleTrader = {
     // pending" (round-1 review — Han/Vader) — see the flag's own comment for
     // why a bare boolean gets consumed by whichever flight settles first.
     const pendingEmail = twoincSoleTrader.pendingChipDecisionEmail;
-    const hadPendingClick = pendingEmail !== null && pendingEmail === twoincSoleTrader.enteredEmail();
+    const hadPendingClick =
+      pendingEmail !== null && pendingEmail === twoincSoleTrader.enteredEmail();
     twoincSoleTrader.pendingChipDecisionEmail = null;
     // `isAvailable()` too (round-1 review — Vader): a country change can
     // call `hide()` — which reverts mode to business synchronously — while
