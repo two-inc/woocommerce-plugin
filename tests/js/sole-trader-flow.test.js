@@ -560,29 +560,43 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         expectNoNote();
       });
 
-      test("no email and no tokens yet: mints tokens, then opens the popup, still no note", () => {
-        soleTrader.render();
-        $("#billing_email").val("");
+      test("tokens are minted up front, so a chip click with no email keeps its own gesture", () => {
+        // Held to the synchronous call stack of the click: a `window.open()`
+        // from an async callback is what the browser blocks.
         soleTrader.tokens = null;
-        let resolveTokens;
-        jest.spyOn(soleTrader, "fetchTokens").mockImplementation((cb) => {
-          resolveTokens = cb;
-        });
-
-        soleTrader.onModeChipClick("sole_trader");
-
-        expect(opened).toHaveLength(0);
-        expect(soleTrader.flightDepth).toBe(1);
+        const fetchTokens = jest.spyOn(soleTrader, "fetchTokens");
+        soleTrader.render();
+        expect(fetchTokens).toHaveBeenCalled();
 
         soleTrader.tokens = {
           delegation_token: "delegation",
           autofill_token: "autofill",
           signup_url: "https://checkout.example.test/soletrader/signup"
         };
-        resolveTokens(true);
+        $("#billing_email").val("");
+
+        soleTrader.onModeChipClick("sole_trader");
 
         expect(opened).toHaveLength(1);
+        expect(soleTrader.flightDepth).toBe(1);
         expectNoNote();
+      });
+
+      test("tokens that could not be minted at all leave only the signup link", () => {
+        // The one remaining case with no popup to offer: without tokens there
+        // is no signup URL to open, so the link is the only recourse left
+        // (same fallback a browser-blocked popup uses).
+        jest.spyOn(soleTrader, "fetchTokens").mockImplementation((cb) => {
+          if (cb) cb(false);
+        });
+        soleTrader.tokens = null;
+        soleTrader.render();
+        $("#billing_email").val("");
+
+        soleTrader.onModeChipClick("sole_trader");
+
+        expect(opened).toHaveLength(0);
+        expect($(".twoinc-sole-trader-note").hasClass("hidden")).toBe(false);
       });
     });
 
@@ -686,9 +700,10 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       });
 
       test("clicking a picked REGISTERED company reopens the dropdown too", () => {
-        // Doug 2026-08-18: click-to-reopen is wanted in both capture modes,
-        // not only sole trader. Registered company keeps the live picker as
-        // the visible field, so its own combobox is the reopen trigger.
+        // Registered-company reopen is the picker's own open-on-click, not a
+        // plugin handler — so what this locks in is the plugin-owned
+        // precondition for it: business mode must leave the widget live and
+        // the field unlocked after a pick, unlike an adopted sole trader.
         const ajax = harness.stubAjax($);
         const $widget = harness.openCompanyWidget($, ctx.helper);
         $widget.trigger({
@@ -708,6 +723,8 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         });
 
         expect($widget.data("select2").isOpen()).toBe(true);
+        expect($("#billing_company").prop("readonly")).toBe(false);
+        expect($("#billing_company_display").prop("disabled")).toBe(false);
         ajax.restore();
       });
 

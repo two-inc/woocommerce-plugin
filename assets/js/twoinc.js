@@ -4704,6 +4704,13 @@ let twoincSoleTrader = {
       .appendTo($note);
     $container.append($note);
 
+    // `openPopup` needs tokens, and the prefetch below only mints them once an
+    // email exists — so a chip click before the buyer has typed one had no
+    // tokens to open a popup with (TWO-40 §7 correction). Minted here rather
+    // than at click time because `window.open()` outside the click's own
+    // gesture is blocker bait. Retried by the next `render()` if it fails.
+    if (!twoincSoleTrader.tokens) twoincSoleTrader.fetchTokens();
+
     // Prefetch for an already-filled email (returning/logged-in buyer), so a
     // known sole trader is auto-selected without waiting for an email edit.
     twoincSoleTrader.onEmailChanged();
@@ -4865,21 +4872,11 @@ let twoincSoleTrader = {
       return;
     }
     if (!twoincSoleTrader.enteredEmail()) {
-      // No email means there is nothing autofill could match, so the outcome is
-      // already known: signup (TWO-40 §7 correction — a chip click resolves to
-      // populated or popup, never to a note). Tokens normally already exist
-      // from the email-driven prefetch, and `openPopup` needs them, but that
-      // prefetch never runs without an email — so mint them here when they are
-      // missing, which is the only case that costs the click its gesture.
-      if (twoincSoleTrader.tokens) {
-        twoincSoleTrader.launchSignup();
-        return;
-      }
-      twoincSoleTrader.beginFlight();
-      twoincSoleTrader.fetchTokens(function () {
-        twoincSoleTrader.settleFlight();
-        if (twoincSoleTrader.mode === "sole_trader") twoincSoleTrader.launchSignup();
-      });
+      // No email, so nothing autofill could match: the outcome is already
+      // signup (TWO-40 §7 correction — a chip click resolves to populated or
+      // popup, never to a note). Synchronous, on the tokens `render()` minted
+      // up front — see the mint's own comment.
+      twoincSoleTrader.launchSignup();
       return;
     }
     // An email is entered but the prefetch has not settled (live-reported by
