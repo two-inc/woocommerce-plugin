@@ -559,43 +559,71 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         expectNoNote();
       });
 
-      test("tokens are minted up front, so a chip click with no email keeps its own gesture", () => {
-        // Held to the synchronous call stack of the click: a `window.open()`
-        // from an async callback is what the browser blocks.
+      test("a buyer with no email at all: the mint lands, then the chip click opens the popup", () => {
+        // The reported defect end to end. `window.open()` has to run inside
+        // the click's own gesture, so the mint must already have landed —
+        // hence the up-front one, not one started by the click.
         soleTrader.tokens = null;
-        const fetchTokens = jest.spyOn(soleTrader, "fetchTokens");
-        soleTrader.render();
-        expect(fetchTokens).toHaveBeenCalled();
-
-        soleTrader.tokens = {
-          delegation_token: "delegation",
-          autofill_token: "autofill",
-          signup_url: "https://checkout.example.test/soletrader/signup"
-        };
         $("#billing_email").val("");
+        // The real mint writes `.tokens` itself and takes no callback here.
+        jest.spyOn(soleTrader, "fetchTokens").mockImplementation(() => {
+          soleTrader.tokens = {
+            delegation_token: "delegation",
+            autofill_token: "autofill",
+            signup_url: "https://checkout.example.test/soletrader/signup"
+          };
+        });
+
+        soleTrader.render();
+        expect(soleTrader.fetchTokens).toHaveBeenCalled();
 
         soleTrader.onModeChipClick("sole_trader");
 
         expect(opened).toHaveLength(1);
-        expect(soleTrader.flightDepth).toBe(1);
+        expect(opened[0].url).toContain("businessToken=delegation");
         expectNoNote();
+      });
+
+      test("an email already filled in does not get a second, concurrent mint", () => {
+        // Two POSTs racing each other's write to `.tokens`: the prefetch
+        // mints for the email anyway.
+        soleTrader.tokens = null;
+        $("#billing_email").val("buyer@example.test");
+        jest.spyOn(soleTrader, "fetchTokens").mockImplementation(() => {});
+
+        soleTrader.render();
+
+        expect(soleTrader.fetchTokens).toHaveBeenCalledTimes(1);
       });
 
       test("tokens that could not be minted at all leave only the signup link", () => {
         // The one remaining case with no popup to offer: without tokens there
-        // is no signup URL to open, so the link is the only recourse left
-        // (same fallback a browser-blocked popup uses).
+        // is no signup URL to open. Asserted through `openPopup` so this
+        // cannot pass by never reaching signup at all.
         jest.spyOn(soleTrader, "fetchTokens").mockImplementation((cb) => {
           if (cb) cb(false);
         });
+        soleTrader.render();
         soleTrader.tokens = null;
+        $("#billing_email").val("");
+        jest.spyOn(soleTrader, "openPopup");
+
+        soleTrader.onModeChipClick("sole_trader");
+
+        expect(soleTrader.openPopup).toHaveBeenCalled();
+        expect(soleTrader.openPopup).toHaveReturnedWith(null);
+        expect(opened).toHaveLength(0);
+        expect($(".twoinc-sole-trader-note").hasClass("hidden")).toBe(false);
+      });
+
+      test("clicking the chip twice does not stack two hosted signups", () => {
         soleTrader.render();
         $("#billing_email").val("");
 
         soleTrader.onModeChipClick("sole_trader");
+        soleTrader.onModeChipClick("sole_trader");
 
-        expect(opened).toHaveLength(0);
-        expect($(".twoinc-sole-trader-note").hasClass("hidden")).toBe(false);
+        expect(opened).toHaveLength(1);
       });
     });
 
