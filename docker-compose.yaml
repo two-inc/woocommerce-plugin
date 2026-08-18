@@ -1,3 +1,13 @@
+# Pinned so every checkout (main + any .worktrees/<branch>/ copy of this
+# file) shares one Compose project identity. Without this, the project name
+# defaults to the current directory's basename, so `make stop`/`make clean`
+# run from a different worktree than the one that started the stack sees no
+# running containers at all (Compose matches by project label, not just
+# container_name) - and running `make install` from a second worktree hits a
+# "container name already in use" conflict against the first's containers
+# instead of managing them.
+name: woocommerce-plugin-dev
+
 services:
   wordpress:
     container_name: wordpress
@@ -37,10 +47,10 @@ services:
       TWOINC_DEV_CHECKOUT_HOST: "${TWO_CHECKOUT_BASE_URL:-}"
       TWOINC_DEV_PORTAL_HOST: "${TWO_PORTAL_BASE_URL:-}"
     volumes:
-      - ./volumes/wordpress:/var/www/html
+      - wordpress_data:/var/www/html
       - .:/var/www/html/wp-content/plugins/tillit-payment-gateway
       - ./docker/mu-plugins:/var/www/html/wp-content/mu-plugins
-      - ./volumes/log/:/var/log/apache2/
+      - apache_log:/var/log/apache2/
     depends_on:
       mariadb:
         condition: service_healthy
@@ -74,7 +84,7 @@ services:
       TWO_API_KEY: "${TWO_API_KEY:-}"
       TWO_API_BASE_URL: "${TWO_API_BASE_URL:-}"
     volumes:
-      - ./volumes/wordpress:/var/www/html
+      - wordpress_data:/var/www/html
       - .:/opt/tillit-payment-gateway
       - .:/var/www/html/wp-content/plugins/tillit-payment-gateway
     depends_on:
@@ -93,9 +103,14 @@ services:
       MYSQL_PASSWORD: twocommerce
       MYSQL_RANDOM_ROOT_PASSWORD: "1"
     volumes:
-      - ./volumes/mariadb:/var/lib/mysql
+      - mariadb_data:/var/lib/mysql
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "twocommerce", "-ptwocommerce"]
       interval: 5s
       timeout: 5s
       retries: 10
+
+volumes:
+  wordpress_data:
+  mariadb_data:
+  apache_log:
