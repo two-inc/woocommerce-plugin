@@ -5506,12 +5506,24 @@ let twoincSoleTrader = {
       if (cb) cb(false);
       return;
     }
+    const country = twoincSoleTrader.currentCountry();
     jQuery
-      .post(cfg.tokens_url, { nonce: cfg.nonce, country: twoincSoleTrader.currentCountry() })
+      .post(cfg.tokens_url, { nonce: cfg.nonce, country: country })
       .done(function (response) {
+        // The buyer may have changed country while the request was in
+        // flight — same guard `refresh()` uses for availability (TWO-40,
+        // round-2 review — Vader). Without it, a slower request for the
+        // country the buyer just left can land after a newer one and
+        // overwrite `tokens` with delegated authority for the wrong
+        // jurisdiction.
+        if (twoincSoleTrader.currentCountry() !== country) {
+          if (cb) cb(false);
+          return;
+        }
         if (response && response.success && response.data && response.data.autofill_token) {
           twoincSoleTrader.tokens = response.data;
           twoincSoleTrader.bindPopupMessageListener();
+          twoincSoleTrader.scheduleTokenRefresh();
           if (cb) cb(true);
         } else {
           if (cb) cb(false);
@@ -5520,6 +5532,84 @@ let twoincSoleTrader = {
       .fail(function () {
         if (cb) cb(false);
       });
+  },
+
+  /** Live id from `scheduleTokenRefresh`, so `stopTokenRefresh` (and tests) can clear it. */
+  tokenRefreshIntervalId: null,
+
+  /**
+   * Keep the delegation/autofill tokens alive across a long checkout
+   * (TWO-40). A buyer who sits on checkout past their expiry would
+   * otherwise find autofill and the signup popup broken on a stale token
+   * the next time either needs one — including via "select a different
+   * sole trader", which reads `tokens` long after adoption (see
+   * `openPopup`).
+   *
+   * Started once, from the first successful mint — not eagerly on page
+   * load, since a buyer who never touches the sole-trader flow never mints
+   * a token and has nothing to refresh.
+   *
+   * @returns {void}
+   */
+  scheduleTokenRefresh: function () {
+    if (twoincSoleTrader.tokenRefreshIntervalId) return;
+    twoincSoleTrader.tokenRefreshIntervalId = setInterval(
+      twoincSoleTrader.refreshTokens,
+      30 * 60 * 1000
+    );
+    window.addEventListener("pagehide", twoincSoleTrader.handlePageHide);
+  },
+
+  /**
+   * The 30-minute refresh tick. Skipped, silently, while a mint from the
+   * normal user-driven path (chip click / email-change prefetch, or the
+   * signup popup itself) is already outstanding — `isBusy()` is the same
+   * guard those paths use against each other, and that flight's own settle
+   * leaves `tokens` fresh regardless. A failed re-mint (network error,
+   * expired session) is left for the next scheduled tick, same tolerance
+   * `fetchTokens` itself already has for its callers.
+   *
+   * Deliberately does NOT also call `beginFlight()`/`settleFlight()` itself
+   * (round-1 review, rejected): `onEmailChanged` never checks `isBusy()`
+   * before starting its own flight, so holding the flag wouldn't close that
+   * race — it would only over-block the Business chip, `reopenSearch()`
+   * and click-to-reopen for a background round trip they didn't ask for.
+   * `fetchTokens`'s own country-staleness guard (round-2 review) keeps the
+   * resulting last-write-wins no worse than the pre-existing, unsequenced
+   * one `tokens` already has between two overlapping `onEmailChanged`
+   * calls. Closing it for real means gating `onEmailChanged`/`launchSignup`
+   * themselves — the fragile flow this feature is scoped to leave alone.
+   *
+   * @returns {void}
+   */
+  refreshTokens: function () {
+    if (twoincSoleTrader.isBusy()) return;
+    twoincSoleTrader.fetchTokens(function () {});
+  },
+
+  /**
+   * `pagehide` fires on a bfcache-eligible navigation too, where the page is
+   * only frozen — not destroyed — and JS timer state (including this
+   * interval) survives the freeze/resume untouched. Tearing the interval
+   * down on that path would leave a buyer restored from bfcache mid-checkout
+   * with a dead refresh loop for the rest of the session (round-1 review —
+   * Vader), so only a real unload (`event.persisted` false) stops it.
+   *
+   * @param {PageTransitionEvent} [event]
+   * @returns {void}
+   */
+  handlePageHide: function (event) {
+    if (event && event.persisted) return;
+    twoincSoleTrader.stopTokenRefresh();
+  },
+
+  /**
+   * @returns {void}
+   */
+  stopTokenRefresh: function () {
+    clearInterval(twoincSoleTrader.tokenRefreshIntervalId);
+    twoincSoleTrader.tokenRefreshIntervalId = null;
+    window.removeEventListener("pagehide", twoincSoleTrader.handlePageHide);
   },
 
   /**
