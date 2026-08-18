@@ -956,5 +956,87 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         expect($("#billing_company").val()).toBe("");
       });
     });
+
+    describe("round-4 review regressions (Han/Vader) — a re-signup's own decision, not just the first one", () => {
+      beforeEach(() => {
+        $("form[name='checkout']").after('<div id="order_review"></div>');
+        ctx.Twoinc.getInstance().initialize(false);
+      });
+
+      test("clicking a captured field while a 'select a different sole trader' popup is still open does not drop its completed signup", () => {
+        soleTrader.setMode("sole_trader");
+        soleTrader.setCompany("TWO:ST1", "First Trader");
+        const win = { closed: false };
+        window.open = jest.fn(() => win);
+
+        // The buyer opens the re-signup popup for a different sole trader.
+        soleTrader.getDifferentSoleTraderBtnNode().trigger("click");
+        expect(soleTrader.soleTraderReconfirming).toBe(true);
+
+        // While that second popup is still open, they click the (not yet
+        // re-locked) captured field instead of finishing it.
+        $("#billing_company").trigger("click");
+        expect(soleTrader.mode).toBe("sole_trader");
+
+        // The second popup completes normally.
+        jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) =>
+          cb({
+            organization_number: "TWO:ST2",
+            company_name: "Second Trader",
+            email: "buyer@example.test"
+          })
+        );
+        soleTrader.bindPopupMessageListener();
+        window.dispatchEvent(
+          new window.MessageEvent("message", {
+            data: "ACCEPTED",
+            origin: "https://checkout.example.test"
+          })
+        );
+
+        expect($("#company_id").val()).toBe("TWO:ST2");
+        expect(soleTrader.soleTraderReconfirming).toBe(false);
+      });
+
+      test("the Business chip is refused while a re-signup popup is still open, same as the first one", () => {
+        soleTrader.setMode("sole_trader");
+        soleTrader.setCompany("TWO:ST1", "First Trader");
+        const win = { closed: false };
+        window.open = jest.fn(() => win);
+
+        soleTrader.getDifferentSoleTraderBtnNode().trigger("click");
+        ctx.helper.buildBusinessChip().trigger("click");
+
+        expect(soleTrader.mode).toBe("sole_trader");
+      });
+
+      test("soleTraderReconfirming clears once the re-signup popup closes without completing", () => {
+        soleTrader.setMode("sole_trader");
+        soleTrader.setCompany("TWO:ST1", "First Trader");
+        const win = { closed: false };
+        window.open = jest.fn(() => win);
+        jest.useFakeTimers();
+
+        soleTrader.getDifferentSoleTraderBtnNode().trigger("click");
+        win.closed = true;
+        jest.advanceTimersByTime(300);
+
+        expect(soleTrader.soleTraderReconfirming).toBe(false);
+        // The original adoption is untouched — abandoning the re-signup is
+        // not the same as abandoning the checkout's first sole trader.
+        expect(soleTrader.mode).toBe("sole_trader");
+        expect($("#company_id").val()).toBe("TWO:ST1");
+        jest.useRealTimers();
+      });
+
+      test("clicking the captured field works normally once no re-signup is in flight", () => {
+        soleTrader.setMode("sole_trader");
+        soleTrader.setCompany("TWO:ST1", "First Trader");
+
+        $("#billing_company").trigger("click");
+
+        expect(soleTrader.mode).toBe("business");
+      });
+    });
   });
 });
