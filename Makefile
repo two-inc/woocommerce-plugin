@@ -19,6 +19,14 @@ run:
 install: run
 	@echo "First provision runs in the wpcli container (~90s):"
 	@echo "  make logs-wpcli   # watch progress"
+	@echo ""
+	@echo "========================================="
+	@echo " WordPress store: http://localhost:8888/"
+	@echo " WP admin:        http://localhost:8888/wp-admin/ (admin / twoinb2b)"
+	@if [ -n "$$TWO_API_BASE_URL" ]; then \
+		echo " API base URL:    $$TWO_API_BASE_URL"; \
+	fi
+	@echo "========================================="
 
 ## Start WordPress with Xdebug enabled and the FRP proxy running
 debug: run
