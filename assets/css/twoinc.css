@@ -327,14 +327,19 @@
 }
 
 /*
- * No hover fill of its own (TWO-40, live-reported by Doug: this chip took a
- * grey-blue fill on hover while its two siblings took the store's brand
- * colour, because a flat `#id:hover` outbids the host theme's own
- * `button:hover` that the other two — styled only by the shared
- * `.twoinc-mode-chip` class — fall through to). Hover is deliberately the
- * theme's to paint, identically for all three chips.
+ * FOCUS only — no longer hover (TWO-40, live-reported by Doug: this chip took
+ * a grey-blue fill on hover while its two siblings took the store's brand
+ * colour, because a flat single-id selector outbids the host theme's own
+ * `button:hover` that the other two — styled by the shared
+ * `.twoinc-mode-chip` class alone — fall through to). Hover is deliberately
+ * the theme's to paint now, identically for all three chips.
+ *
+ * The fill stays on `:focus`, which is what it was originally added for
+ * (#30.x.7, live-reported: tabbing landed here with no visible sign of it).
+ * Hover and focus are different states and only the former was reported.
  */
 #company_not_in_btn:focus {
+  background-color: #f2f4fd;
   outline-offset: -2px;
 }
 

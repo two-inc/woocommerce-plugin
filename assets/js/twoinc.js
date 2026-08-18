@@ -889,15 +889,32 @@ class TwoCompanySearch {
     // sole-trader mode already defers to.
     if (twoincSoleTrader.isDeciding()) return;
 
-    // Already settled in sole-trader mode: manual entry is a DIFFERENT one of
-    // this org's three company-capture modes, so choosing it is an explicit
-    // buyer decision to leave sole trader — the same transition
-    // `reopenSearch()` makes for a click into a captured field, and it has to
-    // happen here because `enterManualCompanyEntry` only ever refuses.
-    if (twoincSoleTrader.mode === "sole_trader") twoincSoleTrader.setMode("business");
+    // Whether this click is the buyer LEAVING sole-trader mode is decided
+    // here, synchronously, and only acted on in the deferral below.
+    //
+    // It cannot be decided inside that deferral, where the two cases are
+    // indistinguishable: a click made while already IN settled sole-trader
+    // mode is an explicit buyer decision to leave it (manual entry is a
+    // different one of this org's three company-capture modes — the same
+    // transition `reopenSearch()` makes for a click into a captured field),
+    // whereas the email-driven prefetch switching INTO sole-trader mode
+    // during the deferral is the race `enterManualCompanyEntry`'s own guard
+    // exists for, and must still be left alone. Both leave
+    // `mode === "sole_trader"` by the time the timer fires.
+    const leavingSoleTrader = twoincSoleTrader.mode === "sole_trader";
 
     jQuery("#" + helper.manualEntryRowId).remove();
-    setTimeout(twoincSelectWooHelper.enterManualCompanyEntry, 0);
+    setTimeout(function () {
+      // Re-checked, not assumed: the mode may have moved on its own between
+      // the click and this timer.
+      if (leavingSoleTrader && twoincSoleTrader.mode === "sole_trader") {
+        // Deferred rather than done at click time because this destroys the
+        // widget the clicked chip lives in — the exact thing this function
+        // defers for (see the docblock above).
+        twoincSoleTrader.setMode("business");
+      }
+      twoincSelectWooHelper.enterManualCompanyEntry();
+    }, 0);
   }
 
   /**

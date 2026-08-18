@@ -982,12 +982,23 @@ describe("company-search manual-entry affordance", () => {
      * cross-sheet specificity, so a rendered-style assertion here would be
      * vacuous rather than wrong.
      */
-    test("no mode chip declares a hover background-color of its own", () => {
-      const css = stylesheetSource();
+    test("no mode chip declares a hover background of its own", () => {
+      // Comments stripped BEFORE matching (round-1 review — Han): a
+      // selector-plus-block match starts at the previous `}`, so it swallows
+      // whatever comment precedes the rule — and the prose above these very
+      // rules discusses `button:hover`. Left in, this test reported the
+      // `:focus` rule as a hover offender, which would have blocked the
+      // correct minimal fix for the focus indicator rather than catching a
+      // real regression.
+      const css = stylesheetSource().replace(/\/\*[\s\S]*?\*\//g, "");
+      // `background` shorthand too, not only `background-color` (round-1
+      // review — Vader): this stylesheet already paints a chip hover via the
+      // shorthand elsewhere (`.twoinc-term-chip--selected:hover`), so a
+      // colour-only check is one keystroke away from being bypassed.
       const offenders = (css.match(/[^{}]*:hover[^{]*\{[^}]*\}/g) || []).filter(
         (rule) =>
           (rule.includes("company_not_in_btn") || rule.includes("twoinc-mode-chip")) &&
-          /background-color\s*:/.test(rule.slice(rule.indexOf("{")))
+          /background(-color)?\s*:/.test(rule.slice(rule.indexOf("{")))
       );
 
       expect(offenders).toEqual([]);
@@ -1315,7 +1326,14 @@ describe("company-search manual-entry affordance", () => {
         // only ever disappears on the path that DID proceed.
         expect(!!ctx.twoinc.manual_company_entry_active).toBe(entered);
         expect(btn().length).toBe(chipsLeft);
-        if (entered) expect(ctx.soleTrader.mode).toBe("business");
+        // The mode swap really reached the DOM, not just the flag (round-1
+        // review — Vader): the chip's absence alone holds pre-fix too, so
+        // without this the settled-sole-trader row proved only half of it.
+        expect(!!$("#billing_company_display").data("select2")).toBe(!entered);
+        if (entered) {
+          expect(ctx.soleTrader.mode).toBe("business");
+          expect($("#billing_company").prop("readonly")).toBe(false);
+        }
       } finally {
         ctx.soleTrader.flightDepth = 0;
         jest.useRealTimers();
