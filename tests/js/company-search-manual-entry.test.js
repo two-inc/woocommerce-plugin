@@ -965,6 +965,39 @@ describe("company-search manual-entry affordance", () => {
       const body = ruleBodyFor(stylesheetSource(), "company_not_in_btn");
       expect(body).toMatch(/text-transform:\s*none\s*!important/);
     });
+
+    /**
+     * All three mode chips hover IDENTICALLY (TWO-40, live-reported by Doug:
+     * "Registered Organization" and "Sole Trader" adopt the store's brand
+     * colour on hover, while "Enter Manually" instead got a red border but a
+     * grey fill).
+     *
+     * The two class-styled chips carry no hover rule of their own, so the
+     * host theme's `button:hover` paints them. "Enter Manually" additionally
+     * matched a flat `#company_not_in_btn:hover { background-color: #f2f4fd }`
+     * — a single-id selector, which outbids that theme rule on specificity
+     * and so was the ONE chip the theme could not colour. The invariant is
+     * therefore "no hover fill declared for any of them", asserted textually
+     * for the same reason the two tests above are: jsdom does not resolve
+     * cross-sheet specificity, so a rendered-style assertion here would be
+     * vacuous rather than wrong.
+     */
+    test("no mode chip declares a hover background of its own", () => {
+      // Comments stripped BEFORE matching: a selector-plus-block match starts
+      // at the previous `}`, so it swallows whatever comment precedes the
+      // rule — and the prose above these rules discusses `button:hover`,
+      // which would make the `:focus` rule read as a hover offender.
+      const css = stylesheetSource().replace(/\/\*[\s\S]*?\*\//g, "");
+      // The `background` shorthand counts too: this stylesheet already paints
+      // a chip hover with it elsewhere (`.twoinc-term-chip--selected:hover`).
+      const offenders = (css.match(/[^{}]*:hover[^{]*\{[^}]*\}/g) || []).filter(
+        (rule) =>
+          (rule.includes("company_not_in_btn") || rule.includes("twoinc-mode-chip")) &&
+          /background(-color)?\s*:/.test(rule.slice(rule.indexOf("{")))
+      );
+
+      expect(offenders).toEqual([]);
+    });
   });
 
   describe("placement below the visible field, not overlapping it (#30.x.5.3 round 3; reworked #30.x.9)", () => {
@@ -1230,6 +1263,84 @@ describe("company-search manual-entry affordance", () => {
         expect(entered).toBe(1);
       } finally {
         ctx.helper.enterManualCompanyEntry = realEnter;
+        jest.useRealTimers();
+      }
+    });
+
+    /**
+     * The chip must never end up gone AND manual entry not entered (TWO-40,
+     * live-reported by Doug: "not only does it fail to move into manual mode,
+     * but the 'Enter Manually' chip disappears altogether").
+     *
+     * `activateManualEntry` removed the chip synchronously and then deferred
+     * `enterManualCompanyEntry` a tick — but that function REFUSES to run
+     * while sole-trader mode is active or still deciding (its own guard, for
+     * reasons its comment gives). Both refusals landed after the chip was
+     * already gone, leaving a dead end with nothing on screen to retry.
+     *
+     * The two states are handled differently on purpose, which is why this is
+     * one table and not one assertion: an ALREADY-SETTLED sole-trader mode is
+     * a mode the buyer may explicitly leave (so the click proceeds, switching
+     * to business first, the same transition `reopenSearch()` makes), whereas
+     * a STILL-DECIDING one must be left for the outstanding flight/popup to
+     * resolve (so the click is dropped — but the chip stays).
+     */
+    test.each([
+      {
+        state: "settled sole-trader mode",
+        // Through the real `setMode`, not by assigning `.mode`: that is what
+        // takes the `enable_company_search`/`manual_company_entry_active`
+        // snapshot this path then has to restore, so a direct assignment
+        // would skip the restore branch entirely.
+        arrange: (soleTrader) => {
+          soleTrader.setMode("sole_trader");
+        },
+        entered: true,
+        chipsLeft: 0,
+        description: "proceeds into manual entry, leaving sole-trader mode behind it"
+      },
+      {
+        state: "an outstanding autofill flight (isDeciding)",
+        arrange: (soleTrader) => {
+          soleTrader.flightDepth = 1;
+        },
+        entered: false,
+        chipsLeft: 1,
+        description: "drops the click but KEEPS the chip, so the buyer can retry"
+      }
+    ])("manual-entry activation in $state $description", ({ arrange, entered, chipsLeft }) => {
+      jest.useFakeTimers();
+      try {
+        // Given: the chip is on screen and the flow is in the state under test.
+        openWithAffordance();
+        type("abc");
+        arrange(ctx.soleTrader);
+        expect(btn().length).toBe(1);
+
+        // When: the buyer activates it.
+        activate();
+        jest.advanceTimersByTime(1);
+
+        // Then: manual entry is entered iff the click proceeded, and the chip
+        // only ever disappears on the path that DID proceed.
+        expect(!!ctx.twoinc.manual_company_entry_active).toBe(entered);
+        expect(btn().length).toBe(chipsLeft);
+        // The mode swap reached the DOM, not just the flag — the chip's
+        // absence alone holds pre-fix too.
+        expect(!!$("#billing_company_display").data("select2")).toBe(!entered);
+        if (entered) {
+          expect(ctx.soleTrader.mode).toBe("business");
+          // The snapshot `setMode("sole_trader")` took is genuinely GIVEN
+          // BACK, not merely coincidentally equal: manual entry sets
+          // `enable_company_search` to "no" itself, so asserting that value
+          // alone passes even with the restore deleted. These two are only
+          // nulled by the restore branch.
+          expect(ctx.soleTrader.savedCompanySearch).toBeNull();
+          expect(ctx.soleTrader.savedManualEntryActive).toBeNull();
+          expect($("#billing_company").prop("readonly")).toBe(false);
+        }
+      } finally {
+        ctx.soleTrader.flightDepth = 0;
         jest.useRealTimers();
       }
     });

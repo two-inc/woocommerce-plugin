@@ -326,7 +326,16 @@
   text-transform: none !important;
 }
 
-#company_not_in_btn:hover,
+/*
+ * FOCUS only, deliberately not hover (TWO-40): a flat single-id selector
+ * outbids the host theme's own `button:hover`, so this was the one mode chip
+ * the store's brand colour could not reach — the other two carry only the
+ * shared `.twoinc-mode-chip` class and fall through to the theme. Hover is
+ * the theme's to paint, identically for all three.
+ *
+ * The fill stays on `:focus`, which is what it was added for (#30.x.7:
+ * tabbing landed here with no visible sign of it).
+ */
 #company_not_in_btn:focus {
   background-color: #f2f4fd;
   outline-offset: -2px;
