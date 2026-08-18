@@ -110,7 +110,9 @@ function loadPluginSource() {
   const indirectEval = eval;
   const exported = indirectEval(
     src +
-      "\n;({ twoincUtilHelper, twoincSelectWooHelper, twoincDomHelper," +
+      "\n;({ twoincUtilHelper, twoincAddressRoles, twoincAddressMirror," +
+      " twoincCompanyCapture," +
+      " twoincSelectWooHelper, twoincDomHelper," +
       " twoincTermChips, twoincSoleTrader, Twoinc });"
   );
   if (!exported || typeof exported.twoincSelectWooHelper !== "object") {
@@ -158,6 +160,9 @@ function loadTwoinc(twoinc) {
   return {
     helper: exported.twoincSelectWooHelper,
     util: exported.twoincUtilHelper,
+    roles: exported.twoincAddressRoles,
+    mirror: exported.twoincAddressMirror,
+    capture: exported.twoincCompanyCapture,
     dom: exported.twoincDomHelper,
     termChips: exported.twoincTermChips,
     soleTrader: exported.twoincSoleTrader,

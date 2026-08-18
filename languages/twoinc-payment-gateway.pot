@@ -852,6 +852,10 @@ msgid "Snap the buyer surcharge line to a clean increment. Select None for stand
 msgstr ""
 
 #: class/WC_Twoinc_Sole_Trader.php
+msgid "Select a different sole trader"
+msgstr ""
+
+#: class/WC_Twoinc_Sole_Trader.php
 msgid "Sole trader"
 msgstr ""
 

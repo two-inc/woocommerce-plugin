@@ -175,6 +175,432 @@ let twoincUtilHelper = {
 };
 
 /**
+ * Which checkout address plays which ROLE, and the one place that decides it
+ * (TWO-40 §1).
+ *
+ * Phrased by role — invoice/billing vs delivery/shipping — never by
+ * "primary/secondary". WooCommerce is BILLING-FIRST: `#billing_*` is the
+ * always-shown form AND the one that plays the invoice role, so the two happen
+ * to coincide here. They do not coincide on PrestaShop, Magento/Luma or Hyvä,
+ * where the delivery form is the always-shown one and the invoice form is the
+ * conditional one. Anything that reasons about "the primary form" therefore
+ * ports wrong in both directions; anything that asks for a ROLE ports cleanly.
+ *
+ * Every country/company read that feeds sole-trader chip visibility, the
+ * signup/token-mint calls, or the two-address mirror goes through here, so
+ * they cannot disagree about which form they mean — the duplicated,
+ * independently-resolved reads were the documented root cause of several
+ * bugs on the PrestaShop implementation this ports from.
+ *
+ * The payment tile has no address fields of its own, so anything rendered
+ * there reads `invoice()` EXPLICITLY rather than "whichever form is on
+ * screen".
+ */
+let twoincAddressRoles = {
+  /** WooCommerce field-name prefix of the address that is invoiced. */
+  invoice: function () {
+    return "billing";
+  },
+
+  /** WooCommerce field-name prefix of the address that is delivered to. */
+  delivery: function () {
+    return "shipping";
+  },
+
+  /**
+   * `#`-prefixed selector of one field on a role's form.
+   *
+   * @param {string} role a value returned by invoice()/delivery()
+   * @param {string} name unprefixed WooCommerce field name, e.g. "country"
+   * @returns {string}
+   */
+  field: function (role, name) {
+    return "#" + role + "_" + name;
+  },
+
+  /**
+   * Live value of one field on a role's form, trimmed, "" when absent.
+   *
+   * LIVE, never a committed/saved/session copy: the buyer's current typing is
+   * what the chip and the workflow calls are about.
+   *
+   * @param {string} role
+   * @param {string} name
+   * @returns {string}
+   */
+  value: function (role, name) {
+    return (jQuery(twoincAddressRoles.field(role, name)).val() || "").trim();
+  }
+};
+
+/**
+ * Mirror the invoice address onto the delivery address, until the buyer edits
+ * the delivery address themselves (TWO-40 §2).
+ *
+ * The delivery address is NEVER locked and never made read-only. A design that
+ * mirrored the non-default address read-only was tried and rejected on the
+ * platform this ports from, killed by a real business case: one legal entity
+ * based in Northern Ireland with a branch in the Republic — no separate
+ * registration, but a genuinely different valid country/company pairing on the
+ * second address. So the rule is propagate-until-edited, not lock.
+ *
+ * "Edited" is a pure CONTENT-MATCH check, deliberately not a flag set by UI
+ * events: before writing, every field this mirror can write is compared
+ * (trimmed, case-insensitive) against the value this mirror last wrote there.
+ * ONE field disagreeing pins the WHOLE delivery address, not just that field —
+ * per-field granularity was considered and explicitly ruled out, because a
+ * buyer who has corrected one line of an address is editing the address, not
+ * that line.
+ *
+ * There is deliberately NO "resume sync" control. Because the check is pure
+ * content, clearing the delivery fields back out re-matches on its own and the
+ * mirror resumes — an earlier design with an explicit flag tied to UI events
+ * was dropped in favour of exactly this property.
+ *
+ * A field the buyer has left EMPTY counts as still-synced whatever the mirror
+ * last wrote, so a freshly-revealed "Ship to a different address?" form (every
+ * field blank) mirrors rather than reading as buyer-edited. An empty field
+ * holds no buyer content there is anything to protect.
+ *
+ * Note what this is NOT for on WooCommerce: the org number and company are
+ * required on the INVOICE-role address only (§2.7), which here is the
+ * always-shown `#billing_*` form — so unlike the shipping-first platforms,
+ * WooCommerce can never hide the address that legally needs them. Nothing
+ * below adds a required cue to a delivery field.
+ */
+let twoincAddressMirror = {
+  /**
+   * Every field this mirror can write, and therefore every field the pin
+   * check must watch.
+   *
+   * `address_2` and `state` are in the list on purpose. A first pass left them
+   * out reasoning they were "safe" to overwrite; they are not — a buyer typing
+   * into address line 2 is exactly as strong a signal of independent editing
+   * as one typing into the city.
+   */
+  MIRRORED_FIELDS: ["company", "country", "address_1", "address_2", "city", "postcode", "state"],
+
+  /**
+   * What this mirror last wrote to each delivery field, i.e. the provenance
+   * record the pin check compares against. `null` until seeded.
+   *
+   * @type {Object<string, string>|null}
+   */
+  written: null,
+
+  /** Re-entrancy guard: our own writes must not be read as buyer edits. */
+  writing: false,
+
+  /** Trimmed, case-insensitive comparison form. */
+  normalize: function (value) {
+    return twoincUtilHelper.blankToEmpty(value).trim().toLowerCase();
+  },
+
+  /**
+   * Seed the provenance record from the invoice address, so an unedited
+   * delivery form that already agrees with it (WooCommerce prefills a
+   * logged-in buyer's saved shipping address, which usually does) reads as
+   * synced rather than as buyer-edited.
+   *
+   * @returns {void}
+   */
+  seed: function () {
+    const invoice = twoincAddressRoles.invoice();
+    twoincAddressMirror.written = {};
+    twoincAddressMirror.MIRRORED_FIELDS.forEach(function (name) {
+      twoincAddressMirror.written[name] = twoincAddressRoles.value(invoice, name);
+    });
+  },
+
+  /**
+   * Whether the delivery address is part of this order at all.
+   *
+   * WooCommerce keeps the shipping fields in the DOM permanently and gates
+   * them on "Ship to a different address?"; with that box unchecked it ignores
+   * every one of them on submit and uses the billing address. Writing into
+   * them then is pure noise — and noise with a cost, since this plugin's
+   * checkout is also live for other payment methods, and quietly rewriting a
+   * form that has no bearing on the order is not something a payment gateway
+   * should do.
+   *
+   * Absence of the checkbox means the delivery form is unconditional (a theme
+   * that always shows it), so that reads as in-play rather than out.
+   *
+   * Checking the box fires WooCommerce's own checkout update, and this runs
+   * again from `updated_checkout` — so the form is filled the moment it starts
+   * to matter, not before.
+   *
+   * @returns {boolean}
+   */
+  deliveryFormIsInPlay: function () {
+    const $toggle = jQuery("#ship-to-different-address-checkbox");
+    return $toggle.length === 0 || $toggle.is(":checked");
+  },
+
+  /**
+   * Whether the buyer has taken the delivery address over.
+   *
+   * @returns {boolean}
+   */
+  isPinned: function () {
+    if (twoincAddressMirror.written === null) return false;
+    const delivery = twoincAddressRoles.delivery();
+    return twoincAddressMirror.MIRRORED_FIELDS.some(function (name) {
+      const $field = jQuery(twoincAddressRoles.field(delivery, name));
+      // A field the delivery form does not have cannot have been edited.
+      if (!$field.length) return false;
+      const current = twoincAddressMirror.normalize($field.val());
+      if (!current) return false;
+      return current !== twoincAddressMirror.normalize(twoincAddressMirror.written[name]);
+    });
+  },
+
+  /**
+   * Propagate the invoice address onto the delivery address, unless pinned.
+   *
+   * Country is written first and with a `change`, because WooCommerce core's
+   * own address-i18n.js rebuilds the state control (select vs text vs absent)
+   * off that event — so the state write below has to land on whatever control
+   * that rebuild produced, not the one that was there before.
+   *
+   * @returns {boolean} whether anything was propagated
+   */
+  sync: function () {
+    if (twoincAddressMirror.writing) return false;
+    if (twoincAddressMirror.written === null) twoincAddressMirror.seed();
+    const delivery = twoincAddressRoles.delivery();
+    // Nothing to mirror onto: a checkout with shipping fields switched off
+    // entirely (virtual cart, or a store that does not ship).
+    if (!jQuery(twoincAddressRoles.field(delivery, "country")).length) return false;
+    if (!twoincAddressMirror.deliveryFormIsInPlay()) return false;
+    if (twoincAddressMirror.isPinned()) return false;
+
+    const invoice = twoincAddressRoles.invoice();
+    twoincAddressMirror.writing = true;
+    try {
+      twoincAddressMirror.MIRRORED_FIELDS.forEach(function (name) {
+        const value = twoincAddressRoles.value(invoice, name);
+        const $field = jQuery(twoincAddressRoles.field(delivery, name));
+        if (!$field.length) {
+          twoincAddressMirror.written[name] = value;
+          return;
+        }
+        if (twoincAddressMirror.normalize($field.val()) !== twoincAddressMirror.normalize(value)) {
+          $field.val(value);
+          if (name === "country") $field.trigger("change");
+        }
+        // Record what actually LANDED, not what was intended. A <select> given
+        // a value it has no option for keeps its current selection silently,
+        // and the delivery country select is exactly that: it lists the
+        // countries the store SHIPS to, which is not always the set it bills
+        // to. Recording the intended value there would leave the record
+        // disagreeing with the field, the next pin check would read that as a
+        // buyer edit, and the mirror would pin itself for the session over a
+        // write the buyer never made.
+        twoincAddressMirror.written[name] = twoincUtilHelper.blankToEmpty($field.val());
+      });
+    } finally {
+      twoincAddressMirror.writing = false;
+    }
+    return true;
+  },
+
+  /** Test seam: forget the provenance record. */
+  reset: function () {
+    twoincAddressMirror.written = null;
+    twoincAddressMirror.writing = false;
+  }
+};
+
+/**
+ * The ONE write path for a captured company, and the guard that keeps a stale
+ * organisation number from outliving the name it was captured with
+ * (TWO-40 §5).
+ *
+ * This state machine was the single most repeated bug source on the platform
+ * this ports from — write-backs, mirror writes and sole-trader adoption each
+ * grew their own copy of "set the number, set the name", and each one was
+ * fixed separately, more than once. Three pieces, and they only work together:
+ *
+ *  1. A PAIRING TAG on the company-name field, recording which organisation
+ *     number that particular name was captured under. On the next buyer input
+ *     to the name field, a tag that is absent or no longer describes the
+ *     name/number pair means the buyer has retyped the name and the number is
+ *     stale — so the number is wiped along with the state that depends on it.
+ *
+ *  2. This SINGLE WRITE HELPER, which sets the number, the name and the tag in
+ *     one call. That is not tidiness: any code that sets `#company_id` without
+ *     coming through here leaves a pair the tag does not describe, and the
+ *     guard wipes it on the buyer's very next keystroke. If a capture keeps
+ *     vanishing, look for a raw `.val()` write first.
+ *
+ *  3. A PROVENANCE MARKER, separate from the tag, recording that a field's
+ *     current value came from the plugin rather than from the buyer. The tag
+ *     answers "is this pair still consistent"; provenance answers "is this
+ *     still ours to overwrite", which is what the delivery-address mirror
+ *     needs and what the tag cannot tell it.
+ *
+ * The name and number fields are the INVOICE-role ones — they are what
+ * WooCommerce posts and what the order intent is authorised against.
+ */
+let twoincCompanyCapture = {
+  /** Attribute holding the name/number pairing tag. */
+  PAIRING_ATTR: "data-two-company-pairing",
+
+  /** Attribute marking a value as plugin-written rather than buyer-typed. */
+  PROVENANCE_ATTR: "data-two-plugin-written",
+
+  nameField: function () {
+    return jQuery(twoincAddressRoles.field(twoincAddressRoles.invoice(), "company"));
+  },
+
+  numberField: function () {
+    return jQuery("#company_id");
+  },
+
+  /**
+   * The tag describing one name/number pair.
+   *
+   * Both halves, not just the name: a tag keyed on the name alone would still
+   * match after some other code path replaced the number behind it, which is
+   * exactly the silent-stale-number case this exists to catch.
+   *
+   * @param {*} companyName
+   * @param {*} companyId
+   * @returns {string}
+   */
+  pairingTag: function (companyName, companyId) {
+    return (
+      twoincUtilHelper.blankToEmpty(companyName).toLowerCase() +
+      "|" +
+      twoincUtilHelper.blankToEmpty(companyId)
+    );
+  },
+
+  /**
+   * Write a captured company: number, name, pairing tag and provenance, in one
+   * call. THE only sanctioned writer of `#company_id`.
+   *
+   * @param {*} companyName
+   * @param {*} companyId
+   * @param {Object} [options]
+   * @param {string} [options.country] country the capture belongs to; defaults
+   *   to the invoice-role country the form currently holds
+   * @returns {void}
+   */
+  write: function (companyName, companyId, options) {
+    const opts = options || {};
+    const name = twoincUtilHelper.blankToEmpty(companyName);
+    const number = twoincUtilHelper.blankToEmpty(companyId);
+    const $name = twoincCompanyCapture.nameField();
+    const $number = twoincCompanyCapture.numberField();
+
+    // Written only when the value actually moves. Re-assigning an input's
+    // value to what it already holds resets the caret in some browsers, and
+    // one caller of this helper is the retype guard, which runs while the
+    // buyer has the caret in that very field.
+    if (twoincUtilHelper.blankToEmpty($number.val()) !== number) $number.val(number);
+    if (twoincUtilHelper.blankToEmpty($name.val()) !== name) $name.val(name);
+
+    if (number) {
+      $name.attr(twoincCompanyCapture.PAIRING_ATTR, twoincCompanyCapture.pairingTag(name, number));
+      $name.attr(twoincCompanyCapture.PROVENANCE_ATTR, "1");
+      $number.attr(twoincCompanyCapture.PROVENANCE_ATTR, "1");
+    } else {
+      // A name with no number is not a pair, so there is no tag to hold. The
+      // manual-entry mode captures exactly that, deliberately.
+      twoincCompanyCapture.forgetPairing();
+    }
+
+    const instance = Twoinc.getInstance();
+    // RAW onto the record, normalised onto the DOM. The record is what goes
+    // into `buyer.company` on the order intent verbatim, and normalising it
+    // here would change the organisation number this plugin POSTS — a
+    // behaviour change nothing in this port asked for. Every comparison
+    // against the record already normalises at the point of reading, which is
+    // why it can hold a padded string or a JSON number safely.
+    instance.customerCompany.company_name = companyName;
+    instance.customerCompany.organization_number = companyId;
+    // Pin the country the capture belongs to alongside the number, so the pair
+    // can never be assembled from two different moments (TWO-25333). Only on a
+    // capturing write: a clearing write has no capture for a country to belong
+    // to.
+    if (number) {
+      instance.customerCompany.country_prefix =
+        opts.country || twoincSelectWooHelper.currentCountry();
+    }
+  },
+
+  /** Drop the pairing tag and both provenance markers. */
+  forgetPairing: function () {
+    twoincCompanyCapture
+      .nameField()
+      .removeAttr(twoincCompanyCapture.PAIRING_ATTR)
+      .removeAttr(twoincCompanyCapture.PROVENANCE_ATTR);
+    twoincCompanyCapture.numberField().removeAttr(twoincCompanyCapture.PROVENANCE_ATTR);
+  },
+
+  /**
+   * Whether a field still holds the value the plugin wrote into it.
+   *
+   * @param {Object} $field jQuery-wrapped field
+   * @returns {boolean}
+   */
+  isPluginWritten: function ($field) {
+    return $field.attr(twoincCompanyCapture.PROVENANCE_ATTR) === "1";
+  },
+
+  /**
+   * Buyer input on the company-name field: drop a now-stale organisation
+   * number, and the state that depends on it.
+   *
+   * Bound to `input`/`change`, which in this file only ever fire for a real
+   * buyer edit — every plugin write goes through `.val()`, which dispatches no
+   * event at all.
+   *
+   * Deliberately does NOT wipe the address fields. The registry address the
+   * outgoing company brought with it is stale, but it is also the only address
+   * on the form, and destroying an address mid-keystroke costs the buyer more
+   * than a stale line does. `registryAddressApplied` is cleared instead, so
+   * the next manual-entry switch or country change tidies it.
+   *
+   * @returns {boolean} whether a stale capture was dropped
+   */
+  guardCompanyRetype: function () {
+    const $name = twoincCompanyCapture.nameField();
+    const $number = twoincCompanyCapture.numberField();
+    const number = twoincUtilHelper.blankToEmpty($number.val());
+
+    // The buyer's own typing, whatever else follows.
+    $name.removeAttr(twoincCompanyCapture.PROVENANCE_ATTR);
+
+    // No number, nothing stale to drop — manual entry captures a name alone
+    // by design, and every keystroke there would otherwise take this path.
+    if (!number) {
+      $name.removeAttr(twoincCompanyCapture.PAIRING_ATTR);
+      return false;
+    }
+
+    const expected = twoincCompanyCapture.pairingTag($name.val(), number);
+    if ($name.attr(twoincCompanyCapture.PAIRING_ATTR) === expected) return false;
+
+    twoincCompanyCapture.write($name.val(), "");
+
+    const instance = Twoinc.getInstance();
+    instance.customerCompany.country_prefix = twoincSelectWooHelper.currentCountry();
+    instance.registryAddressApplied = false;
+
+    // `#company_id`'s own visibility depends on the value just cleared
+    // (TWO-25326 §12), and the verdict on screen was about the company that
+    // has just stopped being captured.
+    twoincDomHelper.clearIntentVerdicts();
+    twoincDomHelper.toggleBusinessFields();
+    twoincSelectWooHelper.renderCompanySummary();
+    return true;
+  }
+};
+
+/**
  * Company-search widget: search/dropdown/manual-entry/select2 lifecycle,
  * encapsulated (TWO-25326 architecture rebuild). Mirrors PrestaShop's
  * TwoCompanySearch class — a single class owns the ENTIRE search, dropdown,
@@ -1072,6 +1498,60 @@ class TwoCompanySearch {
    * open, so add-then-remove keeps at most one node alive and leaves no
    * animating element running behind a closed dropdown.
    */
+  /**
+   * Who is currently holding the in-field search spinner up (TWO-40 §7).
+   *
+   * Two independent things can want it: a company-search request, and a
+   * sole-trader round trip. Before this they both drove
+   * `toggleCompanySearchSpinner` directly, so whichever finished FIRST took
+   * the spinner down under the other — a buyer who blurs the email field and
+   * then opens the company search inside the prefetch's window watched the
+   * search spinner vanish while results were still loading.
+   *
+   * A pair of named holds rather than a bare count, so an unbalanced release
+   * from one owner cannot free the other's hold.
+   */
+  spinnerOwners = { search: false, soleTrader: false };
+
+  /**
+   * Put the in-field spinner up on one owner's behalf.
+   *
+   * @param {string} owner key of spinnerOwners
+   * @returns {void}
+   */
+  holdCompanySearchSpinner(owner) {
+    twoincSelectWooHelper.spinnerOwners[owner] = true;
+    twoincSelectWooHelper.toggleCompanySearchSpinner(true);
+  }
+
+  /**
+   * Drop one owner's hold, taking the spinner down only once nobody holds it.
+   *
+   * @param {string} owner key of spinnerOwners
+   * @returns {void}
+   */
+  releaseCompanySearchSpinner(owner) {
+    twoincSelectWooHelper.spinnerOwners[owner] = false;
+    const owners = twoincSelectWooHelper.spinnerOwners;
+    if (!owners.search && !owners.soleTrader) {
+      twoincSelectWooHelper.toggleCompanySearchSpinner(false);
+    }
+  }
+
+  /**
+   * Drop every hold and take the spinner down.
+   *
+   * For the country-change path, which invalidates everything in flight at
+   * once: whatever either owner was waiting on belongs to a country the
+   * checkout has left.
+   *
+   * @returns {void}
+   */
+  resetCompanySearchSpinner() {
+    twoincSelectWooHelper.spinnerOwners = { search: false, soleTrader: false };
+    twoincSelectWooHelper.toggleCompanySearchSpinner(false);
+  }
+
   toggleCompanySearchSpinner(isSearching) {
     const $search = twoincSelectWooHelper.getCompanySearchFieldContainer();
     if ($search.length === 0) return;
@@ -1107,16 +1587,19 @@ class TwoCompanySearch {
    * `twoincSoleTrader.currentCountry()` delegates to this one, so the
    * per-country availability cache cannot be keyed on a different answer.
    *
-   * NOT the only reader in the file: `getCompanyData()` and
-   * `isCountrySupported()` still read `.val()` raw and uncased, so the
-   * `country_prefix` this file's handler writes upper-cased is replaced with
-   * the raw value by `clearSelectedCompany`'s deferred re-read. Harmless as
-   * things stand — WooCommerce's country values are already upper-case ISO
-   * codes — and left alone rather than swept into this fix, but do not read
-   * the paragraph above as a claim that the whole file is unified.
+   * THE only country reader in the file as of TWO-40 §1: `getCompanyData()`
+   * and `isCountrySupported()` used to read `.val()` raw and uncased, so the
+   * `country_prefix` this file's handler writes upper-cased was replaced with
+   * the raw value by `clearSelectedCompany`'s deferred re-read. Both go
+   * through here now — §1's "resolve country ONE way and reuse it everywhere"
+   * is the whole point, and a second resolver that agrees today is exactly
+   * the shape that stopped agreeing on the platform this ports from.
+   *
+   * Reads the INVOICE-role form explicitly (`twoincAddressRoles`), not
+   * "whichever address form is on screen" — see that object's doc comment.
    */
   currentCountry() {
-    return (jQuery("#billing_country").val() || "").toUpperCase();
+    return twoincAddressRoles.value(twoincAddressRoles.invoice(), "country").toUpperCase();
   }
 
   /**
@@ -1226,7 +1709,7 @@ class TwoCompanySearch {
          */
         transport: function (params, success) {
           const seq = ++twoincSelectWooHelper.companySearchSeq;
-          twoincSelectWooHelper.toggleCompanySearchSpinner(true);
+          twoincSelectWooHelper.holdCompanySearchSpinner("search");
 
           const request = jQuery.ajax(
             jQuery.extend({}, params, {
@@ -1265,7 +1748,9 @@ class TwoCompanySearch {
           request.always(function () {
             // Only the newest request owns the spinner (see companySearchSeq).
             if (seq !== twoincSelectWooHelper.companySearchSeq) return;
-            twoincSelectWooHelper.toggleCompanySearchSpinner(false);
+            // Releases the SEARCH hold only — a sole-trader round trip may
+            // still be waiting on the same spinner (TWO-40 §7).
+            twoincSelectWooHelper.releaseCompanySearchSpinner("search");
           });
 
           return request;
@@ -1409,13 +1894,13 @@ class TwoCompanySearch {
         billingCompanyDisplay.on("query", function (params) {
           const term = (params && params.term) || "";
           if (term.length < twoincSelectWooHelper.companySearchMinLength) return;
-          twoincSelectWooHelper.toggleCompanySearchSpinner(true);
+          twoincSelectWooHelper.holdCompanySearchSpinner("search");
         });
         billingCompanyDisplay.on("results:all", function () {
-          twoincSelectWooHelper.toggleCompanySearchSpinner(false);
+          twoincSelectWooHelper.releaseCompanySearchSpinner("search");
         });
         billingCompanyDisplay.on("results:message", function () {
-          twoincSelectWooHelper.toggleCompanySearchSpinner(false);
+          twoincSelectWooHelper.releaseCompanySearchSpinner("search");
         });
       }
     }
@@ -1799,7 +2284,6 @@ class TwoCompanySearch {
       window.twoinc.text.tooltip_company
     );
     twoincSelectWooHelper.fixSelectWooPositionCompanyName();
-    jQuery("#company_id").val("");
     // The real company field too, matching what enterManualCompanyEntry does.
     // Without this the cleared company survives in #billing_company: it is the
     // field WooCommerce posts, so the order carried a company the buyer had
@@ -1807,21 +2291,26 @@ class TwoCompanySearch {
     // mirror the read-only summary reads — the summary reappeared showing it on
     // the next re-render (TWO-25288).
     //
-    // Gated on the picker being the capture mode, which is what this function
-    // is about clearing. In manual entry #billing_company is the buyer's own
-    // typed input, and this runs on every country change: clearing
-    // unconditionally would wipe a name they typed for reasons of their own.
-    if (window.twoinc.enable_company_search === "yes") {
-      jQuery("#billing_company").val("");
-    }
+    // Gated on PROVENANCE (TWO-40 §5), not on the capture mode. In manual entry
+    // #billing_company is the buyer's own typed input, and this runs on every
+    // country change: clearing unconditionally would wipe a name they typed for
+    // reasons of their own. `enable_company_search === "yes"` was a proxy for
+    // that question and got one case wrong — a sole-trader name is plugin-
+    // written but reaches here with the flag reading "no", so the name survived
+    // a country change that had already taken its organisation number, leaving
+    // the two halves of one capture disagreeing. The provenance marker answers
+    // the question directly instead of standing in for it.
+    const plugin_wrote_name = twoincCompanyCapture.isPluginWritten(
+      twoincCompanyCapture.nameField()
+    );
+    twoincCompanyCapture.write(plugin_wrote_name ? "" : jQuery("#billing_company").val(), "");
 
-    // Clear the addresses, in case address get request fails
+    // Clear the addresses, in case address get request fails.
+    // `clearAddress()`, not a blank `setAddress()` payload: the latter now
+    // leaves line 2 untouched by design (TWO-40 §2.6), which would strand the
+    // outgoing company's registry-written line 2 on the form.
     if (window.twoinc.enable_address_lookup === "yes") {
-      Twoinc.getInstance().setAddress({
-        street_address: "",
-        city: "",
-        postal_code: ""
-      });
+      Twoinc.getInstance().clearAddress();
     }
     Twoinc.getInstance().registryAddressApplied = false;
 
@@ -2153,20 +2642,35 @@ class TwoCompanySearch {
         twoincSelectWooHelper.exitManualCompanyEntry();
       });
 
+    twoincSelectWooHelper.companyFieldAffordanceSlot().append($btn);
+    return $btn;
+  }
+
+  /**
+   * The slot a company-field affordance button hangs in: WooCommerce core's
+   * own `.woocommerce-input-wrapper` around `#billing_company`'s input.
+   *
+   * Extracted so the "select a different sole trader" link (TWO-40 §7) lands
+   * in the SAME visual slot as the "search for company" link, from the same
+   * code, rather than growing a second near-copy of the self-heal below.
+   *
+   * Self-heals rather than silently degrading (found under adversarial
+   * review before merge, round 3): a plain "fall back to
+   * #billing_company_field" would append the button as a sibling of BOTH the
+   * label and the input, rather than immediately after the input alone —
+   * reintroducing the old overlap-with-the-field-label class of bug this
+   * wrapper exists to avoid. Instead, build an equivalent wrapper around just
+   * the <input>: the same DOM shape WooCommerce core's own
+   * woocommerce_form_field() would have produced, so the button always lands
+   * directly below the input regardless of which path got here. Falls through
+   * to #billing_company_field only if #billing_company itself is missing — a
+   * field this whole feature already depends on existing.
+   *
+   * @returns {Object} jQuery-wrapped slot
+   */
+  companyFieldAffordanceSlot() {
     let $wrapper = jQuery("#billing_company_field .woocommerce-input-wrapper");
 
-    // Self-heal rather than silently degrade (found under adversarial
-    // review before merge, round 3): a plain "fall back to
-    // #billing_company_field" here would append the button as a sibling of
-    // BOTH the label and the input, rather than immediately after the input
-    // alone — reintroducing the old overlap-with-the-field-label class of
-    // bug this wrapper exists to avoid. Instead, build an equivalent wrapper
-    // around just the <input> ourselves: same DOM shape WooCommerce core's
-    // own woocommerce_form_field() would have produced, so the button always
-    // lands directly below the input regardless of which path got here.
-    // Falls through to #billing_company_field only if #billing_company
-    // itself is missing — a field this whole feature already depends on
-    // existing.
     if (!$wrapper.length) {
       const $input = jQuery("#billing_company");
       if ($input.length) {
@@ -2175,8 +2679,7 @@ class TwoCompanySearch {
       }
     }
 
-    ($wrapper.length ? $wrapper : jQuery("#billing_company_field")).append($btn);
-    return $btn;
+    return $wrapper.length ? $wrapper : jQuery("#billing_company_field");
   }
 
   /**
@@ -2233,11 +2736,9 @@ class TwoCompanySearch {
     // so this reads `registryAddressApplied` instead, which is set only on
     // the branch that actually writes looked-up data.
     if (Twoinc.getInstance().registryAddressApplied) {
-      Twoinc.getInstance().setAddress({
-        street_address: "",
-        city: "",
-        postal_code: ""
-      });
+      // `clearAddress()`, for the same reason clearSelectedCompany uses it
+      // (TWO-40 §2.6): a blank `setAddress()` payload now leaves line 2 alone.
+      Twoinc.getInstance().clearAddress();
       Twoinc.getInstance().registryAddressApplied = false;
     }
 
@@ -2437,8 +2938,6 @@ class TwoCompanySearch {
     const self = this;
     const $body = jQuery(document.body);
     const $field = $body.find(self.companyFieldSelector);
-    const $billingCompany = $body.find("#billing_company");
-    const $companyId = $body.find("#company_id");
 
     const widget = $field.selectWoo(self.genSelectWooParams());
     twoincDomHelper.toggleTooltip(
@@ -2452,22 +2951,11 @@ class TwoCompanySearch {
       // Get the option data
       const data = e.params.data;
 
-      // Set the company name
-      instance.customerCompany.company_name = data.id;
-
-      // Set the company ID
-      instance.customerCompany.organization_number = data.company_id;
-
-      // Pin the country this company was captured UNDER, alongside the
-      // number (TWO-25333), so the pair can never be assembled from two
-      // different moments.
-      instance.customerCompany.country_prefix = self.currentCountry();
-
-      // Set the company ID to HTML DOM
-      $companyId.val(data.company_id);
-
-      // Set the company name to HTML DOM
-      $billingCompany.val(data.id);
+      // THE single write path (TWO-40 §5): posted fields, instance record,
+      // pairing tag and provenance in one call. Writing `#company_id` here
+      // directly, as this used to, leaves a pair the tag does not describe —
+      // and the retype guard then wipes it on the buyer's next keystroke.
+      twoincCompanyCapture.write(data.id, data.company_id, { country: self.currentCountry() });
 
       // Display the picked company read-only, synchronously.
       self.renderCompanySummary(data.id, data.company_id);
@@ -3067,7 +3555,11 @@ let twoincDomHelper = {
   getCompanyData: function () {
     return {
       company_name: twoincSelectWooHelper.getCompanyName(),
-      country_prefix: jQuery("#billing_country").val(),
+      // Through the one country resolver (TWO-40 §1). Read raw here, this
+      // deferred re-read un-cased a `country_prefix` the picker had pinned
+      // upper-cased, so the same capture had two spellings depending on which
+      // writer got there last.
+      country_prefix: twoincSelectWooHelper.currentCountry(),
       organization_number: jQuery("#company_id").val()
     };
   },
@@ -3088,7 +3580,10 @@ let twoincDomHelper = {
    * Check if selected country is supported by Twoinc
    */
   isCountrySupported: function () {
-    return window.twoinc.supported_buyer_countries.includes(jQuery("#billing_country").val());
+    // Same one country resolver as everything else (TWO-40 §1). The brand's
+    // `supported_buyer_countries` list is upper-case ISO, which is what the
+    // resolver returns.
+    return window.twoinc.supported_buyer_countries.includes(twoincSelectWooHelper.currentCountry());
   },
   /**
    * Check if twoinc payment is currently selected
@@ -3355,12 +3850,17 @@ let twoincDomHelper = {
       document.querySelector("#project").value = window.twoinc.project;
     }
 
-    // Update the object values
-    if (document.querySelector("#billing_company") && window.twoinc.billing_company) {
-      document.querySelector("#billing_company").value = window.twoinc.billing_company;
-    }
-    if (document.querySelector("#company_id") && window.twoinc.company_id) {
-      document.querySelector("#company_id").value = window.twoinc.company_id;
+    // Restore the captured company through the ONE capture write path
+    // (TWO-40 §5), so the restored pair carries its pairing tag. Written
+    // raw, as this used to be, the pair has no tag — and the retype guard
+    // reads an absent tag as "this number no longer belongs to this name" and
+    // wipes a perfectly good restored capture on the buyer's first keystroke
+    // anywhere in the company field.
+    if (window.twoinc.billing_company || window.twoinc.company_id) {
+      twoincCompanyCapture.write(
+        window.twoinc.billing_company || jQuery("#billing_company").val(),
+        window.twoinc.company_id || jQuery("#company_id").val()
+      );
     }
 
     // Re-evaluate the company fields, because the write just above changes
@@ -3620,6 +4120,8 @@ let twoincSoleTrader = {
   // saved", distinct from the flag's own true/false/undefined values.
   savedManualEntryActive: null,
   messageListenerBound: false,
+  /** @type {Function|null} the bound `message` listener, so it can be removed */
+  messageHandler: null,
   // Result of the most recent autofill prefetch for the entered email.
   // ready=false until the first prefetch resolves; matches=true when the
   // buyer on the Two cookie owns the email currently typed at checkout.
@@ -3627,6 +4129,36 @@ let twoincSoleTrader = {
   // Email the prefetch last ran for, to dedupe repeated checkout re-renders
   // (and so a pre-filled email still prefetches once on first render).
   lastPrefetchEmail: null,
+
+  /**
+   * How many sole-trader round trips are outstanding (TWO-40 §7).
+   *
+   * A COUNT, not a boolean: the buyer can change email while a prefetch is
+   * still in the air, which starts a second flight before the first settles.
+   * A boolean would take the busy state down at the first settle and leave the
+   * second running invisibly.
+   *
+   * Wired to the real async duration — every terminal branch of the call graph
+   * settles its own flight — never to a fixed timeout. Adversarial review of
+   * this exact feature upstream found stuck-forever spinners on two separate
+   * abandon/retry paths, so every `cb(...)` below is a settle point.
+   */
+  flightDepth: 0,
+
+  /**
+   * Re-entrancy guard on the signup popup (TWO-40 §7).
+   *
+   * Without it a second activation — a double click on the chip, or the chip
+   * click landing on top of a prefetch that has just resolved to "no matching
+   * buyer" — opens a second popup over the first. Released when the popup call
+   * returns, not when the popup CLOSES: the guard exists to make two
+   * activations in one gesture idempotent, and holding it until the buyer
+   * finishes signup would strand them if they closed the window by hand.
+   */
+  openingSignup: false,
+
+  /** DOM id of the "select a different sole trader" link (TWO-40 §7). */
+  differentSoleTraderBtnId: "select_different_sole_trader_btn",
 
   config: function () {
     return (window.twoinc && window.twoinc.sole_trader) || {};
@@ -3640,8 +4172,11 @@ let twoincSoleTrader = {
     return twoincSelectWooHelper.currentCountry();
   },
 
+  // The chip lives in the payment tile, which has no address fields of its
+  // own, so every read below names the INVOICE role explicitly (TWO-40 §1
+  // a.3) rather than reaching for "whichever address form is on screen".
   enteredEmail: function () {
-    return (jQuery("#billing_email").val() || "").trim();
+    return twoincAddressRoles.value(twoincAddressRoles.invoice(), "email");
   },
 
   isAvailable: function () {
@@ -3705,6 +4240,7 @@ let twoincSoleTrader = {
 
   hide: function () {
     jQuery(".twoinc-sole-trader-toggle").addClass("hidden").empty();
+    jQuery("#" + twoincSoleTrader.differentSoleTraderBtnId).hide();
     // Re-show (e.g. country change) should prefetch afresh.
     twoincSoleTrader.lastPrefetchEmail = null;
     if (twoincSoleTrader.mode === "sole_trader") {
@@ -3781,6 +4317,112 @@ let twoincSoleTrader = {
   },
 
   /**
+   * A sole-trader round trip has started (TWO-40 §7).
+   *
+   * The busy state is shown IN the company-search control's own query field —
+   * the same in-field spinner an ordinary company search uses, not a separate
+   * overlay — and the control is left open rather than closed under the
+   * buyer. On WooCommerce the prefetch runs while the search widget is still
+   * live (the mode switch that tears it down happens only once the flight has
+   * resolved), so there is a field for the spinner to sit in.
+   *
+   * @returns {void}
+   */
+  beginFlight: function () {
+    twoincSoleTrader.flightDepth += 1;
+    if (twoincSoleTrader.flightDepth === 1) {
+      jQuery(".twoinc-sole-trader-toggle").addClass("twoinc-sole-trader-toggle--busy");
+      twoincSelectWooHelper.holdCompanySearchSpinner("soleTrader");
+    }
+  },
+
+  /**
+   * A sole-trader round trip has reached a terminal state — success, failure,
+   * retry-exhausted or abandoned. Every branch that can end one calls this.
+   *
+   * Clamped at zero so an unbalanced settle cannot drive the count negative
+   * and make a subsequent genuine flight invisible.
+   *
+   * @returns {void}
+   */
+  settleFlight: function () {
+    twoincSoleTrader.flightDepth = Math.max(0, twoincSoleTrader.flightDepth - 1);
+    if (twoincSoleTrader.flightDepth === 0) {
+      jQuery(".twoinc-sole-trader-toggle").removeClass("twoinc-sole-trader-toggle--busy");
+      twoincSelectWooHelper.releaseCompanySearchSpinner("soleTrader");
+    }
+  },
+
+  /**
+   * The "select a different sole trader" link, built hidden on first use
+   * (TWO-40 §7).
+   *
+   * Same visual slot and the same shape as the "search for company" link that
+   * manual-entry mode already offers — one affordance pattern for "the
+   * identity I captured is not the one I want", whichever capture mode
+   * produced it.
+   *
+   * ONE link covers both "pick a different existing registration" and
+   * "register a new one": that choice happens inside the hosted signup's own
+   * UI once the popup is open, so the plugin does not distinguish the two.
+   *
+   * @returns {Object} jQuery-wrapped button
+   */
+  getDifferentSoleTraderBtnNode: function () {
+    const id = twoincSoleTrader.differentSoleTraderBtnId;
+    let $btn = jQuery("#" + id);
+    if ($btn.length) return $btn;
+
+    $btn = jQuery("<button></button>")
+      .attr({ id: id, type: "button" })
+      .text(
+        (twoincSoleTrader.config().text && twoincSoleTrader.config().text.select_different) ||
+          "Select a different sole trader"
+      )
+      .hide()
+      // Bound directly on the element, click AND Enter/Space, for the same
+      // reasons documented on getSearchCompanyBtnNode — a delegated click on
+      // document.body was proven not to reach that button live.
+      .on("click", function (event) {
+        event.preventDefault();
+        twoincSoleTrader.launchSignup({ autoselect: false });
+      })
+      .on("keydown", function (event) {
+        if (event.which !== 13 && event.which !== 32) return;
+        event.preventDefault();
+        event.stopPropagation();
+        twoincSoleTrader.launchSignup({ autoselect: false });
+      });
+
+    twoincSelectWooHelper.companyFieldAffordanceSlot().append($btn);
+    return $btn;
+  },
+
+  /**
+   * Show the "select a different sole trader" link only where it means
+   * something: sole-trader mode, with a company already adopted (TWO-40 §7).
+   *
+   * The same gating shape as the manual-entry link's — that one appears once
+   * the buyer is in manual entry, this one once they hold a sole-trader
+   * identity there is an alternative to.
+   *
+   * @returns {void}
+   */
+  syncDifferentSoleTraderLink: function () {
+    const show =
+      twoincSoleTrader.mode === "sole_trader" &&
+      !!twoincUtilHelper.blankToEmpty(jQuery("#company_id").val()) &&
+      !!twoincSoleTrader.tokens;
+    // Built lazily, and only when it is about to be shown. This runs on every
+    // mode switch — including the setMode("business") a checkout with no
+    // sole-trader option ever reaches — and building it there would insert a
+    // hidden button (and, via the slot's self-heal, a wrapper element) into
+    // the address form of every merchant who never sees this feature.
+    if (!show && !jQuery("#" + twoincSoleTrader.differentSoleTraderBtnId).length) return;
+    twoincSoleTrader.getDifferentSoleTraderBtnNode().toggle(show);
+  },
+
+  /**
    * A mode chip was clicked. Business is immediate; Sole trader switches
    * mode then acts on the prefetched autofill result so the signup popup
    * (when needed) opens in the same synchronous gesture as the click.
@@ -3793,7 +4435,7 @@ let twoincSoleTrader = {
     twoincSoleTrader.setMode("sole_trader");
     const pf = twoincSoleTrader.prefetched;
     if (pf.ready && pf.matches && pf.buyer) {
-      twoincSoleTrader.setCompany(pf.buyer.organization_number, pf.buyer.company_name);
+      twoincSoleTrader.setCompany(pf.buyer.organization_number, pf.buyer.company_name, pf.buyer);
       twoincSoleTrader.showNote(false);
     } else if (pf.ready) {
       // Prefetch resolved with no matching buyer → signup. Opening here keeps
@@ -3813,6 +4455,7 @@ let twoincSoleTrader = {
   setMode: function (mode) {
     twoincSoleTrader.mode = mode;
     twoincSoleTrader.updateChips();
+    twoincSoleTrader.syncDifferentSoleTraderLink();
 
     if (mode === "sole_trader") {
       // Suppress company search by the same lever the manual-entry row uses,
@@ -3921,19 +4564,45 @@ let twoincSoleTrader = {
       }
       return;
     }
+    // One flight for the whole token-mint + buyer-lookup round trip, settled
+    // on EVERY terminal branch below (TWO-40 §7).
+    twoincSoleTrader.beginFlight();
     twoincSoleTrader.fetchTokens(function (ok) {
       if (!ok) {
         twoincSoleTrader.prefetched = { ready: true, buyer: null, matches: false };
+        twoincSoleTrader.settleFlight();
         twoincSoleTrader.applyPrefetch();
         return;
       }
       twoincSoleTrader.fetchCurrentBuyer(function (buyer) {
-        const entered = twoincSoleTrader.enteredEmail().toLowerCase();
-        const matches = !!(buyer && buyer.email && String(buyer.email).toLowerCase() === entered);
-        twoincSoleTrader.prefetched = { ready: true, buyer: buyer, matches: matches };
+        twoincSoleTrader.prefetched = {
+          ready: true,
+          buyer: buyer,
+          matches: twoincSoleTrader.buyerOwnsCheckoutEmail(buyer)
+        };
+        twoincSoleTrader.settleFlight();
         twoincSoleTrader.applyPrefetch();
       });
     });
+  },
+
+  /**
+   * Does the buyer on the Two cookie own the email currently typed at
+   * checkout?
+   *
+   * A PASSIVE, pre-authentication check, and correct only there: nothing has
+   * proved who the browser belongs to yet, so the cookie's buyer is trusted
+   * only as far as it agrees with what the buyer has typed.
+   *
+   * It must NOT be reused on a post-authentication path (TWO-40 §8) — see
+   * `bindPopupMessageListener`.
+   *
+   * @param {Object|null} buyer
+   * @returns {boolean}
+   */
+  buyerOwnsCheckoutEmail: function (buyer) {
+    const entered = twoincSoleTrader.enteredEmail().toLowerCase();
+    return !!(buyer && buyer.email && String(buyer.email).toLowerCase() === entered);
   },
 
   /**
@@ -3945,7 +4614,7 @@ let twoincSoleTrader = {
     const pf = twoincSoleTrader.prefetched;
     if (pf.matches && pf.buyer) {
       twoincSoleTrader.setMode("sole_trader");
-      twoincSoleTrader.setCompany(pf.buyer.organization_number, pf.buyer.company_name);
+      twoincSoleTrader.setCompany(pf.buyer.organization_number, pf.buyer.company_name, pf.buyer);
       twoincSoleTrader.showNote(false);
     } else if (twoincSoleTrader.mode === "sole_trader") {
       twoincSoleTrader.setMode("business");
@@ -3956,14 +4625,47 @@ let twoincSoleTrader = {
    * Open the hosted signup popup, falling back to the visible link if the
    * browser blocks the window (e.g. gesture lost after a slow prefetch).
    */
-  launchSignup: function () {
-    const win = twoincSoleTrader.openPopup();
-    twoincSoleTrader.showNote(!win);
+  /**
+   * Open the hosted signup popup, falling back to the visible link if the
+   * browser blocks the window (e.g. gesture lost after a slow prefetch).
+   *
+   * Re-entrancy-guarded (TWO-40 §7): a second activation while one is already
+   * being opened is dropped rather than stacking a second popup.
+   *
+   * @param {Object} [options] passed through to openPopup
+   * @returns {void}
+   */
+  launchSignup: function (options) {
+    if (twoincSoleTrader.openingSignup) return;
+    twoincSoleTrader.openingSignup = true;
+    try {
+      const win = twoincSoleTrader.openPopup(options);
+      twoincSoleTrader.showNote(!win);
+    } finally {
+      // Released once the synchronous open has returned, blocked or not — see
+      // the guard's own comment. Held any longer and a blocked popup would
+      // lock the buyer out of retrying via the fallback link.
+      twoincSoleTrader.openingSignup = false;
+    }
   },
 
-  setCompany: function (companyId, companyName) {
-    jQuery("#company_id").val(companyId);
-    jQuery("#billing_company").val(companyName);
+  /**
+   * Adopt an enrolled sole trader's company onto the checkout.
+   *
+   * Goes through the ONE capture write path (TWO-40 §5), which owns the posted
+   * fields, the instance record, the pairing tag and the provenance markers.
+   * A `TWO:`-prefixed identifier takes exactly the same path as any registry
+   * number — no branch here, none downstream. The only place it is treated
+   * specially is display, and that is `formatCompanyNumber`'s job.
+   *
+   * @param {string} companyId
+   * @param {string} companyName
+   * @param {Object} [buyer] the autofill buyer, when one was resolved; its
+   *   address is written too (§2.6, §5)
+   * @returns {void}
+   */
+  setCompany: function (companyId, companyName, buyer) {
+    twoincCompanyCapture.write(companyName, companyId);
     // The display select too, when this is the clearing call setMode("business")
     // makes. The picker appends an <option> per pick and select2("destroy")
     // leaves it selected, so without this a company picked before the sole-trader
@@ -3973,14 +4675,17 @@ let twoincSoleTrader = {
       jQuery("#billing_company_display").val("");
     }
     const instance = Twoinc.getInstance();
-    instance.customerCompany.organization_number = companyId;
-    instance.customerCompany.company_name = companyName;
-    // Pin the capture country next to the number, same as the picker's select
-    // handler does and for the same reason (TWO-25333 — see there). Only on
-    // the capturing call: setMode("business") reaches this with both arguments
-    // falsy to CLEAR, and there is no capture then for a country to belong to.
-    if (companyId) {
-      instance.customerCompany.country_prefix = twoincSelectWooHelper.currentCountry();
+    // The buyer's address, written REGARDLESS of the merchant's address-lookup
+    // switch (TWO-40 §5). That switch gates an ordinary company-search pick's
+    // address write, and routing sole-trader adoption through the same gate is
+    // the bug this bullet exists for: the switch is legitimately off in
+    // configurations that have nothing to do with sole-trader signup, and a
+    // buyer who has just enrolled must still have their address land. Explicit
+    // bypass rather than making the switch context-aware.
+    const buyerAddress = buyer && (buyer.billing_address || buyer.address);
+    if (companyId && buyerAddress) {
+      instance.setAddress(buyerAddress);
+      instance.registryAddressApplied = true;
     }
     // Re-evaluate which company fields are shown, AFTER the write above
     // (TWO-25326 §12).
@@ -4003,6 +4708,9 @@ let twoincSoleTrader = {
     // above are written in (TWO-25288). Also re-renders after the toggle above,
     // whose own trailing renderCompanySummary() reads the DOM.
     twoincSelectWooHelper.renderCompanySummary(companyName, companyId);
+    // The "select a different sole trader" link only means something once one
+    // is adopted, so its visibility is re-decided wherever that changes.
+    twoincSoleTrader.syncDifferentSoleTraderLink();
     if (companyId) {
       instance.getApproval();
     }
@@ -4069,25 +4777,56 @@ let twoincSoleTrader = {
       });
   },
 
-  openPopup: function () {
+  /**
+   * Open the hosted sole-trader signup in a real popup window (TWO-40 §7).
+   *
+   * `window.open()`, NOT an iframe-in-overlay. The signup/OTP flow depends on
+   * a third party that only works in a real popup window; the iframe rewrite
+   * would sidestep popup-blocker risk and was explicitly evaluated and
+   * rejected for that reason. The call stays SYNCHRONOUS with the click that
+   * triggered it — an async-delayed `window.open()` is blocker bait in every
+   * browser — which is why the chip-click path resolves against a prefetched
+   * result rather than issuing a request first.
+   *
+   * Brand overlays do not need anything added here. A branded deployment
+   * resolves this URL's HOST from the brand registry's own URL template
+   * (see WC_Twoinc_Helper::get_environment_host and the brand's
+   * `checkout_url_template`), so the host itself carries the brand in
+   * production. A `?brand=`/`?brandVersion=` query-string form also exists,
+   * but it is documented as a development-loop affordance for when several
+   * brands temporarily share one non-production domain — not the mechanism to
+   * build on.
+   *
+   * @param {Object} [options]
+   * @param {boolean} [options.autoselect] when false, appended to the URL so
+   *   the hosted flow offers a choice rather than adopting a known
+   *   registration silently
+   * @returns {Window|null}
+   */
+  openPopup: function (options) {
     if (!twoincSoleTrader.tokens) {
       return null;
     }
+    const opts = options || {};
+    const invoice = twoincAddressRoles.invoice();
+    const read = function (name) {
+      return twoincAddressRoles.value(invoice, name);
+    };
     const prefill = {
-      email: jQuery("#billing_email").val(),
-      first_name: jQuery("#billing_first_name").val(),
-      last_name: jQuery("#billing_last_name").val(),
-      company_name: jQuery("#billing_company").val(),
-      phone_number: jQuery("#billing_phone").val(),
+      email: read("email"),
+      first_name: read("first_name"),
+      last_name: read("last_name"),
+      company_name: read("company"),
+      phone_number: read("phone"),
       billing_address: {
-        street: jQuery("#billing_address_1").val(),
-        postal_code: jQuery("#billing_postcode").val(),
-        city: jQuery("#billing_city").val(),
-        region: jQuery("#billing_state").val() || "",
+        street: read("address_1"),
+        postal_code: read("postcode"),
+        city: read("city"),
+        region: read("state"),
         country_code: twoincSoleTrader.currentCountry()
       }
     };
-    const url =
+    let url =
       twoincSoleTrader.tokens.signup_url +
       "?businessToken=" +
       encodeURIComponent(twoincSoleTrader.tokens.delegation_token) +
@@ -4095,10 +4834,15 @@ let twoincSoleTrader = {
       encodeURIComponent(twoincSoleTrader.tokens.autofill_token) +
       "&autofillData=" +
       encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(prefill)))));
+    // Wired through unconditionally when asked for, with no branching on what
+    // the hosted flow does with it — that is the flow's business, not this
+    // plugin's.
+    if (opts.autoselect === false) url += "&autoselect=false";
+    // 700 wide, not narrower: the hosted signup's own layout clips below that.
     return window.open(
       url,
       "_blank",
-      "location=yes,resizable=yes,scrollbars=yes,status=yes,height=805,width=610"
+      "location=yes,resizable=yes,scrollbars=yes,status=yes,height=805,width=700"
     );
   },
 
@@ -4112,7 +4856,11 @@ let twoincSoleTrader = {
       return;
     }
     twoincSoleTrader.messageListenerBound = true;
-    window.addEventListener("message", function (event) {
+    // Kept on the module so it can be unbound again. A `window` listener
+    // outlives everything else this module owns, so without a handle on it
+    // there is no way to take one down — which matters to any harness that
+    // re-evaluates this file against the same window.
+    twoincSoleTrader.messageHandler = function (event) {
       if (twoincSoleTrader.mode !== "sole_trader" || !twoincSoleTrader.tokens) {
         return;
       }
@@ -4121,19 +4869,38 @@ let twoincSoleTrader = {
         return;
       }
       if (event.data === "ACCEPTED") {
+        twoincSoleTrader.beginFlight();
         twoincSoleTrader.fetchCurrentBuyer(function (buyer) {
-          const entered = twoincSoleTrader.enteredEmail().toLowerCase();
-          const matches = !!(buyer && buyer.email && String(buyer.email).toLowerCase() === entered);
-          twoincSoleTrader.prefetched = { ready: true, buyer: buyer, matches: matches };
-          if (matches) {
-            twoincSoleTrader.setCompany(buyer.organization_number, buyer.company_name);
+          // AUTHENTICATED path (TWO-40 §8). The server has just told this
+          // browser who the buyer is — the OTP step succeeded — so the email
+          // they authenticated with is the answer, full stop. Re-running the
+          // PASSIVE `buyerOwnsCheckoutEmail()` check here is a confirmed bug:
+          // a buyer who signs up under a different address from the one in the
+          // checkout's contact field completes OTP, the stale email match
+          // disagrees with the server, and the same popup reopens forever.
+          const resolved = !!buyer;
+          twoincSoleTrader.prefetched = { ready: true, buyer: buyer, matches: resolved };
+          twoincSoleTrader.settleFlight();
+          if (resolved) {
+            twoincSoleTrader.setCompany(buyer.organization_number, buyer.company_name, buyer);
             twoincSoleTrader.showNote(false);
+          } else {
+            twoincSoleTrader.showError();
           }
         });
       } else {
         twoincSoleTrader.showError();
       }
-    });
+    };
+    window.addEventListener("message", twoincSoleTrader.messageHandler);
+  },
+
+  /** Test seam: take the hosted-signup listener back off the window. */
+  unbindPopupMessageListener: function () {
+    if (!twoincSoleTrader.messageHandler) return;
+    window.removeEventListener("message", twoincSoleTrader.messageHandler);
+    twoincSoleTrader.messageHandler = null;
+    twoincSoleTrader.messageListenerBound = false;
   },
 
   showError: function () {
@@ -4283,6 +5050,29 @@ class Twoinc {
       // Move the fields to correct positions
       twoincDomHelper.positionFields();
     }
+
+    // Seed the delivery-address mirror HERE, before any binding below can
+    // change an invoice field (TWO-40 §2). Seeded late — from a
+    // `sync()` that self-seeds — the record would capture the invoice address
+    // as it is AFTER the buyer's first edit, so an unedited delivery address
+    // still holding the pre-edit value would read as buyer-edited and pin
+    // itself for the rest of the session. Reads the invoice form only, so it
+    // does not matter whether WooCommerce has rendered the shipping fields yet.
+    twoincAddressMirror.seed();
+
+    // Propagate invoice → delivery on every invoice-address edit. Delegated,
+    // and on `change` AND `input`: `change` alone misses nothing a buyer does
+    // by hand, but the plugin's own writes (registry autofill, sole-trader
+    // adoption) go through `setAddress()`/the capture helper, which call
+    // `sync()` directly rather than faking events.
+    const mirroredSelector = twoincAddressMirror.MIRRORED_FIELDS.map(function (name) {
+      return twoincAddressRoles.field(twoincAddressRoles.invoice(), name);
+    }).join(", ");
+    $body
+      .off("change.twoincAddressMirror input.twoincAddressMirror", mirroredSelector)
+      .on("change.twoincAddressMirror input.twoincAddressMirror", mirroredSelector, function () {
+        twoincAddressMirror.sync();
+      });
 
     // Focus on search input on country open
     jQuery("#billing_country").on("select2:open", function (e) {
@@ -4465,6 +5255,24 @@ class Twoinc {
       // Verdicts only — same mid-request blanking as the picker's own handler.
       twoincDomHelper.clearIntentVerdicts();
     });
+
+    // Retype guard (TWO-40 §5): a company name the buyer edits away from the
+    // organisation number it was captured under takes that number with it.
+    // Bound on `input` as well as `change` so the stale number is gone before
+    // the buyer can reach Place Order without ever blurring the field.
+    //
+    // Only ever fires for a real buyer edit: every plugin write in this file
+    // goes through `.val()` or `.value =`, neither of which dispatches an
+    // event.
+    $body
+      .off("input.twoincCompanyPairing change.twoincCompanyPairing", "#billing_company")
+      .on(
+        "input.twoincCompanyPairing change.twoincCompanyPairing",
+        "#billing_company",
+        function () {
+          twoincCompanyCapture.guardCompanyRetype();
+        }
+      );
 
     // Handle the country inputs change event. The tracker behind it is seeded
     // at the END of this function, not here — see the comment there.
@@ -5149,12 +5957,149 @@ class Twoinc {
     });
   }
 
+  /**
+   * Write an address that arrived in an external payload onto the
+   * INVOICE-role address form (TWO-40 §2.6).
+   *
+   * ONE routing table for every such payload — the registry address behind a
+   * company-search pick and the sole-trader autofill buyer alike. Sole trader
+   * is deliberately NOT special-cased here; it was on the platform this ports
+   * from, and the divergence is what let the two paths drift.
+   *
+   *   - `building`/`apartment` present → they go on line 1 and `street` goes
+   *     on line 2.
+   *   - `building`/`apartment` absent → `street` goes on line 1 and line 2 is
+   *     left ALONE. Not blanked: this function's job is to write what the
+   *     payload carries, and a payload with nothing for line 2 says nothing
+   *     about line 2. Clearing a captured address is `clearAddress()`.
+   *   - No dedup between the two lines even when they come out textually
+   *     identical — some real addresses genuinely repeat.
+   *   - `region` goes to the state/county control when the country's address
+   *     format has one, else onto the city with a comma (`"Ashford, Kent"`).
+   *
+   * `street_address` is accepted as a synonym for `street`, which is what the
+   * company-address endpoint calls the same field.
+   *
+   * @param {Object} address
+   * @returns {void}
+   */
   setAddress(address) {
-    jQuery("#billing_address_1").val(address.street_address);
-    jQuery("#billing_address_2").val("");
-    jQuery("#billing_city").val(address.city);
-    jQuery("#billing_postcode").val(address.postal_code);
+    const payload = address || {};
+    const role = twoincAddressRoles.invoice();
+    const street = twoincUtilHelper.blankToEmpty(
+      payload.street !== undefined ? payload.street : payload.street_address
+    );
+    const premises = [payload.building, payload.apartment]
+      .map(twoincUtilHelper.blankToEmpty)
+      .filter(Boolean)
+      .join(" ");
+
+    if (premises) {
+      jQuery(twoincAddressRoles.field(role, "address_1")).val(premises);
+      jQuery(twoincAddressRoles.field(role, "address_2")).val(street);
+    } else {
+      jQuery(twoincAddressRoles.field(role, "address_1")).val(street);
+    }
+    jQuery(twoincAddressRoles.field(role, "city")).val(twoincUtilHelper.blankToEmpty(payload.city));
+    jQuery(twoincAddressRoles.field(role, "postcode")).val(
+      twoincUtilHelper.blankToEmpty(payload.postal_code)
+    );
+    Twoinc.getInstance().setRegion(role, payload.region);
+
+    // Propagate onto the delivery address before the re-render below, so one
+    // checkout update carries both (TWO-40 §2).
+    twoincAddressMirror.sync();
+
     // Update order review in case there is a shipping change
+    jQuery(document.body).trigger("update_checkout");
+  }
+
+  /**
+   * Best-effort write of a registry `region` onto a role's address form
+   * (TWO-40 §2.6).
+   *
+   * Text→id matching against a state select is inherently lossy — the registry
+   * and WooCommerce's own state lists are two independent vocabularies — so it
+   * is attempted and then fallen back on, never assumed. When there is no
+   * state control to write to at all (WooCommerce swaps the field for a hidden
+   * input on a country whose address format has no state), the region is
+   * appended to the city rather than dropped: losing it silently would strip a
+   * real part of the buyer's address.
+   *
+   * @param {string} role
+   * @param {*} region
+   * @returns {void}
+   */
+  setRegion(role, region) {
+    const value = twoincUtilHelper.blankToEmpty(region);
+    if (!value) return;
+
+    const $state = jQuery(twoincAddressRoles.field(role, "state"));
+    if ($state.is("select")) {
+      const wanted = value.trim().toLowerCase();
+      let matched = null;
+      $state.find("option").each(function () {
+        const $option = jQuery(this);
+        if (!$option.attr("value")) return;
+        const text = twoincUtilHelper.blankToEmpty($option.text()).toLowerCase();
+        const id = twoincUtilHelper.blankToEmpty($option.attr("value")).toLowerCase();
+        if (text === wanted || id === wanted) matched = $option.attr("value");
+      });
+      if (matched !== null) {
+        $state.val(matched).trigger("change");
+        return;
+      }
+      Twoinc.getInstance().appendRegionToCity(role, value);
+      return;
+    }
+
+    // A hidden input is WooCommerce's marker for "this country's address
+    // format has no state field"; a visible text input is a free-text county
+    // the region can simply be written into.
+    if ($state.length && $state.attr("type") !== "hidden") {
+      $state.val(value);
+      return;
+    }
+
+    Twoinc.getInstance().appendRegionToCity(role, value);
+  }
+
+  /**
+   * Append a region to the city, comma-separated, unless it is already there.
+   *
+   * @param {string} role
+   * @param {string} region
+   * @returns {void}
+   */
+  appendRegionToCity(role, region) {
+    const $city = jQuery(twoincAddressRoles.field(role, "city"));
+    if (!$city.length) return;
+    const city = twoincUtilHelper.blankToEmpty($city.val());
+    if (city.toLowerCase().endsWith(region.toLowerCase())) return;
+    $city.val(city ? city + ", " + region : region);
+  }
+
+  /**
+   * Blank the address fields a captured company's registry address wrote
+   * (TWO-40 §2.6).
+   *
+   * Split out from `setAddress()`, which now means "write what this payload
+   * carries" and therefore deliberately leaves line 2 alone when the payload
+   * says nothing about it. Clearing has the opposite requirement — a line 2
+   * the registry wrote for the OUTGOING company must not survive — so it is
+   * its own function rather than a magic empty payload.
+   *
+   * The state/county control is left alone: it belongs to the country, not to
+   * the company, and the country is not what is being cleared here.
+   *
+   * @returns {void}
+   */
+  clearAddress() {
+    const role = twoincAddressRoles.invoice();
+    ["address_1", "address_2", "city", "postcode"].forEach(function (name) {
+      jQuery(twoincAddressRoles.field(role, name)).val("");
+    });
+    twoincAddressMirror.sync();
     jQuery(document.body).trigger("update_checkout");
   }
 
@@ -5281,6 +6226,13 @@ class Twoinc {
     // all), and every one of those triggers needs it re-populated, not just
     // the two `toggleBusinessFields()` already covered.
     twoincSelectWooHelper.syncCompanySearchTileLocation();
+
+    // WooCommerce re-renders the shipping fields as part of this same refresh
+    // (revealing "Ship to a different address?" is one of the triggers), so a
+    // delivery form that has just appeared, or just been replaced, needs the
+    // mirror re-asserted against it (TWO-40 §2). A no-op once the buyer has
+    // taken that address over.
+    twoincAddressMirror.sync();
   }
 
   /**
@@ -5446,7 +6398,7 @@ class Twoinc {
     // clears it is `clearSelectedCompany()` below re-attaching the widget and
     // taking the dropdown — and the spinner node inside it — with it. That is
     // an incidental consequence of an unrelated call, not a guarantee.
-    twoincSelectWooHelper.toggleCompanySearchSpinner(false);
+    twoincSelectWooHelper.resetCompanySearchSpinner();
 
     twoincSelectWooHelper.clearSelectedCompany();
 
