@@ -30,12 +30,6 @@ help:
 ## Start the WordPress + WooCommerce dev container
 run:
 	docker compose up -d
-	@dev/print-resolved-hosts.sh
-
-## Create the dev container and provision WordPress + the plugin
-install: run
-	@echo "First provision runs in the wpcli container (~90s):"
-	@echo "  make logs-wpcli   # watch progress"
 	@./start-proxy.sh --background || true
 	@PROXY_URL=$$(./start-proxy.sh url 2>/dev/null); \
 	if [ -n "$$PROXY_URL" ]; then \
@@ -44,12 +38,18 @@ install: run
 	echo ""; \
 	echo "========================================="; \
 	echo " WordPress store: http://localhost:8888/"; \
+	echo " WP admin:        http://localhost:8888/wp-admin/ (admin / twoinb2b)"; \
 	if [ -n "$$PROXY_URL" ]; then \
 		echo " Proxy store:     $$PROXY_URL/"; \
+		echo " Proxy admin:     $$PROXY_URL/wp-admin/"; \
 	fi; \
-	echo " WP admin:        http://localhost:8888/wp-admin/ (admin / twoinb2b)"; \
 	dev/print-resolved-hosts.sh; \
 	echo "========================================="
+
+## Create the dev container and provision WordPress + the plugin
+install: run
+	@echo "First provision runs in the wpcli container (~90s):"
+	@echo "  make logs-wpcli   # watch progress"
 
 ## Start WordPress with Xdebug enabled and the FRP proxy running
 debug: run
