@@ -498,7 +498,6 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         expect(opened).toHaveLength(1);
         expect(soleTrader.mode).toBe("sole_trader");
       });
-
     });
 
     describe("a chip click resolves to populate or popup, never a note", () => {
