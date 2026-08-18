@@ -1518,7 +1518,12 @@ describe("company-search manual-entry affordance", () => {
       jest.useRealTimers();
       expect(ctx.twoinc.enable_company_search).toBe("no");
 
+      // The search button (and the widget it goes with) is torn down only
+      // once a sole trader is actually adopted — see `setCompany`'s own
+      // comment (TWO-40 §7 correction) — not on the mode switch alone, so
+      // the round trip is simulated the same way a real prefetch match is.
       ctx.soleTrader.setMode("sole_trader");
+      ctx.soleTrader.setCompany("TWO:ST1", "A Sole Trader");
       expect($("#" + helper.searchCompanyBtnId)[0].style.display).toBe("none");
 
       ctx.soleTrader.setMode("business");
@@ -1538,17 +1543,26 @@ describe("company-search manual-entry affordance", () => {
       // interceptor — the same page-wide-Tab-shaped gap. Asserting only that
       // destroy() happened, without the order, would pass against the old
       // (buggy) code too.
+      //
+      // The close()/destroy() pair itself now fires from `setCompany()`
+      // (TWO-40 §7 correction) once a sole trader is actually adopted, not
+      // from the mode switch alone — see `setMode`'s and `setCompany`'s own
+      // comments — so the mode switch happens first here, unwatched, and the
+      // assertion is on the adoption call.
       const $select = openWithAffordance();
       const calls = [];
       const original = jQuery.fn.select2;
+
+      expect($select.data("select2").isOpen()).toBe(true);
+
+      ctx.soleTrader.setMode("sole_trader");
+
       jest.spyOn(jQuery.fn, "select2").mockImplementation(function (arg) {
         if (arg === "close" || arg === "destroy") calls.push(arg);
         return original.apply(this, arguments);
       });
 
-      expect($select.data("select2").isOpen()).toBe(true);
-
-      ctx.soleTrader.setMode("sole_trader");
+      ctx.soleTrader.setCompany("TWO:ST1", "A Sole Trader");
 
       expect(calls).toEqual(["close", "destroy"]);
       jQuery.fn.select2.mockRestore();
