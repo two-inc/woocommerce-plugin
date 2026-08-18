@@ -1039,41 +1039,31 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       });
     });
 
-    describe("round-5 review regressions (Han/Vader) — soleTraderReconfirming needs to be a count, not a boolean", () => {
+    describe("round-5/6 review regressions (Han/Vader) — soleTraderReconfirmingCount robustness", () => {
       beforeEach(() => {
         $("form[name='checkout']").after('<div id="order_review"></div>');
         ctx.Twoinc.getInstance().initialize(false);
       });
 
-      test("a stale first re-signup's own close does not clear a second, still-open re-signup's decision", () => {
+      test("a second re-signup click while one is already outstanding is refused (round-6 structural hardening), not stacked as a second popup", () => {
         soleTrader.setMode("sole_trader");
         soleTrader.setCompany("TWO:ST1", "First Trader");
         jest.useFakeTimers();
 
-        // A buyer retry, well within the 300ms poll window: close the first
-        // re-signup popup without completing, then immediately re-open a
-        // second one before the first popup's own poll has fired.
         const win1 = { closed: false };
         window.open = jest.fn(() => win1);
         soleTrader.getDifferentSoleTraderBtnNode().trigger("click");
         expect(soleTrader.soleTraderReconfirmingCount).toBe(1);
 
-        win1.closed = true;
-        const win2 = { closed: false };
-        window.open = jest.fn(() => win2);
+        // A buyer retry before the first popup has closed — no second
+        // window, no second increment.
+        const secondOpen = jest.fn(() => ({ closed: false }));
+        window.open = secondOpen;
         soleTrader.getDifferentSoleTraderBtnNode().trigger("click");
-        expect(soleTrader.soleTraderReconfirmingCount).toBe(2);
-
-        // The stale first poll fires now, for the already-closed win1.
-        jest.advanceTimersByTime(300);
+        expect(secondOpen).not.toHaveBeenCalled();
         expect(soleTrader.soleTraderReconfirmingCount).toBe(1);
 
-        // The second, genuinely still-open re-signup must still refuse a
-        // direct "leave sole trader" action, and its own eventual ACCEPTED
-        // must still land.
-        $("#billing_company").trigger("click");
-        expect(soleTrader.mode).toBe("sole_trader");
-
+        // The one real popup's own resolution still settles it correctly.
         jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) =>
           cb({
             organization_number: "TWO:ST2",
@@ -1091,7 +1081,51 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
 
         expect($("#company_id").val()).toBe("TWO:ST2");
         expect(soleTrader.soleTraderReconfirmingCount).toBe(0);
+
+        // Refused nothing it shouldn't have — retrying again now (the
+        // first has fully resolved) opens a real popup.
+        soleTrader.getDifferentSoleTraderBtnNode().trigger("click");
+        expect(soleTrader.soleTraderReconfirmingCount).toBe(1);
         jest.useRealTimers();
+      });
+
+      test("editing the email while a re-signup popup is open does not reset its count out from under it (round-6, Han/Vader)", () => {
+        soleTrader.setMode("sole_trader");
+        soleTrader.setCompany("TWO:ST1", "First Trader");
+        soleTrader.availabilityByCountry = { GB: true };
+        soleTrader.tokens = {
+          delegation_token: "d",
+          autofill_token: "a",
+          signup_url: "https://checkout.example.test/soletrader/signup"
+        };
+        window.open = jest.fn(() => ({ closed: false }));
+
+        soleTrader.getDifferentSoleTraderBtnNode().trigger("click");
+        expect(soleTrader.soleTraderReconfirmingCount).toBe(1);
+
+        // `#billing_email` is never locked, unlike the captured fields — the
+        // buyer edits it while the re-signup popup is still open, and a
+        // fresh autofill flight resolves with a match. `applyPrefetch`'s
+        // match branch calls `setMode("sole_trader")` while mode is ALREADY
+        // `sole_trader` — a redundant same-mode call that must not reset
+        // the re-signup this popup is still deciding.
+        $("#billing_email").val("returning@example.test");
+        jest.spyOn(soleTrader, "fetchTokens").mockImplementation((cb) => cb(true));
+        jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) =>
+          cb({
+            organization_number: "TWO:ST3",
+            company_name: "Returning Co",
+            email: "returning@example.test"
+          })
+        );
+        soleTrader.onEmailChanged();
+
+        expect(soleTrader.soleTraderReconfirmingCount).toBe(1);
+        expect(soleTrader.isDeciding()).toBe(true);
+
+        // The still-open re-signup's own captured field is still refused.
+        $("#billing_company").trigger("click");
+        expect(soleTrader.mode).toBe("sole_trader");
       });
 
       test("a blocked re-signup popup does not strand the count above zero", () => {

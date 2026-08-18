@@ -4769,15 +4769,28 @@ let twoincSoleTrader = {
    * chip-click handler.
    */
   setMode: function (mode) {
+    // Only an actual TRANSITION resets adoption/reconfirmation state
+    // (round-6 review — Han/Vader): `applyPrefetch`'s match branch calls
+    // `setMode("sole_trader")` unconditionally whenever a flight resolves
+    // with a match — including while mode is ALREADY `sole_trader`, e.g. the
+    // buyer edits `#billing_email` (never locked, unlike the captured
+    // fields) while a "select a different sole trader" popup is genuinely
+    // still open. Resetting on that redundant same-mode call zeroed the
+    // re-signup's own `soleTraderReconfirmingCount` mid-flight — the exact
+    // bug rounds 4/5 fixed via the link's click handler, reopened here via a
+    // completely different path neither of them touched.
+    const isTransition = mode !== twoincSoleTrader.mode;
     twoincSoleTrader.mode = mode;
-    // Every switch starts a fresh determination of whether THIS time through
-    // sole-trader mode ends in an adopted company (TWO-40 §7 correction,
-    // round-1 review — Vader) — see the flag's own comment.
-    twoincSoleTrader.soleTraderAdopted = false;
-    // Same reset, for the same reason (round-4 review — Han/Vader): whatever
-    // re-signup(s) this mode switch interrupted have nothing left to
-    // reconfirm.
-    twoincSoleTrader.soleTraderReconfirmingCount = 0;
+    if (isTransition) {
+      // Every REAL switch starts a fresh determination of whether THIS time
+      // through sole-trader mode ends in an adopted company (TWO-40 §7
+      // correction, round-1 review — Vader) — see the flag's own comment.
+      twoincSoleTrader.soleTraderAdopted = false;
+      // Same reset, for the same reason (round-4 review — Han/Vader): a REAL
+      // switch away from (or back into) sole-trader mode means whatever
+      // re-signup(s) it interrupted have nothing left to reconfirm.
+      twoincSoleTrader.soleTraderReconfirmingCount = 0;
+    }
     twoincSoleTrader.updateChips();
     twoincSoleTrader.syncDifferentSoleTraderLink();
 
@@ -5080,11 +5093,28 @@ let twoincSoleTrader = {
    * Re-entrancy-guarded (TWO-40 §7): a second activation while one is already
    * being opened is dropped rather than stacking a second popup.
    *
+   * A re-signup (`options.autoselect === false`) is ALSO refused while a
+   * different one is already outstanding (round-6 review — Han/Vader,
+   * structural hardening): `openingSignup` only guards a second click
+   * landing in the SAME synchronous gesture, not a later, sequential one —
+   * closing one re-signup popup and clicking "select a different sole
+   * trader" again is exactly the retry that made
+   * `soleTraderReconfirmingCount` a count rather than a boolean in the first
+   * place. Refusing a second one here removes that whole scenario rather
+   * than continuing to patch the counter for it.
+   *
    * @param {Object} [options] passed through to openPopup
    * @returns {void}
    */
   launchSignup: function (options) {
     if (twoincSoleTrader.openingSignup) return;
+    if (
+      options &&
+      options.autoselect === false &&
+      twoincSoleTrader.soleTraderReconfirmingCount > 0
+    ) {
+      return;
+    }
     twoincSoleTrader.openingSignup = true;
     try {
       const win = twoincSoleTrader.openPopup(options);
