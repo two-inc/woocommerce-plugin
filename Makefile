@@ -13,6 +13,11 @@ help:
 
 ## Start the WordPress + WooCommerce dev container
 run:
+	# Pre-create bind-mount dirs as the host user - if a mount source doesn't
+	# exist yet, dockerd creates it (root:root) before the container's own
+	# user applies, and the top-level ./volumes then can't be removed by
+	# `make clean` without sudo.
+	@mkdir -p ./volumes/wordpress ./volumes/log ./volumes/mariadb
 	docker compose up -d
 
 ## Create the dev container and provision WordPress + the plugin
