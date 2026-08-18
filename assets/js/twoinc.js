@@ -4425,7 +4425,17 @@ let twoincSoleTrader = {
     jQuery("#" + twoincSoleTrader.differentSoleTraderBtnId).hide();
     // Re-show (e.g. country change) should prefetch afresh.
     twoincSoleTrader.lastPrefetchEmail = null;
-    if (twoincSoleTrader.mode === "sole_trader") {
+    // Refused while `isBusy()` (round-2 review — Han/Vader), same as the
+    // Business chip and `reopenSearch()`: this runs from `refresh()`, which
+    // fires on every `updated_checkout` — a coupon apply, a shipping-method
+    // change, a quantity edit, not only a country change (see `refresh()`'s
+    // own comment) — so an unconditional revert here dropped a signup that
+    // was still completing in the popup, the exact failure round 1 fixed for
+    // `watchPopupClose`'s own poll, reopened through this wider door. The
+    // flight/popup's own terminal branch (`applyPrefetch`, `watchPopupClose`)
+    // re-checks availability/adoption once it actually settles, so deferring
+    // here loses nothing.
+    if (twoincSoleTrader.mode === "sole_trader" && !twoincSoleTrader.isBusy()) {
       twoincSoleTrader.setMode("business");
     }
   },
@@ -4600,7 +4610,12 @@ let twoincSoleTrader = {
    */
   onModeChipClick: function (mode) {
     if (mode === "business") {
-      twoincSoleTrader.setMode("business");
+      // Not the real Business chip's own wiring today — that binds
+      // `setMode` directly with its own `isBusy()` guard (`buildBusinessChip`)
+      // — but this branch is part of the same public entry point, so it gets
+      // the same guard rather than silently regressing the moment something
+      // else calls it (round-2 review — Vader).
+      if (!twoincSoleTrader.isBusy()) twoincSoleTrader.setMode("business");
       return;
     }
     twoincSoleTrader.setMode("sole_trader");
@@ -4814,20 +4829,29 @@ let twoincSoleTrader = {
    */
   onEmailChanged: function () {
     if (!twoincSoleTrader.isAvailable()) {
-      // No flight is starting, so nothing will ever consume a pending chip
-      // decision (round-1 review — Vader): a country change can leave
-      // availability false right as `onModeChipClick`'s own call lands here.
-      // Dropped rather than left dangling for whatever unrelated flight
-      // settles next.
-      twoincSoleTrader.pendingChipDecisionEmail = null;
+      // No flight is starting FROM THIS CALL, so nothing this call does will
+      // ever consume a pending chip decision (round-1 review — Vader): a
+      // country change can leave availability false right as
+      // `onModeChipClick`'s own call lands here. Only dropped when nothing
+      // else is outstanding either (round-2 review — Han): an ALREADY
+      // in-flight request for the same email is still the intended consumer,
+      // and this early return must not pull the decision out from under it.
+      if (twoincSoleTrader.flightDepth === 0) {
+        twoincSoleTrader.pendingChipDecisionEmail = null;
+      }
       return;
     }
     const email = twoincSoleTrader.enteredEmail();
     // Dedupe repeated checkout re-renders firing for an unchanged email.
     if (email === twoincSoleTrader.lastPrefetchEmail) {
-      // Same reasoning as the `isAvailable()` guard above: no new flight
-      // starts here either.
-      twoincSoleTrader.pendingChipDecisionEmail = null;
+      // Same reasoning as the `isAvailable()` guard above (round-2 review —
+      // Han): WooCommerce fires this redundantly for an unchanged email, and
+      // a redundant call landing WHILE the real flight for this same email is
+      // still outstanding must not clear the decision that flight's own
+      // `applyPrefetch()` is about to serve.
+      if (twoincSoleTrader.flightDepth === 0) {
+        twoincSoleTrader.pendingChipDecisionEmail = null;
+      }
       return;
     }
     twoincSoleTrader.lastPrefetchEmail = email;
@@ -4835,7 +4859,11 @@ let twoincSoleTrader = {
     if (!email) {
       // No email to match → cannot be a known sole trader; leave business.
       twoincSoleTrader.pendingChipDecisionEmail = null;
-      if (twoincSoleTrader.mode === "sole_trader") {
+      // Refused while `isBusy()` (round-2 review — Han/Vader), same as
+      // `hide()` just above — a flight or popup for the email the buyer just
+      // cleared may still be outstanding, and its own terminal branch is
+      // what settles mode once it actually resolves.
+      if (twoincSoleTrader.mode === "sole_trader" && !twoincSoleTrader.isBusy()) {
         twoincSoleTrader.setMode("business");
       }
       return;

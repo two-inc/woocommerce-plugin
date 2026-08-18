@@ -753,5 +753,71 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         expect(soleTrader.pendingChipDecisionEmail).toBe(null);
       });
     });
+
+    describe("round-2 review regressions (Han/Vader) — isBusy() wired onto only 2 of the revert paths", () => {
+      test("hide() does not revert mode while a signup popup is still open", () => {
+        soleTrader.setMode("sole_trader");
+        const win = { closed: false };
+        window.open = jest.fn(() => win);
+        soleTrader.launchSignup();
+
+        // A coupon apply / shipping change / quantity edit fires
+        // `updated_checkout` -> refresh() -> hide(), independent of country.
+        soleTrader.hide();
+        expect(soleTrader.mode).toBe("sole_trader");
+
+        // The popup completes normally afterwards.
+        jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) =>
+          cb({ organization_number: "TWO:ST1", company_name: "A Sole Trader", email: "buyer@example.test" })
+        );
+        soleTrader.bindPopupMessageListener();
+        window.dispatchEvent(
+          new window.MessageEvent("message", {
+            data: "ACCEPTED",
+            origin: "https://checkout.example.test"
+          })
+        );
+
+        expect($("#company_id").val()).toBe("TWO:ST1");
+      });
+
+      test("hide() still reverts mode once nothing is outstanding", () => {
+        soleTrader.setMode("sole_trader");
+
+        soleTrader.hide();
+
+        expect(soleTrader.mode).toBe("business");
+      });
+
+      test("clearing the email mid-flight does not revert mode while a flight is still outstanding", () => {
+        const flight = armPendingPrefetch();
+        soleTrader.onModeChipClick("sole_trader");
+
+        $("#billing_email").val("");
+        soleTrader.onEmailChanged();
+        expect(soleTrader.mode).toBe("sole_trader");
+
+        flight.settle(null);
+        // The stale flight's own applyPrefetch() settles it once it actually
+        // resolves, matching against the now-empty email — no match, no
+        // pending click for it either, so it reverts.
+        expect(soleTrader.mode).toBe("business");
+      });
+
+      test("a redundant unchanged-email re-render mid-flight does not drop the pending chip decision", () => {
+        const flight = armPendingPrefetch();
+        soleTrader.onModeChipClick("sole_trader");
+        expect(soleTrader.pendingChipDecisionEmail).toBe("buyer@example.test");
+
+        // WooCommerce firing onEmailChanged again for the SAME email while
+        // the real flight for it is still outstanding must not clear the
+        // decision that flight's own applyPrefetch() is about to serve.
+        soleTrader.onEmailChanged();
+        expect(soleTrader.pendingChipDecisionEmail).toBe("buyer@example.test");
+
+        flight.settle(null);
+        expect(opened).toHaveLength(1);
+      });
+    });
   });
 });
