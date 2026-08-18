@@ -5491,9 +5491,20 @@ let twoincSoleTrader = {
       if (cb) cb(false);
       return;
     }
+    const country = twoincSoleTrader.currentCountry();
     jQuery
-      .post(cfg.tokens_url, { nonce: cfg.nonce, country: twoincSoleTrader.currentCountry() })
+      .post(cfg.tokens_url, { nonce: cfg.nonce, country: country })
       .done(function (response) {
+        // The buyer may have changed country while the request was in
+        // flight — same guard `refresh()` uses for availability (TWO-40,
+        // round-2 review — Vader). Without it, a slower request for the
+        // country the buyer just left can land after a newer one and
+        // overwrite `tokens` with delegated authority for the wrong
+        // jurisdiction.
+        if (twoincSoleTrader.currentCountry() !== country) {
+          if (cb) cb(false);
+          return;
+        }
         if (response && response.success && response.data && response.data.autofill_token) {
           twoincSoleTrader.tokens = response.data;
           twoincSoleTrader.bindPopupMessageListener();
@@ -5544,23 +5555,23 @@ let twoincSoleTrader = {
    * `fetchTokens` itself already has for its callers.
    *
    * Deliberately does NOT also call `beginFlight()`/`settleFlight()` itself
-   * (round-1 review — Vader/Leia/Han all proposed this): `onEmailChanged`
-   * never checks `isBusy()` before starting its OWN flight (it only reads
-   * `flightDepth` in its early-return branches), so holding the flag here
-   * would not stop that direction of the race — a chip-click/email-change
-   * mint can still start while this tick's request is outstanding either
-   * way. What it WOULD do is make `isBusy()` true for that window
-   * everywhere else it's read — the Business chip, `reopenSearch()`,
-   * click-to-reopen — silently deferring real buyer interactions for the
-   * length of a background network round trip they never asked for. Both
-   * concurrent writes to `tokens` in this race are valid, freshly-minted
-   * tokens for the current country; "last one wins" losing a slightly
-   * older-but-still-valid token is the same pre-existing, unsequenced
-   * last-write-wins behaviour `tokens` already has between two overlapping
-   * `onEmailChanged` calls, not a new failure mode this feature introduces.
-   * Closing it for real means gating `onEmailChanged`/`launchSignup`
-   * themselves, which is exactly the fragile flow this feature is scoped to
-   * leave alone.
+   * (round-1 review, rejected): `onEmailChanged` never checks `isBusy()`
+   * before starting its OWN flight (it only reads `flightDepth` in its
+   * early-return branches), so holding the flag here would not stop that
+   * direction of the race — a chip-click/email-change mint can still start
+   * while this tick's request is outstanding either way. What it WOULD do
+   * is make `isBusy()` true for that window everywhere else it's read — the
+   * Business chip, `reopenSearch()`, click-to-reopen — silently deferring
+   * real buyer interactions for the length of a background network round
+   * trip they never asked for. `fetchTokens`'s own country-staleness guard
+   * (round-2 review) means the two concurrent writes this race can produce
+   * are both valid mints for the country each request was actually made
+   * for; "last one wins" losing a slightly older-but-still-valid token is
+   * the same pre-existing, unsequenced last-write-wins behaviour `tokens`
+   * already has between two overlapping `onEmailChanged` calls, not a new
+   * failure mode this feature introduces. Closing it for real means gating
+   * `onEmailChanged`/`launchSignup` themselves, which is exactly the
+   * fragile flow this feature is scoped to leave alone.
    *
    * @returns {void}
    */

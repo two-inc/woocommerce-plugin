@@ -1287,21 +1287,41 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       expect(soleTrader.tokens.delegation_token).toBe("delegation-3");
     });
 
-    test("cleans up the timer, no further re-mints once stopped", () => {
+    test("a stale-country refresh response is discarded rather than overwriting a newer mint (round-2 review — Vader)", () => {
+      // The buyer changes billing country while the refresh tick's own
+      // request is still outstanding. Applying it anyway would ship
+      // delegated authority for the country they just left.
       realMint();
-      soleTrader.stopTokenRefresh();
-      expect(soleTrader.tokenRefreshIntervalId).toBeNull();
+      jest.advanceTimersByTime(30 * 60 * 1000);
+      const staleTick = ajax.last();
 
-      jest.advanceTimersByTime(60 * 60 * 1000);
-      expect(ajax.calls).toHaveLength(1);
+      $("#billing_country").append('<option value="DE">DE</option>');
+      $("#billing_country").val("DE");
+      staleTick.succeed({
+        success: true,
+        data: {
+          delegation_token: "stale-gb-delegation",
+          autofill_token: "stale-gb-autofill",
+          signup_url: "https://checkout.example.test/soletrader/signup"
+        }
+      });
+
+      expect(soleTrader.tokens.delegation_token).toBe("delegation-1");
     });
 
-    test("a real `pagehide` (page unload) stops the timer, not just a direct call", () => {
-      // Exercises the actual `window.addEventListener("pagehide", ...)`
-      // wiring — a test that only calls `stopTokenRefresh()` directly would
-      // still pass even if that wiring were deleted (round-1 review — Leia).
+    test.each([
+      ["a direct stopTokenRefresh() call", () => soleTrader.stopTokenRefresh()],
+      [
+        // Exercises the actual `window.addEventListener("pagehide", ...)`
+        // wiring — a test that only calls `stopTokenRefresh()` directly
+        // would still pass even if that wiring were deleted (round-1
+        // review — Leia; collapsed round-2 review — Leia).
+        "a real pagehide dispatch",
+        () => window.dispatchEvent(new Event("pagehide"))
+      ]
+    ])("cleans up the timer, no further re-mints once stopped, via %s", (_description, stop) => {
       realMint();
-      window.dispatchEvent(new Event("pagehide"));
+      stop();
       expect(soleTrader.tokenRefreshIntervalId).toBeNull();
 
       jest.advanceTimersByTime(60 * 60 * 1000);
