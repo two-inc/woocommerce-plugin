@@ -968,7 +968,12 @@ class TwoCompanySearch {
     const helper = twoincSelectWooHelper;
     const mode = twoincSoleTrader.mode === "sole_trader" ? "sole_trader" : "business";
 
-    jQuery("#" + helper.modeChipsWrapperId)
+    // By class, not `"#" + id` — same reason as `syncManualEntryButton`'s
+    // own lookup (see its comment): an id selector only ever finds ONE
+    // wrapper even when a stale, orphaned one shares the id, and this is
+    // called from every `setMode()` switch, not only right after
+    // `syncManualEntryButton` has already deduped.
+    jQuery("." + helper.modeChipsWrapperClass)
       .find("." + helper.modeChipClass)
       .each(function () {
         jQuery(this).toggleClass("twoinc-mode-chip--selected", jQuery(this).data("mode") === mode);
@@ -2222,23 +2227,65 @@ class TwoCompanySearch {
    * visible at once).
    *
    * Paired on `update_checkout` the same way, and for the same ordering
-   * reason, as `detachCompanySearchTileWrapperToSafety` above — but
-   * unconditional, not gated on `company_search_location`: a live widget
-   * whose `<select>` is torn out from under it by a fragment replace
-   * (`replaceWith`, never `select2("destroy")`) never runs selectWoo's own
-   * AttachBody cleanup, so its dropdown — appended straight to `<body>`,
-   * never a child of the replaced element — is orphaned there, still
-   * visible, forever. `close()` while the widget can still do it properly
-   * detaches that dropdown itself, so there is nothing left standing for a
-   * fragment swap moments later to orphan. A no-op if nothing is open.
+   * reason, as `detachCompanySearchTileWrapperToSafety` above — and gated
+   * the SAME way too, on `company_search_location`. WooCommerce's own
+   * `update_checkout` AJAX only ever replaces the `.woocommerce-checkout-payment`
+   * fragment; `#billing_company_display` is a descendant of that fragment
+   * only when the search control has been moved into the payment tile —
+   * `'address_area'`, the default, renders it in the ordinary billing
+   * fields, which this AJAX never touches. Closing unconditionally would
+   * slam the buyer's open dropdown shut on every unrelated `update_checkout`
+   * (a coupon apply, a shipping-method change, a quantity edit) for every
+   * merchant on the default config, for a danger that config was never
+   * exposed to.
+   *
+   * Where it IS exposed: a live widget whose `<select>` is torn out from
+   * under it by a fragment replace (`replaceWith`, never
+   * `select2("destroy")`) never runs selectWoo's own AttachBody cleanup, so
+   * its dropdown — appended straight to `<body>`, never a child of the
+   * replaced element — is orphaned there, still visible, forever (TWO-40,
+   * live-reported by Doug: two `.select2-results` panels, each with its own
+   * `#company_mode_chips`, visible at once). `close()` while the widget can
+   * still do it properly detaches that dropdown itself, so there is nothing
+   * left standing for the fragment swap moments later to orphan. A no-op if
+   * nothing is open.
+   *
+   * Goes through `closeCompanySearchDropdown()` rather than
+   * `.select2("close")` directly, matching this file's own established
+   * idiom for the same reason that helper's doc comment gives: the plugin
+   * dispatch throws on a page where the widget was never attached.
+   *
+   * selectWoo's `close()` schedules an unconditional `$selection.focus()`
+   * 1ms later (vendored bundle, `container.on('close')` — the same quirk
+   * `focusIsBackOnCompanyField()`'s own comment documents). This handler
+   * fires for `update_checkout` triggers that have nothing to do with the
+   * company field — a coupon apply, a shipping-method change — so unlike
+   * the Tab-shortcut fix elsewhere in this file, there is no new target to
+   * fight for: whatever legitimately had focus before this ran gets it
+   * back if selectWoo steals it away.
+   *
+   * Refused while `twoincSoleTrader.isBusy()` — same restraint
+   * `onEmailChanged`/`reopenSearch`/the Business chip already give this
+   * exact widget elsewhere in the file. `beginFlight()`'s own comment is
+   * explicit that the dropdown (and its busy spinner) are deliberately
+   * left open through a sole-trader autofill/popup round trip; `close()`
+   * here mid-flight would silently swap that spinner out from under the
+   * buyer for no reason tied to this fix.
    *
    * @returns {void}
    */
   closeCompanySearchBeforeCheckoutUpdate() {
-    const $display = jQuery("#billing_company_display");
-    if ($display.data("select2") && $display.data("select2").isOpen()) {
-      $display.select2("close");
-    }
+    if (window.twoinc.company_search_location !== "payment_tile") return;
+    if (twoincSoleTrader.isBusy()) return;
+
+    const $previouslyFocused = jQuery(document.activeElement);
+    twoincSelectWooHelper.closeCompanySearchDropdown();
+
+    setTimeout(function () {
+      if (!twoincSelectWooHelper.focusIsBackOnCompanyField()) return;
+      if ($previouslyFocused.is(document.activeElement)) return;
+      $previouslyFocused.trigger("focus");
+    }, 20);
   }
 
   /**

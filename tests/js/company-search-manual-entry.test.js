@@ -428,8 +428,13 @@ describe("company-search manual-entry affordance", () => {
      * fragment-swap handler on that same event) closes the dropdown while
      * the widget can still detach it properly, so a fragment replace
      * moments later has nothing open left to orphan.
+     *
+     * Gated on `payment_tile` — the only config where WooCommerce's
+     * `update_checkout` AJAX can ever touch this field at all — so every
+     * test in this describe block sets it explicitly.
      */
     test("closeCompanySearchBeforeCheckoutUpdate leaves nothing for a fragment replace to orphan", () => {
+      window.twoinc.company_search_location = "payment_tile";
       openWithAffordance();
       expect($(".select2-results").length).toBe(1);
 
@@ -449,12 +454,34 @@ describe("company-search manual-entry affordance", () => {
       expect($(".select2-results").length).toBe(1);
     });
 
+    test("a no-op on the default 'address_area' config — WooCommerce never touches this field there", () => {
+      openWithAffordance();
+      expect(window.twoinc.company_search_location).not.toBe("payment_tile");
+
+      helper.closeCompanySearchBeforeCheckoutUpdate();
+
+      expect($("#billing_company_display").data("select2").isOpen()).toBe(true);
+      expect($(".select2-results").length).toBe(1);
+    });
+
     test("a no-op when nothing is open", () => {
+      window.twoinc.company_search_location = "payment_tile";
       openWithAffordance();
       $("#billing_company_display").select2("close");
 
       expect(() => helper.closeCompanySearchBeforeCheckoutUpdate()).not.toThrow();
       expect($(".select2-results").length).toBe(0);
+    });
+
+    test("a no-op while a sole-trader autofill flight is outstanding, even in payment_tile mode", () => {
+      window.twoinc.company_search_location = "payment_tile";
+      openWithAffordance();
+      ctx.soleTrader.flightDepth = 1;
+
+      helper.closeCompanySearchBeforeCheckoutUpdate();
+
+      expect($("#billing_company_display").data("select2").isOpen()).toBe(true);
+      ctx.soleTrader.flightDepth = 0;
     });
   });
 
