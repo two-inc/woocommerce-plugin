@@ -881,7 +881,7 @@ class TwoCompanySearch {
 
   /**
    * "Registered Company" mode chip (TWO-40 §0). A no-op while already in
-   * business mode, or while `twoincSoleTrader.isBusy()` — see the click
+   * business mode, or while `twoincSoleTrader.isDeciding()` — see the click
    * handler's own comment (TWO-40 §7 correction: the dropdown/widget this
    * chip lives in now deliberately survives a sole-trader autofill flight
    * or open signup popup, so it IS reachable during that wait, not only in
@@ -899,14 +899,18 @@ class TwoCompanySearch {
       .addClass(helper.modeChipClass)
       .text(label)
       .on("click", function () {
-        // Refused while a sole-trader autofill flight or signup popup is
-        // outstanding (TWO-40 §7 correction, round-1 review — Han/Vader):
-        // this chip only coexists with `sole_trader` mode DURING that wait
-        // (an adopted sole trader destroys the widget it lives in), so
-        // acting on it mid-wait raced the buyer against the flight/popup's
-        // own resolution — `applyPrefetch` or the ACCEPTED handler could
-        // silently reassert or drop what the click just tried to undo.
-        if (twoincSoleTrader.mode === "business" || twoincSoleTrader.isBusy()) return;
+        // Refused while sole-trader mode is still DECIDING what it is
+        // (TWO-40 §7 correction, round-1 review — Han/Vader): this chip only
+        // coexists with `sole_trader` mode DURING that wait (an adopted sole
+        // trader destroys the widget it lives in), so acting on it mid-wait
+        // raced the buyer against the flight/popup's own resolution —
+        // `applyPrefetch` or the ACCEPTED handler could silently reassert or
+        // drop what the click just tried to undo. `isDeciding()`, not the
+        // wider `isBusy()` (round-3 review — Vader): once adopted, the
+        // outcome is already settled and only the popup-close poll hasn't
+        // caught up yet — refusing the click for that stretch too is a UX
+        // regression, not a safety guard.
+        if (twoincSoleTrader.mode === "business" || twoincSoleTrader.isDeciding()) return;
         twoincSoleTrader.setMode("business");
       });
   }
@@ -2818,7 +2822,20 @@ class TwoCompanySearch {
     // own new flag opened up. Same shape as the existing "remove the
     // button before deferring" reentrancy guard in `activateManualEntry`,
     // one level further out.
-    if (twoincSoleTrader.mode === "sole_trader") return;
+    //
+    // `isDeciding()` too (TWO-40 §7 round-3 review — Han): the same deferred
+    // landing can arrive while a sole-trader autofill flight is still
+    // outstanding and `mode` hasn't flipped to `sole_trader` yet — without
+    // this, a match resolving afterwards fully overwrites whatever this
+    // function touched anyway (`applyPrefetch` → `setCompany` →
+    // `lockCapturedFields`), so today it's harmless, but only by that
+    // terminal-branch-wins coincidence; guarding here directly is what every
+    // other entry into/out of sole-trader mode already does. Not `isBusy()`
+    // (round-3 review — Vader): once already adopted this is unreachable
+    // anyway (the mode check above already returns), so the distinction is
+    // moot here, but `isDeciding()` is the correct predicate for "the buyer
+    // is choosing something else" and keeps every such guard consistent.
+    if (twoincSoleTrader.mode === "sole_trader" || twoincSoleTrader.isDeciding()) return;
 
     window.twoinc.enable_company_search = "no";
     // Distinguishes THIS route into "search suppressed" from the other two
@@ -4305,6 +4322,25 @@ let twoincSoleTrader = {
   pendingChipDecisionEmail: null,
 
   /**
+   * Supersession counter for the autofill prefetch (TWO-40 §7 correction,
+   * round-3 review — Vader) — same idiom as `addressLookupSeq`/
+   * `orderIntentCheck.seq` elsewhere in this file. Bumped by `onEmailChanged`
+   * every time it actually starts a new flight; each flight's `applyPrefetch`
+   * call is stamped with the value at ITS start.
+   *
+   * `flightDepth > 0` cannot answer "is this response still the latest
+   * word" — by the time a flight's own callback runs, `settleFlight()` has
+   * already decremented depth for THAT flight, so depth alone looks
+   * identical whether one flight is settling alone or is the second of two.
+   * Two flights for two different emails, the newer started before the
+   * older settled: if the older's stale response lands after the newer
+   * already adopted a match, only a per-flight sequence number distinguishes
+   * "the newest word" from "a stale one" — `flightDepth` reads the same
+   * (zero) either way once both have settled.
+   */
+  prefetchSeq: 0,
+
+  /**
    * True once `setCompany()` has actually adopted a company while in
    * sole-trader mode THIS time through (TWO-40 §7 correction, round-1
    * review — Vader). Reset by every `setMode()` call, so it never reads a
@@ -4611,11 +4647,12 @@ let twoincSoleTrader = {
   onModeChipClick: function (mode) {
     if (mode === "business") {
       // Not the real Business chip's own wiring today — that binds
-      // `setMode` directly with its own `isBusy()` guard (`buildBusinessChip`)
-      // — but this branch is part of the same public entry point, so it gets
-      // the same guard rather than silently regressing the moment something
-      // else calls it (round-2 review — Vader).
-      if (!twoincSoleTrader.isBusy()) twoincSoleTrader.setMode("business");
+      // `setMode` directly with its own `isDeciding()` guard
+      // (`buildBusinessChip`) — but this branch is part of the same public
+      // entry point, so it gets the same guard rather than silently
+      // regressing the moment something else calls it (round-2 review —
+      // Vader; predicate corrected to `isDeciding()` round-3 — Vader).
+      if (!twoincSoleTrader.isDeciding()) twoincSoleTrader.setMode("business");
       return;
     }
     twoincSoleTrader.setMode("sole_trader");
@@ -4665,6 +4702,27 @@ let twoincSoleTrader = {
    */
   isBusy: function () {
     return twoincSoleTrader.flightDepth > 0 || twoincSoleTrader.activePopupWatchers.length > 0;
+  },
+
+  /**
+   * Is sole-trader mode still DECIDING what it is — as opposed to already
+   * adopted, with `activePopupWatchers` only nonzero because the poll hasn't
+   * yet noticed the popup window closed (TWO-40 §7 correction, round-3
+   * review — Vader)?
+   *
+   * `isBusy()` alone over-blocks a direct, explicit buyer action to LEAVE
+   * sole-trader mode (the Business chip, `reopenSearch()`, manual entry):
+   * once `soleTraderAdopted` is true the outcome is already settled — the
+   * captured fields are locked and showing — and refusing the click for
+   * that last stretch of the popup-close poll is a real UX regression, not
+   * a safety guard. `watchPopupClose()`'s own revert already reads
+   * `soleTraderAdopted` directly rather than this, since its question is
+   * the opposite one ("did THIS wait end with nothing captured").
+   *
+   * @returns {boolean}
+   */
+  isDeciding: function () {
+    return twoincSoleTrader.isBusy() && !twoincSoleTrader.soleTraderAdopted;
   },
 
   /**
@@ -4799,17 +4857,22 @@ let twoincSoleTrader = {
    * reopened dropdown, the same landing `exitManualCompanyEntry()` gives a
    * buyer leaving manual entry.
    *
-   * Refused while `isBusy()` (round-1 review — Han/Vader): a captured field
-   * only readonly-locks once `lockCapturedFields()` runs, which is deferred
-   * for the whole autofill/popup wait (see `setMode`'s comment) — reverting
-   * mode out from under that wait is what dropped a completed signup on the
-   * floor, because `bindPopupMessageListener`'s ACCEPTED handler also gates
-   * on `mode === "sole_trader"`.
+   * Refused while `isDeciding()` (round-1 review — Han/Vader; predicate
+   * corrected round-3 — Vader): a captured field only readonly-locks once
+   * `lockCapturedFields()` runs, which is deferred for the whole autofill/
+   * popup wait (see `setMode`'s comment) — reverting mode out from under
+   * that wait is what dropped a completed signup on the floor, because
+   * `bindPopupMessageListener`'s ACCEPTED handler also gates on
+   * `mode === "sole_trader"`. Not the wider `isBusy()`: once adopted, this
+   * is exactly the state Doug's bug 3 describes ("once a sole trader is
+   * selected... click into the field again") — refusing the click just
+   * because the popup-close poll hasn't caught up yet would silently
+   * reintroduce that bug for the whole length of the poll.
    *
    * @returns {void}
    */
   reopenSearch: function () {
-    if (twoincSoleTrader.mode !== "sole_trader" || twoincSoleTrader.isBusy()) return;
+    if (twoincSoleTrader.mode !== "sole_trader" || twoincSoleTrader.isDeciding()) return;
     twoincSoleTrader.setMode("business");
     if (
       !twoincSelectWooHelper.openCompanySearchDropdown() &&
@@ -4869,13 +4932,17 @@ let twoincSoleTrader = {
       return;
     }
     // One flight for the whole token-mint + buyer-lookup round trip, settled
-    // on EVERY terminal branch below (TWO-40 §7).
+    // on EVERY terminal branch below (TWO-40 §7). Stamped with the CURRENT
+    // seq before starting (round-3 review — Vader) — see `prefetchSeq`'s own
+    // comment — so `applyPrefetch` can tell whether this is still the
+    // latest flight by the time it settles.
+    const seq = ++twoincSoleTrader.prefetchSeq;
     twoincSoleTrader.beginFlight();
     twoincSoleTrader.fetchTokens(function (ok) {
       if (!ok) {
         twoincSoleTrader.prefetched = { ready: true, buyer: null, matches: false };
         twoincSoleTrader.settleFlight();
-        twoincSoleTrader.applyPrefetch();
+        twoincSoleTrader.applyPrefetch(seq);
         return;
       }
       twoincSoleTrader.fetchCurrentBuyer(function (buyer) {
@@ -4885,7 +4952,7 @@ let twoincSoleTrader = {
           matches: twoincSoleTrader.buyerOwnsCheckoutEmail(buyer)
         };
         twoincSoleTrader.settleFlight();
-        twoincSoleTrader.applyPrefetch();
+        twoincSoleTrader.applyPrefetch(seq);
       });
     });
   },
@@ -4913,8 +4980,21 @@ let twoincSoleTrader = {
    * React to a resolved prefetch: a matching buyer auto-selects Sole trader
    * and prefills the company; a non-match reverts an active Sole-trader
    * selection back to Registered business (re-clicking then starts signup).
+   *
+   * @param {number} [seq] this flight's `prefetchSeq` snapshot, from
+   *   `onEmailChanged` — see that flag's own comment. Omitted only by direct
+   *   test calls; every real caller passes it.
    */
-  applyPrefetch: function () {
+  applyPrefetch: function (seq) {
+    if (seq !== undefined && seq !== twoincSoleTrader.prefetchSeq) {
+      // Superseded by a newer flight for a different email (round-3 review
+      // — Vader): a second flight can start and settle entirely before this
+      // one's stale response lands (see `prefetchSeq`'s own comment for why
+      // `flightDepth` alone can't tell). Acting on it now — either branch,
+      // match or revert — would stomp whatever the newer flight already
+      // decided.
+      return;
+    }
     const pf = twoincSoleTrader.prefetched;
     // Keyed on the CURRENTLY entered email, not just "was something
     // pending" (round-1 review — Han/Vader) — see the flag's own comment for
@@ -4937,7 +5017,16 @@ let twoincSoleTrader = {
       // popup now, the moment the wait `onModeChipClick` deferred is over,
       // rather than reflexively at click time.
       twoincSoleTrader.launchSignup();
-    } else if (twoincSoleTrader.mode === "sole_trader") {
+    } else if (twoincSoleTrader.mode === "sole_trader" && !twoincSoleTrader.isBusy()) {
+      // `isBusy()` too (round-3 review — Vader): `flightDepth` is a COUNT
+      // specifically because a second flight for a newer email can start
+      // before an earlier one settles (see its own doc comment). Without
+      // this, a stale flight for an email the buyer has since moved on from
+      // — one that settles AFTER a second, later flight already matched and
+      // adopted a company — reverted that just-adopted state to business,
+      // tearing the widget back down under it. The later flight's own
+      // settle (or an open popup's own close) is what's actually authoritative
+      // here, so deferring loses nothing.
       twoincSoleTrader.setMode("business");
     }
   },
@@ -6816,7 +6905,21 @@ class Twoinc {
     // an incidental consequence of an unrelated call, not a guarantee.
     twoincSelectWooHelper.resetCompanySearchSpinner();
 
-    twoincSelectWooHelper.clearSelectedCompany();
+    // Skipped entirely while sole-trader mode owns the field (round-3
+    // review — Han): this rebuilds the search widget and wipes
+    // `#company_id`/`#billing_company` via `twoincCompanyCapture.write()`
+    // unconditionally — including a company already ADOPTED this
+    // sole-trader session, and including the dropdown a flight/popup wait
+    // is deliberately keeping alive (the whole point of round 1). Neither
+    // is what an ordinary company search/address lookup being invalidated
+    // by a country change means here, and `mode` itself was left stranded
+    // at `sole_trader` afterwards with nothing left in the fields to match
+    // it. `refresh()` below (sole-trader availability, re-evaluated for the
+    // new country) is what decides whether to revert — via `hide()`'s own
+    // `isBusy()` guard — once there is something to decide from.
+    if (twoincSoleTrader.mode !== "sole_trader") {
+      twoincSelectWooHelper.clearSelectedCompany();
+    }
 
     // AFTER clearSelectedCompany, deliberately: that function resets
     // `customerCompany` to {} wholesale, so setting the country prefix before

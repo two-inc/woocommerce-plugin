@@ -819,5 +819,142 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         expect(opened).toHaveLength(1);
       });
     });
+
+    describe("round-3 review regressions (Han/Vader) — concurrent flights, isDeciding() vs isBusy(), country change", () => {
+      /**
+       * Prime `countryDidChange`'s own tracker to the current GB before a
+       * test switches the country — it returns false (no change) on its
+       * very first call regardless of the field's value, so a test that
+       * calls `syncBillingCountry()` only once would never reach the
+       * "real country change" branch it means to exercise at all.
+       */
+      function primeCountry() {
+        ctx.helper.countryDidChange("GB");
+      }
+
+      /** Arms fetchTokens/fetchCurrentBuyer to hand back every resolve callback in call order. */
+      function armConcurrentFlights() {
+        jest.spyOn(soleTrader, "fetchTokens").mockImplementation((cb) => cb(true));
+        const callbacks = [];
+        jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => {
+          callbacks.push(cb);
+        });
+        return callbacks;
+      }
+
+      test("a stale flight for an earlier email does not revert a later flight's already-adopted match", () => {
+        const callbacks = armConcurrentFlights();
+
+        $("#billing_email").val("first@example.test");
+        soleTrader.onEmailChanged();
+        $("#billing_email").val("second@example.test");
+        soleTrader.onEmailChanged();
+        expect(callbacks).toHaveLength(2);
+
+        // The SECOND (current-email) flight resolves and adopts first.
+        callbacks[1]({
+          organization_number: "TWO:ST2",
+          company_name: "Second Co",
+          email: "second@example.test"
+        });
+        expect(soleTrader.mode).toBe("sole_trader");
+        expect($("#company_id").val()).toBe("TWO:ST2");
+
+        // The FIRST flight's stale response lands after — no match against
+        // the current email, and must not stomp what the newer flight
+        // already adopted.
+        callbacks[0](null);
+        expect(soleTrader.mode).toBe("sole_trader");
+        expect($("#company_id").val()).toBe("TWO:ST2");
+      });
+
+      test("the Business chip works once adopted even while the popup-close poll hasn't caught up yet", () => {
+        soleTrader.setMode("sole_trader");
+        const win = { closed: false };
+        window.open = jest.fn(() => win);
+        soleTrader.launchSignup();
+        soleTrader.setCompany("TWO:ST1", "A Sole Trader");
+        // Popup handle never reports closed — activePopupWatchers stays
+        // nonzero, so isBusy() alone would refuse this even though the
+        // outcome (adopted) is already settled.
+        expect(soleTrader.isBusy()).toBe(true);
+
+        ctx.helper.buildBusinessChip().trigger("click");
+
+        expect(soleTrader.mode).toBe("business");
+      });
+
+      test("clicking the captured field works once adopted even while the popup-close poll hasn't caught up yet", () => {
+        $("form[name='checkout']").after('<div id="order_review"></div>');
+        ctx.Twoinc.getInstance().initialize(false);
+        soleTrader.setMode("sole_trader");
+        const win = { closed: false };
+        window.open = jest.fn(() => win);
+        soleTrader.launchSignup();
+        soleTrader.setCompany("TWO:ST1", "A Sole Trader");
+        expect(soleTrader.isBusy()).toBe(true);
+
+        $("#billing_company").trigger("click");
+
+        expect(soleTrader.mode).toBe("business");
+      });
+
+      test("a real country change does not wipe an already-adopted sole trader while leaving mode stranded", () => {
+        primeCountry();
+        // A real adopted buyer always has an email — that's how the match
+        // happened — so `refresh()`'s own trailing `onEmailChanged()` (which
+        // otherwise correctly reverts on NO email at all) is a no-op re-entry
+        // here, dedupe against the already-recorded `lastPrefetchEmail`.
+        $("#billing_email").val("buyer@example.test");
+        soleTrader.lastPrefetchEmail = "buyer@example.test";
+        soleTrader.setMode("sole_trader");
+        soleTrader.setCompany("TWO:ST1", "A Sole Trader");
+        soleTrader.availabilityByCountry.SE = true;
+
+        $("#billing_country").append('<option value="SE">SE</option>');
+        $("#billing_country").val("SE");
+        ctx.Twoinc.getInstance().syncBillingCountry();
+
+        expect($("#company_id").val()).toBe("TWO:ST1");
+        expect(soleTrader.mode).toBe("sole_trader");
+      });
+
+      test("a real country change does not wipe a sole-trader flight still in progress", () => {
+        primeCountry();
+        const flight = armPendingPrefetch();
+        soleTrader.onModeChipClick("sole_trader");
+        soleTrader.availabilityByCountry.SE = true;
+
+        $("#billing_country").append('<option value="SE">SE</option>');
+        $("#billing_country").val("SE");
+        ctx.Twoinc.getInstance().syncBillingCountry();
+
+        // The in-flight request for the outgoing country still gets to
+        // settle and decide, rather than having its target fields wiped out
+        // from under it mid-flight.
+        flight.settle({
+          organization_number: "TWO:ST1",
+          company_name: "Sole Co",
+          email: "buyer@example.test"
+        });
+        expect($("#company_id").val()).toBe("TWO:ST1");
+      });
+
+      test("a country change still clears an ordinary company search pick as before", () => {
+        // Through the real write path, not a raw `.val()` — `clearSelectedCompany()`
+        // gates the name clear on provenance (TWO-40 §5), and a raw `.val()`
+        // carries no provenance marker at all.
+        primeCountry();
+        ctx.capture.write("Existing Co", "556677-1234");
+        soleTrader.mode = "business";
+        soleTrader.availabilityByCountry.SE = true;
+
+        $("#billing_country").append('<option value="SE">SE</option>');
+        $("#billing_country").val("SE");
+        ctx.Twoinc.getInstance().syncBillingCountry();
+
+        expect($("#billing_company").val()).toBe("");
+      });
+    });
   });
 });
