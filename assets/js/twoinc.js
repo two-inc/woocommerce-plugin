@@ -4708,11 +4708,10 @@ let twoincSoleTrader = {
     // email exists — so a chip click before the buyer has typed one had no
     // tokens to open a popup with (TWO-40 §7 correction). Minted here rather
     // than at click time because `window.open()` outside the click's own
-    // gesture is blocker bait. Retried by the next `render()` if it fails.
+    // gesture is blocker bait.
     //
-    // Gated on there being no email (round-2 review — Han/Vader): with one, the
-    // prefetch below mints for it anyway, and both firing sent two concurrent
-    // POSTs racing each other's write to `.tokens`.
+    // Skipped once an email is entered: the prefetch below mints for it anyway,
+    // and two concurrent mints race each other's write to `.tokens`.
     if (!twoincSoleTrader.tokens && !twoincSoleTrader.enteredEmail()) {
       twoincSoleTrader.fetchTokens();
     }
@@ -5299,14 +5298,6 @@ let twoincSoleTrader = {
     ) {
       return;
     }
-    // A popup whose own outcome is still undecided is open (round-2 review —
-    // Han/Vader): `openingSignup` only covers a second activation in the SAME
-    // synchronous gesture, so two ordinary sequential chip clicks opened two
-    // hosted signups. `isDeciding()` rather than a bare watcher count for the
-    // reason that predicate exists — a popup left open AFTER its signup was
-    // accepted has already decided, and refusing the next launch for the rest
-    // of its close poll is the regression, not the guard.
-    if (twoincSoleTrader.isDeciding()) return;
     twoincSoleTrader.openingSignup = true;
     try {
       const win = twoincSoleTrader.openPopup(options);

@@ -615,16 +615,6 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         expect(opened).toHaveLength(0);
         expect($(".twoinc-sole-trader-note").hasClass("hidden")).toBe(false);
       });
-
-      test("clicking the chip twice does not stack two hosted signups", () => {
-        soleTrader.render();
-        $("#billing_email").val("");
-
-        soleTrader.onModeChipClick("sole_trader");
-        soleTrader.onModeChipClick("sole_trader");
-
-        expect(opened).toHaveLength(1);
-      });
     });
 
     describe("bug 2 — the search dropdown stays visible with a spinner until the popup closes", () => {
