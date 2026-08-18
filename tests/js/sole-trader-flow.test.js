@@ -105,6 +105,10 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     // that opens a popup and never closes it otherwise leaves that poll
     // running for the rest of the file.
     soleTrader.stopAllPopupWatchers();
+    // Same shape again, for the TWO-40 token-refresh `setInterval` (TWO-40):
+    // a test that reaches a real successful mint starts it, and it would
+    // otherwise keep firing against a stale module for the rest of the file.
+    soleTrader.stopTokenRefresh();
     harness.releaseWidgets($);
     document.body.innerHTML = "";
   });
@@ -1193,6 +1197,103 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         $("#billing_company").trigger("click");
         expect(soleTrader.mode).toBe("business");
       });
+    });
+  });
+
+  describe("TWO-40 — delegated-auth token refresh", () => {
+    let ajax;
+
+    beforeEach(() => {
+      ajax = harness.stubAjax($);
+      jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+      ajax.restore();
+      jest.useRealTimers();
+    });
+
+    /** Drive `onEmailChanged()` through a REAL (stubbed-network) token mint. */
+    function realMint() {
+      $("#billing_email").val("buyer@example.test");
+      jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => cb(null));
+      soleTrader.onEmailChanged();
+      ajax.last().succeed({
+        success: true,
+        data: {
+          delegation_token: "delegation-1",
+          autofill_token: "autofill-1",
+          signup_url: "https://checkout.example.test/soletrader/signup"
+        }
+      });
+    }
+
+    test("does not start eagerly on page load, only `tokens` being pre-set", () => {
+      // `beforeEach` above assigns `soleTrader.tokens` directly, not via a
+      // real mint — a buyer who has never touched sole trader must not get a
+      // background refresh loop for a token nobody minted.
+      expect(soleTrader.tokenRefreshIntervalId).toBeNull();
+    });
+
+    test("starts on the first real mint and re-mints at the 30-minute mark", () => {
+      realMint();
+      expect(soleTrader.tokenRefreshIntervalId).not.toBeNull();
+      expect(ajax.calls).toHaveLength(1);
+
+      jest.advanceTimersByTime(30 * 60 * 1000);
+      expect(ajax.calls).toHaveLength(2);
+
+      ajax.last().succeed({
+        success: true,
+        data: {
+          delegation_token: "delegation-2",
+          autofill_token: "autofill-2",
+          signup_url: "https://checkout.example.test/soletrader/signup"
+        }
+      });
+      expect(soleTrader.tokens.delegation_token).toBe("delegation-2");
+    });
+
+    test("does not fire a second, uncoordinated mint while a real one is already in flight", () => {
+      realMint();
+      // A chip-click/email-change flight outstanding — `isBusy()`, the same
+      // guard those paths use against each other.
+      soleTrader.beginFlight();
+
+      jest.advanceTimersByTime(30 * 60 * 1000);
+
+      expect(ajax.calls).toHaveLength(1);
+      soleTrader.settleFlight();
+    });
+
+    test("a failed re-mint is silent, and the next tick tries again", () => {
+      realMint();
+
+      jest.advanceTimersByTime(30 * 60 * 1000);
+      expect(() => ajax.last().fail("error")).not.toThrow();
+      // The failed tick's tokens are left in place rather than cleared.
+      expect(soleTrader.tokens.delegation_token).toBe("delegation-1");
+
+      jest.advanceTimersByTime(30 * 60 * 1000);
+      expect(ajax.calls).toHaveLength(3);
+      ajax.last().succeed({
+        success: true,
+        data: {
+          delegation_token: "delegation-3",
+          autofill_token: "autofill-3",
+          signup_url: "https://checkout.example.test/soletrader/signup"
+        }
+      });
+      expect(soleTrader.tokens.delegation_token).toBe("delegation-3");
+    });
+
+    test("cleans up the timer, no further re-mints once stopped", () => {
+      realMint();
+      soleTrader.stopTokenRefresh();
+      expect(soleTrader.tokenRefreshIntervalId).toBeNull();
+
+      jest.advanceTimersByTime(60 * 60 * 1000);
+      expect(ajax.calls).toHaveLength(1);
     });
   });
 });

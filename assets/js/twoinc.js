@@ -5497,6 +5497,7 @@ let twoincSoleTrader = {
         if (response && response.success && response.data && response.data.autofill_token) {
           twoincSoleTrader.tokens = response.data;
           twoincSoleTrader.bindPopupMessageListener();
+          twoincSoleTrader.scheduleTokenRefresh();
           if (cb) cb(true);
         } else {
           if (cb) cb(false);
@@ -5505,6 +5506,57 @@ let twoincSoleTrader = {
       .fail(function () {
         if (cb) cb(false);
       });
+  },
+
+  /** Live id from `scheduleTokenRefresh`, so `stopTokenRefresh` (and tests) can clear it. */
+  tokenRefreshIntervalId: null,
+
+  /**
+   * Keep the delegation/autofill tokens alive across a long checkout
+   * (TWO-40). Tokens are short-lived; a buyer who sits on checkout past
+   * their expiry would otherwise find autofill and the signup popup broken
+   * on a stale token the next time either needs one — including via
+   * "select a different sole trader", which reads `tokens` long after
+   * adoption (see `openPopup`).
+   *
+   * Started once, from the first successful mint — not eagerly on page
+   * load, since a buyer who never touches the sole-trader flow never mints
+   * a token and has nothing to refresh.
+   *
+   * @returns {void}
+   */
+  scheduleTokenRefresh: function () {
+    if (twoincSoleTrader.tokenRefreshIntervalId) return;
+    twoincSoleTrader.tokenRefreshIntervalId = setInterval(
+      twoincSoleTrader.refreshTokens,
+      30 * 60 * 1000
+    );
+    window.addEventListener("pagehide", twoincSoleTrader.stopTokenRefresh);
+  },
+
+  /**
+   * The 30-minute refresh tick. Skipped, silently, while a mint from the
+   * normal user-driven path (chip click / email-change prefetch, or the
+   * signup popup itself) is already outstanding — `isBusy()` is the same
+   * guard those paths use against each other, and that flight's own settle
+   * leaves `tokens` fresh regardless. A failed re-mint (network error,
+   * expired session) is left for the next scheduled tick, same tolerance
+   * `fetchTokens` itself already has for its callers.
+   *
+   * @returns {void}
+   */
+  refreshTokens: function () {
+    if (twoincSoleTrader.isBusy()) return;
+    twoincSoleTrader.fetchTokens(function () {});
+  },
+
+  /**
+   * @returns {void}
+   */
+  stopTokenRefresh: function () {
+    clearInterval(twoincSoleTrader.tokenRefreshIntervalId);
+    twoincSoleTrader.tokenRefreshIntervalId = null;
+    window.removeEventListener("pagehide", twoincSoleTrader.stopTokenRefresh);
   },
 
   /**
