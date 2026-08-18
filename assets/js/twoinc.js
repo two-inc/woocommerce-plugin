@@ -4356,28 +4356,33 @@ let twoincSoleTrader = {
   soleTraderAdopted: false,
 
   /**
-   * True while a SECOND signup — "select a different sole trader",
-   * launched from an already-adopted state — is being decided (TWO-40 §7
-   * correction, round-4 review — Han/Vader).
+   * How many "select a different sole trader" re-signups are outstanding
+   * (TWO-40 §7 correction, round-4 review — Han/Vader; made a COUNT round-5
+   * — Han/Vader).
    *
    * `soleTraderAdopted` is a one-way latch set by the FIRST adoption and
    * never cleared except by `setMode()` — which a re-signup never calls,
    * mode stays `sole_trader` throughout. Without this, `isDeciding()`
    * (`isBusy() && !soleTraderAdopted`) read the stale `true` from the first
-   * adoption as "already settled" during the second flight too, so
+   * adoption as "already settled" during a re-signup's own flight too, so
    * `reopenSearch()` and the Business chip refused nothing — a buyer
-   * clicking a captured field WHILE the second popup was still open could
-   * revert to business mode and clear the fields, and the second popup's
-   * own later "ACCEPTED" then landed with `mode !== "sole_trader"` and was
-   * silently dropped by `bindPopupMessageListener`.
+   * clicking a captured field WHILE that popup was still open could revert
+   * to business mode and clear the fields, and the popup's own later
+   * "ACCEPTED" then landed with `mode !== "sole_trader"` and was silently
+   * dropped by `bindPopupMessageListener`.
    *
-   * Set by the "select a different sole trader" link's own activation,
-   * cleared once that specific flight is over — resolved (`setCompany()`
-   * runs the same as any adoption), errored (`showError()`), or the popup
-   * simply closes without either (`watchPopupClose`) — never left to
-   * outlive the flight it was raised for.
+   * A COUNT, not a boolean (round-5 review — Han/Vader; same shape as
+   * `flightDepth`'s own doc comment, and found the same way — nothing
+   * disables the "select a different sole trader" link while a re-signup
+   * for it is already in flight, so a buyer closing one popup and
+   * re-clicking within the SAME 300ms poll window opens a second, genuinely
+   * concurrent re-signup: the first popup's own stale poll then clears a
+   * bare boolean while the second is still very much open and undecided).
+   * Incremented by `launchSignup` for every re-signup it opens, decremented
+   * — clamped at zero, same reason `settleFlight` is — by whichever of
+   * THAT flight's own terminal branches resolves first.
    */
-  soleTraderReconfirming: false,
+  soleTraderReconfirmingCount: 0,
 
   /**
    * True while the ACCEPTED-postMessage handler's own `fetchCurrentBuyer()`
@@ -4754,7 +4759,7 @@ let twoincSoleTrader = {
   isDeciding: function () {
     return (
       twoincSoleTrader.isBusy() &&
-      (!twoincSoleTrader.soleTraderAdopted || twoincSoleTrader.soleTraderReconfirming)
+      (!twoincSoleTrader.soleTraderAdopted || twoincSoleTrader.soleTraderReconfirmingCount > 0)
     );
   },
 
@@ -4770,8 +4775,9 @@ let twoincSoleTrader = {
     // round-1 review — Vader) — see the flag's own comment.
     twoincSoleTrader.soleTraderAdopted = false;
     // Same reset, for the same reason (round-4 review — Han/Vader): whatever
-    // re-signup this mode switch interrupted has nothing left to reconfirm.
-    twoincSoleTrader.soleTraderReconfirming = false;
+    // re-signup(s) this mode switch interrupted have nothing left to
+    // reconfirm.
+    twoincSoleTrader.soleTraderReconfirmingCount = 0;
     twoincSoleTrader.updateChips();
     twoincSoleTrader.syncDifferentSoleTraderLink();
 
@@ -5080,23 +5086,29 @@ let twoincSoleTrader = {
   launchSignup: function (options) {
     if (twoincSoleTrader.openingSignup) return;
     twoincSoleTrader.openingSignup = true;
-    if (options && options.autoselect === false) {
-      // The ONLY caller passing this is the "select a different sole
-      // trader" link (round-4 review — Han/Vader) — a genuinely new
-      // decision, launched from an already-adopted state where
-      // `soleTraderAdopted` is stale-true for the whole duration. See
-      // `soleTraderReconfirming`'s own comment for why `isDeciding()` needs
-      // this to tell the two apart. Cleared by whichever of this specific
-      // flight's own terminal branches runs first — `watchPopupClose` (the
-      // popup closes) or `bindPopupMessageListener`'s ACCEPTED handler (it
-      // resolves, either way).
-      twoincSoleTrader.soleTraderReconfirming = true;
-    }
     try {
       const win = twoincSoleTrader.openPopup(options);
       twoincSoleTrader.showNote(!win);
       if (win) {
-        twoincSoleTrader.watchPopupClose(win);
+        // The ONLY caller passing `autoselect: false` is the "select a
+        // different sole trader" link (round-4 review — Han/Vader) — a
+        // genuinely new decision, launched from an already-adopted state
+        // where `soleTraderAdopted` is stale-true for the whole duration.
+        // See `soleTraderReconfirmingCount`'s own comment for why
+        // `isDeciding()` needs this to tell the two apart.
+        //
+        // Incremented only once a popup has actually opened (round-5 review
+        // — Han/Vader): a BLOCKED re-signup popup calls neither
+        // `watchPopupClose` nor the ACCEPTED handler, so incrementing
+        // unconditionally at the top of this function — as this used to —
+        // stranded the count above zero until the next unrelated
+        // `setMode()` call reset it, wrongly refusing every direct "leave
+        // sole-trader mode" action in the meantime.
+        const isReconfirming = !!(options && options.autoselect === false);
+        if (isReconfirming) {
+          twoincSoleTrader.soleTraderReconfirmingCount += 1;
+        }
+        twoincSoleTrader.watchPopupClose(win, isReconfirming);
       }
     } finally {
       // Released once the synchronous open has returned, blocked or not — see
@@ -5130,18 +5142,31 @@ let twoincSoleTrader = {
    * is the sole authority once a signup has actually completed.
    *
    * @param {Window} win the popup returned by `window.open`
+   * @param {boolean} [isReconfirming] whether THIS popup was a "select a
+   *   different sole trader" re-signup — round-5 review (Han/Vader): only
+   *   decrement `soleTraderReconfirmingCount` for the popup that actually
+   *   incremented it. A bare "decrement on every close" would let an
+   *   unrelated popup's poll steal a decrement meant for a DIFFERENT,
+   *   still-open re-signup — the exact cross-contamination the counter
+   *   exists to avoid (same shape as `flightDepth`'s own COUNT-not-boolean
+   *   reasoning, one level deeper).
    * @returns {void}
    */
-  watchPopupClose: function (win) {
+  watchPopupClose: function (win, isReconfirming) {
     twoincSoleTrader.beginFlight();
     const poll = setInterval(function () {
       if (!win.closed) return;
       twoincSoleTrader.stopWatchingPopup(poll);
       twoincSoleTrader.settleFlight();
-      // Whatever this specific popup was deciding is over now, one way or
-      // another (round-4 review — Han/Vader) — a re-signup's own flag must
-      // not outlive the window it was raised for.
-      twoincSoleTrader.soleTraderReconfirming = false;
+      if (isReconfirming) {
+        // Whatever THIS popup was deciding is over now, one way or another
+        // — clamped, same reason `settleFlight` is, so an unbalanced count
+        // can't go negative.
+        twoincSoleTrader.soleTraderReconfirmingCount = Math.max(
+          0,
+          twoincSoleTrader.soleTraderReconfirmingCount - 1
+        );
+      }
       if (
         twoincSoleTrader.mode === "sole_trader" &&
         !twoincSoleTrader.soleTraderAdopted &&
@@ -5430,11 +5455,24 @@ let twoincSoleTrader = {
           twoincSoleTrader.settleFlight();
           twoincSoleTrader.signupConfirming = false;
           // Whichever it was, this flight's own decision is now made
-          // (round-4 review — Han/Vader) — see `soleTraderReconfirming`'s own
-          // comment. Cleared here rather than only on popup close so a
-          // resolved re-signup un-blocks the Business chip/`reopenSearch()`
-          // immediately, not after another 300ms poll cycle.
-          twoincSoleTrader.soleTraderReconfirming = false;
+          // (round-4 review — Han/Vader) — see `soleTraderReconfirmingCount`'s
+          // own comment. Decremented here rather than only on popup close so
+          // a resolved re-signup un-blocks the Business chip/`reopenSearch()`
+          // immediately, not after another 300ms poll cycle. Clamped, same
+          // reason `watchPopupClose`'s own decrement is: this ONE global
+          // message listener has no way to tell which of possibly several
+          // open popups an "ACCEPTED" came from, so it cannot conditionally
+          // decrement only for a re-signup's the way `watchPopupClose` does
+          // with its per-call `isReconfirming` flag — a genuinely
+          // simultaneous first-time-signup-plus-re-signup is not reachable
+          // through today's UI (the "select a different" link only appears
+          // once already adopted, and a first signup only ever opens before
+          // adoption), so this is a defensive clamp, not a proven-safe
+          // no-op.
+          twoincSoleTrader.soleTraderReconfirmingCount = Math.max(
+            0,
+            twoincSoleTrader.soleTraderReconfirmingCount - 1
+          );
           if (resolved) {
             twoincSoleTrader.setCompany(buyer.organization_number, buyer.company_name, buyer);
             twoincSoleTrader.showNote(false);
