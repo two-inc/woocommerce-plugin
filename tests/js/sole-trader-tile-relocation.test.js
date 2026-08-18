@@ -148,6 +148,49 @@ describe("sole-trader toggle follows the search control (TWO-40)", () => {
       insertAfterSpy.mockRestore();
     });
 
+    /**
+     * Round 1 review (Vader): the populated-summary case above isn't the
+     * common one — `toggleBusinessFields()` calls `renderCompanySummary()`
+     * unconditionally on every payment-method/country/mode switch, so the
+     * summary is usually created and anchored EMPTY/hidden, before any
+     * company has ever been captured. The anchor logic only cares about DOM
+     * position, not visibility, but this proves that rather than assuming it.
+     */
+    test("settles after the company summary node even when the summary is still empty and hidden", () => {
+      ctx.helper.renderCompanySummary();
+
+      soleTrader.refresh();
+
+      const $toggle = $(".twoinc-sole-trader-toggle");
+      const $summary = $("#" + ctx.helper.companySummaryId);
+      expect($summary.length).toBe(1);
+      expect($summary.hasClass("hidden")).toBe(true);
+      expect($toggle.prev()[0]).toBe($summary[0]);
+    });
+
+    /**
+     * Round 2 review (Han): the fallback anchor (no summary created yet)
+     * must match `getCompanySummaryNode()`'s own field-vs-wrapper choice,
+     * not always the bare field — on the pay-for-order page
+     * `syncCompanyFieldWrappers()` hides the whole `.twoinc-inp-container`
+     * wrapper, not just the field, and `getCompanySummaryNode()` anchors on
+     * that wrapper there (see its own doc comment). Anchoring the toggle on
+     * the bare field instead would settle it one level inside a container
+     * the summary will anchor OUTSIDE of as soon as it next runs — this
+     * traced path is inert today (every real caller creates the summary
+     * first), but the fallback must still be correct on its own terms.
+     */
+    test("falls back to the field's .twoinc-inp-container wrapper, not the bare field, when no summary exists yet", () => {
+      $("#billing_company_display_field").wrap('<div class="twoinc-inp-container"></div>');
+      const $wrapper = $("#billing_company_display_field").parent();
+
+      soleTrader.refresh();
+
+      const $toggle = $(".twoinc-sole-trader-toggle");
+      expect($("#" + ctx.helper.companySummaryId).length).toBe(0);
+      expect($toggle.prev()[0]).toBe($wrapper[0]);
+    });
+
     test("survives a WooCommerce-style fragment replace of .woocommerce-checkout-payment without duplicating", () => {
       soleTrader.refresh();
       expect($(".twoinc-sole-trader-toggle").length).toBe(1);

@@ -1838,20 +1838,34 @@ class TwoCompanySearch {
    * it exists, not the bare search field itself (live-verified bug, found
    * post-merge on the WooCommerce dev shop): `getCompanySummaryNode()`
    * re-anchors that node immediately after `#billing_company_display_field`
-   * on EVERY `renderCompanySummary()` call — which fires far more often
-   * than this function does, and unconditionally wins the "right after the
-   * field" position regardless of what this function last did. Anchoring
-   * here on the bare field too meant this function's own idempotency guard
-   * (below) could never be satisfied in production — the toggle's actual
-   * previous sibling is always the summary node, never the field — so
-   * `insertAfter()` fired on every single call instead of skipping once
-   * truly in place. Anchoring on the summary instead (falling back to the
-   * field only when the summary doesn't exist yet) makes the two
-   * mechanisms compatible rather than fighting over the same slot: the
-   * summary always settles right after the field, and this function always
-   * settles right after wherever the summary currently is — a stable
-   * order (field, summary, toggle) regardless of which runs first on a
-   * given cycle.
+   * (or its `.twoinc-inp-container` wrapper — see below) on EVERY
+   * `renderCompanySummary()` call. Anchoring here on the bare field too
+   * meant this function's own idempotency guard (below) could never be
+   * satisfied in production — the toggle's actual previous sibling is
+   * always the summary node, never the field — so `insertAfter()` fired on
+   * every single call instead of skipping once truly in place. Anchoring
+   * on the summary instead (falling back to the field only when the
+   * summary doesn't exist yet) makes the two mechanisms compatible rather
+   * than fighting over the same slot: the summary always settles right
+   * after the field, and this function always settles right after
+   * wherever the summary currently is.
+   *
+   * In practice `toggleBusinessFields()` — which every real caller of
+   * `twoincSoleTrader.refresh()` runs synchronously beforehand, in the same
+   * tick — always calls `renderCompanySummary()` before this function ever
+   * runs (round 2 review — Han), so the summary-not-yet-created fallback
+   * below is not live on any traced path today; kept anyway because
+   * nothing guarantees that call order forever, and it costs nothing to be
+   * right about it now.
+   *
+   * The fallback mirrors `getCompanySummaryNode()`'s own field-vs-wrapper
+   * choice (round 2 review — Han) rather than always anchoring on the bare
+   * field: on the pay-for-order page, `syncCompanyFieldWrappers()` hides the
+   * whole `.twoinc-inp-container` wrapper, not just the field inside it, so
+   * anchoring on the bare field there would settle the toggle one level
+   * inside a container `getCompanySummaryNode()` will anchor OUTSIDE of as
+   * soon as it next runs — the exact class of bug this function exists to
+   * fix, one level down.
    *
    * Guarded on the toggle's CURRENT previous sibling, same idempotency
    * reasoning as `syncCompanySearchTileLocation()` above: an unconditional
@@ -1881,7 +1895,9 @@ class TwoCompanySearch {
     if (!$companyField.length) return;
 
     const $summary = jQuery("#" + twoincSelectWooHelper.companySummaryId);
-    const $anchor = $summary.length ? $summary : $companyField;
+    const $fieldWrapper = $companyField.closest(".twoinc-inp-container");
+    const $fallback = $fieldWrapper.length ? $fieldWrapper : $companyField;
+    const $anchor = $summary.length ? $summary : $fallback;
 
     const $toggle = jQuery(
       twoincSelectWooHelper.paymentTileScopeSelector() + " .twoinc-sole-trader-toggle"
