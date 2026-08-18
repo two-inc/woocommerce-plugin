@@ -87,10 +87,35 @@ for arg in "$@"; do
   fi
 done
 
-# Kill any existing frpc from a previous run
+# Kill any existing frpc from a previous run - by PIDFILE (this checkout)
+# AND by scanning for any other frpc process running from a DIFFERENT
+# worktree/checkout of this same repo. PROXY_USER defaults to the plain
+# $USER, so every worktree of this repo registers the identical FRP
+# subdomain; a PIDFILE in one worktree has no visibility into an frpc
+# process started from another, which is how two worktrees running
+# `make install`/`make run` on the same day collide with "proxy [name]
+# already exists" even though neither one's own PIDFILE looks stale.
+#
+# Scoped by matching the process's cwd against THIS repo's root (via git,
+# so it covers both the main checkout and every .worktrees/ entry) rather
+# than a bare `pkill -f "frpc -c frpc.toml"` - that command line is
+# identical across prestashop-plugin/magento-plugin's own frpc processes
+# too, and killing another repo's live tunnel would be worse than the bug
+# this is fixing.
 if [ -f "$PIDFILE" ]; then
   kill "$(cat "$PIDFILE")" 2>/dev/null
   rm -f "$PIDFILE"
+fi
+REPO_COMMON="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"
+REPO_ROOT="$(dirname "$REPO_COMMON")"
+if [ -n "$REPO_ROOT" ]; then
+  for pid in $(pgrep -f "frpc -c frpc.toml" 2>/dev/null); do
+    pid_cwd=$(readlink -f "/proc/$pid/cwd" 2>/dev/null)
+    case "$pid_cwd" in
+      "$REPO_ROOT"*) kill "$pid" 2>/dev/null ;;
+    esac
+  done
+  sleep 1
 fi
 
 # Resolve FRP auth token
