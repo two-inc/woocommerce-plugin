@@ -312,37 +312,18 @@
 }
 
 /*
- * Manual-entry row inside the company-search results list (TWO-25288).
- *
- * A real <button> now, so its native chrome has to be reset to read as the
- * link it visually is — the same treatment #search_company_btn already gets
- * below. `display: block` + full width keeps it filling the dropdown the way
- * the old option row did; the padding roughly matches selectWoo's own option
- * row padding so it doesn't look like a foreign element bolted underneath.
- * Kept as a flat single-id selector so brand overlays that recolour it keep
- * matching without raising their own specificity.
- *
- * `text-transform: none` is new (round 2, #30.x.5). It was never needed while
- * this was an `<li>` — this <button> tag is what makes it a target for a host
- * theme's generic `button { text-transform: uppercase; }` styling, which
- * plenty of themes apply for CTA-style buttons. An `<li role="option">` never
- * matched that selector; a real `<button>` always will. `!important` because
- * that kind of theme rule is routinely `!important` itself (buttons are a
- * common place themes fight plugins for the last word), and this element has
- * no reason to ever want the theme's button casing.
+ * The "Enter Manually" mode chip (TWO-25288, restyled as a chip TWO-40 §0).
+ * Visual styling (pill shape, colours, focus-safe font/cursor) now comes
+ * from the shared `.twoinc-mode-chip` class this button also carries — see
+ * that rule. This id-selector rule survives ALONE for one property: round
+ * 2's `text-transform: none !important` (#30.x.5), which a host theme's own
+ * `button { text-transform: uppercase !important; }` styling can otherwise
+ * still beat by importance regardless of specificity. Kept as a flat
+ * single-id selector, same as `#search_company_btn` below, so a brand
+ * overlay recolouring it keeps matching without raising its own specificity.
  */
 #company_not_in_btn {
-  display: block;
-  width: 100%;
-  text-align: left;
-  cursor: pointer;
-  color: #3043d1;
-  background: none;
-  border: 0;
   text-transform: none !important;
-  border-top: 1px solid #eeeeee;
-  font: inherit;
-  padding: 6px 12px;
 }
 
 #company_not_in_btn:hover,
@@ -661,14 +642,16 @@
 
 /* Sole trader toggle (TWO-24754) */
 /*
- * Sole-trader mode chips + signup note. Palette mirrors the Magento
- * .mode_selector / .mode_item toggle: brand-blue text on white for the
- * unselected chip, solid brand blue with white text when selected.
+ * The signup-prompt note + in-flight error only (TWO-40 §0 correction). The
+ * mode CHIPS themselves render inside the company-search dropdown — see
+ * `.twoinc-mode-chips`/`.twoinc-mode-chip` below — never in this
+ * always-present payment-tile slot; this was the same DOM-placement defect
+ * ported wrong twice before this correction.
  */
-.twoinc-sole-trader-toggle {
+.twoinc-sole-trader-note-slot {
   margin: 12px 0;
 }
-.twoinc-sole-trader-toggle.hidden {
+.twoinc-sole-trader-note-slot.hidden {
   display: none;
 }
 
@@ -696,12 +679,24 @@
 .twoinc-company-search-tile-slot.hidden {
   display: none;
 }
-.twoinc-mode-selector {
+/*
+ * Mode chips (TWO-40 §0): `.two-company-mode-chips` equivalent, one wrapper
+ * level in from the company-search dropdown — see
+ * twoincSelectWooHelper.syncManualEntryButton() in twoinc.js, which is the
+ * ONE place these render, as children of the dropdown's own results panel,
+ * never as a separate persistent tile. Palette mirrors the Magento
+ * .mode_selector / .mode_item toggle this replaces: brand-blue text on
+ * white for the unselected chip, solid brand blue with white text when
+ * selected — selection is cosmetic only, never a visibility mechanism.
+ */
+.twoinc-mode-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  padding: 6px 12px;
+  border-top: 1px solid #eeeeee;
 }
-.twoinc-mode-item {
+.twoinc-mode-chip {
   text-align: center;
   padding: 5px 12px;
   border-radius: 5px;
@@ -710,8 +705,10 @@
   background-color: #fff;
   cursor: pointer;
   user-select: none;
+  font: inherit;
+  text-transform: none !important;
 }
-.twoinc-mode-item--selected {
+.twoinc-mode-chip--selected {
   color: #fff;
   background-color: #3043d1;
   border-color: #3043d1;

@@ -676,6 +676,27 @@ class TwoCompanySearch {
   searchCompanyBtnId = "search_company_btn";
 
   /**
+   * DOM id of the mode-chips group (TWO-40 §0) — the `.two-company-mode-chips`
+   * equivalent, one level in from the dropdown, direct sibling of the
+   * results list. Holds the "Registered Company" chip, the "Sole Trader"
+   * chip (only while available), and the "Enter Manually" chip
+   * (`manualEntryRowId`), in that order.
+   */
+  modeChipsWrapperId = "company_mode_chips";
+
+  /** Class on the mode-chips group wrapper. */
+  modeChipsWrapperClass = "twoinc-mode-chips";
+
+  /** Shared class on every button inside the mode-chips group. */
+  modeChipClass = "twoinc-mode-chip";
+
+  /** DOM id of the "Registered Company" mode chip. */
+  businessChipId = "company_mode_chip_business";
+
+  /** DOM id of the "Sole Trader" mode chip. */
+  soleTraderChipId = "company_mode_chip_sole_trader";
+
+  /**
    * Text for a company search that could not be completed. Read lazily
    * because window.twoinc is populated by the checkout render; the literal
    * is the last-resort fallback for a page where the localised string is
@@ -777,13 +798,16 @@ class TwoCompanySearch {
   }
 
   /**
-   * Label of the manual-entry row (TWO-25288). Read lazily for the same
-   * reason as the hints above.
+   * Label of the "Enter Manually" mode chip (TWO-40 §0). Read lazily for the
+   * same reason as the hints above.
+   *
+   * Was "My company is not on the list" (TWO-25288). That copy is gone
+   * outright, not kept alongside this chip — it has been fully absorbed
+   * into this one label.
    */
-  companyNotInListText() {
+  enterManuallyText() {
     return (
-      (window.twoinc && window.twoinc.text && window.twoinc.text.company_not_in_list) ||
-      "My company is not on the list"
+      (window.twoinc && window.twoinc.text && window.twoinc.text.enter_manually) || "Enter Manually"
     );
   }
 
@@ -819,14 +843,19 @@ class TwoCompanySearch {
    * primary mouse button — no bespoke keydown bridge and no button check to
    * hand-roll.
    *
+   * Now one of three `.twoinc-mode-chip` buttons inside `.twoinc-mode-chips`
+   * (TWO-40 §0) — see `buildBusinessChip`/`buildSoleTraderChip` and
+   * `syncManualEntryButton`, which places the group as a whole.
+   *
    * @returns {Object} jQuery-wrapped <button>
    */
   buildManualEntryButton() {
     const helper = twoincSelectWooHelper;
 
     return jQuery("<button></button>")
-      .attr({ id: helper.manualEntryRowId, type: "button" })
-      .text(helper.companyNotInListText())
+      .attr({ id: helper.manualEntryRowId, type: "button", "data-mode": "manual" })
+      .addClass(helper.modeChipClass)
+      .text(helper.enterManuallyText())
       .on("click", function () {
         helper.activateManualEntry();
       });
@@ -851,8 +880,91 @@ class TwoCompanySearch {
   }
 
   /**
-   * Put the manual-entry button right after the results list, or take it
-   * away (#30.x.1).
+   * "Registered Company" mode chip (TWO-40 §0). Clicking it while already in
+   * business mode is a no-op — the dropdown is only ever open in business
+   * mode to begin with (sole-trader/manual both close and destroy the
+   * widget), so this exists for the one case it IS reachable: business mode
+   * itself, confirming/no-op.
+   *
+   * @returns {Object} jQuery-wrapped <button>
+   */
+  buildBusinessChip() {
+    const helper = twoincSelectWooHelper;
+    const cfg = twoincSoleTrader.config();
+    const label = (cfg.text && cfg.text.registered_business) || "Registered Company";
+
+    return jQuery("<button></button>")
+      .attr({ id: helper.businessChipId, type: "button", "data-mode": "business" })
+      .addClass(helper.modeChipClass)
+      .text(label)
+      .on("click", function () {
+        if (twoincSoleTrader.mode !== "business") twoincSoleTrader.setMode("business");
+      });
+  }
+
+  /**
+   * "Sole Trader" mode chip (TWO-40 §0). Only ever added to the group while
+   * `twoincSoleTrader.isAvailable()` — see `syncSoleTraderChip`.
+   *
+   * @returns {Object} jQuery-wrapped <button>
+   */
+  buildSoleTraderChip() {
+    const helper = twoincSelectWooHelper;
+    const cfg = twoincSoleTrader.config();
+    const label = (cfg.text && cfg.text.sole_trader) || "Sole Trader";
+
+    return jQuery("<button></button>")
+      .attr({ id: helper.soleTraderChipId, type: "button", "data-mode": "sole_trader" })
+      .addClass(helper.modeChipClass)
+      .text(label)
+      .on("click", function () {
+        twoincSoleTrader.onModeChipClick("sole_trader");
+      });
+  }
+
+  /**
+   * Add or remove the sole-trader chip to match current availability
+   * (TWO-40 §0/§1). Split out from `syncManualEntryButton` because
+   * availability resolves asynchronously per country and can change while
+   * the dropdown is already open and the rest of the group already built.
+   *
+   * @returns {void}
+   */
+  syncSoleTraderChip() {
+    const helper = twoincSelectWooHelper;
+    const $existing = jQuery("#" + helper.soleTraderChipId);
+
+    if (twoincSoleTrader.isAvailable()) {
+      if (!$existing.length) {
+        jQuery("#" + helper.businessChipId).after(helper.buildSoleTraderChip());
+      }
+    } else {
+      $existing.remove();
+    }
+  }
+
+  /**
+   * Cosmetic-only selected-chip class (TWO-40 §0) — never a visibility
+   * mechanism. Manual entry has no "selected" state of its own worth
+   * tracking here: activating it destroys the widget the chips live in, so
+   * there is nothing left to paint a class onto.
+   *
+   * @returns {void}
+   */
+  updateModeChipsSelection() {
+    const helper = twoincSelectWooHelper;
+    const mode = twoincSoleTrader.mode === "sole_trader" ? "sole_trader" : "business";
+
+    jQuery("#" + helper.modeChipsWrapperId)
+      .find("." + helper.modeChipClass)
+      .each(function () {
+        jQuery(this).toggleClass("twoinc-mode-chip--selected", jQuery(this).data("mode") === mode);
+      });
+  }
+
+  /**
+   * Put the mode-chips group right after the results list, or take it away
+   * (#30.x.1, TWO-40 §0).
    *
    * A SIBLING of `.select2-results__options`, not a child of it, so it sits
    * outside the part of the dropdown that scrolls: always visible the moment
@@ -861,26 +973,24 @@ class TwoCompanySearch {
    * results list lives in — so it reads as part of the same panel, just
    * beneath the scrollable area rather than the last row inside it.
    *
-   * Visibility rule is "search UI active and nothing captured yet", NOT the
-   * search threshold (TWO-25326 §2, found live 2026-08-02).
+   * Holds all three mode chips as ONE group, one wrapper level in from the
+   * dropdown (TWO-40 §0 — the same DOM-placement defect ported wrong twice
+   * before this): "Registered Company", "Sole Trader" (while available) and
+   * "Enter Manually", in that order, so the manual-entry chip — and its own
+   * Tab shortcut, keyed on `manualEntryRowId` — stays the group's last
+   * child and the last tabbable element in the document, unchanged from
+   * before this group existed.
    *
-   * It used to be the threshold and nothing else, which meant the button did
-   * not exist in the DOM at all until the buyer had typed three characters.
-   * Doug's requirement is the opposite: a buyer who already knows their
-   * company is not in the registry must have a route into manual entry
-   * WITHOUT typing a doomed query first, so the button is present from the
-   * moment the dropdown opens. `bindManualEntryAffordance` therefore also
-   * calls this on `select2:open`, not only on `input` — with a threshold gate
-   * an open-with-nothing-typed dropdown had nothing to sync.
+   * Visibility rule is "search UI active", NOT the search threshold
+   * (TWO-25326 §2, found live 2026-08-02) and NOT a company already
+   * captured (found live 2026-08-02, same date, a second regression): the
+   * group only ever exists inside the dropdown, so it is only ever on
+   * screen while the dropdown is open — and the dropdown being open IS the
+   * buyer searching. There is no independent visibility switch on the group
+   * or on any one chip; the dropdown's own open/closed state is the only
+   * one (TWO-40 §0).
    *
-   * The one thing that DOES hide it is a company already being captured: the
-   * gate reads the display select's own value, which is written by the
-   * picker's select handler and cleared by `clearSelectedCompany`. A buyer
-   * who picks a company and then reopens the dropdown to change it is past
-   * the point where "not on the list" means anything, and the ticket calls
-   * that state out explicitly.
-   *
-   * Note this leaves the button in the dropdown's subtree while the dropdown
+   * Note this leaves the group in the dropdown's subtree while the dropdown
    * is closed. That is not a stray tab-stop: selectWoo's AttachBody decorator
    * DETACHES the whole dropdown container from the document on close, so a
    * node inside it is not focusable, not rendered and not reachable by Tab
@@ -895,34 +1005,26 @@ class TwoCompanySearch {
     if (!picker || !picker.$results || !picker.$results.length) return;
 
     const $list = picker.$results;
-    const $existing = jQuery("#" + helper.manualEntryRowId);
-
-    // No capture gate. There was one — the button was removed as soon as
-    // `#billing_company_display` held a value — and it was wrong, found live
-    // by Doug 2026-08-02: pick a company, reopen the dropdown to change it,
-    // and there was no route into manual entry at all any more. Worse than
-    // the threshold gate it replaced, because typing no longer brought it
-    // back either.
-    //
-    // §2's "hidden once a company IS selected" cannot mean that. This button
-    // only ever exists inside the dropdown, so it is only ever on screen
-    // while the dropdown is open — and the dropdown being open IS the buyer
-    // searching again. "Hidden once selected" is satisfied by the dropdown
-    // being shut; it does not extend to locking a buyer out of manual entry
-    // because of a pick they are in the middle of correcting.
-    //
-    // That gate also silently disabled the Tab shortcut, since the handler
-    // below keys on the button existing — which is how one regression
-    // presented as two (§2 invisible, §4 keyboard trap).
+    let $wrapper = jQuery("#" + helper.modeChipsWrapperId);
 
     // Already there, immediately after the current results list: nothing to
     // do. Load-bearing rather than an optimisation for the same reason it was
     // before: an unconditional re-append on every keystroke would tear down
-    // and rebuild the same node for no reason.
-    if ($existing.length && $existing.prev().is($list)) return;
+    // and rebuild the same nodes for no reason.
+    if (!$wrapper.length || !$wrapper.prev().is($list)) {
+      $wrapper.remove();
+      $wrapper = jQuery("<div>", {
+        id: helper.modeChipsWrapperId,
+        class: helper.modeChipsWrapperClass,
+        role: "radiogroup"
+      });
+      $wrapper.append(helper.buildBusinessChip());
+      $wrapper.append(helper.buildManualEntryButton());
+      $list.after($wrapper);
+    }
 
-    $existing.remove();
-    $list.after(helper.buildManualEntryButton());
+    helper.syncSoleTraderChip();
+    helper.updateModeChipsSelection();
   }
 
   /**
@@ -1342,7 +1444,7 @@ class TwoCompanySearch {
       if (this.tabIndex < 0) return;
       if (jQuery(this).closest(".select2-container--open, .select2-dropdown").length) return;
       if (twoincSelectWooHelper.isHiddenForTabbing(this)) return;
-      if (!((anchor.compareDocumentPosition(this) & 4) /* DOCUMENT_POSITION_FOLLOWING */)) return;
+      if (!(anchor.compareDocumentPosition(this) & 4 /* DOCUMENT_POSITION_FOLLOWING */)) return;
       found.push(this);
     });
 
@@ -4192,8 +4294,8 @@ let twoincSoleTrader = {
    */
   refresh: function () {
     const cfg = twoincSoleTrader.config();
-    const $container = jQuery(".twoinc-sole-trader-toggle");
-    if (!cfg.availability_url || $container.length === 0) {
+    const $noteSlot = jQuery(".twoinc-sole-trader-note-slot");
+    if (!cfg.availability_url || $noteSlot.length === 0) {
       twoincSoleTrader.hide();
       return;
     }
@@ -4236,10 +4338,14 @@ let twoincSoleTrader = {
     } else {
       twoincSoleTrader.hide();
     }
+    // The sole-trader mode CHIP lives inside the company-search dropdown
+    // (TWO-40 §0), not here — re-sync it so an availability change while
+    // the dropdown is already open adds/removes the chip live.
+    twoincSelectWooHelper.syncManualEntryButton();
   },
 
   hide: function () {
-    jQuery(".twoinc-sole-trader-toggle").addClass("hidden").empty();
+    jQuery(".twoinc-sole-trader-note-slot").addClass("hidden").empty();
     jQuery("#" + twoincSoleTrader.differentSoleTraderBtnId).hide();
     // Re-show (e.g. country change) should prefetch afresh.
     twoincSoleTrader.lastPrefetchEmail = null;
@@ -4250,35 +4356,18 @@ let twoincSoleTrader = {
 
   render: function () {
     const cfg = twoincSoleTrader.config();
-    const $container = jQuery(".twoinc-sole-trader-toggle");
+    const $container = jQuery(".twoinc-sole-trader-note-slot");
     $container.empty().removeClass("hidden");
-
-    // Mode chips (mirrors the Magento .mode_selector / .mode_item rendering).
-    const $selector = jQuery("<div>", { class: "twoinc-mode-selector" });
-    [
-      { value: "business", label: cfg.text.registered_business },
-      { value: "sole_trader", label: cfg.text.sole_trader }
-    ].forEach(function (option) {
-      const $chip = jQuery("<span>", {
-        class: "twoinc-mode-item",
-        text: option.label,
-        role: "button",
-        tabindex: 0,
-        "data-mode": option.value
-      }).on("click keypress", function (event) {
-        if (event.type === "keypress" && event.which !== 13 && event.which !== 32) {
-          return;
-        }
-        event.preventDefault();
-        twoincSoleTrader.onModeChipClick(option.value);
-      });
-      $selector.append($chip);
-    });
-    $container.append($selector);
 
     // Bell-icon note + signup link — shown only when sole-trader mode is
     // active and signup is needed (no matching autofill), and as the
     // fallback when an auto-launched popup is blocked.
+    //
+    // The mode CHIPS themselves (TWO-40 §0 — the same DOM-placement defect
+    // ported wrong twice before this) are NOT built here: they render as
+    // children of the company-search dropdown — see
+    // twoincSelectWooHelper.syncManualEntryButton()/syncSoleTraderChip() —
+    // never as part of this always-present payment-tile note slot.
     const $note = jQuery(
       '<div class="twoinc-sole-trader-note hidden">' +
         '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">' +
@@ -4297,19 +4386,18 @@ let twoincSoleTrader = {
       .appendTo($note);
     $container.append($note);
 
-    twoincSoleTrader.updateChips();
     // Prefetch for an already-filled email (returning/logged-in buyer), so a
     // known sole trader is auto-selected without waiting for an email edit.
     twoincSoleTrader.onEmailChanged();
   },
 
+  /**
+   * Cosmetic-only selected-chip class (TWO-40 §0), delegated to the group's
+   * own owner — the chips live inside the company-search dropdown, not
+   * here. Kept as a thin alias so `setMode()` below needs no change.
+   */
   updateChips: function () {
-    jQuery(".twoinc-sole-trader-toggle .twoinc-mode-item").each(function () {
-      jQuery(this).toggleClass(
-        "twoinc-mode-item--selected",
-        jQuery(this).data("mode") === twoincSoleTrader.mode
-      );
-    });
+    twoincSelectWooHelper.updateModeChipsSelection();
   },
 
   showNote: function (show) {
@@ -4331,7 +4419,12 @@ let twoincSoleTrader = {
   beginFlight: function () {
     twoincSoleTrader.flightDepth += 1;
     if (twoincSoleTrader.flightDepth === 1) {
-      jQuery(".twoinc-sole-trader-toggle").addClass("twoinc-sole-trader-toggle--busy");
+      // The note slot AND the chip group (if the dropdown happens to be
+      // open) — the two places busy state is ever visible, now that the
+      // chips no longer share the note slot's container (TWO-40 §0).
+      jQuery(".twoinc-sole-trader-note-slot, .twoinc-mode-chips").addClass(
+        "twoinc-sole-trader-toggle--busy"
+      );
       twoincSelectWooHelper.holdCompanySearchSpinner("soleTrader");
     }
   },
@@ -4348,7 +4441,9 @@ let twoincSoleTrader = {
   settleFlight: function () {
     twoincSoleTrader.flightDepth = Math.max(0, twoincSoleTrader.flightDepth - 1);
     if (twoincSoleTrader.flightDepth === 0) {
-      jQuery(".twoinc-sole-trader-toggle").removeClass("twoinc-sole-trader-toggle--busy");
+      jQuery(".twoinc-sole-trader-note-slot, .twoinc-mode-chips").removeClass(
+        "twoinc-sole-trader-toggle--busy"
+      );
       twoincSelectWooHelper.releaseCompanySearchSpinner("soleTrader");
     }
   },
@@ -4905,7 +5000,7 @@ let twoincSoleTrader = {
 
   showError: function () {
     const cfg = twoincSoleTrader.config();
-    const $container = jQuery(".twoinc-sole-trader-toggle");
+    const $container = jQuery(".twoinc-sole-trader-note-slot");
     if (!cfg.text || !cfg.text.error || $container.length === 0) {
       return;
     }
