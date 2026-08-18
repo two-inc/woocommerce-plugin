@@ -519,8 +519,6 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                         'registered_business' => __('Registered company', 'twoinc-payment-gateway'),
                         'sole_trader' => __('Sole trader', 'twoinc-payment-gateway'),
                         'popup_prompt' => __('Click here to login or sign up as a sole trader.', 'twoinc-payment-gateway'),
-                        'change_prompt' => __('Select a different sole trader', 'twoinc-payment-gateway'),
-                        'checking' => __('Checking your details', 'twoinc-payment-gateway'),
                         'error' => __('Something went wrong setting up sole trader checkout. Please try again.', 'twoinc-payment-gateway'),
                     ],
                 ],

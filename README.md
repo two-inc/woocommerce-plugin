@@ -107,47 +107,6 @@ TWO\_\* env values to the gateway settings after you edit `.env` (run
 The default `.env` targets a locally running Checkout API backend
 (`portal.localhost`) — no additional setup required.
 
-### Pointing a service somewhere else
-
-The plugin talks to three Two services, and each one can be sent to an
-arbitrary host independently — they are reached by different clients and
-routinely need different hosts during a local loop. Each falls back on its
-own to the brand's host for the configured environment, so overriding one
-leaves the other two alone.
-
-| Env var                    | Service                                           | `.env` key              |
-| -------------------------- | ------------------------------------------------- | ----------------------- |
-| `TWOINC_DEV_API_HOST`      | Checkout / merchant API                           | `TWO_API_BASE_URL`      |
-| `TWOINC_DEV_CHECKOUT_HOST` | Hosted checkout-page app (company search, signup) | `TWO_CHECKOUT_BASE_URL` |
-| `TWOINC_DEV_PORTAL_HOST`   | Merchant portal (settings-screen signup link)     | `TWO_PORTAL_BASE_URL`   |
-
-These are server env vars on the container serving checkout requests, never
-wp-admin fields — the merchant-editable test-host control was removed
-deliberately (TWO-25386) and must not come back. `docker-compose.yaml` wires
-all three from the `.env` keys above.
-
-**The gate.** All three are honoured only where WordPress's own
-`wp_get_environment_type()` reports `development` or `local`, i.e. where the
-install sets `WP_ENVIRONMENT_TYPE` (constant in `wp-config.php`, or
-WordPress's env var). WordPress resolves anything unset or unrecognised to
-`production`, so a shop that has not declared itself non-production honours
-no override, whatever is in its process environment. `docker-compose.yaml`
-sets it to `development` for this stack; an existing local stack needs
-`make run` to pick it up.
-
-`TWOINC_DEV_HOSTNAMES` is separate and older: a comma-separated hostname
-allow-list feeding the legacy dev-environment sniffer, which still decides
-which _environment_ an install predating the explicit `checkout_env` setting
-resolves to. It has no say over the host overrides above.
-
-**Reaching a laptop-hosted checkout page.** `TWOINC_DEV_CHECKOUT_HOST` is the
-one the browser resolves, because the browser is what opens the company-search
-and sole-trader signup flows. Once the shop itself is remote, `localhost` and
-`host.docker.internal` resolve to nothing useful from a browser pointed at
-that remote domain — a reverse tunnel's public host is what belongs here. The
-API and portal hosts have no such constraint: the shop's own PHP process
-reaches those, so a Docker network alias is fine.
-
 If you wish to use the staging site,
 
 ```bash
