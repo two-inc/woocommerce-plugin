@@ -627,6 +627,43 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         // choosing a DIFFERENT sole trader, not leaving sole trader mode.
         expect(soleTrader.mode).toBe("sole_trader");
       });
+
+      /**
+       * The adoption path with no popup at all — an autofill prefetch
+       * matching an existing buyer from the session cookie, live-reported by
+       * Doug as reaching this same "click does nothing" symptom. Every
+       * other test in this block adopts via a direct `setMode` +
+       * `setCompany()` call; this one goes through the real
+       * `onModeChipClick`/`applyPrefetch` match branch, which never calls
+       * `launchSignup()`/`openPopup()` — so if a guard here read stale state
+       * left over from popup bookkeeping (`activePopupWatchers`,
+       * `soleTraderReconfirmingCount`) that only ever gets cleared by a
+       * popup-close event, THIS is the path that would never clear it.
+       */
+      test("clicking after a no-popup, matched-autofill adoption reopens search the same way", () => {
+        $("#billing_email").val("buyer@example.test");
+        jest.spyOn(soleTrader, "fetchTokens").mockImplementation((cb) => cb(true));
+        jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) =>
+          cb({
+            organization_number: "TWO:ST1",
+            company_name: "A Sole Trader",
+            email: "buyer@example.test"
+          })
+        );
+
+        soleTrader.onModeChipClick("sole_trader");
+
+        expect(opened).toHaveLength(0);
+        expect(soleTrader.mode).toBe("sole_trader");
+        expect($("#billing_company").prop("readonly")).toBe(true);
+        expect(soleTrader.isDeciding()).toBe(false);
+
+        $("#billing_company").trigger("click");
+
+        expect(soleTrader.mode).toBe("business");
+        expect($("#billing_company").prop("readonly")).toBe(false);
+        expect($("#billing_company_display").data("select2").isOpen()).toBe(true);
+      });
     });
 
     describe("round-1 review regressions (Han/Vader/Leia) — races the dropdown-survives fix opened up", () => {

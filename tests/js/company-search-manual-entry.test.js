@@ -353,6 +353,190 @@ describe("company-search manual-entry affordance", () => {
     });
   });
 
+  describe("mode chips never duplicate across a stale results panel (TWO-40, live-reported by Doug)", () => {
+    /**
+     * WooCommerce's checkout AJAX can discard the field this widget is
+     * attached to via a plain `replaceWith()` — never `select2("destroy")`
+     * — while its dropdown is open. selectWoo's own destroy is what detaches
+     * a dropdown from `<body>`; skip it and the old dropdown is orphaned
+     * there forever, still `display: flex` and visible. This reproduces
+     * that half of the defect directly: a real second `.select2-results`
+     * panel really does end up sitting in the document after a re-attach.
+     */
+    test("a field replaced while its dropdown is open leaves the old results panel in the document", () => {
+      openWithAffordance();
+      expect($(".select2-results").length).toBe(1);
+
+      $("#billing_company_display_field").replaceWith(
+        '<p id="billing_company_display_field">' +
+          '<select id="billing_company_display" name="billing_company_display">' +
+          '<option value="">&nbsp;</option></select></p>'
+      );
+      helper.attach();
+      $("#billing_company_display").select2("open");
+
+      expect($(".select2-results").length).toBe(2);
+    });
+
+    /**
+     * The stale PANEL itself, not just the wrapper inside it (round-2
+     * review — Vader, following on from the reproduction directly above):
+     * a real production reopen always runs `syncManualEntryButton` in the
+     * same tick (`bindManualEntryAffordance`'s deferred `select2:open`
+     * handler), so this is the state that test's raw 2-panel snapshot
+     * settles into a moment later, not a separate scenario.
+     */
+    test("syncManualEntryButton removes the whole stale panel, not only its wrapper", () => {
+      openWithAffordance();
+
+      $("#billing_company_display_field").replaceWith(
+        '<p id="billing_company_display_field">' +
+          '<select id="billing_company_display" name="billing_company_display">' +
+          '<option value="">&nbsp;</option></select></p>'
+      );
+      helper.attach();
+      $("#billing_company_display").select2("open");
+      expect($(".select2-results").length).toBe(2);
+
+      helper.syncManualEntryButton();
+
+      expect($(".select2-results").length).toBe(1);
+      expect($("." + helper.modeChipsWrapperClass).length).toBe(1);
+    });
+
+    /**
+     * The sweep above must be scoped to THIS field's own results panel,
+     * never a blanket `.select2-results` query (round-3 review — Han):
+     * `syncManualEntryButton` runs from `twoincSoleTrader.apply()`, an
+     * async availability callback completely decoupled from whatever else
+     * the buyer has open — a buyer double-checking their country in its own
+     * open dropdown while that callback happens to land must not have it
+     * swept away from under them.
+     */
+    test("never removes an unrelated widget's own open dropdown elsewhere on the page", () => {
+      openWithAffordance();
+      const $country = $("#billing_country").selectWoo(helper.genSelectWooParams());
+      $country.select2("open");
+      expect($(".select2-results").length).toBe(2);
+
+      helper.syncManualEntryButton();
+
+      expect($country.data("select2").isOpen()).toBe(true);
+      expect($(".select2-results").length).toBe(2);
+      $country.select2("close").select2("destroy");
+    });
+
+    /**
+     * The other half: even granting that a stale panel exists, does
+     * `syncManualEntryButton` actually find and remove its wrapper?
+     *
+     * `jQuery("#" + id)` only ever returns ONE element even when two share
+     * that id — proven directly: `document.querySelectorAll("#x")` on a DOM
+     * with two `id="x"` nodes returns both, `jQuery("#x")` returns one, the
+     * first in document order (Sizzle's ID selector takes the
+     * `getElementById` fast path). Built directly rather than via the real
+     * widget/AJAX race above: that race only ever leaves ONE orphan behind
+     * per cycle, and a single orphan is always the first (oldest) id match,
+     * so the old code's lookup happens to land on it by luck of ordering —
+     * this constructs the case where luck runs out, which is the case a
+     * correct implementation cannot depend on document order to dodge.
+     */
+    test("removes every wrapper sharing the id, not just the first one jQuery's id lookup would see", () => {
+      const $select = openWithAffordance();
+      const $list = resultsList();
+
+      // A second, independent `.select2-results` panel, appended to `<body>`
+      // AFTER the live one — so it is the one an id lookup would find FIRST
+      // if document order does not run the way the real race happens to.
+      const $staleList = $('<ul class="select2-results__options"></ul>');
+      const $stalePanel = $('<span class="select2-results"></span>').append($staleList);
+      $(document.body).append($stalePanel);
+      $staleList.after(
+        jQuery("<div>", {
+          id: helper.modeChipsWrapperId,
+          class: helper.modeChipsWrapperClass
+        }).append(helper.buildBusinessChip())
+      );
+
+      expect($("." + helper.modeChipsWrapperClass).length).toBe(2);
+
+      helper.syncManualEntryButton();
+
+      expect($("." + helper.modeChipsWrapperClass).length).toBe(1);
+      expect($("#" + helper.modeChipsWrapperId).length).toBe(1);
+      // The survivor is the CURRENT widget's, not the stale one.
+      expect(chipsWrapper().prev().is($list)).toBe(true);
+      $stalePanel.remove();
+    });
+
+    /**
+     * The root fix, not just the wrapper-level mitigation above:
+     * `closeCompanySearchBeforeCheckoutUpdate` (bound to `update_checkout`
+     * in `Twoinc#initialize()`) closes the dropdown while the widget can
+     * still detach it properly. `update_checkout` is the PRESENT-tense
+     * trigger that starts a checkout refresh, fired synchronously — the
+     * fragment swap only happens after the async AJAX round-trip that
+     * follows, so this always runs before it regardless of bind order
+     * against WooCommerce's own handler on the same event (same reasoning
+     * as `detachCompanySearchTileWrapperToSafety`'s own comment). Nothing
+     * open is left for a fragment replace moments later to orphan.
+     *
+     * Gated on `payment_tile` — the only config where WooCommerce's
+     * `update_checkout` AJAX can ever touch this field at all — so every
+     * test in this describe block sets it explicitly.
+     */
+    test("closeCompanySearchBeforeCheckoutUpdate leaves nothing for a fragment replace to orphan", () => {
+      window.twoinc.company_search_location = "payment_tile";
+      openWithAffordance();
+      expect($(".select2-results").length).toBe(1);
+
+      helper.closeCompanySearchBeforeCheckoutUpdate();
+      expect($("#billing_company_display").data("select2").isOpen()).toBe(false);
+      expect($(".select2-results").length).toBe(0);
+
+      $("#billing_company_display_field").replaceWith(
+        '<p id="billing_company_display_field">' +
+          '<select id="billing_company_display" name="billing_company_display">' +
+          '<option value="">&nbsp;</option></select></p>'
+      );
+      helper.attach();
+      $("#billing_company_display").select2("open");
+
+      // Exactly the fresh one — nothing left behind from the closed widget.
+      expect($(".select2-results").length).toBe(1);
+    });
+
+    test("a no-op on the default 'address_area' config — WooCommerce never touches this field there", () => {
+      openWithAffordance();
+      expect(window.twoinc.company_search_location).not.toBe("payment_tile");
+
+      helper.closeCompanySearchBeforeCheckoutUpdate();
+
+      expect($("#billing_company_display").data("select2").isOpen()).toBe(true);
+      expect($(".select2-results").length).toBe(1);
+    });
+
+    test("a no-op when nothing is open", () => {
+      window.twoinc.company_search_location = "payment_tile";
+      openWithAffordance();
+      $("#billing_company_display").select2("close");
+
+      expect(() => helper.closeCompanySearchBeforeCheckoutUpdate()).not.toThrow();
+      expect($(".select2-results").length).toBe(0);
+    });
+
+    test("a no-op while a sole-trader autofill flight is outstanding, even in payment_tile mode", () => {
+      window.twoinc.company_search_location = "payment_tile";
+      openWithAffordance();
+      ctx.soleTrader.flightDepth = 1;
+
+      helper.closeCompanySearchBeforeCheckoutUpdate();
+
+      expect($("#billing_company_display").data("select2").isOpen()).toBe(true);
+      ctx.soleTrader.flightDepth = 0;
+    });
+  });
+
   describe("mode chips inherit visibility from the dropdown alone (TWO-40 §0)", () => {
     /**
      * Ground-truth PrestaShop finding this ports: every chip's own `style`
