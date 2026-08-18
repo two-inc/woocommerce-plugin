@@ -29,11 +29,6 @@ help:
 
 ## Start the WordPress + WooCommerce dev container
 run:
-	# Pre-create bind-mount dirs as the host user - if a mount source doesn't
-	# exist yet, dockerd creates it (root:root) before the container's own
-	# user applies, and the top-level ./volumes then can't be removed by
-	# `make clean` without sudo.
-	@mkdir -p ./volumes/wordpress ./volumes/log ./volumes/mariadb
 	docker compose up -d
 	@dev/print-resolved-hosts.sh
 
@@ -97,7 +92,6 @@ stop:
 ## Remove the dev container, volumes and local state
 clean:
 	docker compose down -v
-	rm -rf volumes/
 
 ## Run the unit test harness (same suite CI runs)
 test-unit:
