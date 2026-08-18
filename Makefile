@@ -1,6 +1,22 @@
 # Local dev — see README "Set up Wordpress for local development".
 # Copy .env.example to .env first; docker compose reads it natively.
 
+# Make doesn't read .env on its own (only docker compose does) - include it
+# here too so a value already set there (e.g. TWO_API_BASE_URL's local-API
+# default) isn't clobbered by the TWO_ENV-derived ?= defaults below.
+-include .env
+
+# Internal Two devs (@two.inc gcloud account) point at staging; everyone else
+# at sandbox. Mirrors the PrestaShop/Magento plugin convention. Override via
+# .env or `make ... TWO_ENV=...`. These are NOT read directly by the plugin -
+# docker-compose.yaml threads them through as the TWOINC_DEV_{API,CHECKOUT,
+# PORTAL}_HOST env vars that WC_Twoinc_Helper::get_environment_host() reads.
+TWO_ENV               := $(shell gcloud config get-value account 2>/dev/null | grep -q '@two\.inc$$' && echo staging || echo sandbox)
+TWO_API_BASE_URL      ?= https://api.$(TWO_ENV).two.inc
+TWO_PORTAL_BASE_URL   ?= https://portal.$(TWO_ENV).two.inc
+TWO_CHECKOUT_BASE_URL ?= https://checkout.$(TWO_ENV).two.inc
+export TWO_API_BASE_URL TWO_PORTAL_BASE_URL TWO_CHECKOUT_BASE_URL
+
 .PHONY: help install configure run debug proxy stop clean logs logs-wpcli \
 	test-unit test-js test format archive bump patch minor major \
 	e2e-install e2e-test e2e-test-headed phpcs phpstan
@@ -19,6 +35,7 @@ run:
 	# `make clean` without sudo.
 	@mkdir -p ./volumes/wordpress ./volumes/log ./volumes/mariadb
 	docker compose up -d
+	@dev/print-resolved-hosts.sh
 
 ## Create the dev container and provision WordPress + the plugin
 install: run
@@ -36,9 +53,7 @@ install: run
 		echo " Proxy store:     $$PROXY_URL/"; \
 	fi; \
 	echo " WP admin:        http://localhost:8888/wp-admin/ (admin / twoinb2b)"; \
-	if [ -n "$$TWO_API_BASE_URL" ]; then \
-		echo " API base URL:    $$TWO_API_BASE_URL"; \
-	fi; \
+	dev/print-resolved-hosts.sh; \
 	echo "========================================="
 
 ## Start WordPress with Xdebug enabled and the FRP proxy running
