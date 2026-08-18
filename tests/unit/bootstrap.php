@@ -121,21 +121,6 @@ function get_home_url()
     return $GLOBALS['test_home_url'] ?? 'https://shop.example';
 }
 
-/**
- * WordPress resolves an unset or unrecognised environment type to
- * 'production', so the harness default matches: a test that says nothing
- * gets the same answer a real shop that says nothing gets.
- */
-function wp_get_environment_type()
-{
-    return $GLOBALS['test_environment_type'] ?? 'production';
-}
-
-function untrailingslashit($string)
-{
-    return rtrim((string) $string, '/\\');
-}
-
 function wp_create_nonce($action = -1)
 {
     return 'testnonce';

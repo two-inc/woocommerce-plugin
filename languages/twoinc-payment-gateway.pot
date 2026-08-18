@@ -823,16 +823,8 @@ msgstr ""
 msgid "Rounding step must be one of the offered values."
 msgstr ""
 
-#: class/WC_Twoinc_Checkout.php
-msgid "Checking your details"
-msgstr ""
-
 #: class/WC_Twoinc.php
 msgid "Sandbox"
-msgstr ""
-
-#: class/WC_Twoinc_Checkout.php
-msgid "Select a different sole trader"
 msgstr ""
 
 #: class/WC_Twoinc.php
