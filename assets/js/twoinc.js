@@ -5556,22 +5556,14 @@ let twoincSoleTrader = {
    *
    * Deliberately does NOT also call `beginFlight()`/`settleFlight()` itself
    * (round-1 review, rejected): `onEmailChanged` never checks `isBusy()`
-   * before starting its OWN flight (it only reads `flightDepth` in its
-   * early-return branches), so holding the flag here would not stop that
-   * direction of the race — a chip-click/email-change mint can still start
-   * while this tick's request is outstanding either way. What it WOULD do
-   * is make `isBusy()` true for that window everywhere else it's read — the
-   * Business chip, `reopenSearch()`, click-to-reopen — silently deferring
-   * real buyer interactions for the length of a background network round
-   * trip they never asked for. `fetchTokens`'s own country-staleness guard
-   * (round-2 review) means the two concurrent writes this race can produce
-   * are both valid mints for the country each request was actually made
-   * for; "last one wins" losing a slightly older-but-still-valid token is
-   * the same pre-existing, unsequenced last-write-wins behaviour `tokens`
-   * already has between two overlapping `onEmailChanged` calls, not a new
-   * failure mode this feature introduces. Closing it for real means gating
-   * `onEmailChanged`/`launchSignup` themselves, which is exactly the
-   * fragile flow this feature is scoped to leave alone.
+   * before starting its own flight, so holding the flag wouldn't close that
+   * race — it would only over-block the Business chip, `reopenSearch()`
+   * and click-to-reopen for a background round trip they didn't ask for.
+   * `fetchTokens`'s own country-staleness guard (round-2 review) keeps the
+   * resulting last-write-wins no worse than the pre-existing, unsequenced
+   * one `tokens` already has between two overlapping `onEmailChanged`
+   * calls. Closing it for real means gating `onEmailChanged`/`launchSignup`
+   * themselves — the fragile flow this feature is scoped to leave alone.
    *
    * @returns {void}
    */
