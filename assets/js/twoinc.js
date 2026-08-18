@@ -876,41 +876,31 @@ class TwoCompanySearch {
   activateManualEntry() {
     const helper = twoincSelectWooHelper;
 
-    // `enterManualCompanyEntry` refuses to run in either of the two states
-    // below (see its own guard). Removing the chip before deferring to it
-    // regardless left the buyer with no chip AND no manual mode — a dead end
-    // with nothing left on screen to retry (TWO-40, live-reported by Doug:
-    // "not only does it fail to move into manual mode, but the 'Enter
-    // Manually' chip disappears altogether").
-    //
-    // Mid-decision, the chip STAYS and the click is dropped: the outcome of
-    // the outstanding flight/popup is what decides which mode the buyer ends
-    // up in, and `isDeciding()` is the same predicate every other way out of
-    // sole-trader mode already defers to.
+    // Mid-decision the chip must STAY: the outstanding flight/popup is what
+    // decides the buyer's mode, and `enterManualCompanyEntry` refuses in that
+    // state anyway — so removing the chip first left no chip AND no manual
+    // mode (TWO-40).
     if (twoincSoleTrader.isDeciding()) return;
 
-    // Whether this click is the buyer LEAVING sole-trader mode is decided
-    // here, synchronously, and only acted on in the deferral below.
-    //
-    // It cannot be decided inside that deferral, where the two cases are
-    // indistinguishable: a click made while already IN settled sole-trader
-    // mode is an explicit buyer decision to leave it (manual entry is a
-    // different one of this org's three company-capture modes — the same
-    // transition `reopenSearch()` makes for a click into a captured field),
-    // whereas the email-driven prefetch switching INTO sole-trader mode
-    // during the deferral is the race `enterManualCompanyEntry`'s own guard
-    // exists for, and must still be left alone. Both leave
-    // `mode === "sole_trader"` by the time the timer fires.
+    // Captured synchronously because the deferred callback cannot tell the two
+    // cases apart — both leave `mode === "sole_trader"` by the time it runs:
+    // a click made while ALREADY in sole-trader mode is the buyer choosing to
+    // leave it, whereas the prefetch switching INTO sole-trader mode during
+    // the deferral is the race `enterManualCompanyEntry`'s guard protects.
     const leavingSoleTrader = twoincSoleTrader.mode === "sole_trader";
 
     jQuery("#" + helper.manualEntryRowId).remove();
     setTimeout(function () {
-      // Re-checked, not assumed: the mode may have moved on its own between
-      // the click and this timer.
-      if (leavingSoleTrader && twoincSoleTrader.mode === "sole_trader") {
-        // Deferred rather than done at click time because this destroys the
-        // widget the clicked chip lives in — the exact thing this function
-        // defers for (see the docblock above).
+      // Re-checked against the same predicates: either can change during the
+      // deferral, and reverting under an in-flight decision is what every
+      // other exit from sole-trader mode refuses to do.
+      if (
+        leavingSoleTrader &&
+        twoincSoleTrader.mode === "sole_trader" &&
+        !twoincSoleTrader.isDeciding()
+      ) {
+        // In here rather than at click time: this destroys the widget the
+        // clicked chip lives in, which is what the docblock defers for.
         twoincSoleTrader.setMode("business");
       }
       twoincSelectWooHelper.enterManualCompanyEntry();

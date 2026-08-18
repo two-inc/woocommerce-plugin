@@ -983,18 +983,13 @@ describe("company-search manual-entry affordance", () => {
      * vacuous rather than wrong.
      */
     test("no mode chip declares a hover background of its own", () => {
-      // Comments stripped BEFORE matching (round-1 review — Han): a
-      // selector-plus-block match starts at the previous `}`, so it swallows
-      // whatever comment precedes the rule — and the prose above these very
-      // rules discusses `button:hover`. Left in, this test reported the
-      // `:focus` rule as a hover offender, which would have blocked the
-      // correct minimal fix for the focus indicator rather than catching a
-      // real regression.
+      // Comments stripped BEFORE matching: a selector-plus-block match starts
+      // at the previous `}`, so it swallows whatever comment precedes the
+      // rule — and the prose above these rules discusses `button:hover`,
+      // which would make the `:focus` rule read as a hover offender.
       const css = stylesheetSource().replace(/\/\*[\s\S]*?\*\//g, "");
-      // `background` shorthand too, not only `background-color` (round-1
-      // review — Vader): this stylesheet already paints a chip hover via the
-      // shorthand elsewhere (`.twoinc-term-chip--selected:hover`), so a
-      // colour-only check is one keystroke away from being bypassed.
+      // The `background` shorthand counts too: this stylesheet already paints
+      // a chip hover with it elsewhere (`.twoinc-term-chip--selected:hover`).
       const offenders = (css.match(/[^{}]*:hover[^{]*\{[^}]*\}/g) || []).filter(
         (rule) =>
           (rule.includes("company_not_in_btn") || rule.includes("twoinc-mode-chip")) &&
@@ -1293,8 +1288,12 @@ describe("company-search manual-entry affordance", () => {
     test.each([
       {
         state: "settled sole-trader mode",
+        // Through the real `setMode`, not by assigning `.mode`: that is what
+        // takes the `enable_company_search`/`manual_company_entry_active`
+        // snapshot this path then has to restore, so a direct assignment
+        // would skip the restore branch entirely.
         arrange: (soleTrader) => {
-          soleTrader.mode = "sole_trader";
+          soleTrader.setMode("sole_trader");
         },
         entered: true,
         chipsLeft: 0,
@@ -1326,12 +1325,15 @@ describe("company-search manual-entry affordance", () => {
         // only ever disappears on the path that DID proceed.
         expect(!!ctx.twoinc.manual_company_entry_active).toBe(entered);
         expect(btn().length).toBe(chipsLeft);
-        // The mode swap really reached the DOM, not just the flag (round-1
-        // review — Vader): the chip's absence alone holds pre-fix too, so
-        // without this the settled-sole-trader row proved only half of it.
+        // The mode swap reached the DOM, not just the flag — the chip's
+        // absence alone holds pre-fix too.
         expect(!!$("#billing_company_display").data("select2")).toBe(!entered);
         if (entered) {
           expect(ctx.soleTrader.mode).toBe("business");
+          // The suppression `setMode("sole_trader")` snapshotted is restored
+          // and then re-applied by manual entry itself, not left as whatever
+          // sole-trader mode set.
+          expect(ctx.twoinc.enable_company_search).toBe("no");
           expect($("#billing_company").prop("readonly")).toBe(false);
         }
       } finally {
