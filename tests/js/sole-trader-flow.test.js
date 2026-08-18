@@ -48,7 +48,7 @@ function buildForm() {
     '  <input type="text" id="billing_city" value="" />',
     '  <input type="text" id="billing_postcode" value="" />',
     '  <input type="hidden" id="billing_state" />',
-    '  <div class="twoinc-sole-trader-toggle" role="radiogroup"></div>',
+    '  <div class="twoinc-sole-trader-note-slot"></div>',
     "</form>"
   ].join("\n");
 }
@@ -110,18 +110,18 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       // A COUNT, not a boolean: a buyer changing email mid-prefetch starts a
       // second flight before the first has landed.
       soleTrader.beginFlight();
-      expect($(".twoinc-sole-trader-toggle").hasClass("twoinc-sole-trader-toggle--busy")).toBe(
+      expect($(".twoinc-sole-trader-note-slot").hasClass("twoinc-sole-trader-toggle--busy")).toBe(
         true
       );
 
       soleTrader.beginFlight();
       soleTrader.settleFlight();
-      expect($(".twoinc-sole-trader-toggle").hasClass("twoinc-sole-trader-toggle--busy")).toBe(
+      expect($(".twoinc-sole-trader-note-slot").hasClass("twoinc-sole-trader-toggle--busy")).toBe(
         true
       );
 
       soleTrader.settleFlight();
-      expect($(".twoinc-sole-trader-toggle").hasClass("twoinc-sole-trader-toggle--busy")).toBe(
+      expect($(".twoinc-sole-trader-note-slot").hasClass("twoinc-sole-trader-toggle--busy")).toBe(
         false
       );
     });
@@ -134,7 +134,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       expect(soleTrader.flightDepth).toBe(0);
 
       soleTrader.beginFlight();
-      expect($(".twoinc-sole-trader-toggle").hasClass("twoinc-sole-trader-toggle--busy")).toBe(
+      expect($(".twoinc-sole-trader-note-slot").hasClass("twoinc-sole-trader-toggle--busy")).toBe(
         true
       );
     });
@@ -196,7 +196,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       soleTrader.onEmailChanged();
 
       expect(soleTrader.flightDepth).toBe(0);
-      expect($(".twoinc-sole-trader-toggle").hasClass("twoinc-sole-trader-toggle--busy")).toBe(
+      expect($(".twoinc-sole-trader-note-slot").hasClass("twoinc-sole-trader-toggle--busy")).toBe(
         false
       );
     });
@@ -278,6 +278,23 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
 
       expect($btn.parent().is("#billing_company_field .woocommerce-input-wrapper")).toBe(true);
       expect($btn.text()).toBe("Select a different sole trader");
+    });
+
+    test("sits after the company-search field in document order, never inside its dropdown or chip group (TWO-40 §0)", () => {
+      // Ground-truth PrestaShop finding this ports: the button is a
+      // following SIBLING of the search dropdown, appended as the LAST
+      // child of the outer field wrapper — never a descendant of the
+      // dropdown panel or of `.twoinc-mode-chips`.
+      const $btn = soleTrader.getDifferentSoleTraderBtnNode();
+
+      expect($btn.closest("#billing_company_display_field").length).toBe(0);
+      expect($btn.closest(".twoinc-mode-chips").length).toBe(0);
+
+      const search = $("#billing_company_display_field").get(0);
+      const differentBtn = $btn.get(0);
+      expect(
+        !!(search.compareDocumentPosition(differentBtn) & Node.DOCUMENT_POSITION_FOLLOWING)
+      ).toBe(true);
     });
 
     test("is hidden until a sole trader is actually adopted", () => {

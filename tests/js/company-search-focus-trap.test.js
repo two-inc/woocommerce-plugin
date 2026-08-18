@@ -23,7 +23,7 @@
 const harness = require("./wc-harness");
 
 const TEXT = {
-  company_not_in_list: "My company is not on the list",
+  enter_manually: "Enter Manually",
   search_company: "Search for company"
 };
 

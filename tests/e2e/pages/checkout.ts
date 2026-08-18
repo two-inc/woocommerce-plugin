@@ -16,8 +16,8 @@ export async function selectTwoPayment(page: Page) {
   }
 }
 
-export const SOLE_TRADER_TOGGLE = ".twoinc-sole-trader-toggle";
-export const MODE_CHIP = ".twoinc-mode-item";
+export const SOLE_TRADER_TOGGLE = ".twoinc-mode-chips";
+export const MODE_CHIP = ".twoinc-mode-chip";
 
 /**
  * The pay box renders a "Registered company / Sole trader" chooser whenever
@@ -41,11 +41,26 @@ export async function selectRegisteredCompany(page: Page) {
   } catch {
     return;
   }
-  const selected = await chip.evaluate((el) => el.classList.contains("twoinc-mode-item--selected"));
+  const selected = await chip.evaluate((el) => el.classList.contains("twoinc-mode-chip--selected"));
   if (!selected) {
     await chip.click();
   }
-  await expect(chip).toHaveClass(/twoinc-mode-item--selected/);
+  await expect(chip).toHaveClass(/twoinc-mode-chip--selected/);
+}
+
+/**
+ * Open the company-search select2 without typing or picking a result — the
+ * mode-chips group (TWO-40 §0) only exists in the document while this
+ * dropdown is open, so specs asserting on the chips need this instead of
+ * the full `fillCompanySearch` flow.
+ */
+export async function openCompanySearch(page: Page) {
+  const container = page.locator("#select2-billing_company_display-container");
+  await container.waitFor({ state: "visible" });
+  await container.click();
+  await page
+    .locator(".select2-search__field")
+    .waitFor({ state: "visible", timeout: DEFAULT_TIMEOUT });
 }
 
 export async function fillCompanySearch(page: Page, companyName = BUYER_COMPANY, retries = 3) {

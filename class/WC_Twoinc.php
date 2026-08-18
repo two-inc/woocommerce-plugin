@@ -1011,13 +1011,23 @@ if (!class_exists('WC_Twoinc')) {
 
             // Block order mirrors the Magento Luma renderer's
             // gateway_method.html: term chips first, then the sole-trader
-            // mode toggle.
+            // signup note.
             //
             // $term_input stays AHEAD of the chips container on purpose: the
             // chips JS appends its own copy of the same input INSIDE that
             // container, and the later element wins the POST. Moving this
             // one after the container would let the stale server-rendered
             // term override the buyer's chip selection.
+            //
+            // The sole-trader MODE CHIPS (Registered Company / Sole Trader)
+            // themselves are NOT rendered here (TWO-40 §0 correction — this
+            // was the same DOM-placement defect ported wrong twice before).
+            // They render as children of the company-search dropdown itself
+            // (see twoincSelectWooHelper.syncManualEntryButton() in
+            // twoinc.js, alongside the "Enter Manually" chip), never as a
+            // separate persistent tile. `.twoinc-sole-trader-note-slot`
+            // below only ever holds the signup-prompt note + in-flight error
+            // — see WC_Twoinc.js twoincSoleTrader.render()/apply().
             //
             // One resolution of the brand's notice switch feeds both the
             // loading state and the approved notice (TWO-25224): they are two
@@ -1061,7 +1071,7 @@ if (!class_exists('WC_Twoinc')) {
                     %s
                     <label class="twoinc-term-chips-heading hidden"></label>
                     <div class="twoinc-term-chips hidden" role="radiogroup"></div>
-                    <div class="twoinc-sole-trader-toggle hidden" role="radiogroup"></div>
+                    <div class="twoinc-sole-trader-note-slot hidden"></div>
                     %s
                     %s
                     %s

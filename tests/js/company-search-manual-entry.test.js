@@ -35,7 +35,7 @@ const harness = require("./wc-harness");
 
 /** The strings the affordance reads out of the localised text map. */
 const TEXT = {
-  company_not_in_list: "My company is not on the list",
+  enter_manually: "Enter Manually",
   search_company: "Search for company"
 };
 
@@ -112,6 +112,11 @@ describe("company-search manual-entry affordance", () => {
   /** @returns {Object} the manual-entry button, or an empty set */
   function btn() {
     return $("#" + helper.manualEntryRowId);
+  }
+
+  /** @returns {Object} the mode-chips group (TWO-40 §0), or an empty set */
+  function chipsWrapper() {
+    return $("#" + helper.modeChipsWrapperId);
   }
 
   /** Activate the button the way a buyer's click or Enter/Space does. */
@@ -254,7 +259,7 @@ describe("company-search manual-entry affordance", () => {
     });
   });
 
-  describe("where the button lives (#30.x.1, #30.x.2)", () => {
+  describe("where the button lives (#30.x.1, #30.x.2, TWO-40 §0)", () => {
     test("it is OUTSIDE the results list, not a row inside it", () => {
       openWithAffordance();
 
@@ -262,9 +267,16 @@ describe("company-search manual-entry affordance", () => {
 
       // Not a child of the scrollable results list...
       expect(resultsList().children("#" + helper.manualEntryRowId).length).toBe(0);
-      // ...but its own element still exists, and is a sibling of that list.
+      // ...its own element still exists, inside the mode-chips group...
       expect(btn().length).toBe(1);
-      expect(btn().prev().is(resultsList())).toBe(true);
+      expect(chipsWrapper().length).toBe(1);
+      expect(btn().parent().is(chipsWrapper())).toBe(true);
+      // ...last of the group's chips, so it stays the last tabbable element
+      // in the document (#30.x.6 relies on this)...
+      expect(chipsWrapper().children().last().is(btn())).toBe(true);
+      // ...and the group itself is a sibling of the results list, exactly
+      // where the button used to sit directly.
+      expect(chipsWrapper().prev().is(resultsList())).toBe(true);
     });
 
     test("it is a real <button>, not a styled row", () => {
@@ -291,7 +303,7 @@ describe("company-search manual-entry affordance", () => {
       // (scrollable) results list got — nothing about finding it depends on
       // scroll position.
       expect(btn().length).toBe(1);
-      expect(btn().prev().is($list)).toBe(true);
+      expect(chipsWrapper().prev().is($list)).toBe(true);
     });
 
     test("Tab from the search field reaches it directly, without visiting any option row", () => {
@@ -332,12 +344,60 @@ describe("company-search manual-entry affordance", () => {
       // Asserting on the English string would pass against a literal in the
       // source. Change what the text map says and require the button to
       // follow.
-      ctx.twoinc.text.company_not_in_list = "Selskapet mitt er ikke på listen";
+      ctx.twoinc.text.enter_manually = "Registrer manuelt";
       openWithAffordance();
 
       type("abc");
 
-      expect(btn().text()).toBe("Selskapet mitt er ikke på listen");
+      expect(btn().text()).toBe("Registrer manuelt");
+    });
+  });
+
+  describe("mode chips inherit visibility from the dropdown alone (TWO-40 §0)", () => {
+    /**
+     * Ground-truth PrestaShop finding this ports: every chip's own `style`
+     * attribute is empty in every observed state — there is exactly ONE
+     * visibility switch in the whole structure (the dropdown's own open/
+     * closed state), never one on the group and never one per chip.
+     */
+    test("the whole chip group disappears when the dropdown closes, together, not one at a time", () => {
+      const $select = openWithAffordance();
+
+      expect(chipsWrapper().length).toBe(1);
+      expect(chipsWrapper().children("." + helper.modeChipClass).length).toBeGreaterThanOrEqual(1);
+
+      $select.select2("close");
+
+      // Not hidden — GONE. selectWoo's AttachBody decorator detaches the
+      // whole dropdown subtree on close; nothing here toggles a class or an
+      // inline style on the group or on any one chip to get there.
+      expect(chipsWrapper().length).toBe(0);
+      expect(btn().length).toBe(0);
+    });
+
+    test("reopening rebuilds the same group again, from the dropdown alone", () => {
+      const $select = openWithAffordance();
+      $select.select2("close");
+      expect(chipsWrapper().length).toBe(0);
+
+      $select.select2("open");
+      helper.syncManualEntryButton();
+
+      expect(chipsWrapper().length).toBe(1);
+      expect(btn().length).toBe(1);
+    });
+
+    test("the selected chip's class is cosmetic only — never what makes a chip present or absent", () => {
+      openWithAffordance();
+
+      // Business is the default/selected mode with no sole-trader config
+      // wired up in this suite; asserting the class exists at all, on
+      // exactly one chip, is the point — presence of every chip is
+      // unaffected either way (asserted above).
+      const $selected = chipsWrapper().find("." + helper.modeChipClass + "--selected");
+      expect($selected.length).toBe(1);
+      expect($selected.data("mode")).toBe("business");
+      expect(chipsWrapper().children("." + helper.modeChipClass).length).toBe($selected.length + 1);
     });
   });
 

@@ -423,15 +423,21 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     // from the number required.
                     /* translators: %d: minimum number of characters the buyer must type before the company search runs. Left unresolved here and interpolated in JS from the threshold the widget enforces, so the two cannot disagree. */
                     'company_search_too_short' => __('Please enter %d or more characters', 'twoinc-payment-gateway'),
-                    // The manual-entry row inside the company-search results
-                    // list, and the link back out of manual entry
+                    // The "Enter Manually" mode chip inside the company-search
+                    // dropdown, and the link back out of manual entry
                     // (TWO-25288). Both used to be markup in the billing-form
                     // view, which is rendered on the checkout page only — the
                     // pay-for-order page renders its own copy of the company
                     // inputs and so silently had neither. They are built in JS
                     // now, from here, so both surfaces get the same
                     // translated strings from one source.
-                    'company_not_in_list' => __('My company is not on the list', 'twoinc-payment-gateway'),
+                    //
+                    // Was 'company_not_in_list' / "My company is not on the
+                    // list" (TWO-40 §0 correction): that copy no longer exists
+                    // anywhere on the checkout — it is fully absorbed into
+                    // this chip's own label, alongside the registered-company
+                    // and sole-trader chips it now renders next to.
+                    'enter_manually' => __('Enter Manually', 'twoinc-payment-gateway'),
                     'search_company' => __('Search for company', 'twoinc-payment-gateway'),
                 ],
                 'twoinc_checkout_host' => $this->wc_twoinc->get_twoinc_checkout_host(),

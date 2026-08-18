@@ -5800,9 +5800,14 @@ final class BrandConfigSpec
 
     /**
      * The payment box must order the brand tagline above the term
-     * chips, and the chips above the sole-trader toggle, matching the
+     * chips, and the chips above the sole-trader note slot, matching the
      * Magento Luma renderer. Pinned because the whole box is one
      * concatenated string, so ordering is a silent, easy regression.
+     *
+     * The sole-trader MODE chips themselves are not part of this box at all
+     * (TWO-40 §0 correction) — they render inside the company-search
+     * dropdown. `twoinc-sole-trader-note-slot` here only ever holds the
+     * signup-prompt note and in-flight error.
      */
     private static function testPaymentBoxOrdersTaglineChipsThenSoleTrader(): void
     {
@@ -5811,30 +5816,30 @@ final class BrandConfigSpec
 
         $tagline = strpos($html, 'twoinc-payment-subtitle');
         $chips = strpos($html, 'twoinc-term-chips');
-        $sole_trader = strpos($html, 'twoinc-sole-trader-toggle');
+        $sole_trader = strpos($html, 'twoinc-sole-trader-note-slot');
         $about = strpos($html, 'abt-twoinc');
 
         TinyAssert::true($tagline !== false, 'tagline block missing');
         TinyAssert::true($chips !== false, 'chips container missing');
-        TinyAssert::true($sole_trader !== false, 'sole-trader toggle missing');
+        TinyAssert::true($sole_trader !== false, 'sole-trader note slot missing');
         TinyAssert::true($about !== false, 'about block missing');
 
         TinyAssert::true($tagline < $chips, 'tagline must precede the chips');
-        TinyAssert::true($chips < $sole_trader, 'chips must precede the sole-trader toggle');
+        TinyAssert::true($chips < $sole_trader, 'chips must precede the sole-trader note slot');
         TinyAssert::true($sole_trader < $about, 'about block must trail the box');
     }
 
     /**
      * The company-search-tile-location slot renders between the sole-trader
-     * toggle and the intent message (TWO-25326 §7.1, ruling 2026-08-03,
+     * note slot and the intent message (TWO-25326 §7.1, ruling 2026-08-03,
      * superseding the standalone company-tile-label this ticket originally
      * shipped in PR #431).
      *
      * Position is asserted, not just presence: the requirement names the
-     * sole-trader toggle and the intent message as its two anchors, and the
-     * whole box is one concatenated sprintf, so an edit that moves the slot
-     * is a silent regression exactly like the ordering test above guards
-     * against.
+     * sole-trader note slot and the intent message as its two anchors, and
+     * the whole box is one concatenated sprintf, so an edit that moves the
+     * slot is a silent regression exactly like the ordering test above
+     * guards against.
      *
      * Empty and hidden on render regardless of the `enable_company_search`
      * setting — twoinc.js's syncCompanySearchTileLocation() is what moves the
@@ -5847,15 +5852,15 @@ final class BrandConfigSpec
         self::useTaglineBrand();
         $html = self::gateway()->build_payment_description();
 
-        $sole_trader = strpos($html, 'twoinc-sole-trader-toggle');
+        $sole_trader = strpos($html, 'twoinc-sole-trader-note-slot');
         $slot = strpos($html, 'twoinc-company-search-tile-slot');
         $intent = strpos($html, 'twoinc-pay-box');
 
-        TinyAssert::true($sole_trader !== false, 'sole-trader toggle missing');
+        TinyAssert::true($sole_trader !== false, 'sole-trader note slot missing');
         TinyAssert::true($slot !== false, 'company-search tile slot missing');
         TinyAssert::true($intent !== false, 'intent/notice pay box missing');
 
-        TinyAssert::true($sole_trader < $slot, 'sole-trader toggle must precede the tile slot');
+        TinyAssert::true($sole_trader < $slot, 'sole-trader note slot must precede the tile slot');
         TinyAssert::true($slot < $intent, 'tile slot must precede the intent message');
 
         TinyAssert::true(
