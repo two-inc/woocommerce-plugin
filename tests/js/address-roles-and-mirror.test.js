@@ -102,21 +102,18 @@ describe("TWO-40 §1 — one address-role resolver", () => {
   test.each([
     ["gb", "GB", "an already-lower-case option value"],
     ["GB", "GB", "an upper-case option value"]
-  ])(
-    "every country reader agrees on %s -> %s (%s)",
-    (fieldValue, expected, _description) => {
-      // Given: the field holds a country in one particular case
-      $("#billing_country").append('<option value="' + fieldValue + '">x</option>');
-      $("#billing_country").val(fieldValue);
+  ])("every country reader agrees on %s -> %s (%s)", (fieldValue, expected, _description) => {
+    // Given: the field holds a country in one particular case
+    $("#billing_country").append('<option value="' + fieldValue + '">x</option>');
+    $("#billing_country").val(fieldValue);
 
-      // When/Then: all three readers return the same normalised answer, so a
-      // country pinned next to a captured company cannot be re-read in a
-      // different spelling by the deferred re-read.
-      expect(ctx.helper.currentCountry()).toBe(expected);
-      expect(ctx.dom.getCompanyData().country_prefix).toBe(expected);
-      expect(ctx.dom.isCountrySupported()).toBe(true);
-    }
-  );
+    // When/Then: all three readers return the same normalised answer, so a
+    // country pinned next to a captured company cannot be re-read in a
+    // different spelling by the deferred re-read.
+    expect(ctx.helper.currentCountry()).toBe(expected);
+    expect(ctx.dom.getCompanyData().country_prefix).toBe(expected);
+    expect(ctx.dom.isCountrySupported()).toBe(true);
+  });
 
   test("the sole-trader chip reads the invoice role's email, trimmed", () => {
     $("#billing_email").val("  buyer@example.test ");
@@ -204,25 +201,22 @@ describe("TWO-40 §2 — invoice→delivery mirror", () => {
     ["city", "Ashford", "an edited city"],
     ["postcode", "ZZ9 9ZZ", "an edited postcode"],
     ["state", "Fife", "an edited state/county"]
-  ])(
-    "editing shipping_%s pins the WHOLE delivery address (%s)",
-    (field, value, _description) => {
-      // Given: a synced pair
-      mirror.seed();
-      givenInvoiceAddress();
-      mirror.sync();
+  ])("editing shipping_%s pins the WHOLE delivery address (%s)", (field, value, _description) => {
+    // Given: a synced pair
+    mirror.seed();
+    givenInvoiceAddress();
+    mirror.sync();
 
-      // When: the buyer edits exactly one delivery field
-      $("#shipping_" + field).val(value);
+    // When: the buyer edits exactly one delivery field
+    $("#shipping_" + field).val(value);
 
-      // Then: the pin covers every field, not only the edited one — a buyer
-      // correcting one line is editing the address, not that line.
-      expect(mirror.isPinned()).toBe(true);
-      $("#billing_city").val("Newtown");
-      expect(mirror.sync()).toBe(false);
-      expect($("#shipping_city").val()).toBe(field === "city" ? value : "Registryville");
-    }
-  );
+    // Then: the pin covers every field, not only the edited one — a buyer
+    // correcting one line is editing the address, not that line.
+    expect(mirror.isPinned()).toBe(true);
+    $("#billing_city").val("Newtown");
+    expect(mirror.sync()).toBe(false);
+    expect($("#shipping_city").val()).toBe(field === "city" ? value : "Registryville");
+  });
 
   test("clearing the edited delivery fields resumes the mirror with no resume control", () => {
     mirror.seed();
@@ -304,7 +298,7 @@ describe("TWO-40 §2 — invoice→delivery mirror", () => {
     expect($("#shipping_city").val()).toBe("Newtown");
   });
 
-  test("does not touch the delivery form while \"ship to a different address\" is unchecked", () => {
+  test('does not touch the delivery form while "ship to a different address" is unchecked', () => {
     // WooCommerce keeps those fields in the DOM permanently and ignores every
     // one of them on submit while the box is unchecked. This checkout is also
     // live for other payment methods, so quietly rewriting a form with no

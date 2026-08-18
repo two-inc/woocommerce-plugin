@@ -503,10 +503,7 @@ let twoincCompanyCapture = {
     if (twoincUtilHelper.blankToEmpty($name.val()) !== name) $name.val(name);
 
     if (number) {
-      $name.attr(
-        twoincCompanyCapture.PAIRING_ATTR,
-        twoincCompanyCapture.pairingTag(name, number)
-      );
+      $name.attr(twoincCompanyCapture.PAIRING_ATTR, twoincCompanyCapture.pairingTag(name, number));
       $name.attr(twoincCompanyCapture.PROVENANCE_ATTR, "1");
       $number.attr(twoincCompanyCapture.PROVENANCE_ATTR, "1");
     } else {
@@ -529,7 +526,8 @@ let twoincCompanyCapture = {
     // capturing write: a clearing write has no capture for a country to belong
     // to.
     if (number) {
-      instance.customerCompany.country_prefix = opts.country || twoincSelectWooHelper.currentCountry();
+      instance.customerCompany.country_prefix =
+        opts.country || twoincSelectWooHelper.currentCountry();
     }
   },
 
@@ -3585,9 +3583,7 @@ let twoincDomHelper = {
     // Same one country resolver as everything else (TWO-40 §1). The brand's
     // `supported_buyer_countries` list is upper-case ISO, which is what the
     // resolver returns.
-    return window.twoinc.supported_buyer_countries.includes(
-      twoincSelectWooHelper.currentCountry()
-    );
+    return window.twoinc.supported_buyer_countries.includes(twoincSelectWooHelper.currentCountry());
   },
   /**
    * Check if twoinc payment is currently selected

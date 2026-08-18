@@ -49,7 +49,6 @@ function buildForm() {
     // container, and its absence is how the plugin tells "not the checkout
     // page" from "checkout page".
     '<div id="order_review"></div>'
-
   ].join("\n");
 }
 
