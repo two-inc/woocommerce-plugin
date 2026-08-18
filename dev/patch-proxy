@@ -5,7 +5,9 @@
 # 1. WP_HOME / WP_SITEURL constants are set from docker-compose env vars —
 #    all generated links point at localhost. We inject a mu-plugin that
 #    filters option_home and option_siteurl to return the proxy URL instead
-#    (fires at priority 100, after the constant-based filter at priority 1).
+#    (fires at priority 100, after the constant-based filter at priority 1),
+#    but only for requests that actually arrived via the proxy — a direct
+#    localhost hit keeps localhost URLs.
 # 2. FRP terminates TLS at the edge but forwards X-Forwarded-Proto: http.
 #    Detect via X-Forwarded-Host presence and set HTTPS on.
 #
@@ -40,12 +42,17 @@ defined( 'ABSPATH' ) || exit;
 if ( ! empty( $_SERVER['HTTP_X_FORWARDED_HOST'] ) ) {
     $_SERVER['HTTPS']       = 'on';
     $_SERVER['SERVER_PORT'] = 443;
-}
 
-// Override WP_HOME / WP_SITEURL constants via option filters. Priority 100
-// fires after the constant-based filter registered at priority 1 in wp-load.php.
-add_filter( 'option_home',    function() { return 'PROXY_URL_PLACEHOLDER'; }, 100 );
-add_filter( 'option_siteurl', function() { return 'PROXY_URL_PLACEHOLDER'; }, 100 );
+    // Only override WP_HOME / WP_SITEURL for requests that actually arrived
+    // via the proxy (X-Forwarded-Host present). Applying this unconditionally
+    // broke direct http://localhost:8888 access: every enqueued asset got an
+    // absolute proxy-domain URL regardless of how the page was loaded, so a
+    // degraded/absent tunnel meant a styleless site even though the request
+    // itself never left the machine. Priority 100 fires after the
+    // constant-based filter registered at priority 1 in wp-load.php.
+    add_filter( 'option_home',    function() { return 'PROXY_URL_PLACEHOLDER'; }, 100 );
+    add_filter( 'option_siteurl', function() { return 'PROXY_URL_PLACEHOLDER'; }, 100 );
+}
 PHPEOF
 
 sed -i "s|PROXY_URL_PLACEHOLDER|${PROXY_URL}|g" "$MU_PLUGIN"
