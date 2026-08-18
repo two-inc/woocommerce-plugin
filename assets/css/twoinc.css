@@ -754,7 +754,7 @@
  * never asked for. Stacking a second signup popup is prevented by the
  * re-entrancy guard on the launch itself, which is where that belongs.
  */
-.twoinc-sole-trader-toggle--busy .twoinc-mode-item {
+.twoinc-sole-trader-toggle--busy .twoinc-mode-chip {
   cursor: progress;
 }
 
