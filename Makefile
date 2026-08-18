@@ -38,11 +38,12 @@ run:
 	echo ""; \
 	echo "========================================="; \
 	echo " WordPress store: http://localhost:8888/"; \
-	echo " WP admin:        http://localhost:8888/wp-admin/ (admin / twoinb2b)"; \
+	echo " WP admin:        http://localhost:8888/wp-admin/"; \
 	if [ -n "$$PROXY_URL" ]; then \
 		echo " Proxy store:     $$PROXY_URL/"; \
 		echo " Proxy admin:     $$PROXY_URL/wp-admin/"; \
 	fi; \
+	echo " Credentials:      admin / twoinb2b"; \
 	dev/print-resolved-hosts.sh; \
 	echo "========================================="
 
