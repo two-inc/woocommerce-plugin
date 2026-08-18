@@ -965,6 +965,33 @@ describe("company-search manual-entry affordance", () => {
       const body = ruleBodyFor(stylesheetSource(), "company_not_in_btn");
       expect(body).toMatch(/text-transform:\s*none\s*!important/);
     });
+
+    /**
+     * All three mode chips hover IDENTICALLY (TWO-40, live-reported by Doug:
+     * "Registered Organization" and "Sole Trader" adopt the store's brand
+     * colour on hover, while "Enter Manually" instead got a red border but a
+     * grey fill).
+     *
+     * The two class-styled chips carry no hover rule of their own, so the
+     * host theme's `button:hover` paints them. "Enter Manually" additionally
+     * matched a flat `#company_not_in_btn:hover { background-color: #f2f4fd }`
+     * — a single-id selector, which outbids that theme rule on specificity
+     * and so was the ONE chip the theme could not colour. The invariant is
+     * therefore "no hover fill declared for any of them", asserted textually
+     * for the same reason the two tests above are: jsdom does not resolve
+     * cross-sheet specificity, so a rendered-style assertion here would be
+     * vacuous rather than wrong.
+     */
+    test("no mode chip declares a hover background-color of its own", () => {
+      const css = stylesheetSource();
+      const offenders = (css.match(/[^{}]*:hover[^{]*\{[^}]*\}/g) || []).filter(
+        (rule) =>
+          (rule.includes("company_not_in_btn") || rule.includes("twoinc-mode-chip")) &&
+          /background-color\s*:/.test(rule.slice(rule.indexOf("{")))
+      );
+
+      expect(offenders).toEqual([]);
+    });
   });
 
   describe("placement below the visible field, not overlapping it (#30.x.5.3 round 3; reworked #30.x.9)", () => {
@@ -1230,6 +1257,67 @@ describe("company-search manual-entry affordance", () => {
         expect(entered).toBe(1);
       } finally {
         ctx.helper.enterManualCompanyEntry = realEnter;
+        jest.useRealTimers();
+      }
+    });
+
+    /**
+     * The chip must never end up gone AND manual entry not entered (TWO-40,
+     * live-reported by Doug: "not only does it fail to move into manual mode,
+     * but the 'Enter Manually' chip disappears altogether").
+     *
+     * `activateManualEntry` removed the chip synchronously and then deferred
+     * `enterManualCompanyEntry` a tick — but that function REFUSES to run
+     * while sole-trader mode is active or still deciding (its own guard, for
+     * reasons its comment gives). Both refusals landed after the chip was
+     * already gone, leaving a dead end with nothing on screen to retry.
+     *
+     * The two states are handled differently on purpose, which is why this is
+     * one table and not one assertion: an ALREADY-SETTLED sole-trader mode is
+     * a mode the buyer may explicitly leave (so the click proceeds, switching
+     * to business first, the same transition `reopenSearch()` makes), whereas
+     * a STILL-DECIDING one must be left for the outstanding flight/popup to
+     * resolve (so the click is dropped — but the chip stays).
+     */
+    test.each([
+      {
+        state: "settled sole-trader mode",
+        arrange: (soleTrader) => {
+          soleTrader.mode = "sole_trader";
+        },
+        entered: true,
+        chipsLeft: 0,
+        description: "proceeds into manual entry, leaving sole-trader mode behind it"
+      },
+      {
+        state: "an outstanding autofill flight (isDeciding)",
+        arrange: (soleTrader) => {
+          soleTrader.flightDepth = 1;
+        },
+        entered: false,
+        chipsLeft: 1,
+        description: "drops the click but KEEPS the chip, so the buyer can retry"
+      }
+    ])("manual-entry activation in $state $description", ({ arrange, entered, chipsLeft }) => {
+      jest.useFakeTimers();
+      try {
+        // Given: the chip is on screen and the flow is in the state under test.
+        openWithAffordance();
+        type("abc");
+        arrange(ctx.soleTrader);
+        expect(btn().length).toBe(1);
+
+        // When: the buyer activates it.
+        activate();
+        jest.advanceTimersByTime(1);
+
+        // Then: manual entry is entered iff the click proceeded, and the chip
+        // only ever disappears on the path that DID proceed.
+        expect(!!ctx.twoinc.manual_company_entry_active).toBe(entered);
+        expect(btn().length).toBe(chipsLeft);
+        if (entered) expect(ctx.soleTrader.mode).toBe("business");
+      } finally {
+        ctx.soleTrader.flightDepth = 0;
         jest.useRealTimers();
       }
     });

@@ -875,6 +875,27 @@ class TwoCompanySearch {
    */
   activateManualEntry() {
     const helper = twoincSelectWooHelper;
+
+    // `enterManualCompanyEntry` refuses to run in either of the two states
+    // below (see its own guard). Removing the chip before deferring to it
+    // regardless left the buyer with no chip AND no manual mode — a dead end
+    // with nothing left on screen to retry (TWO-40, live-reported by Doug:
+    // "not only does it fail to move into manual mode, but the 'Enter
+    // Manually' chip disappears altogether").
+    //
+    // Mid-decision, the chip STAYS and the click is dropped: the outcome of
+    // the outstanding flight/popup is what decides which mode the buyer ends
+    // up in, and `isDeciding()` is the same predicate every other way out of
+    // sole-trader mode already defers to.
+    if (twoincSoleTrader.isDeciding()) return;
+
+    // Already settled in sole-trader mode: manual entry is a DIFFERENT one of
+    // this org's three company-capture modes, so choosing it is an explicit
+    // buyer decision to leave sole trader — the same transition
+    // `reopenSearch()` makes for a click into a captured field, and it has to
+    // happen here because `enterManualCompanyEntry` only ever refuses.
+    if (twoincSoleTrader.mode === "sole_trader") twoincSoleTrader.setMode("business");
+
     jQuery("#" + helper.manualEntryRowId).remove();
     setTimeout(twoincSelectWooHelper.enterManualCompanyEntry, 0);
   }
