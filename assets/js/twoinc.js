@@ -4704,6 +4704,18 @@ let twoincSoleTrader = {
       .appendTo($note);
     $container.append($note);
 
+    // `openPopup` needs tokens, and the prefetch below only mints them once an
+    // email exists — so a chip click before the buyer has typed one had no
+    // tokens to open a popup with (TWO-40 §7 correction). Minted here rather
+    // than at click time because `window.open()` outside the click's own
+    // gesture is blocker bait.
+    //
+    // Skipped once an email is entered: the prefetch below mints for it anyway,
+    // and two concurrent mints race each other's write to `.tokens`.
+    if (!twoincSoleTrader.tokens && !twoincSoleTrader.enteredEmail()) {
+      twoincSoleTrader.fetchTokens();
+    }
+
     // Prefetch for an already-filled email (returning/logged-in buyer), so a
     // known sole trader is auto-selected without waiting for an email edit.
     twoincSoleTrader.onEmailChanged();
@@ -4865,8 +4877,11 @@ let twoincSoleTrader = {
       return;
     }
     if (!twoincSoleTrader.enteredEmail()) {
-      // Nothing to autofill yet (no email entered): fall back to the link.
-      twoincSoleTrader.showNote(true);
+      // No email, so nothing autofill could match: the outcome is already
+      // signup (TWO-40 §7 correction — a chip click resolves to populated or
+      // popup, never to a note). Synchronous, on the tokens `render()` minted
+      // up front — see the mint's own comment.
+      twoincSoleTrader.launchSignup();
       return;
     }
     // An email is entered but the prefetch has not settled (live-reported by
