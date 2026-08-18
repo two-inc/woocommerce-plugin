@@ -3,8 +3,9 @@
  * boundary.
  *
  *   §7 — an in-flight state wired to the REAL duration of the round trip (a
- *   count, not a boolean, not a timeout), a re-entrancy guard so one gesture
- *   cannot stack two signup popups, a "select a different sole trader" link in
+ *   count, not a boolean, not a timeout), re-entrancy guards so neither one
+ *   gesture nor a later click on an undecided popup can stack a second signup
+ *   popup, a "select a different sole trader" link in
  *   the same slot as the existing "search for company" one, and a popup that
  *   is wide enough for the hosted flow's own layout.
  *
@@ -273,6 +274,127 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       expect(prefill.email).toBe("buyer@example.test");
       expect(prefill.billing_address.city).toBe("Registryville");
       expect(prefill.billing_address.country_code).toBe("GB");
+    });
+  });
+
+  describe("§7 — popup stacking across sequential activations", () => {
+    test.each([
+      {
+        arrange: () => $("#billing_email").val(""),
+        description: "no email entered, so both clicks resolve straight to signup"
+      },
+      {
+        arrange: () => {
+          $("#billing_email").val("buyer@example.test");
+          soleTrader.prefetched = { ready: true, matches: false, buyer: null };
+        },
+        description: "prefetch already resolved with no match"
+      }
+    ])(
+      "two sequential chip clicks open one popup, not two stacked — $description",
+      ({ arrange }) => {
+        arrange();
+
+        soleTrader.onModeChipClick("sole_trader");
+        expect(opened).toHaveLength(1);
+
+        // A second, LATER click — a separate gesture, after `openingSignup`
+        // has been released — while the first popup is still open and its
+        // outcome undecided.
+        soleTrader.onModeChipClick("sole_trader");
+        expect(opened).toHaveLength(1);
+      }
+    );
+
+    /**
+     * Every launch path the undecided-popup guard must leave alone. Each case
+     * arranges its state, launches, and must end with exactly the popups it
+     * asked for — refusing any of these is the regression the two earlier,
+     * rejected guards each caused (watcher-count alone refused the post-accept
+     * re-signup; `isDeciding()` refused launches with only a prefetch flight
+     * outstanding).
+     */
+    test.each([
+      {
+        arrangeAndAct: () => {
+          // Given: first-signup popup still open, but its signup already
+          // accepted and adopted — the popup has DECIDED.
+          soleTrader.setMode("sole_trader");
+          soleTrader.launchSignup();
+          soleTrader.setCompany("TWO:ST1", "First Trader");
+          // When: the "select a different sole trader" re-signup launches.
+          soleTrader.getDifferentSoleTraderBtnNode().trigger("click");
+        },
+        expectedPopups: 2,
+        description:
+          "a re-signup after acceptance, while the accepted popup's close poll is still outstanding"
+      },
+      {
+        arrangeAndAct: () => {
+          // Given: chip clicked mid-prefetch, no popup yet.
+          $("#billing_email").val("buyer@example.test");
+          jest.spyOn(soleTrader, "fetchTokens").mockImplementation((cb) => cb(true));
+          let resolveBuyer;
+          jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => {
+            resolveBuyer = cb;
+          });
+          soleTrader.onModeChipClick("sole_trader");
+          // When: the flight settles with no match — applyPrefetch's deferred launch.
+          resolveBuyer(null);
+        },
+        expectedPopups: 1,
+        description: "applyPrefetch's deferred launch once the awaited flight settles with no match"
+      },
+      {
+        arrangeAndAct: () => {
+          // Given: a browser-blocked popup — no watcher was ever created.
+          soleTrader.setMode("sole_trader");
+          const realOpen = window.open;
+          window.open = jest.fn(() => null);
+          soleTrader.launchSignup();
+          window.open = realOpen;
+          // When: the buyer retries.
+          soleTrader.launchSignup();
+        },
+        expectedPopups: 1,
+        description: "a retry after a browser-blocked popup"
+      },
+      {
+        arrangeAndAct: () => {
+          // Given: the note link, shown as the blocked-popup fallback.
+          soleTrader.render();
+          soleTrader.setMode("sole_trader");
+          const realOpen = window.open;
+          window.open = jest.fn(() => null);
+          soleTrader.launchSignup();
+          window.open = realOpen;
+          // When: the buyer clicks the visible signup link.
+          $(".twoinc-sole-trader-note__link").trigger("click");
+        },
+        expectedPopups: 1,
+        description: "the note link after a blocked popup"
+      },
+      {
+        arrangeAndAct: () => {
+          // Given: ONLY a prefetch flight outstanding — email typed, flight
+          // in the air, email cleared — no popup anywhere.
+          $("#billing_email").val("buyer@example.test");
+          jest.spyOn(soleTrader, "fetchTokens").mockImplementation((cb) => cb(true));
+          jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation(() => {});
+          soleTrader.onEmailChanged();
+          expect(soleTrader.flightDepth).toBeGreaterThan(0);
+          $("#billing_email").val("");
+          // When: the chip is clicked.
+          soleTrader.onModeChipClick("sole_trader");
+        },
+        expectedPopups: 1,
+        description: "a chip click while only a stale prefetch flight is outstanding"
+      }
+    ])("still launches: $description", ({ arrangeAndAct, expectedPopups }) => {
+      arrangeAndAct();
+
+      // Then: the launch was honoured, not refused.
+      expect(opened).toHaveLength(expectedPopups);
     });
   });
 

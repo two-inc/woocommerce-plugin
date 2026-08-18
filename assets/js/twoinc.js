@@ -5274,7 +5274,10 @@ let twoincSoleTrader = {
    * browser blocks the window (e.g. gesture lost after a slow prefetch).
    *
    * Re-entrancy-guarded (TWO-40 §7): a second activation while one is already
-   * being opened is dropped rather than stacking a second popup.
+   * being opened is dropped rather than stacking a second popup. A second,
+   * LATER activation is likewise dropped for as long as an already-open
+   * popup's outcome is still undecided — see the guard's own comment for why
+   * that predicate is popup-scoped rather than `isDeciding()`.
    *
    * A re-signup (`options.autoselect === false`) is ALSO refused while a
    * different one is already outstanding (round-6 review — Han/Vader,
@@ -5291,6 +5294,24 @@ let twoincSoleTrader = {
    */
   launchSignup: function (options) {
     if (twoincSoleTrader.openingSignup) return;
+    // One undecided popup at a time: `openingSignup` above only makes two
+    // activations in the SAME gesture idempotent, so a second, later click
+    // while the first popup was still open stacked a second window over it.
+    // Scoped to open POPUPS whose outcome is unknown, deliberately narrower
+    // than either obvious predicate: a bare watcher count refuses the
+    // "select a different sole trader" launch from an accepted popup's
+    // remaining close poll (that popup has already decided), and the
+    // flight-inclusive `isDeciding()` refuses a launch when NO popup exists
+    // and only a stale prefetch flight is outstanding — stranding the chip
+    // click with neither populate nor popup, the exact defect TWO-40 §7
+    // removes. A browser-blocked popup creates no watcher, so retries stay
+    // open.
+    if (
+      twoincSoleTrader.activePopupWatchers.length > 0 &&
+      (!twoincSoleTrader.soleTraderAdopted || twoincSoleTrader.soleTraderReconfirmingCount > 0)
+    ) {
+      return;
+    }
     if (
       options &&
       options.autoselect === false &&
