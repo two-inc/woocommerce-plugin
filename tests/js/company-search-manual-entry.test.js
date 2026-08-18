@@ -1330,10 +1330,13 @@ describe("company-search manual-entry affordance", () => {
         expect(!!$("#billing_company_display").data("select2")).toBe(!entered);
         if (entered) {
           expect(ctx.soleTrader.mode).toBe("business");
-          // The suppression `setMode("sole_trader")` snapshotted is restored
-          // and then re-applied by manual entry itself, not left as whatever
-          // sole-trader mode set.
-          expect(ctx.twoinc.enable_company_search).toBe("no");
+          // The snapshot `setMode("sole_trader")` took is genuinely GIVEN
+          // BACK, not merely coincidentally equal: manual entry sets
+          // `enable_company_search` to "no" itself, so asserting that value
+          // alone passes even with the restore deleted. These two are only
+          // nulled by the restore branch.
+          expect(ctx.soleTrader.savedCompanySearch).toBeNull();
+          expect(ctx.soleTrader.savedManualEntryActive).toBeNull();
           expect($("#billing_company").prop("readonly")).toBe(false);
         }
       } finally {
