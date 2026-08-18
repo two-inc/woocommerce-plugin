@@ -471,7 +471,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
 
         soleTrader.onModeChipClick("sole_trader");
         expect(opened).toHaveLength(0);
-        expect(soleTrader.pendingChipDecision).toBe(true);
+        expect(soleTrader.pendingChipDecisionEmail).toBe("buyer@example.test");
 
         flight.settle({
           organization_number: "TWO:ST1",
@@ -482,7 +482,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         expect(opened).toHaveLength(0);
         expect($("#company_id").val()).toBe("TWO:ST1");
         expect(soleTrader.mode).toBe("sole_trader");
-        expect(soleTrader.pendingChipDecision).toBe(false);
+        expect(soleTrader.pendingChipDecisionEmail).toBe(null);
       });
 
       test("prefetch still in flight at click time and resolves with no match: opens exactly one popup, once", () => {
@@ -499,7 +499,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         soleTrader.onModeChipClick("sole_trader");
 
         expect(opened).toHaveLength(0);
-        expect(soleTrader.pendingChipDecision).toBe(false);
+        expect(soleTrader.pendingChipDecisionEmail).toBe(null);
         expect($(".twoinc-sole-trader-note").hasClass("hidden")).toBe(false);
       });
     });
@@ -622,6 +622,135 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         // Unlike the field click, this stays in sole-trader mode — it is
         // choosing a DIFFERENT sole trader, not leaving sole trader mode.
         expect(soleTrader.mode).toBe("sole_trader");
+      });
+    });
+
+    describe("round-1 review regressions (Han/Vader/Leia) — races the dropdown-survives fix opened up", () => {
+      test("the Business chip is refused while an autofill flight is outstanding, not honoured then stomped by the match", () => {
+        const flight = armPendingPrefetch();
+        soleTrader.onModeChipClick("sole_trader");
+
+        // The chip lives inside the search dropdown the buyer is still
+        // looking at — clicking Business mid-flight used to force mode back
+        // to business immediately, only for the later match to silently
+        // force it straight back to sole-trader and populate underneath.
+        ctx.helper.buildBusinessChip().trigger("click");
+        expect(soleTrader.mode).toBe("sole_trader");
+
+        flight.settle({
+          organization_number: "TWO:ST1",
+          company_name: "Sole Co",
+          email: "buyer@example.test"
+        });
+
+        expect(soleTrader.mode).toBe("sole_trader");
+        expect($("#company_id").val()).toBe("TWO:ST1");
+      });
+
+      test("the Business chip works normally once the flight has actually settled", () => {
+        soleTrader.setMode("sole_trader");
+        soleTrader.setCompany("TWO:ST1", "A Sole Trader");
+
+        ctx.helper.buildBusinessChip().trigger("click");
+
+        expect(soleTrader.mode).toBe("business");
+      });
+
+      test("clicking a captured field is refused while a popup is still open, so a completed signup is not dropped", () => {
+        $("form[name='checkout']").after('<div id="order_review"></div>');
+        ctx.Twoinc.getInstance().initialize(false);
+        soleTrader.setMode("sole_trader");
+        const win = { closed: false };
+        window.open = jest.fn(() => win);
+        soleTrader.launchSignup();
+
+        // The buyer clicks the (not-yet-locked) captured field while the
+        // popup is still open, instead of finishing signup in it.
+        $("#billing_company").trigger("click");
+        expect(soleTrader.mode).toBe("sole_trader");
+
+        // The popup posts ACCEPTED and completes normally.
+        jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) =>
+          cb({ organization_number: "TWO:ST1", company_name: "A Sole Trader", email: "buyer@example.test" })
+        );
+        soleTrader.bindPopupMessageListener();
+        window.dispatchEvent(
+          new window.MessageEvent("message", {
+            data: "ACCEPTED",
+            origin: "https://checkout.example.test"
+          })
+        );
+
+        expect($("#company_id").val()).toBe("TWO:ST1");
+      });
+
+      test("an unrelated company already captured before sole-trader mode does not suppress the abandon-revert", () => {
+        // A prior manual/registry pick left #company_id non-empty. Entering
+        // sole-trader mode and abandoning the popup must still revert — the
+        // stale id is not evidence that THIS sole-trader session adopted
+        // anything.
+        $("#company_id").val("556677-1234");
+        soleTrader.setMode("sole_trader");
+        const win = { closed: false };
+        window.open = jest.fn(() => win);
+        jest.useFakeTimers();
+
+        soleTrader.launchSignup();
+        win.closed = true;
+        jest.advanceTimersByTime(300);
+
+        expect(soleTrader.mode).toBe("business");
+        jest.useRealTimers();
+      });
+
+      test("the popup-close poll does not revert while the ACCEPTED handler's own fetch is still resolving", () => {
+        soleTrader.setMode("sole_trader");
+        const win = { closed: false };
+        window.open = jest.fn(() => win);
+        jest.useFakeTimers();
+        soleTrader.launchSignup();
+
+        let resolveBuyer;
+        jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => {
+          resolveBuyer = cb;
+        });
+        soleTrader.bindPopupMessageListener();
+        window.dispatchEvent(
+          new window.MessageEvent("message", { data: "ACCEPTED", origin: "https://checkout.example.test" })
+        );
+
+        // The popup closes before that fetch resolves.
+        win.closed = true;
+        jest.advanceTimersByTime(300);
+        expect(soleTrader.mode).toBe("sole_trader");
+
+        resolveBuyer({ organization_number: "TWO:ST1", company_name: "A Sole Trader" });
+        expect($("#company_id").val()).toBe("TWO:ST1");
+        expect(soleTrader.mode).toBe("sole_trader");
+        jest.useRealTimers();
+      });
+
+      test("a pending chip decision does not fire against a later, unrelated flight for a different email", () => {
+        const flight = armPendingPrefetch();
+        soleTrader.onModeChipClick("sole_trader");
+        expect(soleTrader.pendingChipDecisionEmail).toBe("buyer@example.test");
+
+        // The buyer edits the email before the flight it was raised for
+        // lands, and that stale flight resolves with no match.
+        $("#billing_email").val("someone.else@example.test");
+        flight.settle(null);
+
+        // Dropped, not misapplied: no popup for a decision that no longer
+        // matches what is actually entered.
+        expect(opened).toHaveLength(0);
+      });
+
+      test("a click that lands while availability just dropped does not leak a pending decision forward", () => {
+        $("#billing_email").val("buyer@example.test");
+        soleTrader.availabilityByCountry = { GB: false };
+
+        soleTrader.onModeChipClick("sole_trader");
+        expect(soleTrader.pendingChipDecisionEmail).toBe(null);
       });
     });
   });

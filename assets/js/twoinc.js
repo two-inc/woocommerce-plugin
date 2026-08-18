@@ -880,11 +880,12 @@ class TwoCompanySearch {
   }
 
   /**
-   * "Registered Company" mode chip (TWO-40 §0). Clicking it while already in
-   * business mode is a no-op — the dropdown is only ever open in business
-   * mode to begin with (sole-trader/manual both close and destroy the
-   * widget), so this exists for the one case it IS reachable: business mode
-   * itself, confirming/no-op.
+   * "Registered Company" mode chip (TWO-40 §0). A no-op while already in
+   * business mode, or while `twoincSoleTrader.isBusy()` — see the click
+   * handler's own comment (TWO-40 §7 correction: the dropdown/widget this
+   * chip lives in now deliberately survives a sole-trader autofill flight
+   * or open signup popup, so it IS reachable during that wait, not only in
+   * business mode as it used to be).
    *
    * @returns {Object} jQuery-wrapped <button>
    */
@@ -898,7 +899,15 @@ class TwoCompanySearch {
       .addClass(helper.modeChipClass)
       .text(label)
       .on("click", function () {
-        if (twoincSoleTrader.mode !== "business") twoincSoleTrader.setMode("business");
+        // Refused while a sole-trader autofill flight or signup popup is
+        // outstanding (TWO-40 §7 correction, round-1 review — Han/Vader):
+        // this chip only coexists with `sole_trader` mode DURING that wait
+        // (an adopted sole trader destroys the widget it lives in), so
+        // acting on it mid-wait raced the buyer against the flight/popup's
+        // own resolution — `applyPrefetch` or the ACCEPTED handler could
+        // silently reassert or drop what the click just tried to undo.
+        if (twoincSoleTrader.mode === "business" || twoincSoleTrader.isBusy()) return;
+        twoincSoleTrader.setMode("business");
       });
   }
 
@@ -3048,6 +3057,16 @@ class TwoCompanySearch {
     );
 
     widget.on("select2:select", function (e) {
+      // The dropdown now deliberately survives a sole-trader autofill flight
+      // or an open signup popup (TWO-40 §7 correction) — its spinner means
+      // "wait", not "browse". Before that, sole-trader mode always destroyed
+      // this widget synchronously, so an ordinary pick landing here while
+      // `mode === "sole_trader"` was unreachable; it no longer is (round-1
+      // review — Han), and a pick landing mid-wait wrote #company_id/
+      // #billing_company directly, racing the sole-trader flow's own write
+      // through `setCompany()`.
+      if (twoincSoleTrader.mode === "sole_trader") return;
+
       const instance = twoincInstance || Twoinc.getInstance();
 
       // Get the option data
@@ -4244,6 +4263,11 @@ let twoincSoleTrader = {
    * settles its own flight — never to a fixed timeout. Adversarial review of
    * this exact feature upstream found stuck-forever spinners on two separate
    * abandon/retry paths, so every `cb(...)` below is a settle point.
+   *
+   * Also held by `watchPopupClose()` for as long as the signup popup itself
+   * is open (TWO-40 §7 correction) — a second, later kind of "round trip
+   * outstanding" sharing the same counter and the same in-field spinner,
+   * not just the autofill prefetch this doc originally described.
    */
   flightDepth: 0,
 
@@ -4261,13 +4285,51 @@ let twoincSoleTrader = {
 
   /**
    * A mode-chip click landed while the autofill prefetch it needs was still
-   * in flight (TWO-40 §7 correction). Set by `onModeChipClick`, consumed
-   * exactly once by `applyPrefetch` when that flight settles — see both for
-   * why: showing the manual signup link immediately, as this used to, could
-   * race the buyer into opening a popup a matching autofill result was about
-   * to make unnecessary.
+   * in flight (TWO-40 §7 correction). Set by `onModeChipClick` to the email
+   * it was raised for, consumed exactly once by `applyPrefetch` when a
+   * flight settles FOR THAT SAME EMAIL — see both for why: showing the
+   * manual signup link immediately, as this used to, could race the buyer
+   * into opening a popup a matching autofill result was about to make
+   * unnecessary.
+   *
+   * Keyed on email, not a bare boolean (round-1 review — Han, Vader): a
+   * boolean gets consumed by whichever flight happens to settle first, which
+   * is exactly the shape `flightDepth`'s own doc above says a boolean can't
+   * handle — a buyer can edit the email again, or the click can outlive an
+   * `isAvailable()`-gated flight that never actually started, before the
+   * flight it was really waiting on lands. `null` when nothing is pending;
+   * matching the CURRENTLY entered email at consume time is what makes a
+   * stale decision (raised for an email no longer in the field) inert
+   * rather than firing against whatever unrelated flight settles next.
    */
-  pendingChipDecision: false,
+  pendingChipDecisionEmail: null,
+
+  /**
+   * True once `setCompany()` has actually adopted a company while in
+   * sole-trader mode THIS time through (TWO-40 §7 correction, round-1
+   * review — Vader). Reset by every `setMode()` call, so it never reads a
+   * value left over from before the current switch.
+   *
+   * `watchPopupClose()`'s "did the buyer abandon this popup with nothing
+   * captured" check reads this instead of `#company_id`'s raw DOM value —
+   * that field can already hold an unrelated id from an earlier manual
+   * entry or registry pick, and `setMode("sole_trader")` never clears it on
+   * entry, so the DOM alone can't tell "adopted THIS session" from "still
+   * has old data lying around".
+   */
+  soleTraderAdopted: false,
+
+  /**
+   * True while the ACCEPTED-postMessage handler's own `fetchCurrentBuyer()`
+   * is in flight (TWO-40 §7 correction, round-1 review — Han). Popup-close
+   * detection is a poll with no cooperation from the popup — the buyer (or
+   * the hosted flow itself) can close the window the instant "ACCEPTED" is
+   * posted, well before this fetch resolves and writes `#company_id`.
+   * Without this, `watchPopupClose()`'s poll could see mode still
+   * `sole_trader` and nothing captured YET and revert to business out from
+   * under a signup that was in fact about to complete.
+   */
+  signupConfirming: false,
 
   /** Live `setInterval` ids from `watchPopupClose`, so tests (and any other
    * caller needing a clean slate) can stop every outstanding poll. */
@@ -4567,10 +4629,27 @@ let twoincSoleTrader = {
     // instead and decide exactly once, from whatever it resolves to (see
     // applyPrefetch). The search dropdown/spinner is left alone here — see
     // setMode's own comment — so it stays visible for the whole wait.
-    twoincSoleTrader.pendingChipDecision = true;
+    twoincSoleTrader.pendingChipDecisionEmail = twoincSoleTrader.enteredEmail();
     if (twoincSoleTrader.flightDepth === 0) {
       twoincSoleTrader.onEmailChanged();
     }
+  },
+
+  /**
+   * Is a sole-trader autofill flight or a signup popup currently
+   * outstanding (TWO-40 §7 correction, round-1 review — Han/Vader)?
+   *
+   * The one guard every OTHER way to leave/interrupt sole-trader mode needs
+   * to check before acting: the widget/mode chips now deliberately survive
+   * this whole window (see `setMode`'s own comment), so paths that used to
+   * be unreachable while `mode === "sole_trader"` — the Business chip,
+   * `reopenSearch()`, an ordinary company pick — are reachable now, and
+   * acting on them mid-wait races the flow's own eventual resolution.
+   *
+   * @returns {boolean}
+   */
+  isBusy: function () {
+    return twoincSoleTrader.flightDepth > 0 || twoincSoleTrader.activePopupWatchers.length > 0;
   },
 
   /**
@@ -4580,6 +4659,10 @@ let twoincSoleTrader = {
    */
   setMode: function (mode) {
     twoincSoleTrader.mode = mode;
+    // Every switch starts a fresh determination of whether THIS time through
+    // sole-trader mode ends in an adopted company (TWO-40 §7 correction,
+    // round-1 review — Vader) — see the flag's own comment.
+    twoincSoleTrader.soleTraderAdopted = false;
     twoincSoleTrader.updateChips();
     twoincSoleTrader.syncDifferentSoleTraderLink();
 
@@ -4701,10 +4784,17 @@ let twoincSoleTrader = {
    * reopened dropdown, the same landing `exitManualCompanyEntry()` gives a
    * buyer leaving manual entry.
    *
+   * Refused while `isBusy()` (round-1 review — Han/Vader): a captured field
+   * only readonly-locks once `lockCapturedFields()` runs, which is deferred
+   * for the whole autofill/popup wait (see `setMode`'s comment) — reverting
+   * mode out from under that wait is what dropped a completed signup on the
+   * floor, because `bindPopupMessageListener`'s ACCEPTED handler also gates
+   * on `mode === "sole_trader"`.
+   *
    * @returns {void}
    */
   reopenSearch: function () {
-    if (twoincSoleTrader.mode !== "sole_trader") return;
+    if (twoincSoleTrader.mode !== "sole_trader" || twoincSoleTrader.isBusy()) return;
     twoincSoleTrader.setMode("business");
     if (
       !twoincSelectWooHelper.openCompanySearchDropdown() &&
@@ -4724,17 +4814,27 @@ let twoincSoleTrader = {
    */
   onEmailChanged: function () {
     if (!twoincSoleTrader.isAvailable()) {
+      // No flight is starting, so nothing will ever consume a pending chip
+      // decision (round-1 review — Vader): a country change can leave
+      // availability false right as `onModeChipClick`'s own call lands here.
+      // Dropped rather than left dangling for whatever unrelated flight
+      // settles next.
+      twoincSoleTrader.pendingChipDecisionEmail = null;
       return;
     }
     const email = twoincSoleTrader.enteredEmail();
     // Dedupe repeated checkout re-renders firing for an unchanged email.
     if (email === twoincSoleTrader.lastPrefetchEmail) {
+      // Same reasoning as the `isAvailable()` guard above: no new flight
+      // starts here either.
+      twoincSoleTrader.pendingChipDecisionEmail = null;
       return;
     }
     twoincSoleTrader.lastPrefetchEmail = email;
     twoincSoleTrader.prefetched = { ready: false, buyer: null, matches: false };
     if (!email) {
       // No email to match → cannot be a known sole trader; leave business.
+      twoincSoleTrader.pendingChipDecisionEmail = null;
       if (twoincSoleTrader.mode === "sole_trader") {
         twoincSoleTrader.setMode("business");
       }
@@ -4788,9 +4888,18 @@ let twoincSoleTrader = {
    */
   applyPrefetch: function () {
     const pf = twoincSoleTrader.prefetched;
-    const hadPendingClick = twoincSoleTrader.pendingChipDecision;
-    twoincSoleTrader.pendingChipDecision = false;
-    if (pf.matches && pf.buyer) {
+    // Keyed on the CURRENTLY entered email, not just "was something
+    // pending" (round-1 review — Han/Vader) — see the flag's own comment for
+    // why a bare boolean gets consumed by whichever flight settles first.
+    const pendingEmail = twoincSoleTrader.pendingChipDecisionEmail;
+    const hadPendingClick = pendingEmail !== null && pendingEmail === twoincSoleTrader.enteredEmail();
+    twoincSoleTrader.pendingChipDecisionEmail = null;
+    // `isAvailable()` too (round-1 review — Vader): a country change can
+    // call `hide()` — which reverts mode to business synchronously — while
+    // this flight is still in flight for the country the buyer just left.
+    // Without this, a match landing after that would force sole-trader mode
+    // back on for a country it is no longer offered in.
+    if (pf.matches && pf.buyer && twoincSoleTrader.isAvailable()) {
       twoincSoleTrader.setMode("sole_trader");
       twoincSoleTrader.setCompany(pf.buyer.organization_number, pf.buyer.company_name, pf.buyer);
       twoincSoleTrader.showNote(false);
@@ -4805,10 +4914,6 @@ let twoincSoleTrader = {
     }
   },
 
-  /**
-   * Open the hosted signup popup, falling back to the visible link if the
-   * browser blocks the window (e.g. gesture lost after a slow prefetch).
-   */
   /**
    * Open the hosted signup popup, falling back to the visible link if the
    * browser blocks the window (e.g. gesture lost after a slow prefetch).
@@ -4846,9 +4951,18 @@ let twoincSoleTrader = {
    * "the popup went away" with no cooperation from the popup itself — there
    * is no event for it. If nothing was ever adopted by the time it closes
    * (the buyer backed out without finishing signup), hand the checkout back
-   * to an ordinary company search rather than leaving it stuck mid-switch;
-   * a completed signup (`bindPopupMessageListener`) has already written
-   * `#company_id` by then, so that check is enough to tell the two apart.
+   * to an ordinary company search rather than leaving it stuck mid-switch.
+   *
+   * Reads `soleTraderAdopted`, not `#company_id`'s raw value (round-1 review
+   * — Vader): that field can already hold an unrelated id from an earlier
+   * manual entry or registry pick, predating this sole-trader session
+   * entirely, which would wrongly read as "already adopted" and suppress
+   * the revert. Also skips the revert while `signupConfirming` is true
+   * (round-1 review — Han): the ACCEPTED-postMessage handler's own
+   * `fetchCurrentBuyer()` can still be resolving when this poll notices the
+   * window closed — the popup can go away the instant "ACCEPTED" is posted,
+   * before that fetch has had a chance to write anything — and that handler
+   * is the sole authority once a signup has actually completed.
    *
    * @param {Window} win the popup returned by `window.open`
    * @returns {void}
@@ -4861,7 +4975,8 @@ let twoincSoleTrader = {
       twoincSoleTrader.settleFlight();
       if (
         twoincSoleTrader.mode === "sole_trader" &&
-        !twoincUtilHelper.blankToEmpty(jQuery("#company_id").val())
+        !twoincSoleTrader.soleTraderAdopted &&
+        !twoincSoleTrader.signupConfirming
       ) {
         twoincSoleTrader.setMode("business");
       }
@@ -4918,6 +5033,9 @@ let twoincSoleTrader = {
       // every switch into sole-trader mode, is what lets the dropdown+spinner
       // survive the autofill/popup round trip.
       twoincSoleTrader.lockCapturedFields();
+      // Read by `watchPopupClose()` in place of `#company_id`'s raw value
+      // (round-1 review — Vader) — see that flag's own comment.
+      twoincSoleTrader.soleTraderAdopted = true;
     }
     twoincCompanyCapture.write(companyName, companyId);
     // The display select too, when this is the clearing call setMode("business")
@@ -5124,6 +5242,12 @@ let twoincSoleTrader = {
       }
       if (event.data === "ACCEPTED") {
         twoincSoleTrader.beginFlight();
+        // Held for the duration of this fetch (round-1 review — Han): the
+        // popup can close the instant "ACCEPTED" is posted, well before this
+        // resolves and writes `#company_id` — `watchPopupClose()`'s own poll
+        // checks this before deciding the buyer abandoned signup with
+        // nothing captured.
+        twoincSoleTrader.signupConfirming = true;
         twoincSoleTrader.fetchCurrentBuyer(function (buyer) {
           // AUTHENTICATED path (TWO-40 §8). The server has just told this
           // browser who the buyer is — the OTP step succeeded — so the email
@@ -5135,6 +5259,7 @@ let twoincSoleTrader = {
           const resolved = !!buyer;
           twoincSoleTrader.prefetched = { ready: true, buyer: buyer, matches: resolved };
           twoincSoleTrader.settleFlight();
+          twoincSoleTrader.signupConfirming = false;
           if (resolved) {
             twoincSoleTrader.setCompany(buyer.organization_number, buyer.company_name, buyer);
             twoincSoleTrader.showNote(false);
