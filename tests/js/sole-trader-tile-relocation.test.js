@@ -116,6 +116,38 @@ describe("sole-trader toggle follows the search control (TWO-40)", () => {
       expect($toggle.prev()[0]).toBe($("#billing_company_display_field")[0]);
     });
 
+    /**
+     * Live-verified bug, found post-merge on the WooCommerce dev shop:
+     * `getCompanySummaryNode()` (twoinc.js) re-anchors `#twoinc_company_summary`
+     * immediately after `#billing_company_display_field` on EVERY
+     * `renderCompanySummary()` call — which fires far more often than
+     * `relocateSoleTraderToggle()` does, so in production the toggle's real
+     * previous sibling is always the summary node, never the bare field.
+     * An earlier version of `relocateSoleTraderToggle()` anchored on the
+     * bare field, so its own idempotency guard could never be satisfied —
+     * `insertAfter()` fired on every single call. This drives the same
+     * anchor helper (`helper.renderCompanySummary()`) the production code
+     * path actually calls, so a regression back to anchoring on the bare
+     * field fails here, not just in a live shop.
+     */
+    test("settles after the company summary node, not between it and the search field, and stops re-detaching once settled", () => {
+      ctx.helper.renderCompanySummary("ACME Widgets Ltd", "12345678");
+
+      soleTrader.refresh();
+
+      const $toggle = $(".twoinc-sole-trader-toggle");
+      const $summary = $("#" + ctx.helper.companySummaryId);
+      expect($summary.length).toBe(1);
+      expect($summary.prev()[0]).toBe($("#billing_company_display_field")[0]);
+      expect($toggle.prev()[0]).toBe($summary[0]);
+
+      const insertAfterSpy = jest.spyOn($.fn, "insertAfter");
+      soleTrader.refresh();
+
+      expect(insertAfterSpy).not.toHaveBeenCalled();
+      insertAfterSpy.mockRestore();
+    });
+
     test("survives a WooCommerce-style fragment replace of .woocommerce-checkout-payment without duplicating", () => {
       soleTrader.refresh();
       expect($(".twoinc-sole-trader-toggle").length).toBe(1);

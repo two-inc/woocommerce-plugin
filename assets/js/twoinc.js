@@ -1834,6 +1834,25 @@ class TwoCompanySearch {
    * in that branch, so the two are already adjacent inside the tile and
    * nothing needs to move.
    *
+   * Anchored on the company-summary node (`#twoinc_company_summary`) when
+   * it exists, not the bare search field itself (live-verified bug, found
+   * post-merge on the WooCommerce dev shop): `getCompanySummaryNode()`
+   * re-anchors that node immediately after `#billing_company_display_field`
+   * on EVERY `renderCompanySummary()` call — which fires far more often
+   * than this function does, and unconditionally wins the "right after the
+   * field" position regardless of what this function last did. Anchoring
+   * here on the bare field too meant this function's own idempotency guard
+   * (below) could never be satisfied in production — the toggle's actual
+   * previous sibling is always the summary node, never the field — so
+   * `insertAfter()` fired on every single call instead of skipping once
+   * truly in place. Anchoring on the summary instead (falling back to the
+   * field only when the summary doesn't exist yet) makes the two
+   * mechanisms compatible rather than fighting over the same slot: the
+   * summary always settles right after the field, and this function always
+   * settles right after wherever the summary currently is — a stable
+   * order (field, summary, toggle) regardless of which runs first on a
+   * given cycle.
+   *
    * Guarded on the toggle's CURRENT previous sibling, same idempotency
    * reasoning as `syncCompanySearchTileLocation()` above: an unconditional
    * `insertAfter()` on every call would physically detach and reattach the
@@ -1859,13 +1878,18 @@ class TwoCompanySearch {
     if (window.twoinc.company_search_location === "payment_tile") return;
 
     const $companyField = jQuery("#billing_company_display_field").first();
+    if (!$companyField.length) return;
+
+    const $summary = jQuery("#" + twoincSelectWooHelper.companySummaryId);
+    const $anchor = $summary.length ? $summary : $companyField;
+
     const $toggle = jQuery(
       twoincSelectWooHelper.paymentTileScopeSelector() + " .twoinc-sole-trader-toggle"
     ).first();
-    if (!$companyField.length || !$toggle.length) return;
+    if (!$toggle.length) return;
 
-    if ($toggle.prev()[0] !== $companyField[0]) {
-      $toggle.insertAfter($companyField);
+    if ($toggle.prev()[0] !== $anchor[0]) {
+      $toggle.insertAfter($anchor);
     }
   }
 
