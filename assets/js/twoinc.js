@@ -4259,6 +4259,20 @@ let twoincSoleTrader = {
    */
   openingSignup: false,
 
+  /**
+   * A mode-chip click landed while the autofill prefetch it needs was still
+   * in flight (TWO-40 §7 correction). Set by `onModeChipClick`, consumed
+   * exactly once by `applyPrefetch` when that flight settles — see both for
+   * why: showing the manual signup link immediately, as this used to, could
+   * race the buyer into opening a popup a matching autofill result was about
+   * to make unnecessary.
+   */
+  pendingChipDecision: false,
+
+  /** Live `setInterval` ids from `watchPopupClose`, so tests (and any other
+   * caller needing a clean slate) can stop every outstanding poll. */
+  activePopupWatchers: [],
+
   /** DOM id of the "select a different sole trader" link (TWO-40 §7). */
   differentSoleTraderBtnId: "select_different_sole_trader_btn",
 
@@ -4532,13 +4546,30 @@ let twoincSoleTrader = {
     if (pf.ready && pf.matches && pf.buyer) {
       twoincSoleTrader.setCompany(pf.buyer.organization_number, pf.buyer.company_name, pf.buyer);
       twoincSoleTrader.showNote(false);
-    } else if (pf.ready) {
+      return;
+    }
+    if (pf.ready) {
       // Prefetch resolved with no matching buyer → signup. Opening here keeps
       // the user gesture intact so the popup is not blocker-killed.
       twoincSoleTrader.launchSignup();
-    } else {
-      // Prefetch not ready (e.g. no email entered yet): fall back to the link.
+      return;
+    }
+    if (!twoincSoleTrader.enteredEmail()) {
+      // Nothing to autofill yet (no email entered): fall back to the link.
       twoincSoleTrader.showNote(true);
+      return;
+    }
+    // An email is entered but the prefetch has not settled (live-reported by
+    // Doug, TWO-40 §7 correction): showing the manual "click here to sign up"
+    // link here raced the buyer against their own in-flight autofill result —
+    // clicking it opened a popup, and the prefetch landing moments later then
+    // ALSO silently populated the fields behind it. Wait for the flight
+    // instead and decide exactly once, from whatever it resolves to (see
+    // applyPrefetch). The search dropdown/spinner is left alone here — see
+    // setMode's own comment — so it stays visible for the whole wait.
+    twoincSoleTrader.pendingChipDecision = true;
+    if (twoincSoleTrader.flightDepth === 0) {
+      twoincSoleTrader.onEmailChanged();
     }
   },
 
@@ -4569,32 +4600,31 @@ let twoincSoleTrader = {
       // be put back on the way out, in case the buyer really was mid manual
       // entry.
       window.twoinc.manual_company_entry_active = false;
-      const $display = jQuery("#billing_company_display");
-      if ($display.data("select2")) {
-        // close() before destroy() — same fix, same reason, as
-        // enterManualCompanyEntry (#30.x.13). This branch is reachable with
-        // the widget still OPEN exactly like that one: a buyer mid manual
-        // entry (dropdown already torn down, so a no-op there) or mid an
-        // open search (dropdown live) can switch to sole-trader mode via
-        // the mode chip, and the autofill prefetch (onEmailChanged) can
-        // call setMode("sole_trader") on its own regardless of what the
-        // dropdown is doing. destroy() alone, on an open widget, skips
-        // selectWoo's own close cleanup — the same page-wide-Tab-shaped gap
-        // documented in bindManualEntryAffordance and enterManualCompanyEntry
-        // above (found under adversarial review, round 1 — Han: this PR
-        // fixed the identical hazard in enterManualCompanyEntry but missed
-        // this sibling call site).
-        $display.select2("close");
-        $display.select2("destroy");
-      }
-      // Only the link back to search: the manual-entry row lives inside the
-      // dropdown and goes with the widget that was just destroyed (TWO-25288).
-      jQuery("#" + twoincSelectWooHelper.searchCompanyBtnId).hide();
-      jQuery("#billing_company, #company_id").prop("readonly", true);
-      twoincDomHelper.toggleBusinessFields();
+      // The search widget itself, and the swap to the plain captured fields,
+      // are deliberately NOT done here (TWO-40 §7 correction, live-reported
+      // by Doug). Tearing them down the instant the mode switches — as this
+      // used to, unconditionally — destroys the dropdown before the autofill
+      // round trip (or the signup popup it can lead to) has had a chance to
+      // run, which is exactly the window `beginFlight()`'s own comment says
+      // the dropdown+spinner are supposed to survive. `lockCapturedFields()`
+      // does this instead, once `setCompany()` actually has a company to
+      // show — the only moment there is nothing left to search for.
     } else {
       twoincSoleTrader.showNote(false);
       jQuery("#billing_company, #company_id").prop("readonly", false);
+      const $display = jQuery("#billing_company_display");
+      if ($display.data("select2")) {
+        // Still alive if this switch happens before a company was ever
+        // adopted (TWO-40 §7 correction — e.g. the buyer abandons the popup,
+        // or types a non-matching email while sole-trader mode is still
+        // waiting on a flight). Destroy it here so `enableCompanySearch()`
+        // below does not re-initialise an already-live widget. close()
+        // before destroy() — same fix, same reason, as
+        // enterManualCompanyEntry (#30.x.13): destroy() alone on an open
+        // widget skips selectWoo's own close cleanup.
+        $display.select2("close");
+        $display.select2("destroy");
+      }
       if (twoincSoleTrader.savedCompanySearch !== null) {
         window.twoinc.enable_company_search = twoincSoleTrader.savedCompanySearch;
         window.twoinc.manual_company_entry_active = twoincSoleTrader.savedManualEntryActive;
@@ -4632,6 +4662,57 @@ let twoincSoleTrader = {
       ) {
         twoincSelectWooHelper.getSearchCompanyBtnNode().show();
       }
+    }
+  },
+
+  /**
+   * Tear down the company-search widget and lock the captured fields, once a
+   * sole trader is actually adopted (TWO-40 §7 correction). Split out of
+   * `setMode()` — see its comment — so switching mode alone leaves the
+   * dropdown and its spinner alone; this is the only moment there is nothing
+   * left to search for.
+   *
+   * @returns {void}
+   */
+  lockCapturedFields: function () {
+    const $display = jQuery("#billing_company_display");
+    if ($display.data("select2")) {
+      // close() before destroy() — same fix, same reason, as
+      // enterManualCompanyEntry (#30.x.13): destroy() alone on an open widget
+      // skips selectWoo's own close cleanup.
+      $display.select2("close");
+      $display.select2("destroy");
+    }
+    // Only the link back to search: the manual-entry row lives inside the
+    // dropdown and goes with the widget that was just destroyed (TWO-25288).
+    jQuery("#" + twoincSelectWooHelper.searchCompanyBtnId).hide();
+    jQuery("#billing_company, #company_id").prop("readonly", true);
+  },
+
+  /**
+   * Click-to-reopen (TWO-40 §7 correction, live-reported by Doug): once a
+   * sole trader is adopted, `lockCapturedFields()` readonly-locks the
+   * captured fields and tears down the search widget, leaving no way back to
+   * an ordinary company search except the "select a different sole trader"
+   * link — which only ever leads back into the SAME hosted signup, never
+   * away from sole trader entirely. Clicking into either captured field does
+   * that instead: revert to business mode (restoring whatever search/
+   * manual-entry state was saved) and land the buyer straight in the
+   * reopened dropdown, the same landing `exitManualCompanyEntry()` gives a
+   * buyer leaving manual entry.
+   *
+   * @returns {void}
+   */
+  reopenSearch: function () {
+    if (twoincSoleTrader.mode !== "sole_trader") return;
+    twoincSoleTrader.setMode("business");
+    if (
+      !twoincSelectWooHelper.openCompanySearchDropdown() &&
+      !twoincSelectWooHelper.focusVisibleCompanyField(
+        "#billing_company_display_field .select2-selection"
+      )
+    ) {
+      twoincSelectWooHelper.focusVisibleCompanyField("#billing_company_display");
     }
   },
 
@@ -4707,10 +4788,18 @@ let twoincSoleTrader = {
    */
   applyPrefetch: function () {
     const pf = twoincSoleTrader.prefetched;
+    const hadPendingClick = twoincSoleTrader.pendingChipDecision;
+    twoincSoleTrader.pendingChipDecision = false;
     if (pf.matches && pf.buyer) {
       twoincSoleTrader.setMode("sole_trader");
       twoincSoleTrader.setCompany(pf.buyer.organization_number, pf.buyer.company_name, pf.buyer);
       twoincSoleTrader.showNote(false);
+    } else if (hadPendingClick && twoincSoleTrader.mode === "sole_trader") {
+      // The buyer explicitly asked for sole trader (TWO-40 §7 correction) and
+      // the autofill this settles just came back with no match — open the
+      // popup now, the moment the wait `onModeChipClick` deferred is over,
+      // rather than reflexively at click time.
+      twoincSoleTrader.launchSignup();
     } else if (twoincSoleTrader.mode === "sole_trader") {
       twoincSoleTrader.setMode("business");
     }
@@ -4736,12 +4825,74 @@ let twoincSoleTrader = {
     try {
       const win = twoincSoleTrader.openPopup(options);
       twoincSoleTrader.showNote(!win);
+      if (win) {
+        twoincSoleTrader.watchPopupClose(win);
+      }
     } finally {
       // Released once the synchronous open has returned, blocked or not — see
       // the guard's own comment. Held any longer and a blocked popup would
       // lock the buyer out of retrying via the fallback link.
       twoincSoleTrader.openingSignup = false;
     }
+  },
+
+  /**
+   * Keep the search dropdown's spinner up for as long as the signup popup is
+   * open, and settle it the moment the buyer closes the window (TWO-40 §7
+   * correction, live-reported by Doug: the dropdown used to vanish the
+   * instant the popup opened, whether or not autofill had found anything).
+   *
+   * `window.closed` polling is the only signal a same-origin opener has for
+   * "the popup went away" with no cooperation from the popup itself — there
+   * is no event for it. If nothing was ever adopted by the time it closes
+   * (the buyer backed out without finishing signup), hand the checkout back
+   * to an ordinary company search rather than leaving it stuck mid-switch;
+   * a completed signup (`bindPopupMessageListener`) has already written
+   * `#company_id` by then, so that check is enough to tell the two apart.
+   *
+   * @param {Window} win the popup returned by `window.open`
+   * @returns {void}
+   */
+  watchPopupClose: function (win) {
+    twoincSoleTrader.beginFlight();
+    const poll = setInterval(function () {
+      if (!win.closed) return;
+      twoincSoleTrader.stopWatchingPopup(poll);
+      twoincSoleTrader.settleFlight();
+      if (
+        twoincSoleTrader.mode === "sole_trader" &&
+        !twoincUtilHelper.blankToEmpty(jQuery("#company_id").val())
+      ) {
+        twoincSoleTrader.setMode("business");
+      }
+    }, 300);
+    twoincSoleTrader.activePopupWatchers.push(poll);
+  },
+
+  /** Stop one popup-close poll (its own terminal branch, or a test tearing
+   * down early) without touching any other outstanding one.
+   * @param {number} id the interval id returned by `watchPopupClose`
+   * @returns {void}
+   */
+  stopWatchingPopup: function (id) {
+    clearInterval(id);
+    twoincSoleTrader.activePopupWatchers = twoincSoleTrader.activePopupWatchers.filter(
+      function (existing) {
+        return existing !== id;
+      }
+    );
+  },
+
+  /** Test seam: stop every outstanding popup-close poll and settle the
+   * flight each was holding, so a test file leaves nothing running past it.
+   * @returns {void}
+   */
+  stopAllPopupWatchers: function () {
+    twoincSoleTrader.activePopupWatchers.forEach(function (id) {
+      clearInterval(id);
+      twoincSoleTrader.settleFlight();
+    });
+    twoincSoleTrader.activePopupWatchers = [];
   },
 
   /**
@@ -4760,6 +4911,14 @@ let twoincSoleTrader = {
    * @returns {void}
    */
   setCompany: function (companyId, companyName, buyer) {
+    if (companyId && twoincSoleTrader.mode === "sole_trader") {
+      // The moment there is actually a sole trader captured — as opposed to
+      // just having switched mode (TWO-40 §7 correction) — is the moment
+      // there is nothing left to search for. Locking here, instead of on
+      // every switch into sole-trader mode, is what lets the dropdown+spinner
+      // survive the autofill/popup round trip.
+      twoincSoleTrader.lockCapturedFields();
+    }
     twoincCompanyCapture.write(companyName, companyId);
     // The display select too, when this is the clearing call setMode("business")
     // makes. The picker appends an <option> per pick and select2("destroy")
@@ -5378,6 +5537,15 @@ class Twoinc {
     // popup can open synchronously on the chip click.
     $body.on("change", "#billing_email", function () {
       twoincSoleTrader.onEmailChanged();
+    });
+
+    // Click-to-reopen out of an adopted sole trader (TWO-40 §7 correction,
+    // live-reported by Doug) — see `reopenSearch()`'s own comment. A plain
+    // delegated binding is fine here, unlike `searchCompanyBtnId`'s: these
+    // are static inputs present from page load, not a button built and
+    // rebuilt on every dropdown open.
+    $body.on("click", "#billing_company, #company_id", function () {
+      twoincSoleTrader.reopenSearch();
     });
 
     // Both of these disarm an in-flight check, so both have to take the loading
