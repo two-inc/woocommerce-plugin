@@ -19,14 +19,22 @@ run:
 install: run
 	@echo "First provision runs in the wpcli container (~90s):"
 	@echo "  make logs-wpcli   # watch progress"
-	@echo ""
-	@echo "========================================="
-	@echo " WordPress store: http://localhost:8888/"
-	@echo " WP admin:        http://localhost:8888/wp-admin/ (admin / twoinb2b)"
-	@if [ -n "$$TWO_API_BASE_URL" ]; then \
+	@./start-proxy.sh --background || true
+	@PROXY_URL=$$(./start-proxy.sh url 2>/dev/null); \
+	if [ -n "$$PROXY_URL" ]; then \
+		docker compose exec -T wordpress bash /var/www/html/wp-content/plugins/tillit-payment-gateway/dev/patch-proxy "$$PROXY_URL"; \
+	fi; \
+	echo ""; \
+	echo "========================================="; \
+	echo " WordPress store: http://localhost:8888/"; \
+	if [ -n "$$PROXY_URL" ]; then \
+		echo " Proxy store:     $$PROXY_URL/"; \
+	fi; \
+	echo " WP admin:        http://localhost:8888/wp-admin/ (admin / twoinb2b)"; \
+	if [ -n "$$TWO_API_BASE_URL" ]; then \
 		echo " API base URL:    $$TWO_API_BASE_URL"; \
-	fi
-	@echo "========================================="
+	fi; \
+	echo "========================================="
 
 ## Start WordPress with Xdebug enabled and the FRP proxy running
 debug: run
