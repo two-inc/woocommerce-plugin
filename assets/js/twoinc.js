@@ -5513,11 +5513,11 @@ let twoincSoleTrader = {
 
   /**
    * Keep the delegation/autofill tokens alive across a long checkout
-   * (TWO-40). Tokens are short-lived; a buyer who sits on checkout past
-   * their expiry would otherwise find autofill and the signup popup broken
-   * on a stale token the next time either needs one — including via
-   * "select a different sole trader", which reads `tokens` long after
-   * adoption (see `openPopup`).
+   * (TWO-40). A buyer who sits on checkout past their expiry would
+   * otherwise find autofill and the signup popup broken on a stale token
+   * the next time either needs one — including via "select a different
+   * sole trader", which reads `tokens` long after adoption (see
+   * `openPopup`).
    *
    * Started once, from the first successful mint — not eagerly on page
    * load, since a buyer who never touches the sole-trader flow never mints
@@ -5531,7 +5531,7 @@ let twoincSoleTrader = {
       twoincSoleTrader.refreshTokens,
       30 * 60 * 1000
     );
-    window.addEventListener("pagehide", twoincSoleTrader.stopTokenRefresh);
+    window.addEventListener("pagehide", twoincSoleTrader.handlePageHide);
   },
 
   /**
@@ -5543,6 +5543,25 @@ let twoincSoleTrader = {
    * expired session) is left for the next scheduled tick, same tolerance
    * `fetchTokens` itself already has for its callers.
    *
+   * Deliberately does NOT also call `beginFlight()`/`settleFlight()` itself
+   * (round-1 review — Vader/Leia/Han all proposed this): `onEmailChanged`
+   * never checks `isBusy()` before starting its OWN flight (it only reads
+   * `flightDepth` in its early-return branches), so holding the flag here
+   * would not stop that direction of the race — a chip-click/email-change
+   * mint can still start while this tick's request is outstanding either
+   * way. What it WOULD do is make `isBusy()` true for that window
+   * everywhere else it's read — the Business chip, `reopenSearch()`,
+   * click-to-reopen — silently deferring real buyer interactions for the
+   * length of a background network round trip they never asked for. Both
+   * concurrent writes to `tokens` in this race are valid, freshly-minted
+   * tokens for the current country; "last one wins" losing a slightly
+   * older-but-still-valid token is the same pre-existing, unsequenced
+   * last-write-wins behaviour `tokens` already has between two overlapping
+   * `onEmailChanged` calls, not a new failure mode this feature introduces.
+   * Closing it for real means gating `onEmailChanged`/`launchSignup`
+   * themselves, which is exactly the fragile flow this feature is scoped to
+   * leave alone.
+   *
    * @returns {void}
    */
   refreshTokens: function () {
@@ -5551,12 +5570,28 @@ let twoincSoleTrader = {
   },
 
   /**
+   * `pagehide` fires on a bfcache-eligible navigation too, where the page is
+   * only frozen — not destroyed — and JS timer state (including this
+   * interval) survives the freeze/resume untouched. Tearing the interval
+   * down on that path would leave a buyer restored from bfcache mid-checkout
+   * with a dead refresh loop for the rest of the session (round-1 review —
+   * Vader), so only a real unload (`event.persisted` false) stops it.
+   *
+   * @param {PageTransitionEvent} [event]
+   * @returns {void}
+   */
+  handlePageHide: function (event) {
+    if (event && event.persisted) return;
+    twoincSoleTrader.stopTokenRefresh();
+  },
+
+  /**
    * @returns {void}
    */
   stopTokenRefresh: function () {
     clearInterval(twoincSoleTrader.tokenRefreshIntervalId);
     twoincSoleTrader.tokenRefreshIntervalId = null;
-    window.removeEventListener("pagehide", twoincSoleTrader.stopTokenRefresh);
+    window.removeEventListener("pagehide", twoincSoleTrader.handlePageHide);
   },
 
   /**

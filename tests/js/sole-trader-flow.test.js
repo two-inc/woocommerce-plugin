@@ -1295,5 +1295,33 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       jest.advanceTimersByTime(60 * 60 * 1000);
       expect(ajax.calls).toHaveLength(1);
     });
+
+    test("a real `pagehide` (page unload) stops the timer, not just a direct call", () => {
+      // Exercises the actual `window.addEventListener("pagehide", ...)`
+      // wiring — a test that only calls `stopTokenRefresh()` directly would
+      // still pass even if that wiring were deleted (round-1 review — Leia).
+      realMint();
+      window.dispatchEvent(new Event("pagehide"));
+      expect(soleTrader.tokenRefreshIntervalId).toBeNull();
+
+      jest.advanceTimersByTime(60 * 60 * 1000);
+      expect(ajax.calls).toHaveLength(1);
+    });
+
+    test("a bfcache-eligible `pagehide` (event.persisted) leaves the timer running", () => {
+      // The page is frozen, not destroyed — real browsers pause and resume
+      // the interval across the freeze on their own. Tearing it down here
+      // would leave a buyer restored from bfcache with a dead refresh loop
+      // for the rest of that checkout (round-1 review — Vader).
+      realMint();
+      const persisted = new Event("pagehide");
+      Object.defineProperty(persisted, "persisted", { value: true });
+      window.dispatchEvent(persisted);
+
+      expect(soleTrader.tokenRefreshIntervalId).not.toBeNull();
+
+      jest.advanceTimersByTime(30 * 60 * 1000);
+      expect(ajax.calls).toHaveLength(2);
+    });
   });
 });
