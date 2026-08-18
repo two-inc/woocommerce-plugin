@@ -1018,13 +1018,29 @@ class TwoCompanySearch {
     if (!picker || !picker.$results || !picker.$results.length) return;
 
     const $list = picker.$results;
-    let $wrapper = jQuery("#" + helper.modeChipsWrapperId);
+    // By class, not `"#" + id`: an id selector only ever returns ONE match
+    // even when a second, orphaned wrapper exists. That second wrapper is
+    // real, not hypothetical — WooCommerce's checkout AJAX can replace the
+    // `<select>` this widget is attached to (`updated_checkout`'s fragment
+    // swap) while its dropdown is open, via a plain `replaceWith()` that
+    // never calls `select2("destroy")` on the outgoing element. selectWoo's
+    // own AttachBody decorator only detaches the dropdown it renders into
+    // `<body>` from inside `destroy()`/`close()` — a widget discarded by
+    // having its element torn out from under it, rather than destroyed, so
+    // its dropdown (and whatever this function had already appended into
+    // it) is orphaned in `<body>` forever. The next open on the freshly
+    // re-attached widget then renders a second, independent panel (TWO-40,
+    // live-reported by Doug: two `.select2-results` panels, each holding its
+    // own `#company_mode_chips`). The class selector catches every wrapper
+    // there is regardless of which panel is stale, so this always ends the
+    // pass with at most one.
+    let $wrapper = jQuery("." + helper.modeChipsWrapperClass);
 
-    // Already there, immediately after the current results list: nothing to
-    // do. Load-bearing rather than an optimisation for the same reason it was
-    // before: an unconditional re-append on every keystroke would tear down
-    // and rebuild the same nodes for no reason.
-    if (!$wrapper.length || !$wrapper.prev().is($list)) {
+    // Already there, immediately after the current results list, and no
+    // duplicates: nothing to do. Load-bearing rather than an optimisation
+    // for the same reason it was before: an unconditional re-append on every
+    // keystroke would tear down and rebuild the same nodes for no reason.
+    if ($wrapper.length !== 1 || !$wrapper.prev().is($list)) {
       $wrapper.remove();
       $wrapper = jQuery("<div>", {
         id: helper.modeChipsWrapperId,
@@ -2196,6 +2212,32 @@ class TwoCompanySearch {
     const $pen = twoincSelectWooHelper.getCompanySearchTileHoldingPen();
     if ($wrapper.parent()[0] !== $pen[0]) {
       $wrapper.appendTo($pen);
+    }
+  }
+
+  /**
+   * Close the company-search dropdown before WooCommerce's checkout AJAX can
+   * discard the field it is attached to (TWO-40, live-reported by Doug: two
+   * `.select2-results` panels, each with its own `#company_mode_chips`,
+   * visible at once).
+   *
+   * Paired on `update_checkout` the same way, and for the same ordering
+   * reason, as `detachCompanySearchTileWrapperToSafety` above — but
+   * unconditional, not gated on `company_search_location`: a live widget
+   * whose `<select>` is torn out from under it by a fragment replace
+   * (`replaceWith`, never `select2("destroy")`) never runs selectWoo's own
+   * AttachBody cleanup, so its dropdown — appended straight to `<body>`,
+   * never a child of the replaced element — is orphaned there, still
+   * visible, forever. `close()` while the widget can still do it properly
+   * detaches that dropdown itself, so there is nothing left standing for a
+   * fragment swap moments later to orphan. A no-op if nothing is open.
+   *
+   * @returns {void}
+   */
+  closeCompanySearchBeforeCheckoutUpdate() {
+    const $display = jQuery("#billing_company_display");
+    if ($display.data("select2") && $display.data("select2").isOpen()) {
+      $display.select2("close");
     }
   }
 
@@ -5804,6 +5846,11 @@ class Twoinc {
     // already bound above) is what moves the wrapper back into the fresh
     // slot.
     $body.on("update_checkout", twoincSelectWooHelper.detachCompanySearchTileWrapperToSafety);
+
+    // Same `update_checkout` timing, defending the widget's OWN dropdown
+    // rather than the tile wrapper — see
+    // `closeCompanySearchBeforeCheckoutUpdate`'s own comment.
+    $body.on("update_checkout", twoincSelectWooHelper.closeCompanySearchBeforeCheckoutUpdate);
 
     // A payment-method switch must re-DECIDE company-field visibility, not
     // just relocate whatever is already there (TWO-25326 bugfix, Doug
