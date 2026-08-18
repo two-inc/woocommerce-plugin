@@ -379,6 +379,32 @@ describe("company-search manual-entry affordance", () => {
     });
 
     /**
+     * The stale PANEL itself, not just the wrapper inside it (round-2
+     * review — Vader, following on from the reproduction directly above):
+     * a real production reopen always runs `syncManualEntryButton` in the
+     * same tick (`bindManualEntryAffordance`'s deferred `select2:open`
+     * handler), so this is the state that test's raw 2-panel snapshot
+     * settles into a moment later, not a separate scenario.
+     */
+    test("syncManualEntryButton removes the whole stale panel, not only its wrapper", () => {
+      openWithAffordance();
+
+      $("#billing_company_display_field").replaceWith(
+        '<p id="billing_company_display_field">' +
+          '<select id="billing_company_display" name="billing_company_display">' +
+          '<option value="">&nbsp;</option></select></p>'
+      );
+      helper.attach();
+      $("#billing_company_display").select2("open");
+      expect($(".select2-results").length).toBe(2);
+
+      helper.syncManualEntryButton();
+
+      expect($(".select2-results").length).toBe(1);
+      expect($("." + helper.modeChipsWrapperClass).length).toBe(1);
+    });
+
+    /**
      * The other half: even granting that a stale panel exists, does
      * `syncManualEntryButton` actually find and remove its wrapper?
      *
@@ -424,10 +450,14 @@ describe("company-search manual-entry affordance", () => {
     /**
      * The root fix, not just the wrapper-level mitigation above:
      * `closeCompanySearchBeforeCheckoutUpdate` (bound to `update_checkout`
-     * in `Twoinc#initialize()`, fired synchronously before WooCommerce's own
-     * fragment-swap handler on that same event) closes the dropdown while
-     * the widget can still detach it properly, so a fragment replace
-     * moments later has nothing open left to orphan.
+     * in `Twoinc#initialize()`) closes the dropdown while the widget can
+     * still detach it properly. `update_checkout` is the PRESENT-tense
+     * trigger that starts a checkout refresh, fired synchronously — the
+     * fragment swap only happens after the async AJAX round-trip that
+     * follows, so this always runs before it regardless of bind order
+     * against WooCommerce's own handler on the same event (same reasoning
+     * as `detachCompanySearchTileWrapperToSafety`'s own comment). Nothing
+     * open is left for a fragment replace moments later to orphan.
      *
      * Gated on `payment_tile` — the only config where WooCommerce's
      * `update_checkout` AJAX can ever touch this field at all — so every

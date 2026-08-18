@@ -1023,6 +1023,21 @@ class TwoCompanySearch {
     if (!picker || !picker.$results || !picker.$results.length) return;
 
     const $list = picker.$results;
+
+    // Sweep away the ENTIRE panel, not just its chip wrapper, for any
+    // `.select2-results` that is not this widget's own (round-2 review —
+    // Vader: `closeCompanySearchBeforeCheckoutUpdate` deliberately skips
+    // closing while a sole-trader flight is outstanding — see its own
+    // comment — so a fragment replace during that window can still orphan
+    // a whole dropdown here, same as before that fix existed). Removing the
+    // dead panel itself, not only the wrapper inside it, is what stops that
+    // window from reopening the bug this file's own `syncManualEntryButton`
+    // comment below already describes in full.
+    jQuery(".select2-results")
+      .not($list.closest(".select2-results"))
+      .closest(".select2-container--open")
+      .remove();
+
     // By class, not `"#" + id`: an id selector only ever returns ONE match
     // even when a second, orphaned wrapper exists. That second wrapper is
     // real, not hypothetical — WooCommerce's checkout AJAX can replace the
@@ -2272,6 +2287,25 @@ class TwoCompanySearch {
    * here mid-flight would silently swap that spinner out from under the
    * buyer for no reason tied to this fix.
    *
+   * Checked AGAIN inside the deferred focus-restore below, not only at
+   * entry (round-2 review — Han): a flight can start in the gap between
+   * this synchronous close and that timer firing, and the restore would
+   * otherwise yank focus straight back off whatever that flight's own UI
+   * just gave it — the exact harm the entry guard exists to prevent,
+   * arriving 20ms late instead of at call time.
+   *
+   * The restore's own "did selectWoo steal it" check is deliberately NOT
+   * `focusIsBackOnCompanyField()` (round-2 review — Yoda): that helper
+   * counts nothing-focused (`<body>`) as "yes", which is correct for ITS
+   * caller — paired with attempting a NEW target, so `<body>` and a real
+   * steal both warrant one more try — but wrong here, where a restore of
+   * the OLD element runs instead. `update_checkout` fires for a fragment
+   * replace that can remove the previously-focused node entirely (a
+   * coupon apply, a shipping-method change), which also leaves focus on
+   * `<body>` with nothing to fight — reusing the wider predicate would
+   * fire the restore then anyway. Only a focus landing literally back on
+   * the company field is the steal this guards against.
+   *
    * @returns {void}
    */
   closeCompanySearchBeforeCheckoutUpdate() {
@@ -2282,7 +2316,12 @@ class TwoCompanySearch {
     twoincSelectWooHelper.closeCompanySearchDropdown();
 
     setTimeout(function () {
-      if (!twoincSelectWooHelper.focusIsBackOnCompanyField()) return;
+      if (twoincSoleTrader.isBusy()) return;
+      const $active = jQuery(document.activeElement);
+      const stolenBackToCompanyField =
+        $active.closest("#billing_company_display_field").length > 0 ||
+        $active.is("#billing_company, #company_id");
+      if (!stolenBackToCompanyField) return;
       if ($previouslyFocused.is(document.activeElement)) return;
       $previouslyFocused.trigger("focus");
     }, 20);
