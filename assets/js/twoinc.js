@@ -1561,7 +1561,7 @@ class TwoCompanySearch {
       if (this.tabIndex < 0) return;
       if (jQuery(this).closest(".select2-container--open, .select2-dropdown").length) return;
       if (twoincSelectWooHelper.isHiddenForTabbing(this)) return;
-      if (!(anchor.compareDocumentPosition(this) & 4 /* DOCUMENT_POSITION_FOLLOWING */)) return;
+      if (!((anchor.compareDocumentPosition(this) & 4) /* DOCUMENT_POSITION_FOLLOWING */)) return;
       found.push(this);
     });
 
