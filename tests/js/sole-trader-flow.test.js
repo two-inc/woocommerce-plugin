@@ -478,6 +478,78 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       soleTrader.getDifferentSoleTraderBtnNode().trigger("click");
       expect(opened).toHaveLength(1);
     });
+
+    test("a chip click straight after the buyer closed the popup by hand opens a fresh one — the stale poll neither refuses nor reverts", () => {
+      jest.useFakeTimers();
+      $("#billing_email").val("");
+      const wins = [];
+      window.open = jest.fn(() => {
+        const win = { closed: false };
+        wins.push(win);
+        return win;
+      });
+
+      soleTrader.onModeChipClick("sole_trader");
+      expect(wins).toHaveLength(1);
+
+      // When: the buyer closes the popup and re-clicks INSIDE the close
+      // poll's own 300ms window.
+      wins[0].closed = true;
+      soleTrader.onModeChipClick("sole_trader");
+
+      // Then: a fresh popup, and the first popup's poll firing later must
+      // not revert mode out from under it.
+      expect(wins).toHaveLength(2);
+      jest.advanceTimersByTime(300);
+      expect(soleTrader.mode).toBe("sole_trader");
+      expect(soleTrader.activePopupWatchers).toHaveLength(1);
+      jest.useRealTimers();
+    });
+
+    test("a closed popup's record leaves the watcher list, so nothing refuses forever", () => {
+      jest.useFakeTimers();
+      const win = { closed: false };
+      window.open = jest.fn(() => win);
+      soleTrader.setMode("sole_trader");
+      soleTrader.launchSignup();
+
+      win.closed = true;
+      jest.advanceTimersByTime(300);
+
+      expect(soleTrader.activePopupWatchers).toHaveLength(0);
+      expect(soleTrader.isBusy()).toBe(false);
+      const retryOpen = jest.fn(() => ({ closed: false }));
+      window.open = retryOpen;
+      soleTrader.launchSignup();
+      expect(retryOpen).toHaveBeenCalledTimes(1);
+      jest.useRealTimers();
+    });
+
+    test("no popup stacks while an ACCEPTED's own buyer fetch is still resolving, even once the popup closed and its record is gone", () => {
+      jest.useFakeTimers();
+      soleTrader.setMode("sole_trader");
+      const win = { closed: false };
+      window.open = jest.fn(() => win);
+      soleTrader.launchSignup();
+      soleTrader.bindPopupMessageListener();
+      jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation(() => {});
+
+      window.dispatchEvent(
+        new window.MessageEvent("message", {
+          data: "ACCEPTED",
+          origin: "https://checkout.example.test"
+        })
+      );
+      win.closed = true;
+      jest.advanceTimersByTime(300);
+      expect(soleTrader.activePopupWatchers).toHaveLength(0);
+
+      const stackOpen = jest.fn(() => ({ closed: false }));
+      window.open = stackOpen;
+      soleTrader.launchSignup();
+      expect(stackOpen).not.toHaveBeenCalled();
+      jest.useRealTimers();
+    });
   });
 
   describe("§7 — select a different sole trader", () => {

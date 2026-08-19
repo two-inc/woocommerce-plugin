@@ -4545,9 +4545,11 @@ let twoincSoleTrader = {
    * re-clicking within the SAME 300ms poll window opens a second, genuinely
    * concurrent re-signup: the first popup's own stale poll then clears a
    * bare boolean while the second is still very much open and undecided).
-   * Incremented by `launchSignup` for every re-signup it opens, decremented
-   * — clamped at zero, same reason `settleFlight` is — by whichever of
-   * THAT flight's own terminal branches resolves first.
+   * Incremented by `launchSignup` for every re-signup it opens; decremented
+   * exactly once per popup, by that popup's own decrement owner — the
+   * ACCEPTED handler for a decided popup, `watchPopupClose`'s poll for an
+   * abandoned one (see the watcher record's `decided` flag). Clamped at
+   * zero, same reason `settleFlight` is.
    */
   soleTraderReconfirmingCount: 0,
 
@@ -5330,7 +5332,11 @@ let twoincSoleTrader = {
     if (
       twoincSoleTrader.signupConfirming ||
       twoincSoleTrader.activePopupWatchers.some(function (watcher) {
-        return !watcher.decided;
+        // `win.closed` too: a record outlives its window by up to one 300ms
+        // poll cycle, and a hand-closed popup is not an undecided one — the
+        // buyer already decided against it, so a fresh click must get a
+        // fresh popup, not a refusal.
+        return !watcher.decided && !watcher.win.closed;
       })
     ) {
       return;
@@ -5411,7 +5417,7 @@ let twoincSoleTrader = {
    */
   watchPopupClose: function (win, isReconfirming) {
     twoincSoleTrader.beginFlight();
-    const watcher = { id: null, isReconfirming: !!isReconfirming, decided: false };
+    const watcher = { id: null, win: win, isReconfirming: !!isReconfirming, decided: false };
     watcher.id = setInterval(function () {
       if (!win.closed) return;
       twoincSoleTrader.stopWatchingPopup(watcher.id);
@@ -5432,7 +5438,15 @@ let twoincSoleTrader = {
       if (
         twoincSoleTrader.mode === "sole_trader" &&
         !twoincSoleTrader.soleTraderAdopted &&
-        !twoincSoleTrader.signupConfirming
+        !twoincSoleTrader.signupConfirming &&
+        // A popup relaunched inside this poll's stale window (the buyer
+        // closed this one by hand, then clicked again before the poll
+        // noticed) owns the mode now — reverting under it would drop its
+        // eventual ACCEPTED on the `mode !== "sole_trader"` gate. Its own
+        // terminal branch settles mode, same deferral as `hide()`'s.
+        !twoincSoleTrader.activePopupWatchers.some(function (other) {
+          return !other.decided;
+        })
       ) {
         twoincSoleTrader.setMode("business");
       }
@@ -5735,7 +5749,10 @@ let twoincSoleTrader = {
           // 300ms poll cycle. Scoped to the record paired at receipt: the
           // decrement belongs to the popup that incremented, whether or not
           // its window has already closed by the time this fetch resolves.
-          // Clamped, same reason `watchPopupClose`'s own decrement is.
+          // Clamped, same reason `watchPopupClose`'s own decrement is; the
+          // `watcher` null-check is defensive against a duplicate or late
+          // ACCEPTED with no undecided popup left to pair with — not
+          // reachable through today's UI, not a proven-safe no-op.
           if (watcher && watcher.isReconfirming) {
             twoincSoleTrader.soleTraderReconfirmingCount = Math.max(
               0,
