@@ -32,9 +32,6 @@ run:
 	docker compose up -d
 	@./start-proxy.sh --background || true
 	@PROXY_URL=$$(./start-proxy.sh url 2>/dev/null); \
-	if [ -n "$$PROXY_URL" ]; then \
-		docker compose exec -T wordpress bash /var/www/html/wp-content/plugins/tillit-payment-gateway/dev/patch-proxy "$$PROXY_URL"; \
-	fi; \
 	echo ""; \
 	echo "========================================="; \
 	echo " WordPress store: http://localhost:8888/"; \
@@ -58,9 +55,6 @@ debug: run
 	docker compose restart wordpress
 	@./start-proxy.sh --background || true
 	@PROXY_URL=$$(./start-proxy.sh url 2>/dev/null); \
-	if [ -n "$$PROXY_URL" ]; then \
-		docker compose exec -T wordpress bash /var/www/html/wp-content/plugins/tillit-payment-gateway/dev/patch-proxy "$$PROXY_URL"; \
-	fi; \
 	echo ""; \
 	echo "========================================="; \
 	echo " WordPress store: http://localhost:8888/"; \
