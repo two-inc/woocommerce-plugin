@@ -4,9 +4,9 @@
  *
  *   §7 — an in-flight state wired to the REAL duration of the round trip (a
  *   count, not a boolean, not a timeout), re-entrancy guards so neither one
- *   gesture nor a later click on an undecided popup can stack a second signup
- *   popup, a "select a different sole trader" link in
- *   the same slot as the existing "search for company" one, and a popup that
+ *   gesture nor a later click while a popup is undecided can stack a second
+ *   signup popup, a "select a different sole trader" link in the same slot
+ *   as the existing "search for company" one, and a popup that
  *   is wide enough for the hosted flow's own layout.
  *
  *   §8 — the passive, pre-authentication email match is correct only before
@@ -318,10 +318,23 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       {
         arrangeAndAct: () => {
           // Given: first-signup popup still open, but its signup already
-          // accepted and adopted — the popup has DECIDED.
+          // ACCEPTED and adopted — the popup has DECIDED.
           soleTrader.setMode("sole_trader");
           soleTrader.launchSignup();
-          soleTrader.setCompany("TWO:ST1", "First Trader");
+          soleTrader.bindPopupMessageListener();
+          jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) =>
+            cb({
+              organization_number: "TWO:ST1",
+              company_name: "First Trader",
+              email: "buyer@example.test"
+            })
+          );
+          window.dispatchEvent(
+            new window.MessageEvent("message", {
+              data: "ACCEPTED",
+              origin: "https://checkout.example.test"
+            })
+          );
           // When: the "select a different sole trader" re-signup launches.
           soleTrader.getDifferentSoleTraderBtnNode().trigger("click");
         },
@@ -395,6 +408,75 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
 
       // Then: the launch was honoured, not refused.
       expect(opened).toHaveLength(expectedPopups);
+    });
+
+    test("an accepted-then-closed re-signup spends ONE decrement, so a third click cannot stack over an undecided second re-signup", () => {
+      jest.useFakeTimers();
+      soleTrader.setMode("sole_trader");
+      soleTrader.setCompany("TWO:ST1", "First Trader");
+      soleTrader.bindPopupMessageListener();
+
+      // Given: re-signup R1 accepted, then closed INSIDE its poll's own
+      // 300ms window — the poll has not noticed yet.
+      const win1 = { closed: false };
+      window.open = jest.fn(() => win1);
+      soleTrader.getDifferentSoleTraderBtnNode().trigger("click");
+      jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) =>
+        cb({
+          organization_number: "TWO:ST2",
+          company_name: "Second Trader",
+          email: "buyer@example.test"
+        })
+      );
+      window.dispatchEvent(
+        new window.MessageEvent("message", {
+          data: "ACCEPTED",
+          origin: "https://checkout.example.test"
+        })
+      );
+      expect(soleTrader.soleTraderReconfirmingCount).toBe(0);
+      win1.closed = true;
+
+      // When: re-signup R2 opens before R1's stale poll fires.
+      const win2 = { closed: false };
+      window.open = jest.fn(() => win2);
+      soleTrader.getDifferentSoleTraderBtnNode().trigger("click");
+      expect(soleTrader.soleTraderReconfirmingCount).toBe(1);
+      jest.advanceTimersByTime(300);
+
+      // Then: R1's poll did not steal R2's decrement, and a third click
+      // while R2 is open and undecided does not stack.
+      expect(soleTrader.soleTraderReconfirmingCount).toBe(1);
+      const thirdOpen = jest.fn(() => ({ closed: false }));
+      window.open = thirdOpen;
+      soleTrader.getDifferentSoleTraderBtnNode().trigger("click");
+      expect(thirdOpen).not.toHaveBeenCalled();
+      jest.useRealTimers();
+    });
+
+    test("a prefetch match landing while a first-time popup is still open does not let the re-signup link stack over it", () => {
+      // Given: a no-email chip click opened a first-time popup, undecided.
+      $("#billing_email").val("");
+      soleTrader.onModeChipClick("sole_trader");
+      expect(opened).toHaveLength(1);
+
+      // When: the buyer types an email whose prefetch matches — adoption
+      // happens under the still-open popup and the re-signup link appears.
+      $("#billing_email").val("buyer@example.test");
+      jest.spyOn(soleTrader, "fetchTokens").mockImplementation((cb) => cb(true));
+      jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) =>
+        cb({
+          organization_number: "TWO:ST1",
+          company_name: "Sole Co",
+          email: "buyer@example.test"
+        })
+      );
+      soleTrader.onEmailChanged();
+      expect(soleTrader.soleTraderAdopted).toBe(true);
+
+      // Then: the popup is still undecided, so the link must not stack.
+      soleTrader.getDifferentSoleTraderBtnNode().trigger("click");
+      expect(opened).toHaveLength(1);
     });
   });
 
