@@ -3234,6 +3234,41 @@ class TwoCompanySearch {
     const $body = jQuery(document.body);
     const $field = $body.find(self.companyFieldSelector);
 
+    // A widget can be discarded by having its underlying `<select>` replaced
+    // outright — WooCommerce's checkout-AJAX fragment `replaceWith()` is the
+    // documented trigger (`closeCompanySearchBeforeCheckoutUpdate`'s own
+    // comment) — rather than by a `select2("destroy")` call ever reaching
+    // it. Its INLINE container goes with the removed `<select>`, but
+    // selectWoo's AttachBody decorator renders the actual DROPDOWN as a
+    // separate node appended straight to `<body>` (vendored bundle,
+    // `AttachBody.prototype.render`/`.bind`) so it survives the removal
+    // untouched — nothing but that same discarded instance's own
+    // `destroy()`/`close()` ever detaches it, and nothing calls either once
+    // every reference to the instance is gone with the element. It sits
+    // there forever, still carrying `select2-container--open` if the buyer
+    // had it open at that moment (TWO-25469, confirmed live: reopening the
+    // freshly re-attached widget then renders a SECOND open dropdown
+    // alongside it).
+    //
+    // Only swept when this field has no live widget of its own right now.
+    // The ordinary re-attach path (the 800ms retry, `exitManualCompanyEntry`,
+    // the sole-trader mode switch) calls this while a widget is still
+    // attached to THIS SAME element, and selectWoo's own reinit already
+    // destroys and removes ITS dropdown clone correctly on that path (see
+    // company-search-deferred-init.test.js) — sweeping while one is still
+    // live would race that cleanup instead of helping it.
+    //
+    // Matched by the results-list id, the same idiom `syncManualEntryButton`
+    // already uses for the same reason: selectWoo derives it deterministically
+    // from the field's own id, the SAME id on every re-init of THIS field —
+    // stale or fresh.
+    if (!$field.data("select2")) {
+      const resultsIdPrefix = "select2-" + self.companyFieldSelector.replace("#", "") + "-results";
+      jQuery("[id^='" + resultsIdPrefix + "']")
+        .closest(".select2-container")
+        .remove();
+    }
+
     const widget = $field.selectWoo(self.genSelectWooParams());
     twoincDomHelper.toggleTooltip(
       "#billing_company_display_field .select2-container",
