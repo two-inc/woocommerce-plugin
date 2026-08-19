@@ -550,6 +550,251 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       expect(stackOpen).not.toHaveBeenCalled();
       jest.useRealTimers();
     });
+
+    /**
+     * Round-3 review regressions (by Claude). Letting a fresh popup open over
+     * a hand-closed record's stale poll window — the round-2 fix above — put
+     * TWO undecided records in the list at once, which the ACCEPTED handler's
+     * forward `find(!decided)` then resolved to the STALE one in preference to
+     * the live popup that actually sent the message.
+     */
+    describe("round-3 review regressions — ACCEPTED pairs with the popup that sent it", () => {
+      /** Open a popup through `act`, returning the window handle it got. */
+      function openTracked(act) {
+        const win = { closed: false };
+        window.open = jest.fn(() => win);
+        act();
+        return win;
+      }
+
+      /** Deliver ACCEPTED as the named popup window, the way the browser does. */
+      function accept(source, buyer) {
+        soleTrader.bindPopupMessageListener();
+        jest
+          .spyOn(soleTrader, "fetchCurrentBuyer")
+          .mockImplementation((cb) => cb(buyer === undefined ? null : buyer));
+        window.dispatchEvent(
+          new window.MessageEvent("message", {
+            data: "ACCEPTED",
+            origin: "https://checkout.example.test",
+            source: source
+          })
+        );
+      }
+
+      const BUYER = {
+        organization_number: "TWO:ST2",
+        company_name: "Second Trader",
+        email: "buyer@example.test"
+      };
+
+      test("marks the live popup decided, not the stale hand-closed record it opened over", () => {
+        jest.useFakeTimers();
+        $("#billing_email").val("");
+
+        // Given: popup A hand-closed inside its own poll window, popup B
+        // relaunched over it — both records undecided.
+        const winA = openTracked(() => soleTrader.onModeChipClick("sole_trader"));
+        winA.closed = true;
+        const winB = openTracked(() => soleTrader.onModeChipClick("sole_trader"));
+        expect(soleTrader.activePopupWatchers).toHaveLength(2);
+
+        // When: B completes signup.
+        accept(winB, BUYER);
+
+        // Then: B is the decided one, and A is still owed its own abandon
+        // handling by its own poll.
+        const recordFor = (win) => soleTrader.activePopupWatchers.find((w) => w.win === win);
+        expect(recordFor(winB).decided).toBe(true);
+        expect(recordFor(winA).decided).toBe(false);
+        jest.useRealTimers();
+      });
+
+      test("does not refuse the sanctioned re-signup after an accept that followed a hand-closed popup", () => {
+        jest.useFakeTimers();
+        $("#billing_email").val("");
+
+        // Given: A hand-closed, B relaunched over its stale window, B accepted.
+        const winA = openTracked(() => soleTrader.onModeChipClick("sole_trader"));
+        winA.closed = true;
+        const winB = openTracked(() => soleTrader.onModeChipClick("sole_trader"));
+        accept(winB, BUYER);
+        expect(soleTrader.soleTraderAdopted).toBe(true);
+
+        // When: the buyer takes the "select a different sole trader" link the
+        // accept just earned them.
+        const reSignup = jest.fn(() => ({ closed: false }));
+        window.open = reSignup;
+        soleTrader.getDifferentSoleTraderBtnNode().trigger("click");
+
+        // Then: it opened. Mis-pairing left B undecided and open, which the
+        // launch guard read as "a popup is still deciding" — for as long as
+        // the hosted flow left its own window up, i.e. potentially forever.
+        expect(reSignup).toHaveBeenCalledTimes(1);
+        jest.useRealTimers();
+      });
+
+      test("spends the accepting popup's reconfirming decrement, not a stale record's", () => {
+        jest.useFakeTimers();
+        $("#billing_email").val("");
+
+        // Given: a first-time popup A hand-closed, then an autofill match
+        // adopts under its stale window, so the re-signup link is live.
+        const winA = openTracked(() => soleTrader.onModeChipClick("sole_trader"));
+        winA.closed = true;
+        soleTrader.setCompany("TWO:ST1", "First Trader");
+        expect(soleTrader.soleTraderAdopted).toBe(true);
+
+        // When: re-signup B opens over A and is accepted.
+        const winB = openTracked(() => soleTrader.getDifferentSoleTraderBtnNode().trigger("click"));
+        expect(soleTrader.soleTraderReconfirmingCount).toBe(1);
+        accept(winB, BUYER);
+
+        // Then: B's increment is settled. Pairing with A — which never
+        // incremented, being a first-time signup — left the count stranded at
+        // 1, so `isDeciding()` blocked every leave-sole-trader action after it.
+        expect(soleTrader.soleTraderReconfirmingCount).toBe(0);
+        expect(soleTrader.isDeciding()).toBe(false);
+        jest.useRealTimers();
+      });
+
+      test("a replayed ACCEPTED from an already-decided popup spends no second decrement", () => {
+        jest.useFakeTimers();
+        soleTrader.setMode("sole_trader");
+        soleTrader.setCompany("TWO:ST1", "First Trader");
+
+        // Given: a re-signup accepted once.
+        const win = openTracked(() => soleTrader.getDifferentSoleTraderBtnNode().trigger("click"));
+        expect(soleTrader.soleTraderReconfirmingCount).toBe(1);
+        accept(win, BUYER);
+        expect(soleTrader.soleTraderReconfirmingCount).toBe(0);
+
+        // When: a second re-signup is outstanding and the first popup's
+        // ACCEPTED is replayed.
+        const winNext = openTracked(() =>
+          soleTrader.getDifferentSoleTraderBtnNode().trigger("click")
+        );
+        expect(soleTrader.soleTraderReconfirmingCount).toBe(1);
+        accept(win, BUYER);
+
+        // Then: the replay neither re-spent the decided popup's decrement nor
+        // stole the still-undecided one's.
+        expect(soleTrader.soleTraderReconfirmingCount).toBe(1);
+        expect(soleTrader.activePopupWatchers.find((w) => w.win === winNext).decided).toBe(false);
+        jest.useRealTimers();
+      });
+
+      test("pairs by the live popup when the browser gives no source, never the stale record", () => {
+        jest.useFakeTimers();
+        $("#billing_email").val("");
+
+        // Given: A hand-closed and B live, with a message carrying no source
+        // (a popup that closes in the same turn it posts can arrive this way).
+        const winA = openTracked(() => soleTrader.onModeChipClick("sole_trader"));
+        winA.closed = true;
+        const winB = openTracked(() => soleTrader.onModeChipClick("sole_trader"));
+
+        // When: ACCEPTED arrives unattributed.
+        accept(null, BUYER);
+
+        // Then: the live popup is the one that decided.
+        const recordFor = (win) => soleTrader.activePopupWatchers.find((w) => w.win === win);
+        expect(recordFor(winB).decided).toBe(true);
+        expect(recordFor(winA).decided).toBe(false);
+        jest.useRealTimers();
+      });
+
+      test("a stale poll does not revert mode under a decided popup that is still on screen", () => {
+        jest.useFakeTimers();
+        $("#billing_email").val("");
+
+        // Given: A hand-closed, B relaunched over it, and B's ACCEPTED
+        // resolving to no buyer — decided, errored, window still up.
+        const winA = openTracked(() => soleTrader.onModeChipClick("sole_trader"));
+        winA.closed = true;
+        const winB = openTracked(() => soleTrader.onModeChipClick("sole_trader"));
+        accept(winB, null);
+        expect(soleTrader.soleTraderAdopted).toBe(false);
+
+        // When: A's stale poll finally fires.
+        jest.advanceTimersByTime(300);
+
+        // Then: mode is still B's, so the buyer's retry inside B is not
+        // dropped on the handler's own `mode !== "sole_trader"` gate.
+        expect(soleTrader.mode).toBe("sole_trader");
+        accept(winB, BUYER);
+        expect(soleTrader.soleTraderAdopted).toBe(true);
+        jest.useRealTimers();
+      });
+
+      test("still reverts mode once every popup really has gone", () => {
+        jest.useFakeTimers();
+        $("#billing_email").val("");
+
+        // Given: A hand-closed and B relaunched over it, then B closed too,
+        // neither ever decided.
+        const winA = openTracked(() => soleTrader.onModeChipClick("sole_trader"));
+        winA.closed = true;
+        const winB = openTracked(() => soleTrader.onModeChipClick("sole_trader"));
+        winB.closed = true;
+
+        // When: both stale polls fire.
+        jest.advanceTimersByTime(300);
+
+        // Then: the checkout is handed back to an ordinary company search
+        // rather than left stuck mid-switch.
+        expect(soleTrader.activePopupWatchers).toHaveLength(0);
+        expect(soleTrader.mode).toBe("business");
+        jest.useRealTimers();
+      });
+
+      test("attributes an unattributed accept to the newest closed record, not the stale one under it", () => {
+        jest.useFakeTimers();
+        $("#billing_email").val("");
+
+        // Given: first-time popup A hand-closed, an autofill match adopting
+        // under its stale window, then re-signup B opened over it — and B
+        // posts ACCEPTED and vanishes in the same turn, so BOTH records are
+        // closed and undecided with no source to pair on.
+        const winA = openTracked(() => soleTrader.onModeChipClick("sole_trader"));
+        winA.closed = true;
+        soleTrader.setCompany("TWO:ST1", "First Trader");
+        const winB = openTracked(() => soleTrader.getDifferentSoleTraderBtnNode().trigger("click"));
+        expect(soleTrader.soleTraderReconfirmingCount).toBe(1);
+        winB.closed = true;
+
+        // When: the unattributed ACCEPTED lands.
+        accept(null, BUYER);
+
+        // Then: B owns it. Scanning oldest-first picks A — which, being a
+        // first-time signup, owes no decrement — stranding B's.
+        expect(soleTrader.activePopupWatchers.find((w) => w.win === winB).decided).toBe(true);
+        expect(soleTrader.soleTraderReconfirmingCount).toBe(0);
+        jest.useRealTimers();
+      });
+
+      test("still pairs a popup that closed in the very turn it posted ACCEPTED", () => {
+        jest.useFakeTimers();
+        soleTrader.setMode("sole_trader");
+        soleTrader.setCompany("TWO:ST1", "First Trader");
+
+        // Given: the only record is a re-signup whose window is already gone
+        // by the time the message is delivered, with no source to pair on.
+        const win = openTracked(() => soleTrader.getDifferentSoleTraderBtnNode().trigger("click"));
+        expect(soleTrader.soleTraderReconfirmingCount).toBe(1);
+        win.closed = true;
+
+        // When: its ACCEPTED lands unattributed.
+        accept(null, BUYER);
+
+        // Then: it was still recognised, so its own poll does not later bill a
+        // second decrement as an abandon.
+        expect(soleTrader.soleTraderReconfirmingCount).toBe(0);
+        jest.advanceTimersByTime(300);
+        expect(soleTrader.soleTraderReconfirmingCount).toBe(0);
+        jest.useRealTimers();
+      });
+    });
   });
 
   describe("§7 — select a different sole trader", () => {
