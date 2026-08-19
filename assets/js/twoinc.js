@@ -5148,7 +5148,7 @@ let twoincSoleTrader = {
    */
   lockCapturedFields: function () {
     const $display = jQuery("#billing_company_display");
-    if ($display.data("select2") && $display.data("select2").isOpen()) {
+    if ($display.data("select2")) {
       $display.select2("close");
     }
     // Only the link back to search: the manual-entry row lives inside the
