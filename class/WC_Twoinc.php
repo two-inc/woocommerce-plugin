@@ -1019,12 +1019,12 @@ if (!class_exists('WC_Twoinc')) {
             // one after the container would let the stale server-rendered
             // term override the buyer's chip selection.
             //
-            // The sole-trader MODE CHIPS (Registered Company / Sole Trader)
+            // The sole-trader MODE CHIPS (Registered company / Sole trader)
             // themselves are NOT rendered here (TWO-40 §0 correction — this
             // was the same DOM-placement defect ported wrong twice before).
             // They render as children of the company-search dropdown itself
             // (see twoincSelectWooHelper.syncManualEntryButton() in
-            // twoinc.js, alongside the "Enter Manually" chip), never as a
+            // twoinc.js, alongside the "Enter manually" chip), never as a
             // separate persistent tile. `.twoinc-sole-trader-note-slot`
             // below only ever holds the signup-prompt note + in-flight error
             // — see WC_Twoinc.js twoincSoleTrader.render()/apply().

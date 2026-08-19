@@ -351,7 +351,7 @@
 }
 
 /*
- * The "Enter Manually" mode chip (TWO-25288, restyled as a chip TWO-40 §0).
+ * The "Enter manually" mode chip (TWO-25288, restyled as a chip TWO-40 §0).
  * Visual styling (pill shape, colours, focus-safe font/cursor) now comes
  * from the shared `.twoinc-mode-chip` class this button also carries — see
  * that rule. This id-selector rule survives ALONE for one property: round
@@ -744,7 +744,30 @@
   padding: 6px 12px;
   border-top: 1px solid #eeeeee;
 }
+/*
+ * Two chips per row, each filling half of it (item 4, live-reported by Doug:
+ * content-width chips left visible slack to the right of the row). A 50%
+ * flex-basis rather than PrestaShop's `flex: 1 1 auto` + `min-width`: that
+ * one's arrangement falls out of however wide the field happens to be, and
+ * this dropdown is as wide as whatever column the host theme gives the
+ * billing form. A half-row basis pins the arrangement at every width —
+ * "Registered company"/"Sole trader" on row one, "Enter manually" grown to
+ * the full width of row two, and just the two chips sharing one row where
+ * sole trader is unavailable.
+ *
+ * `box-sizing` spelled out because the basis depends on it: under
+ * content-box the chip's own padding and border would sit OUTSIDE the half
+ * row and push the second chip onto a line of its own. Buttons default to
+ * border-box, so this only matters against a theme that resets it globally.
+ *
+ * `white-space: normal` + `word-break` deliberately, NOT nowrap/ellipsis
+ * (TWO-40 spec: a chip label may wrap onto two lines, and must not
+ * truncate). It also keeps a long label's min-content width from beating
+ * the half-row basis on a narrow field.
+ */
 .twoinc-mode-chip {
+  flex: 1 1 calc(50% - 8px);
+  box-sizing: border-box;
   text-align: center;
   padding: 5px 12px;
   border-radius: 5px;
@@ -754,6 +777,8 @@
   cursor: pointer;
   user-select: none;
   font: inherit;
+  white-space: normal;
+  word-break: break-word;
   text-transform: none !important;
 }
 .twoinc-mode-chip--selected {

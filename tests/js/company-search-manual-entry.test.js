@@ -35,7 +35,7 @@ const harness = require("./wc-harness");
 
 /** The strings the affordance reads out of the localised text map. */
 const TEXT = {
-  enter_manually: "Enter Manually",
+  enter_manually: "Enter manually",
   search_company: "Search for company"
 };
 
@@ -945,11 +945,11 @@ describe("company-search manual-entry affordance", () => {
     /**
      * All three mode chips hover IDENTICALLY (TWO-40, live-reported by Doug:
      * "Registered Organization" and "Sole Trader" adopt the store's brand
-     * colour on hover, while "Enter Manually" instead got a red border but a
+     * colour on hover, while "Enter manually" instead got a red border but a
      * grey fill).
      *
      * The two class-styled chips carry no hover rule of their own, so the
-     * host theme's `button:hover` paints them. "Enter Manually" additionally
+     * host theme's `button:hover` paints them. "Enter manually" additionally
      * matched a flat `#company_not_in_btn:hover { background-color: #f2f4fd }`
      * — a single-id selector, which outbids that theme rule on specificity
      * and so was the ONE chip the theme could not colour. The invariant is
@@ -1246,7 +1246,7 @@ describe("company-search manual-entry affordance", () => {
     /**
      * The chip must never end up gone AND manual entry not entered (TWO-40,
      * live-reported by Doug: "not only does it fail to move into manual mode,
-     * but the 'Enter Manually' chip disappears altogether").
+     * but the 'Enter manually' chip disappears altogether").
      *
      * `activateManualEntry` removed the chip synchronously and then deferred
      * `enterManualCompanyEntry` a tick — but that function REFUSES to run

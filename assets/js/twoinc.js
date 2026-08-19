@@ -707,8 +707,8 @@ class TwoCompanySearch {
   /**
    * DOM id of the mode-chips group (TWO-40 §0) — the `.two-company-mode-chips`
    * equivalent, one level in from the dropdown, direct sibling of the
-   * results list. Holds the "Registered Company" chip, the "Sole Trader"
-   * chip (only while available), and the "Enter Manually" chip
+   * results list. Holds the "Registered company" chip, the "Sole trader"
+   * chip (only while available), and the "Enter manually" chip
    * (`manualEntryRowId`), in that order.
    */
   modeChipsWrapperId = "company_mode_chips";
@@ -719,10 +719,10 @@ class TwoCompanySearch {
   /** Shared class on every button inside the mode-chips group. */
   modeChipClass = "twoinc-mode-chip";
 
-  /** DOM id of the "Registered Company" mode chip. */
+  /** DOM id of the "Registered company" mode chip. */
   businessChipId = "company_mode_chip_business";
 
-  /** DOM id of the "Sole Trader" mode chip. */
+  /** DOM id of the "Sole trader" mode chip. */
   soleTraderChipId = "company_mode_chip_sole_trader";
 
   /**
@@ -827,7 +827,7 @@ class TwoCompanySearch {
   }
 
   /**
-   * Label of the "Enter Manually" mode chip (TWO-40 §0). Read lazily for the
+   * Label of the "Enter manually" mode chip (TWO-40 §0). Read lazily for the
    * same reason as the hints above.
    *
    * Was "My company is not on the list" (TWO-25288). That copy is gone
@@ -836,7 +836,7 @@ class TwoCompanySearch {
    */
   enterManuallyText() {
     return (
-      (window.twoinc && window.twoinc.text && window.twoinc.text.enter_manually) || "Enter Manually"
+      (window.twoinc && window.twoinc.text && window.twoinc.text.enter_manually) || "Enter manually"
     );
   }
 
@@ -937,7 +937,7 @@ class TwoCompanySearch {
   }
 
   /**
-   * "Registered Company" mode chip (TWO-40 §0). A no-op while already in
+   * "Registered company" mode chip (TWO-40 §0). A no-op while already in
    * business mode, or while `twoincSoleTrader.isDeciding()` — see the click
    * handler's own comment (TWO-40 §7 correction: the dropdown/widget this
    * chip lives in now deliberately survives a sole-trader autofill flight
@@ -949,7 +949,7 @@ class TwoCompanySearch {
   buildBusinessChip() {
     const helper = twoincSelectWooHelper;
     const cfg = twoincSoleTrader.config();
-    const label = (cfg.text && cfg.text.registered_business) || "Registered Company";
+    const label = (cfg.text && cfg.text.registered_business) || "Registered company";
 
     return jQuery("<button></button>")
       .attr({ id: helper.businessChipId, type: "button", "data-mode": "business" })
@@ -973,7 +973,7 @@ class TwoCompanySearch {
   }
 
   /**
-   * "Sole Trader" mode chip (TWO-40 §0). Only ever added to the group while
+   * "Sole trader" mode chip (TWO-40 §0). Only ever added to the group while
    * `twoincSoleTrader.isAvailable()` — see `syncSoleTraderChip`.
    *
    * @returns {Object} jQuery-wrapped <button>
@@ -981,7 +981,7 @@ class TwoCompanySearch {
   buildSoleTraderChip() {
     const helper = twoincSelectWooHelper;
     const cfg = twoincSoleTrader.config();
-    const label = (cfg.text && cfg.text.sole_trader) || "Sole Trader";
+    const label = (cfg.text && cfg.text.sole_trader) || "Sole trader";
 
     return jQuery("<button></button>")
       .attr({ id: helper.soleTraderChipId, type: "button", "data-mode": "sole_trader" })
@@ -1050,8 +1050,8 @@ class TwoCompanySearch {
    *
    * Holds all three mode chips as ONE group, one wrapper level in from the
    * dropdown (TWO-40 §0 — the same DOM-placement defect ported wrong twice
-   * before this): "Registered Company", "Sole Trader" (while available) and
-   * "Enter Manually", in that order, so the manual-entry chip — and its own
+   * before this): "Registered company", "Sole trader" (while available) and
+   * "Enter manually", in that order, so the manual-entry chip — and its own
    * Tab shortcut, keyed on `manualEntryRowId` — stays the group's last
    * child and the last tabbable element in the document, unchanged from
    * before this group existed.
@@ -1779,6 +1779,54 @@ class TwoCompanySearch {
       $search.append('<span class="twoinc-search-spinner" aria-hidden="true"></span>');
     }
     $search.toggleClass("twoinc-searching", !!isSearching);
+  }
+
+  /**
+   * Hide the dropdown's own free-text query row while an adopted sole trader
+   * owns the captured company (item 2.1, TWO-40).
+   *
+   * HIDDEN, not merely `readonly` (Doug live-test finding: an earlier round
+   * made it readonly and left it painted, which reads as a search box that
+   * has stopped working). `display: none` plus the `hidden` attribute rather
+   * than `visibility`/`opacity`, so the input leaves the tab order with it —
+   * a keyboard-only buyer must not land on a field they cannot see. The
+   * readonly stays on top of the hide: selectWoo's own `container.on('open')`
+   * focuses this input unconditionally, and a hidden-but-typable field is
+   * exactly the state the readonly was added for.
+   *
+   * The whole SEARCH ROW goes, not just the input: the spinner is an
+   * absolutely-positioned sibling inside that row (see `.twoinc-search-spinner`
+   * in twoinc.css), so hiding the input alone collapses the row and strands
+   * it. Which is also why the hide stands down while `isBusy()` — that
+   * spinner, in this field, IS the in-flight state a re-signup shows (see
+   * `beginFlight`), so both flight edges re-sync.
+   *
+   * Both directions, every open, deliberately: selectWoo renders this row
+   * ONCE per widget instance and re-attaches the same node on every open (its
+   * `dropdown/search` adapter's `render`), so a suppression applied on one
+   * open outlives that open. Leaving sole-trader mode by picking a different
+   * company straight off the live widget is the path that proves it — that
+   * one deliberately does not destroy the widget, so nothing else would ever
+   * give the row back.
+   *
+   * @returns {void}
+   */
+  syncQueryFieldSuppression() {
+    const $row = twoincSelectWooHelper.getCompanySearchFieldContainer();
+    if ($row.length === 0) return;
+    const $query = $row.find(".select2-search__field");
+    const suppressed =
+      twoincSoleTrader.mode === "sole_trader" && twoincSoleTrader.soleTraderAdopted;
+
+    $query.prop("readonly", suppressed);
+    if (suppressed && !twoincSoleTrader.isBusy()) {
+      // A term typed before adopting describes a company the buyer then did
+      // not pick; restoring it would sit above results that no longer match.
+      $query.val("");
+      $row.hide().attr("hidden", "hidden");
+    } else {
+      $row.removeAttr("hidden").show();
+    }
   }
 
   /**
@@ -3445,14 +3493,10 @@ class TwoCompanySearch {
       // Once a sole trader is adopted, this dropdown's own free-text query
       // is not one of the ways to get a different company — the dedicated
       // "select a different sole trader" flow (the link, or re-clicking the
-      // chip — item 4.2/4.3, Doug) is the only one. Readonly, not disabled
-      // or unbound: the click that opens this dropdown at all (direction
-      // (a) above) must still land here, just with nothing typable once it
-      // does. select2 builds this input fresh on every open, so there is
-      // nothing to unwind on close.
-      if (twoincSoleTrader.mode === "sole_trader" && twoincSoleTrader.soleTraderAdopted) {
-        jQuery('input[aria-owns="select2-billing_company_display-results"]').prop("readonly", true);
-      }
+      // chip — item 4.2/4.3, Doug) is the only one. The row is hidden, not
+      // just readonly-locked, and restored on the way back out: see
+      // `syncQueryFieldSuppression`.
+      self.syncQueryFieldSuppression();
     });
 
     return widget;
@@ -4980,6 +5024,10 @@ let twoincSoleTrader = {
         "twoinc-sole-trader-toggle--busy"
       );
       twoincSelectWooHelper.holdCompanySearchSpinner("soleTrader");
+      // A re-signup started from an ALREADY-adopted state has the query row
+      // hidden (item 2.1) — give it back for the flight, or the spinner just
+      // held has nowhere to paint.
+      twoincSelectWooHelper.syncQueryFieldSuppression();
     }
   },
 
@@ -4999,6 +5047,7 @@ let twoincSoleTrader = {
         "twoinc-sole-trader-toggle--busy"
       );
       twoincSelectWooHelper.releaseCompanySearchSpinner("soleTrader");
+      twoincSelectWooHelper.syncQueryFieldSuppression();
     }
   },
 

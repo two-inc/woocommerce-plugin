@@ -1608,7 +1608,20 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
           expect($("#billing_company").prop("readonly")).toBe(true);
         });
 
-        describe("item 4.2 — the dropdown's own free-text query is suppressed once adopted", () => {
+        describe("item 4.2 / item 2.1 — the dropdown's own free-text query is suppressed once adopted", () => {
+          /** @returns {Object} jQuery-wrapped `.select2-search--dropdown` row */
+          function queryRow() {
+            return $("#select2-billing_company_display-results")
+              .closest(".select2-dropdown")
+              .find(".select2-search--dropdown")
+              .first();
+          }
+
+          /** @returns {Object} jQuery-wrapped query input inside that row */
+          function queryField() {
+            return queryRow().find(".select2-search__field");
+          }
+
           test("reopening the widget after adoption leaves its search input readonly", () => {
             soleTrader.setMode("sole_trader");
             soleTrader.setCompany("TWO:ST1", "A Sole Trader");
@@ -1622,7 +1635,53 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
             ).toBe(true);
           });
 
-          test("an ordinary (non-adopted) open leaves the search input typable", () => {
+          /**
+           * Item 2.1, live-reported by Doug: "the field should not be
+           * VISIBLE. I did not tell you it was editable, I told you it was
+           * visible." Readonly alone reads as a search box that has stopped
+           * working.
+           */
+          test("the whole query row is hidden, not merely readonly", () => {
+            soleTrader.setMode("sole_trader");
+            soleTrader.setCompany("TWO:ST1", "A Sole Trader");
+
+            $("#billing_company_display").select2("open");
+
+            expect(queryRow().attr("hidden")).toBe("hidden");
+            expect(queryRow().css("display")).toBe("none");
+          });
+
+          /**
+           * `display: none` and the `hidden` attribute, not
+           * `visibility`/`opacity`: only the former take the input out of the
+           * tab order. selectWoo's own open handler sets `tabindex="0"` on it
+           * unconditionally, so the hide is the ONLY thing keeping a
+           * keyboard-only buyer off a field they cannot see — asserted here so
+           * a later switch to a paint-only mechanism cannot pass.
+           */
+          test("the hidden query field is out of the tab order, not just unpainted", () => {
+            soleTrader.setMode("sole_trader");
+            soleTrader.setCompany("TWO:ST1", "A Sole Trader");
+
+            $("#billing_company_display").select2("open");
+
+            expect(queryField().attr("tabindex")).toBe("0");
+            expect(queryRow().css("display")).toBe("none");
+          });
+
+          test("a term typed before adopting is dropped rather than left above stale results", () => {
+            const $display = $("#billing_company_display");
+            $display.select2("open");
+            queryField().val("some other company");
+
+            soleTrader.setMode("sole_trader");
+            soleTrader.setCompany("TWO:ST1", "A Sole Trader");
+            $display.select2("open");
+
+            expect(queryField().val()).toBe("");
+          });
+
+          test("an ordinary (non-adopted) open leaves the search input typable and visible", () => {
             const $display = $("#billing_company_display");
 
             $display.select2("open");
@@ -1630,6 +1689,75 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
             expect(
               $('input[aria-owns="select2-billing_company_display-results"]').prop("readonly")
             ).toBe(false);
+            expect(queryRow().attr("hidden")).toBeUndefined();
+            expect(queryRow().css("display")).not.toBe("none");
+          });
+
+          test('the row is visible and typable again once "Registered company" is clicked', () => {
+            soleTrader.setMode("sole_trader");
+            soleTrader.setCompany("TWO:ST1", "A Sole Trader");
+            jest.useFakeTimers();
+            $("#billing_company_display").select2("open");
+            // The chip group is appended a tick after `select2:open` — see
+            // bindManualEntryAffordance's own comment.
+            jest.advanceTimersByTime(1);
+            expect(queryRow().css("display")).toBe("none");
+
+            $("#" + ctx.helper.businessChipId).trigger("click");
+            $("#billing_company_display").select2("open");
+            jest.advanceTimersByTime(1);
+            jest.useRealTimers();
+
+            expect(soleTrader.mode).toBe("business");
+            expect(queryRow().attr("hidden")).toBeUndefined();
+            expect(queryRow().css("display")).not.toBe("none");
+            expect(queryField().prop("readonly")).toBe(false);
+          });
+
+          /**
+           * The one path that leaves sole-trader mode WITHOUT destroying the
+           * widget (see the `select2:select` handler's `sole_trader` branch),
+           * so it is the one where a suppression applied on a previous open
+           * would otherwise never be undone — selectWoo renders this row once
+           * per instance, not once per open.
+           */
+          test("picking a different company off the still-live widget gives the row back on the next open", () => {
+            soleTrader.setMode("sole_trader");
+            soleTrader.setCompany("TWO:ST1", "A Sole Trader");
+            const $display = $("#billing_company_display");
+            $display.select2("open");
+            expect(queryRow().css("display")).toBe("none");
+
+            $display.trigger({
+              type: "select2:select",
+              params: { data: { id: "A Registered Co", company_id: "12345678" } }
+            });
+            // The relayed `select2:select` this test fires does not drive
+            // select2's own close, so the reopen needs the close first.
+            $display.select2("close");
+            $display.select2("open");
+
+            expect(queryRow().attr("hidden")).toBeUndefined();
+            expect(queryField().prop("readonly")).toBe(false);
+          });
+
+          /**
+           * The spinner is an absolutely-positioned sibling INSIDE this row
+           * (`.twoinc-search-spinner`), so a re-signup started from an
+           * already-adopted state has to get the row back for its in-flight
+           * state to be visible at all.
+           */
+          test("a re-signup flight from an adopted state shows the row again, and hides it on settle", () => {
+            soleTrader.setMode("sole_trader");
+            soleTrader.setCompany("TWO:ST1", "A Sole Trader");
+            $("#billing_company_display").select2("open");
+
+            soleTrader.beginFlight();
+            expect(queryRow().attr("hidden")).toBeUndefined();
+            expect(queryRow().find(".twoinc-search-spinner").length).toBe(1);
+
+            soleTrader.settleFlight();
+            expect(queryRow().attr("hidden")).toBe("hidden");
           });
 
           test("re-clicking the chip to open a fresh re-signup goes through launchSignup, not a typed query", () => {
@@ -2294,12 +2422,12 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       });
     });
 
-    describe("bug 2 — Enter Manually while adopted, with a leftover popup-close poll still ticking", () => {
+    describe("bug 2 — Enter manually while adopted, with a leftover popup-close poll still ticking", () => {
       test("still switches to manual entry rather than leaving the search widget showing", () => {
         // Adopted through the hosted signup, whose popup-close poll only
         // notices the window closed on its own 300ms cadence — it is still
         // "open" (and therefore still `isBusy()`) at the moment the buyer
-        // clicks Enter Manually.
+        // clicks Enter manually.
         $("#billing_email").val("buyer@example.test");
         jest.spyOn(soleTrader, "fetchTokens").mockImplementation((cb) => cb(true));
         jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => cb(null));
@@ -2361,7 +2489,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         expect(soleTrader.soleTraderAdopted).toBe(true);
         expect($("#billing_company_display_field").hasClass("hidden")).toBe(false);
 
-        // The buyer reopens the (still-live) widget and clicks Enter Manually
+        // The buyer reopens the (still-live) widget and clicks Enter manually
         // for real.
         $("#billing_company_display").select2("open");
         ctx.helper.syncManualEntryButton();
@@ -2576,6 +2704,31 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
 
       jest.advanceTimersByTime(30 * 60 * 1000);
       expect(ajax.calls).toHaveLength(2);
+    });
+  });
+
+  /**
+   * Item 4, live-reported by Doug: WooCommerce's chips sized to their own
+   * content, leaving visible slack to the right of the row, where
+   * PrestaShop's fill it. Asserted against the stylesheet source rather than
+   * a rendered box: jsdom does no flex layout, so a computed-width assertion
+   * here would be vacuous rather than wrong.
+   */
+  describe("item 4 — the chip row fills its full width", () => {
+    test("each chip declares a half-row flex basis, so two share a row and a third grows to fill its own", () => {
+      const rule = /^\.twoinc-mode-chip\s*\{([^}]*)\}/m.exec(stylesheetSource());
+
+      expect(rule).not.toBeNull();
+      // `flex-grow: 1` is what fills the row; the `calc(50% - <gap>)` basis is
+      // what decides how many chips land on it.
+      expect(rule[1]).toMatch(/flex:\s*1\s+1\s+calc\(50%\s*-\s*\d+px\)/);
+    });
+
+    test("the row itself wraps, or the third chip has nowhere to go", () => {
+      const rule = /^\.twoinc-mode-chips\s*\{([^}]*)\}/m.exec(stylesheetSource());
+
+      expect(rule).not.toBeNull();
+      expect(rule[1]).toMatch(/flex-wrap:\s*wrap/);
     });
   });
 });
