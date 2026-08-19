@@ -1108,7 +1108,7 @@ describe("company-search manual-entry affordance", () => {
       btn().trigger(new $.Event("click", { button: 0 }));
       jest.advanceTimersByTime(1);
 
-      expect(ctx.twoinc.enable_company_search).toBe("no");
+      expect(ctx.capture.mode).toBe("manual");
       jest.useRealTimers();
     });
 
@@ -1128,7 +1128,7 @@ describe("company-search manual-entry affordance", () => {
       btn().trigger(new $.Event("mouseup", { button: 2, which: 3 }));
 
       expect(clicked).toEqual([]);
-      expect(ctx.twoinc.enable_company_search).not.toBe("no");
+      expect(ctx.capture.mode).not.toBe("manual");
     });
   });
 
@@ -1148,7 +1148,7 @@ describe("company-search manual-entry affordance", () => {
       // The action is deferred out of the click dispatch.
       jest.advanceTimersByTime(1);
 
-      expect(ctx.twoinc.enable_company_search).toBe("no");
+      expect(ctx.capture.mode).toBe("manual");
       expect($("#billing_company_display").data("select2")).toBeFalsy();
       expect($("#" + helper.manualEntryRowId).length).toBe(0);
       jest.useRealTimers();
@@ -1265,9 +1265,8 @@ describe("company-search manual-entry affordance", () => {
       {
         state: "settled sole-trader mode",
         // Through the real `setMode`, not by assigning `.mode`: that is what
-        // takes the `enable_company_search`/`manual_company_entry_active`
-        // snapshot this path then has to restore, so a direct assignment
-        // would skip the restore branch entirely.
+        // takes the capture-mode snapshot this path then has to restore, so a
+        // direct assignment would skip the restore branch entirely.
         arrange: (soleTrader) => {
           soleTrader.setMode("sole_trader");
         },
@@ -1299,7 +1298,7 @@ describe("company-search manual-entry affordance", () => {
 
         // Then: manual entry is entered iff the click proceeded, and the chip
         // only ever disappears on the path that DID proceed.
-        expect(!!ctx.twoinc.manual_company_entry_active).toBe(entered);
+        expect(ctx.capture.mode === "manual").toBe(entered);
         expect(btn().length).toBe(chipsLeft);
         // The mode swap reached the DOM, not just the flag — the chip's
         // absence alone holds pre-fix too.
@@ -1307,12 +1306,11 @@ describe("company-search manual-entry affordance", () => {
         if (entered) {
           expect(ctx.soleTrader.mode).toBe("business");
           // The snapshot `setMode("sole_trader")` took is genuinely GIVEN
-          // BACK, not merely coincidentally equal: manual entry sets
-          // `enable_company_search` to "no" itself, so asserting that value
-          // alone passes even with the restore deleted. These two are only
-          // nulled by the restore branch.
-          expect(ctx.soleTrader.savedCompanySearch).toBeNull();
-          expect(ctx.soleTrader.savedManualEntryActive).toBeNull();
+          // BACK, not merely coincidentally equal: manual entry sets the
+          // capture mode to `manual` itself, so asserting that value alone
+          // passes even with the restore deleted. The sentinel is only nulled
+          // by the restore branch.
+          expect(ctx.soleTrader.savedCaptureMode).toBeNull();
           expect($("#billing_company").prop("readonly")).toBe(false);
         }
       } finally {
@@ -1476,7 +1474,7 @@ describe("company-search manual-entry affordance", () => {
       expect(detached.parent().length).toBe(0);
       detached.trigger("click");
 
-      expect(ctx.twoinc.enable_company_search).toBe("yes");
+      expect(ctx.capture.mode).toBe("search");
     });
 
     test("leaving manual entry hides the way back out again", () => {
@@ -1490,7 +1488,7 @@ describe("company-search manual-entry affordance", () => {
 
       ctx.helper.exitManualCompanyEntry();
 
-      expect(ctx.twoinc.enable_company_search).toBe("yes");
+      expect(ctx.capture.mode).toBe("search");
       expect($("#" + helper.searchCompanyBtnId)[0].style.display).toBe("none");
       jest.useRealTimers();
     });
@@ -1600,7 +1598,7 @@ describe("company-search manual-entry affordance", () => {
       $searchBtn.trigger(e);
 
       expect(e.isDefaultPrevented()).toBe(true);
-      expect(ctx.twoinc.enable_company_search).toBe("yes");
+      expect(ctx.capture.mode).toBe("search");
       jest.useRealTimers();
     });
 
@@ -1618,7 +1616,7 @@ describe("company-search manual-entry affordance", () => {
       $searchBtn.trigger(e);
 
       expect(e.isDefaultPrevented()).toBe(true);
-      expect(ctx.twoinc.enable_company_search).toBe("yes");
+      expect(ctx.capture.mode).toBe("search");
       jest.useRealTimers();
     });
 
@@ -1641,7 +1639,7 @@ describe("company-search manual-entry affordance", () => {
       $searchBtn.trigger(e);
 
       expect(e.isDefaultPrevented()).toBe(false);
-      expect(ctx.twoinc.enable_company_search).toBe("no");
+      expect(ctx.capture.mode).toBe("manual");
       jest.useRealTimers();
     });
   });
@@ -1787,7 +1785,7 @@ describe("company-search manual-entry affordance", () => {
       activate();
       jest.advanceTimersByTime(1);
       jest.useRealTimers();
-      expect(ctx.twoinc.enable_company_search).toBe("no");
+      expect(ctx.capture.mode).toBe("manual");
 
       // The search button (and the widget it goes with) is torn down only
       // once a sole trader is actually adopted — see `setCompany`'s own
@@ -1799,7 +1797,7 @@ describe("company-search manual-entry affordance", () => {
 
       ctx.soleTrader.setMode("business");
 
-      expect(ctx.twoinc.enable_company_search).toBe("no");
+      expect(ctx.capture.mode).toBe("manual");
       expect($("#" + helper.searchCompanyBtnId)[0].style.display).not.toBe("none");
     });
 
@@ -1843,13 +1841,13 @@ describe("company-search manual-entry affordance", () => {
       // Separately, the email-driven autofill prefetch can call
       // `twoincSoleTrader.setMode("sole_trader")` on its own, asynchronously,
       // regardless of what the dropdown/manual-entry button is doing (see
-      // the comment on `savedManualEntryActive`). If that prefetch's
+      // the comment on `savedCaptureMode`). If that prefetch's
       // callback lands in the SAME tick window as the pending deferred
       // `enterManualCompanyEntry` — entirely plausible, both are macrotask/
       // microtask-scheduled independently of each other — `setMode` runs
       // first (snapshotting the correct pre-manual-entry state), and then
       // the stale `enterManualCompanyEntry` fires anyway: without a guard it
-      // would force `manual_company_entry_active` back to true (wrong —
+      // would force the capture mode back to `manual` (wrong —
       // sole trader needs `#company_id_field` for its synthetic id),
       // re-show the search-again button `setMode` just hid, and wipe
       // `#billing_company`/`#company_id` out from under the synthetic id
@@ -1868,12 +1866,11 @@ describe("company-search manual-entry affordance", () => {
       // Async sole-trader switch races in and completes BEFORE the deferred
       // enterManualCompanyEntry timer fires.
       ctx.soleTrader.setMode("sole_trader");
-      expect(ctx.twoinc.manual_company_entry_active).toBe(false);
-      expect(ctx.twoinc.enable_company_search).toBe("no");
+      expect(ctx.capture.mode).toBe("sole_trader");
 
       // Now the stale deferred callback runs. Without the guard in
-      // enterManualCompanyEntry, this forces manual_company_entry_active
-      // back to true — wrong, sole trader needs #company_id_field for its
+      // enterManualCompanyEntry, this forces the capture mode back to
+      // `manual` — wrong, sole trader needs #company_id_field for its
       // synthetic id (see toggleBusinessFields) — reproducing the
       // #30.x.13 wrong-id-field-visibility symptom via this new flag.
       jest.advanceTimersByTime(1);
@@ -1881,8 +1878,7 @@ describe("company-search manual-entry affordance", () => {
 
       // Sole-trader mode must still be intact — not stomped by the late
       // manual-entry activation.
-      expect(ctx.twoinc.manual_company_entry_active).toBe(false);
-      expect(ctx.twoinc.enable_company_search).toBe("no");
+      expect(ctx.capture.mode).toBe("sole_trader");
     });
   });
 

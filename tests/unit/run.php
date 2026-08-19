@@ -35,6 +35,8 @@ final class BrandConfigSpec
             'testInvoiceEmailFieldHasNoPlaceholder',
             'testFieldPrioritiesMatchDesiredCheckoutOrder',
             'testBillingCompanyDisplayAlwaysRegisteredRegardlessOfCheckbox',
+            'testNativeBillingCompanyRegisteredWhenCoreDropsIt',
+            'testNativeBillingCompanyNeverOverwritten',
             'testCompanyPriorityClampPreventsInversionAboveOptionals',
             'testLocaleDefaultCountryPriorityStaysBelowCompany',
             'testConfirmationUrlHookReceivesUrlAndOrderId',
@@ -569,6 +571,111 @@ final class BrandConfigSpec
                 'billing_company_display must be registered when get_enable_company_search() returns ' . var_export($enableCompanySearch, true)
             );
         }
+    }
+
+    /**
+     * Doug, 2026-08-19 (#486). WooCommerce core DELETES its own company field
+     * — `unset($fields['company'])` in
+     * WC_Countries::get_default_address_fields() — when
+     * `woocommerce_checkout_company_field` reads 'hidden', which is also that
+     * option's default on any store whose default checkout is the block
+     * checkout. `#billing_company_field` was then absent from the rendered DOM
+     * entirely (live-confirmed on staging), and it is one of the two
+     * company-NAME surfaces toggleBusinessFields() chooses between, the field
+     * WooCommerce POSTs the captured name in, and where the "search for
+     * company" affordance is appended. Registering it here puts it beyond that
+     * store-level toggle, exactly as billing_company_display/company_id
+     * already are.
+     *
+     * `['billing' => []]` is precisely the shape the filter chain hands over
+     * on such a store, so this is the real case, not a synthetic one.
+     */
+    private static function testNativeBillingCompanyRegisteredWhenCoreDropsIt(): void
+    {
+        $gateway = new class () extends WC_Twoinc {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                return '';
+            }
+        };
+
+        // Production filter order: move_country_field at priority 20, then
+        // update_company_fields at 23. That order is load-bearing here —
+        // move_country_field runs while billing_company is still absent and has
+        // only its own `?? 30` fallback to position country against, and this
+        // registration has to land at the priority that fallback assumed (#33).
+        $checkout = new WC_Twoinc_Checkout($gateway);
+        $fields = $checkout->move_country_field(['billing' => []]);
+        $fields = $checkout->update_company_fields($fields);
+
+        TinyAssert::true(
+            isset($fields['billing']['billing_company']),
+            'billing_company must be registered even when core dropped it'
+        );
+        // Optional server-side: required-ness is decided client-side per
+        // capture mode and per payment method (toggleBusinessFields'
+        // requiredTargets). A server-side `required` would make every non-Two
+        // checkout unsubmittable without a company name.
+        TinyAssert::true(
+            $fields['billing']['billing_company']['required'] === false,
+            'billing_company must not be server-side required'
+        );
+        // NOT pre-hidden, unlike billing_company_display and company_id: this
+        // is the surface a buyer on an unsupported country sees, and it must be
+        // on screen before this plugin's JS has run at all.
+        TinyAssert::true(
+            !in_array('hidden', $fields['billing']['billing_company']['class'], true),
+            'billing_company must not start hidden'
+        );
+        // Country still lands above it (#33), which is what move_country_field's
+        // own `?? 30` fallback and this registration's shared
+        // $company_name_priority are for.
+        TinyAssert::true(
+            $fields['billing']['billing_country']['priority'] < $fields['billing']['billing_company']['priority'],
+            'country must still sit above the force-registered billing_company'
+        );
+    }
+
+    /**
+     * The other half of the same change: a floor, never an override. A store
+     * that does render the field — or a brand overlay that adjusts its label,
+     * required-ness or priority — owns its own definition, and this plugin
+     * must not flatten it back to the default shape.
+     */
+    private static function testNativeBillingCompanyNeverOverwritten(): void
+    {
+        $gateway = new class () extends WC_Twoinc {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                return '';
+            }
+        };
+
+        $existing = [
+            'label' => 'Organisation',
+            'required' => true,
+            'class' => ['form-row-wide', 'brand-company'],
+            'priority' => 45,
+        ];
+
+        $fields = (new WC_Twoinc_Checkout($gateway))->update_company_fields([
+            'billing' => ['billing_company' => $existing],
+        ]);
+
+        TinyAssert::true(
+            $fields['billing']['billing_company'] === $existing,
+            'an existing billing_company definition must survive untouched'
+        );
     }
 
     /**

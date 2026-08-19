@@ -318,13 +318,16 @@ describe("deferred company-search initialisation", () => {
     expect(handlerCount("select2:open")).toBe(2);
   });
 
-  test("the deferred pass early-returns with company search off", () => {
-    // The `enable_company_search !== "yes"` early return sits ABOVE the first
-    // use of the receiver, so the unbound call never dereferenced anything on
-    // shops with search off. They were unaffected by the bug and must stay
-    // unaffected by the fix — no widget may appear on the timer. `ctx.twoinc`
-    // and `window.twoinc` are the same object, so setting it once is enough.
-    window.twoinc.enable_company_search = "no";
+  test("the deferred pass early-returns outside search capture mode", () => {
+    // The `twoincCompanyCapture.mode !== "search"` early return sits ABOVE the
+    // first use of the receiver, so the unbound call never dereferenced anything
+    // in manual entry. Those buyers were unaffected by the bug and must stay
+    // unaffected by the fix — no widget may appear on the timer.
+    //
+    // Driven off the capture mode rather than `enable_company_search` (#486):
+    // that setting never suppressed the picker in the first place, it only ever
+    // relocated it, and it is no longer mutated at runtime at all.
+    ctx.capture.mode = "manual";
 
     const enableCalls = witnessEnableCalls(ctx.Twoinc);
     const instance = ctx.Twoinc.getInstance();

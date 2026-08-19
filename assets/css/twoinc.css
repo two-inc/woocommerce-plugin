@@ -326,8 +326,15 @@
  * covers the pay-for-order page, where that wrapper (not the field itself)
  * is what the summary lands after; `#billing_company_display_field` covers
  * the checkout page, where there is no such wrapper.
+ *
+ * `#billing_company_field` needs the identical cancellation (Doug,
+ * 2026-08-19): it carries the same 15px `padding-bottom` (above) and the same
+ * core `.form-row` margin, and it is the anchor `getCompanySummaryNode()`
+ * picks whenever the search control is the hidden one of the two company-name
+ * elements.
  */
 #billing_company_display_field + .twoinc-company-summary,
+#billing_company_field + .twoinc-company-summary,
 .twoinc-inp-container + .twoinc-company-summary {
   margin-top: -32px;
 }

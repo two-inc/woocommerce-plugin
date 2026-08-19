@@ -183,14 +183,16 @@ describe("billing country switch", () => {
       // regression. Simulated by knocking a field's state out and checking
       // the handler puts it back.
       initializeCheckout();
-      // The field this configuration resolves to visible (the gateway is not
-      // the selected payment method here, and company search is not enabled
-      // for other methods, so the plain company field is the one shown).
-      ctx.$("#billing_company_field").addClass("hidden");
+      // The field this configuration resolves to visible: search-widget
+      // visibility follows the buyer's own capture mode alone now (#486), not
+      // which payment method is selected and not an admin setting — nothing
+      // here has entered manual entry, so the search field is the one shown,
+      // regardless of the gateway radio's state.
+      ctx.$("#billing_company_display_field").addClass("hidden");
 
       fireCountryChange();
 
-      expect(ctx.$("#billing_company_field").hasClass("hidden")).toBe(false);
+      expect(ctx.$("#billing_company_display_field").hasClass("hidden")).toBe(false);
     });
 
     test("repeated re-renders stay inert, not just the first", () => {
@@ -985,7 +987,7 @@ describe("billing country switch", () => {
       expect(capturedCompany()).toEqual({ name: "Ejemplo SL", id: "B12345678" });
     });
 
-    test("clears with company search OFF (manual entry) as well as on", () => {
+    test("clears in manual entry as well as in search mode", () => {
       // The manual-entry leg behaves differently inside
       // `clearSelectedCompany`: it deliberately KEEPS the buyer's typed
       // `#billing_company` (it is their own input, not a picked company) while
@@ -993,12 +995,11 @@ describe("billing country switch", () => {
       // search-mode tests make, and running only those left this leg unproven.
       //
       // Typed by hand rather than captured (TWO-40 §5): what decides this leg
-      // is PROVENANCE — did the plugin write this name — not the capture mode
-      // the flag names. `enable_company_search === "no"` was a proxy for that
-      // question, and a sole-trader name is plugin-written while reaching here
-      // with the flag reading "no", so the proxy kept a name whose number had
-      // already gone.
-      ctx.twoinc.enable_company_search = "no";
+      // is PROVENANCE — did the plugin write this name — not the capture mode.
+      // `enable_company_search === "no"` was a proxy for that question, and a
+      // sole-trader name is plugin-written while reaching there with the flag
+      // reading "no", so the proxy kept a name whose number had already gone.
+      ctx.capture.mode = "manual";
       addAddressFields();
       initializeCheckout();
       typeCompanyByHand("Example Co", "123456789", "GB");
@@ -1022,8 +1023,8 @@ describe("billing country switch", () => {
       expect(ctx.$("#billing_company_display").data("select2")).toBeTruthy();
     });
 
-    test("does NOT clear the matching pair with company search OFF either", () => {
-      ctx.twoinc.enable_company_search = "no";
+    test("does NOT clear the matching pair in manual entry either", () => {
+      ctx.capture.mode = "manual";
       addAddressFields();
       initializeCheckout();
       ctx.$("#billing_country").val("ES");

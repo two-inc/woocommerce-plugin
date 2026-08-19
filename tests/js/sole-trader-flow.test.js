@@ -895,14 +895,20 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
           expect($("#company_id").val()).toBe("TWO:ST1");
         });
 
-        test("a merchant with company search disabled entirely still gets the native-field swap on adoption (no widget to show it through)", () => {
-          ctx.twoinc.enable_company_search = "no";
+        test("a merchant who relocated the control to the payment tile shows the adoption through the widget there, native field alongside", () => {
+          // Replaces an "enable_company_search: no" case (#486). There is no
+          // such state: the admin checkbox only ever RELOCATES the one search
+          // control (TWO-25326 §7.1), so the adopted sole trader shows through
+          // the widget either way — and in tile placement WooCommerce's own
+          // native field deliberately stays in the address area alongside it,
+          // rather than the two swapping.
+          ctx.twoinc.company_search_location = "payment_tile";
 
           soleTrader.setMode("sole_trader");
           soleTrader.setCompany("TWO:ST1", "A Sole Trader");
 
+          expect($("#billing_company_display_field").hasClass("hidden")).toBe(false);
           expect($("#billing_company_field").hasClass("hidden")).toBe(false);
-          expect($("#billing_company_display_field").hasClass("hidden")).toBe(true);
           expect($("#billing_company").prop("readonly")).toBe(true);
         });
       });
@@ -1558,7 +1564,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         jest.useRealTimers();
 
         expect(soleTrader.mode).toBe("business");
-        expect(ctx.twoinc.manual_company_entry_active).toBe(true);
+        expect(ctx.capture.mode).toBe("manual");
         expect($("#billing_company_field").hasClass("hidden")).toBe(false);
         expect($("#billing_company_display_field").hasClass("hidden")).toBe(true);
       });
@@ -1647,8 +1653,13 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         expect(opened[0].url).toContain("&autoselect=false");
       });
 
-      test("falls back to the native field's own slot once search is disabled entirely, unchanged from before", () => {
-        ctx.twoinc.enable_company_search = "no";
+      test("falls back to the native field's own slot whenever that field is the visible one, unchanged from before", () => {
+        // Reached via tile placement rather than the old "search off" fixture
+        // (#486): there the native field deliberately stays in the address area
+        // alongside the relocated control, so it is visible and the link belongs
+        // in its slot. The branch is keyed on that visibility, not on any
+        // setting.
+        ctx.twoinc.company_search_location = "payment_tile";
         soleTrader.setMode("sole_trader");
         soleTrader.setCompany("TWO:ST1", "A Sole Trader");
 
