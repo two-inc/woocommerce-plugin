@@ -16,7 +16,14 @@
 
 "use strict";
 
+const fs = require("fs");
+const path = require("path");
 const harness = require("./wc-harness");
+
+/** @returns {string} the raw twoinc.css source */
+function stylesheetSource() {
+  return fs.readFileSync(path.join(harness.REPO_ROOT, harness.STYLESHEET_PATH), "utf8");
+}
 
 /** The checkout subset the sole-trader module reads and writes. */
 function buildForm() {
@@ -347,6 +354,66 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     test("the ordinary signup launch carries no autoselect flag", () => {
       soleTrader.launchSignup();
       expect(opened[0].url).not.toContain("autoselect");
+    });
+
+    describe("item 3 — the gap above the link (live-reported by Doug)", () => {
+      // Same box-model stack as `.twoinc-company-summary`'s own gap fix
+      // (a3fd6e8): `#billing_company_display_field`'s 15px padding-bottom
+      // plus WooCommerce core's own `.form-row` bottom margin, cancelled on
+      // whichever element actually lands after that field via the adjacent-
+      // sibling selector `placeDifferentSoleTraderBtn()` inserts it with.
+      test("a scoped negative margin-top cancels the field's own padding-bottom + core's form-row margin", () => {
+        const rule =
+          /#billing_company_display_field \+ #select_different_sole_trader_btn,\s*\.twoinc-inp-container \+ #select_different_sole_trader_btn\s*\{([^}]*)\}/.exec(
+            stylesheetSource()
+          );
+
+        expect(rule).not.toBeNull();
+        expect(rule[1]).toMatch(/margin-top:\s*-\d+px/);
+      });
+
+      test("never doubles up with the summary's own cancellation — the two never show for the same field", () => {
+        // syncDifferentSoleTraderLink()'s gate and renderCompanySummary()'s
+        // are mode-exclusive (sole_trader vs registered-search), so a real
+        // checkout can show at most one of the two negative margins against
+        // a given field, never both stacked on top of each other.
+        soleTrader.mode = "sole_trader";
+        $("#company_id").val("TWO:ST12345");
+        soleTrader.syncDifferentSoleTraderLink();
+
+        expect($(".twoinc-company-summary").length).toBe(0);
+      });
+    });
+
+    describe("item 2 — a sole trader restored by loadUserMetaInputs (live-reported by Doug)", () => {
+      // The regression: `loadUserMetaInputs()` (a returning buyer's LAST
+      // captured company, restored from user meta) writes straight through
+      // `twoincCompanyCapture.write()`, never through `setCompany()` — the
+      // only place `mode`/`soleTraderAdopted` get set and the link gets
+      // synced. The company populated correctly; the link just never
+      // appeared, and a re-signup completing later would have been silently
+      // dropped by `bindPopupMessageListener`'s own `mode !== "sole_trader"`
+      // gate.
+      test("a restored TWO:-prefixed id shows the link", () => {
+        ctx.twoinc.billing_company = "A Sole Trader";
+        ctx.twoinc.company_id = "TWO:ST12345";
+
+        ctx.dom.loadUserMetaInputs();
+
+        expect(soleTrader.mode).toBe("sole_trader");
+        expect(soleTrader.soleTraderAdopted).toBe(true);
+        expect(soleTrader.getDifferentSoleTraderBtnNode().css("display")).not.toBe("none");
+      });
+
+      test("a restored ORDINARY registry number leaves sole-trader mode untouched", () => {
+        ctx.twoinc.billing_company = "ACME Widgets Ltd";
+        ctx.twoinc.company_id = "12345678";
+
+        ctx.dom.loadUserMetaInputs();
+
+        expect(soleTrader.mode).toBe("business");
+        expect(soleTrader.getDifferentSoleTraderBtnNode().css("display")).toBe("none");
+      });
     });
   });
 
@@ -911,6 +978,41 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
           expect($("#billing_company_field").hasClass("hidden")).toBe(false);
           expect($("#billing_company").prop("readonly")).toBe(true);
         });
+
+        describe("item 4.2 — the dropdown's own free-text query is suppressed once adopted", () => {
+          test("reopening the widget after adoption leaves its search input readonly", () => {
+            soleTrader.setMode("sole_trader");
+            soleTrader.setCompany("TWO:ST1", "A Sole Trader");
+            const $display = $("#billing_company_display");
+
+            $display.select2("open");
+
+            expect($display.data("select2").isOpen()).toBe(true);
+            expect(
+              $('input[aria-owns="select2-billing_company_display-results"]').prop("readonly")
+            ).toBe(true);
+          });
+
+          test("an ordinary (non-adopted) open leaves the search input typable", () => {
+            const $display = $("#billing_company_display");
+
+            $display.select2("open");
+
+            expect(
+              $('input[aria-owns="select2-billing_company_display-results"]').prop("readonly")
+            ).toBe(false);
+          });
+
+          test("re-clicking the chip to open a fresh re-signup goes through launchSignup, not a typed query", () => {
+            soleTrader.setMode("sole_trader");
+            soleTrader.setCompany("TWO:ST1", "A Sole Trader");
+            const launchSpy = jest.spyOn(soleTrader, "launchSignup");
+
+            soleTrader.onModeChipClick("sole_trader");
+
+            expect(launchSpy).toHaveBeenCalledWith({ autoselect: false });
+          });
+        });
       });
     });
 
@@ -1442,6 +1544,30 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         expect(soleTrader.mode).toBe("business");
       });
     });
+
+    describe("item 2 — a later, unrelated flight must not revert an already-adopted sole trader", () => {
+      // `#billing_email` is never locked (see the round-6 test above), so a
+      // buyer who has ALREADY been adopted can still edit it afterwards.
+      // Before this fix, `applyPrefetch`'s revert branch checked only
+      // `mode === "sole_trader" && !isBusy()` — a fresh flight for the
+      // edited email settling with no match (the ordinary case: the
+      // autofill cookie has no reason to agree with an adoption already
+      // settled) reverted straight to business and wiped the captured
+      // company, live-reported by Doug.
+      test("editing the email post-adoption to one autofill does not match leaves the adoption alone", () => {
+        soleTrader.setMode("sole_trader");
+        soleTrader.setCompany("TWO:ST1", "First Trader");
+        expect(soleTrader.soleTraderAdopted).toBe(true);
+
+        $("#billing_email").val("unrelated@example.test");
+        jest.spyOn(soleTrader, "fetchTokens").mockImplementation((cb) => cb(true));
+        jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => cb(null));
+        soleTrader.onEmailChanged();
+
+        expect(soleTrader.mode).toBe("sole_trader");
+        expect($("#company_id").val()).toBe("TWO:ST1");
+      });
+    });
   });
 
   describe("TWO-40 §7 direction (a) — Doug's live-tested regressions on the widget-selection PR", () => {
@@ -1453,8 +1579,13 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       ).appendTo("form[name='checkout']");
     });
 
-    describe("bug 1 — re-clicking the Sole Trader chip once already adopted", () => {
-      test("is a no-op, same as the Business chip's own already-selected click", () => {
+    describe("bug 1/item 4.3 — re-clicking the Sole Trader chip once already adopted", () => {
+      // Doug's explicit override (item 4.3): an earlier round made this a
+      // no-op on the theory that the "select a different sole trader" link
+      // was the one deliberate re-signup entry point once adopted. Doug has
+      // now ruled that wrong — re-clicking the chip must act exactly like
+      // that link, not do nothing.
+      test("acts exactly like the 'select a different sole trader' link, not a no-op", () => {
         $("#billing_email").val("buyer@example.test");
         jest.spyOn(soleTrader, "fetchTokens").mockImplementation((cb) => cb(true));
         jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) =>
@@ -1471,12 +1602,14 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         soleTrader.onModeChipClick("sole_trader");
 
         expect(setCompanySpy).not.toHaveBeenCalled();
-        expect($("#billing_company_display_field").hasClass("hidden")).toBe(false);
-        expect($("#billing_company_field").hasClass("hidden")).toBe(true);
+        // The first click matched and adopted synchronously — no popup at
+        // all. This one IS the popup: the chip's own re-signup.
+        expect(opened).toHaveLength(1);
+        expect(opened[0].url).toContain("&autoselect=false");
         expect(soleTrader.mode).toBe("sole_trader");
       });
 
-      test("does not open a second signup popup for an adoption that came through the hosted flow rather than a prefetch match", () => {
+      test("opens a re-signup popup for an adoption that came through the hosted flow rather than a prefetch match", () => {
         $("#billing_email").val("buyer@example.test");
         jest.spyOn(soleTrader, "fetchTokens").mockImplementation((cb) => cb(true));
         jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => cb(null));
@@ -1501,7 +1634,8 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
 
         soleTrader.onModeChipClick("sole_trader");
 
-        expect(opened).toHaveLength(1);
+        expect(opened).toHaveLength(2);
+        expect(opened[1].url).toContain("&autoselect=false");
       });
 
       test("still lets the buyer through while genuinely deciding (not yet adopted)", () => {

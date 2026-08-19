@@ -3441,6 +3441,21 @@ class TwoCompanySearch {
       // timing of the focus fix, which is not what this change is about.
       self.waitToFocus("billing_company_display", null, null);
       self.addSelectWooFocusFixHandler("billing_company_display");
+
+      // Once a sole trader is adopted, this dropdown's own free-text query
+      // is not one of the ways to get a different company — the dedicated
+      // "select a different sole trader" flow (the link, or re-clicking the
+      // chip — item 4.2/4.3, Doug) is the only one. Readonly, not disabled
+      // or unbound: the click that opens this dropdown at all (direction
+      // (a) above) must still land here, just with nothing typable once it
+      // does. select2 builds this input fresh on every open, so there is
+      // nothing to unwind on close.
+      if (twoincSoleTrader.mode === "sole_trader" && twoincSoleTrader.soleTraderAdopted) {
+        jQuery('input[aria-owns="select2-billing_company_display-results"]').prop(
+          "readonly",
+          true
+        );
+      }
     });
 
     return widget;
@@ -4303,10 +4318,27 @@ let twoincDomHelper = {
     // wipes a perfectly good restored capture on the buyer's first keystroke
     // anywhere in the company field.
     if (window.twoinc.billing_company || window.twoinc.company_id) {
+      const restoredId = window.twoinc.company_id || jQuery("#company_id").val();
       twoincCompanyCapture.write(
         window.twoinc.billing_company || jQuery("#billing_company").val(),
-        window.twoinc.company_id || jQuery("#company_id").val()
+        restoredId
       );
+      // A restored SOLE TRADER (live-reported by Doug, item 2): this restore
+      // path writes straight to the capture layer above rather than through
+      // `twoincSoleTrader.setCompany()` — the only place that sets
+      // `mode`/`soleTraderAdopted` and syncs the "select a different sole
+      // trader" link — so a returning buyer whose last order used one saw
+      // the company populate correctly with no way back into a fresh
+      // signup, and a click-to-reopen or re-signup completing later found
+      // `mode !== "sole_trader"` and was silently dropped (see
+      // `bindPopupMessageListener`'s own comment for that failure mode).
+      // `isSyntheticCompanyNumber` is what tells a restored sole trader's
+      // `TWO:…` id apart from an ordinary registry number.
+      if (twoincUtilHelper.isSyntheticCompanyNumber(restoredId)) {
+        twoincSoleTrader.mode = "sole_trader";
+        twoincSoleTrader.soleTraderAdopted = true;
+        twoincSoleTrader.syncDifferentSoleTraderLink();
+      }
     }
 
     // Re-evaluate the company fields, because the write just above changes
@@ -5042,15 +5074,21 @@ let twoincSoleTrader = {
       if (!twoincSoleTrader.isDeciding()) twoincSoleTrader.setMode("business");
       return;
     }
-    // Already the settled selection: the same cosmetic no-op the Business
-    // chip gives its own already-selected click (`mode === "business"`
-    // above). Re-adopting from here re-ran `setCompany()` (and, for an
-    // adoption that came through a popup rather than a prefetch match, could
-    // reach the `pf.ready` branch below and open a SECOND signup popup) for
-    // no reason once the outcome is already settled — the "select a
-    // different sole trader" link is the one deliberate re-signup entry
-    // point once adopted (TWO-40 §7 correction, live-reported by Doug).
-    if (twoincSoleTrader.mode === "sole_trader" && twoincSoleTrader.soleTraderAdopted) return;
+    // Re-clicking once already adopted is the SAME re-signup the "select a
+    // different sole trader" link launches — NOT the Business chip's
+    // already-selected no-op (Doug's explicit override, item 4.3: an
+    // earlier round made this a no-op on the theory that the link should be
+    // the one deliberate re-signup entry point, which Doug has now ruled
+    // wrong — the chip is a second, equally deliberate way to ask for the
+    // same thing). Routed through `launchSignup` directly rather than
+    // `setMode`+the `pf` branches below: those exist to decide sole-trader
+    // mode for the FIRST time, and re-running them here could re-adopt the
+    // SAME prefetched match with no popup at all, which is not what
+    // "select a different" means.
+    if (twoincSoleTrader.mode === "sole_trader" && twoincSoleTrader.soleTraderAdopted) {
+      twoincSoleTrader.launchSignup({ autoselect: false });
+      return;
+    }
     twoincSoleTrader.setMode("sole_trader");
     const pf = twoincSoleTrader.prefetched;
     if (pf.ready && pf.matches && pf.buyer) {
@@ -5503,7 +5541,11 @@ let twoincSoleTrader = {
       // popup now, the moment the wait `onModeChipClick` deferred is over,
       // rather than reflexively at click time.
       twoincSoleTrader.launchSignup();
-    } else if (twoincSoleTrader.mode === "sole_trader" && !twoincSoleTrader.isBusy()) {
+    } else if (
+      twoincSoleTrader.mode === "sole_trader" &&
+      !twoincSoleTrader.isBusy() &&
+      !twoincSoleTrader.soleTraderAdopted
+    ) {
       // `isBusy()` too (round-3 review — Vader): `flightDepth` is a COUNT
       // specifically because a second flight for a newer email can start
       // before an earlier one settles (see its own doc comment). Without
@@ -5513,8 +5555,26 @@ let twoincSoleTrader = {
       // tearing the widget back down under it. The later flight's own
       // settle (or an open popup's own close) is what's actually authoritative
       // here, so deferring loses nothing.
+      //
+      // `!soleTraderAdopted` too (live-reported by Doug, item 2): a buyer
+      // who is ALREADY adopted can still edit `#billing_email` — it is
+      // deliberately never locked, unlike the captured fields — and that
+      // re-fires this same flight for the new address. A non-match there is
+      // not "abandon sole trader", it is "the autofill cookie disagrees
+      // with an already-settled adoption"; the one-way latch is the
+      // authority once set, same as `isDeciding()` already treats it.
       twoincSoleTrader.setMode("business");
     }
+    // Re-synced unconditionally, even on the branch above that changes
+    // nothing else (live-reported by Doug, item 2): tokens are minted by
+    // THIS SAME flight (`onEmailChanged`'s `fetchTokens` call), so a sole
+    // trader already adopted BEFORE this flight ever ran — restored from a
+    // previous order by `loadUserMetaInputs()`, which has no tokens yet at
+    // that early point — only has a real `tokens` value to show the link
+    // against once a flight like this one actually settles. `setCompany()`
+    // already does this on the match branch above; this covers the other
+    // two, where nothing else in this function touches the link.
+    twoincSoleTrader.syncDifferentSoleTraderLink();
   },
 
   /**
@@ -5551,8 +5611,9 @@ let twoincSoleTrader = {
       const win = twoincSoleTrader.openPopup(options);
       twoincSoleTrader.showNote(!win);
       if (win) {
-        // The ONLY caller passing `autoselect: false` is the "select a
-        // different sole trader" link (round-4 review — Han/Vader) — a
+        // Both callers passing `autoselect: false` — the "select a
+        // different sole trader" link, and (item 4.3, Doug's override) a
+        // re-click of the Sole Trader chip once already adopted — are a
         // genuinely new decision, launched from an already-adopted state
         // where `soleTraderAdopted` is stale-true for the whole duration.
         // See `soleTraderReconfirmingCount`'s own comment for why
