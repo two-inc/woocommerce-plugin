@@ -357,13 +357,15 @@ describe("company-search manual-entry affordance", () => {
     /**
      * WooCommerce's checkout AJAX can discard the field this widget is
      * attached to via a plain `replaceWith()` — never `select2("destroy")`
-     * — while its dropdown is open. selectWoo's own destroy is what detaches
-     * a dropdown from `<body>`; skip it and the old dropdown is orphaned
-     * there forever, still `display: flex` and visible. This reproduces
-     * that half of the defect directly: a real second `.select2-results`
-     * panel really does end up sitting in the document after a re-attach.
+     * — while its dropdown is open. `attach()` itself now sweeps this away
+     * before creating the new widget (TWO-25469 — see its own comment):
+     * previously a real second `.select2-results` panel ended up sitting in
+     * the document after a re-attach, until `syncManualEntryButton`'s own,
+     * later, chip-triggered sweep caught up with it a tick after reopen.
+     * That gap is what let two open dropdowns coexist long enough to be
+     * seen live.
      */
-    test("a field replaced while its dropdown is open leaves the old results panel in the document", () => {
+    test("a field replaced while its dropdown is open leaves no stale results panel behind", () => {
       openWithAffordance();
       expect($(".select2-results").length).toBe(1);
 
@@ -375,33 +377,7 @@ describe("company-search manual-entry affordance", () => {
       helper.attach();
       $("#billing_company_display").select2("open");
 
-      expect($(".select2-results").length).toBe(2);
-    });
-
-    /**
-     * The stale PANEL itself, not just the wrapper inside it (round-2
-     * review — Vader, following on from the reproduction directly above):
-     * a real production reopen always runs `syncManualEntryButton` in the
-     * same tick (`bindManualEntryAffordance`'s deferred `select2:open`
-     * handler), so this is the state that test's raw 2-panel snapshot
-     * settles into a moment later, not a separate scenario.
-     */
-    test("syncManualEntryButton removes the whole stale panel, not only its wrapper", () => {
-      openWithAffordance();
-
-      $("#billing_company_display_field").replaceWith(
-        '<p id="billing_company_display_field">' +
-          '<select id="billing_company_display" name="billing_company_display">' +
-          '<option value="">&nbsp;</option></select></p>'
-      );
-      helper.attach();
-      $("#billing_company_display").select2("open");
-      expect($(".select2-results").length).toBe(2);
-
-      helper.syncManualEntryButton();
-
       expect($(".select2-results").length).toBe(1);
-      expect($("." + helper.modeChipsWrapperClass).length).toBe(1);
     });
 
     /**
