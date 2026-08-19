@@ -1803,23 +1803,18 @@ describe("company-search manual-entry affordance", () => {
       expect($("#" + helper.searchCompanyBtnId)[0].style.display).not.toBe("none");
     });
 
-    test("switching to sole trader closes the widget before destroying it, not the other way round (#30.x.13, round 1 review — Han)", () => {
-      // Same hazard as enterManualCompanyEntry's own close()-before-destroy()
-      // fix, in a sibling call site this PR's first pass missed: a buyer can
-      // reach sole-trader mode with the search dropdown still OPEN — via the
-      // mode chip directly, or via the email-driven autofill prefetch
-      // (onEmailChanged) — without ever going through manual entry first.
-      // destroy() alone on an open widget skips selectWoo's own close
-      // cleanup, which is what unbinds its document-level Tab/Enter-as-select
-      // interceptor — the same page-wide-Tab-shaped gap. Asserting only that
-      // destroy() happened, without the order, would pass against the old
-      // (buggy) code too.
-      //
-      // The close()/destroy() pair itself now fires from `setCompany()`
-      // (TWO-40 §7 correction) once a sole trader is actually adopted, not
-      // from the mode switch alone — see `setMode`'s and `setCompany`'s own
-      // comments — so the mode switch happens first here, unwatched, and the
-      // assertion is on the adoption call.
+    test("adopting a sole trader with the dropdown open closes it, but leaves the widget alive (TWO-40 §7 direction (a))", () => {
+      // A buyer can reach sole-trader mode with the search dropdown still
+      // OPEN — via the mode chip directly, or via the email-driven autofill
+      // prefetch (onEmailChanged) — without ever going through manual entry
+      // first. Adoption must still close that open dropdown (selectWoo's own
+      // close cleanup unbinds its document-level Tab/Enter-as-select
+      // interceptor, the same page-wide-Tab-shaped gap #30.x.13 fixed for
+      // enterManualCompanyEntry), but must NOT destroy the widget outright —
+      // direction (a) keeps it alive so a sole trader, once adopted, looks
+      // like a registered company that was just searched and picked, the
+      // same way PrestaShop's adoptSoleTraderBuyer() never tears its own
+      // search field down.
       const $select = openWithAffordance();
       const calls = [];
       const original = jQuery.fn.select2;
@@ -1835,7 +1830,8 @@ describe("company-search manual-entry affordance", () => {
 
       ctx.soleTrader.setCompany("TWO:ST1", "A Sole Trader");
 
-      expect(calls).toEqual(["close", "destroy"]);
+      expect(calls).toEqual(["close"]);
+      expect($select.data("select2")).toBeTruthy();
       jQuery.fn.select2.mockRestore();
     });
 
