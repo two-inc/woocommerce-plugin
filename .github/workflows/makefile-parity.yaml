@@ -6,7 +6,6 @@ on:
     paths:
       - Makefile
       - dev/install-xdebug
-      - dev/patch-proxy
       - start-proxy.sh
       - frpc.toml
 
@@ -53,4 +52,4 @@ jobs:
           make -n proxy
 
       - name: dev scripts are syntactically valid
-        run: bash -n dev/install-xdebug dev/patch-proxy start-proxy.sh
+        run: bash -n dev/install-xdebug start-proxy.sh

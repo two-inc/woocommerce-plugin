@@ -22,9 +22,26 @@ services:
       WORDPRESS_DB_USER: twocommerce
       WORDPRESS_DB_PASSWORD: twocommerce
       WORDPRESS_DB_NAME: twocommerce
-      WORDPRESS_HOME: "http://localhost:8888"
-      WORDPRESS_SITEURL: "http://localhost:8888"
       WORDPRESS_DEBUG: "true"
+      # Site URLs follow the request host, so the shop serves correctly on both
+      # http://localhost:8888 and the FRP tunnel host. Unset on a direct
+      # localhost request, so WP falls back to the DB siteurl.
+      #
+      # Must run in wp-config, NOT a mu-plugin: wp-settings.php bakes
+      # WP_CONTENT_URL (and WP_PLUGIN_URL from it) out of get_option('siteurl')
+      # before mu-plugins load, so an option_siteurl filter can never reach an
+      # asset URL, while the WP_SITEURL constant can.
+      #
+      # Keyed on X-Forwarded-Host because FRP terminates TLS at the edge but
+      # forwards X-Forwarded-Proto: http, so the scheme is forced, not trusted.
+      WORDPRESS_CONFIG_EXTRA: |
+        if ( ! empty( $$_SERVER['HTTP_X_FORWARDED_HOST'] ) ) {
+            $$_SERVER['HTTPS']       = 'on';
+            $$_SERVER['SERVER_PORT'] = 443;
+            $$two_fwd_host = trim( explode( ',', $$_SERVER['HTTP_X_FORWARDED_HOST'] )[0] );
+            define( 'WP_HOME', 'https://' . $$two_fwd_host );
+            define( 'WP_SITEURL', WP_HOME );
+        }
       # Brand override for the plugin's WC_Twoinc_Brand loader (dev only)
       TWO_BRAND_CODE: "${TWO_BRAND_CODE:-}"
       # Dev-only API host override (TWO-25386) — read by
