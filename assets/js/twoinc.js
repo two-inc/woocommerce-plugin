@@ -3306,10 +3306,34 @@ class TwoCompanySearch {
       // "wait", not "browse". Before that, sole-trader mode always destroyed
       // this widget synchronously, so an ordinary pick landing here while
       // `mode === "sole_trader"` was unreachable; it no longer is (round-1
-      // review — Han), and a pick landing mid-wait wrote #company_id/
-      // #billing_company directly, racing the sole-trader flow's own write
-      // through `setCompany()`.
-      if (twoincSoleTrader.mode === "sole_trader") return;
+      // review — Han).
+      //
+      // A pick landing while still genuinely DECIDING (an autofill flight or
+      // signup popup outstanding, adoption not yet settled) is refused, same
+      // guard every other exit from sole-trader mode already uses
+      // (`isDeciding()`'s own comment) — acting on it here would race the
+      // flow's own eventual resolution exactly the way the Business chip and
+      // `reopenSearch()` are guarded against doing.
+      //
+      // Once adopted, a pick made directly off this same still-live widget
+      // (TWO-40 §7 direction (a): the widget now shows the adopted sole
+      // trader as its own selection, not a destroyed-and-hidden one) IS the
+      // buyer choosing a different company outright — the same "leave sole
+      // trader" decision `reopenSearch()`/the Business chip make explicitly,
+      // just arriving through an ordinary select instead of a click. Mirrors
+      // `setMode("business")`'s transition bookkeeping directly rather than
+      // calling `setMode()` itself: that call also destroys and rebuilds
+      // this exact widget (see its own comment), which would blank the very
+      // pick this handler is about to write right back out.
+      if (twoincSoleTrader.mode === "sole_trader") {
+        if (twoincSoleTrader.isDeciding()) return;
+        twoincSoleTrader.mode = "business";
+        twoincSoleTrader.soleTraderAdopted = false;
+        twoincSoleTrader.soleTraderReconfirmingCount = 0;
+        twoincSoleTrader.updateChips();
+        twoincSoleTrader.syncDifferentSoleTraderLink();
+        twoincSoleTrader.leaveSoleTraderMode();
+      }
 
       const instance = twoincInstance || Twoinc.getInstance();
 
@@ -3530,7 +3554,26 @@ let twoincDomHelper = {
         "#department_field"
       );
       requiredTargets.push("#billing_phone_field");
-      if (twoincDomHelper.isCountrySupported() && window.twoinc.enable_company_search === "yes") {
+
+      // A sole trader adopted on a merchant who genuinely has company
+      // search enabled (TWO-40 §7 direction (a)) reads as the search branch
+      // below regardless of `enable_company_search`'s current value —
+      // `setMode("sole_trader")` forces that flag to "no" for the whole
+      // sole-trader session (see its own comment), so the merchant's REAL
+      // setting has to come from the snapshot it saved instead. This is
+      // what makes an adopted sole trader look like a registered company
+      // that was just searched and picked, the same way PrestaShop's
+      // `adoptSoleTraderBuyer()` never swaps its own search field away —
+      // `lockCapturedFields()` is what seeds the widget with the adopted
+      // company as its own selection.
+      const soleTraderAdoptedWithSearch =
+        twoincSoleTrader.mode === "sole_trader" &&
+        twoincSoleTrader.soleTraderAdopted &&
+        twoincSoleTrader.savedCompanySearch === "yes";
+      if (
+        twoincDomHelper.isCountrySupported() &&
+        (window.twoinc.enable_company_search === "yes" || soleTraderAdoptedWithSearch)
+      ) {
         visibleTargets.push("#billing_company_display_field");
         requiredTargets.push("#billing_company_display_field");
 
@@ -3554,17 +3597,19 @@ let twoincDomHelper = {
         // (TWO-25288/#30.x.13) is what put us on this branch. This branch is
         // shared with two other reasons `enable_company_search` can read
         // "no" — the merchant simply never enabled company search at all,
-        // and sole-trader mode (twoincSoleTrader.setMode), which both
-        // legitimately want the id field: the plain fallback captures
-        // name+id like it always has, and sole-trader mode fills company_id
-        // itself with a synthetic identifier (Two's payment method cannot
-        // function without one). Manual entry is the one case in this org's
-        // three-mode company-capture model that captures name ONLY — Two's
-        // payment method still needs an id in the other two modes, but a
-        // buyer who says "my company isn't in the registry" has no id to
-        // give, and showing the field only invites one that was never
-        // validated against anything. `manual_company_entry_active` is set
-        // by enterManualCompanyEntry/exitManualCompanyEntry specifically so
+        // and sole-trader mode on a merchant who never enabled search either
+        // (the `soleTraderAdoptedWithSearch` branch above only ever diverts
+        // AWAY from here, never into it) — both legitimately want the id
+        // field: the plain fallback captures name+id like it always has, and
+        // sole-trader-without-search mode fills company_id itself with a
+        // synthetic identifier (Two's payment method cannot function without
+        // one). Manual entry is the one case in this org's three-mode
+        // company-capture model that captures name ONLY — Two's payment
+        // method still needs an id in the other two modes, but a buyer who
+        // says "my company isn't in the registry" has no id to give, and
+        // showing the field only invites one that was never validated
+        // against anything. `manual_company_entry_active` is set by
+        // enterManualCompanyEntry/exitManualCompanyEntry specifically so
         // this branch can tell "manual entry" apart from the other two
         // routes into it.
         //
@@ -5063,8 +5108,7 @@ let twoincSoleTrader = {
       // does this instead, once `setCompany()` actually has a company to
       // show — the only moment there is nothing left to search for.
     } else {
-      twoincSoleTrader.showNote(false);
-      jQuery("#billing_company, #company_id").prop("readonly", false);
+      twoincSoleTrader.leaveSoleTraderMode();
       const $display = jQuery("#billing_company_display");
       if ($display.data("select2")) {
         // Alive on every switch back to business now (TWO-40 §7 direction
@@ -5079,12 +5123,6 @@ let twoincSoleTrader = {
         // an open widget skips selectWoo's own close cleanup.
         $display.select2("close");
         $display.select2("destroy");
-      }
-      if (twoincSoleTrader.savedCompanySearch !== null) {
-        window.twoinc.enable_company_search = twoincSoleTrader.savedCompanySearch;
-        window.twoinc.manual_company_entry_active = twoincSoleTrader.savedManualEntryActive;
-        twoincSoleTrader.savedCompanySearch = null;
-        twoincSoleTrader.savedManualEntryActive = null;
       }
       twoincSoleTrader.setCompany("", "");
       twoincDomHelper.toggleBusinessFields();
@@ -5121,6 +5159,35 @@ let twoincSoleTrader = {
   },
 
   /**
+   * The state/DOM bookkeeping every real exit from sole-trader mode needs,
+   * regardless of what happens to the search widget on the way out (TWO-40
+   * §7 direction (a)): `setMode`'s own business branch tears the widget down
+   * and lands the buyer in a fresh one — see its own comment — but a pick
+   * made directly off the STILL-LIVE widget (the `select2:select` handler's
+   * `mode === "sole_trader"` branch, once the widget shows an adopted sole
+   * trader as its own selection rather than being hidden behind the native
+   * fields) must not also go through that teardown: the widget already
+   * shows the pick the buyer just made, and destroying/rebuilding it here
+   * would blank that pick right back out before `write()` ever runs. Split
+   * out so both paths share identical "leaving" semantics — readonly
+   * unlock, the note, the merchant's real search setting restored — rather
+   * than drifting out of sync with each other the way this file's history
+   * warns against.
+   *
+   * @returns {void}
+   */
+  leaveSoleTraderMode: function () {
+    twoincSoleTrader.showNote(false);
+    jQuery("#billing_company, #company_id").prop("readonly", false);
+    if (twoincSoleTrader.savedCompanySearch !== null) {
+      window.twoinc.enable_company_search = twoincSoleTrader.savedCompanySearch;
+      window.twoinc.manual_company_entry_active = twoincSoleTrader.savedManualEntryActive;
+      twoincSoleTrader.savedCompanySearch = null;
+      twoincSoleTrader.savedManualEntryActive = null;
+    }
+  },
+
+  /**
    * Close the company-search widget (left alive, not destroyed — TWO-40 §7
    * direction (a): a sole trader, once adopted, is meant to look like a
    * registered company that was just searched and picked, the same way
@@ -5144,13 +5211,42 @@ let twoincSoleTrader = {
    * widget referenceless, so this is not a new failure mode, just one fewer
    * teardown in the sequence.
    *
+   * Seeds the widget's own underlying `<select>` with an option for the
+   * adopted sole trader and selects it (TWO-40 §7 direction (a)), the same
+   * synthetic-`<option>` mechanism `loadUserMetaInputs()` already uses to
+   * restore a returning buyer's pick before select2 ever attaches — so the
+   * widget's rendered selection reads "A Sole Trader" exactly the way it
+   * would read a registered pick's name, rather than the buyer seeing an
+   * adopted sole trader only in the readonly native field. Harmless on a
+   * merchant with company search disabled entirely: `toggleBusinessFields()`
+   * never shows this field there (`soleTraderAdoptedWithSearch`'s own
+   * comment), so the seeded option sits on an element nobody sees, and the
+   * readonly native-field lock below is what the buyer actually sees.
+   *
+   * `.trigger("change")`, not `select2:select` — this is select2's own
+   * documented mechanism for a PROGRAMMATIC selection to update its
+   * rendered display, and deliberately does not fire `select2:select`
+   * itself, so it does not re-enter that handler's own write path
+   * (`setCompany()`, right above this call, already is that write).
+   *
+   * @param {string} companyId
+   * @param {string} companyName
    * @returns {void}
    */
-  lockCapturedFields: function () {
+  lockCapturedFields: function (companyId, companyName) {
     const $display = jQuery("#billing_company_display");
     if ($display.data("select2")) {
       $display.select2("close");
     }
+    if (
+      !$display.find("option").filter(function () {
+        return this.value === companyId;
+      }).length
+    ) {
+      $display.prepend(jQuery("<option></option>").val(companyId).text(companyName));
+    }
+    $display.val(companyId).trigger("change");
+
     // Only the link back to search: the manual-entry row lives inside the
     // dropdown, which stays alive but hidden behind the captured fields
     // rather than going with a destroyed widget (TWO-25288).
@@ -5515,7 +5611,7 @@ let twoincSoleTrader = {
       // there is nothing left to search for. Locking here, instead of on
       // every switch into sole-trader mode, is what lets the dropdown+spinner
       // survive the autofill/popup round trip.
-      twoincSoleTrader.lockCapturedFields();
+      twoincSoleTrader.lockCapturedFields(companyId, companyName);
       // Read by `watchPopupClose()` in place of `#company_id`'s raw value
       // (round-1 review — Vader) — see that flag's own comment.
       twoincSoleTrader.soleTraderAdopted = true;

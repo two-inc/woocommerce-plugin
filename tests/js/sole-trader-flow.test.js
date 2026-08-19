@@ -826,6 +826,86 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         expect($("#billing_company").prop("readonly")).toBe(false);
         expect($("#billing_company_display").data("select2").isOpen()).toBe(true);
       });
+
+      describe("TWO-40 §7 direction (a) — an adopted sole trader displays through the live widget", () => {
+        beforeEach(() => {
+          // `toggleBusinessFields()`'s isTwoincSelected branch — where the
+          // widget-vs-native-field decision actually lives — reads a real
+          // checked `payment_method` radio; `buildForm()` carries none,
+          // since no other test in this file asserts field visibility.
+          $(
+            '<input type="radio" name="payment_method" value="' +
+              ctx.twoinc.gateway_id +
+              '" checked />'
+          ).appendTo("form[name='checkout']");
+        });
+
+        test("with company search enabled, adoption shows the search widget itself, not the native field, seeded with the sole trader's own selection", () => {
+          soleTrader.setMode("sole_trader");
+          soleTrader.setCompany("TWO:ST1", "A Sole Trader");
+
+          expect($("#billing_company_display_field").hasClass("hidden")).toBe(false);
+          expect($("#billing_company_field").hasClass("hidden")).toBe(true);
+          expect($("#billing_company_display").val()).toBe("TWO:ST1");
+          expect($("#billing_company_display").find('option[value="TWO:ST1"]').text()).toBe(
+            "A Sole Trader"
+          );
+        });
+
+        test("picking a different company directly off the still-open widget leaves sole-trader mode and writes the new pick, without destroying the widget", () => {
+          soleTrader.setMode("sole_trader");
+          soleTrader.setCompany("TWO:ST1", "A Sole Trader");
+          const $display = $("#billing_company_display");
+          const widgetInstance = $display.data("select2");
+
+          $display.trigger({
+            type: "select2:select",
+            params: { data: { id: "A Registered Co", company_id: "12345678" } }
+          });
+
+          expect(soleTrader.mode).toBe("business");
+          expect(soleTrader.soleTraderAdopted).toBe(false);
+          expect($("#company_id").val()).toBe("12345678");
+          expect($("#billing_company").val()).toBe("A Registered Co");
+          // Same instance throughout — a pick made off the live widget must
+          // never trigger the destroy/rebuild `setMode("business")`'s OWN
+          // branch does on the way out via reopenSearch/the Business chip;
+          // doing so here would blank the very pick this test just made.
+          expect($display.data("select2")).toBe(widgetInstance);
+        });
+
+        test("a pick landing while still genuinely deciding (autofill flight outstanding) is refused, not silently adopted", () => {
+          const flight = armPendingPrefetch();
+          soleTrader.onModeChipClick("sole_trader");
+          expect(soleTrader.isDeciding()).toBe(true);
+
+          $("#billing_company_display").trigger({
+            type: "select2:select",
+            params: { data: { id: "A Registered Co", company_id: "12345678" } }
+          });
+
+          expect(soleTrader.mode).toBe("sole_trader");
+          expect($("#company_id").val()).toBe("");
+
+          flight.settle({
+            organization_number: "TWO:ST1",
+            company_name: "Sole Co",
+            email: "buyer@example.test"
+          });
+          expect($("#company_id").val()).toBe("TWO:ST1");
+        });
+
+        test("a merchant with company search disabled entirely still gets the native-field swap on adoption (no widget to show it through)", () => {
+          ctx.twoinc.enable_company_search = "no";
+
+          soleTrader.setMode("sole_trader");
+          soleTrader.setCompany("TWO:ST1", "A Sole Trader");
+
+          expect($("#billing_company_field").hasClass("hidden")).toBe(false);
+          expect($("#billing_company_display_field").hasClass("hidden")).toBe(true);
+          expect($("#billing_company").prop("readonly")).toBe(true);
+        });
+      });
     });
 
     describe("round-1 review regressions (Han/Vader/Leia) — races the dropdown-survives fix opened up", () => {
