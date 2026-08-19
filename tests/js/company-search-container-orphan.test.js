@@ -93,6 +93,36 @@ describe("company-search dropdown-clone orphan sweep (TWO-25469)", () => {
     }
   );
 
+  test(
+    "clearSelectedCompany, the OTHER selectWoo re-init site, also sweeps an " +
+      "orphan left by a discard-while-open fragment replace",
+    () => {
+      // `clearSelectedCompany()` re-inits selectWoo directly rather than
+      // through `attach()` — reachable post-fragment-replace from
+      // `onUpdatedCheckout` via `clearCompanyIfCountryStale`. Without its own
+      // sweep call, this path reproduces the exact orphan `attach()` fixes.
+      ctx.helper.attach();
+      ctx.$("#billing_company_display").select2("open");
+      expect(openContainerCount()).toBe(2);
+
+      ctx.$("#billing_company_display_field").remove();
+      ctx
+        .$("form[name='checkout']")
+        .append(
+          '<p id="billing_company_display_field"><select id="billing_company_display">' +
+            '<option value="">&nbsp;</option></select></p>'
+        );
+      expect(openContainerCount()).toBe(1);
+
+      ctx.helper.clearSelectedCompany();
+
+      expect(openContainerCount()).toBe(0);
+      ctx.$("#billing_company_display").select2("open");
+      expect(openContainerCount()).toBe(2);
+      expect(containerCount()).toBe(2);
+    }
+  );
+
   test("the ordinary re-attach path (widget still live on the SAME field) is unaffected", () => {
     // Guards the exclusion in the sweep: re-attaching a live, OPEN widget on
     // the field it is already attached to must still leave exactly one

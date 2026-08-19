@@ -2560,6 +2560,14 @@ class TwoCompanySearch {
     // Clear company inputs
     let billingCompanyDisplay = jQuery("#billing_company_display");
     billingCompanyDisplay.html("");
+    // Re-inits selectWoo directly rather than through `attach()` (round-2
+    // review, TWO-25469) — this can run after `onUpdatedCheckout` has
+    // already seen a fragment replace discard the field's OLD `<select>`
+    // (`clearCompanyIfCountryStale` → here), the exact orphan-dropdown
+    // trigger `attach()`'s own sweep exists for. Without this call the
+    // orphan survives this path untouched. See `sweepOrphanedDropdown()`'s
+    // own comment for the full mechanism.
+    twoincSelectWooHelper.sweepOrphanedDropdown(billingCompanyDisplay);
     billingCompanyDisplay.selectWoo(twoincSelectWooHelper.genSelectWooParams());
     twoincDomHelper.toggleTooltip(
       "#billing_company_display_field .select2-container",
@@ -3211,18 +3219,68 @@ class TwoCompanySearch {
   }
 
   /**
+   * Sweep away an orphaned select2 dropdown clone left behind for this
+   * field before (re-)initialising selectWoo against it (TWO-25469).
+   *
+   * A widget can be discarded by having its underlying `<select>` replaced
+   * outright — WooCommerce's checkout-AJAX fragment `replaceWith()` is the
+   * documented trigger (`closeCompanySearchBeforeCheckoutUpdate`'s own
+   * comment) — rather than by a `select2("destroy")` call ever reaching
+   * it. Its INLINE container goes with the removed `<select>`, but
+   * selectWoo's AttachBody decorator renders the actual DROPDOWN as a
+   * separate node appended straight to `<body>` (vendored bundle,
+   * `AttachBody.prototype.render`/`.bind`) so it survives the removal
+   * untouched — nothing but that same discarded instance's own
+   * `destroy()`/`close()` ever detaches it, and nothing calls either once
+   * every reference to the instance is gone with the element. It sits
+   * there forever, still carrying `select2-container--open` if the buyer
+   * had it open at that moment (TWO-25469, confirmed live: reopening the
+   * freshly re-attached widget then renders a SECOND open dropdown
+   * alongside it).
+   *
+   * Only swept when this field has no live widget of its own right now.
+   * The ordinary re-attach path (the 800ms retry, `exitManualCompanyEntry`,
+   * the sole-trader mode switch) calls this while a widget is still
+   * attached to THIS SAME element, and selectWoo's own reinit already
+   * destroys and removes ITS dropdown clone correctly on that path (see
+   * company-search-deferred-init.test.js) — sweeping while one is still
+   * live would race that cleanup instead of helping it.
+   *
+   * Matched by the results-list id, the same idiom `syncManualEntryButton`
+   * already uses for the same reason: selectWoo derives it deterministically
+   * from the field's own id, the SAME id on every re-init of THIS field —
+   * stale or fresh.
+   *
+   * Called from both places that (re-)initialise selectWoo on this field:
+   * `attach()` and `clearSelectedCompany()` — the latter re-inits directly
+   * rather than through `attach()`, so it needs this call of its own or the
+   * same orphan survives untouched down that path.
+   *
+   * @param {Object} $field jQuery-wrapped company field, current DOM lookup
+   * @returns {void}
+   */
+  sweepOrphanedDropdown($field) {
+    if ($field.data("select2")) return;
+    const resultsIdPrefix = "select2-" + this.companyFieldSelector.replace("#", "") + "-results";
+    jQuery("[id^='" + resultsIdPrefix + "']")
+      .closest(".select2-container")
+      .remove();
+  }
+
+  /**
    * Attach (or re-attach) the selectWoo widget to this instance's configured
    * field and wire up the search/select/open lifecycle (TWO-25326
    * architecture rebuild).
    *
-   * This is the ONE place selectWoo is initialised against the company
-   * field. Called from `Twoinc#enableCompanySearch()`, which is itself
-   * called from `initialize()`, from its own 800ms retry, from
+   * Called from `Twoinc#enableCompanySearch()`, which is itself called from
+   * `initialize()`, from its own 800ms retry, from
    * `exitManualCompanyEntry()` and from a sole-trader mode switch back to
    * search — every one of those needs the widget RE-attached (selectWoo's
    * own re-init tears down and rebuilds its instance), not a second
    * TwoCompanySearch constructed: the class itself is still constructed
-   * exactly once, at module load, below.
+   * exactly once, at module load, below. `clearSelectedCompany()` is the
+   * other caller that (re-)initialises selectWoo on this field, directly
+   * rather than through here — see `sweepOrphanedDropdown()`'s own comment.
    *
    * @param {Twoinc} [twoincInstance] the singleton, so the `select2:select`
    *   handler can write the pick onto it (customerCompany, approval, address
@@ -3234,40 +3292,7 @@ class TwoCompanySearch {
     const $body = jQuery(document.body);
     const $field = $body.find(self.companyFieldSelector);
 
-    // A widget can be discarded by having its underlying `<select>` replaced
-    // outright — WooCommerce's checkout-AJAX fragment `replaceWith()` is the
-    // documented trigger (`closeCompanySearchBeforeCheckoutUpdate`'s own
-    // comment) — rather than by a `select2("destroy")` call ever reaching
-    // it. Its INLINE container goes with the removed `<select>`, but
-    // selectWoo's AttachBody decorator renders the actual DROPDOWN as a
-    // separate node appended straight to `<body>` (vendored bundle,
-    // `AttachBody.prototype.render`/`.bind`) so it survives the removal
-    // untouched — nothing but that same discarded instance's own
-    // `destroy()`/`close()` ever detaches it, and nothing calls either once
-    // every reference to the instance is gone with the element. It sits
-    // there forever, still carrying `select2-container--open` if the buyer
-    // had it open at that moment (TWO-25469, confirmed live: reopening the
-    // freshly re-attached widget then renders a SECOND open dropdown
-    // alongside it).
-    //
-    // Only swept when this field has no live widget of its own right now.
-    // The ordinary re-attach path (the 800ms retry, `exitManualCompanyEntry`,
-    // the sole-trader mode switch) calls this while a widget is still
-    // attached to THIS SAME element, and selectWoo's own reinit already
-    // destroys and removes ITS dropdown clone correctly on that path (see
-    // company-search-deferred-init.test.js) — sweeping while one is still
-    // live would race that cleanup instead of helping it.
-    //
-    // Matched by the results-list id, the same idiom `syncManualEntryButton`
-    // already uses for the same reason: selectWoo derives it deterministically
-    // from the field's own id, the SAME id on every re-init of THIS field —
-    // stale or fresh.
-    if (!$field.data("select2")) {
-      const resultsIdPrefix = "select2-" + self.companyFieldSelector.replace("#", "") + "-results";
-      jQuery("[id^='" + resultsIdPrefix + "']")
-        .closest(".select2-container")
-        .remove();
-    }
+    self.sweepOrphanedDropdown($field);
 
     const widget = $field.selectWoo(self.genSelectWooParams());
     twoincDomHelper.toggleTooltip(
