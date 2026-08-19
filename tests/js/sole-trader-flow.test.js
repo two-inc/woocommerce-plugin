@@ -1438,6 +1438,182 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     });
   });
 
+  describe("TWO-40 §7 direction (a) — Doug's live-tested regressions on the widget-selection PR", () => {
+    beforeEach(() => {
+      $("form[name='checkout']").after('<div id="order_review"></div>');
+      ctx.Twoinc.getInstance().initialize(false);
+      $(
+        '<input type="radio" name="payment_method" value="' + ctx.twoinc.gateway_id + '" checked />'
+      ).appendTo("form[name='checkout']");
+    });
+
+    describe("bug 1 — re-clicking the Sole Trader chip once already adopted", () => {
+      test("is a no-op, same as the Business chip's own already-selected click", () => {
+        $("#billing_email").val("buyer@example.test");
+        jest.spyOn(soleTrader, "fetchTokens").mockImplementation((cb) => cb(true));
+        jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) =>
+          cb({
+            organization_number: "TWO:ST1",
+            company_name: "A Sole Trader",
+            email: "buyer@example.test"
+          })
+        );
+        soleTrader.onModeChipClick("sole_trader");
+        expect($("#billing_company_display_field").hasClass("hidden")).toBe(false);
+
+        const setCompanySpy = jest.spyOn(soleTrader, "setCompany");
+        soleTrader.onModeChipClick("sole_trader");
+
+        expect(setCompanySpy).not.toHaveBeenCalled();
+        expect($("#billing_company_display_field").hasClass("hidden")).toBe(false);
+        expect($("#billing_company_field").hasClass("hidden")).toBe(true);
+        expect(soleTrader.mode).toBe("sole_trader");
+      });
+
+      test("does not open a second signup popup for an adoption that came through the hosted flow rather than a prefetch match", () => {
+        $("#billing_email").val("buyer@example.test");
+        jest.spyOn(soleTrader, "fetchTokens").mockImplementation((cb) => cb(true));
+        jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => cb(null));
+        soleTrader.onModeChipClick("sole_trader");
+        expect(opened).toHaveLength(1);
+
+        soleTrader.bindPopupMessageListener();
+        jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) =>
+          cb({
+            organization_number: "TWO:ST1",
+            company_name: "A Sole Trader",
+            email: "buyer@example.test"
+          })
+        );
+        window.dispatchEvent(
+          new window.MessageEvent("message", {
+            data: "ACCEPTED",
+            origin: "https://checkout.example.test"
+          })
+        );
+        expect(soleTrader.soleTraderAdopted).toBe(true);
+
+        soleTrader.onModeChipClick("sole_trader");
+
+        expect(opened).toHaveLength(1);
+      });
+
+      test("still lets the buyer through while genuinely deciding (not yet adopted)", () => {
+        const flight = (() => {
+          $("#billing_email").val("buyer@example.test");
+          jest.spyOn(soleTrader, "fetchTokens").mockImplementation((cb) => cb(true));
+          let resolveBuyer;
+          jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => {
+            resolveBuyer = cb;
+          });
+          return { settle: (buyer) => resolveBuyer(buyer) };
+        })();
+        soleTrader.onModeChipClick("sole_trader");
+        expect(soleTrader.isDeciding()).toBe(true);
+
+        // A second click mid-decision is untouched by this guard — it only
+        // refuses once actually adopted.
+        soleTrader.onModeChipClick("sole_trader");
+        flight.settle({
+          organization_number: "TWO:ST1",
+          company_name: "A Sole Trader",
+          email: "buyer@example.test"
+        });
+
+        expect(soleTrader.soleTraderAdopted).toBe(true);
+        expect($("#company_id").val()).toBe("TWO:ST1");
+      });
+    });
+
+    describe("bug 2 — Enter Manually while adopted, with a leftover popup-close poll still ticking", () => {
+      test("still switches to manual entry rather than leaving the search widget showing", () => {
+        // Adopted through the hosted signup, whose popup-close poll only
+        // notices the window closed on its own 300ms cadence — it is still
+        // "open" (and therefore still `isBusy()`) at the moment the buyer
+        // clicks Enter Manually.
+        $("#billing_email").val("buyer@example.test");
+        jest.spyOn(soleTrader, "fetchTokens").mockImplementation((cb) => cb(true));
+        jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => cb(null));
+        soleTrader.onModeChipClick("sole_trader");
+
+        soleTrader.bindPopupMessageListener();
+        jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) =>
+          cb({
+            organization_number: "TWO:ST1",
+            company_name: "A Sole Trader",
+            email: "buyer@example.test"
+          })
+        );
+        window.dispatchEvent(
+          new window.MessageEvent("message", {
+            data: "ACCEPTED",
+            origin: "https://checkout.example.test"
+          })
+        );
+        expect(soleTrader.activePopupWatchers.length).toBe(1);
+
+        jest.useFakeTimers();
+        ctx.helper.activateManualEntry();
+        jest.runAllTimers();
+        jest.useRealTimers();
+
+        expect(soleTrader.mode).toBe("business");
+        expect(ctx.twoinc.manual_company_entry_active).toBe(true);
+        expect($("#billing_company_field").hasClass("hidden")).toBe(false);
+        expect($("#billing_company_display_field").hasClass("hidden")).toBe(true);
+      });
+    });
+
+    describe("bug 3 — the 'select a different sole trader' link once adoption shows through the search widget", () => {
+      test("is not stranded inside a field toggleBusinessFields just hid", () => {
+        soleTrader.setMode("sole_trader");
+        soleTrader.setCompany("TWO:ST1", "A Sole Trader");
+
+        expect($("#billing_company_field").hasClass("hidden")).toBe(true);
+
+        const $btn = soleTrader.getDifferentSoleTraderBtnNode();
+
+        expect($btn.closest(".hidden").length).toBe(0);
+        expect($btn.css("display")).not.toBe("none");
+      });
+
+      test("shows on mode + tokens alone, with no #company_id check (Doug's ruling)", () => {
+        // No `setCompany()` call — `#company_id` is deliberately left empty.
+        // There is no real UX state where sole-trader mode is engaged with
+        // nothing captured except while the dropdown is still deciding, and
+        // that already visually obscures this link, so the gate does not
+        // need to lean on the field at all.
+        soleTrader.setMode("sole_trader");
+
+        soleTrader.syncDifferentSoleTraderLink();
+
+        expect($("#company_id").val()).toBe("");
+        expect(soleTrader.getDifferentSoleTraderBtnNode().css("display")).not.toBe("none");
+      });
+
+      test("still opens the re-signup popup with autoselect=false", () => {
+        soleTrader.setMode("sole_trader");
+        soleTrader.setCompany("TWO:ST1", "A Sole Trader");
+
+        soleTrader.getDifferentSoleTraderBtnNode().trigger("click");
+
+        expect(opened).toHaveLength(1);
+        expect(opened[0].url).toContain("&autoselect=false");
+      });
+
+      test("falls back to the native field's own slot once search is disabled entirely, unchanged from before", () => {
+        ctx.twoinc.enable_company_search = "no";
+        soleTrader.setMode("sole_trader");
+        soleTrader.setCompany("TWO:ST1", "A Sole Trader");
+
+        const $btn = soleTrader.getDifferentSoleTraderBtnNode();
+
+        expect($btn.parent().is("#billing_company_field .woocommerce-input-wrapper")).toBe(true);
+        expect($btn.closest(".hidden").length).toBe(0);
+      });
+    });
+  });
+
   describe("TWO-40 — delegated-auth token refresh", () => {
     let ajax;
 

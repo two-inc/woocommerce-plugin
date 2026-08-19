@@ -4901,7 +4901,10 @@ let twoincSoleTrader = {
   getDifferentSoleTraderBtnNode: function () {
     const id = twoincSoleTrader.differentSoleTraderBtnId;
     let $btn = jQuery("#" + id);
-    if ($btn.length) return $btn;
+    if ($btn.length) {
+      twoincSoleTrader.placeDifferentSoleTraderBtn($btn);
+      return $btn;
+    }
 
     $btn = jQuery("<button></button>")
       .attr({ id: id, type: "button" })
@@ -4924,25 +4927,64 @@ let twoincSoleTrader = {
         twoincSoleTrader.launchSignup({ autoselect: false });
       });
 
-    twoincSelectWooHelper.companyFieldAffordanceSlot().append($btn);
+    twoincSoleTrader.placeDifferentSoleTraderBtn($btn);
     return $btn;
   },
 
   /**
-   * Show the "select a different sole trader" link only where it means
-   * something: sole-trader mode, with a company already adopted (TWO-40 §7).
+   * Where the "select a different sole trader" link currently belongs.
    *
-   * The same gating shape as the manual-entry link's — that one appears once
-   * the buyer is in manual entry, this one once they hold a sole-trader
-   * identity there is an alternative to.
+   * Its default home is `companyFieldAffordanceSlot()` — the same slot as
+   * the "search for company" link, inside `#billing_company_field` — which
+   * is correct for every merchant this link predates: manual entry and an
+   * ordinary registered-company pick both leave that field the visible one.
+   *
+   * TWO-40 §7 direction (a) can make an adopted sole trader show through the
+   * live SEARCH widget instead (`soleTraderAdoptedWithSearch`,
+   * `toggleBusinessFields()`'s own comment), which hides
+   * `#billing_company_field` outright to do it — a button appended inside a
+   * hidden field never renders, however its own `.toggle(show)` reads (the
+   * bug this exists to fix, live-reported by Doug: `#company_id` and
+   * `tokens` were never the problem, `syncDifferentSoleTraderLink()`'s own
+   * gate was right — the button just had nowhere visible to render). Follow
+   * the search field itself whenever it — not the native field — is what's
+   * actually shown, re-anchoring on every call the same way
+   * `getCompanySummaryNode()` already does for the same reason.
+   *
+   * @param {Object} $btn jQuery-wrapped button
+   * @returns {void}
+   */
+  placeDifferentSoleTraderBtn: function ($btn) {
+    const $searchField = jQuery("#billing_company_display_field");
+    if (jQuery("#billing_company_field").hasClass("hidden") && $searchField.length) {
+      const $wrapper = $searchField.closest(".twoinc-inp-container");
+      const $anchor = $wrapper.length ? $wrapper : $searchField;
+      if ($btn.prev()[0] !== $anchor[0]) $btn.insertAfter($anchor);
+      return;
+    }
+    twoincSelectWooHelper.companyFieldAffordanceSlot().append($btn);
+  },
+
+  /**
+   * Show the "select a different sole trader" link only where it means
+   * something: sole-trader mode (TWO-40 §7).
+   *
+   * Mode and tokens only (Doug's ruling, TWO-40 §7 correction) — no
+   * `#company_id`-content check: there is no real UX state where sole-trader
+   * mode is engaged with nothing captured, except while the dropdown itself
+   * is still open/rendered deciding what to show, and that already visually
+   * obscures this link. Probing a DOM field for "is a company adopted" was
+   * also the wrong source of truth once TWO-40 §7 direction (a) could leave
+   * `#company_id_field` out of `visibleTargets` entirely
+   * (`soleTraderAdoptedWithSearch`) — the value still gets written there
+   * (`twoincCompanyCapture.write()` is unconditional), but there is no
+   * reason to lean on that DOM detail here when mode + tokens already say
+   * everything this gate needs.
    *
    * @returns {void}
    */
   syncDifferentSoleTraderLink: function () {
-    const show =
-      twoincSoleTrader.mode === "sole_trader" &&
-      !!twoincUtilHelper.blankToEmpty(jQuery("#company_id").val()) &&
-      !!twoincSoleTrader.tokens;
+    const show = twoincSoleTrader.mode === "sole_trader" && !!twoincSoleTrader.tokens;
     // Built lazily, and only when it is about to be shown. This runs on every
     // mode switch — including the setMode("business") a checkout with no
     // sole-trader option ever reaches — and building it there would insert a
@@ -4968,6 +5010,15 @@ let twoincSoleTrader = {
       if (!twoincSoleTrader.isDeciding()) twoincSoleTrader.setMode("business");
       return;
     }
+    // Already the settled selection: the same cosmetic no-op the Business
+    // chip gives its own already-selected click (`mode === "business"`
+    // above). Re-adopting from here re-ran `setCompany()` (and, for an
+    // adoption that came through a popup rather than a prefetch match, could
+    // reach the `pf.ready` branch below and open a SECOND signup popup) for
+    // no reason once the outcome is already settled — the "select a
+    // different sole trader" link is the one deliberate re-signup entry
+    // point once adopted (TWO-40 §7 correction, live-reported by Doug).
+    if (twoincSoleTrader.mode === "sole_trader" && twoincSoleTrader.soleTraderAdopted) return;
     twoincSoleTrader.setMode("sole_trader");
     const pf = twoincSoleTrader.prefetched;
     if (pf.ready && pf.matches && pf.buyer) {
@@ -5185,6 +5236,20 @@ let twoincSoleTrader = {
       twoincSoleTrader.savedCompanySearch = null;
       twoincSoleTrader.savedManualEntryActive = null;
     }
+    // A popup-close poll left over from a resolved adoption/re-signup keeps
+    // `isBusy()` (and therefore `isDeciding()`) true purely on its own
+    // 300ms cadence — this call is the one place every caller has already
+    // committed to leaving sole-trader mode, so whatever that poll was
+    // still going to decide (settle the flight, decrement
+    // `soleTraderReconfirmingCount`, maybe revert to business) is moot.
+    // Left running, it raced `activateManualEntry()`'s deferred
+    // `enterManualCompanyEntry()` call: `setMode("business")` resets
+    // `soleTraderAdopted` right above (transition bookkeeping), which
+    // un-neutralises the stale `isBusy()` for `isDeciding()`'s very next
+    // read — wrongly refusing the manual-entry switch this function's own
+    // caller had already decided on, and leaving the search widget showing
+    // instead (live-reported by Doug, TWO-40 §7 correction).
+    twoincSoleTrader.stopAllPopupWatchers();
   },
 
   /**
