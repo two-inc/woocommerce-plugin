@@ -5067,14 +5067,16 @@ let twoincSoleTrader = {
       jQuery("#billing_company, #company_id").prop("readonly", false);
       const $display = jQuery("#billing_company_display");
       if ($display.data("select2")) {
-        // Still alive if this switch happens before a company was ever
-        // adopted (TWO-40 §7 correction — e.g. the buyer abandons the popup,
-        // or types a non-matching email while sole-trader mode is still
-        // waiting on a flight). Destroy it here so `enableCompanySearch()`
-        // below does not re-initialise an already-live widget. close()
-        // before destroy() — same fix, same reason, as
-        // enterManualCompanyEntry (#30.x.13): destroy() alone on an open
-        // widget skips selectWoo's own close cleanup.
+        // Alive on every switch back to business now (TWO-40 §7 direction
+        // (a)): `lockCapturedFields()` stopped destroying it on adoption, so
+        // this is no longer only the pre-adoption edge case (the buyer
+        // abandons the popup, or types a non-matching email while
+        // sole-trader mode is still waiting on a flight) — it is the ONE
+        // teardown this whole switch does, covering both. Destroy it here so
+        // `enableCompanySearch()` below does not re-initialise an
+        // already-live widget. close() before destroy() — same fix, same
+        // reason, as enterManualCompanyEntry (#30.x.13): destroy() alone on
+        // an open widget skips selectWoo's own close cleanup.
         $display.select2("close");
         $display.select2("destroy");
       }
@@ -5119,25 +5121,39 @@ let twoincSoleTrader = {
   },
 
   /**
-   * Tear down the company-search widget and lock the captured fields, once a
-   * sole trader is actually adopted (TWO-40 §7 correction). Split out of
-   * `setMode()` — see its comment — so switching mode alone leaves the
-   * dropdown and its spinner alone; this is the only moment there is nothing
-   * left to search for.
+   * Close the company-search widget (left alive, not destroyed — TWO-40 §7
+   * direction (a): a sole trader, once adopted, is meant to look like a
+   * registered company that was just searched and picked, the same way
+   * PrestaShop's `adoptSoleTraderBuyer()` never destroys its own search
+   * field) and lock the captured fields, once a sole trader is actually
+   * adopted. Split out of `setMode()` — see its comment — so switching mode
+   * alone leaves the dropdown and its spinner alone; this is the only moment
+   * there is nothing left to search for.
+   *
+   * Not destroyed (TWO-40 §7 direction (a), PR 1 of 2): `reopenSearch()` used
+   * to rebuild the widget from scratch via `attach()` every time it left
+   * sole-trader mode, going through a destroy-then-reinit round trip that
+   * every OTHER re-attach path in this file (the 800ms retry,
+   * `exitManualCompanyEntry`, this same switch-back-to-search) already
+   * relies on `attach()` itself to do safely (see its own doc comment) —
+   * leaving the live instance in place here removes one extra, redundant
+   * destroy/rebuild from the most fragile path in the file. Any fragment
+   * replace that discards the underlying `<select>` without ever calling
+   * destroy is still covered by `attach()`'s own orphan sweep
+   * (`sweepOrphanedDropdown`, TWO-25469) regardless of which path left the
+   * widget referenceless, so this is not a new failure mode, just one fewer
+   * teardown in the sequence.
    *
    * @returns {void}
    */
   lockCapturedFields: function () {
     const $display = jQuery("#billing_company_display");
     if ($display.data("select2")) {
-      // close() before destroy() — same fix, same reason, as
-      // enterManualCompanyEntry (#30.x.13): destroy() alone on an open widget
-      // skips selectWoo's own close cleanup.
       $display.select2("close");
-      $display.select2("destroy");
     }
     // Only the link back to search: the manual-entry row lives inside the
-    // dropdown and goes with the widget that was just destroyed (TWO-25288).
+    // dropdown, which stays alive but hidden behind the captured fields
+    // rather than going with a destroyed widget (TWO-25288).
     jQuery("#" + twoincSelectWooHelper.searchCompanyBtnId).hide();
     jQuery("#billing_company, #company_id").prop("readonly", true);
   },

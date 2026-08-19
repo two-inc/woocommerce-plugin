@@ -711,6 +711,26 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         expect($("#billing_company_display").data("select2").isOpen()).toBe(true);
       });
 
+      /**
+       * TWO-40 §7 direction (a), PR 1 of 2: `lockCapturedFields()` used to
+       * destroy the select2 widget outright the moment a sole trader was
+       * adopted. It now leaves the same instance alive (closed and hidden
+       * behind the locked native fields) for as long as the buyer stays
+       * adopted — `reopenSearch()`'s own `setMode("business")` is still what
+       * tears it down and rebuilds a fresh one on the way OUT, unchanged; see
+       * that block's own comment. This locks in only the adoption half.
+       */
+      test("adopting a sole trader leaves its search widget instance alive rather than destroying it", () => {
+        soleTrader.setMode("sole_trader");
+        const $display = $("#billing_company_display");
+        const widgetBeforeAdoption = $display.data("select2");
+
+        soleTrader.setCompany("TWO:ST1", "A Sole Trader");
+
+        expect($display.data("select2")).toBe(widgetBeforeAdoption);
+        expect(widgetBeforeAdoption.isOpen()).toBe(false);
+      });
+
       test("clicking #company_id after adoption does the same", () => {
         soleTrader.setMode("sole_trader");
         soleTrader.setCompany("TWO:ST1", "A Sole Trader");
