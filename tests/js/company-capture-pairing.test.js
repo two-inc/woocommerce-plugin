@@ -236,6 +236,27 @@ describe("TWO-40 §5 — captured-company write path", () => {
       expect($("#company_id").val()).toBe("12345678");
     });
 
+    test("a company restored from the SESSION pass survives it too", () => {
+      // A guest has no user-meta echo, so loadStorageInputs() is the pass that
+      // supplies their pair — and it assigns both fields with a bare `.val()`,
+      // capturing nothing. Driven through initialize() rather than by calling
+      // the restore directly, because the whole gap was a restore that ran at
+      // the wrong point in that sequence.
+      sessionStorage.setItem(
+        "checkoutInputs",
+        JSON.stringify([
+          { htmlTag: "INPUT", id: "billing_company", type: "text", val: "ACME Widgets Ltd" },
+          { htmlTag: "INPUT", id: "company_id", type: "text", val: "12345678" }
+        ])
+      );
+
+      ctx.Twoinc.getInstance().initialize(true);
+
+      expect($("#company_id").val()).toBe("12345678");
+      expect(retype()).toBe(false);
+      expect($("#company_id").val()).toBe("12345678");
+    });
+
     test("the number field's own visibility is re-decided after a wipe", () => {
       // `#company_id_field` is shown or hidden on the strength of the value it
       // holds (TWO-25326 §12), and this is the function that changes it.

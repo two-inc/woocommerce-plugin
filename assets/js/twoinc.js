@@ -3451,10 +3451,7 @@ class TwoCompanySearch {
       // does. select2 builds this input fresh on every open, so there is
       // nothing to unwind on close.
       if (twoincSoleTrader.mode === "sole_trader" && twoincSoleTrader.soleTraderAdopted) {
-        jQuery('input[aria-owns="select2-billing_company_display-results"]').prop(
-          "readonly",
-          true
-        );
+        jQuery('input[aria-owns="select2-billing_company_display-results"]').prop("readonly", true);
       }
     });
 
@@ -4311,34 +4308,68 @@ let twoincDomHelper = {
       document.querySelector("#project").value = window.twoinc.project;
     }
 
-    // Restore the captured company through the ONE capture write path
-    // (TWO-40 §5), so the restored pair carries its pairing tag. Written
-    // raw, as this used to be, the pair has no tag — and the retype guard
-    // reads an absent tag as "this number no longer belongs to this name" and
-    // wipes a perfectly good restored capture on the buyer's first keystroke
-    // anywhere in the company field.
-    if (window.twoinc.billing_company || window.twoinc.company_id) {
-      const restoredId = window.twoinc.company_id || jQuery("#company_id").val();
-      twoincCompanyCapture.write(
-        window.twoinc.billing_company || jQuery("#billing_company").val(),
-        restoredId
-      );
-      // A restored SOLE TRADER (live-reported by Doug, item 2): this restore
-      // path writes straight to the capture layer above rather than through
-      // `twoincSoleTrader.setCompany()` — the only place that sets
-      // `mode`/`soleTraderAdopted` and syncs the "select a different sole
-      // trader" link — so a returning buyer whose last order used one saw
-      // the company populate correctly with no way back into a fresh
-      // signup, and a click-to-reopen or re-signup completing later found
-      // `mode !== "sole_trader"` and was silently dropped (see
-      // `bindPopupMessageListener`'s own comment for that failure mode).
-      // `isSyntheticCompanyNumber` is what tells a restored sole trader's
-      // `TWO:…` id apart from an ordinary registry number.
-      if (twoincUtilHelper.isSyntheticCompanyNumber(restoredId)) {
-        twoincSoleTrader.mode = "sole_trader";
-        twoincSoleTrader.soleTraderAdopted = true;
-        twoincSoleTrader.syncDifferentSoleTraderLink();
-      }
+    twoincDomHelper.restoreCapturedCompany();
+  },
+  /**
+   * Re-capture a company the page arrived already holding, through the ONE
+   * capture write path (TWO-40 §5), so the restored pair carries its pairing
+   * tag. Written raw, as this used to be, the pair has no tag — and the retype
+   * guard reads an absent tag as "this number no longer belongs to this name"
+   * and wipes a perfectly good restored capture on the buyer's first keystroke
+   * anywhere in the company field.
+   *
+   * Called after each of initialize()'s two restore passes, because either can
+   * be the one that supplies the pair: the user-meta echo exists ONLY for a
+   * signed-in WordPress user (WC_Twoinc_Checkout::prepare_twoinc_object, gated
+   * on wp_get_current_user()->ID), while a guest's company reaches the DOM
+   * without it — WooCommerce's own rendered value, or loadStorageInputs() one
+   * call later. Live-confirmed by Doug: a checkout whose `#company_id` already held
+   * a restored `TWO:…` id had both echo properties `undefined`, so a guard on
+   * the echo alone skipped the whole restore — including its own DOM fallback.
+   *
+   * @returns {void}
+   */
+  restoreCapturedCompany: function () {
+    const metaName = window.twoinc.billing_company;
+    const metaId = window.twoinc.company_id;
+    const domName = twoincCompanyCapture.nameField().val();
+    const domId = twoincCompanyCapture.numberField().val();
+
+    // BOTH halves from ONE source, never a half from each: a tag composed of
+    // one restore's name and another's number describes a company that never
+    // existed, and the retype guard — which compares the live fields against
+    // that tag — would then be reading a fiction. The source holding a NUMBER
+    // wins, that being what makes a pair a capture at all, and the user-meta
+    // echo breaks the tie as the more deliberate record of the two.
+    const fromUserMeta = Boolean(metaId) || (Boolean(metaName) && !domId);
+    const restoredName = fromUserMeta ? metaName : domName;
+    const restoredId = fromUserMeta ? metaId : domId;
+
+    // Nothing to restore without a number — unless the echo is the source, in
+    // which case a name alone is still a deliberate record of a manual-entry
+    // capture. A bare name in the FIELD is not: initialize() runs on the first
+    // re-render that makes this gateway visible, which can be after the buyer
+    // has typed, and stamping plugin provenance on their own typing would let
+    // a later country switch clear it as a value this plugin had written.
+    if (!restoredId && !(fromUserMeta && restoredName)) return;
+
+    twoincCompanyCapture.write(restoredName, restoredId);
+
+    // A restored SOLE TRADER (live-reported by Doug, item 2): this restore
+    // path writes straight to the capture layer above rather than through
+    // `twoincSoleTrader.setCompany()` — the only place that sets
+    // `mode`/`soleTraderAdopted` and syncs the "select a different sole
+    // trader" link — so a returning buyer whose last order used one saw
+    // the company populate correctly with no way back into a fresh
+    // signup, and a click-to-reopen or re-signup completing later found
+    // `mode !== "sole_trader"` and was silently dropped (see
+    // `bindPopupMessageListener`'s own comment for that failure mode).
+    // `isSyntheticCompanyNumber` is what tells a restored sole trader's
+    // `TWO:…` id apart from an ordinary registry number.
+    if (twoincUtilHelper.isSyntheticCompanyNumber(restoredId)) {
+      twoincSoleTrader.mode = "sole_trader";
+      twoincSoleTrader.soleTraderAdopted = true;
+      twoincSoleTrader.syncDifferentSoleTraderLink();
     }
 
     // Re-evaluate the company fields, because the write just above changes
@@ -4346,10 +4377,10 @@ let twoincDomHelper = {
     //
     // Deliberately here rather than at the initialize() call site: this is the
     // function that performs the write, so the re-toggle cannot be separated
-    // from it by a later reordering. A returning sole trader's user meta holds
-    // a minted `TWO:…` identifier, and initialize() has already toggled the
-    // fields once by this point — against an empty input — so without this the
-    // identifier is restored into a visible field on every page load.
+    // from it by a later reordering. A restored sole trader's identifier is a
+    // minted `TWO:…` one, and initialize() has already toggled the fields once
+    // by this point — against an empty input — so without this the identifier
+    // is restored into a visible field on every page load.
     twoincDomHelper.toggleBusinessFields();
   },
   /**
@@ -6692,7 +6723,17 @@ class Twoinc {
     // write `#company_id` (TWO-25326 §12) — the toggle earlier in this function
     // ran before either of them, against an empty input.
     twoincDomHelper.loadUserMetaInputs();
-    if (loadSavedInputs) twoincDomHelper.loadStorageInputs();
+    if (loadSavedInputs) {
+      twoincDomHelper.loadStorageInputs();
+      // loadStorageInputs() writes `#company_id`/`#billing_company` with bare
+      // `.val()` assignments, so unlike the pass above it re-toggles nothing
+      // and captures nothing. For a GUEST that pass is the only one that ever
+      // supplies a company, so without this the restored pair carries no
+      // pairing tag and a restored sole trader never reaches `sole_trader`
+      // mode. No-ops when there is nothing restored, and idempotent when the
+      // pass above already captured the same pair.
+      twoincDomHelper.restoreCapturedCompany();
+    }
 
     // Seed the country tracker HERE — after the two restore passes above, not
     // next to the binding that reads it (TWO-24867 / TWO-25326).

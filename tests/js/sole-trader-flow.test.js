@@ -935,6 +935,114 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         expect(soleTrader.mode).toBe("business");
         expect(soleTrader.getDifferentSoleTraderBtnNode().css("display")).toBe("none");
       });
+
+      // The user-meta echo exists only for a signed-in WordPress user, so for a
+      // GUEST — whose company reaches the DOM by WooCommerce's own rendered
+      // value or by loadStorageInputs() — the restore above was skipped whole,
+      // its own DOM fallback included. Live-confirmed by Doug: both echo
+      // properties `undefined` on a checkout whose `#company_id` already held a
+      // restored `TWO:…` id.
+      describe("no user-meta echo — the guest / session-restore case", () => {
+        beforeEach(() => {
+          delete ctx.twoinc.billing_company;
+          delete ctx.twoinc.company_id;
+        });
+
+        test("a DOM-restored TWO:-prefixed id shows the link", () => {
+          $("#billing_company").val("A Sole Trader");
+          $("#company_id").val("TWO:ST12345");
+
+          ctx.dom.loadUserMetaInputs();
+
+          expect(soleTrader.mode).toBe("sole_trader");
+          expect(soleTrader.soleTraderAdopted).toBe(true);
+          expect(soleTrader.getDifferentSoleTraderBtnNode().css("display")).not.toBe("none");
+        });
+
+        test("a DOM-restored ORDINARY registry number is captured, not adopted", () => {
+          // Captured all the same: the pairing tag is what stops the retype
+          // guard wiping a perfectly good restored number (TWO-40 §5), and a
+          // guest had no path to one before. The sole-trader state is what a
+          // registry number must NOT acquire.
+          $("#billing_company").val("ACME Widgets Ltd");
+          $("#company_id").val("12345678");
+
+          ctx.dom.loadUserMetaInputs();
+
+          expect(ctx.capture.isPluginWritten($("#company_id"))).toBe(true);
+          expect(soleTrader.mode).toBe("business");
+          expect(soleTrader.getDifferentSoleTraderBtnNode().css("display")).toBe("none");
+        });
+
+        test("an empty form restores nothing", () => {
+          ctx.dom.loadUserMetaInputs();
+
+          expect(ctx.capture.isPluginWritten($("#company_id"))).toBe(false);
+          expect(soleTrader.mode).toBe("business");
+        });
+
+        test("a name with no number is left as the buyer's own", () => {
+          // initialize() runs on the first re-render that makes this gateway
+          // visible, which can be after the buyer has typed — and a name with
+          // no number is exactly what manual entry looks like mid-keystroke.
+          // Stamping provenance on it would let a later country switch clear it
+          // as a value this plugin had written.
+          $("#billing_company").val("Buyer's Own Ltd");
+
+          ctx.dom.loadUserMetaInputs();
+
+          expect($("#billing_company").val()).toBe("Buyer's Own Ltd");
+          expect(ctx.capture.isPluginWritten($("#billing_company"))).toBe(false);
+        });
+
+        test("the storage pass's own values are restored too", () => {
+          // loadStorageInputs() runs AFTER the user-meta pass and assigns both
+          // fields with a bare `.val()`, so on a guest checkout it is the pass
+          // that supplies the pair — and the one restoreCapturedCompany() has
+          // to see.
+          ctx.dom.loadUserMetaInputs();
+          $("#billing_company").val("A Sole Trader");
+          $("#company_id").val("TWO:ST12345");
+
+          ctx.dom.restoreCapturedCompany();
+
+          expect(soleTrader.mode).toBe("sole_trader");
+          expect(soleTrader.getDifferentSoleTraderBtnNode().css("display")).not.toBe("none");
+        });
+      });
+
+      test.each([
+        [
+          "the echo wins outright when it holds the number",
+          { metaName: "ACME Widgets Ltd", metaId: "12345678" },
+          { name: "A Sole Trader", id: "TWO:ST12345" },
+          { name: "ACME Widgets Ltd", id: "12345678", mode: "business" }
+        ],
+        [
+          "a name-only echo does not steal the DOM's number",
+          { metaName: "ACME Widgets Ltd", metaId: undefined },
+          { name: "A Sole Trader", id: "TWO:ST12345" },
+          { name: "A Sole Trader", id: "TWO:ST12345", mode: "sole_trader" }
+        ]
+      ])(
+        "a DISAGREEING restore is taken whole from one source — %s",
+        (_description, echo, dom, expected) => {
+          // Otherwise the pairing tag describes a company that never existed —
+          // one restore's name against another's number — and the retype
+          // guard, which compares the live fields against that tag, is reading
+          // a fiction.
+          ctx.twoinc.billing_company = echo.metaName;
+          ctx.twoinc.company_id = echo.metaId;
+          $("#billing_company").val(dom.name);
+          $("#company_id").val(dom.id);
+
+          ctx.dom.loadUserMetaInputs();
+
+          expect($("#billing_company").val()).toBe(expected.name);
+          expect($("#company_id").val()).toBe(expected.id);
+          expect(soleTrader.mode).toBe(expected.mode);
+        }
+      );
     });
   });
 
