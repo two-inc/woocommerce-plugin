@@ -312,6 +312,38 @@
 }
 
 /*
+ * Registered-org mode's gap above the summary (live-reported by Doug on the
+ * widget-selection PR): `#billing_company_display_field` carries its own
+ * 15px `padding-bottom` AND WooCommerce core's own `.form-row` bottom margin
+ * (~22px, theme/core default, not ours to remove) — both apply in full
+ * before this summary's own content starts, stacking to ~37px total when
+ * the intended gap is ~5px.
+ *
+ * Cancelled here, on the summary, via the adjacent-sibling selector
+ * `getCompanySummaryNode()` (twoinc.js) actually inserts it after — never on
+ * the field's own padding directly, which the no-summary state and the
+ * payment-tile placement both still need untouched. `.twoinc-inp-container`
+ * covers the pay-for-order page, where that wrapper (not the field itself)
+ * is what the summary lands after; `#billing_company_display_field` covers
+ * the checkout page, where there is no such wrapper.
+ */
+#billing_company_display_field + .twoinc-company-summary,
+.twoinc-inp-container + .twoinc-company-summary {
+  margin-top: -32px;
+}
+
+/*
+ * The pay-for-order page's own flex row (`.custom-checkout`, above) sizes
+ * each row by its tallest item rather than stacking by margin, so the
+ * general cancellation above would pull the summary up into the field's own
+ * row instead of just tightening a stacked gap. Left at the page's original
+ * spacing there.
+ */
+.custom-checkout .twoinc-inp-container + .twoinc-company-summary {
+  margin-top: 0;
+}
+
+/*
  * The "Enter Manually" mode chip (TWO-25288, restyled as a chip TWO-40 §0).
  * Visual styling (pill shape, colours, focus-safe font/cursor) now comes
  * from the shared `.twoinc-mode-chip` class this button also carries — see

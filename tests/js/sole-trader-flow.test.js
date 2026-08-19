@@ -1562,6 +1562,52 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         expect($("#billing_company_field").hasClass("hidden")).toBe(false);
         expect($("#billing_company_display_field").hasClass("hidden")).toBe(true);
       });
+
+      test("still switches to manual entry via a REAL click on the REAL button inside the reopened widget", () => {
+        // The test above calls `activateManualEntry()` directly. This one
+        // drives the same scenario through the actual selectWoo widget the
+        // adopted sole trader is rendered through (TWO-40 §7 direction (a)) —
+        // attached, reopened, and clicked for real — so a regression that
+        // only shows up once the widget is genuinely live cannot hide behind
+        // a call that skips it.
+        $("#billing_email").val("buyer@example.test");
+        jest.spyOn(soleTrader, "fetchTokens").mockImplementation((cb) => cb(true));
+        jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => cb(null));
+        soleTrader.onModeChipClick("sole_trader");
+
+        soleTrader.bindPopupMessageListener();
+        jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) =>
+          cb({
+            organization_number: "TWO:ST1",
+            company_name: "A Sole Trader",
+            email: "buyer@example.test"
+          })
+        );
+        window.dispatchEvent(
+          new window.MessageEvent("message", {
+            data: "ACCEPTED",
+            origin: "https://checkout.example.test"
+          })
+        );
+        expect(soleTrader.soleTraderAdopted).toBe(true);
+        expect($("#billing_company_display_field").hasClass("hidden")).toBe(false);
+
+        // The buyer reopens the (still-live) widget and clicks Enter Manually
+        // for real.
+        $("#billing_company_display").select2("open");
+        ctx.helper.syncManualEntryButton();
+        const $btn = $("#" + ctx.helper.manualEntryRowId);
+        expect($btn.length).toBe(1);
+
+        jest.useFakeTimers();
+        $btn.trigger("click");
+        jest.runAllTimers();
+        jest.useRealTimers();
+
+        expect(soleTrader.mode).toBe("business");
+        expect($("#billing_company_field").hasClass("hidden")).toBe(false);
+        expect($("#billing_company_display_field").hasClass("hidden")).toBe(true);
+      });
     });
 
     describe("bug 3 — the 'select a different sole trader' link once adoption shows through the search widget", () => {
