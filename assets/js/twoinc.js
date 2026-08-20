@@ -807,13 +807,20 @@ class TwoCompanySearch {
   }
 
   /**
-   * Hint shown while the typed term is below the search threshold
-   * (TWO-25288).
+   * Hint stating the search threshold (TWO-25288), shown as the query field's
+   * own WATERMARK (Doug 2026-08-20, live).
    *
    * Deliberately a FIXED number rather than select2's own "N more characters"
    * countdown: the buyer is told what the field needs, not how far off they
    * currently are. The template carries an unresolved %d, interpolated here
    * from companySearchMinLength, so the claimed minimum is the enforced one.
+   *
+   * It used to render through select2's `language.inputTooShort` hook, which
+   * paints a message ROW inside the results panel — a second on-screen hint
+   * directly under the query field, whose own placeholder already read
+   * "Enter company name to search". PrestaShop folded the two into the one
+   * placeholder slot and this matches it (TWO-40): see
+   * `applyQueryFieldPlaceholder`.
    */
   companySearchTooShortText() {
     const template =
@@ -968,7 +975,25 @@ class TwoCompanySearch {
         // caught up yet — refusing the click for that stretch too is a UX
         // regression, not a safety guard.
         if (twoincSoleTrader.mode === "business" || twoincSoleTrader.isDeciding()) return;
+        // Read BEFORE the switch, reopened after (Doug 2026-08-20, live):
+        // `setMode`'s business branch destroys this dropdown and re-attaches a
+        // fresh, CLOSED widget — see its own comment — so the chip took the
+        // whole panel down with it. `syncQueryFieldSuppression` did un-hide the
+        // query row correctly; it un-hid it on a dropdown that was no longer on
+        // screen. Conditional on it having been open so the other route through
+        // the same branch (a mode revert with no dropdown in sight) does not
+        // pop one open unasked.
+        const wasOpen = twoincSelectWooHelper.companySearchDropdownIsOpen();
         twoincSoleTrader.setMode("business");
+        if (!wasOpen) return;
+        // Synchronous, still inside the click: selectWoo's outside-click close
+        // is a `document.body` mousedown handler bound per OPEN
+        // (`BaseSelection._attachCloseHandler`), so the mousedown that produced
+        // this click was dispatched before the widget this line opens existed
+        // and cannot close it. Focus lands in the query input — the row is
+        // visible again by then, `attach()`'s own `select2:open` handler having
+        // re-synced the new dropdown's copy of it.
+        twoincSelectWooHelper.openCompanySearchDropdown();
       });
   }
 
@@ -1792,6 +1817,82 @@ class TwoCompanySearch {
   }
 
   /**
+   * (Re-)initialise selectWoo on the company field, with the two bits of
+   * post-init wiring every init path owes (Doug 2026-08-20).
+   *
+   * Both wirings act on nodes selectWoo creates in its own constructor — the
+   * dropdown's query input, and the results list a message row is appended to
+   * — so they can only be applied per widget INSTANCE, which is what makes
+   * them this function rather than two more entries in `genSelectWooParams`.
+   * There are two init sites (`attach()` and `clearSelectedCompany()`, see the
+   * latter's own comment for why it does not go through the former) and this
+   * file's history is mostly the story of two such sites drifting apart.
+   *
+   * @param {Object} $field jQuery-wrapped `<select>`
+   * @returns {Object} the jQuery-wrapped selectWoo widget
+   */
+  initCompanySearchWidget($field) {
+    const helper = twoincSelectWooHelper;
+    const widget = $field.selectWoo(helper.genSelectWooParams());
+    helper.applyQueryFieldPlaceholder($field);
+    helper.suppressQueryTooShortMessage($field);
+    return widget;
+  }
+
+  /**
+   * Put the length requirement in the query field's own watermark (Doug
+   * 2026-08-20), a plain `placeholder` attribute, matching how PrestaShop
+   * presents the same rule.
+   *
+   * Read off the INSTANCE rather than the document: selectWoo renders the
+   * query row once, in its constructor, but its AttachBody decorator keeps the
+   * whole dropdown detached from the document until the first open — so the
+   * document-scoped `getCompanySearchFieldContainer()` finds nothing at the
+   * only moment this needs to run. `$dropdown` holds the same node open or
+   * closed, which is also why applying this once per instance is enough
+   * (`syncQueryFieldSuppression`'s own comment documents that persistence).
+   *
+   * @param {Object} $field jQuery-wrapped `<select>`
+   * @returns {void}
+   */
+  applyQueryFieldPlaceholder($field) {
+    const picker = $field.data("select2");
+    if (!picker || !picker.$dropdown) return;
+    picker.$dropdown
+      .find(".select2-search__field")
+      .attr("placeholder", twoincSelectWooHelper.companySearchTooShortText());
+  }
+
+  /**
+   * Stop select2 painting its own "input too short" row under the query field
+   * (Doug 2026-08-20).
+   *
+   * The requirement is now the field's watermark
+   * (`applyQueryFieldPlaceholder`), and two hints for one rule — the second of
+   * them a row inside the results panel, directly beneath the field the first
+   * one is in — is the noise this removes.
+   *
+   * Bound on the instance, not the element: `results:message` is internal to
+   * select2 and is not one of the events it relays to the DOM node. Removing
+   * the row rather than blanking the message via `language.inputTooShort`,
+   * which still appends an empty `<li>` (`Results.displayMessage` appends
+   * unconditionally) and so still leaves a painted strip. Runs in the same
+   * turn as the append, our handler being bound after the one Results itself
+   * installs, so nothing is ever rendered in between.
+   *
+   * @param {Object} $field jQuery-wrapped `<select>`
+   * @returns {void}
+   */
+  suppressQueryTooShortMessage($field) {
+    const picker = $field.data("select2");
+    if (!picker || typeof picker.on !== "function") return;
+    picker.on("results:message", function (params) {
+      if (!params || params.message !== "inputTooShort") return;
+      if (picker.$results) picker.$results.find(".select2-results__message").remove();
+    });
+  }
+
+  /**
    * Class of the sole-trader in-flight spinner (TWO-40, Doug 2026-08-20).
    *
    * A class, not an id, for the same reason `modeChipsWrapperClass` is one: a
@@ -1906,10 +2007,23 @@ class TwoCompanySearch {
    * @returns {void}
    */
   closeCompanySearchDropdownIfOpen() {
-    const $display = jQuery("#billing_company_display");
-    const select2 = $display.data("select2");
-    if (!select2 || typeof select2.isOpen !== "function" || !select2.isOpen()) return;
-    $display.select2("close");
+    if (!twoincSelectWooHelper.companySearchDropdownIsOpen()) return;
+    jQuery("#billing_company_display").select2("close");
+  }
+
+  /**
+   * Is the company-search dropdown currently on screen (Doug 2026-08-20)?
+   *
+   * Asked by two callers with opposite intentions — the settle sequence
+   * above, which only closes what is open, and the Business chip, which only
+   * REOPENS what was open before `setMode()` tore the widget down — so it is
+   * one predicate rather than the same three-clause guard written twice.
+   *
+   * @returns {boolean}
+   */
+  companySearchDropdownIsOpen() {
+    const select2 = jQuery("#billing_company_display").data("select2");
+    return !!select2 && typeof select2.isOpen === "function" && select2.isOpen();
   }
 
   /**
@@ -2031,13 +2145,10 @@ class TwoCompanySearch {
           // only for a timeout, a transport error, or a degraded response.
           return twoincSelectWooHelper.companySearchUnavailableText();
         },
-        inputTooShort: function () {
-          // No argument read on purpose: WooCommerce core's own copy counts
-          // down the REMAINING characters, so the same field said "2 or more"
-          // after one keystroke and "3 or more" before any. This hint is
-          // plugin-owned and states the threshold itself (TWO-25288).
-          return twoincSelectWooHelper.companySearchTooShortText();
-        },
+        // No `inputTooShort` (Doug 2026-08-20): the threshold is the query
+        // field's watermark now, and select2's row for it is suppressed
+        // outright — see `applyQueryFieldPlaceholder` /
+        // `suppressQueryTooShortMessage`.
         noResults: function () {
           return wc_country_select_params.i18n_no_matches;
         },
@@ -2740,7 +2851,7 @@ class TwoCompanySearch {
     // orphan survives this path untouched. See `sweepOrphanedDropdown()`'s
     // own comment for the full mechanism.
     twoincSelectWooHelper.sweepOrphanedDropdown(billingCompanyDisplay);
-    billingCompanyDisplay.selectWoo(twoincSelectWooHelper.genSelectWooParams());
+    twoincSelectWooHelper.initCompanySearchWidget(billingCompanyDisplay);
     twoincDomHelper.toggleTooltip(
       "#billing_company_display_field .select2-container",
       window.twoinc.text.tooltip_company
@@ -3488,7 +3599,7 @@ class TwoCompanySearch {
 
     self.sweepOrphanedDropdown($field);
 
-    const widget = $field.selectWoo(self.genSelectWooParams());
+    const widget = self.initCompanySearchWidget($field);
     twoincDomHelper.toggleTooltip(
       "#billing_company_display_field .select2-container",
       window.twoinc.text.tooltip_company
@@ -4806,6 +4917,8 @@ let twoincSoleTrader = {
   messageListenerBound: false,
   /** @type {Function|null} the bound `message` listener, so it can be removed */
   messageHandler: null,
+  /** @type {Function|null} the bound window `focus` listener — see `bindWindowRefocusListener` */
+  refocusHandler: null,
   // Result of the most recent autofill prefetch for the entered email.
   // ready=false until the first prefetch resolves; matches=true when the
   // buyer on the Two cookie owns the email currently typed at checkout.
@@ -6031,6 +6144,7 @@ let twoincSoleTrader = {
    * @returns {void}
    */
   watchPopupClose: function (win, isReconfirming) {
+    twoincSoleTrader.bindWindowRefocusListener();
     twoincSoleTrader.beginFlight();
     const watcher = { id: null, win: win, isReconfirming: !!isReconfirming, decided: false };
     watcher.id = setInterval(function () {
@@ -6073,6 +6187,89 @@ let twoincSoleTrader = {
       }
     }, 300);
     twoincSoleTrader.activePopupWatchers.push(watcher);
+  },
+
+  /**
+   * Close an abandoned signup popup when the buyer comes back to the checkout
+   * (Doug 2026-08-20, live: the popup stayed up, the dropdown stayed open and
+   * the spinner kept animating over a flow the buyer had walked away from).
+   *
+   * A window `focus` listener, NOT `visibilitychange`: the hosted signup is a
+   * separate WINDOW, so the checkout's own tab never leaves `visible` for the
+   * whole round trip and that event never fires. Bound lazily from
+   * `watchPopupClose` — the only thing that creates the state this acts on —
+   * and left bound for the window's lifetime, same as the `message` listener.
+   *
+   * The target check is not defensive noise. A native `focus` on an element
+   * never reaches a non-capturing window listener, but jQuery's
+   * `.trigger("focus")` does not dispatch natively — it walks the propagation
+   * path itself, window included, regardless of the event type's `bubbles`
+   * flag. This file triggers focus that way on the company fields all over
+   * (`focusVisibleCompanyField`, `releaseFocusFromCompanyField`), so without
+   * the check, opening the dropdown would close the popup.
+   *
+   * @returns {void}
+   */
+  bindWindowRefocusListener: function () {
+    if (twoincSoleTrader.refocusHandler) return;
+    twoincSoleTrader.refocusHandler = function (event) {
+      if (event && event.target && event.target !== window && event.target !== document) return;
+      twoincSoleTrader.closeAbandonedPopups();
+    };
+    window.addEventListener("focus", twoincSoleTrader.refocusHandler);
+  },
+
+  /** Test seam / teardown: drop the window `focus` listener.
+   * @returns {void}
+   */
+  unbindWindowRefocusListener: function () {
+    if (!twoincSoleTrader.refocusHandler) return;
+    window.removeEventListener("focus", twoincSoleTrader.refocusHandler);
+    twoincSoleTrader.refocusHandler = null;
+  },
+
+  /**
+   * Close every signup popup whose outcome is still open, and nothing else
+   * (Doug 2026-08-20).
+   *
+   * `window.close()` on a handle this page's own `window.open()` returned is
+   * permitted regardless of the popup's origin — the opener may always close
+   * what it opened — which is why this can be a real close rather than a
+   * request the hosted flow has to cooperate with.
+   *
+   * Closing the window is the WHOLE action. The spinner, the mode revert and
+   * the dropdown close then happen exactly as they do for a popup the buyer
+   * closed by hand: `watchPopupClose`'s poll sees `.closed` within its next
+   * 300ms tick and runs its own terminal branch. That keeps ONE owner for the
+   * settle (TWO-40 §14) rather than
+   * adding a second path that has to agree with it about `flightDepth`,
+   * `soleTraderReconfirmingCount` and `closeDropdownOnSettle`.
+   *
+   * DECIDED popups are left alone deliberately. A popup whose ACCEPTED
+   * resolved to no buyer is decided yet still very much on screen, and the
+   * buyer's retry inside it posts a second ACCEPTED (see `watchPopupClose`'s
+   * own comment) — closing that window would take the retry with it.
+   *
+   * There is no separate "don't fight a mode-chip click" guard here, and that
+   * is a finding rather than an omission: the window `focus` lands BEFORE the
+   * mousedown of the click that caused it, so no flag a chip handler sets can
+   * be read in time. It is not needed either. A "Sole trader" chip click
+   * arriving a few ms later opens its own popup and takes its own flight, so
+   * `flightDepth` is never zero when the old popup's poll settles and the
+   * dropdown is not closed under it — and that relaunch is now ACCEPTED by
+   * `launchSignup`'s live-popup guard precisely because this closed the window
+   * it would otherwise have been refused for. A "Registered company" click is
+   * a documented no-op while `isDeciding()`, so there is nothing for this to
+   * race.
+   *
+   * @returns {void}
+   */
+  closeAbandonedPopups: function () {
+    twoincSoleTrader.activePopupWatchers.forEach(function (watcher) {
+      if (watcher.decided || watcher.win.closed) return;
+      if (typeof watcher.win.close !== "function") return;
+      watcher.win.close();
+    });
   },
 
   /** Stop one popup-close poll (its own terminal branch, or a test tearing

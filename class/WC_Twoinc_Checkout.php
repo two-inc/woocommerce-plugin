@@ -460,8 +460,10 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     'company_search_unavailable' => __('Company search is temporarily unavailable. Please try again.', 'twoinc-payment-gateway'),
                     // Hint inside the empty company-search field (TWO-25288).
                     'company_search_placeholder' => __('Enter company name to search', 'twoinc-payment-gateway'),
-                    // Hint while the typed term is too short to search
-                    // (TWO-25288). The %d is deliberately LEFT UNRESOLVED
+                    // Watermark inside the dropdown's own query field, stating
+                    // the search threshold (TWO-25288; moved out of the
+                    // results-panel row it used to render as, 2026-08-20).
+                    // The %d is deliberately LEFT UNRESOLVED
                     // here: the JS interpolates it from its own
                     // minimum-length constant, which is also what the widget
                     // enforces, so the number the buyer is told cannot drift

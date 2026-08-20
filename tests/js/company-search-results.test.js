@@ -308,58 +308,28 @@ describe("company search hints", () => {
   });
 
   describe("the min-chars hint", () => {
-    test("states the threshold, ignoring how much is still missing", () => {
-      // `text` left empty on purpose: the assertion is then against the
-      // plugin's own English source string — the msgid PHP registers — and
-      // not against a wording the harness invented.
-      ctx = harness.loadTwoinc();
-      const language = ctx.helper.genSelectWooParams().language;
+    test.each([
+      [undefined, undefined, "Please enter 3 or more characters", "the plugin's own English msgid"],
+      ["minst %d tegn", 4, "minst 4 tegn", "a localised template plus a non-default threshold"],
+      ["Skriv %1$d tegn", undefined, "Skriv 3 tegn", "gettext's positional placeholder form"]
+    ])("states the enforced threshold: %s / %s", (template, minLength, expected, description) => {
+      // The %d reaches the browser unresolved so PHP cannot state a number the
+      // widget does not enforce; `%1$d` is legitimate because `#, php-format`
+      // entitles a translator to reorder arguments. `template` left undefined
+      // asserts against the msgid PHP registers, not a wording the harness
+      // invented.
+      ctx = harness.loadTwoinc(template ? { text: { company_search_too_short: template } } : {});
+      if (minLength) ctx.helper.companySearchMinLength = minLength;
 
-      // Both of these produced DIFFERENT copy under the core strings: "1 or
-      // more" for two characters typed, "3 or more" for none.
-      expect(language.inputTooShort({ minimum: 3, input: "ab" })).toBe(
-        "Please enter 3 or more characters"
-      );
-      expect(language.inputTooShort({ minimum: 3, input: "" })).toBe(
-        "Please enter 3 or more characters"
-      );
+      expect(ctx.helper.companySearchTooShortText()).toBe(expected, description);
     });
 
-    test("does not read WooCommerce core's countdown strings any more", () => {
-      // The borrow is what element 4 removes. Blanking core's strings must
-      // not change the hint; if it does, something still reads them.
-      ctx = harness.loadTwoinc();
-      global.wc_country_select_params.i18n_input_too_short_1 = "CORE ONE";
-      global.wc_country_select_params.i18n_input_too_short_n = "CORE %qty%";
-      const language = ctx.helper.genSelectWooParams().language;
-
-      expect(language.inputTooShort({ minimum: 3, input: "ab" })).toBe(
-        "Please enter 3 or more characters"
-      );
-    });
-
-    test("interpolates the localised template with the enforced threshold", () => {
-      // The %d reaches the browser unresolved so that PHP cannot state a
-      // number the widget does not enforce. Translation-shaped template plus
-      // a non-default threshold: only code that interpolates one from the
-      // other can satisfy both at once.
-      ctx = harness.loadTwoinc({ text: { company_search_too_short: "minst %d tegn" } });
-      ctx.helper.companySearchMinLength = 4;
-
-      expect(ctx.helper.genSelectWooParams().language.inputTooShort({})).toBe("minst 4 tegn");
-    });
-
-    test("interpolates gettext's positional placeholder too", () => {
-      // `#, php-format` legitimises `%1$d`, and a translator reordering
-      // arguments is entitled to use it. A literal "%d" replace leaves that
-      // token raw in the buyer's face. The msgid stays `%d`; only what the
-      // browser accepts widens.
-      ctx = harness.loadTwoinc({ text: { company_search_too_short: "Skriv %1$d tegn" } });
-
-      expect(ctx.helper.genSelectWooParams().language.inputTooShort({})).toBe("Skriv 3 tegn");
-    });
-
-    test("renders into the real dropdown once the buyer starts typing", () => {
+    test("is the query field's own watermark, not a row under it", () => {
+      // Doug 2026-08-20, live: two hints for one rule, the second sitting
+      // directly beneath the field the first is in. PrestaShop folded them
+      // into the one placeholder slot and this matches it — so the wording must
+      // be ON the input, and must NOT appear in the results panel once the
+      // buyer types below the threshold.
       ctx = harness.loadTwoinc();
       harness.buildCheckoutForm();
       const $select = harness.openCompanyWidget(ctx.$, ctx.helper);
@@ -368,12 +338,35 @@ describe("company search hints", () => {
       // Guard: the widget has to be open and its search input present, or
       // every assertion below is vacuous.
       expect($search.length).toBe(1);
+      expect($search.attr("placeholder")).toBe("Please enter 3 or more characters");
 
       $search.val("ab").trigger("input");
 
-      expect(harness.resultsText(ctx.$)).toContain("Please enter 3 or more characters");
+      expect(harness.resultsText(ctx.$)).not.toContain("or more characters");
+      // Not merely blanked: an empty `<li>` still paints a strip, which is the
+      // thing being removed.
+      expect(ctx.$(".select2-results__message").length).toBe(0);
+      // …and core's countdown copy has not crept back in through selectWoo's
+      // own defaults now that the plugin no longer overrides `inputTooShort`.
       expect(harness.resultsText(ctx.$)).not.toContain("1 or more");
       expect($select.data("select2")).toBeTruthy();
+    });
+
+    test("the watermark survives the dropdown being closed and reopened", () => {
+      // Applied once per widget INSTANCE, on a node selectWoo keeps detached
+      // from the document until the first open — so an implementation that
+      // reached for the document instead would find nothing and this asserts
+      // it did not.
+      ctx = harness.loadTwoinc();
+      harness.buildCheckoutForm();
+      const $select = harness.openCompanyWidget(ctx.$, ctx.helper);
+
+      $select.select2("close");
+      $select.select2("open");
+
+      expect(
+        ctx.$('input[aria-owns="select2-billing_company_display-results"]').attr("placeholder")
+      ).toBe("Please enter 3 or more characters");
     });
   });
 

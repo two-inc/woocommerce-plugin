@@ -256,7 +256,11 @@ function buildCheckoutForm(options) {
  */
 function openCompanyWidget($, helper) {
   const $select = $("#billing_company_display");
-  $select.selectWoo(helper.genSelectWooParams());
+  // The plugin's own initialiser, not a bare `.selectWoo(params)`: the query
+  // field's watermark and the suppression of select2's own "input too short"
+  // row are per-instance wiring that lives there, so a raw init here would
+  // exercise a widget the plugin never actually ships.
+  helper.initCompanySearchWidget($select);
   $select.select2("open");
   return $select;
 }

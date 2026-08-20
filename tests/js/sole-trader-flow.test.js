@@ -109,6 +109,9 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     // postMessages for the rest of the file — against a stale module whose
     // spies this test never installed.
     soleTrader.unbindPopupMessageListener();
+    // Same shape again, for the window `focus` listener `watchPopupClose`
+    // binds.
+    soleTrader.unbindWindowRefocusListener();
     // Same shape, for `watchPopupClose`'s real `setInterval` polls: a test
     // that opens a popup and never closes it otherwise leaves that poll
     // running for the rest of the file.
@@ -1527,6 +1530,167 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       });
     });
 
+    /**
+     * Doug 2026-08-20, live: the buyer clicks back onto the checkout page
+     * without finishing the hosted signup. The popup stayed up, the dropdown
+     * stayed open and the spinner kept animating over a flow they had walked
+     * away from.
+     */
+    describe("focus returning to the checkout abandons an outstanding signup popup", () => {
+      /** @returns {Object} a popup handle whose own `close()` is observable */
+      function fakePopup() {
+        const win = { closed: false };
+        win.close = jest.fn(() => {
+          win.closed = true;
+        });
+        return win;
+      }
+
+      /** Fire the window-level `focus` a real refocus produces. */
+      function refocusCheckout() {
+        window.dispatchEvent(new Event("focus"));
+      }
+
+      test("closes the popup, and the existing poll then settles spinner, dropdown and mode", () => {
+        const $widget = harness.openCompanyWidget($, ctx.helper);
+        soleTrader.setMode("sole_trader");
+        const win = fakePopup();
+        window.open = jest.fn(() => win);
+        jest.useFakeTimers();
+        soleTrader.launchSignup();
+        expect($(".twoinc-sole-trader-spinner").length).toBe(1);
+
+        refocusCheckout();
+
+        // Closing the window is the WHOLE action: the popup-close poll stays
+        // the single owner of the spinner, the mode revert and the dropdown
+        // close, so nothing here has to agree with it about `flightDepth`.
+        expect(win.close).toHaveBeenCalledTimes(1);
+        expect($(".twoinc-sole-trader-spinner").length).toBe(1);
+
+        jest.advanceTimersByTime(300);
+
+        expect($(".twoinc-sole-trader-spinner").length).toBe(0);
+        expect($widget.data("select2").isOpen()).toBe(false);
+        expect(soleTrader.mode).toBe("business");
+        jest.useRealTimers();
+      });
+
+      /**
+       * A native element `focus` never reaches a non-capturing window listener,
+       * but jQuery's `.trigger("focus")` walks the propagation path itself,
+       * window included — and that is how this file moves focus onto the
+       * company fields everywhere. Without the handler's target check, simply
+       * opening the dropdown would close the buyer's popup.
+       */
+      test("focus moving between fields on the page is not a refocus", () => {
+        harness.openCompanyWidget($, ctx.helper);
+        soleTrader.setMode("sole_trader");
+        const win = fakePopup();
+        window.open = jest.fn(() => win);
+        soleTrader.launchSignup();
+
+        $("#billing_email").trigger("focus");
+        ctx.helper.openCompanySearchDropdown();
+
+        expect(win.close).not.toHaveBeenCalled();
+      });
+
+      /**
+       * A popup whose ACCEPTED resolved to no buyer is decided yet still very
+       * much on screen, and the buyer's retry inside it posts a second
+       * ACCEPTED (see `watchPopupClose`'s own comment). Closing that window
+       * would take the retry with it.
+       */
+      test("a decided popup that is still open is left alone", () => {
+        harness.openCompanyWidget($, ctx.helper);
+        soleTrader.setMode("sole_trader");
+        const win = fakePopup();
+        window.open = jest.fn(() => win);
+        soleTrader.launchSignup();
+        soleTrader.activePopupWatchers[0].decided = true;
+
+        refocusCheckout();
+
+        expect(win.close).not.toHaveBeenCalled();
+      });
+
+      test("a refocus with nothing outstanding does nothing at all", () => {
+        harness.openCompanyWidget($, ctx.helper);
+        soleTrader.setMode("sole_trader");
+
+        refocusCheckout();
+
+        expect(soleTrader.mode).toBe("sole_trader");
+        expect(opened).toHaveLength(0);
+      });
+
+      /**
+       * The "don't fight a chip click" case, and the reason it needs no guard
+       * of its own. The window `focus` lands BEFORE the mousedown of the click
+       * that caused it, so no flag a chip handler sets could be read in time —
+       * but the relaunch takes its own flight, so `flightDepth` is never zero
+       * when the abandoned popup's poll settles, and the dropdown is not closed
+       * under the buyer. The close is also what MAKES the relaunch possible:
+       * `launchSignup` refuses while a live undecided popup exists.
+       */
+      test("a Sole trader chip click landing on the refocus relaunches, and keeps its dropdown", () => {
+        const $widget = harness.openCompanyWidget($, ctx.helper);
+        soleTrader.setMode("sole_trader");
+        const first = fakePopup();
+        window.open = jest.fn(() => first);
+        jest.useFakeTimers();
+        soleTrader.launchSignup();
+
+        refocusCheckout();
+        expect(first.close).toHaveBeenCalledTimes(1);
+
+        const second = fakePopup();
+        window.open = jest.fn(() => second);
+        soleTrader.onModeChipClick("sole_trader");
+        expect(window.open).toHaveBeenCalledTimes(1);
+
+        // The first popup's poll now notices its window is gone. Its settle
+        // must not take the second flow's dropdown with it.
+        jest.advanceTimersByTime(300);
+
+        expect($widget.data("select2").isOpen()).toBe(true);
+        expect($(".twoinc-sole-trader-spinner").length).toBe(1);
+        expect(soleTrader.mode).toBe("sole_trader");
+        jest.useRealTimers();
+      });
+
+      /**
+       * The one case where the immediate relaunch is still refused, pinned so
+       * it cannot change unnoticed: a RE-signup's increment is spent by its own
+       * popup-close poll, so a chip click in the same breath as the refocus
+       * runs into the round-6 "one outstanding re-signup at a time" guard and
+       * has to wait a poll cycle. Closing the window is what lets that cycle
+       * happen at all, so the wait is bounded rather than indefinite.
+       */
+      test("a re-signup relaunch waits for the abandoned popup's own poll cycle", () => {
+        harness.openCompanyWidget($, ctx.helper);
+        soleTrader.setMode("sole_trader");
+        soleTrader.setCompany("TWO:ST1", "A Sole Trader");
+        const first = fakePopup();
+        window.open = jest.fn(() => first);
+        jest.useFakeTimers();
+        soleTrader.launchSignup({ autoselect: false });
+
+        refocusCheckout();
+        const relaunch = jest.fn(() => fakePopup());
+        window.open = relaunch;
+        soleTrader.onModeChipClick("sole_trader");
+        expect(relaunch).not.toHaveBeenCalled();
+
+        jest.advanceTimersByTime(300);
+        soleTrader.onModeChipClick("sole_trader");
+
+        expect(relaunch).toHaveBeenCalledTimes(1);
+        jest.useRealTimers();
+      });
+    });
+
     describe("bug 3 — clicking a captured sole-trader field reopens search", () => {
       beforeEach(() => {
         // The click-to-reopen binding is delegated from `Twoinc#initialize()`
@@ -1853,6 +2017,48 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
             expect(queryRow().attr("hidden")).toBeUndefined();
             expect(queryRow().css("display")).not.toBe("none");
             expect(queryField().prop("readonly")).toBe(false);
+          });
+
+          /**
+           * Doug 2026-08-20, live: the row-visibility half already worked, but
+           * the dropdown closed anyway — `setMode("business")` destroys this
+           * widget and re-attaches a fresh, CLOSED one, so the chip the buyer
+           * clicked took the whole panel down and the un-hidden row was on a
+           * dropdown that no longer existed.
+           */
+          test("clicking Registered company leaves the dropdown open with focus in the query field", () => {
+            harness.openCompanyWidget($, ctx.helper);
+            // Stubbed for the same reason the Sole trader chip test below stubs
+            // it: this click's other outcome is a popup, whose own flight would
+            // keep `isDeciding()` true and make the Business chip a no-op.
+            jest.spyOn(soleTrader, "launchSignup").mockImplementation(() => {});
+            ctx.helper.buildSoleTraderChip().trigger("click");
+            expect(queryRow().attr("hidden")).toBe("hidden");
+
+            ctx.helper.buildBusinessChip().trigger("click");
+
+            expect(soleTrader.mode).toBe("business");
+            expect(ctx.helper.companySearchDropdownIsOpen()).toBe(true);
+            expect(queryRow().attr("hidden")).toBeUndefined();
+            expect(document.activeElement).toBe(queryField()[0]);
+          });
+
+          /**
+           * The conditional half of the same fix: `setMode("business")` has
+           * other callers with no dropdown in sight (`hide()` on an
+           * `updated_checkout`, `watchPopupClose`'s abandon revert), and none
+           * of them may pop one open at the buyer.
+           */
+          test("a mode revert with the dropdown already closed does not open one", () => {
+            harness.openCompanyWidget($, ctx.helper);
+            jest.spyOn(soleTrader, "launchSignup").mockImplementation(() => {});
+            ctx.helper.buildSoleTraderChip().trigger("click");
+            $("#billing_company_display").select2("close");
+
+            ctx.helper.buildBusinessChip().trigger("click");
+
+            expect(soleTrader.mode).toBe("business");
+            expect(ctx.helper.companySearchDropdownIsOpen()).toBe(false);
           });
 
           /**
