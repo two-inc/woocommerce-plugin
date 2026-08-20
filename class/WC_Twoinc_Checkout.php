@@ -463,11 +463,10 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     // Watermark inside the dropdown's own query field, stating
                     // the search threshold (TWO-25288; moved out of the
                     // results-panel row it used to render as, 2026-08-20).
-                    // The %d is deliberately LEFT UNRESOLVED
-                    // here: the JS interpolates it from its own
-                    // minimum-length constant, which is also what the widget
-                    // enforces, so the number the buyer is told cannot drift
-                    // from the number required.
+                    // The %d is deliberately LEFT UNRESOLVED here: the JS
+                    // interpolates it from its own minimum-length constant,
+                    // which is also what the widget enforces, so the number
+                    // the buyer is told cannot drift from the number required.
                     /* translators: %d: minimum number of characters the buyer must type before the company search runs. Left unresolved here and interpolated in JS from the threshold the widget enforces, so the two cannot disagree. */
                     'company_search_too_short' => __('Please enter %d or more characters', 'twoinc-payment-gateway'),
                     // The "Enter manually" mode chip inside the company-search
