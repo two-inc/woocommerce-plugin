@@ -1716,61 +1716,16 @@ class TwoCompanySearch {
    * inside the dropdown, which select2 tears down and rebuilds on every
    * open, so add-then-remove keeps at most one node alive and leaves no
    * animating element running behind a closed dropdown.
+   *
+   * The COMPANY-SEARCH request is the only thing that ever paints here. The
+   * sole-trader round trip used to share this node — through a two-owner
+   * arbiter, so neither could take it down under the other — and now paints
+   * over the company-NAME field instead (`syncSoleTraderSpinner`), which is
+   * the field that flow is actually filling in. Nothing arbitrates between
+   * the two any more because they are two nodes in two places, and
+   * `companySearchSeq` already decides which of two overlapping searches owns
+   * this one.
    */
-  /**
-   * Who is currently holding the in-field search spinner up (TWO-40 §7).
-   *
-   * Two independent things can want it: a company-search request, and a
-   * sole-trader round trip. Before this they both drove
-   * `toggleCompanySearchSpinner` directly, so whichever finished FIRST took
-   * the spinner down under the other — a buyer who blurs the email field and
-   * then opens the company search inside the prefetch's window watched the
-   * search spinner vanish while results were still loading.
-   *
-   * A pair of named holds rather than a bare count, so an unbalanced release
-   * from one owner cannot free the other's hold.
-   */
-  spinnerOwners = { search: false, soleTrader: false };
-
-  /**
-   * Put the in-field spinner up on one owner's behalf.
-   *
-   * @param {string} owner key of spinnerOwners
-   * @returns {void}
-   */
-  holdCompanySearchSpinner(owner) {
-    twoincSelectWooHelper.spinnerOwners[owner] = true;
-    twoincSelectWooHelper.toggleCompanySearchSpinner(true);
-  }
-
-  /**
-   * Drop one owner's hold, taking the spinner down only once nobody holds it.
-   *
-   * @param {string} owner key of spinnerOwners
-   * @returns {void}
-   */
-  releaseCompanySearchSpinner(owner) {
-    twoincSelectWooHelper.spinnerOwners[owner] = false;
-    const owners = twoincSelectWooHelper.spinnerOwners;
-    if (!owners.search && !owners.soleTrader) {
-      twoincSelectWooHelper.toggleCompanySearchSpinner(false);
-    }
-  }
-
-  /**
-   * Drop every hold and take the spinner down.
-   *
-   * For the country-change path, which invalidates everything in flight at
-   * once: whatever either owner was waiting on belongs to a country the
-   * checkout has left.
-   *
-   * @returns {void}
-   */
-  resetCompanySearchSpinner() {
-    twoincSelectWooHelper.spinnerOwners = { search: false, soleTrader: false };
-    twoincSelectWooHelper.toggleCompanySearchSpinner(false);
-  }
-
   toggleCompanySearchSpinner(isSearching) {
     const $search = twoincSelectWooHelper.getCompanySearchFieldContainer();
     if ($search.length === 0) return;
@@ -1782,8 +1737,20 @@ class TwoCompanySearch {
   }
 
   /**
-   * Hide the dropdown's own free-text query row while an adopted sole trader
-   * owns the captured company (item 2.1, TWO-40).
+   * Hide the dropdown's own free-text query row while sole-trader mode owns
+   * the company field (item 2.1, TWO-40).
+   *
+   * A pure function of MODE, and of nothing else (Doug 2026-08-20). It used
+   * to be ANDed with `soleTraderAdopted` and stood down again while
+   * `isBusy()`, which made the row visible for the whole stretch between the
+   * chip click and the adoption it leads to — the buyer clicked "Sole trader"
+   * and was left looking at a company-search box that no longer searches for
+   * their company. Both extra terms existed for the same one reason: the
+   * in-flight spinner used to paint inside this row (see
+   * `toggleCompanySearchSpinner`), so the row had to be on screen for any
+   * flight to be visible. `syncSoleTraderSpinner` moved that spinner to the
+   * company-NAME field, which is what lets this collapse to the one term it
+   * was always meant to be.
    *
    * HIDDEN, not merely `readonly` (Doug live-test finding: an earlier round
    * made it readonly and left it painted, which reads as a search box that
@@ -1794,20 +1761,16 @@ class TwoCompanySearch {
    * focuses this input unconditionally, and a hidden-but-typable field is
    * exactly the state the readonly was added for.
    *
-   * The whole SEARCH ROW goes, not just the input: the spinner is an
-   * absolutely-positioned sibling inside that row (see `.twoinc-search-spinner`
-   * in twoinc.css), so hiding the input alone collapses the row and strands
-   * it. Which is also why the hide stands down while `isBusy()` — that
-   * spinner, in this field, IS the in-flight state a re-signup shows (see
-   * `beginFlight`), so both flight edges re-sync.
+   * The whole SEARCH ROW goes, not just the input: hiding the input alone
+   * leaves an empty painted row where a search box was.
    *
-   * Both directions, every open, deliberately: selectWoo renders this row
-   * ONCE per widget instance and re-attaches the same node on every open (its
-   * `dropdown/search` adapter's `render`), so a suppression applied on one
-   * open outlives that open. Leaving sole-trader mode by picking a different
-   * company straight off the live widget is the path that proves it — that
-   * one deliberately does not destroy the widget, so nothing else would ever
-   * give the row back.
+   * Both directions, every open AND every mode write, deliberately: selectWoo
+   * renders this row ONCE per widget instance and re-attaches the same node on
+   * every open (its `dropdown/search` adapter's `render`), so a suppression
+   * applied on one open outlives that open. Leaving sole-trader mode by
+   * picking a different company straight off the live widget is the path that
+   * proves it — that one deliberately does not destroy the widget, so nothing
+   * else would ever give the row back.
    *
    * @returns {void}
    */
@@ -1815,18 +1778,138 @@ class TwoCompanySearch {
     const $row = twoincSelectWooHelper.getCompanySearchFieldContainer();
     if ($row.length === 0) return;
     const $query = $row.find(".select2-search__field");
-    const suppressed =
-      twoincSoleTrader.mode === "sole_trader" && twoincSoleTrader.soleTraderAdopted;
+    const suppressed = twoincSoleTrader.mode === "sole_trader";
 
     $query.prop("readonly", suppressed);
-    if (suppressed && !twoincSoleTrader.isBusy()) {
-      // A term typed before adopting describes a company the buyer then did
+    if (suppressed) {
+      // A term typed before switching describes a company the buyer then did
       // not pick; restoring it would sit above results that no longer match.
       $query.val("");
       $row.hide().attr("hidden", "hidden");
     } else {
       $row.removeAttr("hidden").show();
     }
+  }
+
+  /**
+   * Class of the sole-trader in-flight spinner (TWO-40, Doug 2026-08-20).
+   *
+   * A class, not an id, for the same reason `modeChipsWrapperClass` is one: a
+   * checkout fragment swap can orphan a whole dropdown/field wrapper with our
+   * nodes inside it (see `syncManualEntryButton`), and an id selector finds
+   * only ONE of two — leaving the other animating forever behind a settled
+   * flow.
+   */
+  soleTraderSpinnerClass = "twoinc-sole-trader-spinner";
+
+  /** Marker class on whichever element currently hosts that spinner. */
+  soleTraderSpinnerHostClass = "twoinc-name-searching";
+
+  /**
+   * The element the sole-trader spinner paints over: the box of whichever of
+   * the two company-NAME surfaces is currently the visible one (Doug
+   * 2026-08-20).
+   *
+   * Same "whichever is showing" question `getCompanySummaryNode()` answers for
+   * the number label, and answered the same way — the search control wins
+   * while it is showing (it is the name surface in sole-trader mode, see
+   * `toggleBusinessFields`), the native field takes over when it is not, and
+   * both are handled because mode can be `sole_trader` while a capture-mode or
+   * country switch has the other one on screen.
+   *
+   * The INPUT BOX, not the field row: `.select2-selection` and
+   * `.woocommerce-input-wrapper` bound the control itself, whereas the row
+   * wraps the label too — so vertically centring in the row would float the
+   * spinner over the label. Same reason `companyFieldAffordanceSlot()` (reused
+   * here, self-heal and all) exists rather than appending on
+   * `#billing_company_field`.
+   *
+   * @returns {Object} jQuery-wrapped host, empty if there is no name field
+   */
+  soleTraderSpinnerHost() {
+    const $picker = jQuery("#billing_company_display_field");
+    if ($picker.length && !$picker.hasClass("hidden")) {
+      const $selection = $picker.find(".select2-selection").first();
+      return $selection.length ? $selection : $picker;
+    }
+    return twoincSelectWooHelper.companyFieldAffordanceSlot();
+  }
+
+  /**
+   * Show the sole-trader spinner for exactly as long as the flow is running
+   * (Doug 2026-08-20).
+   *
+   * DERIVED from state on every call rather than held between two calls: the
+   * two inputs — mode and `flightDepth` — move independently. A chip click
+   * landing on top of an email-change prefetch that is already in flight
+   * starts no new flight of its own (`onModeChipClick`), so a hold taken at
+   * `beginFlight` would have missed the very wait the buyer is watching; and
+   * the host itself moves when the visible name surface does. Called from both
+   * flight edges and from every write to `mode`.
+   *
+   * `mode === "sole_trader"` is what keeps it off the buyer's screen during
+   * the background prefetch an email edit fires in business mode — a request
+   * they never asked for, over a field they are not waiting on.
+   *
+   * Remove-then-add, same as `toggleCompanySearchSpinner`: at most one node
+   * exists, wherever the host has moved to, and nothing animates on behind a
+   * settled flow.
+   *
+   * @returns {void}
+   */
+  syncSoleTraderSpinner() {
+    const helper = twoincSelectWooHelper;
+    jQuery("." + helper.soleTraderSpinnerClass).remove();
+    jQuery("." + helper.soleTraderSpinnerHostClass).removeClass(helper.soleTraderSpinnerHostClass);
+
+    if (twoincSoleTrader.mode !== "sole_trader" || twoincSoleTrader.flightDepth === 0) return;
+
+    const $host = helper.soleTraderSpinnerHost();
+    if ($host.length === 0) return;
+    $host
+      .addClass(helper.soleTraderSpinnerHostClass)
+      .append(
+        '<span class="twoinc-search-spinner ' +
+          helper.soleTraderSpinnerClass +
+          '" aria-hidden="true"></span>'
+      );
+  }
+
+  /**
+   * Everything the sole-trader flow's two dropdown/field surfaces derive from
+   * `mode` and `flightDepth` (Doug 2026-08-20).
+   *
+   * One call site per state change rather than two, so the query row and the
+   * spinner cannot be re-synced by different sets of callers and drift apart —
+   * which is exactly how the row ended up ANDed with `soleTraderAdopted` while
+   * the spinner was held on flight edges alone.
+   *
+   * @returns {void}
+   */
+  syncSoleTraderSurfaces() {
+    twoincSelectWooHelper.syncQueryFieldSuppression();
+    twoincSelectWooHelper.syncSoleTraderSpinner();
+  }
+
+  /**
+   * Close the company-search dropdown if — and only if — it is open (Doug
+   * 2026-08-20).
+   *
+   * The one difference between the sole-trader flow's two entry points: the
+   * mode chip is clicked from inside an open dropdown and leaves it open for
+   * the whole flow, while the "select a different sole trader" link is clicked
+   * with no dropdown on screen at all. Asking "is it open" at the end, instead
+   * of remembering which entry point started the flow, is what lets both share
+   * one sequence — spinner up, wait for the flow to complete, close the
+   * dropdown, spinner down — with this call a no-op for the link.
+   *
+   * @returns {void}
+   */
+  closeCompanySearchDropdownIfOpen() {
+    const $display = jQuery("#billing_company_display");
+    const select2 = $display.data("select2");
+    if (!select2 || typeof select2.isOpen !== "function" || !select2.isOpen()) return;
+    $display.select2("close");
   }
 
   /**
@@ -1976,7 +2059,7 @@ class TwoCompanySearch {
          */
         transport: function (params, success) {
           const seq = ++twoincSelectWooHelper.companySearchSeq;
-          twoincSelectWooHelper.holdCompanySearchSpinner("search");
+          twoincSelectWooHelper.toggleCompanySearchSpinner(true);
 
           const request = jQuery.ajax(
             jQuery.extend({}, params, {
@@ -2015,9 +2098,7 @@ class TwoCompanySearch {
           request.always(function () {
             // Only the newest request owns the spinner (see companySearchSeq).
             if (seq !== twoincSelectWooHelper.companySearchSeq) return;
-            // Releases the SEARCH hold only — a sole-trader round trip may
-            // still be waiting on the same spinner (TWO-40 §7).
-            twoincSelectWooHelper.releaseCompanySearchSpinner("search");
+            twoincSelectWooHelper.toggleCompanySearchSpinner(false);
           });
 
           return request;
@@ -2161,13 +2242,13 @@ class TwoCompanySearch {
         billingCompanyDisplay.on("query", function (params) {
           const term = (params && params.term) || "";
           if (term.length < twoincSelectWooHelper.companySearchMinLength) return;
-          twoincSelectWooHelper.holdCompanySearchSpinner("search");
+          twoincSelectWooHelper.toggleCompanySearchSpinner(true);
         });
         billingCompanyDisplay.on("results:all", function () {
-          twoincSelectWooHelper.releaseCompanySearchSpinner("search");
+          twoincSelectWooHelper.toggleCompanySearchSpinner(false);
         });
         billingCompanyDisplay.on("results:message", function () {
-          twoincSelectWooHelper.releaseCompanySearchSpinner("search");
+          twoincSelectWooHelper.toggleCompanySearchSpinner(false);
         });
       }
     }
@@ -3445,6 +3526,11 @@ class TwoCompanySearch {
         twoincSoleTrader.soleTraderReconfirmingCount = 0;
         twoincSoleTrader.updateChips();
         twoincSoleTrader.syncDifferentSoleTraderLink();
+        // The other write to `mode` — this one deliberately does not go
+        // through `setMode()` (see above), so it owes the same re-sync: this
+        // widget survives the pick, and nothing else would give the query row
+        // back.
+        twoincSelectWooHelper.syncSoleTraderSurfaces();
         twoincSoleTrader.leaveSoleTraderMode();
       }
 
@@ -3492,13 +3578,15 @@ class TwoCompanySearch {
       self.waitToFocus("billing_company_display", null, null);
       self.addSelectWooFocusFixHandler("billing_company_display");
 
-      // Once a sole trader is adopted, this dropdown's own free-text query
-      // is not one of the ways to get a different company — the dedicated
+      // In sole-trader mode this dropdown's own free-text query is not one of
+      // the ways to get a different company — the dedicated
       // "select a different sole trader" flow (the link, or re-clicking the
       // chip — item 4.2/4.3, Doug) is the only one. The row is hidden, not
       // just readonly-locked, and restored on the way back out: see
-      // `syncQueryFieldSuppression`.
-      self.syncQueryFieldSuppression();
+      // `syncQueryFieldSuppression`. Still needed alongside the sync every
+      // mode write now does: selectWoo re-attaches this row on every open, so
+      // a suppression decided on one open does not carry to the next.
+      self.syncSoleTraderSurfaces();
     });
 
     return widget;
@@ -4882,6 +4970,20 @@ let twoincSoleTrader = {
    */
   activePopupWatchers: [],
 
+  /**
+   * A signup popup has been opened during this flow, so the company-search
+   * dropdown must be closed if it is open once the flow completes (Doug
+   * 2026-08-20 — see `closeCompanySearchDropdownIfOpen`).
+   *
+   * A flag rather than a call at popup-open time because the close belongs at
+   * the END of the flow, and rather than a check inside `settleFlight` because
+   * the flights an email-change prefetch runs on its own must not close a
+   * dropdown the buyer opened and is still typing in. Set by every launch that
+   * actually opened a window, consumed exactly once at depth zero, so both
+   * entry points and any number of nested flights resolve to one close.
+   */
+  closeDropdownOnSettle: false,
+
   /** DOM id of the "select a different sole trader" link (TWO-40 §7). */
   differentSoleTraderBtnId: "select_different_sole_trader_btn",
 
@@ -5052,12 +5154,13 @@ let twoincSoleTrader = {
   /**
    * A sole-trader round trip has started (TWO-40 §7).
    *
-   * The busy state is shown IN the company-search control's own query field —
-   * the same in-field spinner an ordinary company search uses, not a separate
-   * overlay — and the control is left open rather than closed under the
-   * buyer. On WooCommerce the prefetch runs while the search widget is still
-   * live (the mode switch that tears it down happens only once the flight has
-   * resolved), so there is a field for the spinner to sit in.
+   * The busy state is shown over the company-NAME field — the same in-field
+   * spinner an ordinary company search uses, in the field this flow is
+   * filling in rather than in the query row it hides (Doug 2026-08-20; see
+   * `syncSoleTraderSpinner`). The search control is left open rather than
+   * closed under the buyer, and the name field is on screen either way, so the
+   * spinner is visible for the link-click entry point too — that one never had
+   * a dropdown open to paint in.
    *
    * @returns {void}
    */
@@ -5070,12 +5173,8 @@ let twoincSoleTrader = {
       jQuery(".twoinc-sole-trader-note-slot, .twoinc-mode-chips").addClass(
         "twoinc-sole-trader-toggle--busy"
       );
-      twoincSelectWooHelper.holdCompanySearchSpinner("soleTrader");
-      // A re-signup started from an ALREADY-adopted state has the query row
-      // hidden (item 2.1) — give it back for the flight, or the spinner just
-      // held has nowhere to paint.
-      twoincSelectWooHelper.syncQueryFieldSuppression();
     }
+    twoincSelectWooHelper.syncSoleTraderSurfaces();
   },
 
   /**
@@ -5085,6 +5184,14 @@ let twoincSoleTrader = {
    * Clamped at zero so an unbalanced settle cannot drive the count negative
    * and make a subsequent genuine flight invisible.
    *
+   * Depth reaching zero IS "the flow is complete" in the sense the spinner and
+   * the dropdown close are gated on (Doug 2026-08-20): the popup's own watcher
+   * holds a flight until the window is gone, and the ACCEPTED handler holds a
+   * second one across `fetchCurrentBuyer` until `setCompany()` has written the
+   * company name and number. Nothing else has to be joined up for it —
+   * `flightDepth` already counts both, and it is only zero once every one of
+   * them has finished.
+   *
    * @returns {void}
    */
   settleFlight: function () {
@@ -5093,9 +5200,15 @@ let twoincSoleTrader = {
       jQuery(".twoinc-sole-trader-note-slot, .twoinc-mode-chips").removeClass(
         "twoinc-sole-trader-toggle--busy"
       );
-      twoincSelectWooHelper.releaseCompanySearchSpinner("soleTrader");
-      twoincSelectWooHelper.syncQueryFieldSuppression();
+      if (twoincSoleTrader.closeDropdownOnSettle) {
+        // Consumed once, before the surfaces below re-sync: this is the
+        // shared sequence's third step — see
+        // `closeCompanySearchDropdownIfOpen`.
+        twoincSoleTrader.closeDropdownOnSettle = false;
+        twoincSelectWooHelper.closeCompanySearchDropdownIfOpen();
+      }
     }
+    twoincSelectWooHelper.syncSoleTraderSurfaces();
   },
 
   /**
@@ -5374,6 +5487,13 @@ let twoincSoleTrader = {
     }
     twoincSoleTrader.updateChips();
     twoincSoleTrader.syncDifferentSoleTraderLink();
+    // BEFORE the branch below, so a chip click made while the dropdown is
+    // already open hides the query row in the click's own gesture (Doug
+    // 2026-08-20: it used to take effect only on the next open, because
+    // nothing re-synced on a mode write and the `select2:open` handler was
+    // the only caller). The business branch destroys this dropdown a few
+    // lines down, so the restore has to happen while the row still exists.
+    twoincSelectWooHelper.syncSoleTraderSurfaces();
 
     if (mode === "sole_trader") {
       // Sole trader is its own company-capture mode, not manual entry and not
@@ -5862,6 +5982,10 @@ let twoincSoleTrader = {
         if (isReconfirming) {
           twoincSoleTrader.soleTraderReconfirmingCount += 1;
         }
+        // Both entry points, and the first-time enrolment too: the close is
+        // conditional on the dropdown actually being open, which is the one
+        // thing that differs between them.
+        twoincSoleTrader.closeDropdownOnSettle = true;
         twoincSoleTrader.watchPopupClose(win, isReconfirming);
       }
     } finally {
@@ -6382,7 +6506,6 @@ let twoincSoleTrader = {
           // disagrees with the server, and the same popup reopens forever.
           const resolved = !!buyer;
           twoincSoleTrader.prefetched = { ready: true, buyer: buyer, matches: resolved };
-          twoincSoleTrader.settleFlight();
           twoincSoleTrader.signupConfirming = false;
           // This popup's own decision is now made — see
           // `soleTraderReconfirmingCount`'s comment. Decremented here rather
@@ -6406,6 +6529,14 @@ let twoincSoleTrader = {
           } else {
             twoincSoleTrader.showError();
           }
+          // LAST, after the capture above has actually landed (Doug
+          // 2026-08-20). This used to settle before the write, so on the
+          // ordinary path — the popup closes the instant "ACCEPTED" is posted,
+          // which is what `signupConfirming` exists for — depth hit zero, the
+          // spinner came down and the dropdown closed while the company name
+          // and number were still unwritten. "Flow complete" is the write, not
+          // the response.
+          twoincSoleTrader.settleFlight();
         });
       } else {
         twoincSoleTrader.showError();
@@ -7946,7 +8077,7 @@ class Twoinc {
     // clears it is `clearSelectedCompany()` below re-attaching the widget and
     // taking the dropdown — and the spinner node inside it — with it. That is
     // an incidental consequence of an unrelated call, not a guarantee.
-    twoincSelectWooHelper.resetCompanySearchSpinner();
+    twoincSelectWooHelper.toggleCompanySearchSpinner(false);
 
     // Skipped entirely while sole-trader mode owns the field (round-3
     // review — Han): this rebuilds the search widget and wipes

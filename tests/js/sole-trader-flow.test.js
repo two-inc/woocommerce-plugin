@@ -155,46 +155,82 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       );
     });
 
-    test("shows the spinner inside the company-search field, not as an overlay", () => {
+    /**
+     * The spinner belongs over the field this flow is FILLING IN, not in the
+     * query row it hides (Doug 2026-08-20). The query row is suppressed for
+     * the whole of sole-trader mode now, so a spinner painted in there is a
+     * spinner painted nowhere.
+     */
+    test("shows the spinner over the company-NAME field, not in the dropdown's query row", () => {
       const $widget = harness.openCompanyWidget($, ctx.helper);
+      soleTrader.setMode("sole_trader");
 
       soleTrader.beginFlight();
-      expect($(".twoinc-search-spinner").length).toBe(1);
+
+      expect(
+        $("#billing_company_display_field .select2-selection > .twoinc-sole-trader-spinner").length
+      ).toBe(1);
+      expect($(".select2-search--dropdown .twoinc-search-spinner").length).toBe(0);
       // And the control is left OPEN under it.
       expect($widget.data("select2").isOpen()).toBe(true);
 
       soleTrader.settleFlight();
-      expect($(".twoinc-search-spinner").length).toBe(0);
+      expect($(".twoinc-sole-trader-spinner").length).toBe(0);
     });
 
-    test("does not take down a spinner a company search is still holding", () => {
-      // Two independent owners want the same in-field spinner. Before the
-      // ownership split, whichever settled FIRST hid it under the other: a
-      // buyer who blurs the email field and then opens the company search
-      // inside the prefetch's window watched the search spinner vanish while
-      // results were still loading.
-      harness.openCompanyWidget($, ctx.helper);
-      ctx.helper.holdCompanySearchSpinner("search");
+    /**
+     * Both name surfaces, because mode can be `sole_trader` while a country or
+     * capture-mode switch has the native field on screen instead of the picker.
+     */
+    test("paints over the native company field when the picker is the hidden one", () => {
+      $("#billing_company_display_field").addClass("hidden");
+      soleTrader.setMode("sole_trader");
+
       soleTrader.beginFlight();
+
+      expect(
+        $("#billing_company_field .woocommerce-input-wrapper > .twoinc-sole-trader-spinner").length
+      ).toBe(1);
+    });
+
+    test("the company search's own spinner and the sole-trader one do not share a node", () => {
+      // They used to, arbitrated by a two-owner hold, because both painted in
+      // the query row: whichever settled first hid it under the other. Two
+      // nodes in two fields is what removed that contention — asserted so a
+      // future round cannot quietly put them back in one place.
+      harness.openCompanyWidget($, ctx.helper);
+      soleTrader.setMode("sole_trader");
+      ctx.helper.toggleCompanySearchSpinner(true);
+
+      soleTrader.beginFlight();
+      expect($(".select2-search--dropdown .twoinc-search-spinner").length).toBe(1);
+      expect($(".twoinc-sole-trader-spinner").length).toBe(1);
 
       soleTrader.settleFlight();
-      expect($(".twoinc-search-spinner").length).toBe(1);
-
-      ctx.helper.releaseCompanySearchSpinner("search");
-      expect($(".twoinc-search-spinner").length).toBe(0);
+      expect($(".select2-search--dropdown .twoinc-search-spinner").length).toBe(1);
+      expect($(".twoinc-sole-trader-spinner").length).toBe(0);
     });
 
-    test("a country change drops every hold at once", () => {
-      // Everything either owner was waiting on belongs to a country the
-      // checkout has left.
+    test("a prefetch running in business mode paints nothing over the company name", () => {
+      // The email-change prefetch is a background request the buyer never
+      // asked for, over a field they are not waiting on.
       harness.openCompanyWidget($, ctx.helper);
-      ctx.helper.holdCompanySearchSpinner("search");
+
       soleTrader.beginFlight();
 
-      ctx.helper.resetCompanySearchSpinner();
+      expect($(".twoinc-sole-trader-spinner").length).toBe(0);
+    });
 
-      expect($(".twoinc-search-spinner").length).toBe(0);
-      expect(ctx.helper.spinnerOwners).toEqual({ search: false, soleTrader: false });
+    test("a chip click landing on a flight already in the air still shows the spinner", () => {
+      // The click starts no flight of its own (`onModeChipClick` defers to the
+      // one outstanding), so a spinner HELD at `beginFlight` would have missed
+      // exactly the wait the buyer is watching.
+      harness.openCompanyWidget($, ctx.helper);
+      soleTrader.beginFlight();
+
+      soleTrader.setMode("sole_trader");
+
+      expect($(".twoinc-sole-trader-spinner").length).toBe(1);
     });
 
     test.each([
@@ -1338,7 +1374,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         expect($widget.data("select2").isOpen()).toBe(true);
       });
 
-      test("the in-field spinner is up for as long as the popup is open, and comes down when it closes", () => {
+      test("the spinner is up for as long as the popup is open, and comes down when it closes", () => {
         harness.openCompanyWidget($, ctx.helper);
         soleTrader.setMode("sole_trader");
         const win = { closed: false };
@@ -1346,12 +1382,117 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         jest.useFakeTimers();
 
         soleTrader.launchSignup();
-        expect($(".twoinc-search-spinner").length).toBe(1);
+        expect($(".twoinc-sole-trader-spinner").length).toBe(1);
 
         win.closed = true;
         jest.advanceTimersByTime(300);
 
-        expect($(".twoinc-search-spinner").length).toBe(0);
+        expect($(".twoinc-sole-trader-spinner").length).toBe(0);
+        jest.useRealTimers();
+      });
+
+      /**
+       * "Flow complete" is the WRITE, not the popup closing and not the
+       * response landing (Doug 2026-08-20). The ordinary path is the one that
+       * proves it: the hosted flow closes its own window the instant it posts
+       * ACCEPTED, so the popup is long gone by the time `fetchCurrentBuyer`
+       * resolves — and this used to settle the flight before the company name
+       * and number were written, so the spinner came down over empty fields.
+       */
+      test("the spinner outlives the popup close, coming down only once the company is written", () => {
+        harness.openCompanyWidget($, ctx.helper);
+        soleTrader.setMode("sole_trader");
+        const win = { closed: false };
+        window.open = jest.fn(() => win);
+        let resolveBuyer;
+        jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => {
+          resolveBuyer = cb;
+        });
+        // Read INSIDE the write, not after it: settling one line early leaves
+        // the same end state, so only the state at the moment of the write
+        // tells the two orderings apart.
+        let spinnerAtWrite = null;
+        const setCompany = soleTrader.setCompany;
+        jest.spyOn(soleTrader, "setCompany").mockImplementation((...args) => {
+          spinnerAtWrite = $(".twoinc-sole-trader-spinner").length;
+          return setCompany(...args);
+        });
+        jest.useFakeTimers();
+        soleTrader.launchSignup();
+        soleTrader.bindPopupMessageListener();
+
+        // The popup posts ACCEPTED and closes in the same breath.
+        window.dispatchEvent(
+          new MessageEvent("message", {
+            data: "ACCEPTED",
+            origin: "https://checkout.example.test",
+            source: win
+          })
+        );
+        win.closed = true;
+        jest.advanceTimersByTime(300);
+
+        // Popup closed — but the lookup it triggered has not come back, so
+        // nothing is captured yet and the flow is NOT complete.
+        expect($("#company_id").val()).toBe("");
+        expect($(".twoinc-sole-trader-spinner").length).toBe(1);
+
+        resolveBuyer({
+          organization_number: "TWO:ST1",
+          company_name: "A Sole Trader",
+          email: "buyer@example.test"
+        });
+
+        expect(spinnerAtWrite).toBe(1);
+        expect($("#company_id").val()).toBe("TWO:ST1");
+        expect($("#billing_company").val()).toBe("A Sole Trader");
+        expect($(".twoinc-sole-trader-spinner").length).toBe(0);
+        jest.useRealTimers();
+      });
+
+      test("the dropdown the chip was clicked from is closed once the flow completes", () => {
+        const $widget = harness.openCompanyWidget($, ctx.helper);
+        soleTrader.setMode("sole_trader");
+        soleTrader.setCompany("TWO:ST1", "A Sole Trader");
+        const win = { closed: false };
+        window.open = jest.fn(() => win);
+        jest.useFakeTimers();
+
+        // A re-signup from an adopted state: nothing else in this path reverts
+        // mode or re-attaches the widget, so the dropdown would otherwise be
+        // left open on a query row that is hidden and chips that are settled.
+        soleTrader.launchSignup({ autoselect: false });
+        $widget.select2("open");
+        expect($widget.data("select2").isOpen()).toBe(true);
+
+        win.closed = true;
+        jest.advanceTimersByTime(300);
+
+        expect($widget.data("select2").isOpen()).toBe(false);
+        jest.useRealTimers();
+      });
+
+      test("the link's own flow completes with no dropdown to close, and does not fail trying", () => {
+        // The one genuine difference between the two entry points: this one is
+        // clicked with nothing open. The close is conditional, so it is a
+        // no-op here rather than a second code path.
+        harness.openCompanyWidget($, ctx.helper);
+        const $widget = $("#billing_company_display");
+        $widget.select2("close");
+        soleTrader.setMode("sole_trader");
+        soleTrader.setCompany("TWO:ST1", "A Sole Trader");
+        const win = { closed: false };
+        window.open = jest.fn(() => win);
+        jest.useFakeTimers();
+
+        soleTrader.getDifferentSoleTraderBtnNode().trigger("click");
+        expect($(".twoinc-sole-trader-spinner").length).toBe(1);
+
+        win.closed = true;
+        jest.advanceTimersByTime(300);
+
+        expect($widget.data("select2").isOpen()).toBe(false);
+        expect($(".twoinc-sole-trader-spinner").length).toBe(0);
         jest.useRealTimers();
       });
 
@@ -1608,7 +1749,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
           expect($("#billing_company").prop("readonly")).toBe(true);
         });
 
-        describe("item 4.2 / item 2.1 — the dropdown's own free-text query is suppressed once adopted", () => {
+        describe("item 4.2 / item 2.1 — the dropdown's own free-text query is suppressed for the whole of sole-trader mode", () => {
           /** @returns {Object} jQuery-wrapped `.select2-search--dropdown` row */
           function queryRow() {
             return $("#select2-billing_company_display-results")
@@ -1742,21 +1883,53 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
           });
 
           /**
-           * The spinner is an absolutely-positioned sibling INSIDE this row
-           * (`.twoinc-search-spinner`), so a re-signup started from an
-           * already-adopted state has to get the row back for its in-flight
-           * state to be visible at all.
+           * The row used to be given back for the duration of a flight, purely
+           * so the spinner had somewhere to paint. Now the spinner paints over
+           * the company-NAME field, so nothing about a flight makes this row
+           * relevant again (Doug 2026-08-20).
            */
-          test("a re-signup flight from an adopted state shows the row again, and hides it on settle", () => {
+          test("a re-signup flight from an adopted state leaves the row hidden throughout", () => {
             soleTrader.setMode("sole_trader");
             soleTrader.setCompany("TWO:ST1", "A Sole Trader");
             $("#billing_company_display").select2("open");
 
             soleTrader.beginFlight();
-            expect(queryRow().attr("hidden")).toBeUndefined();
-            expect(queryRow().find(".twoinc-search-spinner").length).toBe(1);
+            expect(queryRow().attr("hidden")).toBe("hidden");
+            expect(queryRow().find(".twoinc-search-spinner").length).toBe(0);
+            expect($(".twoinc-sole-trader-spinner").length).toBe(1);
 
             soleTrader.settleFlight();
+            expect(queryRow().attr("hidden")).toBe("hidden");
+          });
+
+          /**
+           * Doug 2026-08-20: the hide used to need a close-and-reopen, because
+           * only `select2:open` re-synced it — a buyer clicking the chip with
+           * the dropdown already open (which is where the chip LIVES) sat
+           * looking at a search box that no longer searched for their company.
+           */
+          test("clicking the Sole trader chip hides the row immediately, with no reopen", () => {
+            harness.openCompanyWidget($, ctx.helper);
+            // Stubbed so the hide can only be the mode write's doing: this
+            // click's other outcome is a popup, and a popup's own flight
+            // re-syncs these surfaces too — which would let the assertion pass
+            // for a reason that has nothing to do with the chip.
+            jest.spyOn(soleTrader, "launchSignup").mockImplementation(() => {});
+            expect(queryRow().attr("hidden")).toBeUndefined();
+
+            ctx.helper.buildSoleTraderChip().trigger("click");
+
+            expect(soleTrader.mode).toBe("sole_trader");
+            expect(queryRow().attr("hidden")).toBe("hidden");
+            expect(queryRow().css("display")).toBe("none");
+          });
+
+          test("suppression is a function of mode alone, not of what has been adopted", () => {
+            harness.openCompanyWidget($, ctx.helper);
+
+            soleTrader.setMode("sole_trader");
+
+            expect(soleTrader.soleTraderAdopted).toBe(false);
             expect(queryRow().attr("hidden")).toBe("hidden");
           });
 
