@@ -1586,7 +1586,7 @@ class TwoCompanySearch {
       if (this.tabIndex < 0) return;
       if (jQuery(this).closest(".select2-container--open, .select2-dropdown").length) return;
       if (twoincSelectWooHelper.isHiddenForTabbing(this)) return;
-      if (!((anchor.compareDocumentPosition(this) & 4) /* DOCUMENT_POSITION_FOLLOWING */)) return;
+      if (!(anchor.compareDocumentPosition(this) & 4 /* DOCUMENT_POSITION_FOLLOWING */)) return;
       found.push(this);
     });
 
@@ -4919,6 +4919,31 @@ let twoincSoleTrader = {
   messageHandler: null,
   /** @type {Function|null} the bound window `focus` listener — see `bindWindowRefocusListener` */
   refocusHandler: null,
+  /**
+   * @type {Function|null} the bound capture-phase `mousedown` listener that
+   * tells the refocus above WHICH gesture caused it — see
+   * `bindWindowRefocusListener`
+   */
+  chipMousedownHandler: null,
+  /**
+   * @type {number|null} the pending abandon this refocus scheduled, or `null`
+   * when none is outstanding. Doubles as the "is a refocus still undecided"
+   * predicate the chip mousedown reads, so a mousedown made while the checkout
+   * already had focus cannot be mistaken for the cause of a later refocus.
+   */
+  refocusAbandonTimer: null,
+  /**
+   * How long the abandon waits for the click that caused the refocus to
+   * identify itself (Doug 2026-08-20).
+   *
+   * A window `focus` is dispatched BEFORE the `mousedown` of the click that
+   * produced it, so the decision cannot be made in the focus handler itself —
+   * it has to outlive it by long enough for that mousedown to arrive. The gap
+   * is one native input event's worth of dispatch, single-digit milliseconds;
+   * this is generous margin for a loaded main thread and still far below the
+   * threshold at which a buyer would perceive the popup as lingering.
+   */
+  refocusChipGraceMs: 150,
   // Result of the most recent autofill prefetch for the entered email.
   // ready=false until the first prefetch resolves; matches=true when the
   // buyer on the Two cookie owns the email currently typed at checkout.
@@ -5473,6 +5498,22 @@ let twoincSoleTrader = {
       if (!twoincSoleTrader.isDeciding()) twoincSoleTrader.setMode("business");
       return;
     }
+    // A signup the buyer has not finished is still on screen, so this click is
+    // asking for it BACK, not for anything new (Doug 2026-08-20, item 6.1):
+    // raise it and stop. Before every branch below, because each of them is
+    // wrong while that popup is live — `launchSignup` would be refused by its
+    // own live-popup guard and do nothing visible at all, and the prefetch
+    // branch is worse, adopting a company behind a window the buyer is still
+    // deciding in (TWO-40 §14).
+    //
+    // Here, on the CHIP, rather than on the refocus that usually precedes it,
+    // even though item 6.1 was reported as a refocus symptom. A chip activated
+    // from the keyboard fires `click` with no `mousedown` at all, so a raise
+    // hung off the refocus's mousedown would leave Enter/Space on this chip as
+    // the one route that cannot get the buyer back to their own popup. The
+    // refocus decides only whether the popup is CLOSED; what a live popup means
+    // for a Sole trader click is the same question however focus got here.
+    if (twoincSoleTrader.refocusOpenPopups()) return;
     // Re-clicking once already adopted is the SAME re-signup the "select a
     // different sole trader" link launches — NOT the Business chip's
     // already-selected no-op (Doug's explicit override, item 4.3: an
@@ -6149,44 +6190,78 @@ let twoincSoleTrader = {
     const watcher = { id: null, win: win, isReconfirming: !!isReconfirming, decided: false };
     watcher.id = setInterval(function () {
       if (!win.closed) return;
-      twoincSoleTrader.stopWatchingPopup(watcher.id);
-      twoincSoleTrader.settleFlight();
-      if (watcher.isReconfirming && !watcher.decided) {
-        // Abandoned without a decision — this poll owns the decrement. A
-        // DECIDED popup's decrement belongs to the ACCEPTED handler that
-        // marked it: an accepted re-signup closed inside this poll's own
-        // 300ms window would otherwise spend two decrements against its one
-        // increment, letting a later, genuinely undecided re-signup read as
-        // settled. Clamped, same reason `settleFlight` is, so an unbalanced
-        // count can't go negative.
-        twoincSoleTrader.soleTraderReconfirmingCount = Math.max(
-          0,
-          twoincSoleTrader.soleTraderReconfirmingCount - 1
-        );
-      }
-      if (
-        twoincSoleTrader.mode === "sole_trader" &&
-        !twoincSoleTrader.soleTraderAdopted &&
-        !twoincSoleTrader.signupConfirming &&
-        // A popup relaunched inside this poll's stale window (the buyer
-        // closed this one by hand, then clicked again before the poll
-        // noticed) owns the mode now — reverting under it would drop its
-        // eventual ACCEPTED on the `mode !== "sole_trader"` gate. Its own
-        // terminal branch settles mode, same deferral as `hide()`'s.
-        //
-        // Still ON SCREEN is the question, not still undecided (round-3
-        // review): a popup whose ACCEPTED resolved to no buyer is decided yet
-        // very much still open, and the buyer's retry inside it posts a second
-        // ACCEPTED that a revert here would drop on that same gate. Any record
-        // whose window HAS closed settles the mode from its own poll instead.
-        !twoincSoleTrader.activePopupWatchers.some(function (other) {
-          return !other.win.closed;
-        })
-      ) {
-        twoincSoleTrader.setMode("business");
-      }
+      twoincSoleTrader.settleClosedPopup(watcher, false);
     }, 300);
     twoincSoleTrader.activePopupWatchers.push(watcher);
+  },
+
+  /**
+   * Everything one popup's window going away settles. Called by that popup's
+   * own poll above, and — only on the mode-chip abandon path — synchronously
+   * by `abandonPopupsForChipClick()`.
+   *
+   * Factored out rather than duplicated so the settle keeps ONE owner
+   * (TWO-40 §14) with no second copy to agree with this one about
+   * `flightDepth`, `soleTraderReconfirmingCount` and `closeDropdownOnSettle`.
+   * Calling it early is safe because `stopWatchingPopup` both clears the
+   * interval and drops the record, so the poll cannot run it a second time.
+   *
+   * @param {Object} watcher the record whose window has gone
+   * @param {boolean} chipOwnsOutcome a mode-chip click is mid-gesture and owns
+   *   the mode and the dropdown from here — see `abandonPopupsForChipClick`
+   * @returns {void}
+   */
+  settleClosedPopup: function (watcher, chipOwnsOutcome) {
+    twoincSoleTrader.stopWatchingPopup(watcher.id);
+    if (chipOwnsOutcome) {
+      // Consumed, not honoured: the chip decides what happens to the dropdown
+      // (Registered company reopens it, Enter manually tears it down), and
+      // closing it from here would destroy the very button whose `click` has
+      // not been dispatched yet — a chip removed between `mousedown` and
+      // `mouseup` produces no `click` at all.
+      twoincSoleTrader.closeDropdownOnSettle = false;
+    }
+    twoincSoleTrader.settleFlight();
+    if (watcher.isReconfirming && !watcher.decided) {
+      // Abandoned without a decision — this settle owns the decrement. A
+      // DECIDED popup's decrement belongs to the ACCEPTED handler that
+      // marked it: an accepted re-signup closed inside this poll's own
+      // 300ms window would otherwise spend two decrements against its one
+      // increment, letting a later, genuinely undecided re-signup read as
+      // settled. Clamped, same reason `settleFlight` is, so an unbalanced
+      // count can't go negative.
+      twoincSoleTrader.soleTraderReconfirmingCount = Math.max(
+        0,
+        twoincSoleTrader.soleTraderReconfirmingCount - 1
+      );
+    }
+    if (
+      // Skipped on the chip path for the same reason as the dropdown close
+      // above, plus one more: `setMode`'s business branch destroys the
+      // dropdown the chip lives in, AND reverting to business here would make
+      // the Registered company chip's own "already in business mode" no-op
+      // swallow the click. Both chips set the mode themselves.
+      !chipOwnsOutcome &&
+      twoincSoleTrader.mode === "sole_trader" &&
+      !twoincSoleTrader.soleTraderAdopted &&
+      !twoincSoleTrader.signupConfirming &&
+      // A popup relaunched inside this poll's stale window (the buyer
+      // closed this one by hand, then clicked again before the poll
+      // noticed) owns the mode now — reverting under it would drop its
+      // eventual ACCEPTED on the `mode !== "sole_trader"` gate. Its own
+      // terminal branch settles mode, same deferral as `hide()`'s.
+      //
+      // Still ON SCREEN is the question, not still undecided (round-3
+      // review): a popup whose ACCEPTED resolved to no buyer is decided yet
+      // very much still open, and the buyer's retry inside it posts a second
+      // ACCEPTED that a revert here would drop on that same gate. Any record
+      // whose window HAS closed settles the mode from its own poll instead.
+      !twoincSoleTrader.activePopupWatchers.some(function (other) {
+        return !other.win.closed;
+      })
+    ) {
+      twoincSoleTrader.setMode("business");
+    }
   },
 
   /**
@@ -6208,21 +6283,79 @@ let twoincSoleTrader = {
    * (`focusVisibleCompanyField`, `releaseFocusFromCompanyField`), so without
    * the check, opening the dropdown would close the popup.
    *
+   * The refocus does not decide anything itself, it only SCHEDULES the abandon
+   * (Doug 2026-08-20, spec revision). Which of three things the buyer meant
+   * depends on what they clicked, and the window `focus` is dispatched before
+   * the `mousedown` of that click — so the decision has to outlive the focus
+   * handler by `refocusChipGraceMs`, and the capture-phase `mousedown` below is
+   * what resolves it:
+   *
+   *  - the Sole trader chip → cancel the abandon outright. Re-clicking the chip
+   *    that launched the popup asks for that popup BACK, and `onModeChipClick`
+   *    raises it. Cancelling here is the whole job; the click owns the rest.
+   *  - any other mode chip → abandon NOW, in the mousedown, so the chip's own
+   *    `click` handler runs a moment later against fully settled state. Left to
+   *    the timer instead it would land after that click, and the chip's
+   *    `isDeciding()` guard would have refused the click for a popup that was
+   *    already on its way out — the gesture reading as "the dropdown just
+   *    closed" with the chip's own action never happening.
+   *  - anything else, including no click at all (alt-tab back, a click on the
+   *    page) → the timer fires and abandons, as it always did.
+   *
+   * Capture phase, and on `document` rather than on the chips: the chips are
+   * rebuilt on every dropdown open, and capture reaches them whether or not
+   * something between them and here stops propagation.
+   *
    * @returns {void}
    */
   bindWindowRefocusListener: function () {
     if (twoincSoleTrader.refocusHandler) return;
     twoincSoleTrader.refocusHandler = function (event) {
       if (event && event.target && event.target !== window && event.target !== document) return;
-      twoincSoleTrader.closeAbandonedPopups();
+      // Coalesced onto the FIRST focus, never rescheduled onto a later one.
+      // The grace belongs to the gesture that brought the buyer back, and
+      // window-targeted `focus` events arrive in bursts for reasons that are
+      // not that gesture — blurring an element fires one, so select2 closing
+      // its own dropdown produces a stream of them. Restarting the clock on
+      // each would let a busy panel postpone the abandon indefinitely.
+      if (twoincSoleTrader.refocusAbandonTimer !== null) return;
+      twoincSoleTrader.refocusAbandonTimer = setTimeout(function () {
+        twoincSoleTrader.refocusAbandonTimer = null;
+        twoincSoleTrader.closeAbandonedPopups();
+      }, twoincSoleTrader.refocusChipGraceMs);
     };
     window.addEventListener("focus", twoincSoleTrader.refocusHandler);
+
+    twoincSoleTrader.chipMousedownHandler = function (event) {
+      // Only a mousedown that a still-undecided refocus is waiting on can be
+      // the click that CAUSED that refocus. Every other chip click — the
+      // checkout already had focus — is left entirely alone, popup included.
+      if (twoincSoleTrader.refocusAbandonTimer === null) return;
+      const target = event && event.target;
+      const chip =
+        target && typeof target.closest === "function"
+          ? target.closest("." + twoincSelectWooHelper.modeChipClass)
+          : null;
+      if (!chip) return;
+      clearTimeout(twoincSoleTrader.refocusAbandonTimer);
+      twoincSoleTrader.refocusAbandonTimer = null;
+      if (chip.getAttribute("data-mode") === "sole_trader") return;
+      twoincSoleTrader.abandonPopupsForChipClick();
+    };
+    document.addEventListener("mousedown", twoincSoleTrader.chipMousedownHandler, true);
   },
 
-  /** Test seam / teardown: drop the window `focus` listener.
+  /** Test seam / teardown: drop the window `focus` listener, the mousedown
+   * listener that resolves it, and any abandon still scheduled.
    * @returns {void}
    */
   unbindWindowRefocusListener: function () {
+    clearTimeout(twoincSoleTrader.refocusAbandonTimer);
+    twoincSoleTrader.refocusAbandonTimer = null;
+    if (twoincSoleTrader.chipMousedownHandler) {
+      document.removeEventListener("mousedown", twoincSoleTrader.chipMousedownHandler, true);
+      twoincSoleTrader.chipMousedownHandler = null;
+    }
     if (!twoincSoleTrader.refocusHandler) return;
     window.removeEventListener("focus", twoincSoleTrader.refocusHandler);
     twoincSoleTrader.refocusHandler = null;
@@ -6250,25 +6383,82 @@ let twoincSoleTrader = {
    * buyer's retry inside it posts a second ACCEPTED (see `watchPopupClose`'s
    * own comment) — closing that window would take the retry with it.
    *
-   * There is no separate "don't fight a mode-chip click" guard here, and that
-   * is a finding rather than an omission: the window `focus` lands BEFORE the
-   * mousedown of the click that caused it, so no flag a chip handler sets can
-   * be read in time. It is not needed either. A "Sole trader" chip click
-   * arriving a few ms later opens its own popup and takes its own flight, so
-   * `flightDepth` is never zero when the old popup's poll settles and the
-   * dropdown is not closed under it — and that relaunch is now ACCEPTED by
-   * `launchSignup`'s live-popup guard precisely because this closed the window
-   * it would otherwise have been refused for. A "Registered company" click is
-   * a documented no-op while `isDeciding()`, so there is nothing for this to
-   * race.
+   * This is the NO-CHIP refocus only — alt-tab back, or a click anywhere on the
+   * page that is not a mode chip. A chip click is resolved before this ever
+   * runs; see `bindWindowRefocusListener` and `abandonPopupsForChipClick`.
    *
    * @returns {void}
    */
   closeAbandonedPopups: function () {
-    twoincSoleTrader.activePopupWatchers.forEach(function (watcher) {
-      if (watcher.decided || watcher.win.closed) return;
+    twoincSoleTrader.abandonablePopups().forEach(function (watcher) {
       if (typeof watcher.win.close !== "function") return;
       watcher.win.close();
+    });
+  },
+
+  /**
+   * Abandon the signup popups because the buyer came back to the checkout by
+   * clicking a mode chip other than Sole trader (Doug 2026-08-20).
+   *
+   * The close is the same one `closeAbandonedPopups` does. What differs is the
+   * TIMING and the ownership: this runs in the chip's own `mousedown`, and
+   * drains each popup's settle synchronously rather than leaving it to the
+   * 300ms poll, so the chip's `click` handler a moment later sees no
+   * outstanding flight and no live popup — which is the whole of what its
+   * `isDeciding()` guard was refusing the click for.
+   *
+   * Draining early is only safe because `chipOwnsOutcome` holds back the two
+   * steps that would touch the dropdown: see `settleClosedPopup`.
+   *
+   * The list is snapshotted because settling a popup removes its own record.
+   *
+   * @returns {void}
+   */
+  abandonPopupsForChipClick: function () {
+    twoincSoleTrader.abandonablePopups().forEach(function (watcher) {
+      if (typeof watcher.win.close === "function") watcher.win.close();
+      twoincSoleTrader.settleClosedPopup(watcher, true);
+    });
+  },
+
+  /**
+   * Bring the still-undecided signup popups back to the front (Doug
+   * 2026-08-20, item 6.1).
+   *
+   * `focus()` on a window handle is how a popup is raised — the browser brings
+   * a window to the front when it is focused — and it needs no cooperation from
+   * the hosted flow however cross-origin it is.
+   *
+   * @returns {boolean} whether there was a popup to raise, which is also the
+   *   answer to "is the buyer's outstanding signup still on screen"
+   */
+  refocusOpenPopups: function () {
+    const abandonable = twoincSoleTrader.abandonablePopups();
+    abandonable.forEach(function (watcher) {
+      if (typeof watcher.win.focus === "function") watcher.win.focus();
+    });
+    return abandonable.length > 0;
+  },
+
+  /**
+   * The popups a refocus is entitled to act on: still undecided, and their
+   * window still there.
+   *
+   * DECIDED popups are excluded deliberately. A popup whose ACCEPTED resolved
+   * to no buyer is decided yet still very much on screen, and the buyer's retry
+   * inside it posts a second ACCEPTED (see `watchPopupClose`'s own comment) —
+   * closing that window would take the retry with it. A record whose window has
+   * already gone is excluded because it outlives that window by up to one poll
+   * cycle, exactly as `launchSignup`'s own guard reads it.
+   *
+   * One predicate, shared by all three refocus outcomes, so the case that
+   * REFUSES to close a popup covers precisely the set the other two close.
+   *
+   * @returns {Array} a snapshot, safe to iterate while records are removed
+   */
+  abandonablePopups: function () {
+    return twoincSoleTrader.activePopupWatchers.filter(function (watcher) {
+      return !watcher.decided && !watcher.win.closed;
     });
   },
 

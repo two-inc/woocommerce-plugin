@@ -1546,13 +1546,53 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         return win;
       }
 
-      /** Fire the window-level `focus` a real refocus produces. */
+      /**
+       * Fire the window-level `focus` a real refocus produces. Deliberately
+       * NOT followed by the grace period — the click that caused the focus is
+       * dispatched inside it, which is the whole point of the deferral, so
+       * every test spends the grace explicitly with `settleRefocus()`.
+       */
       function refocusCheckout() {
         window.dispatchEvent(new Event("focus"));
       }
 
-      test("closes the popup, and the existing poll then settles spinner, dropdown and mode", () => {
+      /** Let the refocus's own deferred abandon fall due. */
+      function settleRefocus() {
+        jest.advanceTimersByTime(soleTrader.refocusChipGraceMs);
+      }
+
+      /**
+       * Mousedown a real chip, the way the browser dispatches it after handing
+       * the checkout window its focus back. Real DOM and real bubbling: the
+       * listener that reads this is a capture-phase one on `document`, so a
+       * detached chip built with `buildBusinessChip()` would never reach it.
+       *
+       * @param {string} id the chip's element id
+       */
+      function mousedownChip(id) {
+        const chip = document.getElementById(id);
+        expect(chip).not.toBeNull();
+        chip.dispatchEvent(new window.MouseEvent("mousedown", { bubbles: true }));
+      }
+
+      /** The chips live in the dropdown panel, built on open. */
+      function openWidgetWithChips() {
         const $widget = harness.openCompanyWidget($, ctx.helper);
+        ctx.helper.syncManualEntryButton();
+        return $widget;
+      }
+
+      /** @returns {Object} jQuery-wrapped query input inside the dropdown */
+      function dropdownQueryField() {
+        return $("#select2-billing_company_display-results")
+          .closest(".select2-dropdown")
+          .find(".select2-search--dropdown")
+          .first()
+          .find(".select2-search__field");
+      }
+
+      test("closes the popup, and the existing poll then settles spinner, dropdown and mode", () => {
+        const $widget = openWidgetWithChips();
         soleTrader.setMode("sole_trader");
         const win = fakePopup();
         window.open = jest.fn(() => win);
@@ -1561,10 +1601,12 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         expect($(".twoinc-sole-trader-spinner").length).toBe(1);
 
         refocusCheckout();
+        settleRefocus();
 
-        // Closing the window is the WHOLE action: the popup-close poll stays
-        // the single owner of the spinner, the mode revert and the dropdown
-        // close, so nothing here has to agree with it about `flightDepth`.
+        // Closing the window is the WHOLE action on this path: the popup-close
+        // poll stays the single owner of the spinner, the mode revert and the
+        // dropdown close, so nothing here has to agree with it about
+        // `flightDepth`.
         expect(win.close).toHaveBeenCalledTimes(1);
         expect($(".twoinc-sole-trader-spinner").length).toBe(1);
 
@@ -1584,16 +1626,19 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
        * opening the dropdown would close the buyer's popup.
        */
       test("focus moving between fields on the page is not a refocus", () => {
-        harness.openCompanyWidget($, ctx.helper);
+        openWidgetWithChips();
         soleTrader.setMode("sole_trader");
         const win = fakePopup();
         window.open = jest.fn(() => win);
+        jest.useFakeTimers();
         soleTrader.launchSignup();
 
         $("#billing_email").trigger("focus");
         ctx.helper.openCompanySearchDropdown();
+        settleRefocus();
 
         expect(win.close).not.toHaveBeenCalled();
+        jest.useRealTimers();
       });
 
       /**
@@ -1603,76 +1648,115 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
        * would take the retry with it.
        */
       test("a decided popup that is still open is left alone", () => {
-        harness.openCompanyWidget($, ctx.helper);
+        openWidgetWithChips();
         soleTrader.setMode("sole_trader");
         const win = fakePopup();
         window.open = jest.fn(() => win);
+        jest.useFakeTimers();
         soleTrader.launchSignup();
         soleTrader.activePopupWatchers[0].decided = true;
 
         refocusCheckout();
+        settleRefocus();
 
         expect(win.close).not.toHaveBeenCalled();
+        jest.useRealTimers();
       });
 
       test("a refocus with nothing outstanding does nothing at all", () => {
-        harness.openCompanyWidget($, ctx.helper);
+        openWidgetWithChips();
         soleTrader.setMode("sole_trader");
+        jest.useFakeTimers();
 
         refocusCheckout();
+        settleRefocus();
 
         expect(soleTrader.mode).toBe("sole_trader");
         expect(opened).toHaveLength(0);
-      });
-
-      /**
-       * The "don't fight a chip click" case, and the reason it needs no guard
-       * of its own. The window `focus` lands BEFORE the mousedown of the click
-       * that caused it, so no flag a chip handler sets could be read in time —
-       * but the relaunch takes its own flight, so `flightDepth` is never zero
-       * when the abandoned popup's poll settles, and the dropdown is not closed
-       * under the buyer. The close is also what MAKES the relaunch possible:
-       * `launchSignup` refuses while a live undecided popup exists.
-       */
-      test("a Sole trader chip click landing on the refocus relaunches, and keeps its dropdown", () => {
-        const $widget = harness.openCompanyWidget($, ctx.helper);
-        soleTrader.setMode("sole_trader");
-        const first = fakePopup();
-        window.open = jest.fn(() => first);
-        jest.useFakeTimers();
-        soleTrader.launchSignup();
-
-        refocusCheckout();
-        expect(first.close).toHaveBeenCalledTimes(1);
-
-        const second = fakePopup();
-        window.open = jest.fn(() => second);
-        soleTrader.onModeChipClick("sole_trader");
-        expect(window.open).toHaveBeenCalledTimes(1);
-
-        // The first popup's poll now notices its window is gone. Its settle
-        // must not take the second flow's dropdown with it.
-        jest.advanceTimersByTime(300);
-
-        expect($widget.data("select2").isOpen()).toBe(true);
-        expect($(".twoinc-sole-trader-spinner").length).toBe(1);
-        expect(soleTrader.mode).toBe("sole_trader");
         jest.useRealTimers();
       });
 
       /**
-       * The one case where the immediate relaunch is still refused, pinned so
-       * it cannot change unnoticed: a RE-signup's increment is spent by its own
-       * popup-close poll, so a chip click in the same breath as the refocus
-       * runs into the round-6 "one outstanding re-signup at a time" guard and
-       * has to wait a poll cycle. Closing the window is what lets that cycle
-       * happen at all, so the wait is bounded rather than indefinite.
+       * Case (c), the control: the buyer came back by clicking somewhere on the
+       * page that is not a mode chip. Nothing about the chips is involved and
+       * the popup goes, exactly as it did before the chips were considered at
+       * all.
        */
-      test("a re-signup relaunch waits for the abandoned popup's own poll cycle", () => {
+      test("clicking the page outside the chips closes the popup with no chip side effects", () => {
+        const $widget = openWidgetWithChips();
+        soleTrader.setMode("sole_trader");
+        const win = fakePopup();
+        window.open = jest.fn(() => win);
+        jest.useFakeTimers();
+        soleTrader.launchSignup();
+
+        refocusCheckout();
+        document
+          .getElementById("billing_email")
+          .dispatchEvent(new window.MouseEvent("mousedown", { bubbles: true }));
+        settleRefocus();
+
+        expect(win.close).toHaveBeenCalledTimes(1);
+        // Nothing has run the chip path's synchronous drain, so the popup's own
+        // poll still owns every settle and none of them has happened yet.
+        expect(soleTrader.mode).toBe("sole_trader");
+        expect($(".twoinc-sole-trader-spinner").length).toBe(1);
+
+        jest.advanceTimersByTime(300);
+
+        expect(soleTrader.mode).toBe("business");
+        expect($widget.data("select2").isOpen()).toBe(false);
+        expect($(".twoinc-sole-trader-spinner").length).toBe(0);
+        jest.useRealTimers();
+      });
+
+      /**
+       * Item 6.1, Doug's spec revision: the Sole trader chip is the ONE
+       * exception to the abandon. Re-clicking the chip that launched the popup
+       * asks for that popup back, so it is raised rather than closed and the
+       * flow it is halfway through survives.
+       */
+      test("the Sole trader chip keeps the popup and raises it instead", () => {
+        const $widget = openWidgetWithChips();
+        soleTrader.setMode("sole_trader");
+        const win = fakePopup();
+        win.focus = jest.fn();
+        window.open = jest.fn(() => win);
+        jest.useFakeTimers();
+        soleTrader.launchSignup();
+
+        refocusCheckout();
+        mousedownChip(ctx.helper.soleTraderChipId);
+        $("#" + ctx.helper.soleTraderChipId).trigger("click");
+        settleRefocus();
+        jest.advanceTimersByTime(300);
+
+        expect(win.close).not.toHaveBeenCalled();
+        expect(win.focus).toHaveBeenCalled();
+        // No second window, and the wait the buyer is still in is intact.
+        expect(window.open).toHaveBeenCalledTimes(1);
+        expect(soleTrader.mode).toBe("sole_trader");
+        expect($widget.data("select2").isOpen()).toBe(true);
+        expect($(".twoinc-sole-trader-spinner").length).toBe(1);
+        jest.useRealTimers();
+      });
+
+      /**
+       * The same exception from an already-adopted state, where the chip's
+       * other meaning is a deliberate re-signup ("select a different sole
+       * trader"). An outstanding popup still wins: launching a second one over
+       * it is what TWO-40 §14 spent four rounds removing.
+       */
+      test("the Sole trader chip raises an outstanding re-signup rather than launching another", () => {
         harness.openCompanyWidget($, ctx.helper);
         soleTrader.setMode("sole_trader");
         soleTrader.setCompany("TWO:ST1", "A Sole Trader");
+        // Chips built AFTER the adoption: it closes the dropdown panel they
+        // live in, and this flow's entry point is the buyer reopening it.
+        $("#billing_company_display").select2("open");
+        ctx.helper.syncManualEntryButton();
         const first = fakePopup();
+        first.focus = jest.fn();
         window.open = jest.fn(() => first);
         jest.useFakeTimers();
         soleTrader.launchSignup({ autoselect: false });
@@ -1680,13 +1764,123 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         refocusCheckout();
         const relaunch = jest.fn(() => fakePopup());
         window.open = relaunch;
-        soleTrader.onModeChipClick("sole_trader");
+        mousedownChip(ctx.helper.soleTraderChipId);
+        $("#" + ctx.helper.soleTraderChipId).trigger("click");
+        settleRefocus();
+
         expect(relaunch).not.toHaveBeenCalled();
+        expect(first.close).not.toHaveBeenCalled();
+        expect(first.focus).toHaveBeenCalled();
+        jest.useRealTimers();
+      });
 
+      /**
+       * Item 6.2, the Registered company half: the popup closes AND the chip
+       * does its own ordinary job on top of that. Both effects, because the
+       * abandon runs in the chip's `mousedown` and deliberately leaves the mode
+       * and the dropdown to the chip — reverting to business here would make
+       * the chip's own "already in business mode" no-op swallow the click, and
+       * closing the dropdown would destroy the chip before its `click` fired.
+       */
+      test("the Registered company chip closes the popup AND shows and focuses the query field", () => {
+        const $widget = openWidgetWithChips();
+        soleTrader.setMode("sole_trader");
+        const win = fakePopup();
+        window.open = jest.fn(() => win);
+        jest.useFakeTimers();
+        soleTrader.launchSignup();
+
+        refocusCheckout();
+        mousedownChip(ctx.helper.businessChipId);
+        expect(win.close).toHaveBeenCalledTimes(1);
+        $("#" + ctx.helper.businessChipId).trigger("click");
+        settleRefocus();
         jest.advanceTimersByTime(300);
-        soleTrader.onModeChipClick("sole_trader");
 
-        expect(relaunch).toHaveBeenCalledTimes(1);
+        expect(soleTrader.mode).toBe("business");
+        expect($widget.data("select2").isOpen()).toBe(true);
+        expect(dropdownQueryField().closest(".select2-search--dropdown").attr("hidden")).toBe(
+          undefined
+        );
+        expect(document.activeElement).toBe(dropdownQueryField()[0]);
+        expect($(".twoinc-sole-trader-spinner").length).toBe(0);
+        jest.useRealTimers();
+      });
+
+      /**
+       * Item 6.2, the Enter manually half. Its own ordinary behaviour, whole:
+       * the dropdown goes, the capture mode becomes manual, and focus lands in
+       * the now-editable native company field.
+       */
+      test("the Enter manually chip closes the popup AND switches to manual entry", () => {
+        openWidgetWithChips();
+        soleTrader.setMode("sole_trader");
+        const win = fakePopup();
+        window.open = jest.fn(() => win);
+        jest.useFakeTimers();
+        soleTrader.launchSignup();
+
+        refocusCheckout();
+        mousedownChip(ctx.helper.manualEntryRowId);
+        expect(win.close).toHaveBeenCalledTimes(1);
+        $("#" + ctx.helper.manualEntryRowId).trigger("click");
+        jest.runAllTimers();
+
+        expect(soleTrader.mode).toBe("business");
+        expect(ctx.capture.mode).toBe("manual");
+        expect(ctx.helper.companySearchDropdownIsOpen()).toBe(false);
+        expect($("#billing_company_field").hasClass("hidden")).toBe(false);
+        expect(document.activeElement).toBe($("#billing_company")[0]);
+        jest.useRealTimers();
+      });
+
+      /**
+       * The stale-claim guard. A chip mousedown made while the checkout ALREADY
+       * had focus is not the cause of any refocus, so it must not be read as
+       * one — neither now (the popup is left entirely alone) nor later, by a
+       * genuine alt-tab-back that follows it.
+       */
+      test("a chip mousedown with no refocus pending leaves the popup alone", () => {
+        openWidgetWithChips();
+        soleTrader.setMode("sole_trader");
+        const win = fakePopup();
+        window.open = jest.fn(() => win);
+        jest.useFakeTimers();
+        soleTrader.launchSignup();
+
+        mousedownChip(ctx.helper.businessChipId);
+        expect(win.close).not.toHaveBeenCalled();
+
+        // And the later genuine refocus still abandons, rather than being
+        // cancelled by that earlier, unrelated mousedown.
+        refocusCheckout();
+        settleRefocus();
+
+        expect(win.close).toHaveBeenCalledTimes(1);
+        jest.useRealTimers();
+      });
+
+      /**
+       * A mousedown that never becomes a click — the buyer drags off the chip,
+       * or it is torn out mid-gesture. The Sole trader chip's cancel is the
+       * whole of its own contribution, so the popup simply stays up, which is
+       * the state that branch exists to preserve anyway.
+       */
+      test("a Sole trader chip mousedown that never becomes a click still keeps the popup", () => {
+        openWidgetWithChips();
+        soleTrader.setMode("sole_trader");
+        const win = fakePopup();
+        window.open = jest.fn(() => win);
+        jest.useFakeTimers();
+        soleTrader.launchSignup();
+
+        refocusCheckout();
+        mousedownChip(ctx.helper.soleTraderChipId);
+        settleRefocus();
+        jest.advanceTimersByTime(300);
+
+        expect(win.close).not.toHaveBeenCalled();
+        expect(soleTrader.mode).toBe("sole_trader");
         jest.useRealTimers();
       });
     });
