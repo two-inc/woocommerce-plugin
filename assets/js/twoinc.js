@@ -5025,6 +5025,17 @@ let twoincSoleTrader = {
   prefetchSeq: 0,
 
   /**
+   * The stamp of the most recently STARTED flight. Equal to `prefetchSeq`
+   * while that flight is still the latest word, and behind it once
+   * `abandonSoleTraderFlow()` has invalidated it — which is how a chip click
+   * tells "a flight is running that will decide for me" from "a flight is
+   * running whose answer will be thrown away" (`onModeChipClick`). Deferring
+   * onto the latter resolves the click to NOTHING AT ALL, which TWO-40 §14
+   * names as the failure to design out rather than re-tune.
+   */
+  startedPrefetchSeq: 0,
+
+  /**
    * True once `setCompany()` has actually adopted a company while in
    * sole-trader mode THIS time through (TWO-40 §7 correction, round-1
    * review — Vader). Reset by every `setMode()` call, so it never reads a
@@ -5559,7 +5570,20 @@ let twoincSoleTrader = {
     // applyPrefetch). The search dropdown/spinner is left alone here — see
     // setMode's own comment — so it stays visible for the whole wait.
     twoincSoleTrader.pendingChipDecisionEmail = twoincSoleTrader.enteredEmail();
-    if (twoincSoleTrader.flightDepth === 0) {
+    // A flight `abandonSoleTraderFlow()` has invalidated is not a flight to
+    // wait for: its `applyPrefetch` returns early, so this click would resolve
+    // to nothing at all. Reachable inside one flight's lifetime — the buyer
+    // leaves sole-trader mode (which abandons it) and clicks the chip straight
+    // back. `onEmailChanged`'s same-email dedupe would refuse to replace the
+    // dead flight, so it is dropped for exactly this case, and only here: a
+    // blanket clear would let the next `updated_checkout` re-run the lookup
+    // and re-adopt behind a buyer who had left.
+    const awaitedFlightIsStale =
+      twoincSoleTrader.startedPrefetchSeq !== twoincSoleTrader.prefetchSeq;
+    if (awaitedFlightIsStale) {
+      twoincSoleTrader.lastPrefetchEmail = null;
+    }
+    if (twoincSoleTrader.flightDepth === 0 || awaitedFlightIsStale) {
       twoincSoleTrader.onEmailChanged();
     }
   },
@@ -5744,8 +5768,54 @@ let twoincSoleTrader = {
     // un-neutralises the stale `isBusy()` for `isDeciding()`'s very next
     // read — wrongly refusing the manual-entry switch this function's own
     // caller had already decided on, and leaving the search widget showing
-    // instead (live-reported by Doug, TWO-40 §7 correction).
+    // instead (live-reported by Doug, TWO-40 §7 correction). The popup
+    // WINDOWS and the autofill lookup are moot for the same reason, and go
+    // with it in one operation — see `abandonSoleTraderFlow()`.
+    twoincSoleTrader.abandonSoleTraderFlow();
+  },
+
+  /**
+   * Give up on everything the sole-trader flow still has outstanding, as ONE
+   * operation: the popup windows, the records tracking them, and the autofill
+   * lookup whose only possible outcome is to put the buyer back into
+   * sole-trader mode (Doug 2026-08-20, ported from the two PrestaShop bugs of
+   * this shape — TWO-40 §14).
+   *
+   * Called only from `leaveSoleTraderMode()`, the single point every exit from
+   * sole-trader mode already funnels through, precisely so "close the popup"
+   * and "cancel the lookup" cannot drift into two separate things each exit
+   * site has to remember to do together, in the right order, every time.
+   *
+   * Closing comes BEFORE dropping the records, because the records hold the
+   * only handles there are: a close attempted after them has nothing left to
+   * close, and the window stays on screen with nothing tracking it — which is
+   * how the next chip click opens a SECOND popup over the first. Every tracked
+   * window is closed, not just the undecided ones `closeAbandonedPopups()`
+   * acts on: a decided popup is spared there so a retry inside it can post a
+   * second ACCEPTED, and mode has left `sole_trader` by the time this runs, so
+   * the message listener drops that ACCEPTED anyway — sparing the window would
+   * leave exactly the orphan above.
+   *
+   * The lookup is invalidated by a `prefetchSeq` bump, the same supersession
+   * the newer-flight case already uses (see that counter's own comment), so
+   * `applyPrefetch` needs no second predicate. Without it, a match landing
+   * after the buyer left re-entered sole-trader mode and re-adopted behind
+   * them — overwriting what they had done since and running the credit check
+   * against the identity they had just walked away from.
+   *
+   * @returns {void}
+   */
+  abandonSoleTraderFlow: function () {
+    twoincSoleTrader.activePopupWatchers.forEach(function (watcher) {
+      if (watcher.win.closed || typeof watcher.win.close !== "function") return;
+      watcher.win.close();
+    });
     twoincSoleTrader.stopAllPopupWatchers();
+    twoincSoleTrader.prefetchSeq += 1;
+    // A chip decision deferred onto a flight this has just invalidated can
+    // never be served by it — `onModeChipClick` starts a fresh flight for a
+    // re-click instead, see its own `startedPrefetchSeq` check.
+    twoincSoleTrader.pendingChipDecisionEmail = null;
   },
 
   /**
@@ -5932,6 +6002,7 @@ let twoincSoleTrader = {
     // comment — so `applyPrefetch` can tell whether this is still the
     // latest flight by the time it settles.
     const seq = ++twoincSoleTrader.prefetchSeq;
+    twoincSoleTrader.startedPrefetchSeq = seq;
     twoincSoleTrader.beginFlight();
     twoincSoleTrader.fetchTokens(function (ok) {
       if (!ok) {

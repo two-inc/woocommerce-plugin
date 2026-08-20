@@ -3135,6 +3135,134 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     });
   });
 
+  /**
+   * TWO-40 §14 — leaving sole-trader mode is ONE operation, not "close the
+   * popup" and "cancel the lookup" as two things every exit site has to
+   * remember to pair (ported from the two PrestaShop bugs of this shape).
+   *
+   * Both scenarios below need `isDeciding()` to be false while something is
+   * still outstanding, which is exactly the adopted state: the outcome is
+   * settled, so a buyer action to LEAVE is deliberately allowed through (see
+   * that predicate's own comment) — and `#billing_email` is never locked, so
+   * an adopted buyer can start a fresh lookup at any time.
+   */
+  describe("TWO-40 §14 — leaving sole-trader mode abandons the whole flow at once", () => {
+    beforeEach(() => {
+      // The click-to-reopen binding is delegated from `Twoinc#initialize()`,
+      // the real checkout-page wiring — same as the bug-3 block above.
+      $("form[name='checkout']").after('<div id="order_review"></div>');
+      ctx.Twoinc.getInstance().initialize(false);
+    });
+
+    /** @returns {Array<Function>} the buyer-lookup callbacks left unresolved */
+    function deferLookups() {
+      const pending = [];
+      jest.spyOn(soleTrader, "fetchTokens").mockImplementation((cb) => cb(true));
+      jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => {
+        pending.push(cb);
+      });
+      return pending;
+    }
+
+    test("a lookup still in flight cannot re-adopt behind a buyer who has left", () => {
+      // Given: adopted, then the buyer edits their email — a fresh lookup.
+      soleTrader.setMode("sole_trader");
+      soleTrader.setCompany("TWO:ST1", "A Sole Trader");
+      $("#billing_email").val("returning@example.test");
+      const pending = deferLookups();
+      soleTrader.onEmailChanged();
+      expect(soleTrader.flightDepth).toBe(1);
+
+      // When: the buyer clicks a captured field to get back to company search,
+      // and the lookup lands afterwards with a match.
+      $("#billing_company").trigger("click");
+      expect(soleTrader.mode).toBe("business");
+      pending[0]({
+        organization_number: "TWO:ST9",
+        company_name: "Cookie Co",
+        email: "returning@example.test"
+      });
+
+      // Then: it is ignored. Before this fix it re-entered sole-trader mode,
+      // re-locked the fields the buyer had just been given back and ran the
+      // credit check on the identity they had walked away from.
+      expect(soleTrader.mode).toBe("business");
+      expect($("#company_id").val()).toBe("");
+      expect($("#billing_company").prop("readonly")).toBe(false);
+    });
+
+    test("a popup still on screen is CLOSED, not merely dropped from tracking", () => {
+      const popup = {
+        closed: false,
+        close: jest.fn(() => {
+          popup.closed = true;
+        }),
+        focus: jest.fn()
+      };
+      window.open = jest.fn(() => popup);
+
+      // Given: a first-time signup popup, still undecided, with an autofill
+      // match adopting underneath it.
+      soleTrader.setMode("sole_trader");
+      soleTrader.launchSignup();
+      expect(soleTrader.activePopupWatchers).toHaveLength(1);
+      $("#billing_email").val("returning@example.test");
+      jest.spyOn(soleTrader, "fetchTokens").mockImplementation((cb) => cb(true));
+      jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) =>
+        cb({
+          organization_number: "TWO:ST1",
+          company_name: "A Sole Trader",
+          email: "returning@example.test"
+        })
+      );
+      soleTrader.onEmailChanged();
+      expect(soleTrader.soleTraderAdopted).toBe(true);
+      expect(soleTrader.isDeciding()).toBe(false);
+
+      // When: the buyer leaves sole-trader mode.
+      $("#billing_company").trigger("click");
+
+      // Then: the window went with the record. Dropping the record alone left
+      // a live popup on screen with nothing holding it, and the next Sole
+      // trader click opened a SECOND one over it.
+      expect(popup.close).toHaveBeenCalled();
+      expect(soleTrader.activePopupWatchers).toHaveLength(0);
+    });
+
+    test("a chip click straight back does not wait on the lookup that leaving invalidated", () => {
+      soleTrader.setMode("sole_trader");
+      soleTrader.setCompany("TWO:ST1", "A Sole Trader");
+      $("#billing_email").val("returning@example.test");
+      const pending = deferLookups();
+      soleTrader.onEmailChanged();
+      $("#billing_company").trigger("click");
+
+      // When: the buyer clicks Sole trader again while the invalidated lookup
+      // is still in the air.
+      soleTrader.onModeChipClick("sole_trader");
+
+      // Then: the click got a lookup of its own rather than deferring onto one
+      // whose answer will be thrown away — which resolved to nothing at all.
+      expect(soleTrader.startedPrefetchSeq).toBe(soleTrader.prefetchSeq);
+      expect(pending).toHaveLength(2);
+      pending[1]({
+        organization_number: "TWO:ST9",
+        company_name: "Cookie Co",
+        email: "returning@example.test"
+      });
+      expect(soleTrader.mode).toBe("sole_trader");
+      expect($("#company_id").val()).toBe("TWO:ST9");
+
+      // And the invalidated one, landing last, still writes nothing.
+      pending[0]({
+        organization_number: "TWO:ST7",
+        company_name: "Stale Co",
+        email: "returning@example.test"
+      });
+      expect($("#company_id").val()).toBe("TWO:ST9");
+    });
+  });
+
   describe("TWO-40 — delegated-auth token refresh", () => {
     let ajax;
 
