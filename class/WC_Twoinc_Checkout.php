@@ -189,6 +189,51 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             // priority needs its own ceiling).
             $company_name_priority = self::clamp_company_priority($fields['billing']['billing_company']['priority'] ?? 30);
 
+            // Always registered too, for the same reason the search control
+            // below is (Doug, 2026-08-19). WooCommerce core DELETES its own
+            // company field outright — `unset($fields['company'])` in
+            // WC_Countries::get_default_address_fields() — when
+            // `woocommerce_checkout_company_field` reads 'hidden', which is
+            // also what that option DEFAULTS to on any store whose default
+            // checkout is the block checkout. So `#billing_company_field` was
+            // absent from the rendered DOM entirely on such a store
+            // (live-confirmed: `document.querySelector('#billing_company_field')`
+            // was null), and this plugin's own company capture cannot work
+            // without it: it is one of the two company-NAME surfaces
+            // `toggleBusinessFields()` chooses between (manual entry, and any
+            // billing country with no registry to search), it is the field
+            // WooCommerce actually POSTs the captured name in, and it is where
+            // the "search for company" affordance is appended. Registering it
+            // here puts the field beyond the reach of that store-level toggle,
+            // exactly as `billing_company_display`/`company_id` already are.
+            //
+            // Filled in only when absent — never overwritten. A store that
+            // does render the field, or a brand overlay that adjusts it, owns
+            // its own definition (label, required-ness, priority); this is a
+            // floor, not an override. Registered BEFORE the two fields below
+            // so that it stays first in insertion order, which is what decides
+            // the rendered order among the three while they share a priority
+            // (PHP's sort is stable, and `wc_checkout_fields_uasort_comparison`
+            // compares priority alone).
+            if (!isset($fields['billing']['billing_company'])) {
+                $fields['billing']['billing_company'] = [
+                    // Core's own shape, minus 'required': see
+                    // WC_Countries::get_default_address_fields(). Optional
+                    // here because required-ness is decided client-side, per
+                    // capture mode and per payment method
+                    // (toggleBusinessFields' `requiredTargets`) — a
+                    // server-side `required` would make every non-Two checkout
+                    // unsubmittable without a company name.
+                    'label' => __('Company name', 'twoinc-payment-gateway'),
+                    'autocomplete' => 'organization',
+                    // form-row-wide for the same clearing reason as
+                    // billing_company_display below (TWO-25160).
+                    'class' => array('form-row-wide'),
+                    'required' => false,
+                    'priority' => $company_name_priority
+                ];
+            }
+
             // Always registered — TWO-25326 §7.1 correction 2026-08-04. This
             // is the ONE company-search control; `get_enable_company_search()`
             // only ever decides WHERE it renders (address area vs payment
@@ -423,7 +468,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     // from the number required.
                     /* translators: %d: minimum number of characters the buyer must type before the company search runs. Left unresolved here and interpolated in JS from the threshold the widget enforces, so the two cannot disagree. */
                     'company_search_too_short' => __('Please enter %d or more characters', 'twoinc-payment-gateway'),
-                    // The "Enter Manually" mode chip inside the company-search
+                    // The "Enter manually" mode chip inside the company-search
                     // dropdown, and the link back out of manual entry
                     // (TWO-25288). Both used to be markup in the billing-form
                     // view, which is rendered on the checkout page only — the
@@ -437,7 +482,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     // anywhere on the checkout — it is fully absorbed into
                     // this chip's own label, alongside the registered-company
                     // and sole-trader chips it now renders next to.
-                    'enter_manually' => __('Enter Manually', 'twoinc-payment-gateway'),
+                    'enter_manually' => __('Enter manually', 'twoinc-payment-gateway'),
                     'search_company' => __('Search for company', 'twoinc-payment-gateway'),
                 ],
                 'twoinc_checkout_host' => $this->wc_twoinc->get_twoinc_checkout_host(),

@@ -348,66 +348,62 @@ describe("TWO:-prefixed organisation numbers", () => {
     });
   });
 
-  describe("the visible #company_id field", () => {
+  describe("the minted number never reaches the buyer", () => {
     /**
-     * The one configuration that shows `#company_id` to the buyer: company
-     * search off, so the plain name+id fallback is what captures the company.
+     * The configuration that used to be §12's problem case: a billing country
+     * with no supported registry, so there is nothing to search and the plain
+     * native name field is what captures the company. That state used to also
+     * show `#company_id` as an editable box, which is how a `TWO:…` value ended
+     * up on screen at all.
+     *
+     * As of 2026-08-19 (Doug, #486) `#company_id_field` is never visible in any
+     * mode or country — the number is a read-only label instead — so §12's
+     * guarantee no longer rests on hiding a field. What these tests pin now is
+     * the other half, which is the half that must not regress: the value stays
+     * on the submitted input, and no surface renders it.
+     *
+     * This fixture used to be driven by `enable_company_search: "no"`. That was
+     * never a real state: the admin checkbox only relocates the search control
+     * (TWO-25326 §7.1), so PHP always sends `'yes'`, and the runtime mutation
+     * that made the fixture "work" is gone.
      */
-    function loadWithSearchOff() {
+    function loadWithNoRegistry() {
       ctx = harness.loadTwoinc({
         gateway_id: GATEWAY_ID,
-        supported_buyer_countries: ["GB"],
-        enable_company_search: "no",
+        supported_buyer_countries: ["NO"],
         enable_address_lookup: "no",
         text: {}
       });
       $ = ctx.$;
       util = ctx.util;
       harness.buildCheckoutForm();
-      // See the note on selectTwo() above: without a checked radio the field
-      // is hidden because Two is not the selected method, and the minted-value
-      // assertion below would hold no matter what the filter did.
+      // Two selected: the label's own visibility no longer depends on it
+      // (#486), but the intent tile's rendering still does, and leaving the
+      // radio unchecked would let a suppression assertion pass for the wrong
+      // reason.
       $("form[name='checkout']").append(
         '<input type="radio" name="payment_method" value="' + GATEWAY_ID + '" checked />'
       );
     }
 
-    test("is shown when the buyer has a registry number to type", () => {
-      loadWithSearchOff();
-      $("#company_id").val("11111111");
+    // The whole reason §12 existed: on a country with no registry, an enrolled
+    // sole trader's `TWO:…` used to sit in a visible text box. It cannot any
+    // more, whatever it holds — the input is hidden in every state — so the
+    // guarantee to pin is that hiding it did not cost the value.
+    test.each([
+      ["11111111", "a registry number"],
+      ["", "nothing captured yet"],
+      [SYNTHETIC, "a minted identifier"]
+    ])("#company_id holding %s (%s) is hidden but still posted", (value) => {
+      loadWithNoRegistry();
+      $("#company_id").val(value);
 
       ctx.dom.toggleBusinessFields();
 
-      expect($("#company_id_field").hasClass("hidden")).toBe(false);
-    });
-
-    test("is shown when nothing has been captured yet", () => {
-      loadWithSearchOff();
-      $("#company_id").val("");
-
-      ctx.dom.toggleBusinessFields();
-
-      expect($("#company_id_field").hasClass("hidden")).toBe(false);
-    });
-
-    test("is hidden when it holds a minted identifier", () => {
-      loadWithSearchOff();
-      $("#company_id").val(SYNTHETIC);
-
-      ctx.dom.toggleBusinessFields();
-
-      // An enrolled sole trader in a search-off shop is how `TWO:…` ends up
-      // in a visible text box. Hiding the field is the fix rather than
-      // blanking it: the value is what WooCommerce posts.
       expect($("#company_id_field").hasClass("hidden")).toBe(true);
-    });
-
-    test("carries no required cue while hidden", () => {
-      loadWithSearchOff();
-      $("#company_id").val(SYNTHETIC);
-
-      ctx.dom.toggleBusinessFields();
-
+      expect($("#company_id").val()).toBe(value);
+      expect($("#company_id").attr("name")).toBe("company_id");
+      expect($("#company_id").prop("disabled")).toBe(false);
       // A required cue on a field nobody can see is how a checkout becomes
       // unsubmittable with no visible reason why. Asserted against what
       // toggleRequiredCues actually does — set the `required` attribute and
@@ -416,17 +412,6 @@ describe("TWO:-prefixed organisation numbers", () => {
       // codebase sets, so it passed no matter what the production code did.
       expect($("#company_id").attr("required")).toBeFalsy();
       expect($("#company_id_field").find("label .twoinc-required").length).toBe(0);
-    });
-
-    test("keeps the required cue when a registry number is expected", () => {
-      // The counterweight to the test above: proves the cue is genuinely
-      // driven by the filter, not simply absent in this fixture.
-      loadWithSearchOff();
-      $("#company_id").val("11111111");
-
-      ctx.dom.toggleBusinessFields();
-
-      expect($("#company_id").attr("required")).toBeTruthy();
     });
 
     describe("driven through the real sole-trader flow", () => {
@@ -438,7 +423,7 @@ describe("TWO:-prefixed organisation numbers", () => {
       // the real flow does not deliver. So drive the actual capture entry
       // point and assert the end state.
       test("enrolling a sole trader leaves no minted number on screen", () => {
-        loadWithSearchOff();
+        loadWithNoRegistry();
 
         ctx.soleTrader.setCompany(SYNTHETIC, "Example Ltd");
 
@@ -449,16 +434,20 @@ describe("TWO:-prefixed organisation numbers", () => {
         expect(ctx.dom.getCompanyData().organization_number).toBe(SYNTHETIC);
       });
 
-      test("capturing a registry company still shows the field", () => {
-        loadWithSearchOff();
+      test("capturing a registry company still surfaces its number, on the label", () => {
+        // The counterweight: proves the suppression above is genuinely driven
+        // by the filter rather than the label simply never rendering here.
+        loadWithNoRegistry();
 
         ctx.soleTrader.setCompany("11111111", "Example Ltd");
 
-        expect($("#company_id_field").hasClass("hidden")).toBe(false);
+        const $summary = $("#" + ctx.helper.companySummaryId);
+        expect($summary.find(".twoinc-company-summary-id").text()).toBe("11111111");
+        expect($summary.hasClass("hidden")).toBe(false);
       });
 
       test("the summary label shows no minted number after enrollment", () => {
-        loadWithSearchOff();
+        loadWithNoRegistry();
 
         ctx.soleTrader.setCompany(SYNTHETIC, "Example Ltd");
 
@@ -475,11 +464,12 @@ describe("TWO:-prefixed organisation numbers", () => {
       // user meta holds a minted identifier, so this is the every-page-load
       // case rather than an edge case.
       test("user-meta restore leaves no minted number on screen", () => {
-        loadWithSearchOff();
+        loadWithNoRegistry();
         ctx.dom.toggleBusinessFields();
         // The state initialize() is in when it reaches the restore: fields
-        // already toggled, input still empty.
-        expect($("#company_id_field").hasClass("hidden")).toBe(false);
+        // already toggled, input still empty, so nothing on the label yet.
+        const $summary = $("#" + ctx.helper.companySummaryId);
+        expect($summary.hasClass("hidden")).toBe(true);
 
         ctx.twoinc.billing_company = "Example Ltd";
         ctx.twoinc.company_id = SYNTHETIC;
@@ -487,17 +477,23 @@ describe("TWO:-prefixed organisation numbers", () => {
 
         expect($("#company_id").val()).toBe(SYNTHETIC);
         expect($("#company_id_field").hasClass("hidden")).toBe(true);
+        expect($summary.find(".twoinc-company-summary-id").text()).toBe("");
+        expect($summary.hasClass("hidden")).toBe(true);
       });
 
-      test("user-meta restore of a registry number still shows the field", () => {
-        loadWithSearchOff();
+      test("user-meta restore of a registry number reaches the label", () => {
+        loadWithNoRegistry();
         ctx.dom.toggleBusinessFields();
 
         ctx.twoinc.billing_company = "Example Ltd";
         ctx.twoinc.company_id = "11111111";
         ctx.dom.loadUserMetaInputs();
 
-        expect($("#company_id_field").hasClass("hidden")).toBe(false);
+        const $summary = $("#" + ctx.helper.companySummaryId);
+        expect($summary.find(".twoinc-company-summary-id").text()).toBe("11111111");
+        expect($summary.hasClass("hidden")).toBe(false);
+        // Still never as a field, even now that it holds a real number.
+        expect($("#company_id_field").hasClass("hidden")).toBe(true);
       });
 
       // No equivalent for loadStorageInputs(): that replay is deliberately

@@ -440,10 +440,39 @@ let twoincAddressMirror = {
  *     still ours to overwrite", which is what the delivery-address mirror
  *     needs and what the tag cannot tell it.
  *
+ *  4. The CAPTURE MODE — which of the three capture UIs the buyer is currently
+ *     using. See the property's own comment.
+ *
  * The name and number fields are the INVOICE-role ones — they are what
  * WooCommerce posts and what the order intent is authorised against.
  */
 let twoincCompanyCapture = {
+  /**
+   * Which of the three company-capture UIs is the buyer's ACTIVE input surface
+   * (#486, Doug): `'search'` (the selectWoo registry picker, the default),
+   * `'manual'` (the plain native `#billing_company`, reached only through
+   * `enterManualCompanyEntry`) or `'sole_trader'` (the adopted/enrolled sole
+   * trader, whose name the picker renders as its own selection — TWO-40 §7
+   * direction (a)).
+   *
+   * This replaces the runtime mutation of `window.twoinc.enable_company_search`
+   * that used to stand in for it. That was an overload of the merchant's admin
+   * setting onto a buyer-driven state, and it cost two live bugs: the search
+   * widget vanishing on a payment-method switch, and `getCompanyName()` reading
+   * the wrong field for an adopted sole trader (starving `isReadyApprovalCheck`
+   * so no order intent ever fired). `enable_company_search` is now what its name
+   * says — merchant configuration, write-once, never touched at runtime; its
+   * real value reaches JS as `window.twoinc.company_search_location`, which
+   * decides WHERE the one search control renders, never whether it is active.
+   *
+   * Distinct from `twoincSoleTrader.mode` (`'business' | 'sole_trader'`), which
+   * tracks the CHIP the buyer picked. The two axes cross: a buyer can be
+   * `twoincSoleTrader.mode === "business"` while this reads `'manual'`.
+   *
+   * @type {'search'|'manual'|'sole_trader'}
+   */
+  mode: "search",
+
   /** Attribute holding the name/number pairing tag. */
   PAIRING_ATTR: "data-two-company-pairing",
 
@@ -678,8 +707,8 @@ class TwoCompanySearch {
   /**
    * DOM id of the mode-chips group (TWO-40 §0) — the `.two-company-mode-chips`
    * equivalent, one level in from the dropdown, direct sibling of the
-   * results list. Holds the "Registered Company" chip, the "Sole Trader"
-   * chip (only while available), and the "Enter Manually" chip
+   * results list. Holds the "Registered company" chip, the "Sole trader"
+   * chip (only while available), and the "Enter manually" chip
    * (`manualEntryRowId`), in that order.
    */
   modeChipsWrapperId = "company_mode_chips";
@@ -690,10 +719,10 @@ class TwoCompanySearch {
   /** Shared class on every button inside the mode-chips group. */
   modeChipClass = "twoinc-mode-chip";
 
-  /** DOM id of the "Registered Company" mode chip. */
+  /** DOM id of the "Registered company" mode chip. */
   businessChipId = "company_mode_chip_business";
 
-  /** DOM id of the "Sole Trader" mode chip. */
+  /** DOM id of the "Sole trader" mode chip. */
   soleTraderChipId = "company_mode_chip_sole_trader";
 
   /**
@@ -798,7 +827,7 @@ class TwoCompanySearch {
   }
 
   /**
-   * Label of the "Enter Manually" mode chip (TWO-40 §0). Read lazily for the
+   * Label of the "Enter manually" mode chip (TWO-40 §0). Read lazily for the
    * same reason as the hints above.
    *
    * Was "My company is not on the list" (TWO-25288). That copy is gone
@@ -807,7 +836,7 @@ class TwoCompanySearch {
    */
   enterManuallyText() {
     return (
-      (window.twoinc && window.twoinc.text && window.twoinc.text.enter_manually) || "Enter Manually"
+      (window.twoinc && window.twoinc.text && window.twoinc.text.enter_manually) || "Enter manually"
     );
   }
 
@@ -908,7 +937,7 @@ class TwoCompanySearch {
   }
 
   /**
-   * "Registered Company" mode chip (TWO-40 §0). A no-op while already in
+   * "Registered company" mode chip (TWO-40 §0). A no-op while already in
    * business mode, or while `twoincSoleTrader.isDeciding()` — see the click
    * handler's own comment (TWO-40 §7 correction: the dropdown/widget this
    * chip lives in now deliberately survives a sole-trader autofill flight
@@ -920,7 +949,7 @@ class TwoCompanySearch {
   buildBusinessChip() {
     const helper = twoincSelectWooHelper;
     const cfg = twoincSoleTrader.config();
-    const label = (cfg.text && cfg.text.registered_business) || "Registered Company";
+    const label = (cfg.text && cfg.text.registered_business) || "Registered company";
 
     return jQuery("<button></button>")
       .attr({ id: helper.businessChipId, type: "button", "data-mode": "business" })
@@ -944,7 +973,7 @@ class TwoCompanySearch {
   }
 
   /**
-   * "Sole Trader" mode chip (TWO-40 §0). Only ever added to the group while
+   * "Sole trader" mode chip (TWO-40 §0). Only ever added to the group while
    * `twoincSoleTrader.isAvailable()` — see `syncSoleTraderChip`.
    *
    * @returns {Object} jQuery-wrapped <button>
@@ -952,7 +981,7 @@ class TwoCompanySearch {
   buildSoleTraderChip() {
     const helper = twoincSelectWooHelper;
     const cfg = twoincSoleTrader.config();
-    const label = (cfg.text && cfg.text.sole_trader) || "Sole Trader";
+    const label = (cfg.text && cfg.text.sole_trader) || "Sole trader";
 
     return jQuery("<button></button>")
       .attr({ id: helper.soleTraderChipId, type: "button", "data-mode": "sole_trader" })
@@ -1021,8 +1050,8 @@ class TwoCompanySearch {
    *
    * Holds all three mode chips as ONE group, one wrapper level in from the
    * dropdown (TWO-40 §0 — the same DOM-placement defect ported wrong twice
-   * before this): "Registered Company", "Sole Trader" (while available) and
-   * "Enter Manually", in that order, so the manual-entry chip — and its own
+   * before this): "Registered company", "Sole trader" (while available) and
+   * "Enter manually", in that order, so the manual-entry chip — and its own
    * Tab shortcut, keyed on `manualEntryRowId` — stays the group's last
    * child and the last tabbable element in the document, unchanged from
    * before this group existed.
@@ -1753,6 +1782,54 @@ class TwoCompanySearch {
   }
 
   /**
+   * Hide the dropdown's own free-text query row while an adopted sole trader
+   * owns the captured company (item 2.1, TWO-40).
+   *
+   * HIDDEN, not merely `readonly` (Doug live-test finding: an earlier round
+   * made it readonly and left it painted, which reads as a search box that
+   * has stopped working). `display: none` plus the `hidden` attribute rather
+   * than `visibility`/`opacity`, so the input leaves the tab order with it —
+   * a keyboard-only buyer must not land on a field they cannot see. The
+   * readonly stays on top of the hide: selectWoo's own `container.on('open')`
+   * focuses this input unconditionally, and a hidden-but-typable field is
+   * exactly the state the readonly was added for.
+   *
+   * The whole SEARCH ROW goes, not just the input: the spinner is an
+   * absolutely-positioned sibling inside that row (see `.twoinc-search-spinner`
+   * in twoinc.css), so hiding the input alone collapses the row and strands
+   * it. Which is also why the hide stands down while `isBusy()` — that
+   * spinner, in this field, IS the in-flight state a re-signup shows (see
+   * `beginFlight`), so both flight edges re-sync.
+   *
+   * Both directions, every open, deliberately: selectWoo renders this row
+   * ONCE per widget instance and re-attaches the same node on every open (its
+   * `dropdown/search` adapter's `render`), so a suppression applied on one
+   * open outlives that open. Leaving sole-trader mode by picking a different
+   * company straight off the live widget is the path that proves it — that
+   * one deliberately does not destroy the widget, so nothing else would ever
+   * give the row back.
+   *
+   * @returns {void}
+   */
+  syncQueryFieldSuppression() {
+    const $row = twoincSelectWooHelper.getCompanySearchFieldContainer();
+    if ($row.length === 0) return;
+    const $query = $row.find(".select2-search__field");
+    const suppressed =
+      twoincSoleTrader.mode === "sole_trader" && twoincSoleTrader.soleTraderAdopted;
+
+    $query.prop("readonly", suppressed);
+    if (suppressed && !twoincSoleTrader.isBusy()) {
+      // A term typed before adopting describes a company the buyer then did
+      // not pick; restoring it would sit above results that no longer match.
+      $query.val("");
+      $row.hide().attr("hidden", "hidden");
+    } else {
+      $row.removeAttr("hidden").show();
+    }
+  }
+
+  /**
    * Replace the results list with the "search unavailable" message. Goes
    * through select2's own results:message channel (the results adapter
    * listens on the container for it) so the message is cleared on the next
@@ -2032,7 +2109,7 @@ class TwoCompanySearch {
    * https://github.com/select2/select2/issues/4614
    */
   fixSelectWooPositionCompanyName() {
-    if (window.twoinc.enable_company_search === "yes") {
+    if (twoincCompanyCapture.mode === "search") {
       const billingCompanyDisplay = jQuery("#billing_company_display").data("select2");
 
       if (billingCompanyDisplay) {
@@ -2516,9 +2593,11 @@ class TwoCompanySearch {
     // found in adversarial review round 2, Han, 2026-08-04; widened
     // 2026-08-04 correction round 3 — the field now always exists
     // server-side, so checking mere presence in the wrapper is no longer
-    // enough). Manual entry and sole-trader mode both hide
-    // `#billing_company_display_field` with the `hidden` class rather than
-    // removing it (see toggleBusinessFields) — it still gets moved into the
+    // enough). Manual entry, and any billing country with no registry to
+    // search, hide `#billing_company_display_field` with the `hidden` class
+    // rather than removing it (see toggleBusinessFields; sole-trader mode used
+    // to be a third such case and is not one any more — the adopted company
+    // renders THROUGH this control now) — it still gets moved into the
     // wrapper by the loop above, so `$wrapper.children().length` alone
     // would unhide the slot around a `display: none` field, leaving the
     // buyer a bare, unexplained gap (`.twoinc-company-search-tile-slot`'s
@@ -2535,9 +2614,21 @@ class TwoCompanySearch {
 
   /**
    * Get company name string
+   *
+   * The native `#billing_company` is read ONLY in manual entry (#486, Doug).
+   * Sole-trader mode reads the picker's display span exactly like an ordinary
+   * search pick does, because that is where the adopted name is rendered
+   * (`lockCapturedFields()` seeds the widget with it, TWO-40 §7 direction (a)).
+   * Branching on `enable_company_search`, as this used to, sent the sole-trader
+   * case down the native-field branch — and that field is not what the buyer
+   * sees there, so this returned empty, `getCompanyData()` produced a
+   * `customerCompany` with no `company_name`, and `isReadyApprovalCheck()`
+   * never let an order intent fire at all: an adopted sole trader Two rejects
+   * got the generic unavailability fallback instead of the message naming their
+   * own business.
    */
   getCompanyName() {
-    if (window.twoinc.enable_company_search === "yes") {
+    if (twoincCompanyCapture.mode !== "manual") {
       let companyNameObj = twoincDomHelper.getCheckoutInput(
         "SPAN",
         "select",
@@ -2669,8 +2760,9 @@ class TwoCompanySearch {
    *
    * Anchored after the company-SEARCH field's (`#billing_company_display_field`)
    * enclosing `.twoinc-inp-container` where there is one, NOT inside it —
-   * `#company_id_field`/`#billing_company_field` only as a fallback for a
-   * page with no search field at all. The pay-for-order page wraps every
+   * `#billing_company_field` when the search field is the hidden one of the two
+   * company-name elements (see the anchor code below), and `#company_id_field`
+   * only as a fallback for a page with no name field at all. The pay-for-order page wraps every
    * company input in such a container and hides the container, not just the
    * field (see syncCompanyFieldWrappers) — so a summary placed inside would be
    * invisible on that page in exactly the search mode it matters most for. The
@@ -2726,6 +2818,19 @@ class TwoCompanySearch {
     const isNew = !$node.length;
 
     let $field = jQuery("#billing_company_display_field");
+    // The label belongs immediately below whichever of the two company-NAME
+    // elements is currently the visible one (Doug, 2026-08-19). The search
+    // control wins whenever it is showing — that is what keeps the label
+    // following it into the payment tile, per the paragraph above — and the
+    // native field takes over only when the search control is hidden, which is
+    // exactly the state where anchoring against a `display: none` row would
+    // strand the label away from the field it annotates (and, via the
+    // `+ .twoinc-company-summary` gap cancellation in twoinc.css, pull it up
+    // over whatever sits above).
+    if ($field.hasClass("hidden")) {
+      const $native = jQuery("#billing_company_field");
+      if ($native.length && !$native.hasClass("hidden")) $field = $native;
+    }
     if (!$field.length) $field = jQuery("#company_id_field");
     if (!$field.length) $field = jQuery("#billing_company_field");
     // Dead ternary removed (round 2 review — Vader): `isNew` is exactly
@@ -2804,19 +2909,29 @@ class TwoCompanySearch {
 
     $node.find(".twoinc-company-summary-id").text(number);
 
-    // Keyed on the NUMBER alone now, not on "name or number" (TWO-25326 §5,
-    // §7). This element renders nothing but the number, so a captured company
-    // with no number — which is exactly what manual entry produces, since it
-    // clears #company_id — must leave no empty block behind occupying vertical
-    // space under the field. §5 states it outright: manual-entry mode shows no
-    // company-number field or label at all.
+    // Two conditions, and only these two (Doug, 2026-08-19), now that this
+    // label is the ONLY surface the captured number ever reaches the buyer
+    // through — `#company_id_field` is permanently hidden in every mode (see
+    // `toggleBusinessFields()`):
     //
-    // Shown only for a Two purchase. A buyer paying by another method may well
-    // have a company number sitting in the field, and echoing it back at them
-    // under Two's styling is noise.
-    const visible = Boolean(
-      number && twoincDomHelper.isTwoincVisible() && twoincDomHelper.isTwoincSelected()
-    );
+    //  1. REGISTERED-COMPANY mode. `search` only, never `manual` (which
+    //     captures a name and clears #company_id, so §5's "no company-number
+    //     field or label at all" already followed from `number` being empty)
+    //     and never `sole_trader` — a number Two minted during enrollment is
+    //     not the buyer's own registry identifier and there is nothing useful
+    //     to show them.
+    //  2. A number that is not internally minted. `number` here is already
+    //     `formatCompanyNumber()`'s output, which is `isSyntheticCompanyNumber()`
+    //     applied as a filter — it returns "" for a `TWO:…` value (TWO-25326
+    //     §12) — so this one truthiness check covers both "nothing captured
+    //     yet" and "captured, but must not be displayed".
+    //
+    // Deliberately NOT gated on Two being the selected payment method, unlike
+    // the version this replaces. Doug's spec names two conditions and neither
+    // is the payment method, and the label now has to hold the same
+    // payment-method-agnostic contract the name field above it does: the
+    // number belongs to the company the buyer captured, not to Two's tile.
+    const visible = Boolean(number && twoincCompanyCapture.mode === "search");
     $node.toggleClass("hidden", !visible);
   }
 
@@ -2988,12 +3103,14 @@ class TwoCompanySearch {
     // what the dropdown is doing (round 2 review, Han+Vader, convergent:
     // both independently reproduced this race). Without this guard, this
     // function would still run after setMode already put the buyer into
-    // sole-trader mode — forcing `manual_company_entry_active` back to
-    // true (wrong: sole trader needs `#company_id_field` for its synthetic
-    // id), re-showing the search-again button setMode just hid, and
+    // sole-trader mode — forcing the capture mode back to
+    // `manual` (wrong: that is the one mode whose name comes off the native
+    // field rather than the picker the adopted sole trader is rendered in),
+    // re-showing the search-again button setMode just hid, and
     // wiping `#billing_company`/`#company_id` out from under the synthetic
     // id sole-trader mode may have just written. That reproduces the exact
-    // #30.x.13 symptom (wrong id-field visibility) via a path this PR's
+    // #30.x.13 symptom (a capture mode disagreeing with what the buyer is
+    // actually looking at) via a path this PR's
     // own new flag opened up. Same shape as the existing "remove the
     // button before deferring" reentrancy guard in `activateManualEntry`,
     // one level further out.
@@ -3012,12 +3129,9 @@ class TwoCompanySearch {
     // is choosing something else" and keeps every such guard consistent.
     if (twoincSoleTrader.mode === "sole_trader" || twoincSoleTrader.isDeciding()) return;
 
-    window.twoinc.enable_company_search = "no";
-    // Distinguishes THIS route into "search suppressed" from the other two
-    // (merchant-level company-search-off, and twoincSoleTrader.setMode) —
-    // see the comment on this flag's read in toggleBusinessFields. Reset in
-    // exitManualCompanyEntry.
-    window.twoinc.manual_company_entry_active = true;
+    // Reset in exitManualCompanyEntry, and snapshotted/restored around a
+    // sole-trader detour by twoincSoleTrader.setMode/leaveSoleTraderMode.
+    twoincCompanyCapture.mode = "manual";
 
     jQuery("#billing_company_display").val("");
     // The real company field too, not just the display one. Without this the
@@ -3118,8 +3232,7 @@ class TwoCompanySearch {
    * @returns {void}
    */
   exitManualCompanyEntry() {
-    window.twoinc.enable_company_search = "yes";
-    window.twoinc.manual_company_entry_active = false;
+    twoincCompanyCapture.mode = "search";
 
     Twoinc.getInstance().enableCompanySearch();
 
@@ -3306,10 +3419,34 @@ class TwoCompanySearch {
       // "wait", not "browse". Before that, sole-trader mode always destroyed
       // this widget synchronously, so an ordinary pick landing here while
       // `mode === "sole_trader"` was unreachable; it no longer is (round-1
-      // review — Han), and a pick landing mid-wait wrote #company_id/
-      // #billing_company directly, racing the sole-trader flow's own write
-      // through `setCompany()`.
-      if (twoincSoleTrader.mode === "sole_trader") return;
+      // review — Han).
+      //
+      // A pick landing while still genuinely DECIDING (an autofill flight or
+      // signup popup outstanding, adoption not yet settled) is refused, same
+      // guard every other exit from sole-trader mode already uses
+      // (`isDeciding()`'s own comment) — acting on it here would race the
+      // flow's own eventual resolution exactly the way the Business chip and
+      // `reopenSearch()` are guarded against doing.
+      //
+      // Once adopted, a pick made directly off this same still-live widget
+      // (TWO-40 §7 direction (a): the widget now shows the adopted sole
+      // trader as its own selection, not a destroyed-and-hidden one) IS the
+      // buyer choosing a different company outright — the same "leave sole
+      // trader" decision `reopenSearch()`/the Business chip make explicitly,
+      // just arriving through an ordinary select instead of a click. Mirrors
+      // `setMode("business")`'s transition bookkeeping directly rather than
+      // calling `setMode()` itself: that call also destroys and rebuilds
+      // this exact widget (see its own comment), which would blank the very
+      // pick this handler is about to write right back out.
+      if (twoincSoleTrader.mode === "sole_trader") {
+        if (twoincSoleTrader.isDeciding()) return;
+        twoincSoleTrader.mode = "business";
+        twoincSoleTrader.soleTraderAdopted = false;
+        twoincSoleTrader.soleTraderReconfirmingCount = 0;
+        twoincSoleTrader.updateChips();
+        twoincSoleTrader.syncDifferentSoleTraderLink();
+        twoincSoleTrader.leaveSoleTraderMode();
+      }
 
       const instance = twoincInstance || Twoinc.getInstance();
 
@@ -3354,6 +3491,14 @@ class TwoCompanySearch {
       // timing of the focus fix, which is not what this change is about.
       self.waitToFocus("billing_company_display", null, null);
       self.addSelectWooFocusFixHandler("billing_company_display");
+
+      // Once a sole trader is adopted, this dropdown's own free-text query
+      // is not one of the ways to get a different company — the dedicated
+      // "select a different sole trader" flow (the link, or re-clicking the
+      // chip — item 4.2/4.3, Doug) is the only one. The row is hidden, not
+      // just readonly-locked, and restored on the way back out: see
+      // `syncQueryFieldSuppression`.
+      self.syncQueryFieldSuppression();
     });
 
     return widget;
@@ -3522,6 +3667,69 @@ let twoincDomHelper = {
     const isTwoincSelected =
       twoincDomHelper.isTwoincVisible() && twoincDomHelper.isTwoincSelected();
 
+    // The company NAME is always on screen, as exactly one of two elements —
+    // this search control or WooCommerce's native `#billing_company` (Doug,
+    // 2026-08-19). Never neither: a buyer with nowhere to see or enter the
+    // company name is the regression this replaces (an unsupported country
+    // hid the search control and left a bare "Company ID" box behind, with no
+    // name capture anywhere). Never both in the same place either — the one
+    // exception is `company_search_location === "payment_tile"` below, where
+    // the two are not competing for the same position: the search control has
+    // been relocated into the payment tile, so the native field is what the
+    // address area still needs (Doug 2026-08-04, live-verified).
+    //
+    // The search control is the visible surface for BOTH capture modes that
+    // render a name into it — an ordinary registry pick and an adopted sole
+    // trader (TWO-40 §7 direction (a): `lockCapturedFields()` seeds the widget
+    // with the adopted company as its own selection, the same way PrestaShop's
+    // `adoptSoleTraderBuyer()` never swaps its own search field away). Two
+    // things take it away, both handing the name over to the native field:
+    // manual entry, and a billing country with no registry to search. Manual
+    // entry is reachable ONLY via
+    // `enterManualCompanyEntry` — never as a side effect of Two being
+    // unavailable, and never as a side effect of the merchant's admin setting
+    // (#486, Doug: the two carve-outs this replaces were
+    // `enable_company_search_for_others`, an admin toggle TWO-25326 removed
+    // from the UI while leaving its logic running here keyed off
+    // `isTwoincSelected`, and a runtime overload of `enable_company_search`
+    // itself. Between them a buyer Two rejects — e.g. an email that resolves
+    // to a different business — fell through to the plain manual field the
+    // moment Two stopped being the selected method, silently downgrading a
+    // registered-company or sole-trader buyer into manual-entry territory they
+    // never asked for). WHERE the control renders is
+    // `company_search_location`'s business, below and in
+    // `syncCompanySearchTileLocation()`; never whether it is active.
+    const showCompanySearch =
+      twoincDomHelper.isCountrySupported() && twoincCompanyCapture.mode !== "manual";
+
+    // `#company_id_field` is never in `visibleTargets` any more, in any mode
+    // (Doug, 2026-08-19): the captured number is not a field the buyer fills
+    // in at all. It reaches them as the read-only label
+    // `renderCompanySummary()` renders below the name field, and the input
+    // itself stays in the DOM permanently hidden, still named and still
+    // posted, because its value is what WooCommerce posts and what the order
+    // intent is authorised against. No mode has anything to type into it: the
+    // picker and sole-trader enrollment write it programmatically, and manual
+    // entry has no number to give.
+    if (showCompanySearch) {
+      visibleTargets.push("#billing_company_display_field");
+
+      // WooCommerce's OWN native company field is a completely separate
+      // concern from where OUR search control lives (bug found by Doug
+      // 2026-08-04, live-verified against the checkbox-off/payment_tile
+      // state): unchecking "Enable company search in address entry" moves
+      // the search control into the payment tile, but must never take
+      // WooCommerce's stock field away from the address area — the two
+      // coexist, search in the tile, native field where WC always puts
+      // it. Left untouched (no required cue): WC owns that field's own
+      // required-ness, this plugin only decides whether it is shown.
+      if (window.twoinc.company_search_location === "payment_tile") {
+        visibleTargets.push("#billing_company_field");
+      }
+    } else {
+      visibleTargets.push("#billing_company_field");
+    }
+
     if (isTwoincSelected) {
       visibleTargets.push(
         "#invoice_email_field",
@@ -3530,82 +3738,13 @@ let twoincDomHelper = {
         "#department_field"
       );
       requiredTargets.push("#billing_phone_field");
-      if (twoincDomHelper.isCountrySupported() && window.twoinc.enable_company_search === "yes") {
-        visibleTargets.push("#billing_company_display_field");
-        requiredTargets.push("#billing_company_display_field");
 
-        // WooCommerce's OWN native company field is a completely separate
-        // concern from where OUR search control lives (bug found by Doug
-        // 2026-08-04, live-verified against the checkbox-off/payment_tile
-        // state): unchecking "Enable company search in address entry" moves
-        // the search control into the payment tile, but must never take
-        // WooCommerce's stock field away from the address area — the two
-        // coexist, search in the tile, native field where WC always puts
-        // it. Left untouched (no required cue): WC owns that field's own
-        // required-ness, this plugin only decides whether it is shown.
-        if (window.twoinc.company_search_location === "payment_tile") {
-          visibleTargets.push("#billing_company_field");
-        }
-      } else {
-        visibleTargets.push("#billing_company_field");
-        requiredTargets.push("#billing_company_field");
-
-        // #company_id_field is deliberately left OUT here when manual entry
-        // (TWO-25288/#30.x.13) is what put us on this branch. This branch is
-        // shared with two other reasons `enable_company_search` can read
-        // "no" — the merchant simply never enabled company search at all,
-        // and sole-trader mode (twoincSoleTrader.setMode), which both
-        // legitimately want the id field: the plain fallback captures
-        // name+id like it always has, and sole-trader mode fills company_id
-        // itself with a synthetic identifier (Two's payment method cannot
-        // function without one). Manual entry is the one case in this org's
-        // three-mode company-capture model that captures name ONLY — Two's
-        // payment method still needs an id in the other two modes, but a
-        // buyer who says "my company isn't in the registry" has no id to
-        // give, and showing the field only invites one that was never
-        // validated against anything. `manual_company_entry_active` is set
-        // by enterManualCompanyEntry/exitManualCompanyEntry specifically so
-        // this branch can tell "manual entry" apart from the other two
-        // routes into it.
-        //
-        // TWO-25326 §12: and left out again when the number currently held is
-        // an internally minted one. This branch is the ONE place `#company_id`
-        // is a field the buyer can see — a merchant with company search off,
-        // in a country whose registry supports sole traders, puts an enrolled
-        // sole trader here with `TWO:…` sitting in a visible text box. Hiding
-        // the field is the fix rather than blanking its value, because the
-        // value is what WooCommerce posts and what the order intent is
-        // authorised against: there is nothing for the buyer to type (the
-        // enrollment already supplied it) so the field has no job left beyond
-        // displaying a string §12 says must not be displayed. Dropping it from
-        // requiredTargets too — a required cue on a field nobody can see is how
-        // a checkout becomes unsubmittable with no visible reason why.
-        if (
-          !window.twoinc.manual_company_entry_active &&
-          !twoincUtilHelper.isSyntheticCompanyNumber(jQuery("#company_id").val())
-        ) {
-          visibleTargets.push("#company_id_field");
-          requiredTargets.push("#company_id_field");
-        }
-      }
-    } else {
-      // Whether company search is available for OTHER payment methods is no
-      // longer a setting of its own (TWO-25326, Doug's ruling: a separate
-      // `enable_company_search_for_others` toggle was one control too many —
-      // there is no scenario where a merchant wants this to disagree with
-      // "Enable company search in address entry"). It now follows that same
-      // admin checkbox directly, via `company_search_location`
-      // ('address_area' means checked): checked shows the search field for
-      // other payment methods too, unchecked does not.
-      if (
-        twoincDomHelper.isCountrySupported() &&
-        window.twoinc.enable_company_search === "yes" &&
-        window.twoinc.company_search_location === "address_area"
-      ) {
-        visibleTargets.push("#billing_company_display_field");
-      } else {
-        visibleTargets.push("#billing_company_field");
-      }
+      // Required-ness stays gated on Two actually being the selected
+      // method — a buyer paying another way shouldn't be forced to fill in
+      // company data Two itself has no use for right now.
+      requiredTargets.push(
+        showCompanySearch ? "#billing_company_display_field" : "#billing_company_field"
+      );
     }
 
     allTargets = jQuery(allTargets.join(","));
@@ -3633,6 +3772,16 @@ let twoincDomHelper = {
     // visibility gate needs re-evaluating. It reads the current inputs and
     // calls nothing that re-enters here.
     twoincSelectWooHelper.renderCompanySummary();
+
+    // And after it, in that order: the "select a different sole trader" link
+    // anchors against whichever company-NAME field this function just decided
+    // to show, and behind the summary above when THAT is the visible one — so
+    // it has to read a visibility the line above has already decided
+    // (`placeDifferentSoleTraderBtn`'s own comment). Builds nothing on a
+    // checkout that never shows the link: `syncDifferentSoleTraderLink()`
+    // returns before touching the DOM while the button neither exists nor is
+    // wanted.
+    twoincSoleTrader.syncDifferentSoleTraderLink();
   },
   /**
    * Mirror each company field's visibility onto its enclosing wrapper
@@ -4215,17 +4364,103 @@ let twoincDomHelper = {
       document.querySelector("#project").value = window.twoinc.project;
     }
 
-    // Restore the captured company through the ONE capture write path
-    // (TWO-40 §5), so the restored pair carries its pairing tag. Written
-    // raw, as this used to be, the pair has no tag — and the retype guard
-    // reads an absent tag as "this number no longer belongs to this name" and
-    // wipes a perfectly good restored capture on the buyer's first keystroke
-    // anywhere in the company field.
-    if (window.twoinc.billing_company || window.twoinc.company_id) {
-      twoincCompanyCapture.write(
-        window.twoinc.billing_company || jQuery("#billing_company").val(),
-        window.twoinc.company_id || jQuery("#company_id").val()
-      );
+    twoincDomHelper.restoreCapturedCompany();
+  },
+  /**
+   * Re-capture a company the page arrived already holding, through the ONE
+   * capture write path (TWO-40 §5), so the restored pair carries its pairing
+   * tag. Written raw, as this used to be, the pair has no tag — and the retype
+   * guard reads an absent tag as "this number no longer belongs to this name"
+   * and wipes a perfectly good restored capture on the buyer's first keystroke
+   * anywhere in the company field.
+   *
+   * Called after each of initialize()'s two restore passes, because either can
+   * be the one that supplies the pair: the user-meta echo exists ONLY for a
+   * signed-in WordPress user (WC_Twoinc_Checkout::prepare_twoinc_object, gated
+   * on wp_get_current_user()->ID), while a guest's company reaches the DOM
+   * without it — WooCommerce's own rendered value, or loadStorageInputs() one
+   * call later. Live-confirmed by Doug: a checkout whose `#company_id` already held
+   * a restored `TWO:…` id had both echo properties `undefined`, so a guard on
+   * the echo alone skipped the whole restore — including its own DOM fallback.
+   *
+   * @returns {void}
+   */
+  restoreCapturedCompany: function () {
+    const metaName = window.twoinc.billing_company;
+    const metaId = window.twoinc.company_id;
+    const domName = twoincCompanyCapture.nameField().val();
+    const domId = twoincCompanyCapture.numberField().val();
+
+    // BOTH halves from ONE source, never a half from each: a tag composed of
+    // one restore's name and another's number describes a company that never
+    // existed, and the retype guard — which compares the live fields against
+    // that tag — would then be reading a fiction. The source holding a NUMBER
+    // wins, that being what makes a pair a capture at all, and the user-meta
+    // echo breaks the tie as the more deliberate record of the two.
+    const fromUserMeta = Boolean(metaId) || (Boolean(metaName) && !domId);
+    const restoredName = fromUserMeta ? metaName : domName;
+    const restoredId = fromUserMeta ? metaId : domId;
+
+    // Nothing to restore without a number — unless the echo is the source, in
+    // which case a name alone is still a deliberate record of a manual-entry
+    // capture. A bare name in the FIELD is not: initialize() runs on the first
+    // re-render that makes this gateway visible, which can be after the buyer
+    // has typed, and stamping plugin provenance on their own typing would let
+    // a later country switch clear it as a value this plugin had written.
+    if (!restoredId && !(fromUserMeta && restoredName)) return;
+
+    twoincCompanyCapture.write(restoredName, restoredId);
+
+    // Seed the PICKER with the restored name too, the same synthetic-`<option>`
+    // mechanism `loadUserMetaInputs()` uses for the user-meta echo — option
+    // VALUE is the name, matching what the picker's own `select2:select`
+    // handler reads back as the company name.
+    //
+    // Only that echo was ever seeded, and this function deliberately restores
+    // from two further sources with no echo behind them (WooCommerce's own
+    // rendered value, and `loadStorageInputs()` — see the note above). The
+    // picker is the visible company-NAME surface for a restored capture, and
+    // `toggleBusinessFields()` hides the native field that used to display it,
+    // so an unseeded picker left a returning guest looking at a placeholder
+    // over a hidden field holding their own company — and `getCompanyName()`
+    // reading it back empty, which stops an order intent firing at all.
+    //
+    // Never over an existing selection: `initialize()` calls this a second time
+    // after `loadStorageInputs()`, and both of the seeding restores run before
+    // that.
+    if (restoredName) {
+      const $display = jQuery("#billing_company_display");
+      if ($display.length && !twoincUtilHelper.blankToEmpty($display.val())) {
+        if (
+          !$display.find("option").filter(function () {
+            return this.value === restoredName;
+          }).length
+        ) {
+          $display.prepend(jQuery("<option></option>").val(restoredName).text(restoredName));
+        }
+        // `.trigger("change")` for the same reason `lockCapturedFields()` uses
+        // it: select2's own documented way to make a PROGRAMMATIC selection
+        // render, without firing `select2:select` and re-entering that
+        // handler's write path.
+        $display.val(restoredName).trigger("change");
+      }
+    }
+
+    // A restored SOLE TRADER (live-reported by Doug, item 2): this restore
+    // path writes straight to the capture layer above rather than through
+    // `twoincSoleTrader.setCompany()` — the only place that sets
+    // `mode`/`soleTraderAdopted` and syncs the "select a different sole
+    // trader" link — so a returning buyer whose last order used one saw
+    // the company populate correctly with no way back into a fresh
+    // signup, and a click-to-reopen or re-signup completing later found
+    // `mode !== "sole_trader"` and was silently dropped (see
+    // `bindPopupMessageListener`'s own comment for that failure mode).
+    // `isSyntheticCompanyNumber` is what tells a restored sole trader's
+    // `TWO:…` id apart from an ordinary registry number.
+    if (twoincUtilHelper.isSyntheticCompanyNumber(restoredId)) {
+      twoincSoleTrader.mode = "sole_trader";
+      twoincSoleTrader.soleTraderAdopted = true;
+      twoincSoleTrader.syncDifferentSoleTraderLink();
     }
 
     // Re-evaluate the company fields, because the write just above changes
@@ -4233,10 +4468,10 @@ let twoincDomHelper = {
     //
     // Deliberately here rather than at the initialize() call site: this is the
     // function that performs the write, so the re-toggle cannot be separated
-    // from it by a later reordering. A returning sole trader's user meta holds
-    // a minted `TWO:…` identifier, and initialize() has already toggled the
-    // fields once by this point — against an empty input — so without this the
-    // identifier is restored into a visible field on every page load.
+    // from it by a later reordering. A restored sole trader's identifier is a
+    // minted `TWO:…` one, and initialize() has already toggled the fields once
+    // by this point — against an empty input — so without this the identifier
+    // is restored into a visible field on every page load.
     twoincDomHelper.toggleBusinessFields();
   },
   /**
@@ -4468,22 +4703,18 @@ let twoincSoleTrader = {
   mode: "business", // 'business' | 'sole_trader'
   availabilityByCountry: {},
   tokens: null,
-  savedCompanySearch: null,
-  // Snapshot of window.twoinc.manual_company_entry_active, saved/restored
-  // alongside savedCompanySearch (#30.x.13, round 1 review — Vader). Without
-  // this, a buyer who reaches sole-trader mode WHILE in manual entry (the
-  // mode chip is not hidden during manual entry, and the email-driven
-  // autofill prefetch can also call setMode("sole_trader") unprompted) comes
-  // back out of sole-trader mode with enable_company_search correctly
-  // restored to "no" (still manual) but manual_company_entry_active left at
-  // the "false" this branch forces below — toggleBusinessFields then reads
-  // that as the OTHER "no" case (merchant-level search-off / sole-trader)
-  // and shows + REQUIRES #company_id_field, with no working search widget
-  // to fill it from (enableCompanySearch early-returns since
-  // enable_company_search !== "yes") and no manual name-only path left. Same
-  // null-sentinel pattern as savedCompanySearch: `null` means "nothing
-  // saved", distinct from the flag's own true/false/undefined values.
-  savedManualEntryActive: null,
+  // Snapshot of twoincCompanyCapture.mode, taken on the way INTO sole-trader
+  // mode and put back on the way out (#30.x.13, round 1 review — Vader;
+  // collapsed from a pair of snapshots into this one when the capture mode
+  // replaced the `enable_company_search`/`manual_company_entry_active` pair,
+  // #486). A buyer can reach sole-trader mode WHILE in manual entry — the mode
+  // chip is not hidden during manual entry, and the email-driven autofill
+  // prefetch can call setMode("sole_trader") unprompted — and without this they
+  // come back out into `search`, with the link back to the picker never shown,
+  // the number label reappearing over a company they are no longer capturing,
+  // and `getCompanyName()` reading the picker instead of the field they typed
+  // into. `null` means "nothing saved", distinct from every real mode value.
+  savedCaptureMode: null,
   messageListenerBound: false,
   /** @type {Function|null} the bound `message` listener, so it can be removed */
   messageHandler: null,
@@ -4605,9 +4836,11 @@ let twoincSoleTrader = {
    * re-clicking within the SAME 300ms poll window opens a second, genuinely
    * concurrent re-signup: the first popup's own stale poll then clears a
    * bare boolean while the second is still very much open and undecided).
-   * Incremented by `launchSignup` for every re-signup it opens, decremented
-   * — clamped at zero, same reason `settleFlight` is — by whichever of
-   * THAT flight's own terminal branches resolves first.
+   * Incremented by `launchSignup` for every re-signup it opens; decremented
+   * exactly once per popup, by that popup's own decrement owner — the
+   * ACCEPTED handler for a decided popup, `watchPopupClose`'s poll for an
+   * abandoned one (see the watcher record's `decided` flag). Clamped at
+   * zero, same reason `settleFlight` is.
    */
   soleTraderReconfirmingCount: 0,
 
@@ -4623,8 +4856,30 @@ let twoincSoleTrader = {
    */
   signupConfirming: false,
 
-  /** Live `setInterval` ids from `watchPopupClose`, so tests (and any other
-   * caller needing a clean slate) can stop every outstanding poll. */
+  /**
+   * One record per live `watchPopupClose` poll: `{ id, win, isReconfirming,
+   * decided }`. `id` is the `setInterval` handle, so tests (and any other
+   * caller needing a clean slate) can stop every outstanding poll; `win` is
+   * the popup itself, which is what lets an inbound message be attributed to
+   * the record that actually sent it.
+   *
+   * `decided` is the popup's OWN outcome — set when the hosted flow posts
+   * "ACCEPTED" for it — as distinct from the global `soleTraderAdopted`/
+   * `soleTraderReconfirmingCount` state, which other actors (an autofill
+   * prefetch matching mid-popup, a second popup) can move while this popup
+   * is still open. `launchSignup`'s stacking guard and both
+   * `soleTraderReconfirmingCount` decrements read the record, so an
+   * accepted-then-closed popup cannot spend two decrements against its one
+   * increment, and a still-undecided popup cannot be mistaken for settled
+   * just because something ELSE adopted a company meanwhile.
+   *
+   * TWO OR MORE records can be undecided at once, so nothing may pair a
+   * message with "the undecided record" by search order (round-3 review):
+   * `launchSignup` refuses only a LIVE undecided popup, so a hand-closed one
+   * stays in this list, still undecided, until its own poll notices — up to a
+   * full 300ms during which a relaunch can open alongside it.
+   * `findPopupWatcher` owns the attribution.
+   */
   activePopupWatchers: [],
 
   /** DOM id of the "select a different sole trader" link (TWO-40 §7). */
@@ -4816,6 +5071,10 @@ let twoincSoleTrader = {
         "twoinc-sole-trader-toggle--busy"
       );
       twoincSelectWooHelper.holdCompanySearchSpinner("soleTrader");
+      // A re-signup started from an ALREADY-adopted state has the query row
+      // hidden (item 2.1) — give it back for the flight, or the spinner just
+      // held has nowhere to paint.
+      twoincSelectWooHelper.syncQueryFieldSuppression();
     }
   },
 
@@ -4835,6 +5094,7 @@ let twoincSoleTrader = {
         "twoinc-sole-trader-toggle--busy"
       );
       twoincSelectWooHelper.releaseCompanySearchSpinner("soleTrader");
+      twoincSelectWooHelper.syncQueryFieldSuppression();
     }
   },
 
@@ -4856,7 +5116,10 @@ let twoincSoleTrader = {
   getDifferentSoleTraderBtnNode: function () {
     const id = twoincSoleTrader.differentSoleTraderBtnId;
     let $btn = jQuery("#" + id);
-    if ($btn.length) return $btn;
+    if ($btn.length) {
+      twoincSoleTrader.placeDifferentSoleTraderBtn($btn);
+      return $btn;
+    }
 
     $btn = jQuery("<button></button>")
       .attr({ id: id, type: "button" })
@@ -4879,25 +5142,86 @@ let twoincSoleTrader = {
         twoincSoleTrader.launchSignup({ autoselect: false });
       });
 
-    twoincSelectWooHelper.companyFieldAffordanceSlot().append($btn);
+    twoincSoleTrader.placeDifferentSoleTraderBtn($btn);
     return $btn;
   },
 
   /**
-   * Show the "select a different sole trader" link only where it means
-   * something: sole-trader mode, with a company already adopted (TWO-40 §7).
+   * Where the "select a different sole trader" link currently belongs.
    *
-   * The same gating shape as the manual-entry link's — that one appears once
-   * the buyer is in manual entry, this one once they hold a sole-trader
-   * identity there is an alternative to.
+   * Its default home is `companyFieldAffordanceSlot()` — the same slot as
+   * the "search for company" link, inside `#billing_company_field` — which
+   * is correct for every merchant this link predates: manual entry and an
+   * ordinary registered-company pick both leave that field the visible one.
+   *
+   * TWO-40 §7 direction (a) makes an adopted sole trader show through the
+   * live SEARCH widget instead (`twoincCompanyCapture.mode === "sole_trader"`,
+   * `toggleBusinessFields()`'s own comment), which hides
+   * `#billing_company_field` outright to do it — a button appended inside a
+   * hidden field never renders, however its own `.toggle(show)` reads (the
+   * bug this exists to fix, live-reported by Doug: `#company_id` and
+   * `tokens` were never the problem, `syncDifferentSoleTraderLink()`'s own
+   * gate was right — the button just had nowhere visible to render). Follow
+   * the search field itself whenever it — not the native field — is what's
+   * actually shown, re-anchoring on every call the same way
+   * `getCompanySummaryNode()` already does for the same reason.
+   *
+   * @param {Object} $btn jQuery-wrapped button
+   * @returns {void}
+   */
+  placeDifferentSoleTraderBtn: function ($btn) {
+    const $searchField = jQuery("#billing_company_display_field");
+    if (jQuery("#billing_company_field").hasClass("hidden") && $searchField.length) {
+      const $wrapper = $searchField.closest(".twoinc-inp-container");
+      let $anchor = $wrapper.length ? $wrapper : $searchField;
+      // Behind the number label while THAT is the visible one, in front of it
+      // otherwise (defect found reviewing #486 as a whole). Both this link and
+      // `getCompanySummaryNode()`'s label follow the same anchor, and both move
+      // only when they are not already sitting on it, so they compete for the
+      // one slot directly after the field — and `toggleBusinessFields()` calls
+      // the label's placement on every payment-method, country and mode switch,
+      // so the label took the slot back every time. Whichever loses it also
+      // loses its own `+`-selector gap cancellation in twoinc.css, which is how
+      // an adopted sole trader's link grew a ~33px gap above it on the buyer's
+      // first payment-method switch. Exactly one of the two is ever visible
+      // (the label renders in registered-search mode only, this link in
+      // sole-trader mode only), so ordering by visibility gives the slot to
+      // the one that can actually use it.
+      const $summary = jQuery("#" + twoincSelectWooHelper.companySummaryId);
+      if ($summary.length && !$summary.hasClass("hidden") && $summary.prev()[0] === $anchor[0]) {
+        $anchor = $summary;
+      }
+      if ($btn.prev()[0] !== $anchor[0]) $btn.insertAfter($anchor);
+      return;
+    }
+    // Same "only move when it isn't already there" guard as the branch above,
+    // for the same reason `getCompanySummaryNode()` has one: this now runs on
+    // every `toggleBusinessFields()`, and an unconditional `append()` re-homes
+    // a node that had not drifted on each one.
+    const $slot = twoincSelectWooHelper.companyFieldAffordanceSlot();
+    if ($btn.parent()[0] !== $slot[0]) $slot.append($btn);
+  },
+
+  /**
+   * Show the "select a different sole trader" link only where it means
+   * something: sole-trader mode (TWO-40 §7).
+   *
+   * Mode and tokens only (Doug's ruling, TWO-40 §7 correction) — no
+   * `#company_id`-content check: there is no real UX state where sole-trader
+   * mode is engaged with nothing captured, except while the dropdown itself
+   * is still open/rendered deciding what to show, and that already visually
+   * obscures this link. Probing a DOM field for "is a company adopted" was
+   * also the wrong source of truth once `#company_id_field` stopped being a
+   * field the buyer ever sees at all (Doug 2026-08-19: permanently hidden in
+   * every mode) — the value still gets written there
+   * (`twoincCompanyCapture.write()` is unconditional), but there is no
+   * reason to lean on that DOM detail here when mode + tokens already say
+   * everything this gate needs.
    *
    * @returns {void}
    */
   syncDifferentSoleTraderLink: function () {
-    const show =
-      twoincSoleTrader.mode === "sole_trader" &&
-      !!twoincUtilHelper.blankToEmpty(jQuery("#company_id").val()) &&
-      !!twoincSoleTrader.tokens;
+    const show = twoincSoleTrader.mode === "sole_trader" && !!twoincSoleTrader.tokens;
     // Built lazily, and only when it is about to be shown. This runs on every
     // mode switch — including the setMode("business") a checkout with no
     // sole-trader option ever reaches — and building it there would insert a
@@ -4921,6 +5245,21 @@ let twoincSoleTrader = {
       // regressing the moment something else calls it (round-2 review —
       // Vader; predicate corrected to `isDeciding()` round-3 — Vader).
       if (!twoincSoleTrader.isDeciding()) twoincSoleTrader.setMode("business");
+      return;
+    }
+    // Re-clicking once already adopted is the SAME re-signup the "select a
+    // different sole trader" link launches — NOT the Business chip's
+    // already-selected no-op (Doug's explicit override, item 4.3: an
+    // earlier round made this a no-op on the theory that the link should be
+    // the one deliberate re-signup entry point, which Doug has now ruled
+    // wrong — the chip is a second, equally deliberate way to ask for the
+    // same thing). Routed through `launchSignup` directly rather than
+    // `setMode`+the `pf` branches below: those exist to decide sole-trader
+    // mode for the FIRST time, and re-running them here could re-adopt the
+    // SAME prefetched match with no popup at all, which is not what
+    // "select a different" means.
+    if (twoincSoleTrader.mode === "sole_trader" && twoincSoleTrader.soleTraderAdopted) {
+      twoincSoleTrader.launchSignup({ autoselect: false });
       return;
     }
     twoincSoleTrader.setMode("sole_trader");
@@ -5037,22 +5376,15 @@ let twoincSoleTrader = {
     twoincSoleTrader.syncDifferentSoleTraderLink();
 
     if (mode === "sole_trader") {
-      // Suppress company search by the same lever the manual-entry row uses,
-      // restoring the merchant's setting (and whether manual entry was
-      // active) on the way back to business mode.
-      if (twoincSoleTrader.savedCompanySearch === null) {
-        twoincSoleTrader.savedCompanySearch = window.twoinc.enable_company_search;
-        twoincSoleTrader.savedManualEntryActive = window.twoinc.manual_company_entry_active;
+      // Sole trader is its own company-capture mode, not manual entry and not
+      // an ordinary registry pick — it renders through the picker but carries a
+      // synthetic id, so neither of the other two modes' surfaces is right for
+      // it. Snapshotted first so it can be put back on the way out, in case
+      // the buyer really was mid manual entry.
+      if (twoincSoleTrader.savedCaptureMode === null) {
+        twoincSoleTrader.savedCaptureMode = twoincCompanyCapture.mode;
       }
-      window.twoinc.enable_company_search = "no";
-      // Sole trader is a DIFFERENT one of this org's three company-capture
-      // modes than manual entry — it carries a synthetic id (see the
-      // comment on this flag's read in toggleBusinessFields) — so any
-      // manual-entry state left over from before this switch must not
-      // suppress #company_id_field here. Snapshotted above first so it can
-      // be put back on the way out, in case the buyer really was mid manual
-      // entry.
-      window.twoinc.manual_company_entry_active = false;
+      twoincCompanyCapture.mode = "sole_trader";
       // The search widget itself, and the swap to the plain captured fields,
       // are deliberately NOT done here (TWO-40 §7 correction, live-reported
       // by Doug). Tearing them down the instant the mode switches — as this
@@ -5063,8 +5395,7 @@ let twoincSoleTrader = {
       // does this instead, once `setCompany()` actually has a company to
       // show — the only moment there is nothing left to search for.
     } else {
-      twoincSoleTrader.showNote(false);
-      jQuery("#billing_company, #company_id").prop("readonly", false);
+      twoincSoleTrader.leaveSoleTraderMode();
       const $display = jQuery("#billing_company_display");
       if ($display.data("select2")) {
         // Alive on every switch back to business now (TWO-40 §7 direction
@@ -5080,44 +5411,67 @@ let twoincSoleTrader = {
         $display.select2("close");
         $display.select2("destroy");
       }
-      if (twoincSoleTrader.savedCompanySearch !== null) {
-        window.twoinc.enable_company_search = twoincSoleTrader.savedCompanySearch;
-        window.twoinc.manual_company_entry_active = twoincSoleTrader.savedManualEntryActive;
-        twoincSoleTrader.savedCompanySearch = null;
-        twoincSoleTrader.savedManualEntryActive = null;
-      }
       twoincSoleTrader.setCompany("", "");
       twoincDomHelper.toggleBusinessFields();
       Twoinc.getInstance().enableCompanySearch();
       // The buyer may have been in MANUAL entry when they switched to sole
-      // trader, in which case the snapshot restored above is "no" and
+      // trader, in which case the mode restored above is `manual` and
       // enableCompanySearch has just early-returned. Without this the link
       // back to search stays hidden and business mode has no route back to
       // the picker at all (TWO-25288).
       //
-      // Gated on `manual_company_entry_active` too (bug found in adversarial
-      // review, TWO-25326 correction, 2026-08-04 — Han): `enable_company_search`
-      // alone used to be a reliable proxy for "restored from manual entry"
-      // because that was the ONLY way this restore point could see anything
-      // but "yes" here. Since the 2026-08-04 correction, `enable_company_search`
-      // unchecked is ALSO the merchant's own, stable, deliberate "search lives
-      // in the payment tile" configuration — a buyer reachable via
-      // `onEmailChanged`'s automatic sole-trader detour on a merchant with
-      // that box unchecked would otherwise show this button, and clicking it
-      // calls `exitManualCompanyEntry()`, which unconditionally flips
-      // `enable_company_search` to "yes" — silently overriding the
-      // merchant's admin setting for the rest of the session. Checking the
-      // just-restored `manual_company_entry_active` narrows this back to
-      // its original, sole intent: only when the buyer was actually IN
-      // manual entry before the sole-trader detour, never merely because
-      // the merchant's setting happens to read "no".
-      if (
-        window.twoinc.enable_company_search !== "yes" &&
-        window.twoinc.manual_company_entry_active
-      ) {
+      // The capture mode answers this directly. The pair of flags it replaces
+      // (#486) could not: `enable_company_search !== "yes"` was also the
+      // merchant's own stable "search lives in the payment tile" configuration,
+      // so a buyer reachable via `onEmailChanged`'s automatic sole-trader detour
+      // on such a merchant saw this button, and clicking it flipped that admin
+      // setting to "yes" for the rest of the session (bug found in adversarial
+      // review, TWO-25326 correction, 2026-08-04 — Han).
+      if (twoincCompanyCapture.mode === "manual") {
         twoincSelectWooHelper.getSearchCompanyBtnNode().show();
       }
     }
+  },
+
+  /**
+   * The state/DOM bookkeeping every real exit from sole-trader mode needs,
+   * regardless of what happens to the search widget on the way out (TWO-40
+   * §7 direction (a)): `setMode`'s own business branch tears the widget down
+   * and lands the buyer in a fresh one — see its own comment — but a pick
+   * made directly off the STILL-LIVE widget (the `select2:select` handler's
+   * `mode === "sole_trader"` branch, once the widget shows an adopted sole
+   * trader as its own selection rather than being hidden behind the native
+   * fields) must not also go through that teardown: the widget already
+   * shows the pick the buyer just made, and destroying/rebuilding it here
+   * would blank that pick right back out before `write()` ever runs. Split
+   * out so both paths share identical "leaving" semantics — readonly
+   * unlock, the note, the capture mode the buyer was in before restored —
+   * rather than drifting out of sync with each other the way this file's
+   * history warns against.
+   *
+   * @returns {void}
+   */
+  leaveSoleTraderMode: function () {
+    twoincSoleTrader.showNote(false);
+    jQuery("#billing_company, #company_id").prop("readonly", false);
+    if (twoincSoleTrader.savedCaptureMode !== null) {
+      twoincCompanyCapture.mode = twoincSoleTrader.savedCaptureMode;
+      twoincSoleTrader.savedCaptureMode = null;
+    }
+    // A popup-close poll left over from a resolved adoption/re-signup keeps
+    // `isBusy()` (and therefore `isDeciding()`) true purely on its own
+    // 300ms cadence — this call is the one place every caller has already
+    // committed to leaving sole-trader mode, so whatever that poll was
+    // still going to decide (settle the flight, decrement
+    // `soleTraderReconfirmingCount`, maybe revert to business) is moot.
+    // Left running, it raced `activateManualEntry()`'s deferred
+    // `enterManualCompanyEntry()` call: `setMode("business")` resets
+    // `soleTraderAdopted` right above (transition bookkeeping), which
+    // un-neutralises the stale `isBusy()` for `isDeciding()`'s very next
+    // read — wrongly refusing the manual-entry switch this function's own
+    // caller had already decided on, and leaving the search widget showing
+    // instead (live-reported by Doug, TWO-40 §7 correction).
+    twoincSoleTrader.stopAllPopupWatchers();
   },
 
   /**
@@ -5144,13 +5498,66 @@ let twoincSoleTrader = {
    * widget referenceless, so this is not a new failure mode, just one fewer
    * teardown in the sequence.
    *
+   * Seeds the widget's own underlying `<select>` with an option for the
+   * adopted sole trader and selects it (TWO-40 §7 direction (a)), the same
+   * synthetic-`<option>` mechanism `loadUserMetaInputs()` already uses to
+   * restore a returning buyer's pick before select2 ever attaches — so the
+   * widget's rendered selection reads "A Sole Trader" exactly the way it
+   * would read a registered pick's name, rather than the buyer seeing an
+   * adopted sole trader only in the readonly native field. It is also what
+   * `getCompanyName()` reads in this mode (#486), so seeding it is what lets an
+   * order intent fire for an adopted sole trader at all. On a merchant whose
+   * setting puts the control in the payment tile the seeded selection simply
+   * renders there instead — the control is never off, only relocated.
+   *
+   * `.trigger("change")`, not `select2:select` — this is select2's own
+   * documented mechanism for a PROGRAMMATIC selection to update its
+   * rendered display, and deliberately does not fire `select2:select`
+   * itself, so it does not re-enter that handler's own write path
+   * (`setCompany()`, right above this call, already is that write).
+   *
+   * @param {string} companyId
+   * @param {string} companyName
    * @returns {void}
    */
-  lockCapturedFields: function () {
+  lockCapturedFields: function (companyId, companyName) {
     const $display = jQuery("#billing_company_display");
     if ($display.data("select2")) {
       $display.select2("close");
+    } else if ($display.length) {
+      // Attached BEFORE the seed below, so that seed's own closing
+      // `.trigger("change")` is what renders the selection (defect found
+      // reviewing #486 as a whole):
+      // manual entry destroys this widget (`enterManualCompanyEntry`), and
+      // `applyPrefetch()`'s match branch then adopts a sole trader with no
+      // guard in that direction — the email field is never locked, so
+      // correcting an email while in manual entry is enough. Adoption's own
+      // `toggleBusinessFields()` makes `#billing_company_display_field` the
+      // visible company-NAME surface for this mode and hides the native field,
+      // and `getCompanyName()` reads the picker's rendered container: with no
+      // picker attached the buyer got a bare unstyled `<select>` and the name
+      // read EMPTY, so `getCompanyData()` carried no `company_name` and
+      // `isReadyApprovalCheck()` never fired an order intent at all — the exact
+      // defect `getCompanyName()`'s own comment describes, reached by a route
+      // neither the capture-mode refactor nor the field-visibility redesign
+      // owns alone.
+      //
+      // The duplicated `select2:select`/`select2:open` handlers this leaves
+      // behind are the pre-existing ones TWO-25338 owns (see `initialize()`'s
+      // 800ms retry comment for the full accounting); this handler's own
+      // sole-trader branch is idempotent under it — the second entry finds
+      // `mode === "business"` and skips.
+      twoincSelectWooHelper.attach(Twoinc.getInstance());
     }
+    if (
+      !$display.find("option").filter(function () {
+        return this.value === companyId;
+      }).length
+    ) {
+      $display.prepend(jQuery("<option></option>").val(companyId).text(companyName));
+    }
+    $display.val(companyId).trigger("change");
+
     // Only the link back to search: the manual-entry row lives inside the
     // dropdown, which stays alive but hidden behind the captured fields
     // rather than going with a destroyed widget (TWO-25288).
@@ -5161,8 +5568,9 @@ let twoincSoleTrader = {
   /**
    * Click-to-reopen (TWO-40 §7 correction, live-reported by Doug): once a
    * sole trader is adopted, `lockCapturedFields()` readonly-locks the
-   * captured fields and tears down the search widget, leaving no way back to
-   * an ordinary company search except the "select a different sole trader"
+   * captured fields, and the dropdown's own free-text query row is suppressed
+   * (`syncQueryFieldSuppression`), leaving no way back to an ordinary company
+   * search except the "select a different sole trader"
    * link — which only ever leads back into the SAME hosted signup, never
    * away from sole trader entirely. Clicking into either captured field does
    * that instead: revert to business mode (restoring whatever search/
@@ -5331,7 +5739,11 @@ let twoincSoleTrader = {
       // popup now, the moment the wait `onModeChipClick` deferred is over,
       // rather than reflexively at click time.
       twoincSoleTrader.launchSignup();
-    } else if (twoincSoleTrader.mode === "sole_trader" && !twoincSoleTrader.isBusy()) {
+    } else if (
+      twoincSoleTrader.mode === "sole_trader" &&
+      !twoincSoleTrader.isBusy() &&
+      !twoincSoleTrader.soleTraderAdopted
+    ) {
       // `isBusy()` too (round-3 review — Vader): `flightDepth` is a COUNT
       // specifically because a second flight for a newer email can start
       // before an earlier one settles (see its own doc comment). Without
@@ -5341,8 +5753,26 @@ let twoincSoleTrader = {
       // tearing the widget back down under it. The later flight's own
       // settle (or an open popup's own close) is what's actually authoritative
       // here, so deferring loses nothing.
+      //
+      // `!soleTraderAdopted` too (live-reported by Doug, item 2): a buyer
+      // who is ALREADY adopted can still edit `#billing_email` — it is
+      // deliberately never locked, unlike the captured fields — and that
+      // re-fires this same flight for the new address. A non-match there is
+      // not "abandon sole trader", it is "the autofill cookie disagrees
+      // with an already-settled adoption"; the one-way latch is the
+      // authority once set, same as `isDeciding()` already treats it.
       twoincSoleTrader.setMode("business");
     }
+    // Re-synced unconditionally, even on the branch above that changes
+    // nothing else (live-reported by Doug, item 2): tokens are minted by
+    // THIS SAME flight (`onEmailChanged`'s `fetchTokens` call), so a sole
+    // trader already adopted BEFORE this flight ever ran — restored from a
+    // previous order by `loadUserMetaInputs()`, which has no tokens yet at
+    // that early point — only has a real `tokens` value to show the link
+    // against once a flight like this one actually settles. `setCompany()`
+    // already does this on the match branch above; this covers the other
+    // two, where nothing else in this function touches the link.
+    twoincSoleTrader.syncDifferentSoleTraderLink();
   },
 
   /**
@@ -5350,7 +5780,10 @@ let twoincSoleTrader = {
    * browser blocks the window (e.g. gesture lost after a slow prefetch).
    *
    * Re-entrancy-guarded (TWO-40 §7): a second activation while one is already
-   * being opened is dropped rather than stacking a second popup.
+   * being opened is dropped rather than stacking a second popup. A second,
+   * LATER activation is likewise dropped for as long as an already-open
+   * popup's outcome is still undecided — see the guard's own comment for why
+   * that predicate is popup-scoped rather than `isDeciding()`.
    *
    * A re-signup (`options.autoselect === false`) is ALSO refused while a
    * different one is already outstanding (round-6 review — Han/Vader,
@@ -5367,6 +5800,37 @@ let twoincSoleTrader = {
    */
   launchSignup: function (options) {
     if (twoincSoleTrader.openingSignup) return;
+    // One LIVE undecided popup at a time: `openingSignup` above only makes
+    // two activations in the SAME gesture idempotent, so a second, later click
+    // while the first popup was still open stacked a second window over it.
+    // LIVE is load-bearing — a hand-closed record stays undecided until its
+    // own poll notices, and this guard deliberately lets a relaunch open
+    // alongside it, so "undecided" alone is NOT an array-wide invariant. Read
+    // as one, it mis-attributes an inbound ACCEPTED; see `findPopupWatcher`.
+    // Scoped to each open popup's OWN outcome (`watcher.decided`, plus the
+    // ACCEPTED fetch still resolving), deliberately narrower than either
+    // obvious predicate: a bare watcher count refuses the "select a
+    // different sole trader" launch from an accepted popup's remaining
+    // close poll (that popup has already decided), and the flight-inclusive
+    // `isDeciding()` refuses a launch when NO popup exists and only a stale
+    // prefetch flight is outstanding — stranding the chip click with
+    // neither populate nor popup, the exact defect TWO-40 §7 removes. Not
+    // the global `soleTraderAdopted` either: an autofill prefetch matching
+    // while a first-time popup is still open sets it, and that popup is
+    // still undecided. A browser-blocked popup creates no watcher, so
+    // retries stay open.
+    if (
+      twoincSoleTrader.signupConfirming ||
+      twoincSoleTrader.activePopupWatchers.some(function (watcher) {
+        // `win.closed` too: a record outlives its window by up to one 300ms
+        // poll cycle, and a hand-closed popup is not an undecided one — the
+        // buyer already decided against it, so a fresh click must get a
+        // fresh popup, not a refusal.
+        return !watcher.decided && !watcher.win.closed;
+      })
+    ) {
+      return;
+    }
     if (
       options &&
       options.autoselect === false &&
@@ -5379,8 +5843,9 @@ let twoincSoleTrader = {
       const win = twoincSoleTrader.openPopup(options);
       twoincSoleTrader.showNote(!win);
       if (win) {
-        // The ONLY caller passing `autoselect: false` is the "select a
-        // different sole trader" link (round-4 review — Han/Vader) — a
+        // Both callers passing `autoselect: false` — the "select a
+        // different sole trader" link, and (item 4.3, Doug's override) a
+        // re-click of the Sole Trader chip once already adopted — are a
         // genuinely new decision, launched from an already-adopted state
         // where `soleTraderAdopted` is stale-true for the whole duration.
         // See `soleTraderReconfirmingCount`'s own comment for why
@@ -5443,14 +5908,19 @@ let twoincSoleTrader = {
    */
   watchPopupClose: function (win, isReconfirming) {
     twoincSoleTrader.beginFlight();
-    const poll = setInterval(function () {
+    const watcher = { id: null, win: win, isReconfirming: !!isReconfirming, decided: false };
+    watcher.id = setInterval(function () {
       if (!win.closed) return;
-      twoincSoleTrader.stopWatchingPopup(poll);
+      twoincSoleTrader.stopWatchingPopup(watcher.id);
       twoincSoleTrader.settleFlight();
-      if (isReconfirming) {
-        // Whatever THIS popup was deciding is over now, one way or another
-        // — clamped, same reason `settleFlight` is, so an unbalanced count
-        // can't go negative.
+      if (watcher.isReconfirming && !watcher.decided) {
+        // Abandoned without a decision — this poll owns the decrement. A
+        // DECIDED popup's decrement belongs to the ACCEPTED handler that
+        // marked it: an accepted re-signup closed inside this poll's own
+        // 300ms window would otherwise spend two decrements against its one
+        // increment, letting a later, genuinely undecided re-signup read as
+        // settled. Clamped, same reason `settleFlight` is, so an unbalanced
+        // count can't go negative.
         twoincSoleTrader.soleTraderReconfirmingCount = Math.max(
           0,
           twoincSoleTrader.soleTraderReconfirmingCount - 1
@@ -5459,12 +5929,26 @@ let twoincSoleTrader = {
       if (
         twoincSoleTrader.mode === "sole_trader" &&
         !twoincSoleTrader.soleTraderAdopted &&
-        !twoincSoleTrader.signupConfirming
+        !twoincSoleTrader.signupConfirming &&
+        // A popup relaunched inside this poll's stale window (the buyer
+        // closed this one by hand, then clicked again before the poll
+        // noticed) owns the mode now — reverting under it would drop its
+        // eventual ACCEPTED on the `mode !== "sole_trader"` gate. Its own
+        // terminal branch settles mode, same deferral as `hide()`'s.
+        //
+        // Still ON SCREEN is the question, not still undecided (round-3
+        // review): a popup whose ACCEPTED resolved to no buyer is decided yet
+        // very much still open, and the buyer's retry inside it posts a second
+        // ACCEPTED that a revert here would drop on that same gate. Any record
+        // whose window HAS closed settles the mode from its own poll instead.
+        !twoincSoleTrader.activePopupWatchers.some(function (other) {
+          return !other.win.closed;
+        })
       ) {
         twoincSoleTrader.setMode("business");
       }
     }, 300);
-    twoincSoleTrader.activePopupWatchers.push(poll);
+    twoincSoleTrader.activePopupWatchers.push(watcher);
   },
 
   /** Stop one popup-close poll (its own terminal branch, or a test tearing
@@ -5476,9 +5960,62 @@ let twoincSoleTrader = {
     clearInterval(id);
     twoincSoleTrader.activePopupWatchers = twoincSoleTrader.activePopupWatchers.filter(
       function (existing) {
-        return existing !== id;
+        return existing.id !== id;
       }
     );
+  },
+
+  /**
+   * The watcher record an inbound hosted-signup message belongs to.
+   *
+   * `event.source` is the authoritative answer: the browser names the window
+   * that posted, and a WindowProxy stays reference-comparable across origins,
+   * so pairing needs no cooperation from the popup and no property access on
+   * it. An exact match wins even when already `decided`, so a replayed
+   * ACCEPTED resolves to the popup it came from rather than falling through
+   * and stealing a different, still-undecided popup's identity.
+   *
+   * The fallbacks cover a popup that closes in the same turn it posts, which
+   * can arrive with `source` already null. Both scan NEWEST first, which is
+   * the round-3 regression in one line: a forward scan returned a stale
+   * hand-closed record ahead of the live popup that actually sent the
+   * message, marking the wrong one decided — refusing the post-accept
+   * re-signup and billing the accepting popup's
+   * `soleTraderReconfirmingCount` decrement to a record that never owed one.
+   * A relaunch is always newer than the stale record it opened over, so
+   * newest-first cannot pick the stale one.
+   *
+   * An unmatched non-null `source` deliberately falls back too, rather than
+   * refusing to pair: the only cost of pairing a message we cannot attribute
+   * is mis-marking a record in a replay that no live window can actually send,
+   * whereas refusing one would strand `soleTraderReconfirmingCount` — and with
+   * it every leave-sole-trader action — on any browser whose `source` is not
+   * reference-equal to what `window.open` returned.
+   *
+   * @param {Window|null} [source] the message's `event.source`
+   * @returns {Object|undefined} the record, if the message can be attributed
+   */
+  findPopupWatcher: function (source) {
+    const watchers = twoincSoleTrader.activePopupWatchers;
+    if (source) {
+      const exact = watchers.find(function (candidate) {
+        return candidate.win === source;
+      });
+      if (exact) {
+        return exact;
+      }
+    }
+    for (let i = watchers.length - 1; i >= 0; i -= 1) {
+      if (!watchers[i].decided && !watchers[i].win.closed) {
+        return watchers[i];
+      }
+    }
+    for (let i = watchers.length - 1; i >= 0; i -= 1) {
+      if (!watchers[i].decided) {
+        return watchers[i];
+      }
+    }
+    return undefined;
   },
 
   /** Test seam: stop every outstanding popup-close poll and settle the
@@ -5486,8 +6023,8 @@ let twoincSoleTrader = {
    * @returns {void}
    */
   stopAllPopupWatchers: function () {
-    twoincSoleTrader.activePopupWatchers.forEach(function (id) {
-      clearInterval(id);
+    twoincSoleTrader.activePopupWatchers.forEach(function (watcher) {
+      clearInterval(watcher.id);
       twoincSoleTrader.settleFlight();
     });
     twoincSoleTrader.activePopupWatchers = [];
@@ -5515,7 +6052,7 @@ let twoincSoleTrader = {
       // there is nothing left to search for. Locking here, instead of on
       // every switch into sole-trader mode, is what lets the dropdown+spinner
       // survive the autofill/popup round trip.
-      twoincSoleTrader.lockCapturedFields();
+      twoincSoleTrader.lockCapturedFields(companyId, companyName);
       // Read by `watchPopupClose()` in place of `#company_id`'s raw value
       // (round-1 review — Vader) — see that flag's own comment.
       twoincSoleTrader.soleTraderAdopted = true;
@@ -5814,6 +6351,20 @@ let twoincSoleTrader = {
         return;
       }
       if (event.data === "ACCEPTED") {
+        // Attribute the message to the popup that sent it — see
+        // `findPopupWatcher`, which reads `event.source` rather than guessing
+        // from the record list. Marked decided at receipt: from this moment
+        // the popup's outcome is known, and its close poll must not treat it
+        // as abandoned (nor spend its reconfirming decrement — that belongs to
+        // this handler's callback below).
+        const watcher = twoincSoleTrader.findPopupWatcher(event.source);
+        // A replayed ACCEPTED resolves to its own, already-decided popup;
+        // only the receipt that actually settles a popup may spend its
+        // decrement below.
+        const newlyDecided = !!watcher && !watcher.decided;
+        if (watcher) {
+          watcher.decided = true;
+        }
         twoincSoleTrader.beginFlight();
         // Held for the duration of this fetch (round-1 review — Han): the
         // popup can close the instant "ACCEPTED" is posted, well before this
@@ -5833,25 +6384,22 @@ let twoincSoleTrader = {
           twoincSoleTrader.prefetched = { ready: true, buyer: buyer, matches: resolved };
           twoincSoleTrader.settleFlight();
           twoincSoleTrader.signupConfirming = false;
-          // Whichever it was, this flight's own decision is now made
-          // (round-4 review — Han/Vader) — see `soleTraderReconfirmingCount`'s
-          // own comment. Decremented here rather than only on popup close so
-          // a resolved re-signup un-blocks the Business chip/`reopenSearch()`
-          // immediately, not after another 300ms poll cycle. Clamped, same
-          // reason `watchPopupClose`'s own decrement is: this ONE global
-          // message listener has no way to tell which of possibly several
-          // open popups an "ACCEPTED" came from, so it cannot conditionally
-          // decrement only for a re-signup's the way `watchPopupClose` does
-          // with its per-call `isReconfirming` flag — a genuinely
-          // simultaneous first-time-signup-plus-re-signup is not reachable
-          // through today's UI (the "select a different" link only appears
-          // once already adopted, and a first signup only ever opens before
-          // adoption), so this is a defensive clamp, not a proven-safe
-          // no-op.
-          twoincSoleTrader.soleTraderReconfirmingCount = Math.max(
-            0,
-            twoincSoleTrader.soleTraderReconfirmingCount - 1
-          );
+          // This popup's own decision is now made — see
+          // `soleTraderReconfirmingCount`'s comment. Decremented here rather
+          // than only on popup close so a resolved re-signup un-blocks the
+          // Business chip/`reopenSearch()` immediately, not after another
+          // 300ms poll cycle. Scoped to the record paired at receipt: the
+          // decrement belongs to the popup that incremented, whether or not
+          // its window has already closed by the time this fetch resolves.
+          // Clamped, same reason `watchPopupClose`'s own decrement is; the
+          // `newlyDecided` check covers a late or replayed ACCEPTED, which
+          // must not spend a second decrement against one increment.
+          if (newlyDecided && watcher.isReconfirming) {
+            twoincSoleTrader.soleTraderReconfirmingCount = Math.max(
+              0,
+              twoincSoleTrader.soleTraderReconfirmingCount - 1
+            );
+          }
           if (resolved) {
             twoincSoleTrader.setCompany(buyer.organization_number, buyer.company_name, buyer);
             twoincSoleTrader.showNote(false);
@@ -5979,9 +6527,14 @@ class Twoinc {
    * constructed once at module load, above). This method's own job is just
    * the early-return gate and handing this singleton to the widget's
    * `select2:select` handler.
+   *
+   * Gated on the capture mode being `search` (#486): manual entry has no picker
+   * to attach, and in sole-trader mode the live widget is already showing the
+   * adopted company as its own selection (`lockCapturedFields()`) — re-attaching
+   * over it would blank that selection back out.
    */
   enableCompanySearch() {
-    if (window.twoinc.enable_company_search !== "yes") return;
+    if (twoincCompanyCapture.mode !== "search") return;
     this.billingCompanySelect = twoincSelectWooHelper.attach(this);
   }
 
@@ -6007,9 +6560,9 @@ class Twoinc {
     // survive any future tightening of isTwoincVisible.)
     if (
       twoincDomHelper.isTwoincVisible() ||
-      // Admin's address-area preference, not the runtime
-      // `enable_company_search` flag — see the comment on the equivalent
-      // check in toggleBusinessFields (TWO-25326 §7.1). No longer ANDed with
+      // Admin's address-area preference, not the buyer-driven capture mode —
+      // see the comment on the equivalent check in toggleBusinessFields
+      // (TWO-25326 §7.1). No longer ANDed with
       // a separate "for other payment methods" toggle (removed, TWO-25326 —
       // that setting is now just this same checkbox, so the AND collapsed
       // to a no-op).
@@ -6313,7 +6866,17 @@ class Twoinc {
     // write `#company_id` (TWO-25326 §12) — the toggle earlier in this function
     // ran before either of them, against an empty input.
     twoincDomHelper.loadUserMetaInputs();
-    if (loadSavedInputs) twoincDomHelper.loadStorageInputs();
+    if (loadSavedInputs) {
+      twoincDomHelper.loadStorageInputs();
+      // loadStorageInputs() writes `#company_id`/`#billing_company` with bare
+      // `.val()` assignments, so unlike the pass above it re-toggles nothing
+      // and captures nothing. For a GUEST that pass is the only one that ever
+      // supplies a company, so without this the restored pair carries no
+      // pairing tag and a restored sole trader never reaches `sole_trader`
+      // mode. No-ops when there is nothing restored, and idempotent when the
+      // pass above already captured the same pair.
+      twoincDomHelper.restoreCapturedCompany();
+    }
 
     // Seed the country tracker HERE — after the two restore passes above, not
     // next to the binding that reads it (TWO-24867 / TWO-25326).
@@ -7684,9 +8247,9 @@ jQuery(function () {
         // immediately: that state exists precisely for checkouts where this
         // gateway isn't offered.
         if (
-          // Admin's address-area preference, not the runtime
-          // `enable_company_search` flag — see the comment on the
-          // equivalent check in toggleBusinessFields (TWO-25326 §7.1).
+          // Admin's address-area preference, not the buyer-driven capture
+          // mode — see the comment on the equivalent check in
+          // toggleBusinessFields (TWO-25326 §7.1).
           window.twoinc.company_search_location === "address_area"
         ) {
           Twoinc.getInstance().initialize(true);

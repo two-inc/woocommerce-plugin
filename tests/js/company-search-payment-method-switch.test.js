@@ -1,37 +1,42 @@
 "use strict";
 
 /**
- * TWO-25326: switching payment method TO the Two gateway, from a different
- * gateway checked by default, must re-decide company-field visibility — not
- * just relocate whatever `toggleBusinessFields()` already decided at page
- * load.
+ * TWO-25326 / #486: switching payment method TO the Two gateway, from a
+ * different gateway checked by default, must re-decide field visibility —
+ * not just relocate whatever `toggleBusinessFields()` already decided at
+ * page load.
  *
- * Live bug (Doug, 2026-08-04): with "Enable Company Search In Address
- * Entry" unchecked (`company_search_location: 'payment_tile'`), the search
- * control never appeared in the payment tile at all. Root cause:
+ * Original live bug (Doug, 2026-08-04): with "Enable Company Search In
+ * Address Entry" unchecked (`company_search_location: 'payment_tile'`), the
+ * search control never appeared in the payment tile at all. Root cause:
  * `onUpdatedCheckout()` calls `syncCompanySearchTileLocation()` directly on
  * every `updated_checkout`, but nothing reliably called
- * `toggleBusinessFields()` — the function that actually decides whether
- * `#billing_company_display_field` is shown — when the buyer SWITCHED to
- * this gateway from a different one. WooCommerce checks the first available
- * gateway by default, so this is the ordinary case, not an edge one. The
- * only rebind that existed lived inside `onUpdatedCheckout()` itself
- * (`jQuery('input[name="payment_method"]').on("change", ...)`, no matching
- * `.off()`), which is bound too late to catch the FIRST switch of a session
- * — nothing forces `updated_checkout` to have fired even once before a buyer
- * picks a payment method — and accumulates a duplicate on every cycle
- * besides. `syncCompanySearchTileLocation()`'s own "unhide only if a VISIBLE
- * child moved in" guard then correctly kept the tile slot hidden around a
- * still-hidden field, which is the exact symptom reported live.
+ * `toggleBusinessFields()` when the buyer SWITCHED to this gateway from a
+ * different one — WooCommerce checks the first available gateway by
+ * default, so this is the ordinary case, not an edge one.
  *
- * The fix moves this to a single namespaced, delegated binding in
- * `initialize()` — bound once, before the buyer's first click. This suite
- * drives the real bootstrap IIFE (the trailing `jQuery(function () { ... })`
- * block) rather than the helper methods directly, because that block is what
- * wires (or fails to wire) the payment-method listener in the first place;
- * `wc-harness.js` deliberately loads with `window.twoinc` ABSENT so that
- * block no-ops (see its own doc comment), which is why no other suite caught
- * this.
+ * #486 correction (Doug, 2026-08-19): `toggleBusinessFields()` itself used
+ * to gate `#billing_company_display_field`'s own visibility on
+ * `isTwoincSelected` — a leftover from the removed
+ * `enable_company_search_for_others` admin setting (TWO-25326). That made a
+ * buyer Two itself rejects (e.g. an email resolving to a different
+ * business) fall through to the plain manual field the moment Two stopped
+ * being the selected/eligible method, silently downgrading a
+ * registered-company or sole-trader buyer into manual-entry territory they
+ * never asked for. The search-vs-plain decision is payment-method-agnostic
+ * now — driven solely by the buyer's own capture mode — so relocation into the
+ * tile happens once at bootstrap and no longer depends on the buyer ever
+ * switching gateways. What switching TO Two still must re-decide is the
+ * genuinely Two-only fields (invoice email, PO number, project,
+ * department) — this suite now proves the payment-method listener still
+ * fires `toggleBusinessFields()` via one of those instead.
+ *
+ * This suite drives the real bootstrap IIFE (the trailing
+ * `jQuery(function () { ... })` block) rather than the helper methods
+ * directly, because that block is what wires (or fails to wire) the
+ * payment-method listener in the first place; `wc-harness.js` deliberately
+ * loads with `window.twoinc` ABSENT so that block no-ops (see its own doc
+ * comment), which is why no other suite caught the original bug.
  */
 
 const fs = require("fs");
@@ -97,6 +102,9 @@ function buildCheckoutForm() {
     '  <p id="company_id_field" class="hidden">',
     "    <input type='text' id='company_id' name='company_id' value='' />",
     "  </p>",
+    '  <p id="invoice_email_field" class="hidden">',
+    "    <input type='email' id='invoice_email' name='invoice_email' value='' />",
+    "  </p>",
     '  <div id="order_review"></div>',
     '  <div id="payment" class="woocommerce-checkout-payment">',
     '    <ul class="wc_payment_methods payment_methods methods">',
@@ -138,8 +146,8 @@ function loadPluginSourceWithBootstrap() {
   indirectEval(src);
 }
 
-describe("payment-method switch onto the Two gateway (TWO-25326)", () => {
-  test("the search control appears in the payment tile after switching TO Two from a different default gateway", async () => {
+describe("payment-method switch onto the Two gateway (TWO-25326 / #486)", () => {
+  test("the search control is already in the payment tile before any switch, and switching TO Two reveals the Two-only fields", async () => {
     buildCheckoutForm();
     installJQuery();
     installWcParams();
@@ -168,23 +176,28 @@ describe("payment-method switch onto the Two gateway (TWO-25326)", () => {
 
     const $ = global.window.jQuery;
 
-    // Sanity check on the fixture itself: at page load, with the OTHER
-    // gateway selected and `company_search_location` "payment_tile" (i.e.
-    // the checkbox unchecked), the search control is correctly absent for
-    // this OTHER gateway — the "other payment methods" branch of
-    // `toggleBusinessFields()` working as designed. If this assertion starts
-    // failing, the bug below is no longer isolated to the switch.
-    expect($("#billing_company_display_field").hasClass("hidden")).toBe(true);
+    // #486: the search control's own visibility no longer depends on which
+    // gateway is selected, so bootstrap already shows and relocates it into
+    // the payment tile with the OTHER gateway checked — the fix under test.
+    expect($("#billing_company_display_field").hasClass("hidden")).toBe(false);
+    expect(
+      $("#billing_company_display_field").closest(".twoinc-company-search-tile-slot").length
+    ).toBe(1);
+    expect($(".twoinc-company-search-tile-slot").hasClass("hidden")).toBe(false);
+
+    // Sanity check on the fixture itself: the Two-only fields start hidden
+    // with the OTHER gateway selected. If this assertion starts failing,
+    // the bug below is no longer isolated to the switch.
+    expect($("#invoice_email_field").hasClass("hidden")).toBe(true);
 
     // The buyer switches to the Two gateway.
     $("#payment_method_" + GATEWAY_ID)
       .prop("checked", true)
       .trigger("change");
 
-    expect($("#billing_company_display_field").hasClass("hidden")).toBe(false);
-    expect(
-      $("#billing_company_display_field").closest(".twoinc-company-search-tile-slot").length
-    ).toBe(1);
-    expect($(".twoinc-company-search-tile-slot").hasClass("hidden")).toBe(false);
+    // Proves the payment-method listener still re-invokes
+    // `toggleBusinessFields()` on switch — the original TWO-25326 wiring
+    // bug this suite guards against.
+    expect($("#invoice_email_field").hasClass("hidden")).toBe(false);
   });
 });

@@ -312,7 +312,46 @@
 }
 
 /*
- * The "Enter Manually" mode chip (TWO-25288, restyled as a chip TWO-40 §0).
+ * Registered-org mode's gap above the summary (live-reported by Doug on the
+ * widget-selection PR): `#billing_company_display_field` carries its own
+ * 15px `padding-bottom` AND WooCommerce core's own `.form-row` bottom margin
+ * (~22px, theme/core default, not ours to remove) — both apply in full
+ * before this summary's own content starts, stacking to ~37px total when
+ * the intended gap is ~5px.
+ *
+ * Cancelled here, on the summary, via the adjacent-sibling selector
+ * `getCompanySummaryNode()` (twoinc.js) actually inserts it after — never on
+ * the field's own padding directly, which the no-summary state and the
+ * payment-tile placement both still need untouched. `.twoinc-inp-container`
+ * covers the pay-for-order page, where that wrapper (not the field itself)
+ * is what the summary lands after; `#billing_company_display_field` covers
+ * the checkout page, where there is no such wrapper.
+ *
+ * `#billing_company_field` needs the identical cancellation (Doug,
+ * 2026-08-19): it carries the same 15px `padding-bottom` (above) and the same
+ * core `.form-row` margin, and it is the anchor `getCompanySummaryNode()`
+ * picks whenever the search control is the hidden one of the two company-name
+ * elements.
+ */
+#billing_company_display_field + .twoinc-company-summary,
+#billing_company_field + .twoinc-company-summary,
+.twoinc-inp-container + .twoinc-company-summary {
+  margin-top: -32px;
+}
+
+/*
+ * The pay-for-order page's own flex row (`.custom-checkout`, above) sizes
+ * each row by its tallest item rather than stacking by margin, so the
+ * general cancellation above would pull the summary up into the field's own
+ * row instead of just tightening a stacked gap. Left at the page's original
+ * spacing there.
+ */
+.custom-checkout .twoinc-inp-container + .twoinc-company-summary {
+  margin-top: 0;
+}
+
+/*
+ * The "Enter manually" mode chip (TWO-25288, restyled as a chip TWO-40 §0).
  * Visual styling (pill shape, colours, focus-safe font/cursor) now comes
  * from the shared `.twoinc-mode-chip` class this button also carries — see
  * that rule. This id-selector rule survives ALONE for one property: round
@@ -705,7 +744,30 @@
   padding: 6px 12px;
   border-top: 1px solid #eeeeee;
 }
+/*
+ * Two chips per row, each filling half of it (item 4, live-reported by Doug:
+ * content-width chips left visible slack to the right of the row). A 50%
+ * flex-basis rather than PrestaShop's `flex: 1 1 auto` + `min-width`: that
+ * one's arrangement falls out of however wide the field happens to be, and
+ * this dropdown is as wide as whatever column the host theme gives the
+ * billing form. A half-row basis pins the arrangement at every width —
+ * "Registered company"/"Sole trader" on row one, "Enter manually" grown to
+ * the full width of row two, and just the two chips sharing one row where
+ * sole trader is unavailable.
+ *
+ * `box-sizing` spelled out because the basis depends on it: under
+ * content-box the chip's own padding and border would sit OUTSIDE the half
+ * row and push the second chip onto a line of its own. Buttons default to
+ * border-box, so this only matters against a theme that resets it globally.
+ *
+ * `white-space: normal` + `word-break` deliberately, NOT nowrap/ellipsis
+ * (TWO-40 spec: a chip label may wrap onto two lines, and must not
+ * truncate). It also keeps a long label's min-content width from beating
+ * the half-row basis on a narrow field.
+ */
 .twoinc-mode-chip {
+  flex: 1 1 calc(50% - 8px);
+  box-sizing: border-box;
   text-align: center;
   padding: 5px 12px;
   border-radius: 5px;
@@ -715,6 +777,8 @@
   cursor: pointer;
   user-select: none;
   font: inherit;
+  white-space: normal;
+  word-break: break-word;
   text-transform: none !important;
 }
 .twoinc-mode-chip--selected {
@@ -791,6 +855,37 @@
   font: inherit;
   text-transform: none !important;
 }
+/*
+ * Same box-model defect as the company-summary gap above (a3fd6e8), for
+ * this link (Doug, item 3): `placeDifferentSoleTraderBtn()` (twoinc.js)
+ * inserts it right after `#billing_company_display_field` (or its
+ * `.twoinc-inp-container` wrapper on the pay-for-order page) the same way
+ * `getCompanySummaryNode()` does, so it stacks against the same field
+ * `padding-bottom: 15px` and WooCommerce core's own `.form-row` bottom
+ * margin (~22px) on top of its own `margin-top: 4px` above, landing well
+ * past the intended small gap.
+ *
+ * Never doubled up with the summary's own cancellation on the same pair:
+ * the two are mutually exclusive by mode (`syncDifferentSoleTraderLink()`
+ * only shows this in sole-trader mode, `renderCompanySummary()`'s number
+ * label only in registered-search mode), so at most one of the two negative
+ * margins is ever live against a given field at once.
+ */
+#billing_company_display_field + #select_different_sole_trader_btn,
+.twoinc-inp-container + #select_different_sole_trader_btn {
+  margin-top: -33px;
+}
+
+/*
+ * Same reason as `.custom-checkout .twoinc-inp-container + .twoinc-company-summary`
+ * above: that page's flex row sizes by its tallest item rather than
+ * stacking by margin, so the cancellation above would pull the link up into
+ * the field's own row instead of just tightening a stacked gap.
+ */
+.custom-checkout .twoinc-inp-container + #select_different_sole_trader_btn {
+  margin-top: 4px;
+}
+
 #select_different_sole_trader_btn:focus {
   border-color: #808080 !important;
 }

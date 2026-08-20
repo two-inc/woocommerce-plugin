@@ -23,7 +23,7 @@
 const harness = require("./wc-harness");
 
 const TEXT = {
-  enter_manually: "Enter Manually",
+  enter_manually: "Enter manually",
   search_company: "Search for company"
 };
 

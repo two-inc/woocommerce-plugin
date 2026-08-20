@@ -15,7 +15,7 @@
     </div>
     <?php
     /*
-     * The "Enter Manually" mode chip and the link back to search used to be
+     * The "Enter manually" mode chip and the link back to search used to be
      * two hidden <div>s here, cloned into the dropdown by the checkout JS
      * (TWO-25288).
      *
@@ -25,7 +25,7 @@
      * runs the same search binding, so cloning from here left that page with
      * no way into manual entry and no way back out.
      *
-     * The "Enter Manually" chip is a real <button>, one of three mode chips
+     * The "Enter manually" chip is a real <button>, one of three mode chips
      * appended as a group, itself a sibling of the results list rather than
      * a row inside it (#30.x.1-3, TWO-40 §0): a pseudo-option <li> inside the
      * results list was tried first (TWO-25288) for arrow-key reachability,

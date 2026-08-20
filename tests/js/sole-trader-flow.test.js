@@ -3,9 +3,10 @@
  * boundary.
  *
  *   §7 — an in-flight state wired to the REAL duration of the round trip (a
- *   count, not a boolean, not a timeout), a re-entrancy guard so one gesture
- *   cannot stack two signup popups, a "select a different sole trader" link in
- *   the same slot as the existing "search for company" one, and a popup that
+ *   count, not a boolean, not a timeout), re-entrancy guards so neither one
+ *   gesture nor a later click while a popup is undecided can stack a second
+ *   signup popup, a "select a different sole trader" link in the same slot
+ *   as the existing "search for company" one, and a popup that
  *   is wide enough for the hosted flow's own layout.
  *
  *   §8 — the passive, pre-authentication email match is correct only before
@@ -16,7 +17,14 @@
 
 "use strict";
 
+const fs = require("fs");
+const path = require("path");
 const harness = require("./wc-harness");
+
+/** @returns {string} the raw twoinc.css source */
+function stylesheetSource() {
+  return fs.readFileSync(path.join(harness.REPO_ROOT, harness.STYLESHEET_PATH), "utf8");
+}
 
 /** The checkout subset the sole-trader module reads and writes. */
 function buildForm() {
@@ -280,6 +288,526 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     });
   });
 
+  describe("§7 — popup stacking across sequential activations", () => {
+    test.each([
+      {
+        arrange: () => $("#billing_email").val(""),
+        description: "no email entered, so both clicks resolve straight to signup"
+      },
+      {
+        arrange: () => {
+          $("#billing_email").val("buyer@example.test");
+          soleTrader.prefetched = { ready: true, matches: false, buyer: null };
+        },
+        description: "prefetch already resolved with no match"
+      }
+    ])(
+      "two sequential chip clicks open one popup, not two stacked — $description",
+      ({ arrange }) => {
+        arrange();
+
+        soleTrader.onModeChipClick("sole_trader");
+        expect(opened).toHaveLength(1);
+
+        // A second, LATER click — a separate gesture, after `openingSignup`
+        // has been released — while the first popup is still open and its
+        // outcome undecided.
+        soleTrader.onModeChipClick("sole_trader");
+        expect(opened).toHaveLength(1);
+      }
+    );
+
+    /**
+     * Every launch path the undecided-popup guard must leave alone. Each case
+     * arranges its state, launches, and must end with exactly the popups it
+     * asked for — refusing any of these is the regression the two earlier,
+     * rejected guards each caused (watcher-count alone refused the post-accept
+     * re-signup; `isDeciding()` refused launches with only a prefetch flight
+     * outstanding).
+     */
+    test.each([
+      {
+        arrangeAndAct: () => {
+          // Given: first-signup popup still open, but its signup already
+          // ACCEPTED and adopted — the popup has DECIDED.
+          soleTrader.setMode("sole_trader");
+          soleTrader.launchSignup();
+          soleTrader.bindPopupMessageListener();
+          jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) =>
+            cb({
+              organization_number: "TWO:ST1",
+              company_name: "First Trader",
+              email: "buyer@example.test"
+            })
+          );
+          window.dispatchEvent(
+            new window.MessageEvent("message", {
+              data: "ACCEPTED",
+              origin: "https://checkout.example.test"
+            })
+          );
+          // When: the "select a different sole trader" re-signup launches.
+          soleTrader.getDifferentSoleTraderBtnNode().trigger("click");
+        },
+        expectedPopups: 2,
+        description:
+          "a re-signup after acceptance, while the accepted popup's close poll is still outstanding"
+      },
+      {
+        arrangeAndAct: () => {
+          // Given: chip clicked mid-prefetch, no popup yet.
+          $("#billing_email").val("buyer@example.test");
+          jest.spyOn(soleTrader, "fetchTokens").mockImplementation((cb) => cb(true));
+          let resolveBuyer;
+          jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => {
+            resolveBuyer = cb;
+          });
+          soleTrader.onModeChipClick("sole_trader");
+          // When: the flight settles with no match — applyPrefetch's deferred launch.
+          resolveBuyer(null);
+        },
+        expectedPopups: 1,
+        description: "applyPrefetch's deferred launch once the awaited flight settles with no match"
+      },
+      {
+        arrangeAndAct: () => {
+          // Given: a browser-blocked popup — no watcher was ever created.
+          soleTrader.setMode("sole_trader");
+          const realOpen = window.open;
+          window.open = jest.fn(() => null);
+          soleTrader.launchSignup();
+          window.open = realOpen;
+          // When: the buyer retries.
+          soleTrader.launchSignup();
+        },
+        expectedPopups: 1,
+        description: "a retry after a browser-blocked popup"
+      },
+      {
+        arrangeAndAct: () => {
+          // Given: the note link, shown as the blocked-popup fallback.
+          soleTrader.render();
+          soleTrader.setMode("sole_trader");
+          const realOpen = window.open;
+          window.open = jest.fn(() => null);
+          soleTrader.launchSignup();
+          window.open = realOpen;
+          // When: the buyer clicks the visible signup link.
+          $(".twoinc-sole-trader-note__link").trigger("click");
+        },
+        expectedPopups: 1,
+        description: "the note link after a blocked popup"
+      },
+      {
+        arrangeAndAct: () => {
+          // Given: ONLY a prefetch flight outstanding — email typed, flight
+          // in the air, email cleared — no popup anywhere.
+          $("#billing_email").val("buyer@example.test");
+          jest.spyOn(soleTrader, "fetchTokens").mockImplementation((cb) => cb(true));
+          jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation(() => {});
+          soleTrader.onEmailChanged();
+          expect(soleTrader.flightDepth).toBeGreaterThan(0);
+          $("#billing_email").val("");
+          // When: the chip is clicked.
+          soleTrader.onModeChipClick("sole_trader");
+        },
+        expectedPopups: 1,
+        description: "a chip click while only a stale prefetch flight is outstanding"
+      }
+    ])("still launches: $description", ({ arrangeAndAct, expectedPopups }) => {
+      arrangeAndAct();
+
+      // Then: the launch was honoured, not refused.
+      expect(opened).toHaveLength(expectedPopups);
+    });
+
+    test("an accepted-then-closed re-signup spends ONE decrement, so a third click cannot stack over an undecided second re-signup", () => {
+      jest.useFakeTimers();
+      soleTrader.setMode("sole_trader");
+      soleTrader.setCompany("TWO:ST1", "First Trader");
+      soleTrader.bindPopupMessageListener();
+
+      // Given: re-signup R1 accepted, then closed INSIDE its poll's own
+      // 300ms window — the poll has not noticed yet.
+      const win1 = { closed: false };
+      window.open = jest.fn(() => win1);
+      soleTrader.getDifferentSoleTraderBtnNode().trigger("click");
+      jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) =>
+        cb({
+          organization_number: "TWO:ST2",
+          company_name: "Second Trader",
+          email: "buyer@example.test"
+        })
+      );
+      window.dispatchEvent(
+        new window.MessageEvent("message", {
+          data: "ACCEPTED",
+          origin: "https://checkout.example.test"
+        })
+      );
+      expect(soleTrader.soleTraderReconfirmingCount).toBe(0);
+      win1.closed = true;
+
+      // When: re-signup R2 opens before R1's stale poll fires.
+      const win2 = { closed: false };
+      window.open = jest.fn(() => win2);
+      soleTrader.getDifferentSoleTraderBtnNode().trigger("click");
+      expect(soleTrader.soleTraderReconfirmingCount).toBe(1);
+      jest.advanceTimersByTime(300);
+
+      // Then: R1's poll did not steal R2's decrement, and a third click
+      // while R2 is open and undecided does not stack.
+      expect(soleTrader.soleTraderReconfirmingCount).toBe(1);
+      const thirdOpen = jest.fn(() => ({ closed: false }));
+      window.open = thirdOpen;
+      soleTrader.getDifferentSoleTraderBtnNode().trigger("click");
+      expect(thirdOpen).not.toHaveBeenCalled();
+      jest.useRealTimers();
+    });
+
+    test("a prefetch match landing while a first-time popup is still open does not let the re-signup link stack over it", () => {
+      // Given: a no-email chip click opened a first-time popup, undecided.
+      $("#billing_email").val("");
+      soleTrader.onModeChipClick("sole_trader");
+      expect(opened).toHaveLength(1);
+
+      // When: the buyer types an email whose prefetch matches — adoption
+      // happens under the still-open popup and the re-signup link appears.
+      $("#billing_email").val("buyer@example.test");
+      jest.spyOn(soleTrader, "fetchTokens").mockImplementation((cb) => cb(true));
+      jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) =>
+        cb({
+          organization_number: "TWO:ST1",
+          company_name: "Sole Co",
+          email: "buyer@example.test"
+        })
+      );
+      soleTrader.onEmailChanged();
+      expect(soleTrader.soleTraderAdopted).toBe(true);
+
+      // Then: the popup is still undecided, so the link must not stack.
+      soleTrader.getDifferentSoleTraderBtnNode().trigger("click");
+      expect(opened).toHaveLength(1);
+    });
+
+    test("a chip click straight after the buyer closed the popup by hand opens a fresh one — the stale poll neither refuses nor reverts", () => {
+      jest.useFakeTimers();
+      $("#billing_email").val("");
+      const wins = [];
+      window.open = jest.fn(() => {
+        const win = { closed: false };
+        wins.push(win);
+        return win;
+      });
+
+      soleTrader.onModeChipClick("sole_trader");
+      expect(wins).toHaveLength(1);
+
+      // When: the buyer closes the popup and re-clicks INSIDE the close
+      // poll's own 300ms window.
+      wins[0].closed = true;
+      soleTrader.onModeChipClick("sole_trader");
+
+      // Then: a fresh popup, and the first popup's poll firing later must
+      // not revert mode out from under it.
+      expect(wins).toHaveLength(2);
+      jest.advanceTimersByTime(300);
+      expect(soleTrader.mode).toBe("sole_trader");
+      expect(soleTrader.activePopupWatchers).toHaveLength(1);
+      jest.useRealTimers();
+    });
+
+    test("a closed popup's record leaves the watcher list, so nothing refuses forever", () => {
+      jest.useFakeTimers();
+      const win = { closed: false };
+      window.open = jest.fn(() => win);
+      soleTrader.setMode("sole_trader");
+      soleTrader.launchSignup();
+
+      win.closed = true;
+      jest.advanceTimersByTime(300);
+
+      expect(soleTrader.activePopupWatchers).toHaveLength(0);
+      expect(soleTrader.isBusy()).toBe(false);
+      const retryOpen = jest.fn(() => ({ closed: false }));
+      window.open = retryOpen;
+      soleTrader.launchSignup();
+      expect(retryOpen).toHaveBeenCalledTimes(1);
+      jest.useRealTimers();
+    });
+
+    test("no popup stacks while an ACCEPTED's own buyer fetch is still resolving, even once the popup closed and its record is gone", () => {
+      jest.useFakeTimers();
+      soleTrader.setMode("sole_trader");
+      const win = { closed: false };
+      window.open = jest.fn(() => win);
+      soleTrader.launchSignup();
+      soleTrader.bindPopupMessageListener();
+      jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation(() => {});
+
+      window.dispatchEvent(
+        new window.MessageEvent("message", {
+          data: "ACCEPTED",
+          origin: "https://checkout.example.test"
+        })
+      );
+      win.closed = true;
+      jest.advanceTimersByTime(300);
+      expect(soleTrader.activePopupWatchers).toHaveLength(0);
+
+      const stackOpen = jest.fn(() => ({ closed: false }));
+      window.open = stackOpen;
+      soleTrader.launchSignup();
+      expect(stackOpen).not.toHaveBeenCalled();
+      jest.useRealTimers();
+    });
+
+    /**
+     * Round-3 review regressions (by Claude). Letting a fresh popup open over
+     * a hand-closed record's stale poll window — the round-2 fix above — put
+     * TWO undecided records in the list at once, which the ACCEPTED handler's
+     * forward `find(!decided)` then resolved to the STALE one in preference to
+     * the live popup that actually sent the message.
+     */
+    describe("round-3 review regressions — ACCEPTED pairs with the popup that sent it", () => {
+      /** Open a popup through `act`, returning the window handle it got. */
+      function openTracked(act) {
+        const win = { closed: false };
+        window.open = jest.fn(() => win);
+        act();
+        return win;
+      }
+
+      /** Deliver ACCEPTED as the named popup window, the way the browser does. */
+      function accept(source, buyer) {
+        soleTrader.bindPopupMessageListener();
+        jest
+          .spyOn(soleTrader, "fetchCurrentBuyer")
+          .mockImplementation((cb) => cb(buyer === undefined ? null : buyer));
+        window.dispatchEvent(
+          new window.MessageEvent("message", {
+            data: "ACCEPTED",
+            origin: "https://checkout.example.test",
+            source: source
+          })
+        );
+      }
+
+      const BUYER = {
+        organization_number: "TWO:ST2",
+        company_name: "Second Trader",
+        email: "buyer@example.test"
+      };
+
+      test("marks the live popup decided, not the stale hand-closed record it opened over", () => {
+        jest.useFakeTimers();
+        $("#billing_email").val("");
+
+        // Given: popup A hand-closed inside its own poll window, popup B
+        // relaunched over it — both records undecided.
+        const winA = openTracked(() => soleTrader.onModeChipClick("sole_trader"));
+        winA.closed = true;
+        const winB = openTracked(() => soleTrader.onModeChipClick("sole_trader"));
+        expect(soleTrader.activePopupWatchers).toHaveLength(2);
+
+        // When: B completes signup.
+        accept(winB, BUYER);
+
+        // Then: B is the decided one, and A is still owed its own abandon
+        // handling by its own poll.
+        const recordFor = (win) => soleTrader.activePopupWatchers.find((w) => w.win === win);
+        expect(recordFor(winB).decided).toBe(true);
+        expect(recordFor(winA).decided).toBe(false);
+        jest.useRealTimers();
+      });
+
+      test("does not refuse the sanctioned re-signup after an accept that followed a hand-closed popup", () => {
+        jest.useFakeTimers();
+        $("#billing_email").val("");
+
+        // Given: A hand-closed, B relaunched over its stale window, B accepted.
+        const winA = openTracked(() => soleTrader.onModeChipClick("sole_trader"));
+        winA.closed = true;
+        const winB = openTracked(() => soleTrader.onModeChipClick("sole_trader"));
+        accept(winB, BUYER);
+        expect(soleTrader.soleTraderAdopted).toBe(true);
+
+        // When: the buyer takes the "select a different sole trader" link the
+        // accept just earned them.
+        const reSignup = jest.fn(() => ({ closed: false }));
+        window.open = reSignup;
+        soleTrader.getDifferentSoleTraderBtnNode().trigger("click");
+
+        // Then: it opened. Mis-pairing left B undecided and open, which the
+        // launch guard read as "a popup is still deciding" — for as long as
+        // the hosted flow left its own window up, i.e. potentially forever.
+        expect(reSignup).toHaveBeenCalledTimes(1);
+        jest.useRealTimers();
+      });
+
+      test("spends the accepting popup's reconfirming decrement, not a stale record's", () => {
+        jest.useFakeTimers();
+        $("#billing_email").val("");
+
+        // Given: a first-time popup A hand-closed, then an autofill match
+        // adopts under its stale window, so the re-signup link is live.
+        const winA = openTracked(() => soleTrader.onModeChipClick("sole_trader"));
+        winA.closed = true;
+        soleTrader.setCompany("TWO:ST1", "First Trader");
+        expect(soleTrader.soleTraderAdopted).toBe(true);
+
+        // When: re-signup B opens over A and is accepted.
+        const winB = openTracked(() => soleTrader.getDifferentSoleTraderBtnNode().trigger("click"));
+        expect(soleTrader.soleTraderReconfirmingCount).toBe(1);
+        accept(winB, BUYER);
+
+        // Then: B's increment is settled. Pairing with A — which never
+        // incremented, being a first-time signup — left the count stranded at
+        // 1, so `isDeciding()` blocked every leave-sole-trader action after it.
+        expect(soleTrader.soleTraderReconfirmingCount).toBe(0);
+        expect(soleTrader.isDeciding()).toBe(false);
+        jest.useRealTimers();
+      });
+
+      test("a replayed ACCEPTED from an already-decided popup spends no second decrement", () => {
+        jest.useFakeTimers();
+        soleTrader.setMode("sole_trader");
+        soleTrader.setCompany("TWO:ST1", "First Trader");
+
+        // Given: a re-signup accepted once.
+        const win = openTracked(() => soleTrader.getDifferentSoleTraderBtnNode().trigger("click"));
+        expect(soleTrader.soleTraderReconfirmingCount).toBe(1);
+        accept(win, BUYER);
+        expect(soleTrader.soleTraderReconfirmingCount).toBe(0);
+
+        // When: a second re-signup is outstanding and the first popup's
+        // ACCEPTED is replayed.
+        const winNext = openTracked(() =>
+          soleTrader.getDifferentSoleTraderBtnNode().trigger("click")
+        );
+        expect(soleTrader.soleTraderReconfirmingCount).toBe(1);
+        accept(win, BUYER);
+
+        // Then: the replay neither re-spent the decided popup's decrement nor
+        // stole the still-undecided one's.
+        expect(soleTrader.soleTraderReconfirmingCount).toBe(1);
+        expect(soleTrader.activePopupWatchers.find((w) => w.win === winNext).decided).toBe(false);
+        jest.useRealTimers();
+      });
+
+      test("pairs by the live popup when the browser gives no source, never the stale record", () => {
+        jest.useFakeTimers();
+        $("#billing_email").val("");
+
+        // Given: A hand-closed and B live, with a message carrying no source
+        // (a popup that closes in the same turn it posts can arrive this way).
+        const winA = openTracked(() => soleTrader.onModeChipClick("sole_trader"));
+        winA.closed = true;
+        const winB = openTracked(() => soleTrader.onModeChipClick("sole_trader"));
+
+        // When: ACCEPTED arrives unattributed.
+        accept(null, BUYER);
+
+        // Then: the live popup is the one that decided.
+        const recordFor = (win) => soleTrader.activePopupWatchers.find((w) => w.win === win);
+        expect(recordFor(winB).decided).toBe(true);
+        expect(recordFor(winA).decided).toBe(false);
+        jest.useRealTimers();
+      });
+
+      test("a stale poll does not revert mode under a decided popup that is still on screen", () => {
+        jest.useFakeTimers();
+        $("#billing_email").val("");
+
+        // Given: A hand-closed, B relaunched over it, and B's ACCEPTED
+        // resolving to no buyer — decided, errored, window still up.
+        const winA = openTracked(() => soleTrader.onModeChipClick("sole_trader"));
+        winA.closed = true;
+        const winB = openTracked(() => soleTrader.onModeChipClick("sole_trader"));
+        accept(winB, null);
+        expect(soleTrader.soleTraderAdopted).toBe(false);
+
+        // When: A's stale poll finally fires.
+        jest.advanceTimersByTime(300);
+
+        // Then: mode is still B's, so the buyer's retry inside B is not
+        // dropped on the handler's own `mode !== "sole_trader"` gate.
+        expect(soleTrader.mode).toBe("sole_trader");
+        accept(winB, BUYER);
+        expect(soleTrader.soleTraderAdopted).toBe(true);
+        jest.useRealTimers();
+      });
+
+      test("still reverts mode once every popup really has gone", () => {
+        jest.useFakeTimers();
+        $("#billing_email").val("");
+
+        // Given: A hand-closed and B relaunched over it, then B closed too,
+        // neither ever decided.
+        const winA = openTracked(() => soleTrader.onModeChipClick("sole_trader"));
+        winA.closed = true;
+        const winB = openTracked(() => soleTrader.onModeChipClick("sole_trader"));
+        winB.closed = true;
+
+        // When: both stale polls fire.
+        jest.advanceTimersByTime(300);
+
+        // Then: the checkout is handed back to an ordinary company search
+        // rather than left stuck mid-switch.
+        expect(soleTrader.activePopupWatchers).toHaveLength(0);
+        expect(soleTrader.mode).toBe("business");
+        jest.useRealTimers();
+      });
+
+      test("attributes an unattributed accept to the newest closed record, not the stale one under it", () => {
+        jest.useFakeTimers();
+        $("#billing_email").val("");
+
+        // Given: first-time popup A hand-closed, an autofill match adopting
+        // under its stale window, then re-signup B opened over it — and B
+        // posts ACCEPTED and vanishes in the same turn, so BOTH records are
+        // closed and undecided with no source to pair on.
+        const winA = openTracked(() => soleTrader.onModeChipClick("sole_trader"));
+        winA.closed = true;
+        soleTrader.setCompany("TWO:ST1", "First Trader");
+        const winB = openTracked(() => soleTrader.getDifferentSoleTraderBtnNode().trigger("click"));
+        expect(soleTrader.soleTraderReconfirmingCount).toBe(1);
+        winB.closed = true;
+
+        // When: the unattributed ACCEPTED lands.
+        accept(null, BUYER);
+
+        // Then: B owns it. Scanning oldest-first picks A — which, being a
+        // first-time signup, owes no decrement — stranding B's.
+        expect(soleTrader.activePopupWatchers.find((w) => w.win === winB).decided).toBe(true);
+        expect(soleTrader.soleTraderReconfirmingCount).toBe(0);
+        jest.useRealTimers();
+      });
+
+      test("still pairs a popup that closed in the very turn it posted ACCEPTED", () => {
+        jest.useFakeTimers();
+        soleTrader.setMode("sole_trader");
+        soleTrader.setCompany("TWO:ST1", "First Trader");
+
+        // Given: the only record is a re-signup whose window is already gone
+        // by the time the message is delivered, with no source to pair on.
+        const win = openTracked(() => soleTrader.getDifferentSoleTraderBtnNode().trigger("click"));
+        expect(soleTrader.soleTraderReconfirmingCount).toBe(1);
+        win.closed = true;
+
+        // When: its ACCEPTED lands unattributed.
+        accept(null, BUYER);
+
+        // Then: it was still recognised, so its own poll does not later bill a
+        // second decrement as an abandon.
+        expect(soleTrader.soleTraderReconfirmingCount).toBe(0);
+        jest.advanceTimersByTime(300);
+        expect(soleTrader.soleTraderReconfirmingCount).toBe(0);
+        jest.useRealTimers();
+      });
+    });
+  });
+
   describe("§7 — select a different sole trader", () => {
     test("lands in the same slot as the search-for-company link", () => {
       const $btn = soleTrader.getDifferentSoleTraderBtnNode();
@@ -347,6 +875,174 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     test("the ordinary signup launch carries no autoselect flag", () => {
       soleTrader.launchSignup();
       expect(opened[0].url).not.toContain("autoselect");
+    });
+
+    describe("item 3 — the gap above the link (live-reported by Doug)", () => {
+      // Same box-model stack as `.twoinc-company-summary`'s own gap fix
+      // (a3fd6e8): `#billing_company_display_field`'s 15px padding-bottom
+      // plus WooCommerce core's own `.form-row` bottom margin, cancelled on
+      // whichever element actually lands after that field via the adjacent-
+      // sibling selector `placeDifferentSoleTraderBtn()` inserts it with.
+      test("a scoped negative margin-top cancels the field's own padding-bottom + core's form-row margin", () => {
+        const rule =
+          /#billing_company_display_field \+ #select_different_sole_trader_btn,\s*\.twoinc-inp-container \+ #select_different_sole_trader_btn\s*\{([^}]*)\}/.exec(
+            stylesheetSource()
+          );
+
+        expect(rule).not.toBeNull();
+        expect(rule[1]).toMatch(/margin-top:\s*-\d+px/);
+      });
+
+      test("never doubles up with the summary's own cancellation — the two never show for the same field", () => {
+        // syncDifferentSoleTraderLink()'s gate and renderCompanySummary()'s
+        // are mode-exclusive (sole_trader vs registered-search), so a real
+        // checkout can show at most one of the two negative margins against
+        // a given field, never both stacked on top of each other.
+        soleTrader.mode = "sole_trader";
+        $("#company_id").val("TWO:ST12345");
+        soleTrader.syncDifferentSoleTraderLink();
+
+        expect($(".twoinc-company-summary").length).toBe(0);
+      });
+    });
+
+    describe("item 2 — a sole trader restored by loadUserMetaInputs (live-reported by Doug)", () => {
+      // The regression: `loadUserMetaInputs()` (a returning buyer's LAST
+      // captured company, restored from user meta) writes straight through
+      // `twoincCompanyCapture.write()`, never through `setCompany()` — the
+      // only place `mode`/`soleTraderAdopted` get set and the link gets
+      // synced. The company populated correctly; the link just never
+      // appeared, and a re-signup completing later would have been silently
+      // dropped by `bindPopupMessageListener`'s own `mode !== "sole_trader"`
+      // gate.
+      test("a restored TWO:-prefixed id shows the link", () => {
+        ctx.twoinc.billing_company = "A Sole Trader";
+        ctx.twoinc.company_id = "TWO:ST12345";
+
+        ctx.dom.loadUserMetaInputs();
+
+        expect(soleTrader.mode).toBe("sole_trader");
+        expect(soleTrader.soleTraderAdopted).toBe(true);
+        expect(soleTrader.getDifferentSoleTraderBtnNode().css("display")).not.toBe("none");
+      });
+
+      test("a restored ORDINARY registry number leaves sole-trader mode untouched", () => {
+        ctx.twoinc.billing_company = "ACME Widgets Ltd";
+        ctx.twoinc.company_id = "12345678";
+
+        ctx.dom.loadUserMetaInputs();
+
+        expect(soleTrader.mode).toBe("business");
+        expect(soleTrader.getDifferentSoleTraderBtnNode().css("display")).toBe("none");
+      });
+
+      // The user-meta echo exists only for a signed-in WordPress user, so for a
+      // GUEST — whose company reaches the DOM by WooCommerce's own rendered
+      // value or by loadStorageInputs() — the restore above was skipped whole,
+      // its own DOM fallback included. Live-confirmed by Doug: both echo
+      // properties `undefined` on a checkout whose `#company_id` already held a
+      // restored `TWO:…` id.
+      describe("no user-meta echo — the guest / session-restore case", () => {
+        beforeEach(() => {
+          delete ctx.twoinc.billing_company;
+          delete ctx.twoinc.company_id;
+        });
+
+        test("a DOM-restored TWO:-prefixed id shows the link", () => {
+          $("#billing_company").val("A Sole Trader");
+          $("#company_id").val("TWO:ST12345");
+
+          ctx.dom.loadUserMetaInputs();
+
+          expect(soleTrader.mode).toBe("sole_trader");
+          expect(soleTrader.soleTraderAdopted).toBe(true);
+          expect(soleTrader.getDifferentSoleTraderBtnNode().css("display")).not.toBe("none");
+        });
+
+        test("a DOM-restored ORDINARY registry number is captured, not adopted", () => {
+          // Captured all the same: the pairing tag is what stops the retype
+          // guard wiping a perfectly good restored number (TWO-40 §5), and a
+          // guest had no path to one before. The sole-trader state is what a
+          // registry number must NOT acquire.
+          $("#billing_company").val("ACME Widgets Ltd");
+          $("#company_id").val("12345678");
+
+          ctx.dom.loadUserMetaInputs();
+
+          expect(ctx.capture.isPluginWritten($("#company_id"))).toBe(true);
+          expect(soleTrader.mode).toBe("business");
+          expect(soleTrader.getDifferentSoleTraderBtnNode().css("display")).toBe("none");
+        });
+
+        test("an empty form restores nothing", () => {
+          ctx.dom.loadUserMetaInputs();
+
+          expect(ctx.capture.isPluginWritten($("#company_id"))).toBe(false);
+          expect(soleTrader.mode).toBe("business");
+        });
+
+        test("a name with no number is left as the buyer's own", () => {
+          // initialize() runs on the first re-render that makes this gateway
+          // visible, which can be after the buyer has typed — and a name with
+          // no number is exactly what manual entry looks like mid-keystroke.
+          // Stamping provenance on it would let a later country switch clear it
+          // as a value this plugin had written.
+          $("#billing_company").val("Buyer's Own Ltd");
+
+          ctx.dom.loadUserMetaInputs();
+
+          expect($("#billing_company").val()).toBe("Buyer's Own Ltd");
+          expect(ctx.capture.isPluginWritten($("#billing_company"))).toBe(false);
+        });
+
+        test("the storage pass's own values are restored too", () => {
+          // loadStorageInputs() runs AFTER the user-meta pass and assigns both
+          // fields with a bare `.val()`, so on a guest checkout it is the pass
+          // that supplies the pair — and the one restoreCapturedCompany() has
+          // to see.
+          ctx.dom.loadUserMetaInputs();
+          $("#billing_company").val("A Sole Trader");
+          $("#company_id").val("TWO:ST12345");
+
+          ctx.dom.restoreCapturedCompany();
+
+          expect(soleTrader.mode).toBe("sole_trader");
+          expect(soleTrader.getDifferentSoleTraderBtnNode().css("display")).not.toBe("none");
+        });
+      });
+
+      test.each([
+        [
+          "the echo wins outright when it holds the number",
+          { metaName: "ACME Widgets Ltd", metaId: "12345678" },
+          { name: "A Sole Trader", id: "TWO:ST12345" },
+          { name: "ACME Widgets Ltd", id: "12345678", mode: "business" }
+        ],
+        [
+          "a name-only echo does not steal the DOM's number",
+          { metaName: "ACME Widgets Ltd", metaId: undefined },
+          { name: "A Sole Trader", id: "TWO:ST12345" },
+          { name: "A Sole Trader", id: "TWO:ST12345", mode: "sole_trader" }
+        ]
+      ])(
+        "a DISAGREEING restore is taken whole from one source — %s",
+        (_description, echo, dom, expected) => {
+          // Otherwise the pairing tag describes a company that never existed —
+          // one restore's name against another's number — and the retype
+          // guard, which compares the live fields against that tag, is reading
+          // a fiction.
+          ctx.twoinc.billing_company = echo.metaName;
+          ctx.twoinc.company_id = echo.metaId;
+          $("#billing_company").val(dom.name);
+          $("#company_id").val(dom.id);
+
+          ctx.dom.loadUserMetaInputs();
+
+          expect($("#billing_company").val()).toBe(expected.name);
+          expect($("#company_id").val()).toBe(expected.id);
+          expect(soleTrader.mode).toBe(expected.mode);
+        }
+      );
     });
   });
 
@@ -825,6 +1521,255 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         expect(soleTrader.mode).toBe("business");
         expect($("#billing_company").prop("readonly")).toBe(false);
         expect($("#billing_company_display").data("select2").isOpen()).toBe(true);
+      });
+
+      describe("TWO-40 §7 direction (a) — an adopted sole trader displays through the live widget", () => {
+        beforeEach(() => {
+          // `toggleBusinessFields()`'s isTwoincSelected branch — where the
+          // widget-vs-native-field decision actually lives — reads a real
+          // checked `payment_method` radio; `buildForm()` carries none,
+          // since no other test in this file asserts field visibility.
+          $(
+            '<input type="radio" name="payment_method" value="' +
+              ctx.twoinc.gateway_id +
+              '" checked />'
+          ).appendTo("form[name='checkout']");
+        });
+
+        test("with company search enabled, adoption shows the search widget itself, not the native field, seeded with the sole trader's own selection", () => {
+          soleTrader.setMode("sole_trader");
+          soleTrader.setCompany("TWO:ST1", "A Sole Trader");
+
+          expect($("#billing_company_display_field").hasClass("hidden")).toBe(false);
+          expect($("#billing_company_field").hasClass("hidden")).toBe(true);
+          expect($("#billing_company_display").val()).toBe("TWO:ST1");
+          expect($("#billing_company_display").find('option[value="TWO:ST1"]').text()).toBe(
+            "A Sole Trader"
+          );
+        });
+
+        test("picking a different company directly off the still-open widget leaves sole-trader mode and writes the new pick, without destroying the widget", () => {
+          soleTrader.setMode("sole_trader");
+          soleTrader.setCompany("TWO:ST1", "A Sole Trader");
+          const $display = $("#billing_company_display");
+          const widgetInstance = $display.data("select2");
+
+          $display.trigger({
+            type: "select2:select",
+            params: { data: { id: "A Registered Co", company_id: "12345678" } }
+          });
+
+          expect(soleTrader.mode).toBe("business");
+          expect(soleTrader.soleTraderAdopted).toBe(false);
+          expect($("#company_id").val()).toBe("12345678");
+          expect($("#billing_company").val()).toBe("A Registered Co");
+          // Same instance throughout — a pick made off the live widget must
+          // never trigger the destroy/rebuild `setMode("business")`'s OWN
+          // branch does on the way out via reopenSearch/the Business chip;
+          // doing so here would blank the very pick this test just made.
+          expect($display.data("select2")).toBe(widgetInstance);
+        });
+
+        test("a pick landing while still genuinely deciding (autofill flight outstanding) is refused, not silently adopted", () => {
+          const flight = armPendingPrefetch();
+          soleTrader.onModeChipClick("sole_trader");
+          expect(soleTrader.isDeciding()).toBe(true);
+
+          $("#billing_company_display").trigger({
+            type: "select2:select",
+            params: { data: { id: "A Registered Co", company_id: "12345678" } }
+          });
+
+          expect(soleTrader.mode).toBe("sole_trader");
+          expect($("#company_id").val()).toBe("");
+
+          flight.settle({
+            organization_number: "TWO:ST1",
+            company_name: "Sole Co",
+            email: "buyer@example.test"
+          });
+          expect($("#company_id").val()).toBe("TWO:ST1");
+        });
+
+        test("a merchant who relocated the control to the payment tile shows the adoption through the widget there, native field alongside", () => {
+          // Replaces an "enable_company_search: no" case (#486). There is no
+          // such state: the admin checkbox only ever RELOCATES the one search
+          // control (TWO-25326 §7.1), so the adopted sole trader shows through
+          // the widget either way — and in tile placement WooCommerce's own
+          // native field deliberately stays in the address area alongside it,
+          // rather than the two swapping.
+          ctx.twoinc.company_search_location = "payment_tile";
+
+          soleTrader.setMode("sole_trader");
+          soleTrader.setCompany("TWO:ST1", "A Sole Trader");
+
+          expect($("#billing_company_display_field").hasClass("hidden")).toBe(false);
+          expect($("#billing_company_field").hasClass("hidden")).toBe(false);
+          expect($("#billing_company").prop("readonly")).toBe(true);
+        });
+
+        describe("item 4.2 / item 2.1 — the dropdown's own free-text query is suppressed once adopted", () => {
+          /** @returns {Object} jQuery-wrapped `.select2-search--dropdown` row */
+          function queryRow() {
+            return $("#select2-billing_company_display-results")
+              .closest(".select2-dropdown")
+              .find(".select2-search--dropdown")
+              .first();
+          }
+
+          /** @returns {Object} jQuery-wrapped query input inside that row */
+          function queryField() {
+            return queryRow().find(".select2-search__field");
+          }
+
+          test("reopening the widget after adoption leaves its search input readonly", () => {
+            soleTrader.setMode("sole_trader");
+            soleTrader.setCompany("TWO:ST1", "A Sole Trader");
+            const $display = $("#billing_company_display");
+
+            $display.select2("open");
+
+            expect($display.data("select2").isOpen()).toBe(true);
+            expect(
+              $('input[aria-owns="select2-billing_company_display-results"]').prop("readonly")
+            ).toBe(true);
+          });
+
+          /**
+           * Item 2.1, live-reported by Doug: "the field should not be
+           * VISIBLE. I did not tell you it was editable, I told you it was
+           * visible." Readonly alone reads as a search box that has stopped
+           * working.
+           */
+          test("the whole query row is hidden, not merely readonly", () => {
+            soleTrader.setMode("sole_trader");
+            soleTrader.setCompany("TWO:ST1", "A Sole Trader");
+
+            $("#billing_company_display").select2("open");
+
+            expect(queryRow().attr("hidden")).toBe("hidden");
+            expect(queryRow().css("display")).toBe("none");
+          });
+
+          /**
+           * `display: none` and the `hidden` attribute, not
+           * `visibility`/`opacity`: only the former take the input out of the
+           * tab order. selectWoo's own open handler sets `tabindex="0"` on it
+           * unconditionally, so the hide is the ONLY thing keeping a
+           * keyboard-only buyer off a field they cannot see — asserted here so
+           * a later switch to a paint-only mechanism cannot pass.
+           */
+          test("the hidden query field is out of the tab order, not just unpainted", () => {
+            soleTrader.setMode("sole_trader");
+            soleTrader.setCompany("TWO:ST1", "A Sole Trader");
+
+            $("#billing_company_display").select2("open");
+
+            expect(queryField().attr("tabindex")).toBe("0");
+            expect(queryRow().css("display")).toBe("none");
+          });
+
+          test("a term typed before adopting is dropped rather than left above stale results", () => {
+            const $display = $("#billing_company_display");
+            $display.select2("open");
+            queryField().val("some other company");
+
+            soleTrader.setMode("sole_trader");
+            soleTrader.setCompany("TWO:ST1", "A Sole Trader");
+            $display.select2("open");
+
+            expect(queryField().val()).toBe("");
+          });
+
+          test("an ordinary (non-adopted) open leaves the search input typable and visible", () => {
+            const $display = $("#billing_company_display");
+
+            $display.select2("open");
+
+            expect(
+              $('input[aria-owns="select2-billing_company_display-results"]').prop("readonly")
+            ).toBe(false);
+            expect(queryRow().attr("hidden")).toBeUndefined();
+            expect(queryRow().css("display")).not.toBe("none");
+          });
+
+          test('the row is visible and typable again once "Registered company" is clicked', () => {
+            soleTrader.setMode("sole_trader");
+            soleTrader.setCompany("TWO:ST1", "A Sole Trader");
+            jest.useFakeTimers();
+            $("#billing_company_display").select2("open");
+            // The chip group is appended a tick after `select2:open` — see
+            // bindManualEntryAffordance's own comment.
+            jest.advanceTimersByTime(1);
+            expect(queryRow().css("display")).toBe("none");
+
+            $("#" + ctx.helper.businessChipId).trigger("click");
+            $("#billing_company_display").select2("open");
+            jest.advanceTimersByTime(1);
+            jest.useRealTimers();
+
+            expect(soleTrader.mode).toBe("business");
+            expect(queryRow().attr("hidden")).toBeUndefined();
+            expect(queryRow().css("display")).not.toBe("none");
+            expect(queryField().prop("readonly")).toBe(false);
+          });
+
+          /**
+           * The one path that leaves sole-trader mode WITHOUT destroying the
+           * widget (see the `select2:select` handler's `sole_trader` branch),
+           * so it is the one where a suppression applied on a previous open
+           * would otherwise never be undone — selectWoo renders this row once
+           * per instance, not once per open.
+           */
+          test("picking a different company off the still-live widget gives the row back on the next open", () => {
+            soleTrader.setMode("sole_trader");
+            soleTrader.setCompany("TWO:ST1", "A Sole Trader");
+            const $display = $("#billing_company_display");
+            $display.select2("open");
+            expect(queryRow().css("display")).toBe("none");
+
+            $display.trigger({
+              type: "select2:select",
+              params: { data: { id: "A Registered Co", company_id: "12345678" } }
+            });
+            // The relayed `select2:select` this test fires does not drive
+            // select2's own close, so the reopen needs the close first.
+            $display.select2("close");
+            $display.select2("open");
+
+            expect(queryRow().attr("hidden")).toBeUndefined();
+            expect(queryField().prop("readonly")).toBe(false);
+          });
+
+          /**
+           * The spinner is an absolutely-positioned sibling INSIDE this row
+           * (`.twoinc-search-spinner`), so a re-signup started from an
+           * already-adopted state has to get the row back for its in-flight
+           * state to be visible at all.
+           */
+          test("a re-signup flight from an adopted state shows the row again, and hides it on settle", () => {
+            soleTrader.setMode("sole_trader");
+            soleTrader.setCompany("TWO:ST1", "A Sole Trader");
+            $("#billing_company_display").select2("open");
+
+            soleTrader.beginFlight();
+            expect(queryRow().attr("hidden")).toBeUndefined();
+            expect(queryRow().find(".twoinc-search-spinner").length).toBe(1);
+
+            soleTrader.settleFlight();
+            expect(queryRow().attr("hidden")).toBe("hidden");
+          });
+
+          test("re-clicking the chip to open a fresh re-signup goes through launchSignup, not a typed query", () => {
+            soleTrader.setMode("sole_trader");
+            soleTrader.setCompany("TWO:ST1", "A Sole Trader");
+            const launchSpy = jest.spyOn(soleTrader, "launchSignup");
+
+            soleTrader.onModeChipClick("sole_trader");
+
+            expect(launchSpy).toHaveBeenCalledWith({ autoselect: false });
+          });
+        });
       });
     });
 
@@ -1356,6 +2301,265 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         expect(soleTrader.mode).toBe("business");
       });
     });
+
+    describe("item 2 — a later, unrelated flight must not revert an already-adopted sole trader", () => {
+      // `#billing_email` is never locked (see the round-6 test above), so a
+      // buyer who has ALREADY been adopted can still edit it afterwards.
+      // Before this fix, `applyPrefetch`'s revert branch checked only
+      // `mode === "sole_trader" && !isBusy()` — a fresh flight for the
+      // edited email settling with no match (the ordinary case: the
+      // autofill cookie has no reason to agree with an adoption already
+      // settled) reverted straight to business and wiped the captured
+      // company, live-reported by Doug.
+      test("editing the email post-adoption to one autofill does not match leaves the adoption alone", () => {
+        soleTrader.setMode("sole_trader");
+        soleTrader.setCompany("TWO:ST1", "First Trader");
+        expect(soleTrader.soleTraderAdopted).toBe(true);
+
+        $("#billing_email").val("unrelated@example.test");
+        jest.spyOn(soleTrader, "fetchTokens").mockImplementation((cb) => cb(true));
+        jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => cb(null));
+        soleTrader.onEmailChanged();
+
+        expect(soleTrader.mode).toBe("sole_trader");
+        expect($("#company_id").val()).toBe("TWO:ST1");
+      });
+    });
+  });
+
+  describe("TWO-40 §7 direction (a) — Doug's live-tested regressions on the widget-selection PR", () => {
+    beforeEach(() => {
+      $("form[name='checkout']").after('<div id="order_review"></div>');
+      ctx.Twoinc.getInstance().initialize(false);
+      $(
+        '<input type="radio" name="payment_method" value="' + ctx.twoinc.gateway_id + '" checked />'
+      ).appendTo("form[name='checkout']");
+    });
+
+    describe("bug 1/item 4.3 — re-clicking the Sole Trader chip once already adopted", () => {
+      // Doug's explicit override (item 4.3): an earlier round made this a
+      // no-op on the theory that the "select a different sole trader" link
+      // was the one deliberate re-signup entry point once adopted. Doug has
+      // now ruled that wrong — re-clicking the chip must act exactly like
+      // that link, not do nothing.
+      test("acts exactly like the 'select a different sole trader' link, not a no-op", () => {
+        $("#billing_email").val("buyer@example.test");
+        jest.spyOn(soleTrader, "fetchTokens").mockImplementation((cb) => cb(true));
+        jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) =>
+          cb({
+            organization_number: "TWO:ST1",
+            company_name: "A Sole Trader",
+            email: "buyer@example.test"
+          })
+        );
+        soleTrader.onModeChipClick("sole_trader");
+        expect($("#billing_company_display_field").hasClass("hidden")).toBe(false);
+
+        const setCompanySpy = jest.spyOn(soleTrader, "setCompany");
+        soleTrader.onModeChipClick("sole_trader");
+
+        expect(setCompanySpy).not.toHaveBeenCalled();
+        // The first click matched and adopted synchronously — no popup at
+        // all. This one IS the popup: the chip's own re-signup.
+        expect(opened).toHaveLength(1);
+        expect(opened[0].url).toContain("&autoselect=false");
+        expect(soleTrader.mode).toBe("sole_trader");
+      });
+
+      test("opens a re-signup popup for an adoption that came through the hosted flow rather than a prefetch match", () => {
+        $("#billing_email").val("buyer@example.test");
+        jest.spyOn(soleTrader, "fetchTokens").mockImplementation((cb) => cb(true));
+        jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => cb(null));
+        soleTrader.onModeChipClick("sole_trader");
+        expect(opened).toHaveLength(1);
+
+        soleTrader.bindPopupMessageListener();
+        jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) =>
+          cb({
+            organization_number: "TWO:ST1",
+            company_name: "A Sole Trader",
+            email: "buyer@example.test"
+          })
+        );
+        window.dispatchEvent(
+          new window.MessageEvent("message", {
+            data: "ACCEPTED",
+            origin: "https://checkout.example.test"
+          })
+        );
+        expect(soleTrader.soleTraderAdopted).toBe(true);
+
+        soleTrader.onModeChipClick("sole_trader");
+
+        expect(opened).toHaveLength(2);
+        expect(opened[1].url).toContain("&autoselect=false");
+      });
+
+      test("still lets the buyer through while genuinely deciding (not yet adopted)", () => {
+        const flight = (() => {
+          $("#billing_email").val("buyer@example.test");
+          jest.spyOn(soleTrader, "fetchTokens").mockImplementation((cb) => cb(true));
+          let resolveBuyer;
+          jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => {
+            resolveBuyer = cb;
+          });
+          return { settle: (buyer) => resolveBuyer(buyer) };
+        })();
+        soleTrader.onModeChipClick("sole_trader");
+        expect(soleTrader.isDeciding()).toBe(true);
+
+        // A second click mid-decision is untouched by this guard — it only
+        // refuses once actually adopted.
+        soleTrader.onModeChipClick("sole_trader");
+        flight.settle({
+          organization_number: "TWO:ST1",
+          company_name: "A Sole Trader",
+          email: "buyer@example.test"
+        });
+
+        expect(soleTrader.soleTraderAdopted).toBe(true);
+        expect($("#company_id").val()).toBe("TWO:ST1");
+      });
+    });
+
+    describe("bug 2 — Enter manually while adopted, with a leftover popup-close poll still ticking", () => {
+      test("still switches to manual entry rather than leaving the search widget showing", () => {
+        // Adopted through the hosted signup, whose popup-close poll only
+        // notices the window closed on its own 300ms cadence — it is still
+        // "open" (and therefore still `isBusy()`) at the moment the buyer
+        // clicks Enter manually.
+        $("#billing_email").val("buyer@example.test");
+        jest.spyOn(soleTrader, "fetchTokens").mockImplementation((cb) => cb(true));
+        jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => cb(null));
+        soleTrader.onModeChipClick("sole_trader");
+
+        soleTrader.bindPopupMessageListener();
+        jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) =>
+          cb({
+            organization_number: "TWO:ST1",
+            company_name: "A Sole Trader",
+            email: "buyer@example.test"
+          })
+        );
+        window.dispatchEvent(
+          new window.MessageEvent("message", {
+            data: "ACCEPTED",
+            origin: "https://checkout.example.test"
+          })
+        );
+        expect(soleTrader.activePopupWatchers.length).toBe(1);
+
+        jest.useFakeTimers();
+        ctx.helper.activateManualEntry();
+        jest.runAllTimers();
+        jest.useRealTimers();
+
+        expect(soleTrader.mode).toBe("business");
+        expect(ctx.capture.mode).toBe("manual");
+        expect($("#billing_company_field").hasClass("hidden")).toBe(false);
+        expect($("#billing_company_display_field").hasClass("hidden")).toBe(true);
+      });
+
+      test("still switches to manual entry via a REAL click on the REAL button inside the reopened widget", () => {
+        // The test above calls `activateManualEntry()` directly. This one
+        // drives the same scenario through the actual selectWoo widget the
+        // adopted sole trader is rendered through (TWO-40 §7 direction (a)) —
+        // attached, reopened, and clicked for real — so a regression that
+        // only shows up once the widget is genuinely live cannot hide behind
+        // a call that skips it.
+        $("#billing_email").val("buyer@example.test");
+        jest.spyOn(soleTrader, "fetchTokens").mockImplementation((cb) => cb(true));
+        jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => cb(null));
+        soleTrader.onModeChipClick("sole_trader");
+
+        soleTrader.bindPopupMessageListener();
+        jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) =>
+          cb({
+            organization_number: "TWO:ST1",
+            company_name: "A Sole Trader",
+            email: "buyer@example.test"
+          })
+        );
+        window.dispatchEvent(
+          new window.MessageEvent("message", {
+            data: "ACCEPTED",
+            origin: "https://checkout.example.test"
+          })
+        );
+        expect(soleTrader.soleTraderAdopted).toBe(true);
+        expect($("#billing_company_display_field").hasClass("hidden")).toBe(false);
+
+        // The buyer reopens the (still-live) widget and clicks Enter manually
+        // for real.
+        $("#billing_company_display").select2("open");
+        ctx.helper.syncManualEntryButton();
+        const $btn = $("#" + ctx.helper.manualEntryRowId);
+        expect($btn.length).toBe(1);
+
+        jest.useFakeTimers();
+        $btn.trigger("click");
+        jest.runAllTimers();
+        jest.useRealTimers();
+
+        expect(soleTrader.mode).toBe("business");
+        expect($("#billing_company_field").hasClass("hidden")).toBe(false);
+        expect($("#billing_company_display_field").hasClass("hidden")).toBe(true);
+      });
+    });
+
+    describe("bug 3 — the 'select a different sole trader' link once adoption shows through the search widget", () => {
+      test("is not stranded inside a field toggleBusinessFields just hid", () => {
+        soleTrader.setMode("sole_trader");
+        soleTrader.setCompany("TWO:ST1", "A Sole Trader");
+
+        expect($("#billing_company_field").hasClass("hidden")).toBe(true);
+
+        const $btn = soleTrader.getDifferentSoleTraderBtnNode();
+
+        expect($btn.closest(".hidden").length).toBe(0);
+        expect($btn.css("display")).not.toBe("none");
+      });
+
+      test("shows on mode + tokens alone, with no #company_id check (Doug's ruling)", () => {
+        // No `setCompany()` call — `#company_id` is deliberately left empty.
+        // There is no real UX state where sole-trader mode is engaged with
+        // nothing captured except while the dropdown is still deciding, and
+        // that already visually obscures this link, so the gate does not
+        // need to lean on the field at all.
+        soleTrader.setMode("sole_trader");
+
+        soleTrader.syncDifferentSoleTraderLink();
+
+        expect($("#company_id").val()).toBe("");
+        expect(soleTrader.getDifferentSoleTraderBtnNode().css("display")).not.toBe("none");
+      });
+
+      test("still opens the re-signup popup with autoselect=false", () => {
+        soleTrader.setMode("sole_trader");
+        soleTrader.setCompany("TWO:ST1", "A Sole Trader");
+
+        soleTrader.getDifferentSoleTraderBtnNode().trigger("click");
+
+        expect(opened).toHaveLength(1);
+        expect(opened[0].url).toContain("&autoselect=false");
+      });
+
+      test("falls back to the native field's own slot whenever that field is the visible one, unchanged from before", () => {
+        // Reached via tile placement rather than the old "search off" fixture
+        // (#486): there the native field deliberately stays in the address area
+        // alongside the relocated control, so it is visible and the link belongs
+        // in its slot. The branch is keyed on that visibility, not on any
+        // setting.
+        ctx.twoinc.company_search_location = "payment_tile";
+        soleTrader.setMode("sole_trader");
+        soleTrader.setCompany("TWO:ST1", "A Sole Trader");
+
+        const $btn = soleTrader.getDifferentSoleTraderBtnNode();
+
+        expect($btn.parent().is("#billing_company_field .woocommerce-input-wrapper")).toBe(true);
+        expect($btn.closest(".hidden").length).toBe(0);
+      });
+    });
   });
 
   describe("TWO-40 — delegated-auth token refresh", () => {
@@ -1500,6 +2704,31 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
 
       jest.advanceTimersByTime(30 * 60 * 1000);
       expect(ajax.calls).toHaveLength(2);
+    });
+  });
+
+  /**
+   * Item 4, live-reported by Doug: WooCommerce's chips sized to their own
+   * content, leaving visible slack to the right of the row, where
+   * PrestaShop's fill it. Asserted against the stylesheet source rather than
+   * a rendered box: jsdom does no flex layout, so a computed-width assertion
+   * here would be vacuous rather than wrong.
+   */
+  describe("item 4 — the chip row fills its full width", () => {
+    test("each chip declares a half-row flex basis, so two share a row and a third grows to fill its own", () => {
+      const rule = /^\.twoinc-mode-chip\s*\{([^}]*)\}/m.exec(stylesheetSource());
+
+      expect(rule).not.toBeNull();
+      // `flex-grow: 1` is what fills the row; the `calc(50% - <gap>)` basis is
+      // what decides how many chips land on it.
+      expect(rule[1]).toMatch(/flex:\s*1\s+1\s+calc\(50%\s*-\s*\d+px\)/);
+    });
+
+    test("the row itself wraps, or the third chip has nowhere to go", () => {
+      const rule = /^\.twoinc-mode-chips\s*\{([^}]*)\}/m.exec(stylesheetSource());
+
+      expect(rule).not.toBeNull();
+      expect(rule[1]).toMatch(/flex-wrap:\s*wrap/);
     });
   });
 });

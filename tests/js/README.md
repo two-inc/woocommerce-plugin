@@ -233,9 +233,10 @@ about the company-search helper, so the bootstrap is left to no-op.
   WooCommerce serialises, re-rendering does not disturb them, and nothing inside the summary
   carries a `name` attribute of its own — asserted against the form's real `serialize()`
   output, since the summary sits inside the checkout form.
-- visibility: shown only for a Two purchase with something captured, hidden when the buyer
-  switches to another payment method (with the fields still posting), and cleared by
-  `clearSelectedCompany()`.
+- visibility: shown when something is captured, **regardless of the selected payment method**
+  (inverted 2026-08-19, #486 — the label is now the only surface the captured number ever
+  reaches the buyer through, so switching away from Two must not silently drop it), and cleared
+  by `clearSelectedCompany()`.
 - the picker's empty option carries a non-breaking space as its **label**, not its value —
   truthy and invisible, so anything checking only for `""` renders it as a company. The live
   read cannot see one (the value is `""`, asserted), so the normalisation is defensive
@@ -248,6 +249,48 @@ about the company-search helper, so the bootstrap is left to no-op.
   on the select.
 - the user-meta restore path, which passes both values explicitly because `loadUserMetaInputs`
   writes `#company_id` _after_ it renders.
+
+`company-name-and-number-surfaces.test.js` — the two surfaces the buyer actually sees, after
+the 2026-08-19 ruling (#486):
+
+- **the company NAME is always on screen, as exactly one of two elements** — the search control
+  or WooCommerce's native `#billing_company` — across the full three-modes × supported/unsupported
+  -country matrix, and independently of the selected payment method. The regression this pins had
+  a third state: an unsupported country hid the search control and put a bare editable "Company ID"
+  box in its place, leaving no name capture anywhere on the page. The one documented exception to
+  "exactly one" is the `payment_tile` placement, where the two are not competing for the same
+  position, and it has a test of its own.
+- **the company NUMBER is a read-only label, never a field.** Its two conditions (`search` mode,
+  and a number that is not internally minted) are tabled with `shown` and `text` as separate
+  columns, because two independent mechanisms produce them: the capture mode gates the label's
+  display, and `formatCompanyNumber()` gates whether a `TWO:…` value reaches the DOM as text at
+  all. It mirrors `#company_id` on a value written _after_ the fields were toggled — the real
+  ordering — and sits adjacent to whichever name element is the visible one.
+- **`#company_id` is still a real, named, undisabled input in every mode**, carrying its value
+  into the POST, with no required cue on a field nobody can fill in.
+
+`company-capture-mode-composition.test.js` — the states only a **sequence** of capture-mode
+changes reaches. Every single transition here is covered by one of the files above; what is not
+is the pair of invariants that two separately-correct changes disagree about (#486):
+
+- **the visible company-name surface must be one that can actually render a name.** Manual entry
+  destroys the picker, and the email-driven autofill prefetch adopts a sole trader with no guard
+  in that direction — so adoption from manual entry pointed the buyer at a picker that was not
+  there. Pinned on the rendered container, on `getCompanyName()`, and on `getCompanyData()`,
+  because an empty `company_name` is what stops an order intent firing at all. The counterweight
+  is pinned too: abandoning that adoption still lands the buyer back in manual entry.
+- **the slot directly after the visible name field belongs to whichever of its two followers is
+  visible.** The read-only number label and the "select a different sole trader" link both anchor
+  there, both move only when they are not already there, and only the label is re-anchored on
+  every `toggleBusinessFields()` — so they traded the slot on every payment-method switch, and
+  whichever lost it lost its `+`-selector gap cancellation in twoinc.css with it.
+- **a capture restored from the DOM alone reaches the picker.** Only the user-meta echo was ever
+  seeded into it, and the restore path deliberately accepts two further sources with no echo
+  behind them — so a returning guest saw the picker's placeholder over a hidden field holding
+  their own company. Pinned for a sole trader and a registry company alike, plus the guard that
+  an earlier restore pass's selection is never overwritten.
+- the restore path's own round trip: the free-text query row is suppressed on the **first** open
+  after a restored sole trader, and given back on the way out through the Registered company chip.
 
 `country-switch.test.js` — what a billing-country change does, and what a fake one must not
 (TWO-24867, with TWO-25326 and TWO-25333):
@@ -285,8 +328,8 @@ about the company-search helper, so the bootstrap is left to no-op.
   `country_prefix` actually **disagree**, and only then. Pinned in both directions, because the
   discriminator is the whole fix: a company captured under the country just left is cleared and
   the approval gate comes back down with it; a matching pair is untouched. Both directions are
-  pinned on **both** `enable_address_lookup` settings and **both** `enable_company_search`
-  settings — the manual-entry leg differs, because `clearSelectedCompany` deliberately keeps the
+  pinned on **both** `enable_address_lookup` settings and in **both** the `search` and `manual`
+  capture modes — the manual-entry leg differs, because `clearSelectedCompany` deliberately keeps the
   buyer's typed `#billing_company` there while still blanking `#company_id`. Three readings are
   deliberately not grounds to clear, each with its own test — a company name with no
   organisation number (not a capture), an unknown country on either side (`country_prefix` is

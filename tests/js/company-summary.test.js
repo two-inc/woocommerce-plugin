@@ -531,8 +531,8 @@ describe("read-only captured-company summary", () => {
       // name+id, sole-trader gets name+synthetic id, manual entry gets name
       // ONLY — Two's payment method cannot function without an id, and
       // showing this field in manual entry invites one that was never
-      // validated against anything (see the `manual_company_entry_active`
-      // comment in toggleBusinessFields). Previously this platform diverged
+      // validated against anything (see the capture-mode comment in
+      // toggleBusinessFields). Previously this platform diverged
       // and kept the field visible/required in manual entry — that was the
       // bug (#30.x.13, live-reported by Doug).
       pickCompany("ACME Widgets Ltd", "12345678");
@@ -548,13 +548,11 @@ describe("read-only captured-company summary", () => {
       // reachable WHILE in manual entry — the mode chip is not hidden during
       // manual entry, and the email-driven autofill prefetch can call
       // twoincSoleTrader.setMode("sole_trader") on its own regardless of
-      // capture mode. setMode saves/restores `enable_company_search` around
-      // the trip, so a buyer who was in manual entry correctly lands back on
-      // enable_company_search === "no" — but without also saving/restoring
-      // `manual_company_entry_active`, toggleBusinessFields cannot tell that
-      // "no" apart from sole-trader's own, and would show + REQUIRE
-      // #company_id_field with no working search widget behind it
-      // (enableCompanySearch early-returns) and no way back to name-only.
+      // capture mode. setMode snapshots and restores the capture mode around
+      // the trip, so a buyer who was in manual entry lands back on `manual`
+      // rather than `search` — without that restore toggleBusinessFields would
+      // show + REQUIRE #company_id_field with no working search widget behind
+      // it (enableCompanySearch early-returns) and no way back to name-only.
       pickCompany("ACME Widgets Ltd", "12345678");
       helper.enterManualCompanyEntry();
       typeCompanyName("Sole Proprietor Bakery");
@@ -642,15 +640,22 @@ describe("read-only captured-company summary", () => {
       expect(isShown()).toBe(false);
     });
 
-    test("hidden when the buyer is paying by another method", () => {
+    test("stays shown when the buyer is paying by another method", () => {
+      // Inverted from "hidden" (Doug, 2026-08-19). The label's two conditions
+      // are the capture mode and whether the number is internally minted —
+      // neither is the payment method. It is now the ONLY surface the captured
+      // number reaches the buyer through (`#company_id_field` is permanently
+      // hidden), so it has to hold the same payment-method-agnostic contract
+      // the company-name field above it does: switching away from Two must not
+      // silently drop the number belonging to the company they captured.
       pickCompany("ACME Widgets Ltd", "12345678");
       expect(isShown()).toBe(true);
 
       $('input[name="payment_method"]').prop("checked", false);
       helper.renderCompanySummary();
 
-      expect(isShown()).toBe(false);
-      // Still rendered, just not shown — and the fields still post.
+      expect(isShown()).toBe(true);
+      expect(renderedNumber()).toBe("12345678");
       expect($("#billing_company").val()).toBe("ACME Widgets Ltd");
     });
 

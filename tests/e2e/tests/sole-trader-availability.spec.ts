@@ -14,7 +14,7 @@ import * as store from "../pages/store.js";
  *
  * The mode-chips group is a DOM child of the company-search dropdown, not a
  * standalone widget (TWO-40 §0): it only exists in the document while the
- * dropdown is open. "Registered company" and "Enter Manually" render
+ * dropdown is open. "Registered company" and "Enter manually" render
  * unconditionally; only the "Sole trader" chip is added/removed per country,
  * so the group itself never disappears — only that one chip does.
  */
