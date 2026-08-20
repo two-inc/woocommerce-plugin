@@ -269,6 +269,29 @@ the 2026-08-19 ruling (#486):
 - **`#company_id` is still a real, named, undisabled input in every mode**, carrying its value
   into the POST, with no required cue on a field nobody can fill in.
 
+`company-capture-mode-composition.test.js` — the states only a **sequence** of capture-mode
+changes reaches. Every single transition here is covered by one of the files above; what is not
+is the pair of invariants that two separately-correct changes disagree about (#486):
+
+- **the visible company-name surface must be one that can actually render a name.** Manual entry
+  destroys the picker, and the email-driven autofill prefetch adopts a sole trader with no guard
+  in that direction — so adoption from manual entry pointed the buyer at a picker that was not
+  there. Pinned on the rendered container, on `getCompanyName()`, and on `getCompanyData()`,
+  because an empty `company_name` is what stops an order intent firing at all. The counterweight
+  is pinned too: abandoning that adoption still lands the buyer back in manual entry.
+- **the slot directly after the visible name field belongs to whichever of its two followers is
+  visible.** The read-only number label and the "select a different sole trader" link both anchor
+  there, both move only when they are not already there, and only the label is re-anchored on
+  every `toggleBusinessFields()` — so they traded the slot on every payment-method switch, and
+  whichever lost it lost its `+`-selector gap cancellation in twoinc.css with it.
+- **a capture restored from the DOM alone reaches the picker.** Only the user-meta echo was ever
+  seeded into it, and the restore path deliberately accepts two further sources with no echo
+  behind them — so a returning guest saw the picker's placeholder over a hidden field holding
+  their own company. Pinned for a sole trader and a registry company alike, plus the guard that
+  an earlier restore pass's selection is never overwritten.
+- the restore path's own round trip: the free-text query row is suppressed on the **first** open
+  after a restored sole trader, and given back on the way out through the Registered company chip.
+
 `country-switch.test.js` — what a billing-country change does, and what a fake one must not
 (TWO-24867, with TWO-25326 and TWO-25333):
 

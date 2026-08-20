@@ -2593,9 +2593,11 @@ class TwoCompanySearch {
     // found in adversarial review round 2, Han, 2026-08-04; widened
     // 2026-08-04 correction round 3 — the field now always exists
     // server-side, so checking mere presence in the wrapper is no longer
-    // enough). Manual entry and sole-trader mode both hide
-    // `#billing_company_display_field` with the `hidden` class rather than
-    // removing it (see toggleBusinessFields) — it still gets moved into the
+    // enough). Manual entry, and any billing country with no registry to
+    // search, hide `#billing_company_display_field` with the `hidden` class
+    // rather than removing it (see toggleBusinessFields; sole-trader mode used
+    // to be a third such case and is not one any more — the adopted company
+    // renders THROUGH this control now) — it still gets moved into the
     // wrapper by the loop above, so `$wrapper.children().length` alone
     // would unhide the slot around a `display: none` field, leaving the
     // buyer a bare, unexplained gap (`.twoinc-company-search-tile-slot`'s
@@ -3770,6 +3772,16 @@ let twoincDomHelper = {
     // visibility gate needs re-evaluating. It reads the current inputs and
     // calls nothing that re-enters here.
     twoincSelectWooHelper.renderCompanySummary();
+
+    // And after it, in that order: the "select a different sole trader" link
+    // anchors against whichever company-NAME field this function just decided
+    // to show, and behind the summary above when THAT is the visible one — so
+    // it has to read a visibility the line above has already decided
+    // (`placeDifferentSoleTraderBtn`'s own comment). Builds nothing on a
+    // checkout that never shows the link: `syncDifferentSoleTraderLink()`
+    // returns before touching the DOM while the button neither exists nor is
+    // wanted.
+    twoincSoleTrader.syncDifferentSoleTraderLink();
   },
   /**
    * Mirror each company field's visibility onto its enclosing wrapper
@@ -4398,6 +4410,41 @@ let twoincDomHelper = {
     if (!restoredId && !(fromUserMeta && restoredName)) return;
 
     twoincCompanyCapture.write(restoredName, restoredId);
+
+    // Seed the PICKER with the restored name too, the same synthetic-`<option>`
+    // mechanism `loadUserMetaInputs()` uses for the user-meta echo — option
+    // VALUE is the name, matching what the picker's own `select2:select`
+    // handler reads back as the company name.
+    //
+    // Only that echo was ever seeded, and this function deliberately restores
+    // from two further sources with no echo behind them (WooCommerce's own
+    // rendered value, and `loadStorageInputs()` — see the note above). The
+    // picker is the visible company-NAME surface for a restored capture, and
+    // `toggleBusinessFields()` hides the native field that used to display it,
+    // so an unseeded picker left a returning guest looking at a placeholder
+    // over a hidden field holding their own company — and `getCompanyName()`
+    // reading it back empty, which stops an order intent firing at all.
+    //
+    // Never over an existing selection: `initialize()` calls this a second time
+    // after `loadStorageInputs()`, and both of the seeding restores run before
+    // that.
+    if (restoredName) {
+      const $display = jQuery("#billing_company_display");
+      if ($display.length && !twoincUtilHelper.blankToEmpty($display.val())) {
+        if (
+          !$display.find("option").filter(function () {
+            return this.value === restoredName;
+          }).length
+        ) {
+          $display.prepend(jQuery("<option></option>").val(restoredName).text(restoredName));
+        }
+        // `.trigger("change")` for the same reason `lockCapturedFields()` uses
+        // it: select2's own documented way to make a PROGRAMMATIC selection
+        // render, without firing `select2:select` and re-entering that
+        // handler's write path.
+        $display.val(restoredName).trigger("change");
+      }
+    }
 
     // A restored SOLE TRADER (live-reported by Doug, item 2): this restore
     // path writes straight to the capture layer above rather than through
@@ -5126,11 +5173,33 @@ let twoincSoleTrader = {
     const $searchField = jQuery("#billing_company_display_field");
     if (jQuery("#billing_company_field").hasClass("hidden") && $searchField.length) {
       const $wrapper = $searchField.closest(".twoinc-inp-container");
-      const $anchor = $wrapper.length ? $wrapper : $searchField;
+      let $anchor = $wrapper.length ? $wrapper : $searchField;
+      // Behind the number label while THAT is the visible one, in front of it
+      // otherwise (defect found reviewing #486 as a whole). Both this link and
+      // `getCompanySummaryNode()`'s label follow the same anchor, and both move
+      // only when they are not already sitting on it, so they compete for the
+      // one slot directly after the field — and `toggleBusinessFields()` calls
+      // the label's placement on every payment-method, country and mode switch,
+      // so the label took the slot back every time. Whichever loses it also
+      // loses its own `+`-selector gap cancellation in twoinc.css, which is how
+      // an adopted sole trader's link grew a ~33px gap above it on the buyer's
+      // first payment-method switch. Exactly one of the two is ever visible
+      // (the label renders in registered-search mode only, this link in
+      // sole-trader mode only), so ordering by visibility gives the slot to
+      // the one that can actually use it.
+      const $summary = jQuery("#" + twoincSelectWooHelper.companySummaryId);
+      if ($summary.length && !$summary.hasClass("hidden") && $summary.prev()[0] === $anchor[0]) {
+        $anchor = $summary;
+      }
       if ($btn.prev()[0] !== $anchor[0]) $btn.insertAfter($anchor);
       return;
     }
-    twoincSelectWooHelper.companyFieldAffordanceSlot().append($btn);
+    // Same "only move when it isn't already there" guard as the branch above,
+    // for the same reason `getCompanySummaryNode()` has one: this now runs on
+    // every `toggleBusinessFields()`, and an unconditional `append()` re-homes
+    // a node that had not drifted on each one.
+    const $slot = twoincSelectWooHelper.companyFieldAffordanceSlot();
+    if ($btn.parent()[0] !== $slot[0]) $slot.append($btn);
   },
 
   /**
@@ -5455,6 +5524,30 @@ let twoincSoleTrader = {
     const $display = jQuery("#billing_company_display");
     if ($display.data("select2")) {
       $display.select2("close");
+    } else if ($display.length) {
+      // Attached BEFORE the seed below, so that seed's own closing
+      // `.trigger("change")` is what renders the selection (defect found
+      // reviewing #486 as a whole):
+      // manual entry destroys this widget (`enterManualCompanyEntry`), and
+      // `applyPrefetch()`'s match branch then adopts a sole trader with no
+      // guard in that direction — the email field is never locked, so
+      // correcting an email while in manual entry is enough. Adoption's own
+      // `toggleBusinessFields()` makes `#billing_company_display_field` the
+      // visible company-NAME surface for this mode and hides the native field,
+      // and `getCompanyName()` reads the picker's rendered container: with no
+      // picker attached the buyer got a bare unstyled `<select>` and the name
+      // read EMPTY, so `getCompanyData()` carried no `company_name` and
+      // `isReadyApprovalCheck()` never fired an order intent at all — the exact
+      // defect `getCompanyName()`'s own comment describes, reached by a route
+      // neither the capture-mode refactor nor the field-visibility redesign
+      // owns alone.
+      //
+      // The duplicated `select2:select`/`select2:open` handlers this leaves
+      // behind are the pre-existing ones TWO-25338 owns (see `initialize()`'s
+      // 800ms retry comment for the full accounting); this handler's own
+      // sole-trader branch is idempotent under it — the second entry finds
+      // `mode === "business"` and skips.
+      twoincSelectWooHelper.attach(Twoinc.getInstance());
     }
     if (
       !$display.find("option").filter(function () {
@@ -5475,8 +5568,9 @@ let twoincSoleTrader = {
   /**
    * Click-to-reopen (TWO-40 §7 correction, live-reported by Doug): once a
    * sole trader is adopted, `lockCapturedFields()` readonly-locks the
-   * captured fields and tears down the search widget, leaving no way back to
-   * an ordinary company search except the "select a different sole trader"
+   * captured fields, and the dropdown's own free-text query row is suppressed
+   * (`syncQueryFieldSuppression`), leaving no way back to an ordinary company
+   * search except the "select a different sole trader"
    * link — which only ever leads back into the SAME hosted signup, never
    * away from sole trader entirely. Clicking into either captured field does
    * that instead: revert to business mode (restoring whatever search/
