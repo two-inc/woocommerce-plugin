@@ -27,7 +27,6 @@ if (!in_array('woocommerce/woocommerce.php', $activeplugins)) {
 }
 
 
-// Define the plugin URL
 define('WC_TWOINC_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('WC_TWOINC_PLUGIN_PATH', plugin_dir_path(__FILE__));
 
@@ -65,16 +64,11 @@ if (!is_admin() && !defined('DOING_AJAX')) {
 
 function load_twoinc_classes()
 {
-    // Support i18n
     init_twoinc_translation();
 
-    // Add AJAX handlers for API key verification
     add_action('wp_ajax_twoinc_verify_api_key', 'twoinc_ajax_verify_api_key');
-
-    // Admin inline merchant-rate fees beside the payment-term checkboxes
     add_action('wp_ajax_twoinc_term_fees', 'twoinc_ajax_term_fees');
 
-    // Load classes
     require_once __DIR__ . '/class/WC_Twoinc_Brand.php';
     require_once __DIR__ . '/class/WC_Twoinc_Helper.php';
     require_once __DIR__ . '/class/WC_Twoinc_FX.php';
@@ -145,58 +139,40 @@ function load_twoinc_classes()
     // add_action('get_header', 'WC_Twoinc::process_confirmation_header_redirect');
     // add_action('init', 'WC_Twoinc::process_confirmation_js_redirect'); // some theme does not call get_header()
 
-    // Load user meta fields to user profile admin page
     add_action('show_user_profile', 'WC_Twoinc::display_user_meta_edit', 10, 1);
     add_action('edit_user_profile', 'WC_Twoinc::display_user_meta_edit', 10, 1);
-    // Save user meta fields on profile update
     add_action('personal_options_update', 'WC_Twoinc::save_user_meta', 10, 1);
     add_action('edit_user_profile_update', 'WC_Twoinc::save_user_meta', 10, 1);
 
-    // A fallback hook in case hook woocommerce_order_status_xxx is not called
+    // Fallback in case woocommerce_order_status_xxx doesn't fire
     add_action('woocommerce_order_edit_status', 'WC_Twoinc::on_order_edit_status', 10, 2);
 
-    // On order bulk action
     add_action('handle_bulk_actions-edit-shop_order', 'WC_Twoinc::on_order_bulk_edit_action', 10, 3);
     add_action('admin_notices', 'WC_Twoinc::on_order_bulk_edit_notices');
 }
 
-/**
- * Initiate the text translation for domain twoinc-payment-gateway
- */
 function init_twoinc_translation()
 {
     $plugin_rel_path = basename(dirname(__FILE__)) . '/languages/';
     load_plugin_textdomain('twoinc-payment-gateway', false, $plugin_rel_path);
 }
 
-/**
- * Add plugin to payment gateways list
- */
 function wc_twoinc_add_to_gateways($gateways)
 {
     $gateways[] = 'WC_Twoinc';
     return $gateways;
 }
 
-/**
- * Enqueue plugin styles
- */
 function wc_twoinc_enqueue_styles()
 {
     wp_enqueue_style('twoinc-payment-gateway-css', WC_TWOINC_PLUGIN_URL . '/assets/css/twoinc.css', false, twoinc_get_asset_version('assets/css/twoinc.css'));
 }
 
-/**
- * Enqueue plugin javascripts
- */
 function wc_twoinc_enqueue_scripts()
 {
     wp_enqueue_script('twoinc-payment-gateway-js', WC_TWOINC_PLUGIN_URL . '/assets/js/twoinc.js', ['jquery'], twoinc_get_asset_version('assets/js/twoinc.js'));
 }
 
-/**
- * Add setting link next to plugin name in plugin list
- */
 function twoinc_settings_link($links)
 {
     // A brand overlay re-skins this same gateway under its own row — the
@@ -264,9 +240,6 @@ function twoinc_rebrand_dependency_api_name($res, $action, $args)
     return $res;
 }
 
-/**
- * Get the version of this Twoinc plugin
- */
 function get_twoinc_plugin_version()
 {
     if (!function_exists('get_plugin_data')) {
@@ -300,30 +273,23 @@ function twoinc_get_asset_version($relative_path)
     return $mtime !== false ? (string) $mtime : get_twoinc_plugin_version();
 }
 
-/**
- * AJAX handler for API key verification
- */
 function twoinc_ajax_verify_api_key()
 {
-    // Check if request method is POST
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
         wp_send_json_error('Invalid request method');
         return;
     }
 
-    // Check if required data is present
     if (!isset($_POST['nonce']) || !isset($_POST['api_key'])) {
         wp_send_json_error('Missing required data');
         return;
     }
 
-    // Verify nonce
     if (!wp_verify_nonce($_POST['nonce'], 'twoinc_admin_nonce')) {
         wp_send_json_error('Security check failed');
         return;
     }
 
-    // Check user capabilities
     if (!current_user_can('manage_options')) {
         wp_send_json_error('Insufficient permissions');
         return;

@@ -10,21 +10,12 @@
 if (!class_exists('WC_Twoinc_Helper')) {
     class WC_Twoinc_Helper
     {
-        /**
-         * Round the amount in woocommerce way
-         *
-         * @return string
-         */
         public static function round_amt($amt)
         {
             return number_format($amt, wc_get_price_decimals(), '.', '');
         }
 
-        /**
-         * Round the rate to 6dp
-         *
-         * @return string
-         */
+        // 6dp precision.
         public static function round_rate($rate)
         {
             return number_format($rate, 6, '.', '');
@@ -87,13 +78,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
             return $rounded;
         }
 
-        /**
-         * Get error message from twoinc response
-         *
-         * @param $response
-         *
-         * @return string|void
-         */
         public static function get_twoinc_error_msg($response)
         {
             if (!$response) {
@@ -116,13 +100,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
             }
         }
 
-        /**
-         * Get validation message from twoinc response
-         *
-         * @param $response
-         *
-         * @return string|void
-         */
         public static function get_twoinc_validation_msg($response)
         {
             $err_msg = sprintf(__('Invoice purchase with %s is not available for this order.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name'));
@@ -133,7 +110,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
             if ($response['response'] && $response['response']['code'] && $response['response']['code'] >= 400) {
                 if ($response['body']) {
                     $body = json_decode($response['body'], true);
-                    // Parameters validation errors
                     if (!is_string($body) && isset($body['error_json']) && is_array($body['error_json'])) {
                         $errs = array();
                         foreach ($body['error_json'] as $err) {
@@ -148,7 +124,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
                             return $errs;
                         }
                     }
-                    // Custom errors
                     if (isset($body['error_code']) && $body['error_code'] == 'SAME_BUYER_SELLER_ERROR') {
                         return __('Buyer and merchant may not be the same company', 'twoinc-payment-gateway');
                     }
@@ -158,16 +133,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
             }
         }
 
-        /**
-         * Get validation message
-         *
-         * @param $loc_str
-         *
-         * @return string|void
-         */
         public static function get_msg_from_err($err)
         {
-            // Check if required keys exist
             if (!isset($err['loc']) || !isset($err['msg'])) {
                 return null;
             }
@@ -210,19 +177,11 @@ if (!class_exists('WC_Twoinc_Helper')) {
             if ($loc_str === '["billing_address","postal_code"]') {
                 return sprintf($generic_err_template, __('Postal code', 'twoinc-payment-gateway'));
             }
-            // Handle invoice email validation errors
             if (strpos($loc_str, '["invoice_details","invoice_emails"') === 0) {
                 return sprintf($generic_err_template, __('Invoice email address', 'twoinc-payment-gateway'));
             }
         }
 
-        /**
-         * Display notice message in website for buyers
-         *
-         * @param $message
-         *
-         * @return void
-         */
         public static function display_ajax_error($message)
         {
             if (is_string($message)) {
@@ -240,25 +199,11 @@ if (!class_exists('WC_Twoinc_Helper')) {
             }
         }
 
-        /**
-         * Check if order is paid by twoinc
-         *
-         * @param $order
-         *
-         * @return bool
-         */
         public static function is_twoinc_order($order)
         {
             return $order && $order->get_payment_method() && $order->get_payment_method() === WC_Twoinc_Brand::get('gateway_id');
         }
 
-        /**
-         * Check if address json to send to Twoinc is empty
-         *
-         * @param $twoinc_address
-         *
-         * @return bool
-         */
         public static function is_twoinc_address_empty($twoinc_address)
         {
 
@@ -275,13 +220,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
             return $is_empty;
         }
 
-        /**
-         * Check if string has no content except special characters
-         *
-         * @param $twoinc_address
-         *
-         * @return bool
-         */
         public static function is_str_no_word($s)
         {
 
@@ -289,15 +227,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Compose the cart items
-         *
-         * @param bool $is_refund true when composing a refund body: refund
-         *                        line items carry negated amounts, so the
-         *                        negative-discount guard does not apply
-         *                        (a refunded discounted line legitimately
-         *                        yields a negative subtotal-total diff).
-         *
-         * @return array
+         * @param bool $is_refund refund line items carry negated amounts, so
+         *                        the negative-discount guard below does not
+         *                        apply to them.
          */
         public static function get_line_items($line_items, $shippings, $fees, $order, $is_refund = false)
         {
@@ -310,7 +242,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
 
                 $tax_rate = WC_Twoinc_Helper::get_item_tax_rate($line_item, $order);
 
-                // Check if product exists and is a valid object. If not, use fallback values.
                 if (! is_object($product_simple)) {
                     $name = method_exists($line_item, 'get_name') ? $line_item->get_name() : 'Item';
                     $description = '';
@@ -331,11 +262,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     $categories = wp_get_post_terms($product_simple->get_id(), 'product_cat');
                 }
 
-                // Derive the line discount at native precision; the guard
-                // rounds once at the payload boundary and fails loud on a
-                // genuinely negative discount (TWO-25097). Refund bodies
-                // carry negated line amounts, so the sign check is skipped
-                // there (legacy behaviour preserved).
+                // Guard rounds once at the payload boundary and fails loud on
+                // a genuinely negative discount (TWO-25097); skipped for
+                // refunds, whose negated line amounts make that check invalid.
                 if ($is_refund) {
                     $discount_amount = WC_Twoinc_Helper::round_amt($line_item['line_subtotal'] - $line_item['line_total']);
                 } else {
@@ -386,7 +315,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 $items[] = $product;
             }
 
-            // Shipping
             foreach ($shippings as $shipping) {
                 if ($shipping->get_total() == 0) {
                     continue;
@@ -412,17 +340,15 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 $items[] = $shipping_line;
             }
 
-            // Fee
             foreach ($fees as $fee) {
                 if ($fee->get_total() == 0) {
                     continue;
                 }
                 $tax_rate = WC_Twoinc_Helper::get_item_tax_rate($fee, $order);
                 $fee_line = [
-                    // The fee name is already the resolved, translated,
-                    // brand-correct label (get_fee_label()); no hardcoded
-                    // prefix — Magento's ComposeOrder never prefixes either,
-                    // and 'type' => 'SERVICE' carries the semantic.
+                    // Already the resolved, translated, brand-correct label;
+                    // no hardcoded prefix — 'type' => 'SERVICE' below carries
+                    // the semantic instead.
                     'name' => $fee->get_name(),
                     'description' => '',
                     'gross_amount' => strval(WC_Twoinc_Helper::round_amt($fee->get_total() + $fee->get_total_tax())),
@@ -445,21 +371,11 @@ if (!class_exists('WC_Twoinc_Helper')) {
             return $items;
         }
 
-        /**
-         * Get internally convened tax key for twoinc computation
-         *
-         * @return array
-         */
         private static function get_internal_tax_key($tax_rate)
         {
             return strval(WC_Twoinc_Helper::round_rate($tax_rate['rate'])) . '|' . $tax_rate['name'];
         }
 
-        /**
-         * Compose the tax subtotals
-         *
-         * @return array
-         */
         public static function get_tax_subtotals($line_items, $shippings, $fees, $order)
         {
 
@@ -481,7 +397,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 $tax_subtotal_dict[$tax_key][] = $tax_single_line;
             }
 
-            // Shipping
             foreach ($shippings as $shipping) {
                 if ($shipping->get_total() == 0) {
                     continue;
@@ -499,7 +414,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 $tax_subtotal_dict[$tax_key][] = $tax_single_line;
             }
 
-            // Fee
             foreach ($fees as $fee) {
                 if ($fee->get_total() == 0) {
                     continue;
@@ -517,7 +431,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 $tax_subtotal_dict[$tax_key][] = $tax_single_line;
             }
 
-            // Aggregate the tax_subtotals
             foreach ($tax_subtotal_dict as $tax_single_line_list) {
                 $tax_subtotal = [
                     'tax_amount' => 0,
@@ -537,22 +450,14 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Compose the shipping_details block for order create/edit bodies.
-         *
-         * WooCommerce core has no stable tracking-number storage (the core
-         * Fulfillments feature is still behind a beta flag), so tracking is
-         * sourced from the `_wc_shipment_tracking_items` order meta shared
-         * by the official WooCommerce Shipment Tracking extension and the
-         * zorem Advanced Shipment Tracking plugin: an array of entries with
-         * `tracking_number`, `tracking_provider` (predefined-carrier slug),
-         * `custom_tracking_provider` / `custom_tracking_link` (free-text
-         * carrier). Predefined carriers keep their tracking URL in the
-         * plugin's carrier list, not in meta, so `carrier_tracking_url` is
-         * only sent for custom entries. The most recent entry wins.
-         *
-         * @param WC_Order $order
-         *
-         * @return array
+         * WooCommerce core has no stable tracking-number storage (Fulfillments
+         * is still behind a beta flag), so tracking is sourced from the
+         * `_wc_shipment_tracking_items` order meta shared by the official
+         * WooCommerce Shipment Tracking extension and the zorem Advanced
+         * Shipment Tracking plugin. Predefined carriers keep their tracking
+         * URL in the plugin's carrier list, not in meta, so
+         * `carrier_tracking_url` is only sent for custom entries. The most
+         * recent entry wins.
          */
         public static function get_shipping_details($order)
         {
@@ -585,36 +490,21 @@ if (!class_exists('WC_Twoinc_Helper')) {
             }
 
             /**
-             * Filter the shipping_details sent to the Two API.
-             *
              * Escape hatch for merchants whose tracking data lives outside
              * the `_wc_shipment_tracking_items` meta convention (TWO-24762).
              *
-             * Fires on EVERY order body composition: checkout order
-             * creation (where no tracking exists yet), order edits, and up
-             * to three times per fulfilment (presence gate, change-detection
-             * hash, edit body). Callbacks must therefore be fast, pure and
-             * deterministic — a slow callback drags checkout and the admin
-             * order screen; a non-deterministic one churns the change hash
-             * and fires spurious edit requests, and can make the gate and
-             * the shipped body disagree. A non-array return is discarded.
-             *
-             * @param array    $shipping_details Composed shipping details.
-             * @param WC_Order $order            WooCommerce order.
+             * Fires up to 3x per fulfilment (presence gate, change-detection
+             * hash, edit body) plus on every checkout/edit body composition,
+             * so callbacks must be fast, pure and deterministic — a
+             * non-deterministic one churns the change hash and can make the
+             * gate and the shipped body disagree. Non-array return discarded.
              */
             $filtered = apply_filters('twoinc_shipping_details', $shipping_details, $order);
             return is_array($filtered) ? $filtered : $shipping_details;
         }
 
-        /**
-         * Return a trimmed string field from a shipment-tracking meta
-         * entry, or '' when absent, non-scalar or whitespace-only.
-         *
-         * @param array  $entry
-         * @param string $key
-         *
-         * @return string
-         */
+        // Trimmed string field from a shipment-tracking meta entry, or '' when
+        // absent, non-scalar or whitespace-only.
         private static function clean_tracking_field($entry, $key)
         {
             if (!isset($entry[$key])) {
@@ -631,8 +521,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Compose request body for twoinc create order
-         *
          * Brand extension hooks fire in this order, each seeing the
          * previous one's result (the same hooks fire in
          * compose_twoinc_edit_order so create and edit stay symmetric):
@@ -645,10 +533,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
          *    integrations.
          * 3. `twoinc_order_payload` — filters the final body; second
          *    arg is the WC_Order.
-         *
-         * @param WC_Order $order
-         *
-         * @return array
          */
         public static function compose_twoinc_order(
             $order,
@@ -707,8 +591,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 'gross_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total())),
                 'net_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total() - $order->get_total_tax())),
                 'tax_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total_tax())),
-                // Native-precision total discount; guard rounds once at the
-                // payload boundary and fails loud on a negative (TWO-25097).
+                // Guard rounds once at the payload boundary, fails loud on a
+                // negative (TWO-25097).
                 'discount_amount' => WC_Twoinc_Helper::guard_negative_discount(
                     $order->get_total_discount(),
                     sprintf('order %s', $order->get_id()),
@@ -739,7 +623,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 'merchant_order_id' => strval($order->get_id()),
                 'merchant_reference' => '',
                 'merchant_urls' => [
-                    // 'merchant_confirmation_url' => $order->get_checkout_order_received_url(),
                     'merchant_cancel_order_url' => wp_specialchars_decode($order->get_cancel_order_url()),
                     'merchant_edit_order_url' => wp_specialchars_decode($order->get_edit_order_url()),
                     'merchant_order_verification_failed_url' => wp_specialchars_decode($order->get_cancel_order_url()),
@@ -755,8 +638,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 $req_body['vendor_name'] = $vendor_name;
             }
 
-            // Buyer-selected payment term + the offered set (TWO-24751);
-            // shape from WC_Twoinc_Payment_Terms::get_order_payload_terms.
+            // Shape from WC_Twoinc_Payment_Terms::get_order_payload_terms (TWO-24751).
             if ($payment_terms) {
                 $req_body['terms'] = $payment_terms['terms'];
                 $req_body['available_terms'] = $payment_terms['available_terms'];
@@ -764,10 +646,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
 
             if (!$skip_nonce) {
                 // Param names and nonce action derive from the brand's
-                // meta_prefix so the read side (process_confirmation)
-                // matches what live branded stores already expect. The
-                // path segment is cosmetic: confirmation detection is by
-                // param presence, not path.
+                // meta_prefix so process_confirmation matches what live
+                // branded stores expect. Path segment is cosmetic —
+                // confirmation detection is by param presence, not path.
                 $confirmation_url = sprintf(
                     '%s/twoinc-payment-gateway/confirm?order_id=%s&%s=%s&%s=%s',
                     get_home_url(),
@@ -777,16 +658,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     WC_Twoinc_Brand::prefixed_name('nonce'),
                     wp_create_nonce(WC_Twoinc_Brand::prefixed_name('confirm_' . $order->get_id()))
                 );
-                /**
-                 * Filter the confirmation URL sent to the Two API.
-                 *
-                 * Brand overlays use their own confirmation route (e.g.
-                 * example-overlay-gateway/confirm); without this hook an overlay
-                 * would have to duplicate process_payment().
-                 *
-                 * @param string $confirmation_url Default confirmation URL.
-                 * @param int    $order_id         WooCommerce order id.
-                 */
+                // Brand overlays use their own confirmation route; without
+                // this hook an overlay would have to duplicate process_payment().
                 $req_body['merchant_urls']['merchant_confirmation_url'] =
                     apply_filters('twoinc_confirmation_url', $confirmation_url, $order->get_id());
             }
@@ -803,18 +676,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 $req_body['tracking_id'] = $tracking_id;
             }
 
-            /**
-             * Filter the composed line items (per-brand payment-terms /
-             * surcharge line handling).
-             *
-             * Receives and must return the FULL line_items array — append or
-             * adjust entries, never return a single line. The body draft is
-             * context only and predates the two_order_create /
-             * twoinc_order_payload filters below.
-             *
-             * @param array $line_items All composed line items.
-             * @param array $req_body   Body draft, pre payload filters.
-             */
+            // Must receive and return the FULL line_items array — append or
+            // adjust entries, never return a single line.
             $req_body['line_items'] = apply_filters('twoinc_payment_terms_line', $req_body['line_items'], $req_body);
 
             // Legacy body filter, kept for existing integrations; runs before
@@ -823,29 +686,11 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 $req_body = apply_filters('two_order_create', $req_body);
             }
 
-            /**
-             * Filter the final create-order body (extra brand fields,
-             * country-specific tax_subtotals, payload reshaping).
-             *
-             * @param array    $req_body Final body, after all other filters.
-             * @param WC_Order $order    The order being composed.
-             */
             $req_body = apply_filters('twoinc_order_payload', $req_body, $order);
 
             return $req_body;
         }
 
-        /**
-         * Compose request body for twoinc edit order
-         *
-         * @param WC_Order $order
-         * @param string   $department
-         * @param string   $project
-         * @param string   $purchase_order_number
-         * @param string   $vendor_name
-         *
-         * @return array
-         */
         public static function compose_twoinc_edit_order(
             $order,
             $department,
@@ -879,8 +724,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 'gross_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total())),
                 'net_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total() - $order->get_total_tax())),
                 'tax_amount' => strval(WC_Twoinc_Helper::round_amt($order->get_total_tax())),
-                // Native-precision total discount; guard rounds once at the
-                // payload boundary and fails loud on a negative (TWO-25097).
+                // Guard rounds once at the payload boundary, fails loud on a
+                // negative (TWO-25097).
                 'discount_amount' => WC_Twoinc_Helper::guard_negative_discount(
                     $order->get_total_discount(),
                     sprintf('order %s', $order->get_id()),
@@ -913,9 +758,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
             }
 
             // Same brand hooks as compose_twoinc_order, in the same order, so
-            // a brand line item or payload mutation applied at creation is not
-            // silently dropped from the edit PUT body (which would also break
-            // the change-detection hash both composers feed).
+            // a mutation applied at creation isn't dropped from the edit PUT
+            // body — which would also break the change-detection hash both
+            // composers feed.
             $req_body['line_items'] = apply_filters('twoinc_payment_terms_line', $req_body['line_items'], $req_body);
 
             if (has_filter('two_order_edit')) {
@@ -927,15 +772,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
             return $req_body;
         }
 
-        /**
-         * Compose request body for twoinc refund order
-         *
-         * @param $order_refund
-         * @param $amount
-         * @param $currency
-         *
-         * @return array
-         */
         public static function compose_twoinc_refund($order_refund, $amount, $currency)
         {
 
@@ -948,11 +784,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
             return $req_body;
         }
 
-        /**
-         * Force reload after admin ajax request
-         *
-         * @return void
-         */
         public static function append_admin_force_reload()
         {
             add_action('woocommerce_admin_order_items_after_line_items', function () {
@@ -960,29 +791,16 @@ if (!class_exists('WC_Twoinc_Helper')) {
             });
         }
 
-        /**
-         * Check if country is supported by twoinc
-         *
-         * @param $country
-         *
-         * @return bool
-         */
         public static function is_country_supported($country)
         {
             return in_array($country, array('NO', 'GB'));
         }
 
         /**
-         * Check if tax subtotals is required in twoinc order request body.
-         *
-         * Always true for a Swedish base country (unconditional, pre-dates
-         * the merchant setting below). Also true when the merchant has
-         * opted in via the "Send tax subtotals in payload" setting
-         * (TWO-25386, ported from Magento/PrestaShop) — an explicit
-         * merchant choice never turns the Swedish requirement off, it only
-         * adds more shops that send tax_subtotals.
-         *
-         * @return bool
+         * Always true for a Swedish base country. Also true when the
+         * merchant opted in via "Send tax subtotals in payload" (TWO-25386,
+         * ported from Magento/PrestaShop) — that setting only adds shops
+         * that send tax_subtotals, never turns the Swedish requirement off.
          */
         public static function is_tax_subtotals_required_by_twoinc()
         {
@@ -993,33 +811,24 @@ if (!class_exists('WC_Twoinc_Helper')) {
             return $gateway && 'yes' === $gateway->get_option('enable_tax_subtotals');
         }
 
-        /**
-         * Check if current server is twoinc development
-         *
-         * @return bool
-         */
         public static function is_twoinc_development()
         {
             $hostname = str_replace(array('http://', 'https://'), '', get_home_url());
 
-            // Local or configured in env var
             if (preg_match('/^localhost(?::[0-9]{1,5})?$/', $hostname) === 1) {
                 return true;
             }
 
-            // Configured dev sites via env var
             $env_dev_hostnames = getenv('TWOINC_DEV_HOSTNAMES');
             if ($env_dev_hostnames && in_array($hostname, explode(',', $env_dev_hostnames))) {
                 return true;
             }
 
-            // Dev subdomains
             $twoinc_dev_sites = '/^.*\.(?:staging|release|experimental|perf|cyber|demo|sandbox)\.two\.inc$/';
             if (preg_match($twoinc_dev_sites, $hostname) === 1) {
                 return true;
             }
 
-            // Neither local nor twoinc development site
             return false;
         }
 
@@ -1033,16 +842,10 @@ if (!class_exists('WC_Twoinc_Helper')) {
         public const ENVIRONMENT_MODES = ['production', 'sandbox', 'staging'];
 
         /**
-         * Resolve the gateway's configured environment mode.
-         *
-         * Mirrors the Magento config repository's mode setting: the stored
-         * `checkout_env` option is normalised to lowercase, with the
-         * historical 'PROD'/'Production' spellings mapping to 'production'.
-         * Anything outside ENVIRONMENT_MODES (including the empty default)
-         * resolves to 'production' — the same host every unrecognised value
-         * produced before the template existed.
-         *
-         * @param WC_Payment_Gateway $gateway
+         * Mirrors the Magento config repository's mode setting: 'PROD' /
+         * 'Production' map to 'production'; anything outside
+         * ENVIRONMENT_MODES (including the empty default) also resolves to
+         * 'production'.
          *
          * @return string one of ENVIRONMENT_MODES
          */
@@ -1059,26 +862,16 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * The environment the gateway actually talks to, i.e. the one the API
-         * host resolves to — which is not always the configured mode.
-         *
-         * On a dev-sniffed shop (see is_twoinc_development()) carrying the
-         * never-configured default mode, the configured mode ('production')
-         * is not the environment that should be in use — a dev-sniffed shop
-         * is by definition not a production shop. This used to be resolved
-         * by reading a merchant-editable free-text test-host override
-         * (TWO-25386 removed that MERCHANT-FACING admin control). Local/dev
-         * tooling that needs the API to resolve to an arbitrary host (e.g.
-         * `make install`'s docker-compose stack, which is not on a
-         * *.staging.two.inc-style domain) still needs an escape hatch, so
-         * this reads the TWOINC_DEV_API_HOST env var instead — a
-         * developer-set server env var, never a wp-admin field, so nothing
-         * a merchant can configure. Falls back to the fixed 'staging' mode
-         * when unset, the same safe direction the removed field's own
-         * unclassifiable-host fallback used: a test environment can neither
-         * take real money nor accept a production token.
-         *
-         * @param WC_Payment_Gateway $gateway
+         * The environment the gateway actually talks to — not always the
+         * configured mode: a dev-sniffed shop (see is_twoinc_development())
+         * carrying the never-configured default 'production' mode is by
+         * definition not a production shop. Local/dev tooling that needs the
+         * API on an arbitrary host (e.g. `make install`'s docker-compose
+         * stack, not on a *.staging.two.inc domain) uses the
+         * TWOINC_DEV_API_HOST env var — a developer-set server var, never a
+         * wp-admin field. Falls back to 'staging' when unset: a test
+         * environment can neither take real money nor accept a production
+         * token.
          *
          * @return string one of ENVIRONMENT_MODES
          */
@@ -1096,17 +889,12 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Classify an arbitrary API host (from TWOINC_DEV_API_HOST) into an
-         * environment mode, so every OTHER host the gateway emits (checkout,
-         * signup) still lands in the same environment the dev-configured API
-         * host actually talks to (TWO-25170). The brand's production API
-         * host is 'production'; a host whose leading labels are `api.<mode>`
-         * is that mode; anything else (localhost, a bespoke tunnel) is
-         * 'staging' — a dev-sniffed shop is by definition not production, so
-         * an unclassifiable host must not resolve there.
-         *
-         * @param string              $host
-         * @param WC_Payment_Gateway  $gateway
+         * Classifies an arbitrary API host (from TWOINC_DEV_API_HOST) so
+         * every other host the gateway emits (checkout, signup) lands in the
+         * same environment (TWO-25170). Production API host -> 'production';
+         * `api.<mode>` labels -> that mode; anything else (localhost, a
+         * bespoke tunnel) -> 'staging', since a dev-sniffed shop must not
+         * resolve to production.
          *
          * @return string one of ENVIRONMENT_MODES
          */
@@ -1133,19 +921,13 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Build an environment host from the brand's URL template, mirroring
+         * Builds an environment host from the brand's URL template, mirroring
          * the Magento config repository: ('api', mode 'staging') on the Two
          * brand -> https://api.staging.two.inc; production drops the mode
-         * suffix. The template itself comes from the brand registry, so a
-         * brand overlay carries its own domains.
+         * suffix. Resolves off the *effective* mode, so every service host
+         * sits in the same environment as the API host.
          *
-         * Resolves off the *effective* mode, so every service host the gateway
-         * emits sits in the same environment as its API host.
-         *
-         * @param string             $service 'api' or 'checkout'
-         * @param WC_Payment_Gateway $gateway
-         *
-         * @return string
+         * @param string $service 'api' or 'checkout'
          */
         public static function get_environment_host($service, $gateway)
         {
@@ -1159,24 +941,17 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Developer env var backing each service host this plugin talks to
-         * (TWO-40 §9).
-         *
-         * Three services, three INDEPENDENT overrides, each falling back on
-         * its own:
+         * Developer env var backing each service host (TWO-40 §9). Three
+         * independent overrides:
          *
          *   - 'api'      the checkout/merchant API
-         *   - 'checkout' the hosted checkout-page app (sole-trader signup and
-         *                company search) — the one the BROWSER loads, which is
-         *                why it needs an override of its own: a host the shop's
-         *                own server process can reach over a Docker network
-         *                alias is not necessarily one the buyer's browser can
-         *                resolve, and on a remotely-hosted shop it definitely
-         *                is not
+         *   - 'checkout' the hosted checkout-page app — loaded by the BROWSER,
+         *                so a Docker-network alias the shop's own server can
+         *                reach is not necessarily one the buyer's browser can
+         *                resolve
          *   - 'portal'   the merchant portal
          *
-         * Server env vars, never wp-admin fields, so nothing here is anything
-         * a merchant can configure.
+         * Server env vars, never wp-admin fields.
          */
         public const DEV_HOST_ENV_VARS = [
             'api' => 'TWOINC_DEV_API_HOST',
@@ -1190,14 +965,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * Gated so a production instance can never honour one even if the
          * variable leaks into its process environment: the shop must BOTH
          * sniff as a development site AND still carry the never-configured
-         * default mode. A merchant who has explicitly chosen an environment
-         * has said which one they want, and an env var does not get to
-         * override that either.
+         * default mode.
          *
-         * @param string             $service key of DEV_HOST_ENV_VARS
-         * @param WC_Payment_Gateway $gateway
-         *
-         * @return string
+         * @param string $service key of DEV_HOST_ENV_VARS
          */
         public static function get_dev_host_override($service, $gateway)
         {
@@ -1214,17 +984,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
             return is_string($host) && $host !== '' ? $host : '';
         }
 
-        /**
-         * The brand's merchant-portal signup URL, with its host swapped for a
-         * developer override when one applies (TWO-40 §9).
-         *
-         * The path is the brand's, so a brand overlay pointing at a different
-         * signup route keeps it; only the origin is replaced.
-         *
-         * @param WC_Payment_Gateway $gateway
-         *
-         * @return string
-         */
+        // Brand's merchant-portal signup URL, host swapped for a developer
+        // override when one applies (TWO-40 §9); only the origin is
+        // replaced, so a brand overlay's own signup path is kept.
         public static function get_merchant_portal_signup_url($gateway)
         {
             $url = (string) WC_Twoinc_Brand::get('sign_up_url');
@@ -1237,21 +999,16 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Get the locale of the current request in full form, e.g. en_US —
-         * sent as the invoice PDF `lang` parameter and the Accept-Language
-         * header, both of which accept the full form (underscore, not
-         * hyphen: the API matches `lang` literally against its allow-list).
+         * Full-form locale (e.g. en_US) — sent as the invoice PDF `lang`
+         * param and the Accept-Language header, both matching `lang`
+         * literally against an allow-list (underscore, not hyphen).
          *
-         * determine_locale(), not get_user_locale(): on the storefront the
-         * page — including this plugin's own translated strings — is rendered
-         * in the site/switched locale, so that is the language the API should
-         * answer in too. get_user_locale() instead returns the WP profile
-         * language of a logged-in buyer, which can differ from the checkout
-         * page around it. In wp-admin (and admin-ajax, i.e. the invoice
-         * download) determine_locale() resolves to the user locale anyway,
-         * so that path is unchanged.
-         *
-         * @return string
+         * determine_locale(), not get_user_locale(): the storefront page
+         * (including this plugin's own strings) renders in the
+         * site/switched locale, which is the language the API should answer
+         * in — get_user_locale() would instead return a logged-in buyer's WP
+         * profile language, which can differ from the checkout page around
+         * it.
          */
         public static function get_locale()
         {
@@ -1262,11 +1019,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
             return 'en_US';
         }
 
-        /**
-         * Recursively utf8 encode object
-         *
-         * @return array
-         */
         public static function utf8ize($d)
         {
             if (is_array($d)) {
@@ -1278,30 +1030,21 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     $d->$k = WC_Twoinc_Helper::utf8ize($v);
                 }
             } elseif (is_string($d)) {
-                // Return if already UTF-8
                 if (mb_check_encoding($d, 'UTF-8')) {
                     return $d;
                 }
 
-                // Try to detect encoding and convert
                 $encoding = mb_detect_encoding($d, mb_detect_order(), true);
                 if ($encoding) {
                     return mb_convert_encoding($d, 'UTF-8', $encoding);
                 }
 
-                // Fallback: Mimic utf8_encode's original behavior
+                // Mimics removed utf8_encode()'s fallback behavior.
                 return mb_convert_encoding($d, 'UTF-8', 'ISO-8859-1');
             }
             return $d;
         }
 
-        /**
-         * Get Order Unsecured Hash
-         *
-         * @param $obj
-         *
-         * @return string
-         */
         public static function hash_order($order, $twoinc_meta)
         {
             $twoinc_order = WC_Twoinc_Helper::compose_twoinc_order(
@@ -1323,26 +1066,11 @@ if (!class_exists('WC_Twoinc_Helper')) {
             return WC_Twoinc_Helper::hash_obj($twoinc_order);
         }
 
-        /**
-         * Get Unsecured Hash
-         *
-         * @param $obj
-         *
-         * @return string
-         */
         public static function hash_obj($obj)
         {
             return md5(json_encode(WC_Twoinc_Helper::utf8ize($obj)));
         }
 
-        /**
-         * Recursively compare arrays
-         *
-         * @param $src_arr
-         * @param $dst_arr
-         *
-         * @return array
-         */
         public static function array_diff_r($src_arr, $dst_arr)
         {
             $diff = array();
@@ -1366,37 +1094,16 @@ if (!class_exists('WC_Twoinc_Helper')) {
             return $diff;
         }
 
-        /**
-         * Get product from a line item
-         *
-         * @param $line_item
-         *
-         * @return array
-         */
         public static function get_product($line_item)
         {
 
             if (gettype($line_item) !== 'array' && get_class($line_item) === 'WC_Order_Item_Product') {
-                /** @var WC_Product_Variation */
-                //if ($line_item->get_product()->get_type() === 'variation') {
-                //    return new WC_Product_Variation($line_item->get_product()->get_variation_id());
-                //}
-                /** @var WC_Order_Item_Product */
                 return $line_item->get_product();
             } else {
-                /** @var WC_Product_Simple */
                 return $line_item['data'];
             }
         }
 
-        /**
-         * Get tax rate from a line item
-         *
-         * @param $line_item
-         * @param $order
-         *
-         * @return array
-         */
         private static function get_item_tax_rate($line_item, $order)
         {
             $item_tax_rate_list = [];
@@ -1418,13 +1125,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
             return WC_Twoinc_Helper::get_tax_rate_from_tax_list($item_tax_rate_list);
         }
 
-        /**
-         * Get tax rate element from a list of tax rate
-         *
-         * @param $tax_rate_list
-         *
-         * @return array
-         */
         private static function get_tax_rate_from_tax_list($tax_rate_list)
         {
             $no_zero_list = [];
@@ -1439,7 +1139,6 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     'name' => 'NA'
                 ];
             } elseif (count($no_zero_list) == 1) {
-                // return the 1st element
                 return reset($no_zero_list);
             } else {
                 $sum_rate = 0;

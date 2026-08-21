@@ -6,14 +6,8 @@ add_action('woocommerce_checkout_process', 'checkout_validate_delivery_date');
 add_action('woocommerce_checkout_update_order_meta', 'add_delivery_date_to_order_meta');
 add_action('wp_insert_post', 'prepend_to_order_note', 10, 3);
 
-/**
- * Enqueue datepicker js
- *
- * @return void
- */
 function enqueue_date_picker()
 {
-    // Only on front-end and checkout page
     if (is_admin() || !is_checkout()) {
         return;
     }
@@ -21,14 +15,8 @@ function enqueue_date_picker()
 }
 
 
-/**
- * Add Delivery date field to Checkout page
- *
- * @return void
- */
 function add_delivery_date_field($checkout)
 {
-
     date_default_timezone_set('Europe/Oslo');
     $dateoptions = array('' => __('Select Pickup Date', 'twoinc-payment-gateway'));
 
@@ -65,16 +53,9 @@ function add_delivery_date_field($checkout)
 }
 
 
-/**
- * Validate if delivery date was sent after clicking Placing order
- *
- * @return void
- */
 function checkout_validate_delivery_date()
 {
-
     if (!$_POST['delivery_date']) {
-        // the required field delivery_date was not sent
         wc_add_notice(
             sprintf(
                 __('%s is a required field.', 'twoinc-payment-gateway'),
@@ -83,7 +64,6 @@ function checkout_validate_delivery_date()
             'error'
         );
     } elseif (!validate_date($_POST['delivery_date'])) {
-        // delivery_date is of incorrect format
         wc_add_notice(
             sprintf(
                 __('%s cannot be parsed.', 'twoinc-payment-gateway'),
@@ -95,11 +75,6 @@ function checkout_validate_delivery_date()
 }
 
 
-/**
- * Add the delivery date to order meta
- *
- * @return void
- */
 function add_delivery_date_to_order_meta($order_id)
 {
     if (!empty($_POST['delivery_date'])) {
@@ -109,11 +84,6 @@ function add_delivery_date_to_order_meta($order_id)
 }
 
 
-/**
- * Validate if a string is of a specific date format
- *
- * @return bool
- */
 function validate_date($date_str, $format = 'Y-m-d')
 {
     $d = DateTime::createFromFormat($format, $date_str);
@@ -121,15 +91,8 @@ function validate_date($date_str, $format = 'Y-m-d')
 }
 
 
-/**
- * Prepend Delivery date to order note on order creation
- *
- * @return void
- */
 function prepend_to_order_note($post_id, $post, $update)
 {
-
-    // Skip if $post_id doesn't exist OR post is not order OR this is update
     if (! $post_id || get_post_type($post_id) != 'shop_order' || $update == 1) {
         return;
     }

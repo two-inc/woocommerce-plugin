@@ -63,56 +63,33 @@ return [
     // Target of the "read more" link in the short tagline rendered under
     // the payment-method title at checkout, above the about block. The
     // tagline SENTENCE is not brand config: it is a literal, extractable
-    // msgid in WC_Twoinc::get_pay_subtitle (the only reader), so it can be
-    // translated per locale from languages/*.po. A brand owns only its own
-    // FAQ URL. null or '' renders no tagline at all (the Two default).
-    // Replaces the former free-form 'checkout_subtitle' string, which was
-    // untranslatable by construction — see TWO-25270. This is a DELIBERATE
-    // divergence from the Magento brand descriptor, which still carries the
-    // whole sentence in <checkout_subtitle>. Magento's translator resolves
-    // a runtime key, so a variable string is translatable there; gettext
-    // extracts statically and cannot.
-    // Accepted constraint of that inversion: every brand setting this key
-    // gets the SAME sentence, because the sentence is now platform copy. A
-    // brand needing different wording needs a new msgid in
-    // get_pay_subtitle, not a value here — brand config cannot carry
-    // translatable prose at all.
+    // msgid in WC_Twoinc::get_pay_subtitle (the only reader), translated
+    // per locale from languages/*.po — gettext extracts statically, so a
+    // variable sentence per brand is not possible here (TWO-25270). A
+    // brand owns only its own FAQ URL; null or '' renders no tagline.
+    // Every brand gets the SAME sentence; different wording needs a new
+    // msgid in get_pay_subtitle, not a value here.
     'checkout_subtitle_faq_url' => null,
     // Contact address shown in the admin API-key field help for
     // obtaining production keys. WC_Twoinc::init_form_fields is the only
     // reader. A brand overlay substitutes its own support address.
     'production_key_contact_email' => 'integration@two.inc',
     // On/off switch for the buyer-facing reassurance messaging around the
-    // order-intent pre-check: the notice shown once intent is approved
-    // (pending final checks) AND the loading state shown while the check
-    // runs (TWO-25224 — both carry our own copy about the check, so they
-    // switch together). The pre-check's two ERROR boxes are NOT covered:
-    // a brand that wants no reassurance still needs failures surfaced.
-    // Explicit boolean ONLY, shared
-    // with the other platforms: true = notice shown; false = suppressed
-    // entirely, no markup emitted at all. Absent or null = the
-    // documented default true, which is what keeps a third-party overlay
-    // that declares nothing on ON. Any other value ('', 0, 'yes', an
-    // array) is a logged error and the default true is used — never a
-    // silent third behaviour.
-    // WC_Twoinc::is_intent_approved_notice_enabled is the only reader; it
-    // resolves once per render and both consumers take the result.
+    // order-intent pre-check: the approved notice and the loading state
+    // shown while the check runs (TWO-25224 — both switch together). The
+    // pre-check's two ERROR boxes are NOT covered: a brand wanting no
+    // reassurance still needs failures surfaced. Explicit boolean ONLY;
+    // absent/null and any invalid value both default true — never a
+    // silent third behaviour. WC_Twoinc::is_intent_approved_notice_enabled
+    // is the only reader.
     'intent_approved_notice_enabled' => true,
-    // Copy override for that notice — WORDING ONLY. It carried the
-    // on/off meaning too until TWO-25218; it no longer does. null, ''
-    // and whitespace-only are all INERT and mean the same thing: the
-    // platform default translated copy in
-    // WC_Twoinc::get_intent_approved_notice (where it lives so WordPress
-    // i18n tooling can extract it). An empty string is NOT an off
-    // switch — use 'intent_approved_notice_enabled' => false for that.
-    // A non-empty string is that sprintf template verbatim, with %1$s
-    // the brand product_name and %2$s the buyer's company name.
-    // WC_Twoinc::get_intent_approved_notice is the only reader.
+    // Copy override for that notice — WORDING ONLY, not on/off (use
+    // 'intent_approved_notice_enabled' for that). null/''/whitespace-only
+    // fall back to the translated default in
+    // WC_Twoinc::get_intent_approved_notice. A non-empty string is the
+    // sprintf template verbatim: %1$s product_name, %2$s buyer company name.
     'intent_approved_notice' => null,
-    // Deliberately no 'intent_declined_notice' key here (removed
-    // 2026-08-04 ruling, TWO-25326): the "order intent NOT approved"
-    // notice is never brand-overridable. WC_Twoinc::
-    // get_intent_declined_notice_template() no longer reads any brand
-    // key for this — do not add one back, and do not add one to an
-    // overlay's own brand file either; it would be silently ignored.
+    // Deliberately no 'intent_declined_notice' key: the "order intent NOT
+    // approved" notice is never brand-overridable (TWO-25326). Do not add
+    // one back here or to an overlay's brand file — it would be ignored.
 ];

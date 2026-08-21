@@ -316,30 +316,19 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                     $converted_fixed = $fixed !== null ? round($fixed * $rate, self::MONEY_DECIMALS) : null;
                     $converted_cap = $cap !== null ? round($cap * $rate, self::MONEY_DECIMALS) : null;
                     // A configured CAP that rounds to 0.00 is relayed AS
-                    // 0.00 — it is NOT a failure and must not be dropped,
-                    // withheld or turned into "no cap". Per the pricing
-                    // API's contract a cap of zero clamps the fee to zero,
-                    // which is a different instruction from an ABSENT cap;
-                    // absence is what means uncapped (see
-                    // surcharge_monetary_components). Because the cap
-                    // bounds the WHOLE fee line item and not the
-                    // percentage portion, a zero cap also zeroes any fixed
-                    // surcharge configured alongside it — which is why it
-                    // is reported, at info, for the same reason as the
-                    // fixed case below. It is still the right outcome: the
-                    // merchant configured a cap worth nothing in this
-                    // currency, and "charge no fee" is what that says.
-                    //
-                    // An earlier revision failed CLOSED here on the
-                    // premise that a zero cap read downstream as *no* cap
-                    // and would relay an uncapped percentage. That premise
-                    // was wrong (TWO-25269) and the guard was reverted. It
-                    // withheld the fee block, not the payment method, so
-                    // its effect was the same zero fee reached silently.
-                    // (float) $cap !== 0.0 so the message stays true: a cap
-                    // that was ALREADY zero did not "round to" anything, and
-                    // it cannot reach the conversion branch anyway now that a
-                    // zero component is exempt from the FX requirement.
+                    // 0.00, not dropped or withheld: per the pricing API's
+                    // contract a cap of zero clamps the fee to zero, distinct
+                    // from an ABSENT cap (which means uncapped — see
+                    // surcharge_monetary_components). Since the cap bounds
+                    // the WHOLE fee line item, it also zeroes any fixed
+                    // surcharge configured alongside it — reported at info
+                    // for the same reason as the fixed case below, but still
+                    // the right outcome (TWO-25269: a fail-closed guard here
+                    // was tried and reverted, as it withheld the fee block
+                    // for the same eventual zero fee).
+                    // (float) $cap !== 0.0: a cap already zero can't reach
+                    // this conversion branch (zero is FX-exempt), so this
+                    // guards only a genuinely non-zero cap that rounds down.
                     if ($cap !== null && (float) $cap !== 0.0 && $converted_cap <= 0 && function_exists('wc_get_logger')) {
                         wc_get_logger()->info(
                             sprintf(
@@ -404,38 +393,6 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         }
 
         /**
-         * The two STORE-currency monetary components of one term's grid
-         * row: the fixed surcharge (fixed/both types) and the cap on the
-         * whole fee line item (percentage/both types). Either may be null.
-         *
-         * A null CAP means "no cap configured", which is a completely
-         * legitimate configuration: the percentage surcharge is then
-         * charged uncapped, exactly as the merchant asked. Absence must
-         * never be treated as a failure anywhere, and neither is a cap
-         * that converts to 0.00 — per the API's contract a cap of zero
-         * clamps the fee to zero, so it is relayed as 0.00 (TWO-25269).
-         * The only fail-closed condition is no FX rate at all.
-         *
-         * A cap of exactly 0 is relayed AS 0, not normalised to absent
-         * (TWO-25289). This boundary used to apply a `> 0` filter, so a cap
-         * typed as 0 became "no cap" and the percentage went out UNCAPPED —
-         * an overcharge, and the exact opposite of what the merchant asked
-         * for. The admin grid now refuses a zero cap outright
-         * (WC_Twoinc::validate_two_surcharge_grid_field), but the filter had
-         * to go with it: a 0 arriving by any route the grid does not police —
-         * a row stored before that validation existed, `wp option update`, an
-         * import — would otherwise still be relayed uncapped. Emptiness is
-         * the only thing that means "no cap" here, and it is tested for
-         * explicitly.
-         *
-         * The `fixed` component keeps its `> 0` filter deliberately: an
-         * absent fixed surcharge and one of 0.00 are the same instruction
-         * (charge nothing extra), so nothing is lost by conflating them.
-         *
-         * @param array{type: string, grid: array<int,array>} $settings
-         * @return array{fixed: float|null, cap: float|null}
-         */
-        /**
          * Whether a monetary component actually requires an FX rate. Absent
          * needs nothing; ZERO needs nothing either, because zero is zero in
          * every currency. Everything else does.
@@ -452,12 +409,9 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          *
          * Emptiness is the only thing that means "no cap"; a cap of 0 is a
          * real instruction and is relayed as one (TWO-25289). A NEGATIVE cap
-         * is neither: it is nonsense the admin grid rejects, so it can only
-         * arrive by a hand edit or an import, and relaying it would be refused
-         * upstream. Treated as absent, which is what this boundary did for
-         * every non-positive value before TWO-25289 and must keep doing for
-         * negatives — dropping the `> 0` filter wholesale would have started
-         * relaying `cap => -10.0`.
+         * is neither: it's nonsense the admin grid rejects (so it can only
+         * arrive via a hand edit or import, where it would be refused
+         * upstream) — treated as absent rather than relayed as `cap => -10.0`.
          *
          * @param array<string,mixed> $row
          * @return float|null
@@ -466,23 +420,16 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         {
             if (!isset($row['limit']) || !is_scalar($row['limit'])) {
                 // is_scalar: a hand-edited or imported option can store an
-                // array here — the same arrival routes that justify relaying a
-                // stored zero — and casting one to string is a PHP warning.
-                // The old `(float) $row['limit'] > 0` test cast it silently.
+                // array here, and casting one to string is a PHP warning.
                 return null;
             }
-            // Comma decimals are NORMALISED here, not treated as junk. The
-            // save path applies exactly this replacement before it validates,
-            // and so does the merchant-minimum validator, so "1,50" is the
-            // plugin's own accepted spelling of 1.50 — it reaches the stored
-            // option through a hand edit, an import, or an option written
-            // before that normalisation existed, the same arrival routes that
-            // justify relaying a stored zero at all. Reading it as junk would
-            // make it ABSENT, and absent means NO CAP: the percentage would
-            // relay uncapped, so the failure direction of dropping it is an
+            // Comma decimals are NORMALISED here, not treated as junk: the
+            // save path and the merchant-minimum validator both apply this
+            // same replacement, so "1,50" is the plugin's own accepted
+            // spelling of 1.50. Reading it as junk would make it ABSENT,
+            // meaning NO CAP — relaying the percentage uncapped, an
             // OVERCHARGE. Normalising can only ever cap lower (a thousands
-            // separator, "1,500", reads as 1.5), which is the safe direction
-            // and is identical to what the save path would have stored.
+            // separator, "1,500", reads as 1.5), the safe direction.
             $raw = trim(str_replace(',', '.', (string) $row['limit']));
             if ($raw === '' || !is_numeric($raw) || (float) $raw < 0) {
                 return null;
@@ -491,6 +438,24 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
             return (float) $raw;
         }
 
+        /**
+         * The two STORE-currency monetary components of one term's grid
+         * row: the fixed surcharge (fixed/both types) and the cap on the
+         * whole fee line item (percentage/both types). Either may be null.
+         *
+         * A null cap means "no cap configured" (percentage charged
+         * uncapped); a cap of exactly 0 is relayed AS 0, not normalised to
+         * absent (TWO-25289) — per the API's contract a cap of zero clamps
+         * the fee to zero, and treating it as absent would send the
+         * percentage out UNCAPPED, an overcharge. Only emptiness means "no
+         * cap".
+         *
+         * The `fixed` component keeps a `> 0` filter deliberately: an
+         * absent fixed surcharge and one of 0.00 are the same instruction.
+         *
+         * @param array{type: string, grid: array<int,array>} $settings
+         * @return array{fixed: float|null, cap: float|null}
+         */
         private static function surcharge_monetary_components(array $settings, int $days): array
         {
             $has_percentage = in_array($settings['type'], ['percentage', 'fixed_and_percentage'], true);
@@ -537,13 +502,11 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
             $monetary_term = null;
             foreach (self::get_available_terms($gateway) as $days) {
                 $components = self::surcharge_monetary_components($settings, $days);
-                // ZERO needs no rate: it is zero in every currency. This
-                // matters because this gate WITHHOLDS the payment method, and
-                // a term whose only monetary component is a zero cap would
+                // ZERO needs no rate: it is zero in every currency. Matters
+                // because this gate WITHHOLDS the payment method, and a term
+                // whose only monetary component is a zero cap would
                 // otherwise take Two offline for the whole checkout over a
-                // conversion with no work to do (TWO-25289). A stored zero cap
-                // is relayed rather than dropped now, so it reaches here where
-                // it never used to.
+                // conversion with no work to do (TWO-25289).
                 if (self::needs_fx($components['fixed']) || self::needs_fx($components['cap'])) {
                     $monetary_term = $days;
                     break;

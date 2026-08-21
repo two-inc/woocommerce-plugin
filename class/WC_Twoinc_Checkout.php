@@ -12,18 +12,12 @@ if (!class_exists('WC_Twoinc_Checkout')) {
     {
         private $wc_twoinc;
 
-        /**
-         * WC_Twoinc_Checkout constructor.
-         */
         public function __construct($wc_twoinc)
         {
 
             $this->wc_twoinc = $wc_twoinc;
 
-            // Move the country field to the top
             add_filter('woocommerce_checkout_fields', [$this, 'move_country_field'], 20);
-
-            // Register the custom fields
             add_filter('woocommerce_checkout_fields', [$this, 'add_tracking_fields'], 21);
             add_filter('woocommerce_checkout_fields', [$this, 'update_company_fields'], 23);
 
@@ -45,36 +39,21 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             // is complete (priority 25 > the base mutations above)
             add_filter('woocommerce_checkout_fields', [$this, 'apply_brand_checkout_fields'], 25);
 
-            // Render the fields on checkout page
             add_action('woocommerce_before_checkout_billing_form', [$this, 'render_twoinc_fields'], 21);
             add_action('woocommerce_pay_order_before_submit', [$this, 'render_twoinc_fields'], 21);
             add_action('woocommerce_before_checkout_billing_form', [$this, 'render_twoinc_representative_fields'], 22);
 
-            // Inject the cart details in header
             add_action('woocommerce_before_checkout_billing_form', [$this, 'inject_cart_details'], 23);
             add_action('woocommerce_pay_order_before_submit', [$this, 'inject_cart_details'], 22);
 
-            // Order pay page customization
             add_action('woocommerce_pay_order_before_submit', [$this, 'order_pay_page_customize'], 24);
         }
 
-        /**
-         * Let a brand overlay add or modify checkout form fields
-         *
-         * @param $fields
-         *
-         * @return mixed
-         */
         public function apply_brand_checkout_fields($fields)
         {
             return apply_filters('twoinc_checkout_fields', $fields);
         }
 
-        /**
-         * Move the country field at the top of the Billing Details section
-         *
-         * @param $fields
-         */
         public function move_country_field($fields)
         {
 
@@ -87,7 +66,6 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             $company_priority = self::clamp_company_priority($fields['billing']['billing_company']['priority'] ?? 30);
             $fields['billing']['billing_country']['priority'] = $company_priority - 1;
 
-            // Return the fields list
             return $fields;
         }
 
@@ -183,14 +161,11 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             // Clamped below the optional-fields baseline (200, below) so
             // company/company_id can never invert above invoice_email/PO/
             // project/department if a future brand overlay ever pushes
-            // billing_company's own priority unusually high (#33 review —
-            // Vader: this used to be a non-issue because the optionals rode
-            // company's own priority; now they're fixed, so company's own
-            // priority needs its own ceiling).
+            // billing_company's own priority unusually high (#33).
             $company_name_priority = self::clamp_company_priority($fields['billing']['billing_company']['priority'] ?? 30);
 
             // Always registered too, for the same reason the search control
-            // below is (Doug, 2026-08-19). WooCommerce core DELETES its own
+            // below is. WooCommerce core DELETES its own
             // company field outright — `unset($fields['company'])` in
             // WC_Countries::get_default_address_fields() — when
             // `woocommerce_checkout_company_field` reads 'hidden', which is
@@ -251,10 +226,6 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 'label' => __('Company name', 'twoinc-payment-gateway'),
                 'autocomplete' => 'organization',
                 'type' => 'select',
-                /*'custom_attributes' => [
-                    'data-multiple' => true,
-                    'data-multi' => true
-                ],*/
                 // form-row-wide is what carries WooCommerce's
                 // `clear: both` (and full width) for a checkout row.
                 // Without it this row does not clear the
@@ -332,17 +303,9 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 ];
             }
 
-            // Return the fields
             return $fields;
         }
 
-        /**
-         * Add the tracking id from order intent to order
-         *
-         * @param $fields
-         *
-         * @return array
-         */
         public function add_tracking_fields($fields)
         {
 
@@ -353,15 +316,9 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 'priority' => 20
             ];
 
-            // Return the fields list
             return $fields;
         }
 
-        /**
-         * Render the Twoinc fields to the checkout page
-         *
-         * @return void
-         */
         public function render_twoinc_fields()
         {
             ob_start();
@@ -370,11 +327,6 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             echo $content;
         }
 
-        /**
-         * Render the Twoinc representative fields to the checkout page
-         *
-         * @return void
-         */
         public function render_twoinc_representative_fields()
         {
             ob_start();
@@ -396,18 +348,15 @@ if (!class_exists('WC_Twoinc_Checkout')) {
 
         /**
          * Where the ONE company-search control (§1-§4) renders in the
-         * checkout DOM (TWO-25326 §7.1, correction 2026-08-04). Pulled out
-         * as a pure function — no gateway, no WP/WC globals — precisely so
-         * this branch can be unit-tested in isolation without dragging in
-         * everything else `prepare_twoinc_object()` touches.
+         * checkout DOM (TWO-25326 §7.1). Pulled out as a pure function — no
+         * gateway, no WP/WC globals — so this branch can be unit-tested in
+         * isolation without dragging in everything else
+         * `prepare_twoinc_object()` touches.
          *
-         * Superseded the short-lived standalone `company_search_location`
-         * admin setting from PR #436: Doug's correction was that merchants
-         * already have the `enable_company_search` checkbox, and a second
-         * location-only setting was one control too many. So the SAME
-         * checkbox now drives both "is the control shown in the address
-         * form" (`enable_company_search === 'yes'`, the value this takes)
-         * and, via this function, where it lives when it isn't:
+         * The SAME `enable_company_search` checkbox drives both "is the
+         * control shown in the address form" (`=== 'yes'`, the value this
+         * takes) and, via this function, where it lives when it isn't —
+         * there is no separate location-only setting:
          *   - 'yes' (checked, the default): 'address_area' — renders in the
          *     billing address form exactly as before this setting existed.
          *   - anything else (unchecked): 'payment_tile' — the SAME control
@@ -424,13 +373,6 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             return $enable_company_search === 'yes' ? 'address_area' : 'payment_tile';
         }
 
-        /**
-         * Passing config to javascript
-         *
-         * @param $merchant array
-         *
-         * @return array
-         */
         private function prepare_twoinc_object($merchant): array
         {
             $currency = get_woocommerce_currency();
@@ -446,8 +388,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
 
             // Read once, fed to both `enable_company_search` below and
             // `derive_company_search_location()` — same option chain, same
-            // request, no reason to hit `get_option()` twice (review nit,
-            // Leia).
+            // request, no reason to hit `get_option()` twice.
             $enable_company_search = $this->wc_twoinc->get_enable_company_search();
 
             $properties = [
@@ -461,9 +402,8 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     // Hint inside the empty company-search field (TWO-25288).
                     'company_search_placeholder' => __('Enter company name to search', 'twoinc-payment-gateway'),
                     // Watermark inside the dropdown's own query field, stating
-                    // the search threshold (TWO-25288; moved out of the
-                    // results-panel row it used to render as, 2026-08-20).
-                    // The %d is deliberately LEFT UNRESOLVED here: the JS
+                    // the search threshold (TWO-25288). The %d is
+                    // deliberately LEFT UNRESOLVED here: the JS
                     // interpolates it from its own minimum-length constant,
                     // which is also what the widget enforces, so the number
                     // the buyer is told cannot drift from the number required.
@@ -471,47 +411,30 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     'company_search_too_short' => __('Please enter %d or more characters', 'twoinc-payment-gateway'),
                     // The "Enter manually" mode chip inside the company-search
                     // dropdown, and the link back out of manual entry
-                    // (TWO-25288). Both used to be markup in the billing-form
-                    // view, which is rendered on the checkout page only — the
-                    // pay-for-order page renders its own copy of the company
-                    // inputs and so silently had neither. They are built in JS
-                    // now, from here, so both surfaces get the same
-                    // translated strings from one source.
-                    //
-                    // Was 'company_not_in_list' / "My company is not on the
-                    // list" (TWO-40 §0 correction): that copy no longer exists
-                    // anywhere on the checkout — it is fully absorbed into
-                    // this chip's own label, alongside the registered-company
-                    // and sole-trader chips it now renders next to.
+                    // (TWO-25288). Built in JS from here rather than as
+                    // billing-form-view markup, so the pay-for-order page
+                    // (which renders its own copy of the company inputs) gets
+                    // the same translated strings too.
                     'enter_manually' => __('Enter manually', 'twoinc-payment-gateway'),
                     'search_company' => __('Search for company', 'twoinc-payment-gateway'),
                 ],
                 'twoinc_checkout_host' => $this->wc_twoinc->get_twoinc_checkout_host(),
-                // Always 'yes' at load — TWO-25326 §7.1 correction
-                // 2026-08-04 (Doug's ruling: the search control is never
-                // "off", only relocated). `window.twoinc.enable_company_search`
+                // Always 'yes' at load (TWO-25326 §7.1): the search control
+                // is never "off", only relocated. `window.twoinc.enable_company_search`
                 // is a RUNTIME flag in twoinc.js — toggled to "no" only by
-                // enterManualCompanyEntry()/twoincSoleTrader.setMode() to
-                // mean "the search widget is not the active input method
-                // right now" — not the admin's raw checkbox value. Feeding
-                // the raw checkbox value in here used to make the two
-                // meanings collide: a merchant who unchecked the box (asking
-                // for payment-tile placement) also read as "search is
-                // suppressed" everywhere this flag gates the actual
-                // selectWoo widget (Twoinc.enableCompanySearch() and
-                // friends), so nothing in the tile ever became live. Where
-                // the control renders is `company_search_location`'s job,
-                // below — driven by the checkbox — never this flag's.
+                // enterManualCompanyEntry()/twoincSoleTrader.setMode() to mean
+                // "the search widget is not the active input method right
+                // now", not the admin's raw checkbox value: feeding the raw
+                // checkbox value in here would suppress the selectWoo widget
+                // (Twoinc.enableCompanySearch() and friends) even when the
+                // merchant only asked for payment-tile placement. Where the
+                // control renders is `company_search_location`'s job, below.
                 'enable_company_search' => 'yes',
-                // TWO-25326 §7.1, correction 2026-08-04: where the one
-                // company-search control renders — driven by the
-                // `enable_company_search` checkbox itself (not a setting of
-                // its own; see get_enable_company_search()'s doc comment).
-                // Any JS check for the admin's own "checked" preference —
-                // including whether company search shows for OTHER payment
-                // methods, which is this same checkbox now too (the
-                // standalone `enable_company_search_for_others` setting was
-                // removed, Doug's ruling) — must read THIS value against
+                // Where the one company-search control renders — driven by
+                // the `enable_company_search` checkbox itself, including
+                // whether company search shows for OTHER payment methods
+                // (same checkbox; TWO-25326 §7.1). Any JS check for the
+                // admin's checked preference must read THIS value against
                 // 'address_area', not the runtime `enable_company_search`
                 // flag above.
                 'company_search_location' => self::derive_company_search_location($enable_company_search),
@@ -593,11 +516,6 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             return $properties;
         }
 
-        /**
-         * Inject the cart content in header
-         *
-         * @return void
-         */
         public function inject_cart_details()
         {
             if (!is_checkout()) {
