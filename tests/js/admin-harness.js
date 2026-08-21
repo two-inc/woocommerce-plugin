@@ -219,7 +219,7 @@ function buildSettingsPage(options) {
     "        <thead><tr><th>Term</th>",
     '          <th class="twoinc-col-fixed">Fixed</th>',
     '          <th class="twoinc-col-percentage">Percentage</th>',
-    '          <th class="twoinc-col-limit">Cap</th>',
+    '          <th class="twoinc-col-limit">Limit</th>',
     "        </tr></thead>",
     "        <tbody>" + rows + "</tbody>",
     "      </table>",

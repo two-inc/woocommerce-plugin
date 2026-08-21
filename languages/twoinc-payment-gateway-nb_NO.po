@@ -661,16 +661,21 @@ msgid "Please enter %d or more characters"
 msgstr "Vennligst skriv inn %d eller flere tegn"
 #: class/WC_Twoinc.php
 #, php-format
-msgid "Surcharge cap for the %s-day term cannot be 0. To charge nothing on this term, set the percentage and the fixed fee to 0 instead, and leave the cap empty."
-msgstr "Maksbeløpet for tillegget på terminen med %s dager kan ikke være 0. Hvis du ikke vil belaste noe for denne terminen, setter du prosenten og det faste gebyret til 0 i stedet, og lar maksbeløpet stå tomt."
+msgid "Surcharge limit for the %s-day term cannot be 0. To charge nothing on this term, set the percentage and the fixed fee to 0 instead, and leave the limit empty."
+msgstr "Grensen for tillegget på terminen med %s dager kan ikke være 0. Hvis du ikke vil belaste noe for denne terminen, setter du prosenten og det faste gebyret til 0 i stedet, og lar grensen stå tom."
 
 #: class/WC_Twoinc.php
-msgid "A cap of 0 is not allowed. To charge nothing on a term, set the percentage and the fixed fee for that term to 0 instead."
-msgstr "Et maksbeløp på 0 er ikke tillatt. Hvis du ikke vil belaste noe for en termin, setter du terminens prosent og faste gebyr til 0 i stedet."
+msgid "A limit of 0 is not allowed. To charge nothing on a term, set the percentage and the fixed fee for that term to 0 instead."
+msgstr "En grense på 0 er ikke tillatt. Hvis du ikke vil belaste noe for en termin, setter du terminens prosent og faste gebyr til 0 i stedet."
 
 #: class/WC_Twoinc.php
-msgid "The cap applies to the whole fee: the percentage and the fixed fee together, not the percentage alone."
-msgstr "Maksbeløpet gjelder hele gebyret: prosenten og det faste gebyret til sammen, ikke bare prosenten."
+#, php-format
+msgid "Clear or correct the surcharge limit of 0 on these terms before enabling a percentage surcharge: %s. A limit of 0 charges nothing at all; to charge nothing on a term, set its percentage and fixed fee to 0 and leave the limit empty."
+msgstr "Fjern eller korriger grensen på 0 for tillegget på disse terminene før du aktiverer et prosenttillegg: %s. En grense på 0 belaster ingenting i det hele tatt; for å ikke belaste noe for en termin, setter du prosenten og det faste gebyret til 0 og lar grensen stå tom."
+
+#: class/WC_Twoinc.php
+msgid "The limit applies to the whole fee: the percentage and the fixed fee together, not the percentage alone."
+msgstr "Grensen gjelder hele gebyret: prosenten og det faste gebyret til sammen, ikke bare prosenten."
 
 #: class/WC_Twoinc.php
 msgid "Custom Payment Terms (days)"

@@ -1485,7 +1485,7 @@ if (!class_exists('WC_Twoinc')) {
                 if (!empty($zero_cap_days)) {
                     throw new Exception(sprintf(
                         /* translators: %s: comma-separated term days, e.g. "14, 30" */
-                        __('Clear or correct the surcharge cap of 0 on these terms before enabling a percentage surcharge: %s. A cap of 0 charges nothing at all; to charge nothing on a term, set its percentage and fixed fee to 0 and leave the cap empty.', 'twoinc-payment-gateway'),
+                        __('Clear or correct the surcharge limit of 0 on these terms before enabling a percentage surcharge: %s. A limit of 0 charges nothing at all; to charge nothing on a term, set its percentage and fixed fee to 0 and leave the limit empty.', 'twoinc-payment-gateway'),
                         implode(', ', $zero_cap_days)
                     ));
                 }
@@ -1595,11 +1595,11 @@ if (!class_exists('WC_Twoinc')) {
             // Zero is NOT the way to express "no fee on this term" — the
             // grid refuses it on save. Say so next to the instruction that
             // otherwise invites it (TWO-25289).
-            $cap_zero_sentence = __('A cap of 0 is not allowed. To charge nothing on a term, set the percentage and the fixed fee for that term to 0 instead.', 'twoinc-payment-gateway');
+            $limit_zero_sentence = __('A limit of 0 is not allowed. To charge nothing on a term, set the percentage and the fixed fee for that term to 0 instead.', 'twoinc-payment-gateway');
             // Stated only for fixed_and_percentage, the one method where the
             // distinction is load-bearing: the cap is applied to the summed
             // fee, so it can wipe the fixed fee as well as the percentage.
-            $cap_whole_fee_sentence = __('The cap applies to the whole fee: the percentage and the fixed fee together, not the percentage alone.', 'twoinc-payment-gateway');
+            $limit_whole_fee_sentence = __('The limit applies to the whole fee: the percentage and the fixed fee together, not the percentage alone.', 'twoinc-payment-gateway');
             // One help paragraph per surcharge method, keyed by the method
             // slug so admin.js can switch between them. Composed here rather
             // than inline in the markup below so the template stays readable.
@@ -1613,9 +1613,9 @@ if (!class_exists('WC_Twoinc')) {
                     $fixed_limit_label
                 );
             }
-            $help_text['percentage'] = $percentage_sentence . ' ' . $limit_sentence . ' ' . $cap_zero_sentence;
+            $help_text['percentage'] = $percentage_sentence . ' ' . $limit_sentence . ' ' . $limit_zero_sentence;
             $help_text['fixed_and_percentage'] = __('Enter the amount and percentage of the fee charged to you that you want to offset with a surcharge. Max 100%.', 'twoinc-payment-gateway')
-                . ' ' . $limit_sentence . ' ' . $cap_whole_fee_sentence . ' ' . $cap_zero_sentence;
+                . ' ' . $limit_sentence . ' ' . $limit_whole_fee_sentence . ' ' . $limit_zero_sentence;
 
             ob_start();
             // Rendered rows mirror the SAVED offered set; admin.js keeps the
@@ -1645,7 +1645,7 @@ if (!class_exists('WC_Twoinc')) {
                             <th><?php esc_html_e('Term (days)', 'twoinc-payment-gateway'); ?></th>
                             <th class="twoinc-col-fixed"><?php esc_html_e('Fixed', 'twoinc-payment-gateway'); ?></th>
                             <th class="twoinc-col-percentage"><?php esc_html_e('Percent of Fee', 'twoinc-payment-gateway'); ?></th>
-                            <th class="twoinc-col-limit"><?php esc_html_e('Cap', 'twoinc-payment-gateway'); ?></th>
+                            <th class="twoinc-col-limit"><?php esc_html_e('Limit', 'twoinc-payment-gateway'); ?></th>
                         </tr></thead>
                         <tbody>
                         <?php foreach ($terms as $days) :
@@ -1779,7 +1779,7 @@ if (!class_exists('WC_Twoinc')) {
                     if ($cap_rounds_away && $cap_column_live) {
                         throw new Exception(sprintf(
                             /* translators: %s: term days */
-                            __('Surcharge cap for the %s-day term cannot be 0. To charge nothing on this term, set the percentage and the fixed fee to 0 instead, and leave the cap empty.', 'twoinc-payment-gateway'),
+                            __('Surcharge limit for the %s-day term cannot be 0. To charge nothing on this term, set the percentage and the fixed fee to 0 instead, and leave the limit empty.', 'twoinc-payment-gateway'),
                             $days
                         ));
                     }
