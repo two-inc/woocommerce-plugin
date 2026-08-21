@@ -21,18 +21,11 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             add_filter('woocommerce_checkout_fields', [$this, 'add_tracking_fields'], 21);
             add_filter('woocommerce_checkout_fields', [$this, 'update_company_fields'], 23);
 
-            // WooCommerce's own address-i18n.js re-derives #billing_country's
+            // WooCommerce's address-i18n.js re-derives #billing_country's
             // client-side priority from THIS locale default array on every
-            // checkout load (fired via country_to_state_changing at init, not
-            // only on country change) and then re-sorts the DOM — entirely
-            // independent of the woocommerce_checkout_fields chain above.
-            // Without this mirror, move_country_field()'s server-side fix is
-            // silently undone a few hundred ms after page load: JS resorts
-            // .form-row elements using the hardcoded core default
-            // (country priority 40) against company's 30, putting company
-            // back above country (#33 — live-staging-only regression, never
-            // reproduced against a local fixture because it depends on
-            // WooCommerce's own bundled JS, not this plugin's).
+            // checkout load and re-sorts the DOM, independent of the
+            // woocommerce_checkout_fields chain above — without this mirror
+            // move_country_field()'s fix is silently undone client-side (#33).
             add_filter('woocommerce_get_country_locale_default', [$this, 'sync_locale_country_priority']);
 
             // Brand overlays add/modify checkout fields after the base set
@@ -57,12 +50,10 @@ if (!class_exists('WC_Twoinc_Checkout')) {
         public function move_country_field($fields)
         {
 
-            // Change the priority for the country field. billing_company may
-            // be absent (e.g. WooCommerce's own "Company name" field toggle
-            // disabled) — fall back to core's default priority (30) rather
-            // than warning on an undefined array key. Clamped below 190: see
-            // the matching clamp in update_company_fields() — country must
-            // never be pushed at/above the optional-fields baseline (200).
+            // billing_company may be absent (e.g. the "Company name" field
+            // toggle disabled) — fall back to core's default priority (30).
+            // Clamped below 190 so country never lands at/above the
+            // optional-fields baseline (200) — see update_company_fields().
             $company_priority = self::clamp_company_priority($fields['billing']['billing_company']['priority'] ?? 30);
             $fields['billing']['billing_country']['priority'] = $company_priority - 1;
 
@@ -70,16 +61,10 @@ if (!class_exists('WC_Twoinc_Checkout')) {
         }
 
         /**
-         * Shared clamp: never let a company-name priority (whatever its
-         * source — billing_company's own field, or WooCommerce's country
-         * locale defaults) push country/optionals out of their intended
-         * band. See move_country_field(), update_company_fields() and
-         * sync_locale_country_priority() — all three must agree on this
-         * number or the three field-order mechanisms drift apart (#33).
-         *
-         * @param $priority
-         *
-         * @return int
+         * Shared clamp so a company-name priority never pushes country/
+         * optionals out of their intended band. move_country_field(),
+         * update_company_fields() and sync_locale_country_priority() must
+         * all agree on this number or the three drift apart (#33).
          */
         private static function clamp_company_priority($priority)
         {
@@ -87,59 +72,31 @@ if (!class_exists('WC_Twoinc_Checkout')) {
         }
 
         /**
-         * Keep WooCommerce's country-locale defaults in sync with the
+         * Keeps WooCommerce's country-locale defaults in sync with the
          * country/company priority clamp above.
          *
-         * WooCommerce's address-i18n.js reads wc_address_i18n_params.locale
-         * (built from this exact filtered array — see
-         * WC_Countries::get_country_locale(), the 'default' entry) and,
-         * on EVERY checkout load — not only when the buyer changes country —
-         * resets #billing_country_field's client-side `data-priority` to
-         * whatever this array says, then physically re-sorts every
-         * `.form-row` in the billing wrapper by that priority
-         * (`rows.detach().appendTo(wrapper)` in address-i18n.js). Company/
-         * company_display are NOT in that JS's locale_fields list, so their
-         * priority is left alone at whatever the server rendered — only
-         * country gets overwritten. Left unfixed, this silently reverts
-         * move_country_field()'s server-side fix a few hundred ms after
-         * load, on every locale, because address-i18n.js always falls back
-         * to `locale.default` for any country without its own 'country'
-         * override (none of WooCommerce's built-in locales define one).
-         *
-         * @param $fields
-         *
-         * @return mixed
+         * address-i18n.js reads this exact filtered array on EVERY checkout
+         * load, not only on country change, and re-sorts `.form-row`
+         * elements in the billing wrapper by it — company/company_display
+         * aren't in that JS's locale_fields list, so only country gets
+         * overwritten. Left unfixed this silently reverts
+         * move_country_field()'s fix a few hundred ms after load.
          */
         public function sync_locale_country_priority($fields)
         {
             // Keys here are unprefixed ('company', 'country') — this is
             // WC_Countries::get_default_address_fields()'s own shape, not
-            // the 'billing_'-prefixed $checkout->get_checkout_fields() shape
-            // that move_country_field()/update_company_fields() operate on.
-            //
-            // Guard on 'country' actually being present (review finding):
-            // every WC core version we've checked includes it, but blind-
-            // writing $fields['country']['priority'] would auto-vivify a
-            // bare ['priority' => X] entry with no type/label/class if some
-            // future version ever omitted it — and that malformed entry
-            // would then be treated as the field's real locale definition
-            // downstream. Absence is a no-op, not a fallback construction:
-            // there is nothing sane to build here without WC's own field
-            // shape.
+            // the 'billing_'-prefixed shape move_country_field()/
+            // update_company_fields() operate on.
             if (!isset($fields['country'])) {
                 return $fields;
             }
 
-            // Reads WC core's own hardcoded 'company' default here (this
-            // array is never customized by a brand overlay — brands only
-            // hook woocommerce_checkout_fields, not
-            // woocommerce_get_country_locale_default), so it can drift from
-            // billing_company's real, possibly brand-adjusted priority in
-            // move_country_field()/update_company_fields(). No brand
-            // currently touches billing_company's priority (#33 review —
-            // Han), so this is a documented latent gap, not an active bug:
-            // if one ever does, this filter would need to read the live
-            // checkout-fields priority instead of the static default here.
+            // WC core's hardcoded 'company' default — never customized by a
+            // brand overlay (brands only hook woocommerce_checkout_fields),
+            // so it can drift from billing_company's real priority above.
+            // No brand currently touches it (#33), so this is a documented
+            // latent gap, not an active bug.
             $company_priority = self::clamp_company_priority($fields['company']['priority'] ?? 30);
             $fields['country']['priority'] = $company_priority - 1;
 
@@ -164,76 +121,42 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             // billing_company's own priority unusually high (#33).
             $company_name_priority = self::clamp_company_priority($fields['billing']['billing_company']['priority'] ?? 30);
 
-            // Always registered too, for the same reason the search control
-            // below is. WooCommerce core DELETES its own
-            // company field outright — `unset($fields['company'])` in
-            // WC_Countries::get_default_address_fields() — when
-            // `woocommerce_checkout_company_field` reads 'hidden', which is
-            // also what that option DEFAULTS to on any store whose default
-            // checkout is the block checkout. So `#billing_company_field` was
-            // absent from the rendered DOM entirely on such a store
-            // (live-confirmed: `document.querySelector('#billing_company_field')`
-            // was null), and this plugin's own company capture cannot work
-            // without it: it is one of the two company-NAME surfaces
-            // `toggleBusinessFields()` chooses between (manual entry, and any
-            // billing country with no registry to search), it is the field
-            // WooCommerce actually POSTs the captured name in, and it is where
-            // the "search for company" affordance is appended. Registering it
-            // here puts the field beyond the reach of that store-level toggle,
-            // exactly as `billing_company_display`/`company_id` already are.
+            // WC core deletes its own company field entirely on stores where
+            // `woocommerce_checkout_company_field` is 'hidden' (the default
+            // for block-checkout stores), so this plugin's own company
+            // capture — the manual-entry/no-registry surface, and the field
+            // WooCommerce POSTs the name in — cannot work without it.
+            // Registering it here puts it beyond that store-level toggle.
             //
-            // Filled in only when absent — never overwritten. A store that
-            // does render the field, or a brand overlay that adjusts it, owns
-            // its own definition (label, required-ness, priority); this is a
-            // floor, not an override. Registered BEFORE the two fields below
-            // so that it stays first in insertion order, which is what decides
-            // the rendered order among the three while they share a priority
-            // (PHP's sort is stable, and `wc_checkout_fields_uasort_comparison`
-            // compares priority alone).
+            // Filled in only when absent, never overwritten — a store or
+            // brand overlay that already defines it owns that definition.
+            // Registered before the two fields below so it stays first in
+            // insertion order, which decides render order among fields that
+            // share a priority (PHP's sort is stable).
             if (!isset($fields['billing']['billing_company'])) {
                 $fields['billing']['billing_company'] = [
-                    // Core's own shape, minus 'required': see
-                    // WC_Countries::get_default_address_fields(). Optional
-                    // here because required-ness is decided client-side, per
-                    // capture mode and per payment method
-                    // (toggleBusinessFields' `requiredTargets`) — a
-                    // server-side `required` would make every non-Two checkout
-                    // unsubmittable without a company name.
+                    // Optional here because required-ness is decided
+                    // client-side, per capture mode and payment method
+                    // (toggleBusinessFields' `requiredTargets`).
                     'label' => __('Company name', 'twoinc-payment-gateway'),
                     'autocomplete' => 'organization',
-                    // form-row-wide for the same clearing reason as
-                    // billing_company_display below (TWO-25160).
                     'class' => array('form-row-wide'),
                     'required' => false,
                     'priority' => $company_name_priority
                 ];
             }
 
-            // Always registered — TWO-25326 §7.1 correction 2026-08-04. This
-            // is the ONE company-search control; `get_enable_company_search()`
-            // only ever decides WHERE it renders (address area vs payment
-            // tile, via `company_search_location` — see
-            // derive_company_search_location() and
-            // twoincDomHelper.syncCompanySearchTileLocation() in twoinc.js),
-            // never whether it exists. A gate here that skipped registration
-            // when the checkbox was unchecked left the payment-tile branch
-            // with nothing to relocate — the tile rendered empty and the
-            // buyer saw only the plain, unenhanced fallback fields
-            // (`#billing_company_field` + `#company_id_field`) in the address
-            // area, with no working search anywhere on the page. Removing the
-            // gate is what gives the relocation JS a control to move.
+            // Always registered (TWO-25326 §7.1) — this is the ONE
+            // company-search control; get_enable_company_search() only ever
+            // decides WHERE it renders (address area vs payment tile), never
+            // whether it exists. Gating registration on the checkbox left the
+            // payment-tile branch with nothing to relocate.
             $fields['billing']['billing_company_display'] = [
                 'label' => __('Company name', 'twoinc-payment-gateway'),
                 'autocomplete' => 'organization',
                 'type' => 'select',
-                // form-row-wide is what carries WooCommerce's
-                // `clear: both` (and full width) for a checkout row.
-                // Without it this row does not clear the
-                // form-row-first/form-row-last float pair that the first-
-                // and last-name rows form, so its label's line boxes get
-                // squeezed into the gutter between those two 47% floats —
-                // the label renders wrapped between the two name inputs
-                // (TWO-25160).
+                // form-row-wide carries the `clear: both` this row needs to
+                // clear the first-/last-name float pair (TWO-25160).
                 'class' => array('billing_company_selectwoo', 'form-row-wide', 'hidden'),
                 'options' => [
                     '' => '&nbsp;'
@@ -249,20 +172,13 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 'priority' => $company_name_priority + 1
             ];
 
-            // Optional checkout fields. ORDER IS LOAD-BEARING: WooCommerce sorts
-            // the billing fields by `priority` (wc_checkout_fields_uasort_comparison),
-            // so the ascending offsets below are what the buyer sees, and they must
-            // match the admin pane sequence in WC_Twoinc::init_form_fields() —
-            // invoice email, purchase order number, project, department. The order
-            // note is WooCommerce core's own `order_comments` and stays where core
-            // puts it (the "Additional information" block, after billing). TWO-25263.
+            // ORDER IS LOAD-BEARING: WooCommerce sorts billing fields by
+            // `priority`, so the ascending offsets below must match the
+            // admin pane sequence in WC_Twoinc::init_form_fields() (TWO-25263).
             //
-            // These sit BELOW every native address/contact field (city/postcode
-            // 70-90, phone 100, email 110 — see WC_Countries default priorities)
-            // rather than riding on company's priority, so they land at the very
-            // bottom of the form regardless of whether company search/company
-            // name is on, off, or absent (#33 — Doug: optionals belong below
-            // town/city, not interleaved near the top).
+            // These sit below every native address/contact field priority
+            // rather than riding on company's, so they land at the bottom
+            // of the form regardless of company search/name state (#33).
             $optional_field_priority = 200;
 
             if ($this->wc_twoinc->get_option('add_field_invoice_email') === 'yes') {
@@ -347,26 +263,15 @@ if (!class_exists('WC_Twoinc_Checkout')) {
         }
 
         /**
-         * Where the ONE company-search control (§1-§4) renders in the
-         * checkout DOM (TWO-25326 §7.1). Pulled out as a pure function — no
-         * gateway, no WP/WC globals — so this branch can be unit-tested in
-         * isolation without dragging in everything else
-         * `prepare_twoinc_object()` touches.
+         * Where the ONE company-search control renders in the checkout DOM
+         * (TWO-25326 §7.1). Pulled out as a pure function so it can be
+         * unit-tested in isolation from prepare_twoinc_object().
          *
-         * The SAME `enable_company_search` checkbox drives both "is the
-         * control shown in the address form" (`=== 'yes'`, the value this
-         * takes) and, via this function, where it lives when it isn't —
-         * there is no separate location-only setting:
-         *   - 'yes' (checked, the default): 'address_area' — renders in the
-         *     billing address form exactly as before this setting existed.
-         *   - anything else (unchecked): 'payment_tile' — the SAME control
-         *     (fields, JS, dropdown) is relocated into the payment tile
-         *     instead of being turned off — see
-         *     twoincSelectWooHelper.syncCompanySearchTileLocation() (the
-         *     TwoCompanySearch class instance) in twoinc.js.
-         *
-         * @param string|null $enable_company_search WC_Twoinc::get_enable_company_search()'s return value — nullable, same as the option chain it reads.
-         * @return string 'address_area' or 'payment_tile'
+         * The SAME `enable_company_search` checkbox drives both whether the
+         * control shows in the address form and, via this function, where
+         * it lives otherwise — there is no separate location-only setting.
+         * Unchecked relocates the same control into the payment tile rather
+         * than turning it off.
          */
         private static function derive_company_search_location(?string $enable_company_search): string
         {
@@ -421,22 +326,14 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 'twoinc_checkout_host' => $this->wc_twoinc->get_twoinc_checkout_host(),
                 // Always 'yes' at load (TWO-25326 §7.1): the search control
                 // is never "off", only relocated. `window.twoinc.enable_company_search`
-                // is a RUNTIME flag in twoinc.js — toggled to "no" only by
-                // enterManualCompanyEntry()/twoincSoleTrader.setMode() to mean
-                // "the search widget is not the active input method right
-                // now", not the admin's raw checkbox value: feeding the raw
-                // checkbox value in here would suppress the selectWoo widget
-                // (Twoinc.enableCompanySearch() and friends) even when the
-                // merchant only asked for payment-tile placement. Where the
-                // control renders is `company_search_location`'s job, below.
+                // is a RUNTIME flag in twoinc.js, toggled to "no" only when
+                // the search widget stops being the active input method —
+                // not the admin's raw checkbox value. Where the control
+                // renders is `company_search_location`'s job, below.
                 'enable_company_search' => 'yes',
-                // Where the one company-search control renders — driven by
-                // the `enable_company_search` checkbox itself, including
-                // whether company search shows for OTHER payment methods
-                // (same checkbox; TWO-25326 §7.1). Any JS check for the
-                // admin's checked preference must read THIS value against
-                // 'address_area', not the runtime `enable_company_search`
-                // flag above.
+                // Where the one company-search control renders. Any JS check
+                // for the admin's checked preference must read THIS value
+                // against 'address_area', not the runtime flag above.
                 'company_search_location' => self::derive_company_search_location($enable_company_search),
                 'enable_address_lookup' => $this->wc_twoinc->get_option('enable_address_lookup'),
                 'enable_order_intent' => $this->wc_twoinc->get_option('enable_order_intent'),
@@ -457,11 +354,8 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 // endpoints in WC_Twoinc_Payment_Terms.
                 'payment_terms' => [
                     'days_label' => __('%s days', 'twoinc-payment-gateway'),
-                    // Chip copy, verbatim from magento-plugin's Luma renderer
-                    // (view/frontend/web/js/view/payment/method-renderer/
-                    // gateway_method.js + template/payment/gateway_method.html),
-                    // which is also what the Amasty and Fire checkouts render —
-                    // they share that one template.
+                    // Chip copy, matching magento-plugin's Luma renderer,
+                    // which the Amasty and Fire checkouts also share.
                     //
                     // >1 term  → `heading` sits ABOVE the chips.
                     // exactly 1 → no heading; `single_label` replaces the bare
@@ -522,24 +416,13 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 return;
             }
 
-            // window.twoinc must not be printed at all when the stored API
-            // key cannot currently be verified — the payment-tile bootstrap
-            // AND the address-block company-search widget are both gated
-            // entirely behind window.twoinc's presence (see the top-level
-            // `if (window.twoinc)` guard in twoinc.js), so withholding it
-            // here is what stops company search from rendering/enabling
-            // itself on a broken integration, for ANY verification failure
-            // (invalid key, Two 5xx, network/routing failure — TWO-25326
-            // follow-up). Uses the same cached check as is_available(), so
-            // on CLASSIC checkout — this hook only fires there; there is no
-            // WooCommerce Blocks/Store API integration in this plugin today
-            // — "payment method hidden" and "company search hidden" can
-            // never disagree with each other. On block-based checkout,
-            // is_available() alone still hides the payment method; this
-            // suppression has no block-checkout equivalent to disagree
-            // with, since window.twoinc was never injected there before
-            // this PR either (review round 1). This also stops firing a
-            // live HTTP call on every checkout render.
+            // window.twoinc must not be printed when the stored API key
+            // cannot currently be verified — the payment-tile bootstrap and
+            // the address-block company-search widget are both gated behind
+            // its presence, so withholding it here stops company search from
+            // rendering on a broken integration (TWO-25326 follow-up). Uses
+            // the same cached check as is_available(), so this also avoids
+            // a live HTTP call on every checkout render.
             $status = $this->wc_twoinc->get_api_key_verification_status();
             if ($status['status'] !== 'ok') {
                 return;

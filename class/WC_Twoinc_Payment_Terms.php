@@ -4,22 +4,19 @@
  * Payment terms chip selector + offset pricing fee — business logic (TWO-24751).
  *
  * All term/fee decisioning lives here; assets/js/twoinc.js only renders what
- * these methods return (the Gutenberg block checkout port must not need a
- * business-logic rewrite, see TWO-24767).
+ * these methods return.
  *
- * Term availability: `get_available_terms()` is the single seam. It resolves
- * the merchant's ticked presets (backend `available_terms` from GET
- * /v1/merchant ∩ admin subset — TWO-24812, the planned convergence: the
- * backend owns which terms are offered, the admin narrows) plus an optional
- * custom term. An empty result means "offer nothing" — no term is sent and
- * the backend applies the account default (pre-feature behaviour). The
+ * Term availability: `get_available_terms()` is the single seam — the
+ * merchant's ticked presets intersected with the backend's offered set
+ * (TWO-24812) plus an optional custom term. An empty result means "offer
+ * nothing": no term is sent and the backend applies the account default. The
  * merchant cannot save into that empty state once terms are configured (see
  * WC_Twoinc::validate_two_payment_terms_field). Do not read term lists
  * anywhere else.
  *
  * Fee arithmetic is never done plugin-side: the offset settings are posted to
  * POST /v1/pricing/order/fee as a `buyer_fee_share` block and the backend
- * computes the buyer's share (mirrors Magento's SurchargeCalculator).
+ * computes the buyer's share.
  */
 
 if (!class_exists('WC_Twoinc_Payment_Terms')) {
@@ -38,8 +35,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
 
         /**
          * Stored surcharge-rounding basis → pricing-API basis. "none" (and
-         * any unmapped value) omits the rounding block. Mirrors Magento's
-         * SurchargeCalculator::ROUNDING_BASIS_TO_API.
+         * any unmapped value) omits the rounding block.
          */
         private const ROUNDING_BASIS_TO_API = [
             'up' => 'UP',
@@ -73,13 +69,11 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          * The terms offered at checkout, ascending. THE availability seam —
          * see the file header before adding another term-list read.
          *
-         * The merchant's ticked presets (intersected with the backend's
-         * `available_terms` from GET /v1/merchant, so a term the backend has
-         * withdrawn drops out even while a stale admin subset still lists it)
-         * plus an optional custom term (unioned in — it may sit outside the
-         * backend's preset list). An empty result is meaningful: no term is
-         * offered, so none is sent and the backend applies the account default
-         * (parity with the pre-feature behaviour on main).
+         * The merchant's ticked presets intersected with the backend's
+         * `available_terms` (so a term the backend withdrew drops out even
+         * while a stale admin subset still lists it), plus an optional
+         * custom term unioned in. An empty result is meaningful: no term is
+         * offered, so none is sent and the backend applies the account default.
          *
          * Cache-only by default — this seam is reached from the gateway
          * constructor, cart totals and wc-ajax, none of which may block on
@@ -91,8 +85,6 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          */
         public static function get_available_terms($gateway, bool $refresh = false): array
         {
-            // The backend's offerable set (empty until a merchant record
-            // has resolved).
             $backend_terms = array_map('intval', $gateway->get_merchant_available_terms($refresh));
 
             $terms = [];
@@ -102,8 +94,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                 $terms = array_values(array_intersect($backend_terms, $admin_subset));
             }
 
-            // Custom term offered alongside the presets (Magento parity:
-            // payment_terms_duration_days). Unioned, not intersected.
+            // Custom term offered alongside the presets, unioned rather than intersected.
             $custom = (int) $gateway->get_option('payment_terms_custom_days');
             if ($custom > 0) {
                 $terms[] = $custom;
@@ -197,19 +188,15 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          * to 'standard' when it cannot be honoured. In custom_class mode the
          * stored slug is re-validated against the LIVE tax-class list on
          * every read: WC_Cart_Fees::add_fee() silently reverts an unknown
-         * tax class to Standard rather than erroring, so if the merchant
-         * deleted the selected class the surcharge would quietly change tax
-         * behaviour anyway — degrading explicitly here keeps the runtime
-         * honest and lets the settings page surface the stale selection
-         * (WC_Twoinc::init_form_fields carries the matching admin warning).
+         * tax class to Standard rather than erroring, so degrading
+         * explicitly here keeps the runtime honest and lets the settings
+         * page surface the stale selection.
          *
-         * '' (the treatment field has no default and starts unselected)
-         * also degrades to 'standard' here: save-validation blocks enabling
+         * '' also degrades to 'standard': save-validation blocks enabling
          * surcharges without a treatment, so an enabled-but-unset
          * combination can only mean a shop that enabled surcharges before
-         * the treatment field existed (or a direct DB edit) — 'standard' is
-         * byte-for-byte the pre-feature fee behaviour those shops were
-         * already getting.
+         * the treatment field existed, and 'standard' is the pre-feature fee
+         * behaviour those shops were already getting.
          *
          * @return array{treatment: string, tax_class: string}
          */
@@ -247,14 +234,13 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         /**
          * The buyer_fee_share block for POST /v1/pricing/order/fee for one
          * term. The backend computes the fee from this; the plugin does no
-         * arithmetic. Mirrors Magento's SurchargeCalculator::buildBuyerFeeShare:
-         * percentage (0.0 when fixed-only, so the API default of 100% is never
-         * silently applied), surcharge_basis, the fixed surcharge (fixed/both
-         * types), a cap on the whole fee line item (the grossed-up percentage
-         * passthrough plus the fixed surcharge as sent — NOT a cap on the
-         * percentage portion alone), rounding (only with a percentage
-         * component) and, in differential mode, the default term as
-         * reference_terms.
+         * arithmetic. Builds: percentage (0.0 when fixed-only, so the API
+         * default of 100% is never silently applied), surcharge_basis, the
+         * fixed surcharge (fixed/both types), a cap on the whole fee line
+         * item (the grossed-up percentage passthrough plus the fixed
+         * surcharge as sent — NOT a cap on the percentage portion alone),
+         * rounding (only with a percentage component) and, in differential
+         * mode, the default term as reference_terms.
          *
          * @return array|null null when no surcharge is configured (type none),
          *                    or when no FX rate is available to express the
@@ -277,21 +263,16 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
             ];
 
             // Fixed amounts and caps are configured in the STORE currency
-            // (the saved woocommerce_currency option) while the pricing
-            // request is made in the ACTIVE checkout currency, so when a
-            // multi-currency setup has them diverge the monetary
-            // components are converted via the Two FX layer (TWO-25104 —
-            // Magento parity, which converts via the store's own rates).
-            // A wrong-currency amount must never be sent, and neither may
-            // the surcharge silently vanish: an unconvertible pair is
-            // caught EARLIER, by the availability gate, which withholds
-            // the payment method for the whole checkout (TWO-25269 —
-            // surcharge_currency_unquotable(), called from
-            // WC_Twoinc::apply_brand_availability_gate). Returning null
-            // here is the defence-in-depth backstop for the paths the
-            // gate does not run on. Same-currency stores never reach the
-            // FX layer. Percentage-based surcharge is currency-agnostic
-            // and unaffected.
+            // while the pricing request is made in the ACTIVE checkout
+            // currency, so when a multi-currency setup has them diverge the
+            // monetary components are converted via the Two FX layer
+            // (TWO-25104). An unconvertible pair is caught EARLIER by the
+            // availability gate, which withholds the payment method for the
+            // whole checkout (TWO-25269 — surcharge_currency_unquotable(),
+            // called from WC_Twoinc::apply_brand_availability_gate);
+            // returning null here is the defence-in-depth backstop for the
+            // paths the gate does not run on. Percentage-based surcharge is
+            // currency-agnostic and unaffected.
             $components = self::surcharge_monetary_components($settings, $days);
             $fixed = $components['fixed'];
             $cap = $components['cap'];
@@ -318,17 +299,14 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                     // A configured CAP that rounds to 0.00 is relayed AS
                     // 0.00, not dropped or withheld: per the pricing API's
                     // contract a cap of zero clamps the fee to zero, distinct
-                    // from an ABSENT cap (which means uncapped — see
+                    // from an ABSENT cap (uncapped — see
                     // surcharge_monetary_components). Since the cap bounds
                     // the WHOLE fee line item, it also zeroes any fixed
-                    // surcharge configured alongside it — reported at info
-                    // for the same reason as the fixed case below, but still
-                    // the right outcome (TWO-25269: a fail-closed guard here
-                    // was tried and reverted, as it withheld the fee block
-                    // for the same eventual zero fee).
+                    // surcharge configured alongside it (TWO-25269: a
+                    // fail-closed guard here was tried and reverted, as it
+                    // withheld the fee block for the same eventual zero fee).
                     // (float) $cap !== 0.0: a cap already zero can't reach
-                    // this conversion branch (zero is FX-exempt), so this
-                    // guards only a genuinely non-zero cap that rounds down.
+                    // this conversion branch (zero is FX-exempt).
                     if ($cap !== null && (float) $cap !== 0.0 && $converted_cap <= 0 && function_exists('wc_get_logger')) {
                         wc_get_logger()->info(
                             sprintf(
@@ -346,10 +324,9 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                     // A FIXED amount that rounds to 0.00 is NOT a failure:
                     // a legitimately tiny configured fee can be genuinely
                     // negligible in a stronger currency, and 0.00 is the
-                    // arithmetically correct answer. Proceed with it —
-                    // rejecting a 0.001 configured fee would be a wrong
-                    // rejection — but say so, because a surcharge line
-                    // quietly reading 0.00 otherwise looks like a bug.
+                    // arithmetically correct answer. Proceed, but log it —
+                    // a surcharge line quietly reading 0.00 otherwise looks
+                    // like a bug.
                     if ($fixed !== null && $converted_fixed <= 0 && function_exists('wc_get_logger')) {
                         wc_get_logger()->info(
                             sprintf(
@@ -569,7 +546,6 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          * off. The backend does the arithmetic; the plugin only relays
          * {step, basis}. A None/unmapped basis or a non-positive step omits
          * the block (the API requires both keys and rejects step <= 0).
-         * Mirrors Magento's SurchargeCalculator::buildRounding.
          *
          * @param array{rounding_basis: string, rounding_step: float|null} $settings
          * @return array{step: float, basis: string}|null
@@ -615,15 +591,12 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                 'currency' => get_woocommerce_currency(),
                 // MONEY_DECIMALS, not round_amt(): round_amt() uses
                 // wc_get_price_decimals(), so a store configured for 3 or 4
-                // price decimals sent an over-precise value here and the API
-                // refused the whole request — the same failure the cap and
-                // surcharge rounding fixes, on the sibling field in the same
-                // payload (TWO-25289).
+                // price decimals sent an over-precise value and the API
+                // refused the whole request (TWO-25289).
                 'gross_amount' => number_format(round($gross_amount, self::MONEY_DECIMALS), self::MONEY_DECIMALS, '.', ''),
                 'buyer_country_code' => $buyer_country,
-                // Required by the pricing request. Hardcoded false for
-                // parity with Magento (SurchargeCalculator) — there is no
-                // admin recourse-pricing config on either plugin yet.
+                // Required by the pricing request. Hardcoded false — there
+                // is no admin recourse-pricing config yet.
                 'approved_on_recourse' => false,
                 'order_terms' => self::build_terms_block($gateway, $days),
                 'buyer_fee_share' => $buyer_fee_share,
@@ -662,9 +635,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          * Fetch the merchant's own pricing rate (percentage + fixed) per term
          * for the admin inline-fee display beside the term checkboxes. This is
          * the cost Two charges the MERCHANT, independent of any cart — distinct
-         * from the buyer surcharge quoted at checkout (fetch_term_fee). Mirrors
-         * Magento's Controller\Adminhtml\Config\Fees → /pricing/v1/merchant/rates
-         * (note the path order differs from the order-fee endpoint).
+         * from the buyer surcharge quoted at checkout (fetch_term_fee).
          *
          * @param int[]  $terms          requested net-term day counts
          * @param string $buyer_country  ISO-2 code for the rate preview
@@ -686,8 +657,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
 
             $response = $gateway->make_request('/pricing/v1/merchant/rates', [
                 'buyer_country_code' => $buyer_country,
-                // No admin recourse-pricing config on either plugin yet —
-                // hardcoded false for parity with Magento's Fees controller.
+                // No admin recourse-pricing config yet — hardcoded false.
                 'recourse_pricing' => false,
                 // payout_schedule omitted: the server infers it from the
                 // merchant's payee accounts (matches Magento).
@@ -744,8 +714,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          * woocommerce_cart_calculate_fees hook: charge the buyer's fee share
          * for the selected term as a WC cart fee. The amount from the pricing
          * endpoint is net; WC applies the store's tax handling to the fee so
-         * the order's internal net + tax = gross consistency holds (the same
-         * posture as Magento's store-configured surcharge tax rate).
+         * the order's internal net + tax = gross consistency holds.
          */
         public static function apply_cart_fee($cart): void
         {
@@ -884,13 +853,8 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         /**
          * Buyer-facing chip amount: the store's own price format, so the chip
          * shows the currency SYMBOL in the store's configured position with
-         * the store's separators — "€12,50", not "12.50 EUR".
-         *
-         * This is the WooCommerce equivalent of Magento's
-         * priceUtils.formatPrice(amount, quote.getPriceFormat()) in
-         * view/frontend/web/js/view/payment/method-renderer/gateway_method.js:
-         * both take the symbol and layout from the store's display format
-         * rather than echoing the currency code the pricing API returned.
+         * the store's separators — "€12,50", not "12.50 EUR" — rather than
+         * echoing the currency code the pricing API returned.
          *
          * wc_price() is the single source of that format in WooCommerce, but
          * it returns markup; the chip is rendered with jQuery `text`, so the

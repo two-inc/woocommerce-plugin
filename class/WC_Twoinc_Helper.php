@@ -23,22 +23,17 @@ if (!class_exists('WC_Twoinc_Helper')) {
 
         /**
          * Round a computed discount once at the payload boundary and fail
-         * loud if it is genuinely negative (TWO-25097, mirrors the
-         * PrestaShop guard shipped in TWO-24741).
+         * loud if it is genuinely negative (TWO-25097).
          *
-         * The discount MUST be derived at native precision and rounded
-         * exactly once, here. Rounding the operands first (e.g. a 2dp unit
-         * price before differencing totals) manufactures phantom +/-0.01
-         * discounts whenever the operands round in opposite directions —
-         * the PrestaShop round-1 self-review finding. For the same reason
-         * the sign check runs on the once-rounded value: sub-cent float
-         * residue in the platform's native totals is not a data error and
-         * must not fail an otherwise healthy checkout.
+         * The discount must be derived at native precision and rounded
+         * exactly once, here — rounding the operands first manufactures
+         * phantom +/-0.01 discounts when they round in opposite directions.
+         * The sign check runs on the once-rounded value so sub-cent float
+         * residue doesn't fail an otherwise healthy checkout.
          *
          * A genuinely negative discount is a data inconsistency from an
-         * upstream cart-rule/coupon bug. It is surfaced, never silently
-         * clamped to zero: the exception fails checkout loud instead of
-         * posting a bad payload to the Two API.
+         * upstream cart-rule/coupon bug — surfaced, never silently clamped
+         * to zero.
          *
          * @param float  $discount_amount discount at native precision
          * @param string $subject         short surface identifier for the

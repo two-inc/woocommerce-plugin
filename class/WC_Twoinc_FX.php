@@ -3,12 +3,10 @@
 /**
  * FX conversion layer over GET /refdata/v1/fx-rates (TWO-25104).
  *
- * WooCommerce has no native exchange-rate table (the parity gap vs Magento,
- * whose plugin reads the store's own rates). This class is the single FX
- * source for the plugin: it fetches Two's EUR-pivot spot table from the
- * checkout API with the merchant's API key (server-side only — the key and
- * the rates never reach browser JS), caches it, and computes cross rates
- * exactly as the endpoint does (rate = eur_value(from) / eur_value(to)).
+ * The single FX source for the plugin: it fetches Two's EUR-pivot spot table
+ * from the checkout API with the merchant's API key (server-side only — the
+ * key and the rates never reach browser JS), caches it, and computes cross
+ * rates exactly as the endpoint does (rate = eur_value(from) / eur_value(to)).
  * Converting with the same table Two uses server-side keeps plugin-side
  * figures (fixed surcharge, surcharge cap, minimum-order gates) consistent
  * with what the API will compute at order time.

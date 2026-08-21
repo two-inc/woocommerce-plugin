@@ -4,8 +4,7 @@
  * Sole trader checkout support — business logic (TWO-24754).
  *
  * All decisioning lives here; assets/js/twoinc.js only renders what these
- * methods return (the Gutenberg block checkout port must not need a
- * business-logic rewrite, see TWO-24767).
+ * methods return.
  *
  * One gate decides whether the Sole Trader option shows for a billing
  * country: country-level legal truth from the registry endpoint
@@ -15,14 +14,14 @@
  * merchant preference, and a second gate only adds a way for the feature to
  * be invisible for its whole life because an installer defaulted it off.
  *
- * The flow mirrors the Magento reference (gateway_method.js): the buyer
- * switches to sole-trader mode, the plugin server-side mints two delegated
- * authority tokens with the merchant API key, the buyer registers or logs in
- * through Two's hosted signup popup, and the checkout autofills the company
- * fields from GET /autofill/v1/buyer/current. No sole-trader-specific fields
- * are collected at checkout and the order payload is unchanged — an enrolled
- * sole trader's organization number (TWO:ST…) carries the semantics and the
- * backend derives the company type from it (TWO-24749 spike).
+ * Flow: the buyer switches to sole-trader mode, the plugin server-side mints
+ * two delegated authority tokens with the merchant API key, the buyer
+ * registers or logs in through Two's hosted signup popup, and the checkout
+ * autofills the company fields from GET /autofill/v1/buyer/current. No
+ * sole-trader-specific fields are collected at checkout and the order
+ * payload is unchanged — an enrolled sole trader's organization number
+ * (TWO:ST…) carries the semantics and the backend derives the company type
+ * from it (TWO-24749 spike).
  */
 
 if (!class_exists('WC_Twoinc_Sole_Trader')) {

@@ -738,23 +738,15 @@ if (!class_exists('WC_Twoinc')) {
 
         /**
          * Whether the brand wants the intent-approved notice at all.
-         *
-         * 'intent_approved_notice_enabled' is an explicit boolean and
-         * nothing else, shared verbatim with the other platforms:
-         *   - true            -> notice shown;
-         *   - false           -> suppressed entirely;
-         *   - absent / null   -> the documented default, true. This is
-         *     what keeps a third-party overlay that declares neither
-         *     notice key on ON;
-         *   - anything else   -> a clear logged error naming the key, the
-         *     offending value's type and the brand code, and then the
-         *     documented default true.
+         * 'intent_approved_notice_enabled' is an explicit boolean, shared
+         * verbatim with the other platforms: true/false as given, absent/
+         * null defaults to true, anything else logs an error naming the
+         * key/value/brand and falls back to true.
          *
          * The invalid case deliberately does NOT throw: this runs on a
-         * buyer-facing checkout render, where a white screen is a worse
-         * failure than a notice that stays on. Erring to ON is also the
-         * fail-safe direction — a brand that wanted it off gets a visible,
-         * reported wrong state and nobody loses a sale.
+         * buyer-facing checkout render, where a white screen is worse than
+         * a notice that stays on — erring to ON is also the fail-safe
+         * direction, since nobody loses a sale over it.
          */
         private function is_intent_approved_notice_enabled(): bool
         {
@@ -784,33 +776,23 @@ if (!class_exists('WC_Twoinc')) {
          * Buyer-facing notice shown once order intent is approved, pending
          * final checks — the whole `.twoinc-intent-approved` block, or ''.
          *
-         * Two independent brand keys, shared verbatim with the other
-         * platforms' checkout renderers. On/off is
-         * 'intent_approved_notice_enabled' (see above); this method owns
-         * only the wording, from 'intent_approved_notice':
-         *   - absent / null / '' / whitespace-only -> the platform default
-         *     copy below. An empty override is INERT, not "suppressed"
-         *     (TWO-25213), so a stale overlay still carrying one renders
-         *     the default copy rather than breaking the checkout;
-         *   - non-empty string                     -> used verbatim as
-         *     the company-name variant's sprintf template.
+         * On/off is 'intent_approved_notice_enabled' (see above); this
+         * method owns only the wording, from 'intent_approved_notice':
+         * absent/null/''/whitespace-only falls back to the platform default
+         * below — an empty override is INERT, not "suppressed" (TWO-25213),
+         * so a stale overlay still renders the default rather than breaking
+         * checkout. A non-empty string is used verbatim as the sprintf
+         * template.
          *
-         * Two placeholders, in this order: %1$s is the brand product name,
-         * substituted here; %2$s is the buyer's captured company, which only
-         * the browser knows, so it is emitted as a token on
-         * data-company-template for the checkout JS to substitute at unhide
-         * time. As of TWO-25326 §7.3 that token stands for the WHOLE
-         * "<name> (<number>)" chunk (or bare name with no number, e.g. manual
-         * entry) — twoinc.js builds that string and substitutes it wherever
-         * this token lands. The div's own text is the no-company variant, so
-         * a buyer whose company is unknown (or whose JS never runs) still
-         * reads a complete sentence.
+         * %1$s is the brand product name, substituted here. %2$s is the
+         * buyer's captured company, known only to the browser, so it's
+         * emitted as a token on data-company-template for twoinc.js to
+         * substitute at unhide time with the "<name> (<number>)" chunk
+         * (TWO-25326 §7.3). The div's own text is the no-company variant,
+         * for a buyer whose company is unknown or whose JS never runs.
          *
-         * A brand's own override template still works unchanged: it keeps
-         * its own wording and its own %1$s product name, and only needs to
-         * place %2$s somewhere in its sentence to get the same company
-         * substitution (§7.4) — nothing here special-cases the default copy
-         * over a brand's.
+         * A brand override keeps its own wording and %1$s, and only needs
+         * %2$s placed somewhere to get the same substitution (§7.4).
          *
          * @param bool $notice_enabled resolved once per render by the caller
          *                             (see get_intent_loader_html()).
@@ -823,12 +805,9 @@ if (!class_exists('WC_Twoinc')) {
 
             $template = WC_Twoinc_Brand::get('intent_approved_notice');
             if (!is_string($template) || trim($template) === '') {
-                // TWO-25326 §7.3: the company (name + number, formatted by
-                // twoinc.js) sits directly in the sentence now, replacing the
-                // standalone tile label. "subject to additional checks" is
-                // dropped from this variant per the ruling's literal wording;
-                // it stays in the no-company fallback below, which the
-                // ruling does not cover.
+                // TWO-25326 §7.3 literal wording drops "subject to additional
+                // checks" from this variant; it stays in the no-company
+                // fallback below, which the ruling doesn't cover.
                 /* translators: %1$s: brand product name (e.g. "Two"); %2$s: the buyer's captured company name and number, substituted client-side — reorderable, do not assume %1$s precedes %2$s in every locale */
                 $template = __('This order by %2$s is likely to be accepted by %1$s', 'twoinc-payment-gateway');
             }
@@ -836,21 +815,16 @@ if (!class_exists('WC_Twoinc')) {
             $product_name = WC_Twoinc_Brand::get('product_name');
             $with_company = sprintf($template, $product_name, self::INTENT_NOTICE_COMPANY_TOKEN);
             // The no-company fallback is always the platform default copy:
-            // a brand overriding the notice overrides the company variant
-            // only, since dropping a clause out of arbitrary brand copy is
-            // not something this layer can do safely.
+            // a brand override only overrides the company variant, since
+            // dropping a clause out of arbitrary brand copy isn't safe here.
             $without_company = sprintf(
                 __('Your invoice with %1$s is likely to be accepted, subject to additional checks.', 'twoinc-payment-gateway'),
                 $product_name
             );
 
-            // role="status" (review round 1): this box is unhidden by the
-            // checkout JS when the verdict lands, and until now nothing
-            // announced it. The loader carries a role and the verdict did not,
-            // so a screen-reader buyer heard that a check had started and never
-            // heard how it ended — and the colour and border this pass adds are
-            // no help to them at all. Polite rather than assertive: an approval
-            // is good news that can wait for a gap in speech.
+            // role="status": announces the verdict to screen readers once the
+            // checkout JS unhides this box. Polite rather than assertive —
+            // an approval is good news that can wait for a gap in speech.
             return sprintf(
                 '<div class="twoinc-pay-box twoinc-intent-approved hidden" role="status" data-company-template="%s">%s</div>',
                 esc_attr($with_company),
@@ -861,22 +835,17 @@ if (!class_exists('WC_Twoinc')) {
         /**
          * Buyer-facing notice shown when order intent is NOT approved (or no
          * intent check has run) — the `.twoinc-err-payment-default` block
-         * (TWO-25326 §7.3, added 2026-08-03).
+         * (TWO-25326 §7.3).
          *
          * Unlike the approved notice above, this box is NEVER gated on
-         * 'intent_approved_notice_enabled' (TWO-25224: "a merchant who wants
-         * no reassurance still needs failures surfaced") — it always renders,
-         * brand suppression or not, so its default text argument is used
-         * directly as a fallback rather than routed through an early return.
+         * 'intent_approved_notice_enabled' (TWO-25224: a merchant who wants
+         * no reassurance still needs failures surfaced) — it always renders.
          *
          * Same token mechanism as get_intent_approved_notice(): %1$s is the
-         * brand product name, %2$s is the company token twoinc.js substitutes
-         * with the same "<name> (<number>)" (or bare name) string.
+         * brand product name, %2$s is the company token twoinc.js substitutes.
          *
-         * Deliberately NOT brand-overridable (2026-08-04 ruling, TWO-25326):
-         * unlike get_intent_approved_notice() above, there is no
-         * 'intent_declined_notice' brand key and there must never be one —
-         * every brand renders this exact platform default copy.
+         * Deliberately NOT brand-overridable (TWO-25326): there is no
+         * 'intent_declined_notice' brand key and there must never be one.
          *
          * @return string sprintf template with %1$s and the company TOKEN,
          *                 ready for esc_attr() into data-company-template.
@@ -918,58 +887,40 @@ if (!class_exists('WC_Twoinc')) {
             // gateway_method.html: term chips first, then the sole-trader
             // signup note.
             //
-            // $term_input stays AHEAD of the chips container on purpose: the
-            // chips JS appends its own copy of the same input INSIDE that
-            // container, and the later element wins the POST. Moving this
-            // one after the container would let the stale server-rendered
-            // term override the buyer's chip selection.
+            // $term_input stays AHEAD of the chips container: the chips JS
+            // appends its own copy of the same input INSIDE that container,
+            // and the later element wins the POST — moving this one after
+            // would let a stale server-rendered term override the chip pick.
             //
-            // The sole-trader MODE CHIPS (Registered company / Sole trader)
-            // themselves are NOT rendered here (TWO-40 §0). They render as
-            // children of the company-search dropdown itself
-            // (see twoincSelectWooHelper.syncManualEntryButton() in
-            // twoinc.js, alongside the "Enter manually" chip), never as a
-            // separate persistent tile. `.twoinc-sole-trader-note-slot`
-            // below only ever holds the signup-prompt note + in-flight error
-            // — see WC_Twoinc.js twoincSoleTrader.render()/apply().
+            // Sole-trader MODE CHIPS (Registered company / Sole trader) are
+            // NOT rendered here (TWO-40 §0) — they render as children of the
+            // company-search dropdown (twoincSelectWooHelper.syncManualEntryButton()
+            // in twoinc.js). `.twoinc-sole-trader-note-slot` below only ever
+            // holds the signup-prompt note + in-flight error.
             //
             // One resolution of the brand's notice switch feeds both the
-            // loading state and the approved notice (TWO-25224): they are two
-            // halves of the same reassurance messaging, and resolving it twice
-            // would report an invalid brand value twice per render.
+            // loading state and the approved notice (TWO-25224), so it isn't
+            // reported twice per render.
             $notice_enabled = $this->is_intent_approved_notice_enabled();
 
             // The standalone `<name> (<number>)` tile label is REMOVED
-            // (TWO-25326 §7.2/§7.3, ruling 2026-08-03). The company now lives
-            // only inside the intent-approved/declined sentences themselves
-            // (get_intent_approved_notice() / get_intent_declined_notice_template()
-            // above), never as a separate element — see those methods' doc
-            // comments for the token mechanism that replaces it.
+            // (TWO-25326 §7.2/§7.3); the company lives only inside the
+            // intent-approved/declined sentences (see those methods' doc
+            // comments for the token mechanism).
             //
-            // The tile-location slot below is new (§7.1): empty and hidden by
-            // default (enable_company_search checked, the unchanged
-            // behaviour). When the merchant UNCHECKS "Enable Company Search
-            // In Address Entry", twoincSelectWooHelper.syncCompanySearchTileLocation()
-            // in twoinc.js relocates `#billing_company_display_field` (the
-            // ONLY field still eligible to move here — `#billing_company_field`
-            // and `#company_id_field` deliberately stay in the address form;
-            // see that function's own doc comment) into this slot, and
-            // unhides the slot only if something actually moved in. The
-            // field is always registered server-side now (see
-            // update_company_fields() in WC_Twoinc_Checkout — the earlier
-            // gate that skipped registration on an unchecked box is
-            // removed), so this branch is live: a functional selectWoo
-            // search inside the tile, not an empty box. Always rendered (a
-            // hidden empty div is cheap) so the JS never has to special-case
-            // "the slot doesn't exist yet" against "the setting is off".
+            // This slot (§7.1) is empty/hidden by default. When the merchant
+            // unchecks "Enable Company Search In Address Entry",
+            // twoincSelectWooHelper.syncCompanySearchTileLocation() in
+            // twoinc.js relocates `#billing_company_display_field` (the only
+            // field eligible to move here — see that function's own doc
+            // comment) into this slot and unhides it only if something moved
+            // in. Always rendered (a hidden empty div is cheap) so the JS
+            // never has to special-case "slot doesn't exist" vs "setting off".
             $company_search_tile_slot = '<div class="twoinc-company-search-tile-slot hidden"></div>';
 
-            // The two failure boxes carry role="alert" (review round 1), where
-            // the approved notice carries role="status". Both were silent to
-            // assistive technology until now — the loader announced that a check
-            // had started and nothing announced how it ended. Assertive for
-            // these two rather than polite: this payment method has just been
-            // deselected under the buyer, so it should interrupt.
+            // The two failure boxes carry role="alert"; the approved notice
+            // carries role="status". Assertive here since this payment
+            // method has just been deselected under the buyer.
             return sprintf(
                 '<div>
                     %s
@@ -2119,7 +2070,7 @@ if (!class_exists('WC_Twoinc')) {
             // cache (get_api_key_verification_status()) might be holding.
             // Feed it forward so a merchant who just fixed a broken key
             // doesn't have to wait out API_KEY_VERIFICATION_TTL for
-            // checkout to notice (TWO-25326 follow-up, review round 1).
+            // checkout to notice (TWO-25326 follow-up).
             $this->cache_verification_result($this->get_option('api_key'), $result);
         }
 
@@ -2177,21 +2128,19 @@ if (!class_exists('WC_Twoinc')) {
             // A truthy, non-WP_Error response that lacks a 'body' key at all
             // is malformed/unexpected — NOT the same as "not configured"
             // (categorize_verification_result() would otherwise conflate
-            // the two, since both fell through to an implicit null return
-            // before this branch existed — TWO-25326 follow-up, review
-            // round 1). Not reproducible via a real wp_remote_request()
-            // response today, but a mocked/future make_request() could hit
-            // it, and the distinction is free to make explicit.
+            // the two — TWO-25326 follow-up). Not reproducible via a real
+            // wp_remote_request() response today, but a mocked/future
+            // make_request() could hit it.
             return ['error' => 'malformed_response', 'code' => null];
         }
 
         /**
          * Categorizes verify_api_key()'s return value into buckets an admin
          * can act on ("is my key wrong, or is Two down") without exposing
-         * the raw response body anywhere (TWO-25326 follow-up — today's
-         * incident showed every non-200 response, including 5xx and
-         * network failures, was reported identically as "API key is
-         * invalid", which sent the admin chasing the wrong fix).
+         * the raw response body anywhere (TWO-25326 follow-up: every
+         * non-200 response, including 5xx and network failures, was
+         * previously reported identically as "API key is invalid", which
+         * sent the admin chasing the wrong fix).
          *
          * Shared by the settings-page AJAX handler
          * (twoinc_ajax_verify_api_key in tillit-payment-gateway.php) and
@@ -2244,9 +2193,8 @@ if (!class_exists('WC_Twoinc')) {
          * makes on a cache miss. Short and explicit because that call can
          * land inline in a customer-facing request — unlike the admin
          * settings page's own re-verification, which can afford
-         * verify_api_key()'s longer default (TWO-25326 follow-up, review
-         * round 1). Mirrors WC_Twoinc_FX::FETCH_TIMEOUT's reasoning for the
-         * same constraint.
+         * verify_api_key()'s longer default (TWO-25326 follow-up). Mirrors
+         * WC_Twoinc_FX::FETCH_TIMEOUT's reasoning for the same constraint.
          */
         const API_KEY_VERIFICATION_TIMEOUT = 5;
 
@@ -2292,9 +2240,7 @@ if (!class_exists('WC_Twoinc')) {
             // The transient above only bounds how OFTEN this fires, not how
             // LONG a single miss can take — inheriting verify_api_key()'s
             // 30s admin-page default would let one unreachable-Two request
-            // block that render for up to 30s (TWO-25326 follow-up, review
-            // round 1). Mirrors WC_Twoinc_FX::FETCH_TIMEOUT's reasoning for
-            // the same "inline in a request path" constraint.
+            // block that render for up to 30s (TWO-25326 follow-up).
             $result = $this->verify_api_key(null, self::API_KEY_VERIFICATION_TIMEOUT);
             return $this->cache_verification_result($api_key, $result);
         }
@@ -2306,7 +2252,7 @@ if (!class_exists('WC_Twoinc')) {
          * page, twoinc_ajax_verify_api_key()) feed their outcome into, so a
          * merchant who just fixed their key on the settings page doesn't
          * have to wait out the TTL for checkout to notice (TWO-25326
-         * follow-up, review round 1).
+         * follow-up).
          *
          * @param string     $api_key
          * @param array|null $result verify_api_key()'s return value.
@@ -2347,7 +2293,7 @@ if (!class_exists('WC_Twoinc')) {
          * (invalid/expired key, Two's API returning 5xx, a network/routing
          * failure reaching it, …). A buyer could otherwise select a
          * payment method that is not actually functional (TWO-25326
-         * follow-up, from today's routing-failure incident).
+         * follow-up).
          *
          * @return bool
          */
@@ -2364,9 +2310,7 @@ if (!class_exists('WC_Twoinc')) {
             // reason once per request so a verification failure doesn't
             // read as the gateway simply vanishing (mirrors
             // apply_brand_availability_gate()'s own "log once" pattern
-            // below; TWO-25326 follow-up, review round 1 — this is exactly
-            // the "couldn't tell why" gap the rest of this PR fixes on the
-            // admin page, so it must not reappear unlogged here).
+            // below; TWO-25326 follow-up).
             static $logged = false;
             if (!$logged && function_exists('wc_get_logger')) {
                 $logged = true;
@@ -2984,11 +2928,6 @@ if (!class_exists('WC_Twoinc')) {
             ];
         }
 
-        /**
-         * Notify Twoinc API after order item update
-         *
-         * @param $order
-         */
         public function after_order_item_update($order)
         {
             if (!WC_Twoinc_Helper::is_twoinc_order($order)) {
@@ -3023,12 +2962,6 @@ if (!class_exists('WC_Twoinc')) {
             }
         }
 
-        /**
-         * After the order update by post.php
-         *
-         * @param $order_id
-         * @param $items
-         */
         public function after_order_update($post_id, $post, $update, $post_before)
         {
 
@@ -3049,12 +2982,6 @@ if (!class_exists('WC_Twoinc')) {
             $this->process_update_twoinc_order($order, $twoinc_meta);
         }
 
-        /**
-         * Another hook to call the function on_order_completed
-         *
-         * @param $order_id
-         * @param $to_status
-         */
         public static function on_order_edit_status($order_id, $to_status)
         {
             $wc_twoinc_instance = WC_Twoinc::get_instance();
@@ -3077,13 +3004,6 @@ if (!class_exists('WC_Twoinc')) {
             }
         }
 
-        /**
-         * Hook to call upon bulk order update to completed or cancelled status
-         *
-         * @param $redirect
-         * @param $doaction
-         * @param $object_ids
-         */
         public static function on_order_bulk_edit_action($redirect, $doaction, $object_ids)
         {
             $wc_twoinc_instance = WC_Twoinc::get_instance();
@@ -3245,11 +3165,6 @@ if (!class_exists('WC_Twoinc')) {
             return preg_replace('/^wc-/', '', (string) $status);
         }
 
-        /**
-         * Notify Twoinc API when the order status is completed
-         *
-         * @param $order_id
-         */
         public function on_order_completed($order_id)
         {
 
@@ -3345,11 +3260,6 @@ if (!class_exists('WC_Twoinc')) {
             return true;
         }
 
-        /**
-         * Notify Twoinc API when the order status is cancelled
-         *
-         * @param $order_id
-         */
         public function on_order_cancelled($order_id)
         {
             $order = wc_get_order($order_id);
@@ -3417,13 +3327,6 @@ if (!class_exists('WC_Twoinc')) {
             return;
         }
 
-        /**
-         * Display user meta fields on user edit admin page
-         *
-         * @param $user
-         *
-         * @return void
-         */
         public static function display_user_meta_edit($user)
         {
             ?>
@@ -3462,13 +3365,6 @@ if (!class_exists('WC_Twoinc')) {
             <?php
         }
 
-        /**
-         * Save user meta to DB on user edit
-         *
-         * @param $user_id
-         *
-         * @return void
-         */
         public static function save_user_meta($user_id)
         {
 
@@ -3486,13 +3382,6 @@ if (!class_exists('WC_Twoinc')) {
             update_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('project'), $_POST['twoinc_project']);
         }
 
-        /**
-         * Process the payment
-         *
-         * @param int $order_id
-         *
-         * @return array
-         */
         /**
          * Remove the gateway from checkout when the platform minimum
          * (API-resolved, see get_platform_minimum_order()), the brand's
@@ -4194,20 +4083,16 @@ if (!class_exists('WC_Twoinc')) {
         private function process_confirmation()
         {
 
-            // Stop if this is not confirmation page
             if (!$this->is_confirmation_page()) {
                 return;
             }
 
-            // Make sure this function is called only once per run
             if ($this->twoinc_process_confirmation_called) {
                 return;
             }
-
-            // Make sure this function is called only once per run
             $this->twoinc_process_confirmation_called = true;
 
-            // Add status header to avoid being mistaken as 404 by other plugins
+            // Avoid being mistaken as 404 by other plugins
             status_header(200);
 
             $order_id = sanitize_text_field($_REQUEST['order_id']);
@@ -4520,15 +4405,13 @@ if (!class_exists('WC_Twoinc')) {
                     // Built by the shared option builder, not inline, so the
                     // dropdown cannot drift from what the validators refuse.
                     'options'     => $this->get_surcharge_tax_treatment_options(),
-                    // Deliberately NO pre-selected default (unified rule
-                    // across the WC/PS/Magento plugins): how a fee is taxed
-                    // must be an explicit merchant decision, so the field
-                    // starts on the placeholder until the merchant picks a
-                    // mode. This default only feeds get_option() for shops
-                    // that have NEVER saved this field — a persisted
-                    // settings-row value (including 'standard' accepted
-                    // under the old default) is returned as-is and is never
-                    // migrated or reset by this change. Save-time
+                    // Deliberately no pre-selected default: how a fee is
+                    // taxed must be an explicit merchant decision, so the
+                    // field starts on the placeholder until the merchant
+                    // picks a mode. This default only feeds get_option()
+                    // for shops that never saved this field — a persisted
+                    // settings-row value (including a legacy 'standard')
+                    // is returned as-is, never migrated or reset. Save-time
                     // enforcement lives in validate_surcharge_type_field /
                     // validate_surcharge_tax_treatment_field.
                     'default'     => ''
@@ -4548,10 +4431,9 @@ if (!class_exists('WC_Twoinc')) {
                     'title'       => __('Payment Surcharge Configuration', 'twoinc-payment-gateway'),
                     // No 'description': the grid's help text is the
                     // surcharge-method-keyed copy that
-                    // generate_two_surcharge_grid_html() renders BELOW the
-                    // table, word-for-word from Magento's
-                    // view/adminhtml/templates/system/config/field/surcharge-grid.phtml.
-                    // A 'description' set by a wc_two_form_fields filter is
+                    // generate_two_surcharge_grid_html() renders below the
+                    // table, matching the Magento plugin's copy. A
+                    // 'description' set by a wc_two_form_fields filter is
                     // still rendered, also below the table.
                     'type'        => 'two_surcharge_grid',
                 ],
@@ -4660,14 +4542,6 @@ if (!class_exists('WC_Twoinc')) {
             $this->form_fields = apply_filters('wc_two_form_fields', $twoinc_form_fields);
         }
 
-        /**
-         * Generate API key field with verification
-         *
-         * @param $key
-         * @param $data
-         *
-         * @return false|string
-         */
         public function generate_api_key_with_verification_html($key, $data)
         {
             $field_key = $this->get_field_key($key);
@@ -4716,7 +4590,7 @@ if (!class_exists('WC_Twoinc')) {
                         <div id="twoinc-signup-prompt" style="margin-top: 8px; color: #666; font-size: 13px;<?php echo $merchant_id ? ' display: none;' : ''; ?>">
                             <strong><?php printf(__('Don\'t have an API key? Get one by signing up <a href=\'%s\'>here</a>.', 'twoinc-payment-gateway'), esc_url(WC_Twoinc_Helper::get_merchant_portal_signup_url($this))); ?></strong>
                         </div>
-                        <?php // Hidden by default; populated + shown by admin.js when the live re-verification on page load (or on typing a new key) cannot confirm the key. Text is set dynamically per failure category — invalid key vs Two service error vs unreachable — so an admin isn't stuck guessing "is my key wrong or is Two down" (TWO-25326 follow-up, supersedes an earlier static-text version of this same notice). ?>
+                        <?php // Hidden by default; populated + shown by admin.js when the live re-verification on page load (or on typing a new key) cannot confirm the key. Text is set dynamically per failure category — invalid key vs Two service error vs unreachable — so an admin isn't stuck guessing "is my key wrong or is Two down" (TWO-25326 follow-up). ?>
                         <div id="twoinc-merchant-invalid-notice" style="margin-top: 8px; color: #dc3232; font-size: 13px; display: none;"></div>
                         <?php echo $this->get_description_html($data); // WPCS: XSS ok.
                         ?>
@@ -4739,14 +4613,6 @@ if (!class_exists('WC_Twoinc')) {
             return ob_get_clean();
         }
 
-        /**
-         * Generate a radio input
-         *
-         * @param $key
-         * @param $data
-         *
-         * @return false|string
-         */
         public function generate_radio_html($key, $data)
         {
             $field_key = $this->get_field_key($key);
@@ -5011,20 +4877,14 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * Run the update execution
-         *
          * The Two API only accepts order edits before fulfilment, so once
          * the order has reached a fulfilled/terminal state this is a no-op:
          * without the gate, any post-completion change that lands in the
          * composed body (most commonly a tracking number added after the
          * order was marked completed) would poison the change hash and
-         * make EVERY subsequent admin save fire an edit request the API is
+         * make every subsequent admin save fire an edit request the API is
          * guaranteed to reject, each leaving a "contact support" order
          * note (TWO-24762 review).
-         *
-         * @param $order
-         * @param $twoinc_meta
-         * @param $forced_reload
          *
          * @return boolean true when the remote order is in sync (updated,
          *                 or no update needed), false when an update was
@@ -5075,15 +4935,10 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * Run the update
-         *
-         * @param $order
          * @param $twoinc_meta Optional pre-fetched meta from
          *                     get_save_twoinc_meta, to spare a duplicate
          *                     fetch (which can itself cost a remote GET)
          *                     on hot paths like fulfilment.
-         *
-         * @return boolean
          */
         private function update_twoinc_order($order, $twoinc_meta = null)
         {
@@ -5150,11 +5005,6 @@ if (!class_exists('WC_Twoinc')) {
             return true;
         }
 
-        /**
-         * Get twoinc order id with backward compatibility
-         *
-         * @param $order
-         */
         private function get_twoinc_order_id($order)
         {
 
@@ -5187,15 +5037,6 @@ if (!class_exists('WC_Twoinc')) {
             return true;
         }
 
-        /**
-         * Make a request to Twoinc API
-         *
-         * @param $endpoint
-         * @param $payload
-         * @param string $method
-         *
-         * @return WP_Error|array
-         */
         public function make_request($endpoint, $payload = [], $method = 'POST', $params = array(), $api_key_override = null, $timeout = 30)
         {
             $params['client'] = 'wp';
@@ -5260,11 +5101,6 @@ if (!class_exists('WC_Twoinc')) {
             return $response;
         }
 
-        /**
-         * Display admin banner notice for twoinc account setup
-         *
-         * @return void
-         */
         public function twoinc_account_init_notice()
         {
             global $pagenow;
@@ -5313,11 +5149,6 @@ if (!class_exists('WC_Twoinc')) {
             ';
         }
 
-        /**
-         * On deactivating the plugin
-         *
-         * @return void
-         */
         public function on_deactivate_plugin()
         {
             // The recurring FX refresh must not keep firing (listener-less)
@@ -5347,21 +5178,14 @@ if (!class_exists('WC_Twoinc')) {
          */
         public function admin_options()
         {
-            // Surface the per-field validation failures. WooCommerce validates
-            // each settings field independently and, when a validate_*_field
-            // method throws, records the message with WC_Settings_API::add_error
-            // and moves on: the field simply does not assign, everything else
-            // saves, and the page re-renders. Nothing in core PRINTS that
-            // bucket — display_errors() is the gateway's job, and this plugin
-            // never called it. So every per-field refusal was invisible: a
-            // merchant who typed a cap of 0 (the exact mistake TWO-25289
-            // exists to catch) saw their whole grid edit revert with no notice
-            // and a page that looked like it had saved. This is a DIFFERENT
-            // bucket from WC_Admin_Settings::add_error used in
-            // process_admin_options, which the settings page prints itself.
-            //
-            // Printed BEFORE the fields so the notice sits above the form
-            // rather than below the grid the merchant has to scroll back to.
+            // Surfaces per-field validation failures: when a validate_*_field
+            // method throws, WooCommerce records it via
+            // WC_Settings_API::add_error and moves on (field doesn't assign,
+            // everything else saves) but nothing in core prints that bucket —
+            // without this call a merchant who typed a cap of 0 (TWO-25289)
+            // saw the grid revert with no notice. Different bucket from
+            // WC_Admin_Settings::add_error, which the settings page prints
+            // itself. Printed before the fields so it sits above the form.
             $this->display_errors();
             parent::admin_options();
             $components = [sprintf(
@@ -5551,11 +5375,6 @@ if (!class_exists('WC_Twoinc')) {
             $this->update_option('payment_terms_custom_days', '');
         }
 
-        /**
-         * Get payment method icon
-         *
-         * @return string
-         */
         public function get_icon()
         {
             $icon_html = '<img src="' . esc_url($this->icon) . '" alt="' . esc_attr($this->title) . '" class="mollie-gateway-icon" />';

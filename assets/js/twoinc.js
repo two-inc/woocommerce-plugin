@@ -4252,21 +4252,11 @@ let twoincSoleTrader = {
 
   /**
    * The state/DOM bookkeeping every real exit from sole-trader mode needs,
-   * regardless of what happens to the search widget on the way out (TWO-40
-   * §7 direction (a)): `setMode`'s own business branch tears the widget down
-   * and lands the buyer in a fresh one — see its own comment — but a pick
-   * made directly off the STILL-LIVE widget (the `select2:select` handler's
-   * `mode === "sole_trader"` branch, once the widget shows an adopted sole
-   * trader as its own selection rather than being hidden behind the native
-   * fields) must not also go through that teardown: the widget already
-   * shows the pick the buyer just made, and destroying/rebuilding it here
-   * would blank that pick right back out before `write()` ever runs. Split
-   * out so both paths share identical "leaving" semantics — readonly
-   * unlock, the note, the capture mode the buyer was in before restored —
-   * rather than drifting out of sync with each other the way this file's
-   * history warns against.
-   *
-   * @returns {void}
+   * regardless of what happens to the search widget on the way out
+   * (TWO-40 §7): `setMode`'s own business branch tears the widget down, but
+   * a pick made directly off the still-live widget must not also go
+   * through that teardown, since it would blank the pick before `write()`
+   * ever runs. Split out so both paths share identical "leaving" semantics.
    */
   leaveSoleTraderMode: function () {
     twoincSoleTrader.showNote(false);
@@ -4276,42 +4266,25 @@ let twoincSoleTrader = {
       twoincSoleTrader.savedCaptureMode = null;
     }
     // A popup-close poll left over from a resolved adoption/re-signup keeps
-    // `isBusy()` (and therefore `isDeciding()`) true purely on its own
-    // 300ms cadence — this call is the one place every caller has already
-    // committed to leaving sole-trader mode, so whatever that poll was
-    // still going to decide (settle the flight, decrement
-    // `soleTraderReconfirmingCount`, maybe revert to business) is moot.
-    // Left running, it raced `activateManualEntry()`'s deferred
-    // `enterManualCompanyEntry()` call: `setMode("business")` resets
-    // `soleTraderAdopted` right above (transition bookkeeping), which
-    // un-neutralises the stale `isBusy()` for `isDeciding()`'s very next
-    // read — wrongly refusing the manual-entry switch this function's own
-    // caller had already decided on, and leaving the search widget showing
-    // instead (live-reported by Doug, TWO-40 §7 correction). The popup
-    // WINDOWS are moot for the same reason — see `abandonSoleTraderFlow()`.
+    // `isBusy()`/`isDeciding()` true purely on its own 300ms cadence. This
+    // is the one place every caller has already committed to leaving
+    // sole-trader mode, so whatever that poll was still going to decide is
+    // moot — left running it would race a deferred manual-entry switch,
+    // wrongly refusing it while the stale busy state persists.
     twoincSoleTrader.abandonSoleTraderFlow();
   },
 
   /**
-   * Give up on everything the sole-trader flow still has outstanding, as ONE
-   * operation: the popup windows and the records tracking them (Doug
-   * 2026-08-20, ported from the two PrestaShop bugs of this shape — TWO-40
-   * §14).
+   * Give up on everything the sole-trader flow still has outstanding, as
+   * one operation: the popup windows and the records tracking them
+   * (TWO-40 §14). Called only from `leaveSoleTraderMode()`.
    *
-   * Called only from `leaveSoleTraderMode()`, the single point every exit from
-   * sole-trader mode already funnels through.
-   *
-   * Closing comes BEFORE dropping the records, because the records hold the
-   * only handles there are: a close attempted after them has nothing left to
-   * close, and the window stays on screen with nothing tracking it — which is
-   * how the next chip click opens a SECOND popup over the first. Every tracked
-   * window is closed, not just the undecided ones `closeAbandonedPopups()`
-   * acts on: a decided popup is spared there so a retry inside it can post a
-   * second ACCEPTED, and mode has left `sole_trader` by the time this runs, so
-   * the message listener drops that ACCEPTED anyway — sparing the window would
-   * leave exactly the orphan above.
-   *
-   * @returns {void}
+   * Closing comes before dropping the records, since the records hold the
+   * only handles there are — closing after would leave the window on
+   * screen with nothing tracking it, letting the next chip click open a
+   * second popup over it. Every tracked window is closed here, not just the
+   * undecided ones `closeAbandonedPopups()` acts on, since mode has already
+   * left `sole_trader` by the time this runs.
    */
   abandonSoleTraderFlow: function () {
     twoincSoleTrader.activePopupWatchers.forEach(function (watcher) {
@@ -4334,65 +4307,35 @@ let twoincSoleTrader = {
    * Not destroyed (TWO-40 §7 direction (a), PR 1 of 2): `reopenSearch()` used
    * to rebuild the widget from scratch via `attach()` every time it left
    * sole-trader mode, going through a destroy-then-reinit round trip that
-   * every OTHER re-attach path in this file (the 800ms retry,
-   * `exitManualCompanyEntry`, this same switch-back-to-search) already
-   * relies on `attach()` itself to do safely (see its own doc comment) —
-   * leaving the live instance in place here removes one extra, redundant
-   * destroy/rebuild from the most fragile path in the file. Any fragment
-   * replace that discards the underlying `<select>` without ever calling
-   * destroy is still covered by `attach()`'s own orphan sweep
-   * (`sweepOrphanedDropdown`, TWO-25469) regardless of which path left the
-   * widget referenceless, so this is not a new failure mode, just one fewer
-   * teardown in the sequence.
+   * leaves the live instance in place, one fewer destroy/rebuild than
+   * every other re-attach path in the file relies on `attach()` to do
+   * safely. Any fragment replace that discards the underlying `<select>`
+   * without calling destroy is still covered by `attach()`'s own orphan
+   * sweep (`sweepOrphanedDropdown`, TWO-25469).
    *
-   * Seeds the widget's own underlying `<select>` with an option for the
-   * adopted sole trader and selects it (TWO-40 §7 direction (a)), the same
-   * synthetic-`<option>` mechanism `loadUserMetaInputs()` already uses to
-   * restore a returning buyer's pick before select2 ever attaches — so the
-   * widget's rendered selection reads "A Sole Trader" exactly the way it
-   * would read a registered pick's name, rather than the buyer seeing an
-   * adopted sole trader only in the readonly native field. It is also what
-   * `getCompanyName()` reads in this mode (#486), so seeding it is what lets an
-   * order intent fire for an adopted sole trader at all. On a merchant whose
-   * setting puts the control in the payment tile the seeded selection simply
-   * renders there instead — the control is never off, only relocated.
+   * Seeds the widget's underlying `<select>` with an option for the
+   * adopted sole trader and selects it (TWO-40 §7), the same
+   * synthetic-`<option>` mechanism `loadUserMetaInputs()` uses to restore a
+   * returning buyer's pick — so the rendered selection reads the sole
+   * trader's name like an ordinary pick, and `getCompanyName()` (which
+   * reads this in sole-trader mode) has something to find.
    *
-   * `.trigger("change")`, not `select2:select` — this is select2's own
-   * documented mechanism for a PROGRAMMATIC selection to update its
-   * rendered display, and deliberately does not fire `select2:select`
-   * itself, so it does not re-enter that handler's own write path
-   * (`setCompany()`, right above this call, already is that write).
-   *
-   * @param {string} companyId
-   * @param {string} companyName
-   * @returns {void}
+   * `.trigger("change")`, not `select2:select`: select2's own documented
+   * mechanism for a programmatic selection to update its rendered display,
+   * deliberately not re-entering `select2:select`'s own write path
+   * (`setCompany()`, already called above this).
    */
   lockCapturedFields: function (companyId, companyName) {
     const $display = jQuery("#billing_company_display");
     if ($display.data("select2")) {
       $display.select2("close");
     } else if ($display.length) {
-      // Attached BEFORE the seed below, so that seed's own closing
-      // `.trigger("change")` is what renders the selection (defect found
-      // reviewing #486 as a whole):
-      // manual entry destroys this widget (`enterManualCompanyEntry`), and the
-      // Sole trader chip is not hidden there — so an adoption can land with no
-      // picker attached. Adoption's own
-      // `toggleBusinessFields()` makes `#billing_company_display_field` the
-      // visible company-NAME surface for this mode and hides the native field,
-      // and `getCompanyName()` reads the picker's rendered container: with no
-      // picker attached the buyer got a bare unstyled `<select>` and the name
-      // read EMPTY, so `getCompanyData()` carried no `company_name` and
-      // `isReadyApprovalCheck()` never fired an order intent at all — the exact
-      // defect `getCompanyName()`'s own comment describes, reached by a route
-      // neither the capture-mode refactor nor the field-visibility redesign
-      // owns alone.
-      //
-      // The duplicated `select2:select`/`select2:open` handlers this leaves
-      // behind are the pre-existing ones TWO-25338 owns (see `initialize()`'s
-      // 800ms retry comment for the full accounting); this handler's own
-      // sole-trader branch is idempotent under it — the second entry finds
-      // `mode === "business"` and skips.
+      // Attached before the seed below, so that seed's own closing
+      // `.trigger("change")` is what renders the selection: manual entry
+      // destroys this widget and the Sole trader chip isn't hidden there,
+      // so an adoption can land with no picker attached, and
+      // `getCompanyName()` needs the picker's rendered container to read a
+      // name from at all.
       twoincSelectWooHelper.attach(Twoinc.getInstance());
     }
     if (
@@ -4412,31 +4355,21 @@ let twoincSoleTrader = {
   },
 
   /**
-   * Click-to-reopen (TWO-40 §7 correction, live-reported by Doug): once a
-   * sole trader is adopted, `lockCapturedFields()` readonly-locks the
-   * captured fields, and the dropdown's own free-text query row is suppressed
-   * (`syncQueryFieldSuppression`), leaving no way back to an ordinary company
-   * search except the "select a different sole trader"
-   * link — which only ever leads back into the SAME hosted signup, never
-   * away from sole trader entirely. Clicking into either captured field does
-   * that instead: revert to business mode (restoring whatever search/
-   * manual-entry state was saved) and land the buyer straight in the
-   * reopened dropdown, the same landing `exitManualCompanyEntry()` gives a
-   * buyer leaving manual entry.
+   * Click-to-reopen (TWO-40 §7): once a sole trader is adopted, the
+   * captured fields readonly-lock and the query row is suppressed, leaving
+   * no way back to an ordinary company search except the "select a
+   * different sole trader" link, which only leads back into the same
+   * hosted signup. Clicking into either captured field instead reverts to
+   * business mode and lands the buyer in the reopened dropdown, same as
+   * `exitManualCompanyEntry()` does leaving manual entry.
    *
-   * Refused while `isDeciding()` (round-1 review — Han/Vader; predicate
-   * corrected round-3 — Vader): a captured field only readonly-locks once
-   * `lockCapturedFields()` runs, which is deferred for the whole autofill/
-   * popup wait (see `setMode`'s comment) — reverting mode out from under
-   * that wait is what dropped a completed signup on the floor, because
-   * `bindPopupMessageListener`'s ACCEPTED handler also gates on
-   * `mode === "sole_trader"`. Not the wider `isBusy()`: once adopted, this
-   * is exactly the state Doug's bug 3 describes ("once a sole trader is
-   * selected... click into the field again") — refusing the click just
-   * because the popup-close poll hasn't caught up yet would silently
-   * reintroduce that bug for the whole length of the poll.
-   *
-   * @returns {void}
+   * Refused while `isDeciding()`, not the wider `isBusy()`: a captured
+   * field only readonly-locks once `lockCapturedFields()` runs (deferred
+   * for the whole autofill/popup wait), so reverting mode out from under
+   * that wait would drop a completed signup, since the ACCEPTED handler
+   * also gates on `mode === "sole_trader"`. Once adopted, refusing the
+   * click just because the popup-close poll hasn't caught up would
+   * reintroduce that bug for the length of the poll.
    */
   reopenSearch: function () {
     if (twoincSoleTrader.mode !== "sole_trader" || twoincSoleTrader.isDeciding()) return;
@@ -4453,52 +4386,29 @@ let twoincSoleTrader = {
 
   /**
    * Open the hosted signup popup, falling back to the visible link if the
-   * browser blocks the window.
+   * browser blocks the window. Re-entrancy-guarded (TWO-40 §7): a second
+   * activation while one is already opening is dropped, and a later
+   * activation is dropped for as long as an already-open popup's outcome
+   * is still undecided.
    *
-   * Re-entrancy-guarded (TWO-40 §7): a second activation while one is already
-   * being opened is dropped rather than stacking a second popup. A second,
-   * LATER activation is likewise dropped for as long as an already-open
-   * popup's outcome is still undecided — see the guard's own comment for why
-   * that predicate is popup-scoped rather than `isDeciding()`.
-   *
-   * A re-signup (`options.autoselect === false`) is ALSO refused while a
-   * different one is already outstanding (round-6 review — Han/Vader,
-   * structural hardening): `openingSignup` only guards a second click
-   * landing in the SAME synchronous gesture, not a later, sequential one —
-   * closing one re-signup popup and clicking "select a different sole
-   * trader" again is exactly the retry that made
-   * `soleTraderReconfirmingCount` a count rather than a boolean in the first
-   * place. Refusing a second one here removes that whole scenario rather
-   * than continuing to patch the counter for it.
-   *
-   * @param {Object} [options] passed through to openPopup
-   * @returns {void}
+   * A re-signup (`options.autoselect === false`) is also refused while a
+   * different one is already outstanding: `openingSignup` only guards two
+   * clicks in the same synchronous gesture, not a later sequential one —
+   * closing one re-signup and re-clicking is exactly the case that made
+   * `soleTraderReconfirmingCount` a count rather than a boolean.
    */
   launchSignup: function (options) {
     if (twoincSoleTrader.openingSignup) return;
-    // One LIVE undecided popup at a time: `openingSignup` above only makes
-    // two activations in the SAME gesture idempotent, so a second, later click
-    // while the first popup was still open stacked a second window over it.
-    // LIVE is load-bearing — a hand-closed record stays undecided until its
-    // own poll notices, and this guard deliberately lets a relaunch open
-    // alongside it, so "undecided" alone is NOT an array-wide invariant. Read
-    // as one, it mis-attributes an inbound ACCEPTED; see `findPopupWatcher`.
-    // Scoped to each open popup's OWN outcome (`watcher.decided`, plus the
-    // ACCEPTED fetch still resolving), deliberately narrower than either
-    // obvious predicate: a bare watcher count refuses the "select a
-    // different sole trader" launch from an accepted popup's remaining
-    // close poll (that popup has already decided), and the flight-inclusive
-    // `isDeciding()` refuses a launch when NO popup exists and only a stale
-    // flight is outstanding — stranding the chip click with no popup at all,
-    // the exact defect TWO-40 §7 removes. A browser-blocked popup creates no
-    // watcher, so retries stay open.
+    // One live undecided popup at a time. "Live" is load-bearing: a
+    // hand-closed record stays undecided until its own poll notices, and a
+    // relaunch is deliberately allowed to open alongside it — reading
+    // "undecided" alone would mis-attribute an inbound ACCEPTED (see
+    // `findPopupWatcher`). Scoped to each popup's own outcome rather than
+    // `isDeciding()`, which would strand a chip click when no popup exists
+    // and only a stale flight is outstanding.
     if (
       twoincSoleTrader.signupConfirming ||
       twoincSoleTrader.activePopupWatchers.some(function (watcher) {
-        // `win.closed` too: a record outlives its window by up to one 300ms
-        // poll cycle, and a hand-closed popup is not an undecided one — the
-        // buyer already decided against it, so a fresh click must get a
-        // fresh popup, not a refusal.
         return !watcher.decided && !watcher.win.closed;
       })
     ) {
@@ -4517,71 +4427,49 @@ let twoincSoleTrader = {
       twoincSoleTrader.showNote(!win);
       if (win) {
         // Both callers passing `autoselect: false` — the "select a
-        // different sole trader" link, and (item 4.3, Doug's override) a
-        // re-click of the Sole Trader chip once already adopted — are a
-        // genuinely new decision, launched from an already-adopted state
-        // where `soleTraderAdopted` is stale-true for the whole duration.
-        // See `soleTraderReconfirmingCount`'s own comment for why
-        // `isDeciding()` needs this to tell the two apart.
+        // different sole trader" link, and a re-click of the chip once
+        // already adopted — are a genuinely new decision launched from a
+        // stale-true `soleTraderAdopted`; see that flag's own comment.
         //
-        // Incremented only once a popup has actually opened (round-5 review
-        // — Han/Vader): a BLOCKED re-signup popup calls neither
-        // `watchPopupClose` nor the ACCEPTED handler, so incrementing
-        // unconditionally at the top of this function — as this used to —
-        // stranded the count above zero until the next unrelated
-        // `setMode()` call reset it, wrongly refusing every direct "leave
-        // sole-trader mode" action in the meantime.
+        // Incremented only once a popup has actually opened: a blocked
+        // re-signup calls neither `watchPopupClose` nor the ACCEPTED
+        // handler, so incrementing unconditionally would strand the count
+        // above zero until an unrelated `setMode()` reset it.
         const isReconfirming = !!(options && options.autoselect === false);
         if (isReconfirming) {
           twoincSoleTrader.soleTraderReconfirmingCount += 1;
         }
-        // Both entry points, and the first-time enrolment too: the close is
-        // conditional on the dropdown actually being open, which is the one
-        // thing that differs between them.
         twoincSoleTrader.closeDropdownOnSettle = true;
         twoincSoleTrader.watchPopupClose(win, isReconfirming);
       }
     } finally {
-      // Released once the synchronous open has returned, blocked or not — see
-      // the guard's own comment. Held any longer and a blocked popup would
-      // lock the buyer out of retrying via the fallback link.
+      // Released once the synchronous open has returned, blocked or not —
+      // held any longer and a blocked popup would lock the buyer out of
+      // retrying via the fallback link.
       twoincSoleTrader.openingSignup = false;
     }
   },
 
   /**
-   * Keep the search dropdown's spinner up for as long as the signup popup is
-   * open, and settle it the moment the buyer closes the window (TWO-40 §7
-   * correction, live-reported by Doug: the dropdown used to vanish the
-   * instant the popup opened, whether or not autofill had found anything).
+   * Keep the search dropdown's spinner up for as long as the signup popup
+   * is open, and settle it the moment the buyer closes the window
+   * (TWO-40 §7). `window.closed` polling is the only signal a same-origin
+   * opener has for "the popup went away", with no cooperation from the
+   * popup and no event for it. If nothing was adopted by close time, hand
+   * the checkout back to an ordinary company search.
    *
-   * `window.closed` polling is the only signal a same-origin opener has for
-   * "the popup went away" with no cooperation from the popup itself — there
-   * is no event for it. If nothing was ever adopted by the time it closes
-   * (the buyer backed out without finishing signup), hand the checkout back
-   * to an ordinary company search rather than leaving it stuck mid-switch.
-   *
-   * Reads `soleTraderAdopted`, not `#company_id`'s raw value (round-1 review
-   * — Vader): that field can already hold an unrelated id from an earlier
-   * manual entry or registry pick, predating this sole-trader session
-   * entirely, which would wrongly read as "already adopted" and suppress
-   * the revert. Also skips the revert while `signupConfirming` is true
-   * (round-1 review — Han): the ACCEPTED-postMessage handler's own
-   * `fetchCurrentBuyer()` can still be resolving when this poll notices the
-   * window closed — the popup can go away the instant "ACCEPTED" is posted,
-   * before that fetch has had a chance to write anything — and that handler
-   * is the sole authority once a signup has actually completed.
+   * Reads `soleTraderAdopted`, not `#company_id`'s raw value, which can
+   * hold an unrelated id from an earlier capture and would wrongly read as
+   * "already adopted". Also skips the revert while `signupConfirming`:
+   * the ACCEPTED handler's own `fetchCurrentBuyer()` can still be resolving
+   * when this poll notices the window closed, and that handler is the sole
+   * authority once a signup has completed.
    *
    * @param {Window} win the popup returned by `window.open`
-   * @param {boolean} [isReconfirming] whether THIS popup was a "select a
-   *   different sole trader" re-signup — round-5 review (Han/Vader): only
-   *   decrement `soleTraderReconfirmingCount` for the popup that actually
-   *   incremented it. A bare "decrement on every close" would let an
-   *   unrelated popup's poll steal a decrement meant for a DIFFERENT,
-   *   still-open re-signup — the exact cross-contamination the counter
-   *   exists to avoid (same shape as `flightDepth`'s own COUNT-not-boolean
-   *   reasoning, one level deeper).
-   * @returns {void}
+   * @param {boolean} [isReconfirming] whether this popup was a re-signup —
+   *   only decrement `soleTraderReconfirmingCount` for the popup that
+   *   actually incremented it, so an unrelated popup's poll can't steal a
+   *   decrement meant for a different, still-open re-signup.
    */
   watchPopupClose: function (win, isReconfirming) {
     twoincSoleTrader.bindWindowRefocusListener();
@@ -4595,66 +4483,50 @@ let twoincSoleTrader = {
   },
 
   /**
-   * Everything one popup's window going away settles. Called by that popup's
-   * own poll above, and — only on the mode-chip abandon path — synchronously
-   * by `abandonPopupsForChipClick()`.
-   *
-   * Factored out rather than duplicated so the settle keeps ONE owner
-   * (TWO-40 §14) with no second copy to agree with this one about
-   * `flightDepth`, `soleTraderReconfirmingCount` and `closeDropdownOnSettle`.
-   * Calling it early is safe because `stopWatchingPopup` both clears the
-   * interval and drops the record, so the poll cannot run it a second time.
+   * Everything one popup's window going away settles. Called by that
+   * popup's own poll above, and — only on the mode-chip abandon path —
+   * synchronously by `abandonPopupsForChipClick()`. Factored out so the
+   * settle keeps one owner (TWO-40 §14) for `flightDepth`,
+   * `soleTraderReconfirmingCount` and `closeDropdownOnSettle`.
    *
    * @param {Object} watcher the record whose window has gone
-   * @param {boolean} chipOwnsOutcome a mode-chip click is mid-gesture and owns
-   *   the mode and the dropdown from here — see `abandonPopupsForChipClick`
-   * @returns {void}
+   * @param {boolean} chipOwnsOutcome a mode-chip click is mid-gesture and
+   *   owns the mode and dropdown from here
    */
   settleClosedPopup: function (watcher, chipOwnsOutcome) {
     twoincSoleTrader.stopWatchingPopup(watcher.id);
     if (chipOwnsOutcome) {
-      // Consumed, not honoured: the chip decides what happens to the dropdown
-      // (Registered company reopens it, Enter manually tears it down), and
-      // closing it from here would destroy the very button whose `click` has
-      // not been dispatched yet — a chip removed between `mousedown` and
-      // `mouseup` produces no `click` at all.
+      // Consumed, not honoured: the chip decides what happens to the
+      // dropdown, and closing it here would destroy the button whose
+      // `click` hasn't been dispatched yet.
       twoincSoleTrader.closeDropdownOnSettle = false;
     }
     twoincSoleTrader.settleFlight();
     if (watcher.isReconfirming && !watcher.decided) {
       // Abandoned without a decision — this settle owns the decrement. A
-      // DECIDED popup's decrement belongs to the ACCEPTED handler that
-      // marked it: an accepted re-signup closed inside this poll's own
-      // 300ms window would otherwise spend two decrements against its one
-      // increment, letting a later, genuinely undecided re-signup read as
-      // settled. Clamped, same reason `settleFlight` is, so an unbalanced
-      // count can't go negative.
+      // decided popup's decrement belongs to the ACCEPTED handler instead.
       twoincSoleTrader.soleTraderReconfirmingCount = Math.max(
         0,
         twoincSoleTrader.soleTraderReconfirmingCount - 1
       );
     }
     if (
-      // Skipped on the chip path for the same reason as the dropdown close
-      // above, plus one more: `setMode`'s business branch destroys the
-      // dropdown the chip lives in, AND reverting to business here would make
-      // the Registered company chip's own "already in business mode" no-op
-      // swallow the click. Both chips set the mode themselves.
+      // Skipped on the chip path: `setMode`'s business branch destroys the
+      // dropdown the chip lives in, and reverting here would make the
+      // Registered company chip's own "already in business mode" no-op
+      // swallow the click.
       !chipOwnsOutcome &&
       twoincSoleTrader.mode === "sole_trader" &&
       !twoincSoleTrader.soleTraderAdopted &&
       !twoincSoleTrader.signupConfirming &&
-      // A popup relaunched inside this poll's stale window (the buyer
-      // closed this one by hand, then clicked again before the poll
-      // noticed) owns the mode now — reverting under it would drop its
-      // eventual ACCEPTED on the `mode !== "sole_trader"` gate. Its own
-      // terminal branch settles mode, same deferral as `hide()`'s.
+      // A popup relaunched inside this poll's stale window owns the mode
+      // now — reverting under it would drop its eventual ACCEPTED on the
+      // `mode !== "sole_trader"` gate.
       //
-      // Still ON SCREEN is the question, not still undecided (round-3
-      // review): a popup whose ACCEPTED resolved to no buyer is decided yet
-      // very much still open, and the buyer's retry inside it posts a second
-      // ACCEPTED that a revert here would drop on that same gate. Any record
-      // whose window HAS closed settles the mode from its own poll instead.
+      // "Still on screen" is the question, not "still undecided": a popup
+      // whose ACCEPTED resolved to no buyer is decided yet still open, and
+      // a retry inside it posts a second ACCEPTED a revert would drop on
+      // that same gate.
       !twoincSoleTrader.activePopupWatchers.some(function (other) {
         return !other.win.closed;
       })
@@ -4664,46 +4536,38 @@ let twoincSoleTrader = {
   },
 
   /**
-   * Close an abandoned signup popup when the buyer comes back to the checkout
-   * (Doug 2026-08-20, live: the popup stayed up, the dropdown stayed open and
-   * the spinner kept animating over a flow the buyer had walked away from).
+   * Close an abandoned signup popup when the buyer comes back to the
+   * checkout.
    *
-   * A window `focus` listener, NOT `visibilitychange`: the hosted signup is a
-   * separate WINDOW, so the checkout's own tab never leaves `visible` for the
-   * whole round trip and that event never fires. Bound lazily from
-   * `watchPopupClose` — the only thing that creates the state this acts on —
-   * and left bound for the window's lifetime, same as the `message` listener.
+   * A window `focus` listener, not `visibilitychange`: the hosted signup is
+   * a separate window, so the checkout's own tab never leaves `visible` for
+   * the round trip and that event never fires. Bound lazily from
+   * `watchPopupClose`, left bound for the window's lifetime like the
+   * `message` listener.
    *
-   * The target check is not defensive noise. A native `focus` on an element
-   * never reaches a non-capturing window listener, but jQuery's
-   * `.trigger("focus")` does not dispatch natively — it walks the propagation
-   * path itself, window included, regardless of the event type's `bubbles`
-   * flag. This file triggers focus that way on the company fields all over
-   * (`focusVisibleCompanyField`, `releaseFocusFromCompanyField`), so without
-   * the check, opening the dropdown would close the popup.
+   * The target check is not defensive noise: jQuery's `.trigger("focus")`
+   * does not dispatch natively — it walks the propagation path itself,
+   * window included. This file triggers focus that way on the company
+   * fields (`focusVisibleCompanyField`, `releaseFocusFromCompanyField`), so
+   * without the check, opening the dropdown would close the popup.
    *
-   * The refocus does not decide anything itself, it only SCHEDULES the abandon
-   * (Doug 2026-08-20, spec revision). Which of three things the buyer meant
-   * depends on what they clicked, and the window `focus` is dispatched before
-   * the `mousedown` of that click — so the decision has to outlive the focus
-   * handler by `refocusChipGraceMs`, and the capture-phase `mousedown` below is
-   * what resolves it:
+   * The refocus only SCHEDULES the abandon — which of three things the
+   * buyer meant depends on what they clicked, and window `focus` fires
+   * before that click's `mousedown` — so the decision has to outlive the
+   * focus handler by `refocusChipGraceMs`, resolved by the capture-phase
+   * `mousedown` below:
    *
-   *  - the Sole trader chip → cancel the abandon outright. Re-clicking the chip
-   *    that launched the popup asks for that popup BACK, and `onModeChipClick`
-   *    raises it. Cancelling here is the whole job; the click owns the rest.
-   *  - any other mode chip → abandon NOW, in the mousedown, so the chip's own
-   *    `click` handler runs a moment later against fully settled state. Left to
-   *    the timer instead it would land after that click, and the chip's
-   *    `isDeciding()` guard would have refused the click for a popup that was
-   *    already on its way out — the gesture reading as "the dropdown just
-   *    closed" with the chip's own action never happening.
-   *  - anything else, including no click at all (alt-tab back, a click on the
-   *    page) → the timer fires and abandons, as it always did.
+   *  - Sole trader chip → cancel the abandon; re-clicking asks for that
+   *    popup back and `onModeChipClick` raises it.
+   *  - any other mode chip → abandon now, in the mousedown, so the chip's
+   *    `click` handler runs after against settled state — left to the
+   *    timer it would land after that click and the chip's `isDeciding()`
+   *    guard would wrongly refuse it.
+   *  - anything else (alt-tab back, a click on the page) → the timer fires
+   *    and abandons.
    *
-   * Capture phase, and on `document` rather than on the chips: the chips are
-   * rebuilt on every dropdown open, and capture reaches them whether or not
-   * something between them and here stops propagation.
+   * Capture phase, on `document` rather than the chips: chips are rebuilt
+   * on every dropdown open, and capture reaches them regardless.
    *
    * @returns {void}
    */
@@ -4761,32 +4625,23 @@ let twoincSoleTrader = {
   },
 
   /**
-   * Close every signup popup whose outcome is still open, and nothing else
-   * (Doug 2026-08-20).
+   * Close every signup popup whose outcome is still open, and nothing else.
+   * `window.close()` on a handle this page's own `window.open()` returned
+   * is permitted regardless of origin, so this can be a real close.
    *
-   * `window.close()` on a handle this page's own `window.open()` returned is
-   * permitted regardless of the popup's origin — the opener may always close
-   * what it opened — which is why this can be a real close rather than a
-   * request the hosted flow has to cooperate with.
+   * Closing the window is the whole action — spinner, mode revert and
+   * dropdown close happen exactly as for a popup closed by hand:
+   * `watchPopupClose`'s poll sees `.closed` within its next 300ms tick and
+   * runs its own terminal branch, keeping one owner for the settle
+   * (TWO-40 §14).
    *
-   * Closing the window is the WHOLE action. The spinner, the mode revert and
-   * the dropdown close then happen exactly as they do for a popup the buyer
-   * closed by hand: `watchPopupClose`'s poll sees `.closed` within its next
-   * 300ms tick and runs its own terminal branch. That keeps ONE owner for the
-   * settle (TWO-40 §14) rather than
-   * adding a second path that has to agree with it about `flightDepth`,
-   * `soleTraderReconfirmingCount` and `closeDropdownOnSettle`.
+   * Decided popups are left alone: a popup whose ACCEPTED resolved to no
+   * buyer is decided yet still on screen, and the buyer's retry inside it
+   * posts a second ACCEPTED — closing it would take the retry with it.
    *
-   * DECIDED popups are left alone deliberately. A popup whose ACCEPTED
-   * resolved to no buyer is decided yet still very much on screen, and the
-   * buyer's retry inside it posts a second ACCEPTED (see `watchPopupClose`'s
-   * own comment) — closing that window would take the retry with it.
-   *
-   * This is the NO-CHIP refocus only — alt-tab back, or a click anywhere on the
-   * page that is not a mode chip. A chip click is resolved before this ever
-   * runs; see `bindWindowRefocusListener` and `abandonPopupsForChipClick`.
-   *
-   * @returns {void}
+   * This is the no-chip refocus only — a chip click is resolved before
+   * this ever runs; see `bindWindowRefocusListener` and
+   * `abandonPopupsForChipClick`.
    */
   closeAbandonedPopups: function () {
     twoincSoleTrader.abandonablePopups().forEach(function (watcher) {
@@ -4796,22 +4651,14 @@ let twoincSoleTrader = {
   },
 
   /**
-   * Abandon the signup popups because the buyer came back to the checkout by
-   * clicking a mode chip other than Sole trader (Doug 2026-08-20).
-   *
-   * The close is the same one `closeAbandonedPopups` does. What differs is the
-   * TIMING and the ownership: this runs in the chip's own `mousedown`, and
+   * Abandon the signup popups because the buyer came back to the checkout
+   * by clicking a mode chip other than Sole trader. Same close as
+   * `closeAbandonedPopups`, but runs in the chip's own `mousedown` and
    * drains each popup's settle synchronously rather than leaving it to the
    * 300ms poll, so the chip's `click` handler a moment later sees no
-   * outstanding flight and no live popup — which is the whole of what its
-   * `isDeciding()` guard was refusing the click for.
-   *
-   * Draining early is only safe because `chipOwnsOutcome` holds back the two
-   * steps that would touch the dropdown: see `settleClosedPopup`.
-   *
-   * The list is snapshotted because settling a popup removes its own record.
-   *
-   * @returns {void}
+   * outstanding flight or live popup. Safe to drain early only because
+   * `chipOwnsOutcome` holds back the steps that touch the dropdown — see
+   * `settleClosedPopup`.
    */
   abandonPopupsForChipClick: function () {
     twoincSoleTrader.abandonablePopups().forEach(function (watcher) {
@@ -4821,15 +4668,11 @@ let twoincSoleTrader = {
   },
 
   /**
-   * Bring the still-undecided signup popups back to the front (Doug
-   * 2026-08-20, item 6.1).
+   * Bring the still-undecided signup popups back to the front. `focus()`
+   * on a window handle needs no cooperation from the hosted flow however
+   * cross-origin it is.
    *
-   * `focus()` on a window handle is how a popup is raised — the browser brings
-   * a window to the front when it is focused — and it needs no cooperation from
-   * the hosted flow however cross-origin it is.
-   *
-   * @returns {boolean} whether there was a popup to raise, which is also the
-   *   answer to "is the buyer's outstanding signup still on screen"
+   * @returns {boolean} whether there was a popup to raise
    */
   refocusOpenPopups: function () {
     const abandonable = twoincSoleTrader.abandonablePopups();
@@ -4843,15 +4686,9 @@ let twoincSoleTrader = {
    * The popups a refocus is entitled to act on: still undecided, and their
    * window still there.
    *
-   * DECIDED popups are excluded deliberately. A popup whose ACCEPTED resolved
-   * to no buyer is decided yet still very much on screen, and the buyer's retry
-   * inside it posts a second ACCEPTED (see `watchPopupClose`'s own comment) —
-   * closing that window would take the retry with it. A record whose window has
-   * already gone is excluded because it outlives that window by up to one poll
-   * cycle, exactly as `launchSignup`'s own guard reads it.
-   *
-   * One predicate, shared by all three refocus outcomes, so the case that
-   * REFUSES to close a popup covers precisely the set the other two close.
+   * Decided popups are excluded: a popup whose ACCEPTED resolved to no
+   * buyer is decided yet still on screen, and a retry inside it posts a
+   * second ACCEPTED — closing that window would take the retry with it.
    *
    * @returns {Array} a snapshot, safe to iterate while records are removed
    */
@@ -4878,29 +4715,22 @@ let twoincSoleTrader = {
   /**
    * The watcher record an inbound hosted-signup message belongs to.
    *
-   * `event.source` is the authoritative answer: the browser names the window
-   * that posted, and a WindowProxy stays reference-comparable across origins,
-   * so pairing needs no cooperation from the popup and no property access on
-   * it. An exact match wins even when already `decided`, so a replayed
-   * ACCEPTED resolves to the popup it came from rather than falling through
-   * and stealing a different, still-undecided popup's identity.
+   * `event.source` is the authoritative answer — a WindowProxy stays
+   * reference-comparable across origins. An exact match wins even when
+   * already `decided`, so a replayed ACCEPTED resolves to the popup it
+   * came from rather than stealing a different, still-undecided popup's
+   * identity.
    *
-   * The fallbacks cover a popup that closes in the same turn it posts, which
-   * can arrive with `source` already null. Both scan NEWEST first, which is
-   * the round-3 regression in one line: a forward scan returned a stale
-   * hand-closed record ahead of the live popup that actually sent the
-   * message, marking the wrong one decided — refusing the post-accept
-   * re-signup and billing the accepting popup's
-   * `soleTraderReconfirmingCount` decrement to a record that never owed one.
-   * A relaunch is always newer than the stale record it opened over, so
-   * newest-first cannot pick the stale one.
+   * The fallbacks cover a popup that closes in the same turn it posts,
+   * which can arrive with `source` already null. Both scan newest first: a
+   * forward scan can return a stale hand-closed record ahead of the live
+   * popup that actually sent the message, marking the wrong one decided.
    *
-   * An unmatched non-null `source` deliberately falls back too, rather than
-   * refusing to pair: the only cost of pairing a message we cannot attribute
-   * is mis-marking a record in a replay that no live window can actually send,
-   * whereas refusing one would strand `soleTraderReconfirmingCount` — and with
-   * it every leave-sole-trader action — on any browser whose `source` is not
-   * reference-equal to what `window.open` returned.
+   * An unmatched non-null `source` deliberately falls back too, rather
+   * than refusing to pair: mis-marking a record in an unattributable
+   * replay is cheaper than stranding `soleTraderReconfirmingCount` on any
+   * browser whose `source` is not reference-equal to what `window.open`
+   * returned.
    *
    * @param {Window|null} [source] the message's `event.source`
    * @returns {Object|undefined} the record, if the message can be attributed
@@ -4957,61 +4787,46 @@ let twoincSoleTrader = {
    */
   setCompany: function (companyId, companyName, buyer) {
     if (companyId && twoincSoleTrader.mode === "sole_trader") {
-      // The moment there is actually a sole trader captured — as opposed to
-      // just having switched mode (TWO-40 §7 correction) — is the moment
-      // there is nothing left to search for. Locking here, instead of on
-      // every switch into sole-trader mode, is what lets the dropdown+spinner
-      // survive the autofill/popup round trip.
+      // The moment there is actually a sole trader captured — not just a
+      // mode switch (TWO-40 §7) — is the moment there is nothing left to
+      // search for. Locking here, not on every switch into sole-trader
+      // mode, is what lets the dropdown+spinner survive the autofill/popup
+      // round trip.
       twoincSoleTrader.lockCapturedFields(companyId, companyName);
-      // Read by `watchPopupClose()` in place of `#company_id`'s raw value
-      // (round-1 review — Vader) — see that flag's own comment.
+      // Read by `watchPopupClose()` in place of `#company_id`'s raw value.
       twoincSoleTrader.soleTraderAdopted = true;
     }
     twoincCompanyCapture.write(companyName, companyId);
     // The display select too, when this is the clearing call setMode("business")
-    // makes. The picker appends an <option> per pick and select2("destroy")
-    // leaves it selected, so without this a company picked before the sole-trader
-    // detour stayed on that select after being cleared from both posted fields
-    // (TWO-25288).
+    // makes. select2("destroy") leaves the picker's appended <option> selected,
+    // so without this a company picked before the sole-trader detour stayed on
+    // that select after being cleared from both posted fields (TWO-25288).
     if (!companyName) {
       jQuery("#billing_company_display").val("");
     }
     const instance = Twoinc.getInstance();
-    // The buyer's address, written REGARDLESS of the merchant's address-lookup
-    // switch (TWO-40 §5). That switch gates an ordinary company-search pick's
-    // address write, and routing sole-trader adoption through the same gate is
-    // the bug this bullet exists for: the switch is legitimately off in
-    // configurations that have nothing to do with sole-trader signup, and a
-    // buyer who has just enrolled must still have their address land. Explicit
-    // bypass rather than making the switch context-aware.
+    // The buyer's address, written regardless of the merchant's
+    // address-lookup switch (TWO-40 §5): that switch legitimately gates an
+    // ordinary company-search pick's address write in configurations that
+    // have nothing to do with sole-trader signup, but a buyer who just
+    // enrolled must still have their address land. Explicit bypass rather
+    // than making the switch context-aware.
     const buyerAddress = buyer && (buyer.billing_address || buyer.address);
     if (companyId && buyerAddress) {
       instance.setAddress(buyerAddress);
       instance.registryAddressApplied = true;
     }
-    // Re-evaluate which company fields are shown, AFTER the write above
-    // (TWO-25326 §12).
-    //
-    // `#company_id`'s visibility depends on the value it now holds, and this
-    // is the function that changes that value. Every route into sole-trader
-    // capture toggles the fields BEFORE the autofill lands — setMode() runs
-    // while the input is still empty, and the hosted-signup postMessage
-    // handler reaches here with no toggle of its own at all — so without this
-    // the minted `TWO:…` identifier lands in a field that was made visible on
-    // the strength of it being empty, and stays on screen until some
-    // unrelated country or payment-method switch happens to re-toggle. That
-    // is the exact surface §12 exists to close.
-    //
-    // Not re-entrant: toggleBusinessFields() reads the inputs and reassigns
-    // classes, and calls nothing that comes back here.
+    // Re-evaluate which company fields are shown, after the write above
+    // (TWO-25326 §12): `#company_id`'s visibility depends on the value it
+    // now holds. Every route into sole-trader capture toggles the fields
+    // before the autofill lands, so without this the minted `TWO:…`
+    // identifier lands in a field made visible on the strength of being
+    // empty, and stays on screen until an unrelated toggle happens.
     twoincDomHelper.toggleBusinessFields();
-    // Explicit rather than DOM-read: this function is the authority on what was
-    // just captured, so the summary should not depend on the order the mirrors
-    // above are written in (TWO-25288). Also re-renders after the toggle above,
-    // whose own trailing renderCompanySummary() reads the DOM.
+    // Explicit rather than DOM-read: this function is the authority on what
+    // was just captured, so the summary should not depend on write order
+    // (TWO-25288).
     twoincSelectWooHelper.renderCompanySummary(companyName, companyId);
-    // The "select a different sole trader" link only means something once one
-    // is adopted, so its visibility is re-decided wherever that changes.
     twoincSoleTrader.syncDifferentSoleTraderLink();
     if (companyId) {
       instance.getApproval();
@@ -5034,11 +4849,10 @@ let twoincSoleTrader = {
       .post(cfg.tokens_url, { nonce: cfg.nonce, country: country })
       .done(function (response) {
         // The buyer may have changed country while the request was in
-        // flight — same guard `refresh()` uses for availability (TWO-40,
-        // round-2 review — Vader). Without it, a slower request for the
-        // country the buyer just left can land after a newer one and
-        // overwrite `tokens` with delegated authority for the wrong
-        // jurisdiction.
+        // flight — same guard `refresh()` uses for availability. Without
+        // it, a slower request for the country the buyer just left can
+        // land after a newer one and overwrite `tokens` with delegated
+        // authority for the wrong jurisdiction.
         if (twoincSoleTrader.currentCountry() !== country) {
           if (cb) cb(false);
           return;
@@ -5065,12 +4879,11 @@ let twoincSoleTrader = {
    * (TWO-40). A buyer who sits on checkout past their expiry would
    * otherwise find autofill and the signup popup broken on a stale token
    * the next time either needs one — including via "select a different
-   * sole trader", which reads `tokens` long after adoption (see
-   * `openPopup`).
+   * sole trader", which reads `tokens` long after adoption.
    *
-   * Started once, from the first successful mint — not eagerly on page
-   * load, since a buyer who never touches the sole-trader flow never mints
-   * a token and has nothing to refresh.
+   * Started once, from the first successful mint, not eagerly on page
+   * load: a buyer who never touches the sole-trader flow never mints a
+   * token and has nothing to refresh.
    *
    * @returns {void}
    */
@@ -5106,11 +4919,11 @@ let twoincSoleTrader = {
 
   /**
    * `pagehide` fires on a bfcache-eligible navigation too, where the page is
-   * only frozen — not destroyed — and JS timer state (including this
-   * interval) survives the freeze/resume untouched. Tearing the interval
-   * down on that path would leave a buyer restored from bfcache mid-checkout
-   * with a dead refresh loop for the rest of the session (round-1 review —
-   * Vader), so only a real unload (`event.persisted` false) stops it.
+   * only frozen and JS timer state (including this interval) survives the
+   * freeze/resume untouched. Tearing the interval down on that path would
+   * leave a buyer restored from bfcache with a dead refresh loop for the
+   * rest of the session, so only a real unload (`event.persisted` false)
+   * stops it.
    *
    * @param {PageTransitionEvent} [event]
    * @returns {void}
@@ -5166,22 +4979,19 @@ let twoincSoleTrader = {
   /**
    * Open the hosted sole-trader signup in a real popup window (TWO-40 §7).
    *
-   * `window.open()`, NOT an iframe-in-overlay. The signup/OTP flow depends on
-   * a third party that only works in a real popup window; the iframe rewrite
-   * would sidestep popup-blocker risk and was explicitly evaluated and
-   * rejected for that reason. The call stays SYNCHRONOUS with the click that
-   * triggered it — an async-delayed `window.open()` is blocker bait in every
-   * browser — which is why the chip-click path opens on tokens minted up
-   * front rather than issuing a request first.
+   * `window.open()`, not an iframe-in-overlay: the signup/OTP flow depends
+   * on a third party that only works in a real popup window. The call
+   * stays synchronous with the click that triggered it — an
+   * async-delayed `window.open()` is blocker bait in every browser — which
+   * is why the chip-click path opens on tokens minted up front rather than
+   * issuing a request first.
    *
-   * Brand overlays do not need anything added here. A branded deployment
-   * resolves this URL's HOST from the brand registry's own URL template
-   * (see WC_Twoinc_Helper::get_environment_host and the brand's
-   * `checkout_url_template`), so the host itself carries the brand in
-   * production. A `?brand=`/`?brandVersion=` query-string form also exists,
-   * but it is documented as a development-loop affordance for when several
-   * brands temporarily share one non-production domain — not the mechanism to
-   * build on.
+   * Brand overlays need nothing added here: a branded deployment resolves
+   * this URL's host from the brand registry's own URL template (see
+   * WC_Twoinc_Helper::get_environment_host and the brand's
+   * `checkout_url_template`). A `?brand=`/`?brandVersion=` query-string
+   * form also exists, but is a development-loop affordance, not the
+   * mechanism to build on.
    *
    * @param {Object} [options]
    * @param {boolean} [options.autoselect] when false, appended to the URL so
@@ -5256,11 +5066,9 @@ let twoincSoleTrader = {
       }
       if (event.data === "ACCEPTED") {
         // Attribute the message to the popup that sent it — see
-        // `findPopupWatcher`, which reads `event.source` rather than guessing
-        // from the record list. Marked decided at receipt: from this moment
-        // the popup's outcome is known, and its close poll must not treat it
-        // as abandoned (nor spend its reconfirming decrement — that belongs to
-        // this handler's callback below).
+        // `findPopupWatcher`. Marked decided at receipt so its close poll
+        // must not treat it as abandoned or spend its reconfirming
+        // decrement (that belongs to this handler's callback below).
         const watcher = twoincSoleTrader.findPopupWatcher(event.source);
         // A replayed ACCEPTED resolves to its own, already-decided popup;
         // only the receipt that actually settles a popup may spend its
@@ -5270,32 +5078,27 @@ let twoincSoleTrader = {
           watcher.decided = true;
         }
         twoincSoleTrader.beginFlight();
-        // Held for the duration of this fetch (round-1 review — Han): the
-        // popup can close the instant "ACCEPTED" is posted, well before this
-        // resolves and writes `#company_id` — `watchPopupClose()`'s own poll
-        // checks this before deciding the buyer abandoned signup with
-        // nothing captured.
+        // Held for the duration of this fetch: the popup can close the
+        // instant "ACCEPTED" is posted, well before this resolves and
+        // writes `#company_id` — `watchPopupClose()`'s own poll checks
+        // this before deciding the buyer abandoned signup with nothing
+        // captured.
         twoincSoleTrader.signupConfirming = true;
         twoincSoleTrader.fetchCurrentBuyer(function (buyer) {
-          // AUTHENTICATED path (TWO-40 §8). The server has just told this
-          // browser who the buyer is — the OTP step succeeded — so the email
-          // they authenticated with is the answer, full stop. Re-checking it
-          // against the checkout's own contact field is a confirmed bug: a
-          // buyer who signs up under a different address completes OTP, the
-          // stale email match disagrees with the server, and the same popup
+          // Authenticated path (TWO-40 §8): the server has just told this
+          // browser who the buyer is, so the email they authenticated with
+          // is the answer, full stop. Re-checking it against the
+          // checkout's own contact field is a confirmed bug: a buyer who
+          // signs up under a different address completes OTP, the stale
+          // email match disagrees with the server, and the same popup
           // reopens forever.
           const resolved = !!buyer;
           twoincSoleTrader.signupConfirming = false;
-          // This popup's own decision is now made — see
-          // `soleTraderReconfirmingCount`'s comment. Decremented here rather
-          // than only on popup close so a resolved re-signup un-blocks the
-          // Business chip/`reopenSearch()` immediately, not after another
-          // 300ms poll cycle. Scoped to the record paired at receipt: the
-          // decrement belongs to the popup that incremented, whether or not
-          // its window has already closed by the time this fetch resolves.
-          // Clamped, same reason `watchPopupClose`'s own decrement is; the
-          // `newlyDecided` check covers a late or replayed ACCEPTED, which
-          // must not spend a second decrement against one increment.
+          // Decremented here rather than only on popup close so a resolved
+          // re-signup un-blocks the Business chip/`reopenSearch()`
+          // immediately, not after another 300ms poll cycle. `newlyDecided`
+          // covers a late or replayed ACCEPTED, which must not spend a
+          // second decrement against one increment.
           if (newlyDecided && watcher.isReconfirming) {
             twoincSoleTrader.soleTraderReconfirmingCount = Math.max(
               0,
@@ -5308,13 +5111,11 @@ let twoincSoleTrader = {
           } else {
             twoincSoleTrader.showError();
           }
-          // LAST, after the capture above has actually landed (Doug
-          // 2026-08-20). This used to settle before the write, so on the
-          // ordinary path — the popup closes the instant "ACCEPTED" is posted,
-          // which is what `signupConfirming` exists for — depth hit zero, the
-          // spinner came down and the dropdown closed while the company name
-          // and number were still unwritten. "Flow complete" is the write, not
-          // the response.
+          // Last, after the capture above has actually landed: this used
+          // to settle before the write, so on the ordinary path the
+          // spinner came down and the dropdown closed while the company
+          // name and number were still unwritten. "Flow complete" is the
+          // write, not the response.
           twoincSoleTrader.settleFlight();
         });
       } else {
@@ -5370,41 +5171,30 @@ class Twoinc {
     this.orderIntentCheck = {
       interval: null,
       pendingCheck: false,
-      // Monotonic supersession counter for the order-intent request, the same
-      // idiom `addressLookupSeq` above uses and for the same reason (review
-      // round 3). Bumped when a request is issued and by every abandon, so a
-      // response is only allowed to act if it is still the newest question
-      // asked. Without it BOTH of these painted:
-      //
-      //   - two checks overlapping (the interval is disarmed before the request
-      //     goes out, so a second can be armed while the first is in flight) and
-      //     arriving in reverse order — the older verdict won, and the buyer
-      //     read an answer about a company or cart they had already moved on
-      //     from;
-      //   - a response arriving after the check was abandoned — a Place Order
-      //     click — which deselected the gateway and painted a verdict onto a
-      //     checkout already mid-submit.
+      // Monotonic supersession counter for the order-intent request, same
+      // idiom as `addressLookupSeq` above. Bumped when a request is issued
+      // and by every abandon, so a response is only allowed to act if it
+      // is still the newest question asked. Without it: two checks can
+      // overlap and arrive in reverse order, letting an older verdict win
+      // over a company/cart the buyer already moved on from; or a
+      // response can arrive after the check was abandoned by a Place
+      // Order click, painting a verdict onto a checkout already mid-submit.
       seq: 0,
-      // The seq of the request currently in flight, or null. This is the ONLY
-      // record that a check is running between the interval being disarmed and
-      // the response arriving, so abandonOrderIntentCheck() has to consult it:
-      // during that window every other flag reads falsy, and round 2's
-      // `wasRunning` gate therefore skipped the reset and left the loader on
-      // screen for the rest of the page.
+      // The seq of the request currently in flight, or null. This is the
+      // only record that a check is running between the interval being
+      // disarmed and the response arriving, so abandonOrderIntentCheck()
+      // has to consult it.
       inFlightSeq: null,
-      // The jqXHR of the request in flight, so a superseded one can be dropped
-      // instead of left to run (review round 5). Without this, rapid edits
-      // stacked one POST per second against a 30s timeout — up to thirty
-      // outstanding requests, all but the last of them already known to be
-      // unwanted.
+      // The jqXHR of the request in flight, so a superseded one can be
+      // dropped instead of left to run. Without this, rapid edits stacked
+      // one POST per second against a 30s timeout — up to thirty
+      // outstanding requests, all but the last already unwanted.
       inFlightXhr: null,
-      // Ticks spent waiting for a readable cart total. The interval body cannot
-      // proceed without one and used to retry forever, leaking a 1s timer for the
-      // life of the page and keeping `pendingCheck` alive with it. See the
-      // `!gross_amount` branch. Reset in exactly
-      // one place — where a check is armed — because that is the only place it
-      // can be stale by the time it matters (review round 2 found three further
-      // resets that no test could distinguish from their absence).
+      // Ticks spent waiting for a readable cart total. The interval body
+      // cannot proceed without one and used to retry forever, leaking a
+      // 1s timer for the life of the page. See the `!gross_amount` branch.
+      // Reset in exactly one place — where a check is armed — because
+      // that is the only place it can be stale by the time it matters.
       priceWaitTicks: 0,
       // The timer that waits out a WooCommerce checkout re-render before
       // painting a verdict. Held here rather than in a local, so that
@@ -5513,88 +5303,24 @@ class Twoinc {
       twoincSelectWooHelper.waitToFocus("billing_country");
     });
 
-    // Enable company search, then again on a delay to catch a billing fragment
-    // that WooCommerce had not rendered yet when initialize() ran. This retry is
-    // the only one this code owns: `updated_checkout` re-syncs plenty of other
-    // state but does not re-attach the picker itself. The other callers of
-    // enableCompanySearch are the manual-entry exit and the sole-trader mode
-    // switch — so a checkout whose deferred pass misses can still be recovered
-    // by going through one of those, but nothing here is aiming for that, and it
-    // is not a path to rely on. Treat this timer as the one that has to work.
+    // Enable company search, then again on a delay to catch a billing
+    // fragment that WooCommerce had not rendered yet when initialize()
+    // ran. This retry is the only one this code owns: `updated_checkout`
+    // does not re-attach the picker itself.
     //
-    // Wrapped rather than passed by reference (TWO-25337). `setTimeout` invokes
-    // a bare method reference with the GLOBAL as its receiver: the timer steps
-    // supply `window` as the callback's this-value, and a strict-mode class body
-    // does not change that, because the global is only substituted for a
-    // null/undefined receiver in sloppy mode and here a receiver was passed. So
-    // `this` inside enableCompanySearch was `window`, and the deferred pass
-    // wrote its `billingCompanySelect` onto `window` rather than onto this
-    // instance.
+    // Wrapped rather than passed by reference (TWO-25337): `setTimeout`
+    // invokes a bare method reference with the global as its receiver, so
+    // `this` inside enableCompanySearch would be `window` and the
+    // deferred pass would write `billingCompanySelect` onto `window`
+    // instead of this instance.
     //
-    // That did NOT throw and did not break the retry: nothing outside
-    // enableCompanySearch reads `billingCompanySelect`, so the widget still
-    // attached, and every other lookup in there goes through the DOM or
-    // `Twoinc.getInstance()`. What it left behind was a live selectWoo object on
-    // `window`, plus an instance property still holding whatever the
-    // synchronous pass wrote. Note what that value is, because it is NOT null:
-    // `.selectWoo()` on an empty jQuery set returns that same empty set. So in
-    // the late-render case this timer exists for, the property held a truthy
-    // empty set — a widget-shaped object wrapping no element, which is worse
-    // than null for anyone testing it for presence. (`null` survives only when
-    // company search is off, where the early return sits above the assignment.)
-    // The first reader of `this.billingCompanySelect` after a deferred
-    // re-attach would get that stale value, which is the trap
-    // `clearSelectedCompany` already avoids by looking the widget up from the
-    // DOM instead.
-    //
-    // Verified in real Chromium rather than reasoned about: the receiver is
-    // `window`, the assignment succeeds, and the console stays clean. Under
-    // Jest's fake timers the same call throws instead, because Sinon invokes
-    // the callback with `null` rather than the global — so the suite sees a
-    // TypeError that no browser ever produces. Do not restate that TypeError as
-    // production behaviour; it is a test-harness artefact.
-    //
-    // NOT fixed here, and not caused here: the deferred re-run leaves the
-    // picker's own `select2:select` / `select2:open` handlers DUPLICATED. Those
-    // are bound unnamespaced with no preceding `.off()`, and selectWoo's re-init
-    // destroys the previous instance with `.off(".select2")`, which cannot match
-    // them — so after the retry a single pick runs the whole select body twice.
-    //
-    // What that costs, per handler, neither overstated nor waved away. The
-    // `select2:select` copy is the one that costs anything.
-    //
-    // From the duplicated `select2:select`: `renderCompanySummary()` and
-    // `togglePaySubtitleDesc()` genuinely run twice, and `addressLookup()` does
-    // too when address lookup is enabled. The DOM and `customerCompany` writes
-    // are idempotent — same data both times. `getApproval()` costs nothing: the
-    // second entry finds `orderIntentCheck.interval` already set, flags
-    // `pendingCheck` and returns, and that flag cannot buy a later extra round
-    // either, because `pendingCheck` is only ever set inside that same guard and
-    // every site that nulls `interval` clears it in the same block — so the 3s
-    // poller only sees it set while the interval is still running, and the call
-    // it makes re-enters the guard and returns. The duplicate is simply dropped.
-    //
-    // From the duplicated `select2:open`: very little, and specifically NOT a
-    // pair of racing focus pollers. `addSelectWooFocusFixHandler` is idempotent
-    // (it guards on its own `two-focused-handler` attribute), and while
-    // `waitToFocus` has no dedupe, the arguments this site passes it —
-    // `("billing_company_display", null, null)` — defeat its own defaults: it
-    // guards them with `isNaN`, and `isNaN(null)` is false, so `hitsRequired`
-    // stays null and `attemptsLeft` becomes `null * 8`, i.e. 0. The interval
-    // clears itself on its first tick. Duplicating it therefore costs two
-    // single-shot focus nudges, each already a no-op when the input is focused.
-    //
-    // One stale figure to distrust while reading around this:
-    // `focusStillWithinCompanySearch`'s docblock says the poll can nudge "up to
-    // ~4.8s from `select2:open`", which is 2 x 8 x 300ms — the numbers you get by
-    // assuming those `isNaN` defaults apply. They do not apply to this call site,
-    // so that bound does not describe it. Left as-is rather than corrected here
-    // because it belongs with the `waitToFocus` work in TWO-25338, but do not
-    // take it as evidence of a focus race on the company picker.
-    //
-    // Pre-existing and unchanged by this commit: the retry ran on a live widget
-    // before it too, only storing its reference elsewhere. Its own ticket,
-    // TWO-25338.
+    // Pre-existing, not fixed here (TWO-25338): the deferred re-run
+    // leaves the picker's `select2:select`/`select2:open` handlers
+    // duplicated, since they're bound unnamespaced and selectWoo's
+    // re-init `.off(".select2")` can't match them. The duplicate
+    // `select2:select` costs nothing beyond idempotent re-renders and
+    // re-entering `getApproval()`'s already-running guard; the duplicate
+    // `select2:open` costs two no-op focus nudges.
     this.enableCompanySearch();
     setTimeout(function () {
       self.enableCompanySearch();
@@ -5731,27 +5457,24 @@ class Twoinc {
     // `checkout_error` is the worse of the two to leave spinning.
     $body.on("click", "#place_order", function () {
       // This now ABORTS an outstanding order-intent POST, where it used to only
-      // disarm the timer (review round 5 noted the change). That response is the
-      // only writer of `#tracking_id`, so in principle a tracking id could be lost
-      // — in practice it could not: WooCommerce serialises the form after this
-      // handler runs, so a response that had not already landed would have missed
-      // the submission anyway. Recorded because it IS a behaviour change.
+      // Disarms any in-flight order-intent request. That response is the
+      // only writer of `#tracking_id`; in practice none is lost, since
+      // WooCommerce serialises the form after this handler runs, so a
+      // response that hadn't already landed would have missed the
+      // submission anyway.
       Twoinc.getInstance().abandonOrderIntentCheck();
     });
 
     $body.on("checkout_error", function () {
-      // Abandon, then re-arm (review round 5). The buyer is still on the page and
-      // about to correct a field, but `checkout_error` does NOT fire
-      // `updated_checkout`, so nothing else would run another check — the tile sat
-      // blank, with no verdict and no spinner, for the rest of the page.
-      // getApproval() no-ops when the form is not ready, so this costs nothing on
-      // the errors that have nothing to do with this gateway.
-      // Re-arm ONLY if a check was actually interrupted (review round 7).
-      // Unconditionally, `getApproval()`'s own clear wiped a perfectly good verdict
-      // that the abandon had just been careful to leave alone, and could not repaint
-      // it for at least a second — or at all quickly for an approval, which is never
-      // cached. Every failed submit for an unrelated reason, a missing postcode say,
-      // flickered the box.
+      // Abandon, then re-arm. The buyer is still on the page and about to
+      // correct a field, but `checkout_error` does not fire
+      // `updated_checkout`, so nothing else would run another check — the
+      // tile would sit blank for the rest of the page. `getApproval()`
+      // no-ops when the form is not ready, so this costs nothing on errors
+      // unrelated to this gateway.
+      // Re-arm only if a check was actually interrupted: unconditionally,
+      // `getApproval()`'s own clear would wipe a perfectly good verdict
+      // that the abandon had just been careful to leave alone.
       if (Twoinc.getInstance().abandonOrderIntentCheck()) {
         Twoinc.getInstance().getApproval();
       }
@@ -5773,31 +5496,27 @@ class Twoinc {
       twoincDomHelper.loadStorageInputs();
       // loadStorageInputs() writes `#company_id`/`#billing_company` with bare
       // `.val()` assignments, so unlike the pass above it re-toggles nothing
-      // and captures nothing. For a GUEST that pass is the only one that ever
+      // and captures nothing. For a guest that pass is the only one that ever
       // supplies a company, so without this the restored pair carries no
       // pairing tag and a restored sole trader never reaches `sole_trader`
-      // mode. No-ops when there is nothing restored, and idempotent when the
-      // pass above already captured the same pair.
+      // mode.
       twoincDomHelper.restoreCapturedCompany();
     }
 
-    // Seed the country tracker HERE — after the two restore passes above, not
-    // next to the binding that reads it (TWO-24867 / TWO-25326).
+    // Seed the country tracker here — after the two restore passes above,
+    // not next to the binding that reads it (TWO-24867 / TWO-25326).
     //
     // `loadStorageInputs()` writes #billing_country with `selectElem.value =`
-    // and fires no `change`. Seeded before it, the tracker held the country
-    // the page was rendered with while the field held the restored one, and
-    // the first re-render afterwards read the difference as a real country
-    // change — destroying the company and address that same restore had just
-    // put back. The bootstrap's own call is `initialize(true)`, so that is the
-    // production path, not an edge case.
+    // and fires no `change`. Seeded before it, the tracker would hold the
+    // country the page was rendered with while the field held the restored
+    // one, and the first re-render afterwards would read the difference as
+    // a real country change — destroying the company and address that same
+    // restore had just put back.
     //
     // Seeding at all is what tells the two first-event cases apart: with no
-    // seed the FIRST country the page ever sees is adopted rather than acted
-    // on — right for the re-render WooCommerce fires at init (core's
-    // address-i18n.js triggers `country_to_state_changing` carrying the
-    // country the form already had), wrong for a buyer who changes country
-    // before any re-render happens.
+    // seed the first country the page ever sees is adopted rather than
+    // acted on — right for the re-render WooCommerce fires at init, wrong
+    // for a buyer who changes country before any re-render happens.
     //
     // Through `countryDidChange` rather than by assignment, so this file has
     // exactly one writer for the tracker.
@@ -5828,11 +5547,10 @@ class Twoinc {
    * @returns {boolean}
    */
   updateElements() {
-    // Clear the VERDICT, not the loading state (review round 5). This runs on
-    // every `updated_checkout`, and WooCommerce fires that for a shipping-method
-    // change or a coupon — neither of which has any bearing on a request already
-    // in flight. The blanket hide that used to be here blinked the spinner off
-    // mid-request and left the tile blank until the response landed.
+    // Clear the verdict, not the loading state. This runs on every
+    // `updated_checkout`, and WooCommerce fires that for a shipping-method
+    // change or a coupon — neither of which has any bearing on a request
+    // already in flight.
     twoincDomHelper.clearIntentVerdicts();
 
     // Check approval again
@@ -5865,13 +5583,14 @@ class Twoinc {
   }
 
   /**
-   * Retire whatever order-intent request is in flight (review round 5).
+   * Retire whatever order-intent request is in flight.
    *
-   * Bumping the counter is what makes the response a no-op; the abort is purely
-   * so the connection is not held open for an answer nobody will read. The order
-   * matters: the counter moves FIRST, so the `.fail` that jQuery synchronously
-   * runs for an abort already fails its own `stillCurrent()` check and cannot
-   * deselect the gateway or paint a decline.
+   * Bumping the counter is what makes the response a no-op; the abort is
+   * purely so the connection is not held open for an answer nobody will
+   * read. The order matters: the counter moves first, so the `.fail` that
+   * jQuery synchronously runs for an abort already fails its own
+   * `stillCurrent()` check and cannot deselect the gateway or paint a
+   * decline.
    *
    * @returns {void}
    */
@@ -5907,29 +5626,22 @@ class Twoinc {
    * changed.
    */
   abandonOrderIntentCheck() {
-    // Only touch the UI when there was actually something in flight (review
-    // round 2). `#place_order` fires on clicks that never submit — an HTML5
+    // Only touch the UI when there was actually something in flight.
+    // `#place_order` fires on clicks that never submit — an HTML5
     // constraint failure, WooCommerce's own client-side validation — and
-    // `checkout_error` fires for errors that have nothing to do with this
-    // gateway, such as a missing postcode. Resetting unconditionally wiped a
+    // `checkout_error` fires for errors unrelated to this gateway, such as
+    // a missing postcode. Resetting unconditionally would wipe a
     // perfectly good verdict in both cases, and neither fires
-    // `updated_checkout`, so nothing brought it back.
-    // `inFlightSeq` is in the list because of a hole round 2's gate had (found
-    // round 3): the interval is disarmed BEFORE the request goes out, so for the
-    // whole duration of the XHR every other flag here reads falsy. An abandon in
-    // that window therefore skipped the reset and left the loader on screen with
-    // its response orphaned below — the exact defect the gate was added to avoid,
-    // reintroduced through its own condition.
-    // One question, not two. Round 8 split this into `wasShowing` (an outstanding
-    // request or a pending paint) to gate the reset, and `wasRunning` to gate the
-    // caller's re-arm, on the theory that resetting for a merely ARMED check wipes an
-    // earlier verdict. It cannot: every route that arms a check calls
-    // `clearIntentVerdicts()` in the same breath — `getApproval()` at its head,
-    // `updateElements()` before it — so "armed" already implies "nothing of ours is on
-    // screen", and the reset is a no-op there rather than a hazard. The split was
-    // reverted for the reason round 7 deleted the paint give-up's hand-back: a
-    // distinction no test can exhibit is one more invariant to maintain and nothing
-    // else.
+    // `updated_checkout`, so nothing would bring it back.
+    // `inFlightSeq` is included because the interval is disarmed before
+    // the request goes out, so for the whole duration of the XHR every
+    // other flag here reads falsy — an abandon in that window would
+    // otherwise skip the reset and leave the loader on screen with its
+    // response orphaned.
+    // One question, not two: resetting for a merely armed check is safe
+    // because every route that arms a check calls `clearIntentVerdicts()`
+    // in the same breath, so "armed" already implies nothing of ours is
+    // on screen.
     const wasRunning =
       this.orderIntentCheck.interval !== null ||
       this.orderIntentCheck.renderInterval !== null ||
@@ -5948,8 +5660,8 @@ class Twoinc {
       twoincDomHelper.togglePaySubtitleDesc();
     }
 
-    // Returned so callers can tell "I stopped something" from "there was nothing to
-    // stop" (review round 7) — `checkout_error` re-arms only in the first case.
+    // Returned so callers can tell "I stopped something" from "there was
+    // nothing to stop" — `checkout_error` re-arms only in the first case.
     return wasRunning;
   }
 
@@ -5958,15 +5670,14 @@ class Twoinc {
    */
   getApproval() {
     if (!this.isReadyApprovalCheck()) {
-      // A form that has become incomplete cannot answer the question a request
-      // in flight is asking, and that request's answer describes a form the
-      // buyer no longer has (review round 5). Orphan it, and take the loading
-      // state down with it — otherwise the spinner runs until a response the
+      // A form that has become incomplete cannot answer the question a
+      // request in flight is asking. Orphan it, and take the loading state
+      // down with it — otherwise the spinner runs until a response the
       // checkout will refuse to use finally arrives.
-      // A pending PAINT counts as well as a request in flight (review round 5):
-      // once `stillCurrent()` has released `inFlightSeq` the response is banked and
-      // only the paint is left, and letting it land writes a verdict about a form
-      // the buyer has since emptied.
+      // A pending paint counts as well as a request in flight: once
+      // `stillCurrent()` has released `inFlightSeq` the response is banked
+      // and only the paint is left, and letting it land writes a verdict
+      // about a form the buyer has since emptied.
       if (
         this.orderIntentCheck.inFlightSeq !== null ||
         this.orderIntentCheck.renderInterval !== null
@@ -5976,27 +5687,25 @@ class Twoinc {
       return;
     }
 
-    // CLEAR the previous verdict here — and only clear it. The loading state
-    // goes up where the request is actually issued, in the interval body below.
+    // Clear the previous verdict here — and only clear it. The loading
+    // state goes up where the request is actually issued, in the interval
+    // body below.
     //
     // Clearing at this one choke point is the whole of TWO-25326's third
-    // requirement, and it has to be here rather than per-caller: four of the
-    // five routes in — setSoleTraderCompany(), onCompanyInputBlur(),
-    // onRepresentativeInputBlur() and onCountryChange() — did no clearing of
-    // their own at all, so the buyer changing company kept reading "<old
-    // company> is not available for this order" until the new RESULT arrived.
+    // requirement, and it has to be here rather than per-caller: several
+    // of the routes in did no clearing of their own, so the buyer changing
+    // company kept reading "<old company> is not available for this
+    // order" until the new result arrived.
     //
-    // Showing the LOADER here as well was tried and reverted (review round 5).
-    // It read better — no gap between the old verdict going and the spinner
-    // appearing — but it decoupled the loading state's lifetime from the
-    // request's, and four review rounds of stranded, blanked and duplicated
-    // spinners followed from that one change. Tied to the request, the loader
-    // is up exactly while a request is outstanding, which is a property that
-    // holds by construction instead of by patching every exit.
+    // Showing the loader here too was tried and reverted: it decoupled the
+    // loading state's lifetime from the request's, producing stranded,
+    // blanked and duplicated spinners. Tied to the request instead, the
+    // loader is up exactly while a request is outstanding, by
+    // construction rather than by patching every exit.
     //
-    // Above the interval guard on purpose: a call arriving while a check is
-    // already armed is a NEWER question, so the older verdict is stale from
-    // this moment either way.
+    // Above the interval guard on purpose: a call arriving while a check
+    // is already armed is a newer question, so the older verdict is stale
+    // from this moment either way.
     twoincDomHelper.clearIntentVerdicts();
 
     if (this.orderIntentCheck.interval) {
@@ -6009,27 +5718,23 @@ class Twoinc {
       let gross_amount = twoincDomHelper.getPrice("order-total");
       let tax_amount = twoincDomHelper.getPrice("tax-rate");
       if (!gross_amount) {
-        // Bounded, not forever (review round 1). No cart total, no request — but
-        // this used to retry indefinitely, and there are carts where it can never
-        // succeed: a 100%-discounted order's total of 0 is falsy every tick, and a
-        // theme whose totals markup `getPrice()` cannot read never yields one at
-        // all. An unbounded 1s interval is a leak for the life of the page, and it
-        // holds `pendingCheck` with it, which keeps the 3s poller re-entering.
+        // Bounded, not forever: there are carts where a total never
+        // succeeds (a 100%-discounted order's total of 0 is falsy every
+        // tick; a theme whose totals markup `getPrice()` can't read never
+        // yields one). An unbounded interval would leak for the life of
+        // the page and keep `pendingCheck` re-entering the 3s poller.
         //
-        // Ten ticks because the only legitimate reason to wait is a totals
-        // block WooCommerce is still re-rendering, which is sub-second; ten
-        // seconds is generous for that and short enough that the buyer is still
-        // looking. Giving up costs nothing — the next blur or `updated_checkout`
-        // arms a fresh check.
+        // Ten ticks: the only legitimate reason to wait is a totals block
+        // WooCommerce is still re-rendering, which is sub-second. Giving
+        // up costs nothing — the next blur or `updated_checkout` arms a
+        // fresh check.
         if (++Twoinc.getInstance().orderIntentCheck.priceWaitTicks < 10) return;
-        // Disarm QUIETLY (review round 5). No loading state is up during the price
-        // wait — it goes up with the request, which is downstream of reading the
-        // total — so there is nothing of this check's to take off screen, and
-        // abandonOrderIntentCheck()'s blanket reset instead wiped whatever else was
-        // there. Reachable with a verdict on screen: an earlier request lands and
-        // paints while this interval is still counting, and the give-up erased it
-        // with nothing left to re-arm. Deliberately does NOT touch an outstanding
-        // request either — that is a live question this wait knows nothing about.
+        // Disarm quietly: no loading state is up during the price wait —
+        // it goes up with the request — so there is nothing of this
+        // check's to take off screen, and abandonOrderIntentCheck()'s
+        // blanket reset would instead wipe whatever else was there.
+        // Deliberately does not touch an outstanding request either —
+        // that is a live question this wait knows nothing about.
         clearInterval(Twoinc.getInstance().orderIntentCheck.interval);
         Twoinc.getInstance().orderIntentCheck.interval = null;
         Twoinc.getInstance().orderIntentCheck.pendingCheck = false;
@@ -6078,21 +5783,19 @@ class Twoinc {
 
       let hashedBody = twoincUtilHelper.getUnsecuredHash(jsonBody);
       if (Twoinc.getInstance().orderIntentLog[hashedBody]) {
-        // This body has already been answered — render the cached verdict and
-        // DISARM (review round 1). This branch used to return with the interval
-        // still running, which had two consequences: the cached verdict was
-        // re-rendered every second forever, and `pendingCheck` — set by the guard
-        // in getApproval() whenever an interval is armed — could never be cleared,
-        // so the 3s poller in initialize() re-entered getApproval() indefinitely.
-        // Disarming is also just correct: the answer is in hand.
+        // This body has already been answered — render the cached verdict
+        // and disarm: leaving the interval running would re-render the
+        // cached verdict every second forever, and leave `pendingCheck`
+        // permanently set, keeping the 3s poller re-entering
+        // `getApproval()` indefinitely.
         clearInterval(Twoinc.getInstance().orderIntentCheck.interval);
         Twoinc.getInstance().orderIntentCheck.interval = null;
         Twoinc.getInstance().orderIntentCheck.pendingCheck = false;
-        // And retire anything in flight (review round 5). A request issued for an
-        // EARLIER body can still be outstanding here, and its answer would land
-        // afterwards and paint over the verdict this branch is about to show —
-        // the cached one being, by construction, the answer to the body the form
-        // holds right now.
+        // And retire anything in flight: a request issued for an earlier
+        // body can still be outstanding here, and its answer would land
+        // afterwards and paint over the verdict this branch is about to
+        // show — the cached one being, by construction, the answer to the
+        // body the form holds right now.
         Twoinc.getInstance().supersedeInFlightOrderIntent();
         twoincDomHelper.togglePaySubtitleDesc(
           ...Twoinc.getInstance().orderIntentLog[hashedBody].split("|")
@@ -6100,12 +5803,12 @@ class Twoinc {
         return;
       }
       if (!Twoinc.getInstance().isReadyApprovalCheck()) {
-        // Nothing of this check is on screen yet — the loading state goes up with
-        // the request, below — so this is a disarm, and abandonOrderIntentCheck()'s
-        // reset is a no-op via its own `wasRunning` gate unless an EARLIER check
-        // left a request or a paint outstanding, which is precisely when the reset
-        // is wanted. Reachable whenever the buyer empties a required field in the
-        // second between arming and this tick.
+        // Nothing of this check is on screen yet — the loading state goes
+        // up with the request, below — so this is a disarm, and
+        // abandonOrderIntentCheck()'s reset is a no-op unless an earlier
+        // check left a request or a paint outstanding. Reachable whenever
+        // the buyer empties a required field in the second between arming
+        // and this tick.
         Twoinc.getInstance().abandonOrderIntentCheck();
         return;
       }
@@ -6119,23 +5822,21 @@ class Twoinc {
       // a cart total sits between the two.
       twoincDomHelper.togglePaySubtitleDesc("checking-intent");
 
-      // Retire the previous request before issuing this one (review round 5).
-      // The interval is disarmed before a request goes out, so nothing stopped a
-      // second check arming and POSTing while the first was still outstanding —
-      // at one per second against a 30s timeout, up to thirty in flight, all but
-      // the last already superseded. This also claims this request's place in
-      // the queue, so both handlers can tell whether they are still the newest
-      // question asked (see `seq`/`inFlightSeq`).
+      // Retire the previous request before issuing this one: the interval
+      // is disarmed before a request goes out, so nothing stops a second
+      // check arming and POSTing while the first was still outstanding —
+      // at one per second against a 30s timeout, up to thirty in flight,
+      // all but the last already superseded. This also claims this
+      // request's place in the queue, so both handlers can tell whether
+      // they are still the newest question asked (see `seq`/`inFlightSeq`).
       Twoinc.getInstance().supersedeInFlightOrderIntent();
       const seq = Twoinc.getInstance().orderIntentCheck.seq;
       Twoinc.getInstance().orderIntentCheck.inFlightSeq = seq;
-      // The company this request is ABOUT, captured now rather than re-read when its
-      // verdict is painted (review round 5) — and read from `customerCompany`, the
-      // same record the request BODY above is built from (review round 8). It used to
-      // come off `#billing_company`/`#company_id`, which can diverge from the record:
-      // `clearCompanyIfCountryStale()` exists because of that divergence and
-      // documents it as reachable (a number typed into `#company_id` with no blur).
-      // Divergent, the sentence named a company the API was never asked about.
+      // The company this request is about, captured now rather than
+      // re-read when its verdict is painted, and read from
+      // `customerCompany` — the same record the request body above is
+      // built from, rather than `#billing_company`/`#company_id`, which
+      // can diverge from it (see `clearCompanyIfCountryStale()`).
       const companyLabel = twoincDomHelper.readCompanyLabelFromRecord();
 
       /**
@@ -6163,12 +5864,12 @@ class Twoinc {
         dataType: "json",
         method: "POST",
         xhrFields: { withCredentials: true },
-        // Bounded, like the company-search transport already is (review round
-        // 3). A request that never settles calls neither handler, and both the
-        // loader coming down and the verdict appearing hang off those handlers —
-        // so a hung connection meant "Checking availability" for the rest of the
-        // page. A timeout arrives as a `.fail` with status 0, which paints the
-        // generic decline and is deliberately not cached.
+        // Bounded, like the company-search transport already is. A request
+        // that never settles calls neither handler, and both the loader
+        // coming down and the verdict appearing hang off those handlers —
+        // so a hung connection would mean "Checking availability" for the
+        // rest of the page. A timeout arrives as a `.fail` with status 0,
+        // which paints the generic decline and is deliberately not cached.
         timeout: 30000,
         data: jsonBody
       });
@@ -6177,15 +5878,13 @@ class Twoinc {
       approvalResponse.done(function (response) {
         if (!stillCurrent()) return;
 
-        // A 200 whose JSON body parses to `null` — or to anything that is not an
-        // object — makes every read below a TypeError (review round 8). It throws
-        // AFTER `stillCurrent()` has released `inFlightSeq`/`inFlightXhr` and BEFORE
-        // the paint is armed, so the loader is stranded for the rest of the page with
-        // nothing left able to reset it: `abandonOrderIntentCheck()`'s gate reads
-        // false on every flag by then. Same class as the `responseJSON` and
-        // `Array.append` throws round 1 fixed, but on the SUCCESS path, which those
-        // guards never covered. Normalising to `{}` sends it down the not-approved
-        // branch, which is the right reading of an unusable body.
+        // A 200 whose JSON body parses to `null` — or to anything that is
+        // not an object — makes every read below a TypeError. It throws
+        // after `stillCurrent()` has released `inFlightSeq`/`inFlightXhr`
+        // and before the paint is armed, so the loader would be stranded
+        // for the rest of the page with nothing left able to reset it.
+        // Normalising to `{}` sends it down the not-approved branch,
+        // which is the right reading of an unusable body.
         const body = response && typeof response === "object" ? response : {};
 
         // Store the approved state
@@ -6200,18 +5899,17 @@ class Twoinc {
           document.querySelector("#tracking_id").value = body.tracking_id;
         }
 
-        // Display messages and update order intent logs. The hash is passed
-        // rather than read back off a shared slot (review round 2): because the
-        // interval is disarmed BEFORE the request goes out, a second check could
-        // be armed and overwrite that slot while the first was still in flight —
-        // so the first response was cached under the second request's body. With
-        // the cached branch now disarming, that mis-filed entry would be served
-        // forever with no request ever issued again.
+        // Display messages and update order intent logs. The hash is
+        // passed rather than read back off a shared slot: because the
+        // interval is disarmed before the request goes out, a second
+        // check could be armed and overwrite that slot while the first
+        // was still in flight, mis-filing the first response under the
+        // second request's body.
         //
-        // `false` is "this is not a failure" — read from the jQuery callback we
-        // are IN rather than sniffed off the payload (review round 3). jQuery
-        // hands `.done` the parsed response BODY, so a `status` field in that
-        // body was being read as an HTTP status.
+        // `false` is "this is not a failure" — read from the jQuery
+        // callback we are in rather than sniffed off the payload: jQuery
+        // hands `.done` the parsed response body, so a `status` field in
+        // that body would otherwise be read as an HTTP status.
         Twoinc.getInstance().processOrderIntentResponse(body, hashedBody, false, companyLabel);
       });
 
@@ -6241,11 +5939,10 @@ class Twoinc {
     } else {
       // Display error messages
       displayMsgId = "errored|.twoinc-err-payment-default";
-      // `isFailure &&` (review round 3): on the success path `response` is the
-      // parsed response BODY, so an API that returns a field called `status`
-      // would send a perfectly good 200 down the HTTP-error branch below. Which
-      // callback we were invoked from is the fact being tested, and only the
-      // caller knows it.
+      // `isFailure &&`: on the success path `response` is the parsed
+      // response body, so an API that returns a field called `status`
+      // would otherwise send a perfectly good 200 down the HTTP-error
+      // branch below.
       if (isFailure && response.status >= 400) {
         // @TODO: use the error code returned by the API
         //
@@ -6276,20 +5973,21 @@ class Twoinc {
         }
       }
 
-      // Cache the verdict against the request body that produced it — but only
-      // when it IS a verdict (review round 2, narrowed round 3).
+      // Cache the verdict against the request body that produced it — but
+      // only when it is a verdict.
       //
-      // The cached branch disarms the timer and issues no request, so a cached
-      // answer is permanent for the rest of the page. That is right for an
-      // answer and catastrophic for a hiccup: one dropped connection would
-      // decline this cart and company until the buyer reloaded.
+      // The cached branch disarms the timer and issues no request, so a
+      // cached answer is permanent for the rest of the page. That is right
+      // for an answer and catastrophic for a hiccup: one dropped
+      // connection would decline this cart and company until the buyer
+      // reloaded.
       //
-      // A declining 200 is an answer. So is most of the 4xx range — the backend
-      // refusing this order with a reason. Not cacheable: anything on the
-      // transport (status 0, our own timeout), any 5xx, and the four 4xx codes
-      // that mean "ask again" rather than "no" — 401 and 403 (a session or key
-      // that can be refreshed), 408 (a timeout the server noticed first) and 429
-      // (rate limiting, where re-asking later is the documented remedy).
+      // A declining 200 is an answer. So is most of the 4xx range — the
+      // backend refusing this order with a reason. Not cacheable: anything
+      // on the transport (status 0, our own timeout), any 5xx, and the
+      // four 4xx codes that mean "ask again" rather than "no" — 401 and
+      // 403 (a session or key that can be refreshed), 408 (a timeout the
+      // server noticed first) and 429 (rate limiting).
       const RETRYABLE = [401, 403, 408, 429];
       const cacheable =
         !isFailure ||
@@ -6303,21 +6001,18 @@ class Twoinc {
     // `updated_checkout` rebuilds the payment box and would discard anything
     // written into it.
     //
-    // Bounded, and cancellable (review round 2). This is the ONLY code that
-    // takes the loading state down, so an overlay that never clears used to mean
-    // "Checking availability" for the rest of the page — the same defect the
-    // cart-total wait was bounded for. And the timer used to be a local, so
-    // abandonOrderIntentCheck() could not reach it: a Place Order click reset the
-    // tile and an orphan copy of this then painted a verdict back onto a
-    // checkout that was already mid-submit, with the gateway radio already
-    // deselected.
+    // Bounded, and cancellable. This is the only code that takes the
+    // loading state down, so an overlay that never clears would mean
+    // "Checking availability" for the rest of the page. The timer is kept
+    // on the instance rather than a local so abandonOrderIntentCheck() can
+    // reach it: a Place Order click resets the tile, and an unreachable
+    // copy would paint a verdict back onto a checkout already mid-submit.
     let renderWaitTicks = 0;
-    // The paint is tied to the check that produced it (review round 5). Neither
-    // the issue path nor the cached branch clears `renderInterval`, so a paint
-    // still pending from an earlier response would fire afterwards and put a stale
-    // verdict over the loader — or over the verdict — of the check that superseded
-    // it. Reachable with an `updated_checkout` arriving in the second between a
-    // response and its paint, which is routine.
+    // The paint is tied to the check that produced it. Neither the issue
+    // path nor the cached branch clears `renderInterval`, so a paint
+    // still pending from an earlier response would fire afterwards and
+    // put a stale verdict over the loader — or over the verdict — of the
+    // check that superseded it.
     const paintSeq = this.orderIntentCheck.seq;
     clearInterval(this.orderIntentCheck.renderInterval);
     this.orderIntentCheck.renderInterval = setInterval(() => {
@@ -6337,31 +6032,21 @@ class Twoinc {
         return;
       }
       if (++renderWaitTicks >= 10) {
-        // Give up on THIS paint only, rather than calling
-        // abandonOrderIntentCheck() (review round 3). That helper also bumps the
-        // supersession counter and clears `pendingCheck`, neither of which has
-        // anything to do with an overlay refusing to clear — and bumping the
-        // counter here would silently orphan a newer check that had already been
-        // armed while this paint was waiting.
+        // Give up on this paint only, rather than calling
+        // abandonOrderIntentCheck(): that helper also bumps the
+        // supersession counter and clears `pendingCheck`, neither of
+        // which has anything to do with an overlay refusing to clear —
+        // bumping the counter here would silently orphan a newer check
+        // already armed while this paint was waiting.
         clearInterval(this.orderIntentCheck.renderInterval);
         this.orderIntentCheck.renderInterval = null;
 
-        // Reset, unconditionally. Rounds 3-7 went round this branch three times —
-        // reset, then hand the tile back to anything still running, then hand it
-        // back only for an outstanding request — and the last pass showed the
-        // hand-back is UNREACHABLE, so the simplest form is also the correct one.
-        //
-        // Why unreachable: getting here at all means `paintSeq === seq`, or the
-        // guard above would have returned. A request is outstanding only if it was
-        // issued, issuing bumps `seq`, and this paint's `paintSeq` was captured
-        // before that — so "outstanding request" implies `paintSeq !== seq` and we
-        // never arrive. `inFlightSeq` is therefore always null at this line.
-        //
-        // The behaviour the hand-back was reaching for is real, and the `paintSeq`
-        // guard is what delivers it: when a newer check has superseded this paint,
-        // the guard retires the paint and touches the tile not at all, leaving the
-        // newer check's own loading state exactly where it is. This branch only ever
-        // runs when nothing else is in play, and then a neutral tile is right.
+        // Reset unconditionally: getting here means `paintSeq === seq`
+        // (the guard above would have returned otherwise), and issuing a
+        // request bumps `seq` after this paint's `paintSeq` was captured
+        // — so an outstanding request implies `paintSeq !== seq`, and
+        // `inFlightSeq` is always null at this line. A neutral tile is
+        // therefore always the right end state here.
         twoincDomHelper.togglePaySubtitleDesc();
       }
     }, 1000);
@@ -6607,48 +6292,36 @@ class Twoinc {
    * Handle the woocommerce updated checkout event
    */
   onUpdatedCheckout() {
-    // RECORD the billing country, and nothing else (TWO-24867). A re-render
-    // can move the field with no `change` event — a `checkout_error`
-    // re-render, a multi-step theme, a session address restored server-side —
-    // and without this the tracker would hold the pre-re-render country for
-    // the rest of the page, so a later genuine switch BACK to that value
-    // would read as no change and be swallowed.
+    // Record the billing country, and nothing else (TWO-24867). A
+    // re-render can move the field with no `change` event, and without
+    // this the tracker would hold the pre-re-render country for the rest
+    // of the page, so a later genuine switch back to that value would
+    // read as no change and be swallowed.
     //
-    // Deliberately NOT `syncBillingCountry()`. These re-renders restore the
-    // country and the company together, so clearing the capture here would
-    // destroy what the same re-render just put back — the TWO-25326 failure
-    // on a new trigger. Throwing away a captured company needs the buyer's
-    // gesture, and the `change` event is the only signal of one there is.
+    // Deliberately not `syncBillingCountry()`: these re-renders restore
+    // the country and the company together, so clearing the capture here
+    // would destroy what the same re-render just put back. Throwing away
+    // a captured company needs the buyer's gesture, and the `change`
+    // event is the only signal of one there is.
     //
-    // Record-only is still not the whole answer, though: a country that moved
-    // to something the captured company does not belong to left that company
-    // captured and approved, and the mismatch surfaced as an opaque
+    // Record-only is still not the whole answer: a country that moved to
+    // something the captured company does not belong to leaves that
+    // company captured and approved, surfacing as an opaque
     // order-creation failure. `clearCompanyIfCountryStale` below is the
-    // discriminator for that — it fires on the countries DISAGREEING, not on
-    // the country having moved, so it stays silent on the restore-together
+    // discriminator — it fires on the countries disagreeing, not on the
+    // country having moved, so it stays silent on the restore-together
     // case above (TWO-25333).
     const movedCountry = twoincSelectWooHelper.currentCountry();
     if (twoincSelectWooHelper.countryDidChange(movedCountry)) {
-      // Invalidating in-flight work IS safe here, though, and record-only
-      // would otherwise leave a hole: on this path nothing bumps either
-      // counter, so a company-search response or a registry address for the
-      // OUTGOING country could still land — and the address guard's own
-      // country comparison does not cover it either, since an empty reading
-      // on either side (the field mid-replacement, which is exactly what this
-      // path is about) waves the response through by design.
-      //
-      // Purely destructive-to-pending, never to captured state: it discards
-      // answers to questions asked under a country that is no longer
-      // selected, which is not something the buyer can lose.
+      // Invalidating in-flight work is safe here: this discards answers
+      // to questions asked under a country that is no longer selected,
+      // never captured state, so it is not something the buyer can lose.
       twoincSelectWooHelper.companySearchSeq += 1;
       Twoinc.getInstance().addressLookupSeq += 1;
 
-      // BEFORE updateElements() below, which is what re-runs getApproval().
-      // getApproval() does not fire immediately — it arms a 1s interval — so
-      // the ordering is not what stops the stale pair being posted, and no
-      // test pins it as though it were. It is here because clearing before the
-      // approval pass is the only order in which `updateElements` sees the
-      // state that the rest of this event's work should be derived from.
+      // Before updateElements() below: clearing before the approval pass
+      // is the order in which `updateElements` sees the state the rest of
+      // this event's work should be derived from.
       Twoinc.getInstance().clearCompanyIfCountryStale(movedCountry);
     }
 
@@ -6665,17 +6338,13 @@ class Twoinc {
     twoincTermChips.refresh();
     twoincSoleTrader.refresh();
 
-    // TWO-25326 §7.1, hardened round 2026-08-03: called directly here, not
-    // only via `toggleBusinessFields()`. `updated_checkout` (this handler)
-    // fires on every WooCommerce checkout AJAX refresh — a shipping-method
-    // change, a coupon apply, a quantity change — not only the
-    // payment-method/gestured-country switches that call
-    // `toggleBusinessFields()`. The server just re-rendered a fresh, empty
-    // `.twoinc-company-search-tile-slot` as part of that same refresh (see
-    // `detachCompanySearchTileWrapperToSafety`, paired on `update_checkout`,
-    // for why the wrapper survived the refresh to be moved back in here at
-    // all), and every one of those triggers needs it re-populated, not just
-    // the two `toggleBusinessFields()` already covered.
+    // TWO-25326 §7.1: called directly here, not only via
+    // `toggleBusinessFields()`. `updated_checkout` fires on every
+    // WooCommerce checkout AJAX refresh (shipping-method change, coupon
+    // apply, quantity change), not only the payment-method/country
+    // switches that call `toggleBusinessFields()`, and the server
+    // re-renders a fresh, empty `.twoinc-company-search-tile-slot` on
+    // every one of those refreshes.
     twoincSelectWooHelper.syncCompanySearchTileLocation();
 
     // WooCommerce re-renders the shipping fields as part of this same refresh
@@ -6699,41 +6368,28 @@ class Twoinc {
 
     if (inputName === "company_id") {
       const typed = $input.val();
-      // Only when the blur actually MOVED the number (TWO-25333 — see the
-      // picker's select handler for why the number and the country have to be
-      // written together). This is a BLUR, not a change: tabbing through an
-      // untouched `#company_id` fires it too, and re-pinning there would
-      // launder a stale pair into a consistent-looking one. The number would
-      // still be the previous country's company while `country_prefix` was
-      // rewritten to the country the form has since moved to, and
-      // `clearCompanyIfCountryStale` could never fire on it again. Pinning only
-      // a number the buyer actually entered keeps the witness tied to a
-      // capture rather than to a keystroke that passed through.
-      // Normalised on both sides, and requiring a value: `organization_number`
-      // is seeded null by the constructor and written from parsed JSON by the
-      // sole-trader prefill, so a raw `!==` reads the number 123456789 as
-      // different from the string "123456789" and re-pins on a blur that moved
-      // nothing — reopening the laundering this guard exists to close, through
-      // a type mismatch. And a blur on an EMPTY untouched field would otherwise
-      // count as movement ("" !== null), pinning a country onto a capture that
-      // does not exist; inert today, but it makes the witness look
-      // authoritative to the next reader, which is how this class of bug got
-      // here.
+      // Only when the blur actually moved the number (TWO-25333 — see the
+      // picker's select handler for why the number and the country have
+      // to be written together). This is a blur, not a change: tabbing
+      // through an untouched `#company_id` fires it too, and re-pinning
+      // there would launder a stale pair into a consistent-looking one —
+      // the number would still be the previous country's company while
+      // `country_prefix` got rewritten to the new one, and
+      // `clearCompanyIfCountryStale` could never fire on it again.
+      // Normalised on both sides, requiring a value: `organization_number`
+      // is seeded null and written from parsed JSON by the sole-trader
+      // prefill, so a raw `!==` would read 123456789 as different from
+      // "123456789" and re-pin on a blur that moved nothing, and a blur
+      // on an empty untouched field would count as movement ("" !== null).
       const previousNumber = twoincUtilHelper.blankToEmpty(
         Twoinc.getInstance().customerCompany.organization_number
       );
       const numberMoved = twoincUtilHelper.blankToEmpty(typed) !== previousNumber;
-      // Stored RAW, deliberately. Normalising on the way in was written here
-      // first, to remove the asymmetry between this one writer and the readers
-      // that all normalise — and then reverted, because it would have changed
-      // the organisation number this plugin POSTS on the order intent
-      // (`customerCompany` goes into `buyer.company` verbatim in getApproval),
-      // which is a behaviour change nothing in this ticket asked for. No test in
-      // this suite distinguishes the two, and that is a consequence of the
-      // choice rather than a justification for it — a test trivially could,
-      // by asserting the stored value keeps its padding. The record may hold an
-      // unnormalised value; that is precisely why every comparison against it
-      // goes through `blankToEmpty` rather than trusting its shape.
+      // Stored raw, deliberately: normalising on the way in would change
+      // the organisation number this plugin POSTs on the order intent
+      // (`customerCompany` goes into `buyer.company` verbatim in
+      // getApproval). Every comparison against it goes through
+      // `blankToEmpty` rather than trusting its shape.
       Twoinc.getInstance().customerCompany.organization_number = typed;
       if (numberMoved && twoincUtilHelper.blankToEmpty(typed)) {
         Twoinc.getInstance().customerCompany.country_prefix =
@@ -6776,40 +6432,29 @@ class Twoinc {
   }
 
   /**
-   * Bring everything that depends on the billing country back into step with
-   * the field (TWO-24867). Reached only from the `change` handler on
-   * #billing_country — that event is the closest thing this checkout has to a
-   * buyer gesture on the country.
+   * Bring everything that depends on the billing country back into step
+   * with the field (TWO-24867). Reached only from the `change` handler on
+   * #billing_country — the closest thing this checkout has to a buyer
+   * gesture on the country.
    *
-   * Everything destructive lives behind that gesture on purpose. WooCommerce
-   * can also move the country with no `change` at all — a `checkout_error`
-   * re-render, a multi-step theme, a session address restored server-side —
-   * and it is tempting to run this from `updated_checkout` so the tracker
-   * cannot drift. It must NOT: those re-renders restore the country and the
-   * company TOGETHER, so clearing on them destroys data the same re-render
-   * just put back, which is the TWO-25326 failure again on a new trigger.
-   * `onUpdatedCheckout` therefore only RECORDS the country (see there); the
-   * tracker still cannot drift, and nothing is thrown away without a gesture.
+   * Everything destructive lives behind that gesture on purpose.
+   * WooCommerce can also move the country with no `change` at all, and
+   * running this from `updated_checkout` instead would destroy a country
+   * and company restored together by the same re-render (TWO-25326).
+   * `onUpdatedCheckout` therefore only records the country instead.
    */
   syncBillingCountry() {
     const country = twoincSelectWooHelper.currentCountry();
     const changed = twoincSelectWooHelper.countryDidChange(country);
 
-    // Unconditional, and BEFORE the guard below. This pass is idempotent —
-    // it re-derives which company fields should be visible and required from
-    // the current state and writes nothing the buyer typed — and the events
-    // the guard now swallows are exactly the ones that just re-rendered the
-    // billing fields underneath it (core's address-i18n.js re-sorts them on
-    // `country_to_state_changing`). Gating it behind the guard along with
-    // everything else would have turned this fix into a field-visibility
-    // regression on every such re-render (TWO-24867).
+    // Unconditional, and before the guard below: this pass is idempotent
+    // and the events the guard swallows are exactly the ones that just
+    // re-rendered the billing fields underneath it (TWO-24867).
     twoincDomHelper.toggleBusinessFields();
 
-    // Everything past here is destructive, so only a REAL country change gets
-    // to run it (TWO-25326 — see countryDidChange for the events this
-    // swallows). The rest of what this handler used to do on those events is
-    // already re-run by `onUpdatedCheckout`: sole-trader availability and the
-    // approval check both go through it.
+    // Everything past here is destructive, so only a real country change
+    // gets to run it (TWO-25326). The rest of what this handler used to
+    // do on those events is already re-run by `onUpdatedCheckout`.
     if (!changed) {
       return;
     }
@@ -6830,49 +6475,35 @@ class Twoinc {
     // enough — the guard has to sit on the handler.
     twoincSelectWooHelper.companySearchSeq += 1;
     self.addressLookupSeq += 1;
-    // The order-intent request is retired on this path too, but NOT from here
-    // (review round 5). An explicit `supersedeInFlightOrderIntent()` was added
-    // here first and no mutation could kill it: `clearSelectedCompany()` below
-    // resets `customerCompany` wholesale, so the `self.getApproval()` at the end
-    // of this function finds an incomplete form and retires the in-flight request
-    // through its own readiness guard. Keeping a second, unreachable copy of that
-    // would be a line no test can distinguish from its absence. The OUTCOME — a
-    // response for the outgoing country cannot paint — is asserted in
-    // tests/js/intent-loading-state.test.js.
-    // The company-search SPINNER, below — belt and braces, and DELIBERATELY not
-    // covered by a test: there is no reachable case that fails without it today,
-    // so a test asserting the spinner is gone afterwards would pass either way and
-    // be worse than none. The reasoning for keeping the line anyway: the transport hands
-    // the spinner off to whichever request is newest, so bumping the counter
-    // above orphans the one an in-flight search is showing (its `always()`
-    // now sees a stale sequence and returns before hiding it). What actually
-    // clears it is `clearSelectedCompany()` below re-attaching the widget and
-    // taking the dropdown — and the spinner node inside it — with it. That is
-    // an incidental consequence of an unrelated call, not a guarantee.
+    // The order-intent request is retired on this path too, but not from
+    // here: `clearSelectedCompany()` below resets `customerCompany`
+    // wholesale, so `self.getApproval()` at the end of this function finds
+    // an incomplete form and retires the in-flight request through its
+    // own readiness guard.
+    // The company-search spinner, below — belt and braces: bumping the
+    // counter above orphans the one an in-flight search is showing (its
+    // `always()` sees a stale sequence and returns before hiding it), and
+    // `clearSelectedCompany()` clearing it via widget re-attach is
+    // otherwise only an incidental consequence of an unrelated call.
     twoincSelectWooHelper.toggleCompanySearchSpinner(false);
 
-    // Skipped entirely while sole-trader mode owns the field (round-3
-    // review — Han): this rebuilds the search widget and wipes
-    // `#company_id`/`#billing_company` via `twoincCompanyCapture.write()`
-    // unconditionally — including a company already ADOPTED this
-    // sole-trader session, and including the dropdown a flight/popup wait
-    // is deliberately keeping alive (the whole point of round 1). Neither
-    // is what an ordinary company search/address lookup being invalidated
-    // by a country change means here, and `mode` itself was left stranded
-    // at `sole_trader` afterwards with nothing left in the fields to match
-    // it. `refresh()` below (sole-trader availability, re-evaluated for the
-    // new country) is what decides whether to revert — via `hide()`'s own
-    // `isBusy()` guard — once there is something to decide from.
+    // Skipped entirely while sole-trader mode owns the field: this
+    // rebuilds the search widget and wipes `#company_id`/`#billing_company`
+    // unconditionally, including a company already adopted this
+    // sole-trader session and the dropdown a flight/popup wait is
+    // deliberately keeping alive. `refresh()` below (sole-trader
+    // availability, re-evaluated for the new country) decides whether to
+    // revert instead, via `hide()`'s own `isBusy()` guard.
     if (twoincSoleTrader.mode !== "sole_trader") {
       twoincSelectWooHelper.clearSelectedCompany();
     }
 
-    // AFTER clearSelectedCompany, deliberately: that function resets
-    // `customerCompany` to {} wholesale, so setting the country prefix before
-    // it (as this used to) discarded it immediately and left getApproval()
-    // below — and getDueInDays(), which early-returns without one — running
-    // on an undefined country for the three seconds until the deferred
-    // re-read inside clearSelectedCompany put it back (TWO-24867).
+    // After clearSelectedCompany, deliberately: that function resets
+    // `customerCompany` to {} wholesale, so setting the country prefix
+    // before it would discard it immediately and leave getApproval() and
+    // getDueInDays() below running on an undefined country for the three
+    // seconds until the deferred re-read inside clearSelectedCompany puts
+    // it back (TWO-24867).
     self.customerCompany.country_prefix = country;
 
     // Sole trader availability is per-country; re-evaluate the toggle.
@@ -6882,88 +6513,52 @@ class Twoinc {
   }
 
   /**
-   * Drop a captured company that belongs to a country the checkout has since
-   * moved away from (TWO-25333).
+   * Drop a captured company that belongs to a country the checkout has
+   * since moved away from (TWO-25333).
    *
-   * The gap this closes. `onUpdatedCheckout` records a country that moved with
-   * no `change` event and deliberately does NOT clear the capture, because
-   * those re-renders restore the country and the company together and
-   * clearing would destroy what the re-render just put back (TWO-24867 /
-   * TWO-25326 — see there). But when the country really did move to something
-   * the captured company does not belong to, that company survived and
-   * nothing downstream caught it: `getApproval()` posts `customerCompany`
-   * carrying the OLD `country_prefix` next to the OLD organisation number, so
-   * the pair is internally consistent and the intent check approves it and
-   * the buyer sees a green payment method; the order payload then pairs that
-   * `company_id` with the ORDER's billing country with no consistency check
-   * between the two. The mismatch reached the Two API at order creation and
-   * came back as an opaque failure the buyer could not act on.
+   * The gap this closes: `onUpdatedCheckout` records a country that moved
+   * with no `change` event and deliberately does not clear the capture,
+   * since those re-renders restore the country and the company together
+   * (TWO-24867 / TWO-25326). But when the country really did move away
+   * from the captured company, that company survives and `getApproval()`
+   * posts an internally-consistent stale pair the intent check approves,
+   * while the order payload pairs that `company_id` with the order's
+   * actual billing country — a mismatch that reaches the Two API at order
+   * creation as an opaque failure. Discriminating instead of always/never
+   * clearing is what avoids reintroducing TWO-25326: in the
+   * restore-together case the recorded country and the captured
+   * company's own country agree by construction, so this stays silent
+   * exactly where clearing would be destructive.
    *
-   * Discriminating rather than choosing between "always clear" and "never
-   * clear" is what keeps this from being TWO-25326 again: in the
-   * restore-together case the recorded country and the captured company's own
-   * country agree by construction, because the same re-render supplied both,
-   * so this stays silent exactly where clearing would be destructive.
+   * Called only from `onUpdatedCheckout` — `syncBillingCountry` already
+   * clears unconditionally on a real country change, which is strictly
+   * stronger.
    *
-   * Called only from `onUpdatedCheckout`. The `change` path
-   * (`syncBillingCountry`) already clears unconditionally on a real country
-   * change, which is strictly stronger, so running this there as well would
-   * be dead code rather than extra safety.
+   * Not grounds to clear:
+   *   - No organisation number on `customerCompany` (a name with no id is
+   *     not a capture, TWO-25326 §6).
    *
-   * Three readings are NOT grounds to clear, and none of them is incidental:
+   *     Known residual gap: `customerCompany` is populated from the DOM
+   *     on a timer, so `#company_id` can hold a real capture while this
+   *     object still holds nulls (during `initialize()`'s deferred seed,
+   *     and for three seconds after `clearSelectedCompany`). A silent
+   *     country move inside one of those windows is missed, and the
+   *     deferred re-read then un-pins the witness via `getCompanyData()`,
+   *     which reads `#billing_country` live. Benign today because
+   *     `organization_number` is empty there and every downstream guard
+   *     refuses on that. Closing it properly means stopping DOM re-reads
+   *     from overwriting a pinned `country_prefix` — a change to
+   *     `getCompanyData()`'s contract, left for its own ticket.
+   *   - An unknown country on either side — same rule as the
+   *     address-lookup guard and `countryDidChange`: only two countries
+   *     that are both known and different are evidence of anything.
+   *   - The DOM already holding a different company from the one
+   *     recorded: then the record is stale, not the fields (a re-render
+   *     swapped in another saved country+company pair), and clearing
+   *     would destroy what the re-render just restored.
    *
-   *   - No organisation number on `customerCompany`. A company name with no
-   *     id is not a capture (TWO-25326 §6: the payment method is usable only
-   *     for a company captured WITH an id), and there is nothing about a bare
-   *     name that a country change invalidates.
-   *
-   *     KNOWN RESIDUAL GAP, not closed here. `customerCompany` is populated
-   *     from the DOM on a timer, so `#company_id` can hold a real capture
-   *     while this object still holds nulls — during `initialize()`'s deferred
-   *     seed, and for the three seconds after `clearSelectedCompany`. A silent
-   *     country move inside one of those windows is missed, and the deferred
-   *     re-read then pairs the old country's company with the new country via
-   *     `getCompanyData()`, which reads `#billing_country` live and so
-   *     UN-PINS the witness — leaving a self-consistent false pair nothing can
-   *     detect afterwards. The country is not the only half `getCompanyData()`
-   *     unpairs: it also sources the name from `getCompanyName()`, which in
-   *     company-search mode reads the `checkoutInputs` sessionStorage snapshot
-   *     rather than the DOM, so the name comes from a third moment again.
-   *     Benign in both windows as things stand, because `organization_number`
-   *     is empty there and every downstream guard refuses on that — but the
-   *     gap is two-axis, not one, and a later reader should not conclude the
-   *     name half is sound. Falling back to `#company_id` here would not help:
-   *     the DOM has no per-company country to compare against, which is why
-   *     the witness has to live in JS state at all. Closing it properly means
-   *     stopping the DOM re-reads from overwriting a pinned `country_prefix`,
-   *     which is a change to `getCompanyData()`'s contract and its several
-   *     other callers — deliberately left for its own ticket rather than
-   *     widened into this one.
-   *   - An unknown country on either side. `country_prefix` is null until the
-   *     first capture or DOM re-read, and an empty field reading means the
-   *     field was mid-replacement — the same rule the address-lookup guard
-   *     and `countryDidChange` already apply, for the same reason: only two
-   *     countries that are both KNOWN and DIFFERENT are evidence of anything.
-   *   - The DOM already holding a DIFFERENT company from the one recorded.
-   *     Then it is the record that is stale, not the fields: `customerCompany`
-   *     is refreshed from the DOM on a timer, so a re-render that swapped in
-   *     another saved address — country AND company together, a different pair
-   *     but a self-consistent one — reaches here with the previous capture
-   *     still in JS state. Clearing on that would destroy the company the
-   *     re-render had just restored, which is precisely the regression this
-   *     ticket must not reintroduce. Re-sync to the DOM instead.
-   *
-   * Compared case-insensitively because the two sides are written by
-   * different readers: `currentCountry()` upper-cases, `getCompanyData()`
-   * reads `#billing_country` raw (the inconsistency noted in the comment on
-   * `currentCountry`, still not swept up here). WooCommerce's country values
-   * are upper-case ISO codes today, so this normalisation is guarding the
-   * comparison against that known disagreement rather than against observed
-   * mixed-case data — a false positive here is a destructive clear.
-   *
-   * Returns nothing on purpose. It reported whether it had cleared, the only
-   * caller ignored it, and flipping the value broke no test — an unverified
-   * contract stated in a docblock is worse than none.
+   * Compared case-insensitively: `currentCountry()` upper-cases,
+   * `getCompanyData()` reads `#billing_country` raw.
    *
    * @param {string} country upper-cased ISO code the checkout has moved to
    * @returns {void}
@@ -6973,70 +6568,52 @@ class Twoinc {
     if (!company.organization_number) return;
 
     const capturedCountry = twoincUtilHelper.blankToEmpty(company.country_prefix).toUpperCase();
-    // `!country` is unreachable from the only caller today and no test covers
-    // it: `countryDidChange` already returns false on an empty reading, so this
-    // is never entered with one. Kept as the guard a second caller would need,
-    // and said out loud so the docblock's "an unknown country on either side"
-    // is not read as two tested readings when only the captured side is.
+    // `!country` is unreachable from the only caller today: `countryDidChange`
+    // already returns false on an empty reading. Kept as the guard a
+    // second caller would need.
     if (!country || !capturedCountry || capturedCountry === country) return;
 
-    // Every comparison below goes through `blankToEmpty`, which normalises
-    // null/undefined to "" and coerces to a trimmed string. Not defensive
-    // noise: `organization_number` is seeded null by the constructor and
-    // written from parsed JSON by the sole-trader prefill, so it is not
-    // guaranteed to be a string, while `.val()` always is. A raw `!==` between
-    // the number 123456789 and the string "123456789" is true, and every
-    // comparison here treats "different" as evidence — so an un-normalised
-    // compare turns a type mismatch into either a laundered stale pair or a
-    // destructive clear of a valid capture.
+    // Every comparison below goes through `blankToEmpty`: `organization_number`
+    // is seeded null and written from parsed JSON by the sole-trader
+    // prefill, so it is not guaranteed to be a string, while `.val()`
+    // always is — an un-normalised compare would turn a type mismatch
+    // into either a laundered stale pair or a destructive clear.
     const domNumber = twoincUtilHelper.blankToEmpty(jQuery("#company_id").val());
     const domName = twoincUtilHelper.blankToEmpty(jQuery("#billing_company").val());
     const recordedNumber = twoincUtilHelper.blankToEmpty(company.organization_number);
     const recordedName = twoincUtilHelper.blankToEmpty(company.company_name);
 
-    // The DOM holds a DIFFERENT company than the record: BOTH halves present
-    // and BOTH diverged. Then it is the record that is stale rather than the
-    // fields — a re-render swapped in another saved address, country and
-    // company together, a different pair but a self-consistent one — and
-    // clearing would destroy what that re-render just restored.
+    // The DOM holds a different company than the record: both halves
+    // present and both diverged. Then it is the record that is stale, not
+    // the fields — a re-render swapped in another saved address, country
+    // and company together — and clearing would destroy what that
+    // re-render just restored.
     //
-    // Both halves, and both non-empty, is the whole discriminator. Requiring
-    // only the number to diverge was fail-OPEN: a buyer typing into
-    // `#company_id` without blurring produces the same divergence, and this
-    // branch then pinned the new country onto a number no capture path had
-    // witnessed, next to the PREVIOUS company's name — a two-moment pair made
-    // self-consistent, which is the exact defect this function exists to catch.
+    // Requiring only the number to diverge would be fail-open: a buyer
+    // typing into `#company_id` without blurring produces the same
+    // divergence, and this branch would then pin the new country onto a
+    // number no capture path had witnessed, next to the previous
+    // company's name.
     //
-    // What the rule actually tests is "both mirrors changed", not "restore
-    // versus keystroke" — the two are not the same thing and the difference
-    // matters to whoever reads this next. A genuine restore of a DIFFERENT
-    // company that happens to carry the SAME name (group entities trading
-    // under one name) reads as one mirror moving and is cleared. Accepted:
-    // rare, fail-closed, and the buyer re-picks.
+    // This rule holds on WooCommerce's own re-render paths because
+    // `#company_id` is a registered billing field
+    // (`$fields['billing']['company_id']` in WC_Twoinc_Checkout), living
+    // in the same billing fragment as `#billing_company`, so every
+    // WC-driven re-render writes both from the same vintage. One mirror
+    // moving alone is therefore evidence of something other than a
+    // re-render.
     //
-    // The rule holds on WooCommerce's own re-render paths because `#company_id`
-    // is a registered billing field (`$fields['billing']['company_id']` in
-    // WC_Twoinc_Checkout), so it lives in the same billing fragment as
-    // `#billing_company` and every WC-driven re-render writes both from the
-    // same vintage. One mirror moving alone is therefore evidence of something
-    // other than a re-render.
+    // Anything else falls through to the clear, deliberately fail-closed:
+    // a diverged number with an empty `#billing_company` is not trusted,
+    // since taking the name from the record instead would pair company
+    // A's name with company B's number and leave `isReadyApprovalCheck()`
+    // refusing forever with no deferred re-read to recover it.
     //
-    // Anything else falls through to the clear, deliberately fail-CLOSED. In
-    // particular a diverged number with an EMPTY `#billing_company` is NOT
-    // trusted: taking the name from the record instead would pair company A's
-    // name with company B's number, and writing the empty name through would
-    // leave `isReadyApprovalCheck()` refusing forever — this branch arms no
-    // deferred re-read, and the next re-render would see a self-consistent
-    // pair and never fire again, so the payment method would be stuck unusable
-    // with no way back. A clear is recoverable; that is not.
-    //
-    // Read field by field rather than through `getCompanyData()`, which is what
-    // this did first and which was wrong on the half that matters: in
-    // company-search mode that takes the name from `getCompanyName()`, and that
-    // does not read the DOM at all — it reads the `checkoutInputs`
-    // sessionStorage snapshot, refreshed only by `saveCheckoutInputs()`'s own
-    // interval. So the name came from a different moment than the number and
-    // the country. `#billing_company` is the right source here: the field
+    // Read field by field rather than through `getCompanyData()`: in
+    // company-search mode that takes the name from `getCompanyName()`,
+    // which reads the `checkoutInputs` sessionStorage snapshot rather
+    // than the DOM, so the name would come from a different moment than
+    // the number and the country. `#billing_company` is the field
     // WooCommerce posts, the mirror a restore writes, and the one
     // `clearSelectedCompany` and `enterManualCompanyEntry` already treat as
     // authoritative.
@@ -7055,29 +6632,18 @@ class Twoinc {
     //     `#company_id` alone, and an un-normalised compare takes the re-sync
     //     branch and launders a GB-captured number into a self-consistent ES
     //     pair.
-    //   - Whitespace, on either side and in either direction. The record picks
-    //     it up because the manual blur handler stores what the field holds;
-    //     the DOM picks it up from a paste into `#company_id` or a trailing
-    //     space typed into `#billing_company` with no blur behind it.
+    //   - Whitespace, on either side. The record picks it up because the
+    //     manual blur handler stores what the field holds; the DOM picks
+    //     it up from a paste or a trailing space typed with no blur.
     //
-    // Not normalised, and equivalent by construction: `capturedCountry`. It is
-    // compared against a value `currentCountry()` produced, and WooCommerce's
-    // country values are unpadded upper-case ISO strings on both sides — the
-    // `.toUpperCase()` there is about the two READERS disagreeing, which is a
-    // real difference and is tested.
+    // `country_prefix: country` rather than a fresh `currentCountry()`
+    // read: written as the argument so the value this pairs the company
+    // with is provably the one the change was detected against.
     //
-    // `country_prefix: country` rather than a fresh `currentCountry()` read is
-    // also indistinguishable today — the caller took `country` from that same
-    // reader on this same tick. Written as the argument anyway, so the value
-    // this pairs the company with is provably the one the change was detected
-    // against rather than whatever the field says by the time this line runs.
-    //
-    // Also equivalent by construction, recorded so the next reader does not
-    // "fix" it into a difference: `company_name: domName` needs no fallback.
-    // The condition guarantees `domName` is non-empty, so
-    // `domName || recordedName` is dead — and worse than dead, because falling
-    // back to the record's name would pair company A's name with company B's
-    // number, the two-moment pair this whole function exists to prevent.
+    // `company_name: domName` needs no fallback: the condition guarantees
+    // `domName` is non-empty, and falling back to the record's name would
+    // pair company A's name with company B's number — the two-moment
+    // pair this whole function exists to prevent.
     if (domNumber && domName && domNumber !== recordedNumber && domName !== recordedName) {
       this.customerCompany = {
         company_name: domName,
@@ -7087,23 +6653,16 @@ class Twoinc {
       return;
     }
 
-    // No supersession bump here, deliberately. `clearSelectedCompany()` below
-    // empties the fields, so a company search or a registry address issued
-    // under the outgoing country must not land on top of them afterwards — but
-    // the only caller has already bumped both counters, unconditionally on the
-    // country having moved, before it reaches this. A defensive repeat was
-    // written here first and then removed: it changed nothing observable, so no
-    // test could hold it in place, and an untestable line that reads as the
-    // guarantee is worse than the guarantee living plainly at the one call
-    // site. A second caller would have to bump them too, and its own test for
-    // that is what would say so.
+    // No supersession bump here, deliberately: the only caller has
+    // already bumped both counters, unconditionally, on the country
+    // having moved before it reaches this.
     twoincSelectWooHelper.clearSelectedCompany();
 
-    // AFTER clearSelectedCompany, for the reason spelled out in
-    // syncBillingCountry: it resets `customerCompany` to {} wholesale, so an
-    // assignment made before it is dropped and leaves getApproval() and
-    // getDueInDays() with no country for the three seconds until its deferred
-    // re-read runs.
+    // After clearSelectedCompany, for the reason spelled out in
+    // syncBillingCountry: it resets `customerCompany` to {} wholesale, so
+    // an assignment made before it is dropped and leaves getApproval()
+    // and getDueInDays() with no country for the three seconds until its
+    // deferred re-read runs.
     this.customerCompany.country_prefix = country;
   }
 }
@@ -7112,19 +6671,14 @@ let instance = null;
 let isTwoincSelected = null;
 jQuery(function () {
   if (window.twoinc) {
-    // WooCommerce core's own radio-click handler for payment method
-    // selection (checkout.js payment_method_selected) calls
-    // e.stopPropagation() and only fires a bare `payment_method_selected`
-    // event on document.body — it never triggers `update_checkout`. This
-    // gateway's buyer surcharge fee (apply_cart_fee) is conditional on
-    // which payment method is currently chosen, so without an explicit
-    // recalculation trigger here the fee neither appears when switching
-    // TO this gateway nor disappears when switching AWAY from it, until
-    // something unrelated (e.g. a term-chip click) happens to fire
-    // update_checkout first. Bound once at page load; WC fires
-    // payment_method_selected only when the checked radio actually
-    // changes, so this does not cause extra recalculations on unrelated
-    // re-renders.
+    // WooCommerce core's own payment-method radio handler fires a bare
+    // `payment_method_selected` event on document.body, never
+    // `update_checkout`. This gateway's buyer surcharge fee
+    // (apply_cart_fee) is conditional on the chosen payment method, so
+    // without an explicit recalculation trigger here the fee would
+    // neither appear when switching to this gateway nor disappear when
+    // switching away, until something unrelated happened to fire
+    // update_checkout first.
     jQuery(document.body).on("payment_method_selected", function () {
       jQuery(document.body).trigger("update_checkout");
     });
@@ -7142,13 +6696,10 @@ jQuery(function () {
         // The gateway can be absent at page load yet appear later: the
         // server-side availability gate re-evaluates per order-review
         // refresh (basket total crossing the platform minimum, billing
-        // country change). The old one-shot check left company search
-        // unwired for the whole session. Re-check on every
-        // updated_checkout; and when company search is enabled for other
-        // methods — the same "Enable company search in address entry"
-        // checkbox, no separate setting any more (TWO-25326) — wire it
-        // immediately: that state exists precisely for checkouts where this
-        // gateway isn't offered.
+        // country change). Re-check on every updated_checkout; and when
+        // company search is enabled for other methods, wire it
+        // immediately — that state exists precisely for checkouts where
+        // this gateway isn't offered.
         if (
           // Admin's address-area preference, not the buyer-driven capture
           // mode — see the comment on the equivalent check in

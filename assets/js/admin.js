@@ -140,12 +140,12 @@ jQuery(function ($) {
       case "not_configured":
         return notices.not_configured || "Enter an API key above to enable this payment method.";
       case "request_failed":
-        // The AJAX request to THIS SITE's admin-ajax.php failed before Two
+        // The AJAX request to this site's admin-ajax.php failed before Two
         // was ever contacted (jQuery's error callback fires on any
         // transport-level failure — a WordPress-side 500, an expired
         // nonce, a proxy/WAF block — not specifically "Two is
-        // unreachable"). Reviewed round 1: the "unreachable" wording here
-        // would have wrongly pointed an admin at Two for a WP-side problem.
+        // unreachable"), so the "unreachable" wording would wrongly point
+        // an admin at Two for a WP-side problem.
         return notices.request_failed || "Could not complete verification — try again shortly.";
       default:
         return code
@@ -159,9 +159,7 @@ jQuery(function ($) {
 
   // A failed verification must not leave the previously fetched Merchant ID
   // on screen — that reads as "the integration is fine" when it isn't.
-  // Swap it for the categorized invalid-key notice instead (this call site
-  // is also the fix for the settings page silently keeping stale merchant
-  // info on a broken key).
+  // Swap it for the categorized invalid-key notice instead.
   function showMerchantInfoInvalid(status, code) {
     $("#twoinc-merchant-info").hide();
     $("#twoinc-signup-prompt").hide();

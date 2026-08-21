@@ -65,12 +65,6 @@ describe("company-search manual-entry affordance", () => {
     document.body.innerHTML = "";
   });
 
-  /**
-   * Attach the widget, open it, and wire the affordance the way
-   * enableCompanySearch does.
-   *
-   * @returns {Object} the jQuery-wrapped select
-   */
   function openWithAffordance() {
     // Bound BEFORE the open, the way enableCompanySearch does it: the button
     // is now placed by a delegated `select2:open` handler (TWO-25326 §2), so
@@ -87,39 +81,28 @@ describe("company-search manual-entry affordance", () => {
     return $select;
   }
 
-  /** @returns {Object} the dropdown's search input */
   function searchInput() {
     return $(helper.companySearchInputSelector);
   }
 
-  /**
-   * Type into the dropdown's search field and fire the event the affordance
-   * listens on. Deliberately NOT `.trigger("keyup")` or a debounce flush: the
-   * button is specified to appear on input, before any request goes out.
-   *
-   * @param {string} term what the buyer has typed
-   * @returns {void}
-   */
+  // Deliberately NOT `.trigger("keyup")` or a debounce flush: the button is
+  // specified to appear on input, before any request goes out.
   function type(term) {
     searchInput().val(term).trigger("input");
   }
 
-  /** @returns {Object} the results <ul> the picker renders into */
   function resultsList() {
     return $("#billing_company_display").data("select2").$results;
   }
 
-  /** @returns {Object} the manual-entry button, or an empty set */
   function btn() {
     return $("#" + helper.manualEntryRowId);
   }
 
-  /** @returns {Object} the mode-chips group (TWO-40 §0), or an empty set */
   function chipsWrapper() {
     return $("#" + helper.modeChipsWrapperId);
   }
 
-  /** Activate the button the way a buyer's click or Enter/Space does. */
   function activate() {
     btn().trigger("click");
   }
@@ -145,13 +128,7 @@ describe("company-search manual-entry affordance", () => {
   });
 
   describe("visibility: present whenever the dropdown is open (TWO-25326 §2)", () => {
-    /**
-     * Dispatch a real Tab keydown at the query field. Same `which: 9`
-     * reasoning as the copies in the Tab describes below.
-     *
-     * @param {Object} $el
-     * @returns {Object} the jQuery.Event dispatched
-     */
+    // Same `which: 9` reasoning as the copies in the Tab describes below.
     function tabAtSearch($el) {
       const e = jQuery.Event("keydown", { key: "Tab", which: 9 });
       $el.trigger(e);
