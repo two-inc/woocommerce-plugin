@@ -9,10 +9,10 @@
  *  1. `toggleBusinessFields()` makes the SEARCH control the visible
  *     company-name surface for sole-trader mode, and `getCompanyName()` reads
  *     that control's rendered container — but manual entry DESTROYS the
- *     control, and `applyPrefetch()`'s match branch adopts a sole trader with
- *     no guard in that direction. Adoption from manual entry therefore showed
- *     the buyer a bare unstyled `<select>` and read the captured name back
- *     empty, which stops an order intent firing at all.
+ *     control, and the Sole trader chip is not hidden there, so an adoption
+ *     can land with no picker attached. Adoption from manual entry therefore
+ *     showed the buyer a bare unstyled `<select>` and read the captured name
+ *     back empty, which stops an order intent firing at all.
  *
  *  2. The read-only number label and the "select a different sole trader" link
  *     both anchor themselves directly after the visible company-name field,
@@ -77,19 +77,21 @@ describe("capture modes composed, not taken one at a time (#486)", () => {
   describe("a sole trader adopted while the buyer sits in manual entry", () => {
     /**
      * The realistic sequence: the buyer says "my company isn't in the
-     * registry", starts typing, then corrects the email address above — which
-     * is never locked, so it re-fires the autofill prefetch — and Two knows
-     * that address as an enrolled sole trader.
+     * registry", starts typing, then clicks the Sole trader chip — which is
+     * not hidden during manual entry — and completes the hosted signup, whose
+     * ACCEPTED handler writes through `setCompany()`.
      *
      * @returns {void}
      */
     function adoptFromManualEntry() {
       ctx.helper.enterManualCompanyEntry();
       $("#billing_company").val("Whatever They Typed");
-      $("#billing_email").val(MATCHED_BUYER.email);
-      ctx.soleTrader.prefetched = { ready: true, matches: true, buyer: MATCHED_BUYER };
-
-      ctx.soleTrader.applyPrefetch();
+      ctx.soleTrader.setMode("sole_trader");
+      ctx.soleTrader.setCompany(
+        MATCHED_BUYER.organization_number,
+        MATCHED_BUYER.company_name,
+        MATCHED_BUYER
+      );
     }
 
     test("is rendered through a LIVE picker, not the bare <select> manual entry left behind", () => {
@@ -99,12 +101,40 @@ describe("capture modes composed, not taken one at a time (#486)", () => {
       // test proves nothing about re-attaching it.
       expect($("#billing_company_display").data("select2")).toBeFalsy();
 
-      $("#billing_email").val(MATCHED_BUYER.email);
-      ctx.soleTrader.prefetched = { ready: true, matches: true, buyer: MATCHED_BUYER };
-      ctx.soleTrader.applyPrefetch();
+      ctx.soleTrader.setMode("sole_trader");
+      ctx.soleTrader.setCompany(
+        MATCHED_BUYER.organization_number,
+        MATCHED_BUYER.company_name,
+        MATCHED_BUYER
+      );
 
       expect($("#billing_company_display").data("select2")).toBeTruthy();
       expect($("#select2-billing_company_display-container").text()).toBe("A Sole Trader");
+    });
+
+    /**
+     * The INVERSION of what #486 pinned here. That test asserted the buyer's
+     * hand-typed company name being overwritten, and the picker re-attached
+     * over it, by a background email-driven autofill match — the behaviour
+     * Doug's 2026-08-21 architectural ruling removes: a company may only ever
+     * be filled in by the buyer's own interaction with the company field, so
+     * nothing an email change starts may touch what they typed.
+     */
+    test("is NEVER adopted by an email change alone — a hand-typed name survives it", () => {
+      // Through the REAL checkout wiring — `initialize()` is where an
+      // email-driven handler would be bound.
+      $("form[name='checkout']").after('<div id="order_review"></div>');
+      ctx.Twoinc.getInstance().initialize(false);
+      ctx.helper.enterManualCompanyEntry();
+      $("#billing_company").val("Whatever They Typed");
+
+      $("#billing_email").val(MATCHED_BUYER.email).trigger("change");
+
+      expect($("#billing_company").val()).toBe("Whatever They Typed");
+      expect($("#company_id").val()).toBe("");
+      expect(ctx.soleTrader.mode).toBe("business");
+      expect(ctx.capture.mode).toBe("manual");
+      expect($("#billing_company_display").data("select2")).toBeFalsy();
     });
 
     test("puts the adopted name where toggleBusinessFields has just pointed the buyer", () => {

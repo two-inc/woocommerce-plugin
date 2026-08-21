@@ -858,11 +858,10 @@
  * control already shows (.twoinc-search-spinner) rather than a separate
  * overlay.
  *
- * Deliberately INDICATIVE only — no `pointer-events: none`, no dimming. The
- * prefetch runs in the background off an email change the buyer may not
- * associate with the chips at all, so blocking the chips would leave them
- * unable to pick "Registered company" for the duration of a request they
- * never asked for. Stacking a second signup popup is prevented by the
+ * Deliberately INDICATIVE only — no `pointer-events: none`, no dimming.
+ * Blocking the chips would leave the buyer unable to pick "Registered
+ * company" for the duration of a round trip they may not associate with the
+ * chips at all. Stacking a second signup popup is prevented by the
  * re-entrancy guard on the launch itself, which is where that belongs.
  */
 .twoinc-sole-trader-toggle--busy .twoinc-mode-chip {

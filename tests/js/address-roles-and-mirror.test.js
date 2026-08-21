@@ -115,11 +115,6 @@ describe("TWO-40 §1 — one address-role resolver", () => {
     expect(ctx.dom.isCountrySupported()).toBe(true);
   });
 
-  test("the sole-trader chip reads the invoice role's email, trimmed", () => {
-    $("#billing_email").val("  buyer@example.test ");
-    expect(ctx.soleTrader.enteredEmail()).toBe("buyer@example.test");
-  });
-
   test("the sole-trader country delegates to the one country resolver", () => {
     $("#billing_country").val("NO");
     expect(ctx.soleTrader.currentCountry()).toBe(ctx.helper.currentCountry());
