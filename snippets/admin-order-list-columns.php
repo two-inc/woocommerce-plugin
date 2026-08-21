@@ -38,6 +38,9 @@ function add_filtering_query($query)
 }
 
 
+/**
+ * @return array
+ */
 function add_sorting_query($query)
 {
     if (!is_admin()) {

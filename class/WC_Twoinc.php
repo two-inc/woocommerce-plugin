@@ -5037,6 +5037,9 @@ if (!class_exists('WC_Twoinc')) {
             return true;
         }
 
+        /**
+         * @return WP_Error|array
+         */
         public function make_request($endpoint, $payload = [], $method = 'POST', $params = array(), $api_key_override = null, $timeout = 30)
         {
             $params['client'] = 'wp';

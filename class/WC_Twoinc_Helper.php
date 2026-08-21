@@ -1089,6 +1089,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
             return $diff;
         }
 
+        /**
+         * @return array
+         */
         public static function get_product($line_item)
         {
 
