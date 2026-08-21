@@ -203,7 +203,9 @@ function buildSettingsPage(options) {
     "    </select></td></tr>",
     '    <tr><td><select id="' + FIELD_PREFIX + 'surcharge_tax_class"></select></td></tr>',
     '    <tr><td><select id="' + FIELD_PREFIX + 'surcharge_differential"></select></td></tr>',
-    '    <tr><td><input type="text" id="' + FIELD_PREFIX + 'surcharge_line_description" /></td></tr>',
+    '    <tr><td><input type="text" id="' +
+      FIELD_PREFIX +
+      'surcharge_line_description" /></td></tr>',
     '    <tr><td><select id="' + FIELD_PREFIX + 'surcharge_rounding_basis">',
     '      <option value="none" selected>none</option>',
     '      <option value="up">up</option>',

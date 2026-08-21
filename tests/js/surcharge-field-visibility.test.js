@@ -63,7 +63,12 @@ describe("surcharge option field visibility", () => {
   test.each([
     [undefined, [14], true, "empty custom value stays hidden"],
     ["30", [14, 30], true, "custom value matching a ticked preset row stays hidden"],
-    ["30", [14], true, "custom value matching an unticked-but-offered preset row is folded (hidden)"],
+    [
+      "30",
+      [14],
+      true,
+      "custom value matching an unticked-but-offered preset row is folded (hidden)"
+    ],
     ["45", [14, 30], false, "genuinely custom value (no matching offered row) is shown"]
   ])("custom days=%s, checked=%s -> hidden=%s (%s)", async (customDays, checked, hidden) => {
     const { $ } = await harness.loadAdmin({ customDays: customDays, checked: checked });
