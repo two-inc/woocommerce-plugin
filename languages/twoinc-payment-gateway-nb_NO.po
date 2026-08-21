@@ -677,6 +677,10 @@ msgid "Custom Payment Terms (days)"
 msgstr "Egendefinerte betalingsbetingelser (dager)"
 
 #: class/WC_Twoinc.php
+msgid "Custom Payment Terms (days) must be a whole number of days."
+msgstr "Egendefinerte betalingsbetingelser (dager) må være et helt antall dager."
+
+#: class/WC_Twoinc.php
 msgid "Default Payment Terms"
 msgstr "Standard betalingsbetingelser"
 

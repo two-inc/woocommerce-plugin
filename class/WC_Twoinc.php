@@ -1950,19 +1950,20 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * True when a custom day count is not already offered by one of the
-         * TICKED preset checkboxes above — the "Custom Payment Terms (days)"
+         * True when a custom day count doesn't already duplicate a term the
+         * backend offers (checked or not) — the "Custom Payment Terms (days)"
          * field is only shown/meaningful for a genuinely custom value, not a
-         * duplicate of a term the merchant already ticked (TWO-25498).
+         * value that already has a preset checkbox row (TWO-25498). Compared
+         * against the full backend-available set, not just the currently
+         * ticked subset, so a match on an unticked preset also folds in
+         * (see reconcile_custom_payment_term).
          */
         private function is_custom_payment_term_genuine(int $custom_days): bool
         {
             if ($custom_days <= 0) {
                 return false;
             }
-            $checked = $this->get_option('payment_terms_days');
-            $checked = is_array($checked) ? array_map('intval', $checked) : [];
-            return !in_array($custom_days, $checked, true);
+            return !in_array($custom_days, $this->get_merchant_available_terms(), true);
         }
 
         /**
@@ -2021,7 +2022,7 @@ if (!class_exists('WC_Twoinc')) {
                 return '';
             }
             if (!ctype_digit($value)) {
-                throw new Exception(__('Custom Payment Term (days) must be a whole number of days.', 'twoinc-payment-gateway'));
+                throw new Exception(__('Custom Payment Terms (days) must be a whole number of days.', 'twoinc-payment-gateway'));
             }
             return (string) (int) $value;
         }
@@ -5698,12 +5699,11 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * A custom day count that now duplicates a preset the checkboxes
-         * already offer (e.g. the merchant just ticked that preset, or it
-         * re-entered the backend's available list) is redundant — clear it
-         * and fold its day count into the checkbox selection so a later
-         * render doesn't show a "custom" field for a value that already
-         * has a preset (TWO-25498).
+         * A custom day count that now duplicates a backend-offered preset
+         * (ticked or not, e.g. it re-entered the backend's available list)
+         * is redundant — clear it and tick that preset's checkbox so a
+         * later render doesn't show a "custom" field for a value that
+         * already has a preset row (TWO-25498).
          */
         private function reconcile_custom_payment_term(): void
         {

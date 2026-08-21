@@ -85,6 +85,7 @@ final class BrandConfigSpec
             'testSurchargeRefusalIsVisibleAndNothingPartiallySaves',
             'testCustomPaymentTermFieldHiddenUnlessGenuinelyCustom',
             'testCustomPaymentTermReconciledOnSaveWhenItMatchesATickedPreset',
+            'testCustomPaymentTermTicksAnUnofferedButOfferedUntickedMatch',
             'testCustomPaymentTermNotReconciledWhenGenuinelyCustom',
             'testZeroCapOnAnUnrenderedRowDoesNotBlockEnabling',
             'testDisablingSurchargesIsNeverBlockedByAZeroCap',
@@ -3165,14 +3166,15 @@ final class BrandConfigSpec
     /**
      * TWO-25498. The "Custom Payment Terms (days)" row is hidden server-side
      * (no JS flash) unless the stored custom value is genuinely custom — not
-     * a duplicate of one of the TICKED preset checkboxes.
+     * a duplicate of a backend-offered preset row, ticked or not.
      */
     private static function testCustomPaymentTermFieldHiddenUnlessGenuinelyCustom(): void
     {
+        // self::gateway() offers [14, 30, 60, 90] from the backend.
         $gateway = self::gateway();
         $option_key = $gateway->get_option_key();
 
-        // Genuinely custom: 45 is not one of the ticked presets.
+        // Genuinely custom: 45 is not offered at all.
         $GLOBALS['__twoinc_test_options'][$option_key] = [
             'payment_terms_days' => ['30'],
             'payment_terms_custom_days' => '45',
@@ -3189,6 +3191,17 @@ final class BrandConfigSpec
         $gateway->init_settings();
         $html = $gateway->generate_two_custom_payment_days_html('payment_terms_custom_days', []);
         TinyAssert::true(strpos($html, 'style="display:none;"') !== false, 'a value duplicating a ticked preset must render hidden');
+
+        // Duplicate of an OFFERED-BUT-UNTICKED preset (60 is offered by the
+        // backend but not in payment_terms_days here): hidden too, since it
+        // already has a preset row to fold into.
+        $GLOBALS['__twoinc_test_options'][$option_key] = [
+            'payment_terms_days' => ['30'],
+            'payment_terms_custom_days' => '60',
+        ];
+        $gateway->init_settings();
+        $html = $gateway->generate_two_custom_payment_days_html('payment_terms_custom_days', []);
+        TinyAssert::true(strpos($html, 'style="display:none;"') !== false, 'a value duplicating an unticked but offered preset must render hidden');
 
         // Empty: hidden.
         $GLOBALS['__twoinc_test_options'][$option_key] = [
@@ -3228,6 +3241,36 @@ final class BrandConfigSpec
 
         TinyAssert::same('', $saved['payment_terms_custom_days'], 'a custom value duplicating a newly-ticked preset must be cleared');
         TinyAssert::same([14, 30], $saved['payment_terms_days'], 'the day count must survive in the checkbox selection');
+    }
+
+    /**
+     * TWO-25498. A custom value matching an offered-but-currently-UNticked
+     * preset (60 is offered by the backend but wasn't ticked this save)
+     * must actually tick that preset, not just clear the custom value — the
+     * bug this fix targets: the old genuine-check only ever compared
+     * against the ticked set, so this fold-in branch was unreachable.
+     */
+    private static function testCustomPaymentTermTicksAnUnofferedButOfferedUntickedMatch(): void
+    {
+        $gateway = self::gateway();
+        $gateway->init_form_fields();
+        $option_key = $gateway->get_option_key();
+        $GLOBALS['__twoinc_test_options'][$option_key] = [
+            'payment_terms_days' => ['14'],
+            'payment_terms_custom_days' => '60',
+        ];
+        // The merchant doesn't touch the checkboxes on this save — 60 stays
+        // unticked in the POST, but it matches an offered preset row.
+        $gateway->test_post_data = [
+            $gateway->get_field_key('surcharge_tax_treatment') => 'standard',
+            $gateway->get_field_key('payment_terms_days') => ['14'],
+            $gateway->get_field_key('payment_terms_custom_days') => '60',
+        ];
+        $gateway->process_admin_options();
+        $saved = get_option($option_key, []);
+
+        TinyAssert::same('', $saved['payment_terms_custom_days'], 'a custom value matching an offered preset must be cleared even when unticked');
+        TinyAssert::same([14, 60], $saved['payment_terms_days'], 'the matching preset must be ticked into the checkbox selection');
     }
 
     private static function testCustomPaymentTermNotReconciledWhenGenuinelyCustom(): void

@@ -521,18 +521,19 @@ jQuery(function ($) {
 
     // Custom Payment Terms (days) row is only meaningful for a genuinely
     // custom value — hide it once the custom day duplicates one of the
-    // TICKED preset checkboxes above (TWO-25498). Mirrors
-    // WC_Twoinc::is_custom_payment_term_genuine() server-side.
+    // preset checkbox rows above, ticked or not (TWO-25498). Every row here
+    // is a backend-offered term regardless of tick state, so this matches
+    // WC_Twoinc::is_custom_payment_term_genuine() server-side without an
+    // extra fetch.
     function updateCustomDaysVisibility() {
       if ($customDays.length === 0) return;
       const c = customDay();
-      const ticked = $checkboxes
-        .filter(":checked")
+      const offered = $checkboxes
         .map(function () {
           return parseInt(this.value, 10);
         })
         .get();
-      const genuine = c > 0 && ticked.indexOf(c) === -1;
+      const genuine = c > 0 && offered.indexOf(c) === -1;
       $customDays.closest("tr").toggle(genuine);
     }
 

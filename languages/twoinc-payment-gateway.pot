@@ -640,7 +640,7 @@ msgid "Custom Payment Terms (days)"
 msgstr ""
 
 #: class/WC_Twoinc.php
-msgid "Custom Payment Term (days) must be a whole number of days."
+msgid "Custom Payment Terms (days) must be a whole number of days."
 msgstr ""
 
 #: class/WC_Twoinc.php

@@ -62,20 +62,22 @@ describe("surcharge option field visibility", () => {
 
   test.each([
     [undefined, [14], true, "empty custom value stays hidden"],
-    ["30", [14, 30], true, "custom value matching a ticked term stays hidden"],
-    ["30", [14], false, "custom value matching an UNticked term is still genuinely custom"],
-    ["45", [14, 30], false, "genuinely custom value (no matching ticked term) is shown"]
+    ["30", [14, 30], true, "custom value matching a ticked preset row stays hidden"],
+    ["30", [14], true, "custom value matching an unticked-but-offered preset row is folded (hidden)"],
+    ["45", [14, 30], false, "genuinely custom value (no matching offered row) is shown"]
   ])("custom days=%s, checked=%s -> hidden=%s (%s)", async (customDays, checked, hidden) => {
     const { $ } = await harness.loadAdmin({ customDays: customDays, checked: checked });
     expectRow($, "payment_terms_custom_days", hidden);
   });
 
-  test("ticking the checkbox that duplicates the custom value hides it live", async () => {
-    const { $ } = await harness.loadAdmin({ customDays: "30", checked: [14] });
-    // Not yet duplicated: 30 is a genuinely custom value while unticked.
+  test("typing a custom value that duplicates an offered row hides it live", async () => {
+    const { $ } = await harness.loadAdmin({ customDays: "45", checked: [14] });
+    // 45 matches no rendered preset row (default terms are 14/30/60/90).
     expectRow($, "payment_terms_custom_days", false);
 
-    $('.twoinc-term-checkbox[value="30"]').prop("checked", true).trigger("change");
+    $("#" + harness.FIELD_PREFIX + "payment_terms_custom_days")
+      .val("30")
+      .trigger("change");
 
     expectRow($, "payment_terms_custom_days", true);
   });

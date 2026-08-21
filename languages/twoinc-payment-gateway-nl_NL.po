@@ -685,8 +685,8 @@ msgid "Custom Payment Terms (days)"
 msgstr "Aangepaste betalingstermijnen (dagen)"
 
 #: class/WC_Twoinc.php
-msgid "Custom Payment Term (days) must be a whole number of days."
-msgstr "Aangepaste betalingstermijn (dagen) moet een geheel aantal dagen zijn."
+msgid "Custom Payment Terms (days) must be a whole number of days."
+msgstr "Aangepaste betalingstermijnen (dagen) moet een geheel aantal dagen zijn."
 
 #: class/WC_Twoinc.php
 msgid "Default Payment Terms"
