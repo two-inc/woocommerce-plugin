@@ -83,14 +83,10 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     document.body.innerHTML = "";
   });
 
-  /**
-   * The four pay-boxes the PHP renderer emits into the payment tile, with the
-   * same classes and the same `hidden` starting state. Text is a distinctive
-   * marker rather than production copy: this suite is about WHICH box is on
-   * screen, never about wording.
-   *
-   * @returns {void}
-   */
+  // The four pay-boxes the PHP renderer emits into the payment tile, with the
+  // same classes and the same `hidden` starting state. Text is a distinctive
+  // marker rather than production copy: this suite is about WHICH box is on
+  // screen, never about wording.
   function buildPaymentTile() {
     $(document.body).append(
       '<li class="wc_payment_method"><div class="payment_box">' +
@@ -127,13 +123,9 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     );
   }
 
-  /**
-   * The two price nodes `getPrice()` reads. Without them the interval body
-   * returns on `!gross_amount` before it ever reaches the check, so the
-   * request assertions below would pass against a request that never happened.
-   *
-   * @returns {void}
-   */
+  // The two price nodes `getPrice()` reads. Without them the interval body
+  // returns on `!gross_amount` before it ever reaches the check, so the request
+  // assertions below would pass against a request that never happened.
   function buildCartTotals() {
     $(document.body).append(
       '<div class="order-total"><span class="woocommerce-Price-amount">120.00</span></div>' +
@@ -141,27 +133,17 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     );
   }
 
-  /**
-   * @param {string} selector one pay-box class
-   * @returns {boolean} whether that box is on screen
-   */
   function shown(selector) {
     const $box = $(".twoinc-pay-box" + selector);
     return $box.length > 0 && !$box.hasClass("hidden");
   }
 
-  /**
-   * Arm a check AND let the interval issue its request, which is when the loading
-   * state goes up (review round 5 reverted showing it on arming — see
-   * `getApproval()`'s own comment for why).
-   *
-   * @param {Object} ajax the stubAjax recorder
-   * @returns {void}
-   */
+  // Arms a check AND lets the interval issue its request, which is when the
+  // loading state goes up — see `getApproval()`'s own comment for why.
   function issueACheck(ajax) {
-    // Exact delta, not `> 0` (review round 5): a regression that issues an extra
-    // request per arming is precisely what "one request at a time" exists to stop,
-    // and a floor would let it through every precondition in this file.
+    // Exact delta, not `> 0`: a regression that issues an extra request per
+    // arming is precisely what "one request at a time" exists to stop, and a
+    // floor would let it through every precondition in this file.
     const before = ajax.calls.length;
     instance.getApproval();
     jest.advanceTimersByTime(1000);
@@ -169,24 +151,15 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     expect(shown(".twoinc-loader")).toBe(true);
   }
 
-  /**
-   * Reveal a verdict box directly, leaving the loader alone.
-   *
-   * `togglePaySubtitleDesc()` cannot be used to stage a verdict ALONGSIDE a live
-   * loader — painting a verdict hides the loader, by design. So the "clears the
-   * verdict AND keeps the loader" tests need the box unhidden by hand, or their
-   * clear-assertions are vacuous against a box that was never shown (review
-   * round 6).
-   *
-   * @param {string} selector one pay-box class
-   * @returns {void}
-   */
+  // `togglePaySubtitleDesc()` cannot be used to stage a verdict ALONGSIDE a live
+  // loader — painting a verdict hides the loader, by design. So the "clears the
+  // verdict AND keeps the loader" tests need the box unhidden by hand, or their
+  // clear-assertions are vacuous against a box that was never shown.
   function revealVerdictBox(selector) {
     $(".twoinc-pay-box" + selector).removeClass("hidden");
     expect(shown(selector)).toBe(true);
   }
 
-  /** Put a declined verdict on screen, as a completed earlier check would. */
   function showStaleDecline() {
     dom.togglePaySubtitleDesc("errored", ".twoinc-err-payment-default");
     expect(shown(".twoinc-err-payment-default")).toBe(true);
@@ -528,10 +501,6 @@ describe("order-intent loading state and stale-verdict clearing", () => {
      * which jQuery callback we came from is a fact only the caller has, and
      * sniffing it off the payload read a `status` field in a 200 response BODY as
      * an HTTP status (review round 3).
-     *
-     * @param {Object} ajax the stubAjax recorder
-     * @param {Object} response synthetic jqXHR
-     * @returns {void}
      */
     function failTheCheckWith(ajax, response) {
       instance.getApproval();
@@ -721,14 +690,9 @@ describe("order-intent loading state and stale-verdict clearing", () => {
   });
 
   describe("a cached verdict disarms the check instead of re-rendering forever", () => {
-    /**
-     * Run one real check to completion so its request body is in
-     * `orderIntentLog`. Only a NON-approved verdict is cached — the approved
-     * branch never writes the log — so this declines.
-     *
-     * @param {Object} ajax the stubAjax recorder
-     * @returns {void}
-     */
+    // Runs one real check to completion so its request body is in
+    // `orderIntentLog`. Only a NON-approved verdict is cached — the approved
+    // branch never writes the log — so this declines.
     function completeADeclinedCheck(ajax) {
       instance.getApproval();
       jest.advanceTimersByTime(1000);
@@ -2307,13 +2271,8 @@ describe("order-intent loading state and stale-verdict clearing", () => {
   });
 
   describe("a verdict is announced, not silently swapped in", () => {
-    /**
-     * Record the order of mutations to one box: `attributes` when the `hidden`
-     * class moves, `childList`/`characterData` when its sentence is written.
-     *
-     * @param {Element} node
-     * @returns {{records: Array, stop: Function}}
-     */
+    // Records the order of mutations to one box: `attributes` when the `hidden`
+    // class moves, `childList`/`characterData` when its sentence is written.
     function watch(node) {
       const records = [];
       const observer = new MutationObserver(function (list) {
@@ -2465,17 +2424,10 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       injected.remove();
     });
 
-    /**
-     * The computed style of a pay-box with `hidden` taken OFF.
-     *
-     * Every box in the fixture starts hidden, which is what production serves —
-     * but `display: none` is not the state whose layout is being asserted, and
-     * jsdom's `!important` gap means it does not even resolve to `none`
-     * reliably. Unhide, then measure.
-     *
-     * @param {string} selector
-     * @returns {CSSStyleDeclaration}
-     */
+    // Every box in the fixture starts hidden, which is what production serves —
+    // but `display: none` is not the state whose layout is being asserted, and
+    // jsdom's `!important` gap means it does not even resolve to `none`
+    // reliably. Unhide, then measure.
     function unhidden(selector) {
       const node = document.querySelector(selector);
       expect(node).not.toBeNull();
@@ -2483,10 +2435,6 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       return window.getComputedStyle(node);
     }
 
-    /**
-     * @param {string} selector
-     * @returns {CSSStyleDeclaration}
-     */
     function styleOf(selector) {
       const node = document.querySelector(selector);
       expect(node).not.toBeNull();
@@ -2501,9 +2449,6 @@ describe("order-intent loading state and stale-verdict clearing", () => {
      * the hex literal made an equivalent `rgb()` notation in the stylesheet —
      * identical paint — fail the test. Normalising both sides asserts the
      * colour rather than how it was typed.
-     *
-     * @param {string} hex
-     * @returns {string}
      */
     function rgb(hex) {
       const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
@@ -2513,10 +2458,6 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       );
     }
 
-    /**
-     * @param {CSSStyleDeclaration} style
-     * @returns {string} the top border colour, normalised
-     */
     function borderColour(style) {
       const raw = style.borderTopColor;
       return raw.charAt(0) === "#" ? rgb(raw) : raw;

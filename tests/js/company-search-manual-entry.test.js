@@ -65,12 +65,6 @@ describe("company-search manual-entry affordance", () => {
     document.body.innerHTML = "";
   });
 
-  /**
-   * Attach the widget, open it, and wire the affordance the way
-   * enableCompanySearch does.
-   *
-   * @returns {Object} the jQuery-wrapped select
-   */
   function openWithAffordance() {
     // Bound BEFORE the open, the way enableCompanySearch does it: the button
     // is now placed by a delegated `select2:open` handler (TWO-25326 §2), so
@@ -87,39 +81,28 @@ describe("company-search manual-entry affordance", () => {
     return $select;
   }
 
-  /** @returns {Object} the dropdown's search input */
   function searchInput() {
     return $(helper.companySearchInputSelector);
   }
 
-  /**
-   * Type into the dropdown's search field and fire the event the affordance
-   * listens on. Deliberately NOT `.trigger("keyup")` or a debounce flush: the
-   * button is specified to appear on input, before any request goes out.
-   *
-   * @param {string} term what the buyer has typed
-   * @returns {void}
-   */
+  // Deliberately NOT `.trigger("keyup")` or a debounce flush: the button is
+  // specified to appear on input, before any request goes out.
   function type(term) {
     searchInput().val(term).trigger("input");
   }
 
-  /** @returns {Object} the results <ul> the picker renders into */
   function resultsList() {
     return $("#billing_company_display").data("select2").$results;
   }
 
-  /** @returns {Object} the manual-entry button, or an empty set */
   function btn() {
     return $("#" + helper.manualEntryRowId);
   }
 
-  /** @returns {Object} the mode-chips group (TWO-40 §0), or an empty set */
   function chipsWrapper() {
     return $("#" + helper.modeChipsWrapperId);
   }
 
-  /** Activate the button the way a buyer's click or Enter/Space does. */
   function activate() {
     btn().trigger("click");
   }
@@ -145,13 +128,7 @@ describe("company-search manual-entry affordance", () => {
   });
 
   describe("visibility: present whenever the dropdown is open (TWO-25326 §2)", () => {
-    /**
-     * Dispatch a real Tab keydown at the query field. Same `which: 9`
-     * reasoning as the copies in the Tab describes below.
-     *
-     * @param {Object} $el
-     * @returns {Object} the jQuery.Event dispatched
-     */
+    // Same `which: 9` reasoning as the copies in the Tab describes below.
     function tabAtSearch($el) {
       const e = jQuery.Event("keydown", { key: "Tab", which: 9 });
       $el.trigger(e);
@@ -562,19 +539,9 @@ describe("company-search manual-entry affordance", () => {
   });
 
   describe("Tab-to-button shortcut (#30.x.6)", () => {
-    /**
-     * Dispatch a real Tab keydown at the search field, the way the browser
-     * would, and return the event so its `defaultPrevented` state can be
-     * asserted.
-     *
-     * `which: 9` because the production handler reads `e.which` (matching
-     * the vendored selectWoo bundle's own convention), not `e.key` — a test
-     * built on `.key` alone would keep passing against a handler that no
-     * longer reads it.
-     *
-     * @param {Object} opts e.g. { shiftKey: true }
-     * @returns {Object} the jQuery.Event dispatched
-     */
+    // `which: 9` because the production handler reads `e.which` (matching the
+    // vendored selectWoo bundle's own convention), not `e.key` — a test built on
+    // `.key` alone would keep passing against a handler that no longer reads it.
     function tabAt($el, opts) {
       const e = jQuery.Event("keydown", Object.assign({ key: "Tab", which: 9 }, opts || {}));
       $el.trigger(e);
@@ -899,20 +866,13 @@ describe("company-search manual-entry affordance", () => {
      * itself, which is deterministic and matches this repo's existing
      * convention for CSS facts jsdom cannot render (see the spinner GIF byte
      * assertions in company-search-transport.test.js).
-     *
-     * @returns {string} the raw CSS
      */
     function stylesheetSource() {
       return fs.readFileSync(path.join(harness.REPO_ROOT, harness.STYLESHEET_PATH), "utf8");
     }
 
-    /**
-     * Extract a single-id-selector rule's declaration block by name.
-     *
-     * @param {string} css the stylesheet source
-     * @param {string} id e.g. "search_company_btn" (no leading #)
-     * @returns {string} the rule's declaration block, or "" if not found
-     */
+    // Extract a single-id-selector rule's declaration block by name (id e.g.
+    // "search_company_btn", no leading #).
     function ruleBodyFor(css, id) {
       const re = new RegExp("#" + id + "\\s*\\{([^}]*)\\}", "m");
       const m = re.exec(css);
@@ -1334,12 +1294,8 @@ describe("company-search manual-entry affordance", () => {
       jest.useRealTimers();
     });
 
-    /**
-     * Add the address inputs `setAddress` writes to, prefilled the way an
-     * address lookup for a picked company leaves them.
-     *
-     * @returns {void}
-     */
+    // Add the address inputs `setAddress` writes to, prefilled the way an address
+    // lookup for a picked company leaves them.
     function givenLookedUpAddress() {
       $("form[name='checkout']").append(
         [

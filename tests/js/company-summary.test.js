@@ -22,7 +22,6 @@ const fs = require("fs");
 const path = require("path");
 const harness = require("./wc-harness");
 
-/** @returns {string} the raw twoinc.css source */
 function stylesheetSource() {
   return fs.readFileSync(path.join(harness.REPO_ROOT, harness.STYLESHEET_PATH), "utf8");
 }
@@ -55,16 +54,10 @@ describe("read-only captured-company summary", () => {
     document.body.innerHTML = "";
   });
 
-  /**
-   * Add the payment-method radio and check it.
-   *
-   * The summary is gated on Two being the chosen method — a buyer paying by
-   * another gateway may well have typed a company name into WooCommerce's own
-   * field — and `isTwoincSelected()` reads that radio, so without this every
-   * assertion below would be checking a permanently hidden element.
-   *
-   * @returns {void}
-   */
+  // The summary is gated on Two being the chosen method — a buyer paying by
+  // another gateway may well have typed a company name into WooCommerce's own
+  // field — and `isTwoincSelected()` reads that radio, so without this every
+  // assertion below would be checking a permanently hidden element.
   function selectTwo() {
     $("form[name='checkout']").append(
       '<input type="radio" name="payment_method" value="' + GATEWAY_ID + '" checked />'
@@ -104,84 +97,50 @@ describe("read-only captured-company summary", () => {
     approveIntent();
   }
 
-  /**
-   * Put the tile into the intent-approved state — the notice on screen, and
-   * so the label with it.
-   *
-   * @returns {void}
-   */
+  // Puts the tile into the intent-approved state — the notice on screen, and so
+  // the label with it.
   function approveIntent() {
     dom.togglePaySubtitleDesc("intent-approved");
   }
 
-  /** @returns {Object} the payment tile's intent-approved notice */
   function intentNotice() {
     return $(".twoinc-pay-box.twoinc-intent-approved");
   }
 
-  /** @returns {boolean} whether the intent-approved notice is on screen */
   function intentShown() {
     return intentNotice().length > 0 && !intentNotice().hasClass("hidden");
   }
 
-  /** @returns {Object} the summary element, or an empty set */
   function summary() {
     return $("#" + helper.companySummaryId);
   }
 
-  /**
-   * @returns {string} the intent-approved notice's own text, `<name>
-   *   (<number>)` when shown with a company substituted in — this is where
-   *   the now-removed `.twoinc-company-tile-label` used to render it
-   *   (TWO-25326 §7.2/§7.3).
-   */
+  // The intent-approved notice's own text, `<name> (<number>)` when shown with a
+  // company substituted in.
   function tileText() {
     return intentNotice().hasClass("hidden") ? "" : intentNotice().text();
   }
 
-  /**
-   * The captured company NAME, read straight off the posted field.
-   *
-   * Used to render in a `.twoinc-company-summary-name` span under the
-   * company field; TWO-25326 §7 removed it from there — it was a second copy
-   * of what the company-name control immediately above already shows. It then
-   * briefly lived in the payment tile's `.twoinc-company-tile-label`
-   * (PR #431) before that too was removed and replaced with the company
-   * embedded directly in the intent-message sentences (§7.2/§7.3, ruling
-   * 2026-08-03) — which only render it while an intent check has actually
-   * run. Reading `#billing_company` directly is what makes this assertion
-   * independent of that: it is the one thing every capture mode always
-   * writes, tile state notwithstanding, and it is also literally what
-   * WooCommerce posts — which is the property these tests care about.
-   *
-   * @returns {string}
-   */
+  // The captured company NAME, read straight off the posted field rather than any
+  // rendered label: `#billing_company` is the one thing every capture mode always
+  // writes, tile state notwithstanding, and it is also literally what WooCommerce
+  // posts — the property these tests care about.
   function renderedName() {
     return $("#billing_company").val();
   }
 
-  /** @returns {string} the rendered organisation number */
   function renderedNumber() {
     return summary().find(".twoinc-company-summary-id").text();
   }
 
-  /** @returns {boolean} whether the summary is currently shown */
   function isShown() {
     return summary().length > 0 && !summary().hasClass("hidden");
   }
 
-  /**
-   * Pick a company the way the picker's own select handler does.
-   *
-   * Driven through `enableCompanySearch`'s real `select2:select` binding rather
-   * than by calling the render function: the point of the test is that picking
-   * a company renders the summary, and a direct call would pass even if the
-   * handler had never been wired to it.
-   *
-   * @param {string} name the company name (the picker's `data.id`)
-   * @param {string} companyId the organisation number
-   * @returns {void}
-   */
+  // Driven through `enableCompanySearch`'s real `select2:select` binding rather
+  // than by calling the render function: the point of the test is that picking a
+  // company renders the summary, and a direct call would pass even if the
+  // handler had never been wired to it.
   function pickCompany(name, companyId) {
     const ajax = harness.stubAjax($);
     ctx.Twoinc.getInstance().enableCompanySearch();
@@ -472,19 +431,11 @@ describe("read-only captured-company summary", () => {
   });
 
   describe("manual entry", () => {
-    /**
-     * Type a company name the way the buyer does in manual entry, and let the
-     * checkout re-render.
-     *
-     * `toggleBusinessFields` is the re-render entry point, not a test hook: it
-     * runs on every payment-method, country and capture-mode switch, and it is
-     * production code. The `change` handler that also re-renders is installed
-     * by `Twoinc.initialize`, whose bootstrap (intervals, order-intent polling)
-     * this suite deliberately does not stand up — see wc-harness.
-     *
-     * @param {string} name what the buyer typed
-     * @returns {void}
-     */
+    // `toggleBusinessFields` is the re-render entry point, not a test hook: it
+    // runs on every payment-method, country and capture-mode switch, and it is
+    // production code. The `change` handler that also re-renders is installed by
+    // `Twoinc.initialize`, whose bootstrap (intervals, order-intent polling) this
+    // suite deliberately does not stand up — see wc-harness.
     function typeCompanyName(name) {
       $("#billing_company").val(name);
       dom.toggleBusinessFields();
@@ -769,29 +720,21 @@ describe("read-only captured-company summary", () => {
   });
 
   /**
-   * The captured company now renders INSIDE the intent-message sentences
+   * The captured company renders INSIDE the intent-message sentences
    * themselves — the approved notice and the declined ("not available") box
-   * both carry it — rather than in a separate `.twoinc-company-tile-label`
-   * element (TWO-25326 §7.2/§7.3, ruling 2026-08-03, superseding the label
-   * PR #431 shipped the night before).
-   *
-   * There is no longer a second element whose visibility has to be kept in
-   * sync with the notice's — the company text and the notice are the same
-   * element now, so "shown" and "carries the company" collapse into one
-   * question per box. What is still worth asserting: which template each box
-   * substitutes from, that they do not cross-contaminate, and that the
-   * no-company fallback still works exactly as it did before this ticket
-   * touched either box.
+   * both carry it (TWO-25326 §7.2/§7.3) — so "shown" and "carries the
+   * company" collapse into one question per box. What is worth asserting:
+   * which template each box substitutes from, that they do not
+   * cross-contaminate, and that the no-company fallback still works.
    */
   describe("intent-message boxes carry the captured company (TWO-25326 §7.2/§7.3, 2026-08-03)", () => {
-    /** Capture a company without leaving the intent notice on screen. */
+    // Capture a company without leaving the intent notice on screen.
     function captureCompanyOnly() {
       const ajax = harness.stubAjax($);
       pickCompany("ACME Widgets Ltd", "12345678");
       ajax.restore();
     }
 
-    /** @returns {Object} the payment tile's declined ("not available") box */
     function declinedBox() {
       return $(".twoinc-pay-box.twoinc-err-payment-default");
     }

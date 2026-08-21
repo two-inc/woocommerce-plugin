@@ -21,12 +21,11 @@ const fs = require("fs");
 const path = require("path");
 const harness = require("./wc-harness");
 
-/** @returns {string} the raw twoinc.css source */
 function stylesheetSource() {
   return fs.readFileSync(path.join(harness.REPO_ROOT, harness.STYLESHEET_PATH), "utf8");
 }
 
-/** The checkout subset the sole-trader module reads and writes. */
+// The checkout subset the sole-trader module reads and writes.
 function buildForm() {
   document.body.innerHTML = [
     '<form name="checkout" class="checkout woocommerce-checkout">',
@@ -124,14 +123,10 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     document.body.innerHTML = "";
   });
 
-  /**
-   * Put the flow in its one genuinely-undecided state — a chip click with
-   * the signup popup open and no outcome posted yet — and hand back the
-   * means to decide it.
-   *
-   * @returns {{settle: Function}} `settle(buyer)` posts the popup's own
-   *   ACCEPTED and resolves the buyer lookup it fires, `null` for none.
-   */
+  // Puts the flow in its one genuinely-undecided state — a chip click with the
+  // signup popup open and no outcome posted yet — and hands back
+  // `settle(buyer)`, which posts the popup's own ACCEPTED and resolves the
+  // buyer lookup it fires (`null` for none).
   function armUndecidedSignup() {
     $("#billing_email").val("buyer@example.test");
     soleTrader.bindPopupMessageListener();
@@ -555,7 +550,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
      * the live popup that actually sent the message.
      */
     describe("round-3 review regressions — ACCEPTED pairs with the popup that sent it", () => {
-      /** Open a popup through `act`, returning the window handle it got. */
+      // Opens a popup through `act`, returning the window handle it got.
       function openTracked(act) {
         const win = { closed: false };
         window.open = jest.fn(() => win);
@@ -563,7 +558,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         return win;
       }
 
-      /** Deliver ACCEPTED as the named popup window, the way the browser does. */
+      // Delivers ACCEPTED as the named popup window, the way the browser does.
       function accept(source, buyer) {
         soleTrader.bindPopupMessageListener();
         jest
@@ -1032,12 +1027,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
   });
 
   describe("§8 — identity trust levels", () => {
-    /**
-     * Deliver a hosted-signup postMessage the way the popup does.
-     *
-     * @param {string} data
-     * @returns {void}
-     */
+    // Delivers a hosted-signup postMessage the way the popup does.
     function postFromSignup(data) {
       window.dispatchEvent(
         new window.MessageEvent("message", {
@@ -1401,7 +1391,6 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
      * away from.
      */
     describe("focus returning to the checkout abandons an outstanding signup popup", () => {
-      /** @returns {Object} a popup handle whose own `close()` is observable */
       function fakePopup() {
         const win = { closed: false };
         win.close = jest.fn(() => {
@@ -1410,43 +1399,36 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         return win;
       }
 
-      /**
-       * Fire the window-level `focus` a real refocus produces. Deliberately
-       * NOT followed by the grace period — the click that caused the focus is
-       * dispatched inside it, which is the whole point of the deferral, so
-       * every test spends the grace explicitly with `settleRefocus()`.
-       */
+      // Fires the window-level `focus` a real refocus produces. Deliberately NOT
+      // followed by the grace period — the click that caused the focus is
+      // dispatched inside it, which is the whole point of the deferral, so every
+      // test spends the grace explicitly with `settleRefocus()`.
       function refocusCheckout() {
         window.dispatchEvent(new Event("focus"));
       }
 
-      /** Let the refocus's own deferred abandon fall due. */
+      // Lets the refocus's own deferred abandon fall due.
       function settleRefocus() {
         jest.advanceTimersByTime(soleTrader.refocusChipGraceMs);
       }
 
-      /**
-       * Mousedown a real chip, the way the browser dispatches it after handing
-       * the checkout window its focus back. Real DOM and real bubbling: the
-       * listener that reads this is a capture-phase one on `document`, so a
-       * detached chip built with `buildBusinessChip()` would never reach it.
-       *
-       * @param {string} id the chip's element id
-       */
+      // Mousedown a real chip, the way the browser dispatches it after handing
+      // the checkout window its focus back. Real DOM and real bubbling: the
+      // listener that reads this is a capture-phase one on `document`, so a
+      // detached chip built with `buildBusinessChip()` would never reach it.
       function mousedownChip(id) {
         const chip = document.getElementById(id);
         expect(chip).not.toBeNull();
         chip.dispatchEvent(new window.MouseEvent("mousedown", { bubbles: true }));
       }
 
-      /** The chips live in the dropdown panel, built on open. */
+      // The chips live in the dropdown panel, built on open.
       function openWidgetWithChips() {
         const $widget = harness.openCompanyWidget($, ctx.helper);
         ctx.helper.syncManualEntryButton();
         return $widget;
       }
 
-      /** @returns {Object} jQuery-wrapped query input inside the dropdown */
       function dropdownQueryField() {
         return $("#select2-billing_company_display-results")
           .closest(".select2-dropdown")
@@ -2852,7 +2834,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       jest.useRealTimers();
     });
 
-    /** Drive a REAL (stubbed-network) token mint, as `render()` does. */
+    // Drives a REAL (stubbed-network) token mint, as `render()` does.
     function realMint() {
       soleTrader.fetchTokens();
       ajax.last().succeed({

@@ -9,8 +9,6 @@ add_action('pre_get_posts', 'add_sorting_query');
 
 
 /**
- * Add filtering query for custom columns
- *
  * @return void
  */
 function add_filtering_query($query)
@@ -45,8 +43,6 @@ function add_filtering_query($query)
 
 
 /**
- * Add sorting query for custom columns
- *
  * @return array
  */
 function add_sorting_query($query)
@@ -62,7 +58,7 @@ function add_sorting_query($query)
             'relation' => 'OR',
             array(
                 'key' => 'delivery_date',
-                'compare' => 'NOT EXISTS', // for empty value
+                'compare' => 'NOT EXISTS',
             ),
             array(
                 'key' => 'delivery_date',
@@ -76,13 +72,10 @@ function add_sorting_query($query)
 
 
 /**
- * Add custom columns to admin edit order page
- *
  * @return array
  */
 function add_custom_columns($columns)
 {
-
     $new_columns = array();
     foreach ($columns as $column_name => $column_info) {
         $new_columns[$column_name] = $column_info;
@@ -97,13 +90,10 @@ function add_custom_columns($columns)
 
 
 /**
- * Add sort-by feature to custom columns
- *
  * @return array
  */
 function add_custom_sortable_columns($columns)
 {
-
     $columns['order_delivery_date'] = 'order_delivery_date';
 
     return $columns;
@@ -111,13 +101,10 @@ function add_custom_sortable_columns($columns)
 
 
 /**
- * Add custom columns content in admin edit order page
- *
  * @return void
  */
 function add_custom_columns_content($column)
 {
-
     global $post;
     if ('order_customer_user' === $column) {
         $order = wc_get_order($post->ID);
@@ -138,13 +125,10 @@ function add_custom_columns_content($column)
 
 
 /**
- * Add From and To date range in admin edit order page
- *
  * @return void
  */
 function add_delivery_date_filter_form_inputs()
 {
-
     $from = (isset($_GET['delivery_date_from']) && $_GET['delivery_date_from']) ? $_GET['delivery_date_from'] : '';
     $to = (isset($_GET['delivery_date_to']) && $_GET['delivery_date_to']) ? $_GET['delivery_date_to'] : '';
 

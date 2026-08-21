@@ -1,5 +1,4 @@
 <?php
-// Add due in days to order req body to Two
 function add_two_order_fields($two_req)
 {
     $order = wc_get_order($two_req['merchant_order_id']);
@@ -12,10 +11,8 @@ function add_two_order_fields($two_req)
 add_filter("two_order_create", "add_two_order_fields");
 
 
-// Add the new field due in days in checkout
 function add_two_due_days($fields)
 {
-
     $lang = WC_Twoinc_Helper::get_locale();
     $label_text = "Days you'll have to pay your invoice";
     if ($lang === 'sv_SE') {
@@ -42,7 +39,6 @@ function add_two_due_days($fields)
 add_filter("woocommerce_checkout_fields", "add_two_due_days");
 
 
-// Add the javascript to replace due in days in UI
 function add_demo_replace_due_in_days_script()
 {
     ?>

@@ -73,30 +73,17 @@ describe("billing country switch", () => {
     jest.useRealTimers();
   });
 
-  /**
-   * Run the real page wiring: the delegated `change` binding on
-   * #billing_country, the `updated_checkout` binding, and the seed of the
-   * country tracker.
-   *
-   * Every test that fires a country event goes through this rather than
-   * calling the handler by hand. Calling it directly would leave the binding
-   * itself untested, so unwiring it — or moving the seed to somewhere
-   * initialize() does not reach — would keep the suite green.
-   *
-   * @returns {void}
-   */
+  // Runs the real page wiring: the delegated `change` binding on
+  // #billing_country, the `updated_checkout` binding, and the seed of the
+  // country tracker. Every test that fires a country event goes through this
+  // rather than calling the handler by hand, so unwiring the binding would fail
+  // the suite rather than leave it green.
   function initializeCheckout() {
     ctx.Twoinc.getInstance().initialize(false);
   }
 
-  /**
-   * Put a captured company in every field that holds one, the way a pick from
-   * the search results does.
-   *
-   * @param {string} name
-   * @param {string} id
-   * @returns {void}
-   */
+  // Puts a captured company in every field that holds one, the way a pick from
+  // the search results does.
   function captureCompany(name, id, country) {
     // Through the ONE capture write path (TWO-40 §5), not by poking the two
     // inputs: that is what a real pick, a sole-trader adoption and a user-meta
@@ -112,19 +99,11 @@ describe("billing country switch", () => {
     ctx.Twoinc.getInstance().customerCompany.country_prefix = country || "GB";
   }
 
-  /**
-   * The buyer typing a company into the plain fallback fields by hand, with no
-   * plugin write behind it.
-   *
-   * Distinct from `captureCompany` since TWO-40 §5: the two differ by
-   * PROVENANCE, and the country-change clear treats them differently on
-   * purpose — it drops what the plugin wrote and keeps what the buyer typed.
-   *
-   * @param {string} name
-   * @param {string} id
-   * @param {string} [country]
-   * @returns {void}
-   */
+  // The buyer typing a company into the plain fallback fields by hand, with no
+  // plugin write behind it. Distinct from `captureCompany` since TWO-40 §5: the
+  // two differ by PROVENANCE, and the country-change clear treats them
+  // differently on purpose — it drops what the plugin wrote and keeps what the
+  // buyer typed.
   function typeCompanyByHand(name, id, country) {
     ctx.$("#billing_company").val(name);
     ctx.$("#company_id").val(id);
@@ -135,17 +114,12 @@ describe("billing country switch", () => {
     };
   }
 
-  /**
-   * Fire a real `change` on the country field, which reaches the plugin only
-   * through the delegated binding `initialize()` installs on document.body.
-   *
-   * @returns {void}
-   */
+  // Fires a real `change` on the country field, which reaches the plugin only
+  // through the delegated binding `initialize()` installs on document.body.
   function fireCountryChange() {
     ctx.$("#billing_country").trigger("change");
   }
 
-  /** @returns {{name: string, id: string}} the currently captured company */
   function capturedCompany() {
     return {
       name: ctx.$("#billing_company").val(),
@@ -526,13 +500,9 @@ describe("billing country switch", () => {
   });
 
   describe("a capture stranded in the wrong country (TWO-25333)", () => {
-    /**
-     * The four core billing address inputs `setAddress` writes. Needed by any
-     * test that lets the clear run with `enable_address_lookup` on, since
-     * `clearSelectedCompany` blanks them on that setting.
-     *
-     * @returns {void}
-     */
+    // The four core billing address inputs `setAddress` writes. Needed by any
+    // test that lets the clear run with `enable_address_lookup` on, since
+    // `clearSelectedCompany` blanks them on that setting.
     function addAddressFields() {
       ctx
         .$("form[name='checkout']")
@@ -546,16 +516,11 @@ describe("billing country switch", () => {
         );
     }
 
-    /**
-     * Move the country with NO `change` event and let the re-render land —
-     * the path this whole block is about. WooCommerce writes
-     * #billing_country with `.val()` / `selectElem.value =` on a
-     * checkout_error re-render, a multi-step theme and a server-side session
-     * restore, and fires `updated_checkout` rather than `change`.
-     *
-     * @param {string} country
-     * @returns {void}
-     */
+    // Moves the country with NO `change` event and lets the re-render land — the
+    // path this whole block is about. WooCommerce writes #billing_country with
+    // `.val()` / `selectElem.value =` on a checkout_error re-render, a
+    // multi-step theme and a server-side session restore, and fires
+    // `updated_checkout` rather than `change`.
     function moveCountrySilently(country) {
       ctx.$("#billing_country").val(country);
       ctx.$(document.body).trigger("updated_checkout");

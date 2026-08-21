@@ -326,14 +326,13 @@ function sanitize_title($title)
 /**
  * Cart stub for the surcharge cart-fee hook. add_fee() records its exact
  * arguments (argc included, so tests can pin the 3-arg pre-feature call
- * shape) and computes the fee tax the way core does:
+ * shape) and computes fee tax the way core does:
  *
  *  - $taxable false → no tax, unconditionally (never consults rates).
  *  - a $tax_class that doesn't match a live class silently reverts to
  *    Standard (the WC_Cart_Fees::add_fee / WC_Tax::get_rates gotcha the
- *    plugin-side validation defends against — mirrored here faithfully
- *    so a regression in that validation shows up as the WRONG TAX, not
- *    as a stub error).
+ *    plugin-side validation defends against — mirrored faithfully so a
+ *    regression there shows up as the WRONG TAX, not a stub error).
  *  - matched rate rows apply additively (US state+local, CA GST+PST).
  */
 class StubFeeCart
@@ -404,11 +403,8 @@ class WC_Payment_Gateway
 
     public $plugin_id = 'woocommerce_';
 
-    // Mirrors WC_Settings_API::get_option's own $enabled semantics closely
-    // enough for is_available() below: core defaults an unset gateway to
-    // disabled, not enabled, so this stub does too rather than defaulting to
-    // 'yes' and silently making every gateway "available" in tests that
-    // never touch it.
+    // Defaults to disabled like core (not 'yes'), so is_available() below
+    // isn't silently true in tests that never touch this.
     public $enabled = 'no';
 
     // Mirrors WC_Settings_API::get_post_data (the submitted settings form),
@@ -419,10 +415,8 @@ class WC_Payment_Gateway
     // field defaults, and WC_Twoinc::init_form_fields() assigns it.
     public $form_fields = [];
 
-    // Mirrors core's own is_available() closely enough for WC_Twoinc's
-    // override to call parent::is_available() safely — core also checks
-    // cart totals/needs_setup, deliberately not reproduced here since no
-    // test in this suite depends on that path.
+    // Enough for WC_Twoinc's override to call parent::is_available() safely;
+    // core's cart-totals/needs_setup checks aren't reproduced (unused here).
     public function is_available()
     {
         return 'yes' === $this->enabled;
@@ -434,27 +428,18 @@ class WC_Payment_Gateway
     }
 
     // Mirrors WC_Settings_API::get_option: the stored row wins, an absent key
-    // falls back to the field's declared default via core's get_field_default
-    // semantics (empty() => ''), and $empty_value substitutes for '' — every
-    // resolution memoised into $settings, as core does. Faithful enough that a
-    // test can assert what a merchant's shop actually reads; the earlier shim
-    // ignored $settings entirely, which made any assertion about a stored
-    // value a restatement of what the test had just seeded.
+    // falls back to the field's declared default (empty() => ''), and
+    // $empty_value substitutes for ''; resolution is memoised into $settings.
     //
-    // Three deliberate divergences from core, all in the default-resolution
-    // path rather than the read itself:
-    //  - core lazily calls init_settings() when $settings is empty. Not
-    //    copied: a test that seeds $GLOBALS['__twoinc_test_options'] and never
-    //    calls init_settings() should fail loudly on the field default rather
-    //    than silently work.
-    //  - core resolves defaults through get_form_fields(), which runs
-    //    set_defaults() and the woocommerce_settings_api_form_fields_<id>
-    //    filter. This reads $form_fields raw, so a suppression filter an
-    //    overlay registers is not applied.
-    //  - core's init_settings() preserves a falsy-but-non-empty default (it
-    //    plucks 'default' rather than testing empty()), whereas the empty()
-    //    test below collapses '0' to ''. Only surcharge_differential declares
-    //    such a default today, and its one consumer compares against '1'.
+    // Three deliberate divergences from core, all in default-resolution:
+    //  - does not lazily call init_settings() — a test that seeds
+    //    $GLOBALS['__twoinc_test_options'] without calling init_settings()
+    //    fails loudly on the field default instead of silently working.
+    //  - resolves defaults from raw $form_fields, not get_form_fields(), so
+    //    an overlay's suppression filter is not applied here.
+    //  - collapses a falsy-but-non-empty default to '' (core preserves it).
+    //    Only surcharge_differential declares such a default, compared
+    //    against '1' by its one consumer.
     public function get_option($key, $empty_value = null)
     {
         if (!isset($this->settings[$key])) {
@@ -487,11 +472,9 @@ class WC_Payment_Gateway
         return $this->plugin_id . $this->id . '_settings';
     }
 
-    // Mirrors WC_Settings_API::$settings and init_settings(): the stored
-    // settings blob, read from the single wp option WooCommerce keeps every
-    // gateway setting in. Unlike core it does NOT merge form-field defaults
-    // over the stored values — tests that care about defaults read
-    // form_fields directly.
+    // Stored settings blob (mirrors WC_Settings_API::$settings). Unlike
+    // core it does NOT merge form-field defaults over stored values — tests
+    // that care about defaults read form_fields directly.
     public $settings = [];
 
     public function init_settings()
@@ -500,17 +483,12 @@ class WC_Payment_Gateway
         $this->settings = is_array($stored) ? $stored : [];
     }
 
-    // ── WC_Settings_API save + error surface ─────────────────────────
-    //
-    // Mirrors WC_Settings_API::$errors / add_error() / get_errors() /
-    // display_errors() / get_field_value() / process_admin_options(), because
-    // the behaviour under test is a property OF that machinery rather than of
-    // any one validator: WooCommerce validates each field independently, and a
-    // validator that throws only skips ITS OWN assignment. Everything else in
-    // the same submission still saves, and the message lands in a bucket that
-    // core never prints. Both halves of that — the partial save and the silent
-    // error — are what TWO-25289's tests assert, so a stub that just called
-    // one validator directly could not see either.
+    // ── WC_Settings_API save + error surface (TWO-25289) ─────────────
+    // Mirrors WC_Settings_API::$errors/add_error/get_errors/display_errors/
+    // get_field_value/process_admin_options: each field validates
+    // independently, a throwing validator skips only its own assignment,
+    // and the error lands in a bucket core never prints — the partial save
+    // + silent error these tests assert.
 
     /** @var string[] */
     public $errors = [];
@@ -603,10 +581,9 @@ class WC_Payment_Gateway
         return is_null($value) ? '' : $value;
     }
 
-    // The loop that produces the partial save. Note what happens on a throw:
-    // $this->settings[$key] is NOT assigned, so it keeps whatever
-    // init_settings() read from the stored option, while every non-throwing
-    // sibling assigns its new value — and the whole blob is then written.
+    // On a throw, $this->settings[$key] is NOT assigned (keeps the value
+    // init_settings() read), while every non-throwing sibling still saves —
+    // producing the partial save.
     public function process_admin_options()
     {
         $this->init_settings();
@@ -624,9 +601,8 @@ class WC_Payment_Gateway
         return update_option($this->get_option_key(), $this->settings, 'yes');
     }
 
-    // Core renders the gateway heading, description and the settings table.
-    // Reduced to the table marker: these tests only need to know WHERE the
-    // error notice lands relative to the form, not what the form looks like.
+    // Reduced to the table marker — tests only need WHERE the error notice
+    // lands relative to the form, not what the form looks like.
     public function admin_options()
     {
         echo '<table class="form-table"></table>';
@@ -944,12 +920,9 @@ function check_admin_referer($action = -1, $query_arg = '_wpnonce')
     return 1;
 }
 
-// Capability set injected per test via $GLOBALS['__twoinc_test_caps'].
-// Meta-capability checks against a specific object (e.g.
-// current_user_can('edit_shop_order', $order_id)) resolve against
-// $GLOBALS['__twoinc_test_object_caps'] as "capability:object_id" strings,
-// so tests can distinguish the blanket type capability from the per-object
-// grant.
+// Capability set via $GLOBALS['__twoinc_test_caps']. A meta-capability check
+// against an object id resolves against $GLOBALS['__twoinc_test_object_caps']
+// as "capability:object_id", distinguishing blanket vs per-object grants.
 function current_user_can($capability, ...$args)
 {
     if ($args !== []) {

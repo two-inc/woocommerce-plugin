@@ -711,8 +711,7 @@ final class BrandConfigSpec
         $checkout = new WC_Twoinc_Checkout($gateway);
 
         // A brand overlay pushing billing_company's priority far above the
-        // optional baseline — this used to be safe (optionals rode this
-        // same value), now it must stay safe via the clamp.
+        // optional baseline must still be clamped safe.
         $fields = ['billing' => ['billing_company' => ['priority' => 1000]]];
 
         $fields = $checkout->move_country_field($fields);
@@ -2115,7 +2114,6 @@ final class BrandConfigSpec
         ]);
         TinyAssert::same([30 => ['fixed' => '10.50', 'percentage' => '2.5']], $clean);
 
-        // Negative value rejected
         $threw = false;
         try {
             $gateway->validate_two_surcharge_grid_field('surcharge_grid', [30 => ['fixed' => '-1']]);
@@ -2124,7 +2122,6 @@ final class BrandConfigSpec
         }
         TinyAssert::true($threw);
 
-        // Percentage > 100 rejected
         $threw = false;
         try {
             $gateway->validate_two_surcharge_grid_field('surcharge_grid', [30 => ['percentage' => '150']]);
@@ -2190,7 +2187,6 @@ final class BrandConfigSpec
             'zero percentage + zero fixed with an empty cap is the sanctioned "no fee" row'
         );
 
-        // Non-array input → empty grid
         TinyAssert::same([], $gateway->validate_two_surcharge_grid_field('surcharge_grid', ''));
 
         // The Cap column is HIDDEN for a type without a percentage, but a
@@ -6253,8 +6249,7 @@ final class BrandConfigSpec
             'the declined box must carry the company template, brand name resolved, company tokenised'
         );
 
-        // Unchanged, no-company fallback text — still the box's own visible
-        // content, exactly as before this ticket added the template.
+        // The no-company fallback text is still the box's own visible content.
         TinyAssert::true(
             strpos($html, 'Invoice purchase with Taglinebrand is not available for this order.') !== false,
             'the no-company fallback sentence must be unchanged'
@@ -7708,15 +7703,6 @@ final class BrandConfigSpec
         );
     }
 
-    /**
-     * The msgstr a .po pairs with one msgid, or '' when there is no such entry.
-     *
-     * Deliberately minimal: single-line `msgid "..."` / `msgstr "..."` only,
-     * which is the shape every entry this is used for has. A multi-line or
-     * plural entry returns '' and fails the caller's assertion loudly rather
-     * than being silently mis-read — the wrong-but-plausible answer is the one
-     * outcome a catalogue check must not produce.
-     */
     /**
      * Direct cases for poTranslation(), which every safety property in its docblock
      * needed and none had: all eight mutations of that parser survived the suite

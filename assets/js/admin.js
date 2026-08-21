@@ -73,7 +73,6 @@ jQuery(function ($) {
     $("#woocommerce_" + twoinc_admin.gateway_id + "_enable_address_lookup")
   );
 
-  // API Key verification functionality
   let verificationTimeout;
   const $apiKeyField = $("#woocommerce_" + twoinc_admin.gateway_id + "_api_key");
   const $verificationIcon = $("#api-key-verification-icon");
@@ -141,12 +140,12 @@ jQuery(function ($) {
       case "not_configured":
         return notices.not_configured || "Enter an API key above to enable this payment method.";
       case "request_failed":
-        // The AJAX request to THIS SITE's admin-ajax.php failed before Two
+        // The AJAX request to this site's admin-ajax.php failed before Two
         // was ever contacted (jQuery's error callback fires on any
         // transport-level failure — a WordPress-side 500, an expired
         // nonce, a proxy/WAF block — not specifically "Two is
-        // unreachable"). Reviewed round 1: the "unreachable" wording here
-        // would have wrongly pointed an admin at Two for a WP-side problem.
+        // unreachable"), so the "unreachable" wording would wrongly point
+        // an admin at Two for a WP-side problem.
         return notices.request_failed || "Could not complete verification — try again shortly.";
       default:
         return code
@@ -160,9 +159,7 @@ jQuery(function ($) {
 
   // A failed verification must not leave the previously fetched Merchant ID
   // on screen — that reads as "the integration is fine" when it isn't.
-  // Swap it for the categorized invalid-key notice instead (this call site
-  // is also the fix for the settings page silently keeping stale merchant
-  // info on a broken key).
+  // Swap it for the categorized invalid-key notice instead.
   function showMerchantInfoInvalid(status, code) {
     $("#twoinc-merchant-info").hide();
     $("#twoinc-signup-prompt").hide();
@@ -202,17 +199,15 @@ jQuery(function ($) {
     });
   }
 
-  // Verify API key on input change with debouncing
   $apiKeyField.on("input", function () {
     const apiKey = $(this).val();
 
     clearTimeout(verificationTimeout);
     verificationTimeout = setTimeout(function () {
       verifyApiKey(apiKey);
-    }, 1000); // Wait 1 second after user stops typing
+    }, 1000);
   });
 
-  // Verify on page load if API key exists
   if ($apiKeyField.val()) {
     verifyApiKey($apiKeyField.val());
   }
@@ -398,16 +393,9 @@ jQuery(function ($) {
       // silently clear a stored term's surcharge on untick+retick.
       const stored = (twoinc_admin.surcharge_grid || {})[days] || {};
       const cell = function (col) {
-        // PRESENCE, not truthiness — the same test the PHP renderer makes
-        // with isset(). `stored[col] || ""` blanked a stored NUMERIC 0,
-        // because 0 is falsy in JS but a perfectly real stored value: the
-        // option is written as canonical numeric strings on save, yet it
-        // reaches here through wp_localize_script, which JSON-encodes and
-        // can hand back a number. Blanking a cap of 0 on untick+retick made
-        // the save drop the cell, and an absent cap means NO cap, so the
-        // percentage then relayed UNCAPPED — the overcharge this ticket
-        // exists to prevent, reintroduced through the JS path while the PHP
-        // path was correct. The two renderers must agree.
+        // PRESENCE, not truthiness (isset(), matching the PHP renderer): a
+        // stored numeric 0 cap is falsy in JS but a real "no cap" value —
+        // `stored[col] || ""` would blank it and relay the surcharge uncapped.
         const raw = stored[col];
         return $("<td></td>")
           .addClass("twoinc-col-" + col)
@@ -438,7 +426,6 @@ jQuery(function ($) {
           $(this).remove();
         }
       });
-      // Insert missing rows in day order.
       jQuery.each(terms, function (_, days) {
         if ($tbody.find('tr[data-days="' + days + '"]').length) return;
         const $row = buildGridRow(fieldKey, days);
