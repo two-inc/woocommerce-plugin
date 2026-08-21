@@ -53,7 +53,6 @@ describe("payment terms chips", () => {
     document.body.innerHTML = "";
   });
 
-  /** @returns {string} */
   function headingText() {
     const $h = ctx.$(".twoinc-term-chips-heading");
     return $h.hasClass("hidden") ? "" : $h.text();
