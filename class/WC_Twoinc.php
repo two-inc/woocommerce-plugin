@@ -219,6 +219,9 @@ if (!class_exists('WC_Twoinc')) {
             return $options;
         }
 
+        /**
+         * @return string
+         */
         public function get_merchant_id()
         {
             return $this->get_option('merchant_id') ?? $this->get_option('tillit_merchant_id');
@@ -597,6 +600,8 @@ if (!class_exists('WC_Twoinc')) {
          * MERCHANT's default due-in-days off GET /v1/merchant, not anything
          * about a specific invoice. No value is carried across; the row is a
          * 1h TTL cache that self-heals on the first request with an API key.
+         *
+         * @return void
          */
         private function drop_renamed_option_rows()
         {
@@ -3327,6 +3332,9 @@ if (!class_exists('WC_Twoinc')) {
             return;
         }
 
+        /**
+         * @return void
+         */
         public static function display_user_meta_edit($user)
         {
             ?>
@@ -3365,6 +3373,9 @@ if (!class_exists('WC_Twoinc')) {
             <?php
         }
 
+        /**
+         * @return void
+         */
         public static function save_user_meta($user_id)
         {
 
@@ -3656,6 +3667,11 @@ if (!class_exists('WC_Twoinc')) {
             return apply_filters('twoinc_payment_validation_error', null, $order_id);
         }
 
+        /**
+         * @param int $order_id
+         *
+         * @return array
+         */
         public function process_payment($order_id)
         {
 
@@ -4542,6 +4558,9 @@ if (!class_exists('WC_Twoinc')) {
             $this->form_fields = apply_filters('wc_two_form_fields', $twoinc_form_fields);
         }
 
+        /**
+         * @return false|string
+         */
         public function generate_api_key_with_verification_html($key, $data)
         {
             $field_key = $this->get_field_key($key);
@@ -4613,6 +4632,9 @@ if (!class_exists('WC_Twoinc')) {
             return ob_get_clean();
         }
 
+        /**
+         * @return false|string
+         */
         public function generate_radio_html($key, $data)
         {
             $field_key = $this->get_field_key($key);
@@ -4939,6 +4961,8 @@ if (!class_exists('WC_Twoinc')) {
          *                     get_save_twoinc_meta, to spare a duplicate
          *                     fetch (which can itself cost a remote GET)
          *                     on hot paths like fulfilment.
+         *
+         * @return boolean
          */
         private function update_twoinc_order($order, $twoinc_meta = null)
         {
@@ -5038,6 +5062,8 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
+         * @param string $method
+         *
          * @return WP_Error|array
          */
         public function make_request($endpoint, $payload = [], $method = 'POST', $params = array(), $api_key_override = null, $timeout = 30)
@@ -5104,6 +5130,9 @@ if (!class_exists('WC_Twoinc')) {
             return $response;
         }
 
+        /**
+         * @return void
+         */
         public function twoinc_account_init_notice()
         {
             global $pagenow;
@@ -5152,6 +5181,9 @@ if (!class_exists('WC_Twoinc')) {
             ';
         }
 
+        /**
+         * @return void
+         */
         public function on_deactivate_plugin()
         {
             // The recurring FX refresh must not keep firing (listener-less)
@@ -5378,6 +5410,9 @@ if (!class_exists('WC_Twoinc')) {
             $this->update_option('payment_terms_custom_days', '');
         }
 
+        /**
+         * @return string
+         */
         public function get_icon()
         {
             $icon_html = '<img src="' . esc_url($this->icon) . '" alt="' . esc_attr($this->title) . '" class="mollie-gateway-icon" />';

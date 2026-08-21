@@ -27,7 +27,11 @@ if (!class_exists('WC_Twoinc_Brand')) {
         /** @var array|null */
         private static $config;
 
-        /** @return mixed null when the key is not declared */
+        /**
+         * @param string $key
+         *
+         * @return mixed null when the key is not declared
+         */
         public static function get($key)
         {
             $config = self::config();
@@ -78,7 +82,13 @@ if (!class_exists('WC_Twoinc_Brand')) {
             return self::$config;
         }
 
-        /** Brand-prefixed name, e.g. meta_prefix 'twoinc' + 'order_id' -> 'twoinc_order_id'. */
+        /**
+         * Brand-prefixed name, e.g. meta_prefix 'twoinc' + 'order_id' -> 'twoinc_order_id'.
+         *
+         * @param string $name
+         *
+         * @return string
+         */
         public static function prefixed_name($name)
         {
             return self::get('meta_prefix') . '_' . $name;
@@ -89,6 +99,10 @@ if (!class_exists('WC_Twoinc_Brand')) {
          * -> '_twoinc_order_reference'. Live stores hold data under the
          * brand's prefix, so it is load-bearing for existing orders —
          * never hardcode the literal.
+         *
+         * @param string $name
+         *
+         * @return string
          */
         public static function meta_key($name)
         {

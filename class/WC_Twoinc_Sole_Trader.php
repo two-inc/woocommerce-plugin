@@ -4,7 +4,8 @@
  * Sole trader checkout support — business logic (TWO-24754).
  *
  * All decisioning lives here; assets/js/twoinc.js only renders what these
- * methods return.
+ * methods return (the Gutenberg block checkout port must not need a
+ * business-logic rewrite, see TWO-24767).
  *
  * One gate decides whether the Sole Trader option shows for a billing
  * country: country-level legal truth from the registry endpoint

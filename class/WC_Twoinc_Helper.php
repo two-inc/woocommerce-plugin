@@ -10,6 +10,9 @@
 if (!class_exists('WC_Twoinc_Helper')) {
     class WC_Twoinc_Helper
     {
+        /**
+         * @return string
+         */
         public static function round_amt($amt)
         {
             return number_format($amt, wc_get_price_decimals(), '.', '');
@@ -73,6 +76,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
             return $rounded;
         }
 
+        /**
+         * @return string|void
+         */
         public static function get_twoinc_error_msg($response)
         {
             if (!$response) {
@@ -95,6 +101,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
             }
         }
 
+        /**
+         * @return string|void
+         */
         public static function get_twoinc_validation_msg($response)
         {
             $err_msg = sprintf(__('Invoice purchase with %s is not available for this order.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name'));
@@ -128,6 +137,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
             }
         }
 
+        /**
+         * @return string|void
+         */
         public static function get_msg_from_err($err)
         {
             if (!isset($err['loc']) || !isset($err['msg'])) {
@@ -177,6 +189,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
             }
         }
 
+        /**
+         * @return void
+         */
         public static function display_ajax_error($message)
         {
             if (is_string($message)) {
@@ -194,6 +209,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
             }
         }
 
+        /**
+         * @return bool
+         */
         public static function is_twoinc_order($order)
         {
             return $order && $order->get_payment_method() && $order->get_payment_method() === WC_Twoinc_Brand::get('gateway_id');
@@ -215,6 +233,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
             return $is_empty;
         }
 
+        /**
+         * @return bool
+         */
         public static function is_str_no_word($s)
         {
 
@@ -225,6 +246,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * @param bool $is_refund refund line items carry negated amounts, so
          *                        the negative-discount guard below does not
          *                        apply to them.
+         *
+         * @return array
          */
         public static function get_line_items($line_items, $shippings, $fees, $order, $is_refund = false)
         {
@@ -366,6 +389,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
             return $items;
         }
 
+        /**
+         * @return array
+         */
         private static function get_internal_tax_key($tax_rate)
         {
             return strval(WC_Twoinc_Helper::round_rate($tax_rate['rate'])) . '|' . $tax_rate['name'];
@@ -453,6 +479,10 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * URL in the plugin's carrier list, not in meta, so
          * `carrier_tracking_url` is only sent for custom entries. The most
          * recent entry wins.
+         *
+         * @param WC_Order $order
+         *
+         * @return array
          */
         public static function get_shipping_details($order)
         {
@@ -493,13 +523,23 @@ if (!class_exists('WC_Twoinc_Helper')) {
              * so callbacks must be fast, pure and deterministic — a
              * non-deterministic one churns the change hash and can make the
              * gate and the shipped body disagree. Non-array return discarded.
+             *
+             * @param array    $shipping_details Composed shipping details.
+             * @param WC_Order $order            WooCommerce order.
              */
             $filtered = apply_filters('twoinc_shipping_details', $shipping_details, $order);
             return is_array($filtered) ? $filtered : $shipping_details;
         }
 
-        // Trimmed string field from a shipment-tracking meta entry, or '' when
-        // absent, non-scalar or whitespace-only.
+        /**
+         * Trimmed string field from a shipment-tracking meta entry, or '' when
+         * absent, non-scalar or whitespace-only.
+         *
+         * @param array  $entry
+         * @param string $key
+         *
+         * @return string
+         */
         private static function clean_tracking_field($entry, $key)
         {
             if (!isset($entry[$key])) {
@@ -528,6 +568,10 @@ if (!class_exists('WC_Twoinc_Helper')) {
          *    integrations.
          * 3. `twoinc_order_payload` — filters the final body; second
          *    arg is the WC_Order.
+         *
+         * @param WC_Order $order
+         *
+         * @return array
          */
         public static function compose_twoinc_order(
             $order,
@@ -686,6 +730,15 @@ if (!class_exists('WC_Twoinc_Helper')) {
             return $req_body;
         }
 
+        /**
+         * @param WC_Order $order
+         * @param string   $department
+         * @param string   $project
+         * @param string   $purchase_order_number
+         * @param string   $vendor_name
+         *
+         * @return array
+         */
         public static function compose_twoinc_edit_order(
             $order,
             $department,
@@ -767,6 +820,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
             return $req_body;
         }
 
+        /**
+         * @return array
+         */
         public static function compose_twoinc_refund($order_refund, $amount, $currency)
         {
 
@@ -779,6 +835,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
             return $req_body;
         }
 
+        /**
+         * @return void
+         */
         public static function append_admin_force_reload()
         {
             add_action('woocommerce_admin_order_items_after_line_items', function () {
@@ -786,6 +845,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
             });
         }
 
+        /**
+         * @return bool
+         */
         public static function is_country_supported($country)
         {
             return in_array($country, array('NO', 'GB'));
@@ -806,6 +868,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
             return $gateway && 'yes' === $gateway->get_option('enable_tax_subtotals');
         }
 
+        /**
+         * @return bool
+         */
         public static function is_twoinc_development()
         {
             $hostname = str_replace(array('http://', 'https://'), '', get_home_url());
@@ -842,6 +907,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * ENVIRONMENT_MODES (including the empty default) also resolves to
          * 'production'.
          *
+         * @param WC_Payment_Gateway $gateway
+         *
          * @return string one of ENVIRONMENT_MODES
          */
         public static function get_environment_mode($gateway)
@@ -868,6 +935,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * environment can neither take real money nor accept a production
          * token.
          *
+         * @param WC_Payment_Gateway $gateway
+         *
          * @return string one of ENVIRONMENT_MODES
          */
         public static function get_effective_environment_mode($gateway)
@@ -890,6 +959,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * `api.<mode>` labels -> that mode; anything else (localhost, a
          * bespoke tunnel) -> 'staging', since a dev-sniffed shop must not
          * resolve to production.
+         *
+         * @param string             $host
+         * @param WC_Payment_Gateway $gateway
          *
          * @return string one of ENVIRONMENT_MODES
          */
@@ -922,7 +994,10 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * suffix. Resolves off the *effective* mode, so every service host
          * sits in the same environment as the API host.
          *
-         * @param string $service 'api' or 'checkout'
+         * @param string             $service 'api' or 'checkout'
+         * @param WC_Payment_Gateway $gateway
+         *
+         * @return string
          */
         public static function get_environment_host($service, $gateway)
         {
@@ -962,7 +1037,10 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * sniff as a development site AND still carry the never-configured
          * default mode.
          *
-         * @param string $service key of DEV_HOST_ENV_VARS
+         * @param string             $service key of DEV_HOST_ENV_VARS
+         * @param WC_Payment_Gateway $gateway
+         *
+         * @return string
          */
         public static function get_dev_host_override($service, $gateway)
         {
@@ -979,9 +1057,15 @@ if (!class_exists('WC_Twoinc_Helper')) {
             return is_string($host) && $host !== '' ? $host : '';
         }
 
-        // Brand's merchant-portal signup URL, host swapped for a developer
-        // override when one applies (TWO-40 §9); only the origin is
-        // replaced, so a brand overlay's own signup path is kept.
+        /**
+         * Brand's merchant-portal signup URL, host swapped for a developer
+         * override when one applies (TWO-40 §9); only the origin is
+         * replaced, so a brand overlay's own signup path is kept.
+         *
+         * @param WC_Payment_Gateway $gateway
+         *
+         * @return string
+         */
         public static function get_merchant_portal_signup_url($gateway)
         {
             $url = (string) WC_Twoinc_Brand::get('sign_up_url');
@@ -1004,6 +1088,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
          * in — get_user_locale() would instead return a logged-in buyer's WP
          * profile language, which can differ from the checkout page around
          * it.
+         *
+         * @return string
          */
         public static function get_locale()
         {
@@ -1014,6 +1100,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
             return 'en_US';
         }
 
+        /**
+         * @return array
+         */
         public static function utf8ize($d)
         {
             if (is_array($d)) {
@@ -1040,6 +1129,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
             return $d;
         }
 
+        /**
+         * @return string
+         */
         public static function hash_order($order, $twoinc_meta)
         {
             $twoinc_order = WC_Twoinc_Helper::compose_twoinc_order(
@@ -1061,6 +1153,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
             return WC_Twoinc_Helper::hash_obj($twoinc_order);
         }
 
+        /**
+         * @return string
+         */
         public static function hash_obj($obj)
         {
             return md5(json_encode(WC_Twoinc_Helper::utf8ize($obj)));
@@ -1102,6 +1197,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
             }
         }
 
+        /**
+         * @return array
+         */
         private static function get_item_tax_rate($line_item, $order)
         {
             $item_tax_rate_list = [];
@@ -1123,6 +1221,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
             return WC_Twoinc_Helper::get_tax_rate_from_tax_list($item_tax_rate_list);
         }
 
+        /**
+         * @return array
+         */
         private static function get_tax_rate_from_tax_list($tax_rate_list)
         {
             $no_zero_list = [];

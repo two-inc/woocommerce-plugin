@@ -67,7 +67,8 @@ return [
     // boolean only; anything else defaults true.
     'intent_approved_notice_enabled' => true,
     // Copy override for that notice — wording only, not on/off (use
-    // 'intent_approved_notice_enabled' for that). null/''/whitespace-only
+    // 'intent_approved_notice_enabled' for that; it carried the on/off
+    // meaning too until TWO-25218, no longer). null/''/whitespace-only
     // falls back to WC_Twoinc::get_intent_approved_notice's default. A
     // non-empty string is the sprintf template verbatim: %1$s
     // product_name, %2$s buyer company name.

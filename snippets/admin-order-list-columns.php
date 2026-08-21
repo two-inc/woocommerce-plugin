@@ -8,6 +8,9 @@ add_action('pre_get_posts', 'add_filtering_query');
 add_action('pre_get_posts', 'add_sorting_query');
 
 
+/**
+ * @return void
+ */
 function add_filtering_query($query)
 {
     global $pagenow;
@@ -15,6 +18,7 @@ function add_filtering_query($query)
     if (
         is_admin()
         && $query->is_main_query()
+        // by default filter will be added to all post types, you can operate with $_GET['post_type'] to restrict it for some types
         && in_array($pagenow, array('edit.php', 'upload.php'))
         && (! empty($_GET['delivery_date_from']) || ! empty($_GET['delivery_date_to']))
     ) {
@@ -67,6 +71,9 @@ function add_sorting_query($query)
 }
 
 
+/**
+ * @return array
+ */
 function add_custom_columns($columns)
 {
     $new_columns = array();
@@ -82,6 +89,9 @@ function add_custom_columns($columns)
 }
 
 
+/**
+ * @return array
+ */
 function add_custom_sortable_columns($columns)
 {
     $columns['order_delivery_date'] = 'order_delivery_date';
@@ -90,6 +100,9 @@ function add_custom_sortable_columns($columns)
 }
 
 
+/**
+ * @return void
+ */
 function add_custom_columns_content($column)
 {
     global $post;
@@ -111,6 +124,9 @@ function add_custom_columns_content($column)
 }
 
 
+/**
+ * @return void
+ */
 function add_delivery_date_filter_form_inputs()
 {
     $from = (isset($_GET['delivery_date_from']) && $_GET['delivery_date_from']) ? $_GET['delivery_date_from'] : '';

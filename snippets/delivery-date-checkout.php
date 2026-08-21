@@ -6,6 +6,9 @@ add_action('woocommerce_checkout_process', 'checkout_validate_delivery_date');
 add_action('woocommerce_checkout_update_order_meta', 'add_delivery_date_to_order_meta');
 add_action('wp_insert_post', 'prepend_to_order_note', 10, 3);
 
+/**
+ * @return void
+ */
 function enqueue_date_picker()
 {
     if (is_admin() || !is_checkout()) {
@@ -15,6 +18,9 @@ function enqueue_date_picker()
 }
 
 
+/**
+ * @return void
+ */
 function add_delivery_date_field($checkout)
 {
     date_default_timezone_set('Europe/Oslo');
@@ -53,6 +59,9 @@ function add_delivery_date_field($checkout)
 }
 
 
+/**
+ * @return void
+ */
 function checkout_validate_delivery_date()
 {
     if (!$_POST['delivery_date']) {
@@ -75,6 +84,9 @@ function checkout_validate_delivery_date()
 }
 
 
+/**
+ * @return void
+ */
 function add_delivery_date_to_order_meta($order_id)
 {
     if (!empty($_POST['delivery_date'])) {
@@ -84,6 +96,9 @@ function add_delivery_date_to_order_meta($order_id)
 }
 
 
+/**
+ * @return bool
+ */
 function validate_date($date_str, $format = 'Y-m-d')
 {
     $d = DateTime::createFromFormat($format, $date_str);
@@ -91,6 +106,9 @@ function validate_date($date_str, $format = 'Y-m-d')
 }
 
 
+/**
+ * @return void
+ */
 function prepend_to_order_note($post_id, $post, $update)
 {
     if (! $post_id || get_post_type($post_id) != 'shop_order' || $update == 1) {

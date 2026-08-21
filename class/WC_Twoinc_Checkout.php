@@ -65,6 +65,8 @@ if (!class_exists('WC_Twoinc_Checkout')) {
          * optionals out of their intended band. move_country_field(),
          * update_company_fields() and sync_locale_country_priority() must
          * all agree on this number or the three drift apart (#33).
+         *
+         * @return int
          */
         private static function clamp_company_priority($priority)
         {
@@ -81,6 +83,8 @@ if (!class_exists('WC_Twoinc_Checkout')) {
          * aren't in that JS's locale_fields list, so only country gets
          * overwritten. Left unfixed this silently reverts
          * move_country_field()'s fix a few hundred ms after load.
+         *
+         * @return mixed
          */
         public function sync_locale_country_priority($fields)
         {
@@ -222,6 +226,9 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             return $fields;
         }
 
+        /**
+         * @return array
+         */
         public function add_tracking_fields($fields)
         {
 
@@ -235,6 +242,9 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             return $fields;
         }
 
+        /**
+         * @return void
+         */
         public function render_twoinc_fields()
         {
             ob_start();
@@ -243,6 +253,9 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             echo $content;
         }
 
+        /**
+         * @return void
+         */
         public function render_twoinc_representative_fields()
         {
             ob_start();
@@ -410,6 +423,9 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             return $properties;
         }
 
+        /**
+         * @return void
+         */
         public function inject_cart_details()
         {
             if (!is_checkout()) {

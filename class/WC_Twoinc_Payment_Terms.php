@@ -4,7 +4,8 @@
  * Payment terms chip selector + offset pricing fee — business logic (TWO-24751).
  *
  * All term/fee decisioning lives here; assets/js/twoinc.js only renders what
- * these methods return.
+ * these methods return (the Gutenberg block checkout port must not need a
+ * business-logic rewrite, see TWO-24767).
  *
  * Term availability: `get_available_terms()` is the single seam — the
  * merchant's ticked presets intersected with the backend's offered set
