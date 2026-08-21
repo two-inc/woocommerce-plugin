@@ -83,6 +83,10 @@ final class BrandConfigSpec
             'testSurchargeGridValidationNormalisesAndRejects',
             'testSurchargeGridEnforcesMerchantFixedCap',
             'testSurchargeRefusalIsVisibleAndNothingPartiallySaves',
+            'testCustomPaymentTermFieldHiddenUnlessGenuinelyCustom',
+            'testCustomPaymentTermReconciledOnSaveWhenItMatchesATickedPreset',
+            'testCustomPaymentTermTicksAnUnofferedButOfferedUntickedMatch',
+            'testCustomPaymentTermNotReconciledWhenGenuinelyCustom',
             'testZeroCapOnAnUnrenderedRowDoesNotBlockEnabling',
             'testDisablingSurchargesIsNeverBlockedByAZeroCap',
             'testSurchargeCapZeroAmountFromApiMeansNoLimit',
@@ -2558,27 +2562,30 @@ final class BrandConfigSpec
         $limit_option = WC_Twoinc_Brand::prefixed_name('merchant_surcharge_limit');
         $GLOBALS['__twoinc_test_options'][$limit_option] = json_encode(['amount' => 25.0, 'currency' => 'EUR']);
 
-        // Matching store currency: the grid claims the enforced maximum.
+        // Matching store currency: the fixed paragraph claims the enforced
+        // maximum, on top of the always-shown base sentence.
         $GLOBALS['__twoinc_test_store_currency'] = 'EUR';
         $gateway = self::validationGateway(['payment_terms_days' => [30]], [30]);
         $html = $gateway->generate_two_surcharge_grid_html('surcharge_grid', []);
-        TinyAssert::true(strpos($html, 'Max EUR 25.') !== false, 'expected Max sentence for matching currency');
+        TinyAssert::true(
+            strpos($html, 'Enter the amount you want to charge your customer. Max EUR 25.') !== false,
+            'expected base + Max sentence for matching currency'
+        );
+        TinyAssert::true(strpos($html, 'Max 100%.') !== false, 'the percentage ceiling is always claimable');
 
         // Store currency differs from the cap's: save-validation skips the
-        // cap (Woo does no FX conversion), so the help text must not claim
-        // a fixed maximum it will not enforce. The fixed-amount help
-        // paragraph disappears entirely and the combined variant degrades
-        // to the percentage-only wording — the percentage
-        // ceiling itself is always enforced, so "Max: 100%" stays.
+        // cap (Woo does no FX conversion), so the fixed help text must not
+        // claim a maximum it will not enforce — but the base sentence still
+        // renders; "no cap" must not mean "no help at all" (TWO-25498).
         $GLOBALS['__twoinc_test_store_currency'] = 'NOK';
         $html = $gateway->generate_two_surcharge_grid_html('surcharge_grid', []);
         TinyAssert::true(strpos($html, 'Max EUR') === false, 'fixed Max sentence must be omitted on currency mismatch');
         TinyAssert::true(strpos($html, 'Max NOK') === false, 'no fixed maximum may be claimed on currency mismatch');
         TinyAssert::true(
-            strpos($html, 'twoinc-surcharge-grid-help--fixed"') === false,
-            'the fixed-only help paragraph must not render without an enforceable cap'
+            strpos($html, 'twoinc-surcharge-grid-help--fixed"') !== false,
+            'the fixed help paragraph always renders, cap or not'
         );
-        TinyAssert::true(strpos($html, 'Max: 100%.') !== false, 'percentage ceiling is always claimable');
+        TinyAssert::true(strpos($html, 'Max 100%.') !== false, 'percentage ceiling is always claimable');
         unset($GLOBALS['__twoinc_test_store_currency']);
 
         // An active-currency-only divergence is NOT a mismatch: the cap is
@@ -3154,6 +3161,134 @@ final class BrandConfigSpec
         $_POST[$custom_key] = '45';
         TinyAssert::same([], $gateway->validate_two_payment_terms_field('payment_terms_days', []));
         unset($_POST[$custom_key]);
+    }
+
+    /**
+     * TWO-25498. The "Custom Payment Terms (days)" row is hidden server-side
+     * (no JS flash) unless the stored custom value is genuinely custom — not
+     * a duplicate of a backend-offered preset row, ticked or not.
+     */
+    private static function testCustomPaymentTermFieldHiddenUnlessGenuinelyCustom(): void
+    {
+        // self::gateway() offers [14, 30, 60, 90] from the backend.
+        $gateway = self::gateway();
+        $option_key = $gateway->get_option_key();
+
+        // Genuinely custom: 45 is not offered at all.
+        $GLOBALS['__twoinc_test_options'][$option_key] = [
+            'payment_terms_days' => ['30'],
+            'payment_terms_custom_days' => '45',
+        ];
+        $gateway->init_settings();
+        $html = $gateway->generate_two_custom_payment_days_html('payment_terms_custom_days', []);
+        TinyAssert::true(strpos($html, 'style="display:none;"') === false, 'a genuinely custom value must render visible');
+
+        // Duplicate of a ticked preset: hidden.
+        $GLOBALS['__twoinc_test_options'][$option_key] = [
+            'payment_terms_days' => ['30'],
+            'payment_terms_custom_days' => '30',
+        ];
+        $gateway->init_settings();
+        $html = $gateway->generate_two_custom_payment_days_html('payment_terms_custom_days', []);
+        TinyAssert::true(strpos($html, 'style="display:none;"') !== false, 'a value duplicating a ticked preset must render hidden');
+
+        // Duplicate of an OFFERED-BUT-UNTICKED preset (60 is offered by the
+        // backend but not in payment_terms_days here): hidden too, since it
+        // already has a preset row to fold into.
+        $GLOBALS['__twoinc_test_options'][$option_key] = [
+            'payment_terms_days' => ['30'],
+            'payment_terms_custom_days' => '60',
+        ];
+        $gateway->init_settings();
+        $html = $gateway->generate_two_custom_payment_days_html('payment_terms_custom_days', []);
+        TinyAssert::true(strpos($html, 'style="display:none;"') !== false, 'a value duplicating an unticked but offered preset must render hidden');
+
+        // Empty: hidden.
+        $GLOBALS['__twoinc_test_options'][$option_key] = [
+            'payment_terms_days' => ['30'],
+            'payment_terms_custom_days' => '',
+        ];
+        $gateway->init_settings();
+        $html = $gateway->generate_two_custom_payment_days_html('payment_terms_custom_days', []);
+        TinyAssert::true(strpos($html, 'style="display:none;"') !== false, 'an empty custom value must render hidden');
+    }
+
+    /**
+     * TWO-25498. On save, a custom value that now duplicates a term the
+     * merchant just ticked is redundant — it is cleared and folded into the
+     * checkbox selection (already there in this case, but the write path is
+     * exercised regardless). Drives the real save loop, like
+     * testSurchargeRefusalIsVisibleAndNothingPartiallySaves above.
+     */
+    private static function testCustomPaymentTermReconciledOnSaveWhenItMatchesATickedPreset(): void
+    {
+        $gateway = self::gateway();
+        $gateway->init_form_fields();
+        $option_key = $gateway->get_option_key();
+        $GLOBALS['__twoinc_test_options'][$option_key] = [
+            'payment_terms_days' => ['14'],
+            'payment_terms_custom_days' => '30',
+        ];
+        // The merchant ticks 30 (previously offered only via the custom
+        // field) on this save.
+        $gateway->test_post_data = [
+            $gateway->get_field_key('surcharge_tax_treatment') => 'standard',
+            $gateway->get_field_key('payment_terms_days') => ['14', '30'],
+            $gateway->get_field_key('payment_terms_custom_days') => '30',
+        ];
+        $gateway->process_admin_options();
+        $saved = get_option($option_key, []);
+
+        TinyAssert::same('', $saved['payment_terms_custom_days'], 'a custom value duplicating a newly-ticked preset must be cleared');
+        TinyAssert::same([14, 30], $saved['payment_terms_days'], 'the day count must survive in the checkbox selection');
+    }
+
+    /**
+     * TWO-25498. A custom value matching an offered-but-currently-UNticked
+     * preset (60 is offered by the backend but wasn't ticked this save)
+     * must actually tick that preset, not just clear the custom value — the
+     * bug this fix targets: the old genuine-check only ever compared
+     * against the ticked set, so this fold-in branch was unreachable.
+     */
+    private static function testCustomPaymentTermTicksAnUnofferedButOfferedUntickedMatch(): void
+    {
+        $gateway = self::gateway();
+        $gateway->init_form_fields();
+        $option_key = $gateway->get_option_key();
+        $GLOBALS['__twoinc_test_options'][$option_key] = [
+            'payment_terms_days' => ['14'],
+            'payment_terms_custom_days' => '60',
+        ];
+        // The merchant doesn't touch the checkboxes on this save — 60 stays
+        // unticked in the POST, but it matches an offered preset row.
+        $gateway->test_post_data = [
+            $gateway->get_field_key('surcharge_tax_treatment') => 'standard',
+            $gateway->get_field_key('payment_terms_days') => ['14'],
+            $gateway->get_field_key('payment_terms_custom_days') => '60',
+        ];
+        $gateway->process_admin_options();
+        $saved = get_option($option_key, []);
+
+        TinyAssert::same('', $saved['payment_terms_custom_days'], 'a custom value matching an offered preset must be cleared even when unticked');
+        TinyAssert::same([14, 60], $saved['payment_terms_days'], 'the matching preset must be ticked into the checkbox selection');
+    }
+
+    private static function testCustomPaymentTermNotReconciledWhenGenuinelyCustom(): void
+    {
+        $gateway = self::gateway();
+        $gateway->init_form_fields();
+        $option_key = $gateway->get_option_key();
+        $GLOBALS['__twoinc_test_options'][$option_key] = [];
+        $gateway->test_post_data = [
+            $gateway->get_field_key('surcharge_tax_treatment') => 'standard',
+            $gateway->get_field_key('payment_terms_days') => ['14'],
+            $gateway->get_field_key('payment_terms_custom_days') => '45',
+        ];
+        $gateway->process_admin_options();
+        $saved = get_option($option_key, []);
+
+        TinyAssert::same('45', $saved['payment_terms_custom_days'], 'a genuinely custom value must survive the save untouched');
+        TinyAssert::same([14], $saved['payment_terms_days'], 'ticked presets are unaffected when nothing needs reconciling');
     }
 
     private static function testDefaultTermCoercedToOfferedSet(): void

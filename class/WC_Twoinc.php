@@ -1485,7 +1485,7 @@ if (!class_exists('WC_Twoinc')) {
                 if (!empty($zero_cap_days)) {
                     throw new Exception(sprintf(
                         /* translators: %s: comma-separated term days, e.g. "14, 30" */
-                        __('Clear or correct the surcharge cap of 0 on these terms before enabling a percentage surcharge: %s. A cap of 0 charges nothing at all; to charge nothing on a term, set its percentage and fixed fee to 0 and leave the cap empty.', 'twoinc-payment-gateway'),
+                        __('Clear or correct the surcharge limit of 0 on these terms before enabling a percentage surcharge: %s. A limit of 0 charges nothing at all; to charge nothing on a term, set its percentage and fixed fee to 0 and leave the limit empty.', 'twoinc-payment-gateway'),
                         implode(', ', $zero_cap_days)
                     ));
                 }
@@ -1584,11 +1584,6 @@ if (!class_exists('WC_Twoinc')) {
             $fixed_limit_label = $fixed_limit && $fixed_limit['currency'] === $currency_code
                 ? $this->format_surcharge_limit_label($fixed_limit)
                 : '';
-            // Percentage ceiling. Mirrors Magento's
-            // ConfigRepository::SURCHARGE_PERCENTAGE_MAX; here the bound is
-            // the one validate_two_surcharge_grid_field() enforces, so the
-            // claimed and the enforced maximum stay the same number.
-            $percentage_limit_label = '100%';
             // Shared trailing sentence on both percentage-bearing help
             // variants, exactly as Magento's surcharge-grid.phtml composes
             // it. %s is the currency SYMBOL there, not the code.
@@ -1600,37 +1595,27 @@ if (!class_exists('WC_Twoinc')) {
             // Zero is NOT the way to express "no fee on this term" — the
             // grid refuses it on save. Say so next to the instruction that
             // otherwise invites it (TWO-25289).
-            $cap_zero_sentence = __('A cap of 0 is not allowed. To charge nothing on a term, set the percentage and the fixed fee for that term to 0 instead.', 'twoinc-payment-gateway');
+            $limit_zero_sentence = __('A limit of 0 is not allowed. To charge nothing on a term, set the percentage and the fixed fee for that term to 0 instead.', 'twoinc-payment-gateway');
             // Stated only for fixed_and_percentage, the one method where the
             // distinction is load-bearing: the cap is applied to the summed
             // fee, so it can wipe the fixed fee as well as the percentage.
-            $cap_whole_fee_sentence = __('The cap applies to the whole fee: the percentage and the fixed fee together, not the percentage alone.', 'twoinc-payment-gateway');
+            $limit_whole_fee_sentence = __('The limit applies to the whole fee: the percentage and the fixed fee together, not the percentage alone.', 'twoinc-payment-gateway');
             // One help paragraph per surcharge method, keyed by the method
             // slug so admin.js can switch between them. Composed here rather
             // than inline in the markup below so the template stays readable.
-            $percentage_sentence = sprintf(
-                /* translators: %s: maximum percentage, e.g. "100%%" */
-                __('Enter the percentage of the fee you want to charge your customer. Max: %s.', 'twoinc-payment-gateway'),
-                $percentage_limit_label
-            );
+            $percentage_sentence = __('Enter the percentage of the fee\'s cost to you that you want the surcharge to recover. 100% means the fee no longer reduces your revenue at all.', 'twoinc-payment-gateway');
             $help_text = [];
+            $help_text['fixed'] = __('Enter the amount you want to charge your customer.', 'twoinc-payment-gateway');
             if ($fixed_limit_label !== '') {
-                $help_text['fixed'] = sprintf(
+                $help_text['fixed'] .= ' ' . sprintf(
                     /* translators: %s: maximum fixed amount with currency, e.g. "EUR 25" */
-                    __('Enter the amount you want to charge your customer. Max %s.', 'twoinc-payment-gateway'),
+                    __('Max %s.', 'twoinc-payment-gateway'),
                     $fixed_limit_label
                 );
             }
-            $help_text['percentage'] = $percentage_sentence . ' ' . $limit_sentence . ' ' . $cap_zero_sentence;
-            // No enforceable fixed maximum → degrade to the percentage-only
-            // wording rather than claim a maximum that is not applied.
-            $help_text['fixed_and_percentage'] = ($fixed_limit_label !== '' ? sprintf(
-                /* translators: 1: maximum fixed amount with currency, e.g. "EUR 25"; 2: maximum percentage, e.g. "100%%" */
-                __('Enter the amount and percentage of the fee you want to charge your customer. Max %1$s / %2$s.', 'twoinc-payment-gateway'),
-                $fixed_limit_label,
-                $percentage_limit_label
-            ) : $percentage_sentence) . ' ' . $limit_sentence
-                . ' ' . $cap_whole_fee_sentence . ' ' . $cap_zero_sentence;
+            $help_text['percentage'] = $percentage_sentence . ' ' . $limit_sentence . ' ' . $limit_zero_sentence;
+            $help_text['fixed_and_percentage'] = __('Enter the amount and percentage of the fee charged to you that you want to offset with a surcharge. Max 100%.', 'twoinc-payment-gateway')
+                . ' ' . $limit_sentence . ' ' . $limit_whole_fee_sentence . ' ' . $limit_zero_sentence;
 
             ob_start();
             // Rendered rows mirror the SAVED offered set; admin.js keeps the
@@ -1659,8 +1644,8 @@ if (!class_exists('WC_Twoinc')) {
                         <thead><tr>
                             <th><?php esc_html_e('Term (days)', 'twoinc-payment-gateway'); ?></th>
                             <th class="twoinc-col-fixed"><?php esc_html_e('Fixed', 'twoinc-payment-gateway'); ?></th>
-                            <th class="twoinc-col-percentage"><?php esc_html_e('Percentage (%)', 'twoinc-payment-gateway'); ?></th>
-                            <th class="twoinc-col-limit"><?php esc_html_e('Cap', 'twoinc-payment-gateway'); ?></th>
+                            <th class="twoinc-col-percentage"><?php esc_html_e('Percent of Fee', 'twoinc-payment-gateway'); ?></th>
+                            <th class="twoinc-col-limit"><?php esc_html_e('Limit', 'twoinc-payment-gateway'); ?></th>
                         </tr></thead>
                         <tbody>
                         <?php foreach ($terms as $days) :
@@ -1794,7 +1779,7 @@ if (!class_exists('WC_Twoinc')) {
                     if ($cap_rounds_away && $cap_column_live) {
                         throw new Exception(sprintf(
                             /* translators: %s: term days */
-                            __('Surcharge cap for the %s-day term cannot be 0. To charge nothing on this term, set the percentage and the fixed fee to 0 instead, and leave the cap empty.', 'twoinc-payment-gateway'),
+                            __('Surcharge limit for the %s-day term cannot be 0. To charge nothing on this term, set the percentage and the fixed fee to 0 instead, and leave the limit empty.', 'twoinc-payment-gateway'),
                             $days
                         ));
                     }
@@ -1965,6 +1950,67 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
+         * True when a custom day count doesn't already duplicate a term the
+         * backend offers (checked or not) — the "Custom Payment Terms (days)"
+         * field is only shown/meaningful for a genuinely custom value, not a
+         * value that already has a preset checkbox row (TWO-25498). Compared
+         * against the full backend-available set, not just the currently
+         * ticked subset, so a match on an unticked preset also folds in
+         * (see reconcile_custom_payment_term).
+         */
+        private function is_custom_payment_term_genuine(int $custom_days): bool
+        {
+            if ($custom_days <= 0) {
+                return false;
+            }
+            return !in_array($custom_days, $this->get_merchant_available_terms(), true);
+        }
+
+        /**
+         * Render the "Custom Payment Terms (days)" number field, hidden
+         * server-side (no JS flash) unless the stored value is genuinely
+         * custom. admin.js keeps this live against unsaved checkbox ticks;
+         * see updateCustomDaysVisibility there. Mirrors WC_Settings_API's
+         * own generate_number_html, with the added visibility guard.
+         */
+        public function generate_two_custom_payment_days_html($key, $data)
+        {
+            $field_key = $this->get_field_key($key);
+            $defaults  = array(
+                'title'             => '',
+                'disabled'          => false,
+                'class'             => '',
+                'css'               => '',
+                'placeholder'       => '',
+                'type'              => 'number',
+                'desc_tip'          => false,
+                'description'       => '',
+                'custom_attributes' => array(),
+            );
+            $data = wp_parse_args($data, $defaults);
+            $genuine = $this->is_custom_payment_term_genuine((int) $this->get_option($key));
+            ob_start();
+            ?>
+            <tr valign="top" class="twoinc-custom-payment-days-field" <?php echo $genuine ? '' : 'style="display:none;"'; ?>>
+                <th scope="row" class="titledesc">
+                    <label for="<?php echo esc_attr($field_key); ?>"><?php echo wp_kses_post($data['title']); ?> <?php echo $this->get_tooltip_html($data); // WPCS: XSS ok.
+                    ?></label>
+                </th>
+                <td class="forminp">
+                    <fieldset>
+                        <legend class="screen-reader-text"><span><?php echo wp_kses_post($data['title']); ?></span></legend>
+                        <input class="input-text regular-input <?php echo esc_attr($data['class']); ?>" type="<?php echo esc_attr($data['type']); ?>" name="<?php echo esc_attr($field_key); ?>" id="<?php echo esc_attr($field_key); ?>" style="<?php echo esc_attr($data['css']); ?>" value="<?php echo esc_attr($this->get_option($key)); ?>" placeholder="<?php echo esc_attr($data['placeholder']); ?>" <?php disabled($data['disabled'], true); ?> <?php echo $this->get_custom_attribute_html($data); // WPCS: XSS ok.
+                        ?> />
+                        <?php echo $this->get_description_html($data); // WPCS: XSS ok.
+                        ?>
+                    </fieldset>
+                </td>
+            </tr>
+            <?php
+            return ob_get_clean();
+        }
+
+        /**
          * Validate the optional custom payment term: a non-negative whole number
          * of days, or blank. Mirrors Magento's payment_terms_duration_days
          * (validate-digits validate-zero-or-greater).
@@ -1976,7 +2022,7 @@ if (!class_exists('WC_Twoinc')) {
                 return '';
             }
             if (!ctype_digit($value)) {
-                throw new Exception(__('Custom Payment Term (days) must be a whole number of days.', 'twoinc-payment-gateway'));
+                throw new Exception(__('Custom Payment Terms (days) must be a whole number of days.', 'twoinc-payment-gateway'));
             }
             return (string) (int) $value;
         }
@@ -4568,15 +4614,19 @@ if (!class_exists('WC_Twoinc')) {
                     'type'        => 'two_payment_terms',
                 ],
                 'payment_terms_custom_days' => [
-                    'title'             => __('Custom Payment Term (days)', 'twoinc-payment-gateway'),
+                    'title'             => __('Custom Payment Terms (days)', 'twoinc-payment-gateway'),
                     'description'       => __('Optional. Enter a custom number of days to offer alongside the selected terms above.', 'twoinc-payment-gateway'),
                     'desc_tip'          => true,
-                    'type'              => 'number',
+                    // Custom render (not the default 'number' generator):
+                    // the row is hidden server-side unless the stored value
+                    // is a genuine custom term, not a duplicate of a preset
+                    // the checkboxes above already offer (TWO-25498).
+                    'type'              => 'two_custom_payment_days',
                     'custom_attributes' => ['min' => '0', 'step' => '1'],
                     'default'           => ''
                 ],
                 'default_payment_term' => [
-                    'title'       => __('Default Payment Term', 'twoinc-payment-gateway'),
+                    'title'       => __('Default Payment Terms', 'twoinc-payment-gateway'),
                     'description' => __('Select the payment term that will be automatically selected for your customer.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'type'        => 'select',
@@ -4615,7 +4665,7 @@ if (!class_exists('WC_Twoinc')) {
                     'default'     => ''
                 ],
                 'surcharge_tax_treatment' => [
-                    'title'       => __('Surcharge tax treatment', 'twoinc-payment-gateway'),
+                    'title'       => __('Surcharge Tax Treatment', 'twoinc-payment-gateway'),
                     'desc_tip'    => __('How the surcharge line is taxed. Standard applies your store\'s default tax rules to the fee. Specific tax class taxes the fee under a WooCommerce tax class you select below — to leave the fee untaxed, create a tax class with a 0% rate and select it here.', 'twoinc-payment-gateway'),
                     // Visible (non-tooltip) description: carries the loud
                     // never-taxed error when the stored treatment is one this
@@ -4640,7 +4690,7 @@ if (!class_exists('WC_Twoinc')) {
                     'default'     => ''
                 ],
                 'surcharge_tax_class' => [
-                    'title'       => __('Surcharge tax class', 'twoinc-payment-gateway'),
+                    'title'       => __('Surcharge Tax Class', 'twoinc-payment-gateway'),
                     'desc_tip'    => __('The WooCommerce tax class applied to the surcharge when the tax treatment is "Specific tax class". Manage tax classes under WooCommerce → Settings → Tax.', 'twoinc-payment-gateway'),
                     // Visible (non-tooltip) description: carries the stale-
                     // selection warning when the stored class has been
@@ -5645,6 +5695,30 @@ if (!class_exists('WC_Twoinc')) {
             // Save all settings (with possibly reverted API key)
             $_POST = $post_data;
             parent::process_admin_options();
+            $this->reconcile_custom_payment_term();
+        }
+
+        /**
+         * A custom day count that now duplicates a backend-offered preset
+         * (ticked or not, e.g. it re-entered the backend's available list)
+         * is redundant — clear it and tick that preset's checkbox so a
+         * later render doesn't show a "custom" field for a value that
+         * already has a preset row (TWO-25498).
+         */
+        private function reconcile_custom_payment_term(): void
+        {
+            $custom = (int) $this->get_option('payment_terms_custom_days');
+            if ($custom <= 0 || $this->is_custom_payment_term_genuine($custom)) {
+                return;
+            }
+            $days = $this->get_option('payment_terms_days');
+            $days = is_array($days) ? array_map('intval', $days) : [];
+            if (!in_array($custom, $days, true)) {
+                $days[] = $custom;
+                sort($days);
+                $this->update_option('payment_terms_days', $days);
+            }
+            $this->update_option('payment_terms_custom_days', '');
         }
 
         /**

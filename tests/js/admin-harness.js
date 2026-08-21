@@ -85,6 +85,7 @@ function installJQuery() {
  * @param {number[]} options.checked which of those start ticked
  * @param {Object} options.stored the stored grid, keyed by term days
  * @param {string} options.type stored surcharge_type
+ * @param {number|string} options.customDays stored payment_terms_custom_days value
  * @returns {void}
  */
 function buildSettingsPage(options) {
@@ -183,7 +184,9 @@ function buildSettingsPage(options) {
     '    <tr><td><div class="twoinc-term-checkboxes">' + checkboxes + "</div></td></tr>",
     '    <tr><td><input type="text" id="' +
       FIELD_PREFIX +
-      'payment_terms_custom_days" value="" /></td></tr>',
+      'payment_terms_custom_days" value="' +
+      (opts.customDays === undefined ? "" : opts.customDays) +
+      '" /></td></tr>',
     '    <tr><td><select id="' + FIELD_PREFIX + 'default_payment_term"></select></td></tr>',
     '    <tr><td><select id="' + FIELD_PREFIX + 'surcharge_type">',
     ["none", "fixed", "percentage", "fixed_and_percentage"]
@@ -199,13 +202,24 @@ function buildSettingsPage(options) {
     '      <option value="custom_class">custom_class</option>',
     "    </select></td></tr>",
     '    <tr><td><select id="' + FIELD_PREFIX + 'surcharge_tax_class"></select></td></tr>',
+    '    <tr><td><select id="' + FIELD_PREFIX + 'surcharge_differential"></select></td></tr>',
+    '    <tr><td><input type="text" id="' +
+      FIELD_PREFIX +
+      'surcharge_line_description" /></td></tr>',
+    '    <tr><td><select id="' + FIELD_PREFIX + 'surcharge_rounding_basis">',
+    '      <option value="none" selected>none</option>',
+    '      <option value="up">up</option>',
+    '      <option value="down">down</option>',
+    '      <option value="standard">standard</option>',
+    "    </select></td></tr>",
+    '    <tr><td><select id="' + FIELD_PREFIX + 'surcharge_rounding_step"></select></td></tr>',
     '    <tr class="twoinc-surcharge-grid-field"><td>',
     '      <p class="twoinc-surcharge-grid-empty" style="display:none"></p>',
     '      <table class="widefat twoinc-surcharge-grid" data-field-key="' + gridKey + '">',
     "        <thead><tr><th>Term</th>",
     '          <th class="twoinc-col-fixed">Fixed</th>',
     '          <th class="twoinc-col-percentage">Percentage</th>',
-    '          <th class="twoinc-col-limit">Cap</th>',
+    '          <th class="twoinc-col-limit">Limit</th>',
     "        </tr></thead>",
     "        <tbody>" + rows + "</tbody>",
     "      </table>",

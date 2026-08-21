@@ -495,21 +495,70 @@ jQuery(function ($) {
       $taxClass.closest("tr").toggle(type !== "none" && treatment === "custom_class");
     }
 
+    // ── Surcharge basis/description/rounding visibility ──────────────
+    // These rows are only meaningful once a surcharge method is chosen;
+    // no surcharge → they're noise, same rationale as updateTaxFields above.
+    const $surchargeDifferential = $("#" + prefix + "surcharge_differential");
+    const $surchargeLineDescription = $("#" + prefix + "surcharge_line_description");
+    const $surchargeRoundingBasis = $("#" + prefix + "surcharge_rounding_basis");
+    const $surchargeRoundingStep = $("#" + prefix + "surcharge_rounding_step");
+
+    function updateSurchargeOptionFields() {
+      const type = $surchargeType.val() || "none";
+      const visible = type !== "none";
+      $surchargeDifferential.closest("tr").toggle(visible);
+      $surchargeLineDescription.closest("tr").toggle(visible);
+      $surchargeRoundingBasis.closest("tr").toggle(visible);
+    }
+
+    // Rounding Step depends on both the Rounding Basis row being shown
+    // AND that row's own value not being "None".
+    function updateRoundingStepVisibility() {
+      const type = $surchargeType.val() || "none";
+      const basis = $surchargeRoundingBasis.val() || "none";
+      $surchargeRoundingStep.closest("tr").toggle(type !== "none" && basis !== "none");
+    }
+
+    // Custom Payment Terms (days) row is only meaningful for a genuinely
+    // custom value — hide it once the custom day duplicates one of the
+    // preset checkbox rows above, ticked or not (TWO-25498). Every row here
+    // is a backend-offered term regardless of tick state, so this matches
+    // WC_Twoinc::is_custom_payment_term_genuine() server-side without an
+    // extra fetch.
+    function updateCustomDaysVisibility() {
+      if ($customDays.length === 0) return;
+      const c = customDay();
+      const offered = $checkboxes
+        .map(function () {
+          return parseInt(this.value, 10);
+        })
+        .get();
+      const genuine = c > 0 && offered.indexOf(c) === -1;
+      $customDays.closest("tr").toggle(genuine);
+    }
+
     function onTermsChanged() {
       rebuildDefaultTerm();
       loadFees();
       updateGridRows();
+      updateCustomDaysVisibility();
     }
 
     $checkboxes.on("change", onTermsChanged);
     $customDays.on("change keyup", onTermsChanged);
     $surchargeType.on("change", updateGridColumns);
     $surchargeType.on("change", updateTaxFields);
+    $surchargeType.on("change", updateSurchargeOptionFields);
+    $surchargeType.on("change", updateRoundingStepVisibility);
     $taxTreatment.on("change", updateTaxFields);
+    $surchargeRoundingBasis.on("change", updateRoundingStepVisibility);
 
     rebuildDefaultTerm();
     loadFees();
     updateGridRows();
+    updateCustomDaysVisibility();
     updateTaxFields();
+    updateSurchargeOptionFields();
+    updateRoundingStepVisibility();
   })();
 });

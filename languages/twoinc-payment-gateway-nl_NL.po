@@ -673,7 +673,7 @@ msgid "Buyer-facing label for the surcharge line. Use %s for the term length in 
 msgstr "Label van de toeslagregel dat de koper ziet. Gebruik %s voor de termijn in dagen. Laat leeg voor de merkstandaard."
 
 #: class/WC_Twoinc.php
-msgid "Cap"
+msgid "Limit"
 msgstr "Maximum"
 
 #: class/WC_Twoinc_Sole_Trader.php
@@ -681,16 +681,16 @@ msgid "Click here to login or sign up as a sole trader."
 msgstr "Klik hier om in te loggen of u te registreren als eenmanszaak."
 
 #: class/WC_Twoinc.php
-msgid "Custom Payment Term (days)"
-msgstr "Aangepaste betalingstermijn (dagen)"
+msgid "Custom Payment Terms (days)"
+msgstr "Aangepaste betalingstermijnen (dagen)"
 
 #: class/WC_Twoinc.php
-msgid "Custom Payment Term (days) must be a whole number of days."
-msgstr "Aangepaste betalingstermijn (dagen) moet een geheel aantal dagen zijn."
+msgid "Custom Payment Terms (days) must be a whole number of days."
+msgstr "Aangepaste betalingstermijnen (dagen) moet een geheel aantal dagen zijn."
 
 #: class/WC_Twoinc.php
-msgid "Default Payment Term"
-msgstr "Standaard betalingstermijn"
+msgid "Default Payment Terms"
+msgstr "Standaard betalingstermijnen"
 
 #: class/WC_Twoinc.php
 msgid "Down"
@@ -713,18 +713,21 @@ msgid "End of month"
 msgstr "Einde van de maand"
 
 #: class/WC_Twoinc.php
-msgid "Enter the amount you want to charge your customer. Max %s."
-msgstr "Vul het bedrag in dat je bij je klant in rekening wilt brengen. Max %s."
+msgid "Enter the amount you want to charge your customer."
+msgstr "Vul het bedrag in dat je bij je klant in rekening wilt brengen."
 
 #: class/WC_Twoinc.php
 #, php-format
-msgid "Enter the amount and percentage of the fee you want to charge your customer. Max %1$s / %2$s."
-msgstr "Vul het bedrag en het percentage van de fee in dat je bij je klant in rekening wilt brengen. Max %1$s / %2$s."
+msgid "Max %s."
+msgstr "Max %s."
 
 #: class/WC_Twoinc.php
-#, php-format
-msgid "Enter the percentage of the fee you want to charge your customer. Max: %s."
-msgstr "Vul het percentage van de fee in dat je bij je klant in rekening wilt brengen. Max: %s."
+msgid "Enter the amount and percentage of the fee charged to you that you want to offset with a surcharge. Max 100%."
+msgstr "Vul het bedrag en percentage in van de fee die aan jou in rekening wordt gebracht en die je wilt compenseren met een toeslag. Max 100%."
+
+#: class/WC_Twoinc.php
+msgid "Enter the percentage of the fee's cost to you that you want the surcharge to recover. 100% means the fee no longer reduces your revenue at all."
+msgstr "Vul het percentage in van de kosten van de fee voor jou dat je met de toeslag wilt terugverdienen. 100% betekent dat de fee je omzet niet langer verlaagt."
 
 #: class/WC_Twoinc.php
 #, php-format
@@ -833,8 +836,8 @@ msgid "Percentage"
 msgstr "Percentage"
 
 #: class/WC_Twoinc.php
-msgid "Percentage (%)"
-msgstr "Percentage (%)"
+msgid "Percent of Fee"
+msgstr "Percentage van de fee"
 
 #: class/WC_Twoinc.php
 msgid "Platform minimum %1$s, %2$s tax. A value here is interpreted in the store currency on the tax basis selected below and must exceed it."
@@ -1020,15 +1023,20 @@ msgid "Please enter %d or more characters"
 msgstr "Voer %d of meer tekens in"
 #: class/WC_Twoinc.php
 #, php-format
-msgid "Surcharge cap for the %s-day term cannot be 0. To charge nothing on this term, set the percentage and the fixed fee to 0 instead, and leave the cap empty."
+msgid "Surcharge limit for the %s-day term cannot be 0. To charge nothing on this term, set the percentage and the fixed fee to 0 instead, and leave the limit empty."
 msgstr "Het maximum voor de toeslag voor de termijn van %s dagen mag niet 0 zijn. Als je voor deze termijn niets in rekening wilt brengen, stel dan het percentage en het vaste bedrag in op 0 en laat het maximum leeg."
 
 #: class/WC_Twoinc.php
-msgid "A cap of 0 is not allowed. To charge nothing on a term, set the percentage and the fixed fee for that term to 0 instead."
+msgid "A limit of 0 is not allowed. To charge nothing on a term, set the percentage and the fixed fee for that term to 0 instead."
 msgstr "Een maximum van 0 is niet toegestaan. Als je voor een termijn niets in rekening wilt brengen, stel dan het percentage en het vaste bedrag van die termijn in op 0."
 
 #: class/WC_Twoinc.php
-msgid "The cap applies to the whole fee: the percentage and the fixed fee together, not the percentage alone."
+#, php-format
+msgid "Clear or correct the surcharge limit of 0 on these terms before enabling a percentage surcharge: %s. A limit of 0 charges nothing at all; to charge nothing on a term, set its percentage and fixed fee to 0 and leave the limit empty."
+msgstr "Wis of corrigeer het maximum van 0 voor de toeslag op deze termijnen voordat je een percentagetoeslag inschakelt: %s. Een maximum van 0 zorgt ervoor dat er helemaal niets in rekening wordt gebracht; om voor een termijn niets in rekening te brengen, stel je het percentage en het vaste bedrag in op 0 en laat je het maximum leeg."
+
+#: class/WC_Twoinc.php
+msgid "The limit applies to the whole fee: the percentage and the fixed fee together, not the percentage alone."
 msgstr "Het maximum geldt voor de hele fee: het percentage en het vaste bedrag samen, niet alleen het percentage."
 
 #: class/WC_Twoinc.php
@@ -1068,7 +1076,7 @@ msgid "This API key could not be verified."
 msgstr "Deze API-sleutel kon niet worden geverifieerd."
 
 #: class/WC_Twoinc.php
-msgid "Surcharge tax treatment"
+msgid "Surcharge Tax Treatment"
 msgstr "Btw-behandeling van de toeslag"
 
 #: class/WC_Twoinc.php
@@ -1076,7 +1084,7 @@ msgid "How the surcharge line is taxed. Standard applies your store's default ta
 msgstr "Hoe de toeslagregel wordt belast. Standaard past de standaard btw-regels van uw winkel toe op het bedrag. Specifieke btw-klasse belast het bedrag onder een WooCommerce-btw-klasse die u hieronder selecteert — om het bedrag onbelast te laten, maakt u een btw-klasse met een tarief van 0% en selecteert u die hier."
 
 #: class/WC_Twoinc.php
-msgid "Surcharge tax class"
+msgid "Surcharge Tax Class"
 msgstr "Btw-klasse van de toeslag"
 
 #: class/WC_Twoinc.php

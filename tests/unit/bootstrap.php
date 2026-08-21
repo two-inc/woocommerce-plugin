@@ -108,6 +108,24 @@ function wp_kses_post($content)
     return $content;
 }
 
+function disabled($actual, $expected = true, $echo = true)
+{
+    $html = ((string) $actual === (string) $expected) ? ' disabled="disabled"' : '';
+    if ($echo) {
+        echo $html;
+    }
+    return $html;
+}
+
+function checked($actual, $expected = true, $echo = true)
+{
+    $html = ((string) $actual === (string) $expected) ? ' checked="checked"' : '';
+    if ($echo) {
+        echo $html;
+    }
+    return $html;
+}
+
 function wp_parse_args($args, $defaults = [])
 {
     if (is_object($args)) {
@@ -449,6 +467,16 @@ class WC_Payment_Gateway
         return $this->settings[$key];
     }
 
+    // Mirrors WC_Settings_API::update_option: writes one field into the
+    // settings blob and persists the whole blob, the same partial-update
+    // surface WC_Twoinc::reconcile_custom_payment_term() relies on outside
+    // the process_admin_options() save loop.
+    public function update_option($key, $value = '')
+    {
+        $this->settings[$key] = $value;
+        return update_option($this->get_option_key(), $this->settings, 'yes');
+    }
+
     public function get_field_key($key)
     {
         return $this->plugin_id . $this->id . '_' . $key;
@@ -516,6 +544,39 @@ class WC_Payment_Gateway
     public function get_form_fields()
     {
         return $this->form_fields;
+    }
+
+    // Mirrors WC_Settings_API::get_tooltip_html / get_description_html /
+    // get_custom_attribute_html closely enough for the custom field
+    // renderers under test: desc_tip true shows the description as a
+    // tooltip instead of inline text, mirroring core's mutual exclusion.
+    public function get_tooltip_html($data)
+    {
+        if (($data['desc_tip'] ?? false) === true) {
+            $tip = $data['description'] ?? '';
+        } elseif (!empty($data['desc_tip'])) {
+            $tip = $data['desc_tip'];
+        } else {
+            $tip = '';
+        }
+        return $tip !== '' ? '<span class="woocommerce-help-tip" data-tip="' . esc_attr($tip) . '"></span>' : '';
+    }
+
+    public function get_description_html($data)
+    {
+        if (empty($data['description']) || ($data['desc_tip'] ?? false) === true) {
+            return '';
+        }
+        return '<p class="description">' . wp_kses_post($data['description']) . '</p>';
+    }
+
+    public function get_custom_attribute_html($data)
+    {
+        $attributes = [];
+        foreach ((array) ($data['custom_attributes'] ?? []) as $attribute => $value) {
+            $attributes[] = esc_attr($attribute) . '="' . esc_attr($value) . '"';
+        }
+        return implode(' ', $attributes);
     }
 
     public function get_field_type($field)

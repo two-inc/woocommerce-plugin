@@ -661,16 +661,54 @@ msgid "Please enter %d or more characters"
 msgstr "Ange %d eller fler tecken"
 #: class/WC_Twoinc.php
 #, php-format
-msgid "Surcharge cap for the %s-day term cannot be 0. To charge nothing on this term, set the percentage and the fixed fee to 0 instead, and leave the cap empty."
-msgstr "Maxbeloppet för tillägget på terminen med %s dagar får inte vara 0. Om du inte vill debitera något för denna termin sätter du procenten och den fasta avgiften till 0 i stället och lämnar maxbeloppet tomt."
+msgid "Surcharge limit for the %s-day term cannot be 0. To charge nothing on this term, set the percentage and the fixed fee to 0 instead, and leave the limit empty."
+msgstr "Gränsen för tillägget på terminen med %s dagar får inte vara 0. Om du inte vill debitera något för denna termin sätter du procenten och den fasta avgiften till 0 i stället och lämnar gränsen tom."
 
 #: class/WC_Twoinc.php
-msgid "A cap of 0 is not allowed. To charge nothing on a term, set the percentage and the fixed fee for that term to 0 instead."
-msgstr "Ett maxbelopp på 0 är inte tillåtet. Om du inte vill debitera något för en termin sätter du terminens procent och fasta avgift till 0 i stället."
+msgid "A limit of 0 is not allowed. To charge nothing on a term, set the percentage and the fixed fee for that term to 0 instead."
+msgstr "En gräns på 0 är inte tillåten. Om du inte vill debitera något för en termin sätter du terminens procent och fasta avgift till 0 i stället."
 
 #: class/WC_Twoinc.php
-msgid "The cap applies to the whole fee: the percentage and the fixed fee together, not the percentage alone."
-msgstr "Maxbeloppet gäller hela avgiften: procenten och den fasta avgiften tillsammans, inte bara procenten."
+#, php-format
+msgid "Clear or correct the surcharge limit of 0 on these terms before enabling a percentage surcharge: %s. A limit of 0 charges nothing at all; to charge nothing on a term, set its percentage and fixed fee to 0 and leave the limit empty."
+msgstr "Rensa eller korrigera gränsen på 0 för tillägget på dessa terminer innan du aktiverar ett procenttillägg: %s. En gräns på 0 debiterar ingenting alls; för att inte debitera något för en termin sätter du procenten och den fasta avgiften till 0 och lämnar gränsen tom."
+
+#: class/WC_Twoinc.php
+msgid "The limit applies to the whole fee: the percentage and the fixed fee together, not the percentage alone."
+msgstr "Gränsen gäller hela avgiften: procenten och den fasta avgiften tillsammans, inte bara procenten."
+
+#: class/WC_Twoinc.php
+msgid "Custom Payment Terms (days)"
+msgstr "Anpassade betalningsvillkor (dagar)"
+
+#: class/WC_Twoinc.php
+msgid "Custom Payment Terms (days) must be a whole number of days."
+msgstr "Anpassade betalningsvillkor (dagar) måste vara ett helt antal dagar."
+
+#: class/WC_Twoinc.php
+msgid "Default Payment Terms"
+msgstr "Standardbetalningsvillkor"
+
+#: class/WC_Twoinc.php
+msgid "Percent of Fee"
+msgstr "Procent av avgiften"
+
+#: class/WC_Twoinc.php
+msgid "Enter the amount you want to charge your customer."
+msgstr "Ange beloppet du vill debitera din kund."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Max %s."
+msgstr "Max %s."
+
+#: class/WC_Twoinc.php
+msgid "Enter the amount and percentage of the fee charged to you that you want to offset with a surcharge. Max 100%."
+msgstr "Ange beloppet och procentandelen av avgiften som debiteras dig som du vill kompensera med ett tillägg. Max 100 %."
+
+#: class/WC_Twoinc.php
+msgid "Enter the percentage of the fee's cost to you that you want the surcharge to recover. 100% means the fee no longer reduces your revenue at all."
+msgstr "Ange hur stor procentandel av avgiftens kostnad för dig du vill att tillägget ska kompensera för. 100 % innebär att avgiften inte längre minskar din omsättning alls."
 
 #: class/WC_Twoinc.php
 msgid "This API key is invalid or has expired."
@@ -709,7 +747,7 @@ msgid "This API key could not be verified."
 msgstr "Den här API-nyckeln kunde inte verifieras."
 
 #: class/WC_Twoinc.php
-msgid "Surcharge tax treatment"
+msgid "Surcharge Tax Treatment"
 msgstr "Skattehantering av tillägg"
 
 #: class/WC_Twoinc.php
@@ -717,7 +755,7 @@ msgid "How the surcharge line is taxed. Standard applies your store's default ta
 msgstr "Hur tilläggsraden beskattas. Standard tillämpar butikens standardskatteregler på avgiften. Specifik skatteklass beskattar avgiften enligt en WooCommerce-skatteklass du väljer nedan — för att lämna avgiften obeskattad, skapa en skatteklass med 0 % skattesats och välj den här."
 
 #: class/WC_Twoinc.php
-msgid "Surcharge tax class"
+msgid "Surcharge Tax Class"
 msgstr "Skatteklass för tillägg"
 
 #: class/WC_Twoinc.php
