@@ -109,6 +109,9 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     // postMessages for the rest of the file — against a stale module whose
     // spies this test never installed.
     soleTrader.unbindPopupMessageListener();
+    // Same shape again, for the window `focus` listener `watchPopupClose`
+    // binds.
+    soleTrader.unbindWindowRefocusListener();
     // Same shape, for `watchPopupClose`'s real `setInterval` polls: a test
     // that opens a popup and never closes it otherwise leaves that poll
     // running for the rest of the file.
@@ -121,10 +124,38 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     document.body.innerHTML = "";
   });
 
+  /**
+   * Put the flow in its one genuinely-undecided state — a chip click with
+   * the signup popup open and no outcome posted yet — and hand back the
+   * means to decide it.
+   *
+   * @returns {{settle: Function}} `settle(buyer)` posts the popup's own
+   *   ACCEPTED and resolves the buyer lookup it fires, `null` for none.
+   */
+  function armUndecidedSignup() {
+    $("#billing_email").val("buyer@example.test");
+    soleTrader.bindPopupMessageListener();
+    let resolveBuyer;
+    jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => {
+      resolveBuyer = cb;
+    });
+    return {
+      settle: (buyer) => {
+        window.dispatchEvent(
+          new window.MessageEvent("message", {
+            data: "ACCEPTED",
+            origin: "https://checkout.example.test"
+          })
+        );
+        resolveBuyer(buyer);
+      }
+    };
+  }
+
   describe("§7 — in-flight state", () => {
     test("goes up on the first flight and stays up until the last settles", () => {
-      // A COUNT, not a boolean: a buyer changing email mid-prefetch starts a
-      // second flight before the first has landed.
+      // A COUNT, not a boolean: a re-signup can overlap an earlier popup's
+      // own close poll.
       soleTrader.beginFlight();
       expect($(".twoinc-sole-trader-note-slot").hasClass("twoinc-sole-trader-toggle--busy")).toBe(
         true
@@ -155,66 +186,79 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       );
     });
 
-    test("shows the spinner inside the company-search field, not as an overlay", () => {
+    /**
+     * The spinner belongs over the field this flow is FILLING IN, not in the
+     * query row it hides (Doug 2026-08-20). The query row is suppressed for
+     * the whole of sole-trader mode now, so a spinner painted in there is a
+     * spinner painted nowhere.
+     */
+    test("shows the spinner over the company-NAME field, not in the dropdown's query row", () => {
       const $widget = harness.openCompanyWidget($, ctx.helper);
+      soleTrader.setMode("sole_trader");
 
       soleTrader.beginFlight();
-      expect($(".twoinc-search-spinner").length).toBe(1);
+
+      expect(
+        $("#billing_company_display_field .select2-selection > .twoinc-sole-trader-spinner").length
+      ).toBe(1);
+      expect($(".select2-search--dropdown .twoinc-search-spinner").length).toBe(0);
       // And the control is left OPEN under it.
       expect($widget.data("select2").isOpen()).toBe(true);
 
       soleTrader.settleFlight();
-      expect($(".twoinc-search-spinner").length).toBe(0);
+      expect($(".twoinc-sole-trader-spinner").length).toBe(0);
     });
 
-    test("does not take down a spinner a company search is still holding", () => {
-      // Two independent owners want the same in-field spinner. Before the
-      // ownership split, whichever settled FIRST hid it under the other: a
-      // buyer who blurs the email field and then opens the company search
-      // inside the prefetch's window watched the search spinner vanish while
-      // results were still loading.
-      harness.openCompanyWidget($, ctx.helper);
-      ctx.helper.holdCompanySearchSpinner("search");
+    /**
+     * Both name surfaces, because mode can be `sole_trader` while a country or
+     * capture-mode switch has the native field on screen instead of the picker.
+     */
+    test("paints over the native company field when the picker is the hidden one", () => {
+      $("#billing_company_display_field").addClass("hidden");
+      soleTrader.setMode("sole_trader");
+
       soleTrader.beginFlight();
+
+      expect(
+        $("#billing_company_field .woocommerce-input-wrapper > .twoinc-sole-trader-spinner").length
+      ).toBe(1);
+    });
+
+    test("the company search's own spinner and the sole-trader one do not share a node", () => {
+      // They used to, arbitrated by a two-owner hold, because both painted in
+      // the query row: whichever settled first hid it under the other. Two
+      // nodes in two fields is what removed that contention — asserted so a
+      // future round cannot quietly put them back in one place.
+      harness.openCompanyWidget($, ctx.helper);
+      soleTrader.setMode("sole_trader");
+      ctx.helper.toggleCompanySearchSpinner(true);
+
+      soleTrader.beginFlight();
+      expect($(".select2-search--dropdown .twoinc-search-spinner").length).toBe(1);
+      expect($(".twoinc-sole-trader-spinner").length).toBe(1);
 
       soleTrader.settleFlight();
-      expect($(".twoinc-search-spinner").length).toBe(1);
-
-      ctx.helper.releaseCompanySearchSpinner("search");
-      expect($(".twoinc-search-spinner").length).toBe(0);
+      expect($(".select2-search--dropdown .twoinc-search-spinner").length).toBe(1);
+      expect($(".twoinc-sole-trader-spinner").length).toBe(0);
     });
 
-    test("a country change drops every hold at once", () => {
-      // Everything either owner was waiting on belongs to a country the
-      // checkout has left.
+    test("a flight running in business mode paints nothing over the company name", () => {
       harness.openCompanyWidget($, ctx.helper);
-      ctx.helper.holdCompanySearchSpinner("search");
+
       soleTrader.beginFlight();
 
-      ctx.helper.resetCompanySearchSpinner();
-
-      expect($(".twoinc-search-spinner").length).toBe(0);
-      expect(ctx.helper.spinnerOwners).toEqual({ search: false, soleTrader: false });
+      expect($(".twoinc-sole-trader-spinner").length).toBe(0);
     });
 
-    test.each([
-      ["the token mint fails", false],
-      ["the buyer lookup resolves", true]
-    ])("settles when %s", (_description, tokensOk) => {
-      // Every terminal branch of the call graph settles its own flight — the
-      // upstream review of this feature found stuck-forever spinners on two
-      // separate abandon paths, so this is asserted per branch rather than
-      // once for the happy path.
-      $("#billing_email").val("buyer@example.test");
-      jest.spyOn(soleTrader, "fetchTokens").mockImplementation((cb) => cb(tokensOk));
-      jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => cb(null));
+    test("the spinner is DERIVED from mode, not held from beginFlight alone", () => {
+      // A mode switch made while a flight is already in the air still has to
+      // paint — a spinner HELD at `beginFlight` would have missed the wait.
+      harness.openCompanyWidget($, ctx.helper);
+      soleTrader.beginFlight();
 
-      soleTrader.onEmailChanged();
+      soleTrader.setMode("sole_trader");
 
-      expect(soleTrader.flightDepth).toBe(0);
-      expect($(".twoinc-sole-trader-note-slot").hasClass("twoinc-sole-trader-toggle--busy")).toBe(
-        false
-      );
+      expect($(".twoinc-sole-trader-spinner").length).toBe(1);
     });
   });
 
@@ -289,22 +333,10 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
   });
 
   describe("§7 — popup stacking across sequential activations", () => {
-    test.each([
-      {
-        arrange: () => $("#billing_email").val(""),
-        description: "no email entered, so both clicks resolve straight to signup"
-      },
-      {
-        arrange: () => {
-          $("#billing_email").val("buyer@example.test");
-          soleTrader.prefetched = { ready: true, matches: false, buyer: null };
-        },
-        description: "prefetch already resolved with no match"
-      }
-    ])(
-      "two sequential chip clicks open one popup, not two stacked — $description",
-      ({ arrange }) => {
-        arrange();
+    test.each([[""], ["buyer@example.test"]])(
+      "two sequential chip clicks open one popup, not two stacked — email %p",
+      (email) => {
+        $("#billing_email").val(email);
 
         soleTrader.onModeChipClick("sole_trader");
         expect(opened).toHaveLength(1);
@@ -322,7 +354,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
      * arranges its state, launches, and must end with exactly the popups it
      * asked for — refusing any of these is the regression the two earlier,
      * rejected guards each caused (watcher-count alone refused the post-accept
-     * re-signup; `isDeciding()` refused launches with only a prefetch flight
+     * re-signup; `isDeciding()` refused launches with only a stale flight
      * outstanding).
      */
     test.each([
@@ -355,22 +387,6 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       },
       {
         arrangeAndAct: () => {
-          // Given: chip clicked mid-prefetch, no popup yet.
-          $("#billing_email").val("buyer@example.test");
-          jest.spyOn(soleTrader, "fetchTokens").mockImplementation((cb) => cb(true));
-          let resolveBuyer;
-          jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => {
-            resolveBuyer = cb;
-          });
-          soleTrader.onModeChipClick("sole_trader");
-          // When: the flight settles with no match — applyPrefetch's deferred launch.
-          resolveBuyer(null);
-        },
-        expectedPopups: 1,
-        description: "applyPrefetch's deferred launch once the awaited flight settles with no match"
-      },
-      {
-        arrangeAndAct: () => {
           // Given: a browser-blocked popup — no watcher was ever created.
           soleTrader.setMode("sole_trader");
           const realOpen = window.open;
@@ -400,19 +416,13 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       },
       {
         arrangeAndAct: () => {
-          // Given: ONLY a prefetch flight outstanding — email typed, flight
-          // in the air, email cleared — no popup anywhere.
-          $("#billing_email").val("buyer@example.test");
-          jest.spyOn(soleTrader, "fetchTokens").mockImplementation((cb) => cb(true));
-          jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation(() => {});
-          soleTrader.onEmailChanged();
-          expect(soleTrader.flightDepth).toBeGreaterThan(0);
-          $("#billing_email").val("");
+          // Given: ONLY a bare flight outstanding, no popup anywhere.
+          soleTrader.beginFlight();
           // When: the chip is clicked.
           soleTrader.onModeChipClick("sole_trader");
         },
         expectedPopups: 1,
-        description: "a chip click while only a stale prefetch flight is outstanding"
+        description: "a chip click while only a stale flight is outstanding"
       }
     ])("still launches: $description", ({ arrangeAndAct, expectedPopups }) => {
       arrangeAndAct();
@@ -463,31 +473,6 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       soleTrader.getDifferentSoleTraderBtnNode().trigger("click");
       expect(thirdOpen).not.toHaveBeenCalled();
       jest.useRealTimers();
-    });
-
-    test("a prefetch match landing while a first-time popup is still open does not let the re-signup link stack over it", () => {
-      // Given: a no-email chip click opened a first-time popup, undecided.
-      $("#billing_email").val("");
-      soleTrader.onModeChipClick("sole_trader");
-      expect(opened).toHaveLength(1);
-
-      // When: the buyer types an email whose prefetch matches — adoption
-      // happens under the still-open popup and the re-signup link appears.
-      $("#billing_email").val("buyer@example.test");
-      jest.spyOn(soleTrader, "fetchTokens").mockImplementation((cb) => cb(true));
-      jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) =>
-        cb({
-          organization_number: "TWO:ST1",
-          company_name: "Sole Co",
-          email: "buyer@example.test"
-        })
-      );
-      soleTrader.onEmailChanged();
-      expect(soleTrader.soleTraderAdopted).toBe(true);
-
-      // Then: the popup is still undecided, so the link must not stack.
-      soleTrader.getDifferentSoleTraderBtnNode().trigger("click");
-      expect(opened).toHaveLength(1);
     });
 
     test("a chip click straight after the buyer closed the popup by hand opens a fresh one — the stale poll neither refuses nor reverts", () => {
@@ -1062,14 +1047,6 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       );
     }
 
-    test("the PASSIVE check still requires the cookie's buyer to own the typed email", () => {
-      $("#billing_email").val("buyer@example.test");
-
-      expect(soleTrader.buyerOwnsCheckoutEmail({ email: "buyer@example.test" })).toBe(true);
-      expect(soleTrader.buyerOwnsCheckoutEmail({ email: "someone.else@example.test" })).toBe(false);
-      expect(soleTrader.buyerOwnsCheckoutEmail(null)).toBe(false);
-    });
-
     test("a completed signup is adopted even under a DIFFERENT email from the checkout's", () => {
       // The confirmed bug this closes: the server has already told the browser
       // who the buyer is, so re-running the passive match makes the plugin
@@ -1089,16 +1066,12 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
 
       expect($("#company_id").val()).toBe("TWO:ST12345");
       expect($("#billing_company").val()).toBe("Sole Trader Co");
-      expect(soleTrader.prefetched.matches).toBe(true);
     });
 
     test("a completed signup that resolves no buyer at all surfaces the error", () => {
       // The authenticated path trusts the server, which means it also has to
       // handle the server having nothing — otherwise this branch silently does
       // nothing and the buyer is left staring at an unchanged checkout.
-      // Rendered BEFORE the mode is set: render() re-runs the email-driven
-      // prefetch, and with no email entered that reverts sole-trader mode to
-      // business on its own.
       soleTrader.render();
       soleTrader.mode = "sole_trader";
       jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => cb(null));
@@ -1139,74 +1112,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
   });
 
   describe("TWO-40 §7 correction — live-reported by Doug", () => {
-    /** Sets up a prefetch flight and hands back the callback for fetchCurrentBuyer. */
-    function armPendingPrefetch() {
-      $("#billing_email").val("buyer@example.test");
-      jest.spyOn(soleTrader, "fetchTokens").mockImplementation((cb) => cb(true));
-      let resolveBuyer;
-      jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => {
-        resolveBuyer = cb;
-      });
-      return {
-        settle: (buyer) => resolveBuyer(buyer)
-      };
-    }
-
-    describe("bug 1 — chip click, autofill matched: populate only, never a popup", () => {
-      test("prefetch already resolved and matching: populates synchronously, no popup", () => {
-        soleTrader.prefetched = {
-          ready: true,
-          matches: true,
-          buyer: {
-            organization_number: "TWO:ST1",
-            company_name: "Sole Co",
-            email: "buyer@example.test"
-          }
-        };
-
-        soleTrader.onModeChipClick("sole_trader");
-
-        expect(opened).toHaveLength(0);
-        expect($("#company_id").val()).toBe("TWO:ST1");
-      });
-
-      test("prefetch still in flight at click time: waits, then populates with no popup once it matches", () => {
-        const flight = armPendingPrefetch();
-
-        soleTrader.onModeChipClick("sole_trader");
-        expect(opened).toHaveLength(0);
-        expect(soleTrader.pendingChipDecisionEmail).toBe("buyer@example.test");
-
-        flight.settle({
-          organization_number: "TWO:ST1",
-          company_name: "Sole Co",
-          email: "buyer@example.test"
-        });
-
-        expect(opened).toHaveLength(0);
-        expect($("#company_id").val()).toBe("TWO:ST1");
-        expect(soleTrader.mode).toBe("sole_trader");
-        expect(soleTrader.pendingChipDecisionEmail).toBe(null);
-      });
-
-      test("prefetch still in flight at click time and resolves with no match: opens exactly one popup, once", () => {
-        const flight = armPendingPrefetch();
-
-        soleTrader.onModeChipClick("sole_trader");
-        flight.settle(null);
-
-        expect(opened).toHaveLength(1);
-        expect(soleTrader.mode).toBe("sole_trader");
-      });
-    });
-
-    describe("a chip click resolves to populate or popup, never a note", () => {
-      const MATCHED_BUYER = {
-        organization_number: "TWO:ST1",
-        company_name: "Sole Co",
-        email: "buyer@example.test"
-      };
-
+    describe("a chip click resolves to the popup, never a note", () => {
       /**
        * The note is the browser-blocked-popup fallback ONLY — never an outcome
        * the chip click itself chooses. Asserted against a note that exists:
@@ -1219,53 +1125,52 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         expect($note.hasClass("hidden")).toBe(true);
       }
 
-      const cases = [
-        {
-          arrange: () => {
-            $("#billing_email").val(MATCHED_BUYER.email);
-            soleTrader.prefetched = { ready: true, matches: true, buyer: MATCHED_BUYER };
-          },
-          expectedCompanyId: "TWO:ST1",
-          expectedPopups: 0,
-          description: "autofill already resolved with a match"
-        },
-        {
-          arrange: () => {
-            $("#billing_email").val("buyer@example.test");
-            soleTrader.prefetched = { ready: true, matches: false, buyer: null };
-          },
-          expectedCompanyId: "",
-          expectedPopups: 1,
-          description: "autofill already resolved with no match"
-        },
-        {
-          arrange: () => {
-            $("#billing_email").val("");
-          },
-          expectedCompanyId: "",
-          expectedPopups: 1,
-          description: "no email entered, so nothing autofill could match"
-        }
-      ];
-
-      test.each(cases)("$description", ({ arrange, expectedCompanyId, expectedPopups }) => {
+      /**
+       * The chip ALWAYS opens the hosted signup and populates nothing itself,
+       * whatever the email field happens to hold (Doug 2026-08-21: a company
+       * may only ever be filled in by the buyer's own trip through that flow,
+       * so this chip has no conditional fast path — WC behaving as PrestaShop
+       * does). Every row here used to resolve differently, off a passive
+       * email-driven autofill probe against the Two session cookie; the first
+       * one adopted a company outright with no popup at all.
+       */
+      test.each([
+        ["an email Two recognises", "buyer@example.test"],
+        ["an email Two does not recognise", "stranger@example.test"],
+        ["no email entered at all", ""]
+      ])("opens the popup and writes nothing — %s", (_description, email) => {
         soleTrader.render();
-        arrange();
+        $("#billing_email").val(email);
 
         soleTrader.onModeChipClick("sole_trader");
 
-        expect(opened).toHaveLength(expectedPopups);
-        expect($("#company_id").val()).toBe(expectedCompanyId);
+        expect(opened).toHaveLength(1);
+        expect($("#company_id").val()).toBe("");
         expectNoNote();
       });
 
-      test("a buyer with no email at all: the mint lands, then the chip click opens the popup", () => {
+      test("a bare email change, with no click near the company field, adopts nothing", () => {
+        // Through the REAL checkout wiring — `initialize()` is where an
+        // email-driven handler would be bound, so a test that skips it would
+        // pass whatever the code does.
+        $("form[name='checkout']").after('<div id="order_review"></div>');
+        ctx.Twoinc.getInstance().initialize(false);
+        soleTrader.render();
+        const write = jest.spyOn(ctx.capture, "write");
+
+        $("#billing_email").val("buyer@example.test").trigger("change");
+
+        expect(soleTrader.mode).toBe("business");
+        expect(opened).toHaveLength(0);
+        expect(write).not.toHaveBeenCalled();
+        expect($("#company_id").val()).toBe("");
+      });
+
+      test("render() mints up front, so the chip click has tokens to open with", () => {
         // The reported defect end to end. `window.open()` has to run inside
         // the click's own gesture, so the mint must already have landed —
         // hence the up-front one, not one started by the click.
         soleTrader.tokens = null;
-        $("#billing_email").val("");
-        // The real mint writes `.tokens` itself and takes no callback here.
         jest.spyOn(soleTrader, "fetchTokens").mockImplementation(() => {
           soleTrader.tokens = {
             delegation_token: "delegation",
@@ -1284,16 +1189,15 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         expectNoNote();
       });
 
-      test("an email already filled in does not get a second, concurrent mint", () => {
-        // Two POSTs racing each other's write to `.tokens`: the prefetch
-        // mints for the email anyway.
-        soleTrader.tokens = null;
-        $("#billing_email").val("buyer@example.test");
+      test("a re-render does not mint a second, concurrent set of tokens", () => {
+        // Two POSTs racing each other's write to `.tokens`. `render()` runs on
+        // every `updated_checkout`.
         jest.spyOn(soleTrader, "fetchTokens").mockImplementation(() => {});
 
         soleTrader.render();
+        soleTrader.render();
 
-        expect(soleTrader.fetchTokens).toHaveBeenCalledTimes(1);
+        expect(soleTrader.fetchTokens).not.toHaveBeenCalled();
       });
 
       test("tokens that could not be minted at all leave only the signup link", () => {
@@ -1318,9 +1222,8 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     });
 
     describe("bug 2 — the search dropdown stays visible with a spinner until the popup closes", () => {
-      test("dropdown survives the mode switch while a match is still pending", () => {
+      test("dropdown survives the mode switch, with nothing adopted yet", () => {
         const $widget = harness.openCompanyWidget($, ctx.helper);
-        armPendingPrefetch();
 
         soleTrader.setMode("sole_trader");
 
@@ -1338,7 +1241,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         expect($widget.data("select2").isOpen()).toBe(true);
       });
 
-      test("the in-field spinner is up for as long as the popup is open, and comes down when it closes", () => {
+      test("the spinner is up for as long as the popup is open, and comes down when it closes", () => {
         harness.openCompanyWidget($, ctx.helper);
         soleTrader.setMode("sole_trader");
         const win = { closed: false };
@@ -1346,12 +1249,117 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         jest.useFakeTimers();
 
         soleTrader.launchSignup();
-        expect($(".twoinc-search-spinner").length).toBe(1);
+        expect($(".twoinc-sole-trader-spinner").length).toBe(1);
 
         win.closed = true;
         jest.advanceTimersByTime(300);
 
-        expect($(".twoinc-search-spinner").length).toBe(0);
+        expect($(".twoinc-sole-trader-spinner").length).toBe(0);
+        jest.useRealTimers();
+      });
+
+      /**
+       * "Flow complete" is the WRITE, not the popup closing and not the
+       * response landing (Doug 2026-08-20). The ordinary path is the one that
+       * proves it: the hosted flow closes its own window the instant it posts
+       * ACCEPTED, so the popup is long gone by the time `fetchCurrentBuyer`
+       * resolves — and this used to settle the flight before the company name
+       * and number were written, so the spinner came down over empty fields.
+       */
+      test("the spinner outlives the popup close, coming down only once the company is written", () => {
+        harness.openCompanyWidget($, ctx.helper);
+        soleTrader.setMode("sole_trader");
+        const win = { closed: false };
+        window.open = jest.fn(() => win);
+        let resolveBuyer;
+        jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => {
+          resolveBuyer = cb;
+        });
+        // Read INSIDE the write, not after it: settling one line early leaves
+        // the same end state, so only the state at the moment of the write
+        // tells the two orderings apart.
+        let spinnerAtWrite = null;
+        const setCompany = soleTrader.setCompany;
+        jest.spyOn(soleTrader, "setCompany").mockImplementation((...args) => {
+          spinnerAtWrite = $(".twoinc-sole-trader-spinner").length;
+          return setCompany(...args);
+        });
+        jest.useFakeTimers();
+        soleTrader.launchSignup();
+        soleTrader.bindPopupMessageListener();
+
+        // The popup posts ACCEPTED and closes in the same breath.
+        window.dispatchEvent(
+          new MessageEvent("message", {
+            data: "ACCEPTED",
+            origin: "https://checkout.example.test",
+            source: win
+          })
+        );
+        win.closed = true;
+        jest.advanceTimersByTime(300);
+
+        // Popup closed — but the lookup it triggered has not come back, so
+        // nothing is captured yet and the flow is NOT complete.
+        expect($("#company_id").val()).toBe("");
+        expect($(".twoinc-sole-trader-spinner").length).toBe(1);
+
+        resolveBuyer({
+          organization_number: "TWO:ST1",
+          company_name: "A Sole Trader",
+          email: "buyer@example.test"
+        });
+
+        expect(spinnerAtWrite).toBe(1);
+        expect($("#company_id").val()).toBe("TWO:ST1");
+        expect($("#billing_company").val()).toBe("A Sole Trader");
+        expect($(".twoinc-sole-trader-spinner").length).toBe(0);
+        jest.useRealTimers();
+      });
+
+      test("the dropdown the chip was clicked from is closed once the flow completes", () => {
+        const $widget = harness.openCompanyWidget($, ctx.helper);
+        soleTrader.setMode("sole_trader");
+        soleTrader.setCompany("TWO:ST1", "A Sole Trader");
+        const win = { closed: false };
+        window.open = jest.fn(() => win);
+        jest.useFakeTimers();
+
+        // A re-signup from an adopted state: nothing else in this path reverts
+        // mode or re-attaches the widget, so the dropdown would otherwise be
+        // left open on a query row that is hidden and chips that are settled.
+        soleTrader.launchSignup({ autoselect: false });
+        $widget.select2("open");
+        expect($widget.data("select2").isOpen()).toBe(true);
+
+        win.closed = true;
+        jest.advanceTimersByTime(300);
+
+        expect($widget.data("select2").isOpen()).toBe(false);
+        jest.useRealTimers();
+      });
+
+      test("the link's own flow completes with no dropdown to close, and does not fail trying", () => {
+        // The one genuine difference between the two entry points: this one is
+        // clicked with nothing open. The close is conditional, so it is a
+        // no-op here rather than a second code path.
+        harness.openCompanyWidget($, ctx.helper);
+        const $widget = $("#billing_company_display");
+        $widget.select2("close");
+        soleTrader.setMode("sole_trader");
+        soleTrader.setCompany("TWO:ST1", "A Sole Trader");
+        const win = { closed: false };
+        window.open = jest.fn(() => win);
+        jest.useFakeTimers();
+
+        soleTrader.getDifferentSoleTraderBtnNode().trigger("click");
+        expect($(".twoinc-sole-trader-spinner").length).toBe(1);
+
+        win.closed = true;
+        jest.advanceTimersByTime(300);
+
+        expect($widget.data("select2").isOpen()).toBe(false);
+        expect($(".twoinc-sole-trader-spinner").length).toBe(0);
         jest.useRealTimers();
       });
 
@@ -1382,6 +1390,361 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
 
         expect(soleTrader.mode).toBe("sole_trader");
         expect($("#company_id").val()).toBe("TWO:ST1");
+        jest.useRealTimers();
+      });
+    });
+
+    /**
+     * Doug 2026-08-20, live: the buyer clicks back onto the checkout page
+     * without finishing the hosted signup. The popup stayed up, the dropdown
+     * stayed open and the spinner kept animating over a flow they had walked
+     * away from.
+     */
+    describe("focus returning to the checkout abandons an outstanding signup popup", () => {
+      /** @returns {Object} a popup handle whose own `close()` is observable */
+      function fakePopup() {
+        const win = { closed: false };
+        win.close = jest.fn(() => {
+          win.closed = true;
+        });
+        return win;
+      }
+
+      /**
+       * Fire the window-level `focus` a real refocus produces. Deliberately
+       * NOT followed by the grace period — the click that caused the focus is
+       * dispatched inside it, which is the whole point of the deferral, so
+       * every test spends the grace explicitly with `settleRefocus()`.
+       */
+      function refocusCheckout() {
+        window.dispatchEvent(new Event("focus"));
+      }
+
+      /** Let the refocus's own deferred abandon fall due. */
+      function settleRefocus() {
+        jest.advanceTimersByTime(soleTrader.refocusChipGraceMs);
+      }
+
+      /**
+       * Mousedown a real chip, the way the browser dispatches it after handing
+       * the checkout window its focus back. Real DOM and real bubbling: the
+       * listener that reads this is a capture-phase one on `document`, so a
+       * detached chip built with `buildBusinessChip()` would never reach it.
+       *
+       * @param {string} id the chip's element id
+       */
+      function mousedownChip(id) {
+        const chip = document.getElementById(id);
+        expect(chip).not.toBeNull();
+        chip.dispatchEvent(new window.MouseEvent("mousedown", { bubbles: true }));
+      }
+
+      /** The chips live in the dropdown panel, built on open. */
+      function openWidgetWithChips() {
+        const $widget = harness.openCompanyWidget($, ctx.helper);
+        ctx.helper.syncManualEntryButton();
+        return $widget;
+      }
+
+      /** @returns {Object} jQuery-wrapped query input inside the dropdown */
+      function dropdownQueryField() {
+        return $("#select2-billing_company_display-results")
+          .closest(".select2-dropdown")
+          .find(".select2-search--dropdown")
+          .first()
+          .find(".select2-search__field");
+      }
+
+      test("closes the popup, and the existing poll then settles spinner, dropdown and mode", () => {
+        const $widget = openWidgetWithChips();
+        soleTrader.setMode("sole_trader");
+        const win = fakePopup();
+        window.open = jest.fn(() => win);
+        jest.useFakeTimers();
+        soleTrader.launchSignup();
+        expect($(".twoinc-sole-trader-spinner").length).toBe(1);
+
+        refocusCheckout();
+        settleRefocus();
+
+        // Closing the window is the WHOLE action on this path: the popup-close
+        // poll stays the single owner of the spinner, the mode revert and the
+        // dropdown close, so nothing here has to agree with it about
+        // `flightDepth`.
+        expect(win.close).toHaveBeenCalledTimes(1);
+        expect($(".twoinc-sole-trader-spinner").length).toBe(1);
+
+        jest.advanceTimersByTime(300);
+
+        expect($(".twoinc-sole-trader-spinner").length).toBe(0);
+        expect($widget.data("select2").isOpen()).toBe(false);
+        expect(soleTrader.mode).toBe("business");
+        jest.useRealTimers();
+      });
+
+      /**
+       * A native element `focus` never reaches a non-capturing window listener,
+       * but jQuery's `.trigger("focus")` walks the propagation path itself,
+       * window included — and that is how this file moves focus onto the
+       * company fields everywhere. Without the handler's target check, simply
+       * opening the dropdown would close the buyer's popup.
+       */
+      test("focus moving between fields on the page is not a refocus", () => {
+        openWidgetWithChips();
+        soleTrader.setMode("sole_trader");
+        const win = fakePopup();
+        window.open = jest.fn(() => win);
+        jest.useFakeTimers();
+        soleTrader.launchSignup();
+
+        $("#billing_email").trigger("focus");
+        ctx.helper.openCompanySearchDropdown();
+        settleRefocus();
+
+        expect(win.close).not.toHaveBeenCalled();
+        jest.useRealTimers();
+      });
+
+      /**
+       * A popup whose ACCEPTED resolved to no buyer is decided yet still very
+       * much on screen, and the buyer's retry inside it posts a second
+       * ACCEPTED (see `watchPopupClose`'s own comment). Closing that window
+       * would take the retry with it.
+       */
+      test("a decided popup that is still open is left alone", () => {
+        openWidgetWithChips();
+        soleTrader.setMode("sole_trader");
+        const win = fakePopup();
+        window.open = jest.fn(() => win);
+        jest.useFakeTimers();
+        soleTrader.launchSignup();
+        soleTrader.activePopupWatchers[0].decided = true;
+
+        refocusCheckout();
+        settleRefocus();
+
+        expect(win.close).not.toHaveBeenCalled();
+        jest.useRealTimers();
+      });
+
+      test("a refocus with nothing outstanding does nothing at all", () => {
+        openWidgetWithChips();
+        soleTrader.setMode("sole_trader");
+        jest.useFakeTimers();
+
+        refocusCheckout();
+        settleRefocus();
+
+        expect(soleTrader.mode).toBe("sole_trader");
+        expect(opened).toHaveLength(0);
+        jest.useRealTimers();
+      });
+
+      /**
+       * Case (c), the control: the buyer came back by clicking somewhere on the
+       * page that is not a mode chip. Nothing about the chips is involved and
+       * the popup goes, exactly as it did before the chips were considered at
+       * all.
+       */
+      test("clicking the page outside the chips closes the popup with no chip side effects", () => {
+        const $widget = openWidgetWithChips();
+        soleTrader.setMode("sole_trader");
+        const win = fakePopup();
+        window.open = jest.fn(() => win);
+        jest.useFakeTimers();
+        soleTrader.launchSignup();
+
+        refocusCheckout();
+        document
+          .getElementById("billing_email")
+          .dispatchEvent(new window.MouseEvent("mousedown", { bubbles: true }));
+        settleRefocus();
+
+        expect(win.close).toHaveBeenCalledTimes(1);
+        // Nothing has run the chip path's synchronous drain, so the popup's own
+        // poll still owns every settle and none of them has happened yet.
+        expect(soleTrader.mode).toBe("sole_trader");
+        expect($(".twoinc-sole-trader-spinner").length).toBe(1);
+
+        jest.advanceTimersByTime(300);
+
+        expect(soleTrader.mode).toBe("business");
+        expect($widget.data("select2").isOpen()).toBe(false);
+        expect($(".twoinc-sole-trader-spinner").length).toBe(0);
+        jest.useRealTimers();
+      });
+
+      /**
+       * Item 6.1, Doug's spec revision: the Sole trader chip is the ONE
+       * exception to the abandon. Re-clicking the chip that launched the popup
+       * asks for that popup back, so it is raised rather than closed and the
+       * flow it is halfway through survives.
+       */
+      test("the Sole trader chip keeps the popup and raises it instead", () => {
+        const $widget = openWidgetWithChips();
+        soleTrader.setMode("sole_trader");
+        const win = fakePopup();
+        win.focus = jest.fn();
+        window.open = jest.fn(() => win);
+        jest.useFakeTimers();
+        soleTrader.launchSignup();
+
+        refocusCheckout();
+        mousedownChip(ctx.helper.soleTraderChipId);
+        $("#" + ctx.helper.soleTraderChipId).trigger("click");
+        settleRefocus();
+        jest.advanceTimersByTime(300);
+
+        expect(win.close).not.toHaveBeenCalled();
+        expect(win.focus).toHaveBeenCalled();
+        // No second window, and the wait the buyer is still in is intact.
+        expect(window.open).toHaveBeenCalledTimes(1);
+        expect(soleTrader.mode).toBe("sole_trader");
+        expect($widget.data("select2").isOpen()).toBe(true);
+        expect($(".twoinc-sole-trader-spinner").length).toBe(1);
+        jest.useRealTimers();
+      });
+
+      /**
+       * The same exception from an already-adopted state, where the chip's
+       * other meaning is a deliberate re-signup ("select a different sole
+       * trader"). An outstanding popup still wins: launching a second one over
+       * it is what TWO-40 §14 spent four rounds removing.
+       */
+      test("the Sole trader chip raises an outstanding re-signup rather than launching another", () => {
+        harness.openCompanyWidget($, ctx.helper);
+        soleTrader.setMode("sole_trader");
+        soleTrader.setCompany("TWO:ST1", "A Sole Trader");
+        // Chips built AFTER the adoption: it closes the dropdown panel they
+        // live in, and this flow's entry point is the buyer reopening it.
+        $("#billing_company_display").select2("open");
+        ctx.helper.syncManualEntryButton();
+        const first = fakePopup();
+        first.focus = jest.fn();
+        window.open = jest.fn(() => first);
+        jest.useFakeTimers();
+        soleTrader.launchSignup({ autoselect: false });
+
+        refocusCheckout();
+        const relaunch = jest.fn(() => fakePopup());
+        window.open = relaunch;
+        mousedownChip(ctx.helper.soleTraderChipId);
+        $("#" + ctx.helper.soleTraderChipId).trigger("click");
+        settleRefocus();
+
+        expect(relaunch).not.toHaveBeenCalled();
+        expect(first.close).not.toHaveBeenCalled();
+        expect(first.focus).toHaveBeenCalled();
+        jest.useRealTimers();
+      });
+
+      /**
+       * Item 6.2, the Registered company half: the popup closes AND the chip
+       * does its own ordinary job on top of that. Both effects, because the
+       * abandon runs in the chip's `mousedown` and deliberately leaves the mode
+       * and the dropdown to the chip — reverting to business here would make
+       * the chip's own "already in business mode" no-op swallow the click, and
+       * closing the dropdown would destroy the chip before its `click` fired.
+       */
+      test("the Registered company chip closes the popup AND shows and focuses the query field", () => {
+        const $widget = openWidgetWithChips();
+        soleTrader.setMode("sole_trader");
+        const win = fakePopup();
+        window.open = jest.fn(() => win);
+        jest.useFakeTimers();
+        soleTrader.launchSignup();
+
+        refocusCheckout();
+        mousedownChip(ctx.helper.businessChipId);
+        expect(win.close).toHaveBeenCalledTimes(1);
+        $("#" + ctx.helper.businessChipId).trigger("click");
+        settleRefocus();
+        jest.advanceTimersByTime(300);
+
+        expect(soleTrader.mode).toBe("business");
+        expect($widget.data("select2").isOpen()).toBe(true);
+        expect(dropdownQueryField().closest(".select2-search--dropdown").attr("hidden")).toBe(
+          undefined
+        );
+        expect(document.activeElement).toBe(dropdownQueryField()[0]);
+        expect($(".twoinc-sole-trader-spinner").length).toBe(0);
+        jest.useRealTimers();
+      });
+
+      /**
+       * Item 6.2, the Enter manually half. Its own ordinary behaviour, whole:
+       * the dropdown goes, the capture mode becomes manual, and focus lands in
+       * the now-editable native company field.
+       */
+      test("the Enter manually chip closes the popup AND switches to manual entry", () => {
+        openWidgetWithChips();
+        soleTrader.setMode("sole_trader");
+        const win = fakePopup();
+        window.open = jest.fn(() => win);
+        jest.useFakeTimers();
+        soleTrader.launchSignup();
+
+        refocusCheckout();
+        mousedownChip(ctx.helper.manualEntryRowId);
+        expect(win.close).toHaveBeenCalledTimes(1);
+        $("#" + ctx.helper.manualEntryRowId).trigger("click");
+        jest.runAllTimers();
+
+        expect(soleTrader.mode).toBe("business");
+        expect(ctx.capture.mode).toBe("manual");
+        expect(ctx.helper.companySearchDropdownIsOpen()).toBe(false);
+        expect($("#billing_company_field").hasClass("hidden")).toBe(false);
+        expect(document.activeElement).toBe($("#billing_company")[0]);
+        jest.useRealTimers();
+      });
+
+      /**
+       * The stale-claim guard. A chip mousedown made while the checkout ALREADY
+       * had focus is not the cause of any refocus, so it must not be read as
+       * one — neither now (the popup is left entirely alone) nor later, by a
+       * genuine alt-tab-back that follows it.
+       */
+      test("a chip mousedown with no refocus pending leaves the popup alone", () => {
+        openWidgetWithChips();
+        soleTrader.setMode("sole_trader");
+        const win = fakePopup();
+        window.open = jest.fn(() => win);
+        jest.useFakeTimers();
+        soleTrader.launchSignup();
+
+        mousedownChip(ctx.helper.businessChipId);
+        expect(win.close).not.toHaveBeenCalled();
+
+        // And the later genuine refocus still abandons, rather than being
+        // cancelled by that earlier, unrelated mousedown.
+        refocusCheckout();
+        settleRefocus();
+
+        expect(win.close).toHaveBeenCalledTimes(1);
+        jest.useRealTimers();
+      });
+
+      /**
+       * A mousedown that never becomes a click — the buyer drags off the chip,
+       * or it is torn out mid-gesture. The Sole trader chip's cancel is the
+       * whole of its own contribution, so the popup simply stays up, which is
+       * the state that branch exists to preserve anyway.
+       */
+      test("a Sole trader chip mousedown that never becomes a click still keeps the popup", () => {
+        openWidgetWithChips();
+        soleTrader.setMode("sole_trader");
+        const win = fakePopup();
+        window.open = jest.fn(() => win);
+        jest.useFakeTimers();
+        soleTrader.launchSignup();
+
+        refocusCheckout();
+        mousedownChip(ctx.helper.soleTraderChipId);
+        settleRefocus();
+        jest.advanceTimersByTime(300);
+
+        expect(win.close).not.toHaveBeenCalled();
+        expect(soleTrader.mode).toBe("sole_trader");
         jest.useRealTimers();
       });
     });
@@ -1486,43 +1849,6 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         expect(soleTrader.mode).toBe("sole_trader");
       });
 
-      /**
-       * The adoption path with no popup at all — an autofill prefetch
-       * matching an existing buyer from the session cookie, live-reported by
-       * Doug as reaching this same "click does nothing" symptom. Every
-       * other test in this block adopts via a direct `setMode` +
-       * `setCompany()` call; this one goes through the real
-       * `onModeChipClick`/`applyPrefetch` match branch, which never calls
-       * `launchSignup()`/`openPopup()` — so if a guard here read stale state
-       * left over from popup bookkeeping (`activePopupWatchers`,
-       * `soleTraderReconfirmingCount`) that only ever gets cleared by a
-       * popup-close event, THIS is the path that would never clear it.
-       */
-      test("clicking after a no-popup, matched-autofill adoption reopens search the same way", () => {
-        $("#billing_email").val("buyer@example.test");
-        jest.spyOn(soleTrader, "fetchTokens").mockImplementation((cb) => cb(true));
-        jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) =>
-          cb({
-            organization_number: "TWO:ST1",
-            company_name: "A Sole Trader",
-            email: "buyer@example.test"
-          })
-        );
-
-        soleTrader.onModeChipClick("sole_trader");
-
-        expect(opened).toHaveLength(0);
-        expect(soleTrader.mode).toBe("sole_trader");
-        expect($("#billing_company").prop("readonly")).toBe(true);
-        expect(soleTrader.isDeciding()).toBe(false);
-
-        $("#billing_company").trigger("click");
-
-        expect(soleTrader.mode).toBe("business");
-        expect($("#billing_company").prop("readonly")).toBe(false);
-        expect($("#billing_company_display").data("select2").isOpen()).toBe(true);
-      });
-
       describe("TWO-40 §7 direction (a) — an adopted sole trader displays through the live widget", () => {
         beforeEach(() => {
           // `toggleBusinessFields()`'s isTwoincSelected branch — where the
@@ -1570,8 +1896,8 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
           expect($display.data("select2")).toBe(widgetInstance);
         });
 
-        test("a pick landing while still genuinely deciding (autofill flight outstanding) is refused, not silently adopted", () => {
-          const flight = armPendingPrefetch();
+        test("a pick landing while still genuinely deciding (signup undecided) is refused, not silently adopted", () => {
+          const flight = armUndecidedSignup();
           soleTrader.onModeChipClick("sole_trader");
           expect(soleTrader.isDeciding()).toBe(true);
 
@@ -1608,7 +1934,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
           expect($("#billing_company").prop("readonly")).toBe(true);
         });
 
-        describe("item 4.2 / item 2.1 — the dropdown's own free-text query is suppressed once adopted", () => {
+        describe("item 4.2 / item 2.1 — the dropdown's own free-text query is suppressed for the whole of sole-trader mode", () => {
           /** @returns {Object} jQuery-wrapped `.select2-search--dropdown` row */
           function queryRow() {
             return $("#select2-billing_company_display-results")
@@ -1715,6 +2041,48 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
           });
 
           /**
+           * Doug 2026-08-20, live: the row-visibility half already worked, but
+           * the dropdown closed anyway — `setMode("business")` destroys this
+           * widget and re-attaches a fresh, CLOSED one, so the chip the buyer
+           * clicked took the whole panel down and the un-hidden row was on a
+           * dropdown that no longer existed.
+           */
+          test("clicking Registered company leaves the dropdown open with focus in the query field", () => {
+            harness.openCompanyWidget($, ctx.helper);
+            // Stubbed for the same reason the Sole trader chip test below stubs
+            // it: this click's other outcome is a popup, whose own flight would
+            // keep `isDeciding()` true and make the Business chip a no-op.
+            jest.spyOn(soleTrader, "launchSignup").mockImplementation(() => {});
+            ctx.helper.buildSoleTraderChip().trigger("click");
+            expect(queryRow().attr("hidden")).toBe("hidden");
+
+            ctx.helper.buildBusinessChip().trigger("click");
+
+            expect(soleTrader.mode).toBe("business");
+            expect(ctx.helper.companySearchDropdownIsOpen()).toBe(true);
+            expect(queryRow().attr("hidden")).toBeUndefined();
+            expect(document.activeElement).toBe(queryField()[0]);
+          });
+
+          /**
+           * The conditional half of the same fix: `setMode("business")` has
+           * other callers with no dropdown in sight (`hide()` on an
+           * `updated_checkout`, `watchPopupClose`'s abandon revert), and none
+           * of them may pop one open at the buyer.
+           */
+          test("a mode revert with the dropdown already closed does not open one", () => {
+            harness.openCompanyWidget($, ctx.helper);
+            jest.spyOn(soleTrader, "launchSignup").mockImplementation(() => {});
+            ctx.helper.buildSoleTraderChip().trigger("click");
+            $("#billing_company_display").select2("close");
+
+            ctx.helper.buildBusinessChip().trigger("click");
+
+            expect(soleTrader.mode).toBe("business");
+            expect(ctx.helper.companySearchDropdownIsOpen()).toBe(false);
+          });
+
+          /**
            * The one path that leaves sole-trader mode WITHOUT destroying the
            * widget (see the `select2:select` handler's `sole_trader` branch),
            * so it is the one where a suppression applied on a previous open
@@ -1742,21 +2110,53 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
           });
 
           /**
-           * The spinner is an absolutely-positioned sibling INSIDE this row
-           * (`.twoinc-search-spinner`), so a re-signup started from an
-           * already-adopted state has to get the row back for its in-flight
-           * state to be visible at all.
+           * The row used to be given back for the duration of a flight, purely
+           * so the spinner had somewhere to paint. Now the spinner paints over
+           * the company-NAME field, so nothing about a flight makes this row
+           * relevant again (Doug 2026-08-20).
            */
-          test("a re-signup flight from an adopted state shows the row again, and hides it on settle", () => {
+          test("a re-signup flight from an adopted state leaves the row hidden throughout", () => {
             soleTrader.setMode("sole_trader");
             soleTrader.setCompany("TWO:ST1", "A Sole Trader");
             $("#billing_company_display").select2("open");
 
             soleTrader.beginFlight();
-            expect(queryRow().attr("hidden")).toBeUndefined();
-            expect(queryRow().find(".twoinc-search-spinner").length).toBe(1);
+            expect(queryRow().attr("hidden")).toBe("hidden");
+            expect(queryRow().find(".twoinc-search-spinner").length).toBe(0);
+            expect($(".twoinc-sole-trader-spinner").length).toBe(1);
 
             soleTrader.settleFlight();
+            expect(queryRow().attr("hidden")).toBe("hidden");
+          });
+
+          /**
+           * Doug 2026-08-20: the hide used to need a close-and-reopen, because
+           * only `select2:open` re-synced it — a buyer clicking the chip with
+           * the dropdown already open (which is where the chip LIVES) sat
+           * looking at a search box that no longer searched for their company.
+           */
+          test("clicking the Sole trader chip hides the row immediately, with no reopen", () => {
+            harness.openCompanyWidget($, ctx.helper);
+            // Stubbed so the hide can only be the mode write's doing: this
+            // click's other outcome is a popup, and a popup's own flight
+            // re-syncs these surfaces too — which would let the assertion pass
+            // for a reason that has nothing to do with the chip.
+            jest.spyOn(soleTrader, "launchSignup").mockImplementation(() => {});
+            expect(queryRow().attr("hidden")).toBeUndefined();
+
+            ctx.helper.buildSoleTraderChip().trigger("click");
+
+            expect(soleTrader.mode).toBe("sole_trader");
+            expect(queryRow().attr("hidden")).toBe("hidden");
+            expect(queryRow().css("display")).toBe("none");
+          });
+
+          test("suppression is a function of mode alone, not of what has been adopted", () => {
+            harness.openCompanyWidget($, ctx.helper);
+
+            soleTrader.setMode("sole_trader");
+
+            expect(soleTrader.soleTraderAdopted).toBe(false);
             expect(queryRow().attr("hidden")).toBe("hidden");
           });
 
@@ -1774,13 +2174,13 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     });
 
     describe("round-1 review regressions (Han/Vader/Leia) — races the dropdown-survives fix opened up", () => {
-      test("the Business chip is refused while an autofill flight is outstanding, not honoured then stomped by the match", () => {
-        const flight = armPendingPrefetch();
+      test("the Business chip is refused while a signup is outstanding, not honoured then stomped by its result", () => {
+        const flight = armUndecidedSignup();
         soleTrader.onModeChipClick("sole_trader");
 
         // The chip lives inside the search dropdown the buyer is still
         // looking at — clicking Business mid-flight used to force mode back
-        // to business immediately, only for the later match to silently
+        // to business immediately, only for the later result to silently
         // force it straight back to sole-trader and populate underneath.
         ctx.helper.buildBusinessChip().trigger("click");
         expect(soleTrader.mode).toBe("sole_trader");
@@ -1884,29 +2284,6 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         expect(soleTrader.mode).toBe("sole_trader");
         jest.useRealTimers();
       });
-
-      test("a pending chip decision does not fire against a later, unrelated flight for a different email", () => {
-        const flight = armPendingPrefetch();
-        soleTrader.onModeChipClick("sole_trader");
-        expect(soleTrader.pendingChipDecisionEmail).toBe("buyer@example.test");
-
-        // The buyer edits the email before the flight it was raised for
-        // lands, and that stale flight resolves with no match.
-        $("#billing_email").val("someone.else@example.test");
-        flight.settle(null);
-
-        // Dropped, not misapplied: no popup for a decision that no longer
-        // matches what is actually entered.
-        expect(opened).toHaveLength(0);
-      });
-
-      test("a click that lands while availability just dropped does not leak a pending decision forward", () => {
-        $("#billing_email").val("buyer@example.test");
-        soleTrader.availabilityByCountry = { GB: false };
-
-        soleTrader.onModeChipClick("sole_trader");
-        expect(soleTrader.pendingChipDecisionEmail).toBe(null);
-      });
     });
 
     describe("round-2 review regressions (Han/Vader) — isBusy() wired onto only 2 of the revert paths", () => {
@@ -1947,36 +2324,6 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
 
         expect(soleTrader.mode).toBe("business");
       });
-
-      test("clearing the email mid-flight does not revert mode while a flight is still outstanding", () => {
-        const flight = armPendingPrefetch();
-        soleTrader.onModeChipClick("sole_trader");
-
-        $("#billing_email").val("");
-        soleTrader.onEmailChanged();
-        expect(soleTrader.mode).toBe("sole_trader");
-
-        flight.settle(null);
-        // The stale flight's own applyPrefetch() settles it once it actually
-        // resolves, matching against the now-empty email — no match, no
-        // pending click for it either, so it reverts.
-        expect(soleTrader.mode).toBe("business");
-      });
-
-      test("a redundant unchanged-email re-render mid-flight does not drop the pending chip decision", () => {
-        const flight = armPendingPrefetch();
-        soleTrader.onModeChipClick("sole_trader");
-        expect(soleTrader.pendingChipDecisionEmail).toBe("buyer@example.test");
-
-        // WooCommerce firing onEmailChanged again for the SAME email while
-        // the real flight for it is still outstanding must not clear the
-        // decision that flight's own applyPrefetch() is about to serve.
-        soleTrader.onEmailChanged();
-        expect(soleTrader.pendingChipDecisionEmail).toBe("buyer@example.test");
-
-        flight.settle(null);
-        expect(opened).toHaveLength(1);
-      });
     });
 
     describe("round-3 review regressions (Han/Vader) — concurrent flights, isDeciding() vs isBusy(), country change", () => {
@@ -1990,42 +2337,6 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       function primeCountry() {
         ctx.helper.countryDidChange("GB");
       }
-
-      /** Arms fetchTokens/fetchCurrentBuyer to hand back every resolve callback in call order. */
-      function armConcurrentFlights() {
-        jest.spyOn(soleTrader, "fetchTokens").mockImplementation((cb) => cb(true));
-        const callbacks = [];
-        jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => {
-          callbacks.push(cb);
-        });
-        return callbacks;
-      }
-
-      test("a stale flight for an earlier email does not revert a later flight's already-adopted match", () => {
-        const callbacks = armConcurrentFlights();
-
-        $("#billing_email").val("first@example.test");
-        soleTrader.onEmailChanged();
-        $("#billing_email").val("second@example.test");
-        soleTrader.onEmailChanged();
-        expect(callbacks).toHaveLength(2);
-
-        // The SECOND (current-email) flight resolves and adopts first.
-        callbacks[1]({
-          organization_number: "TWO:ST2",
-          company_name: "Second Co",
-          email: "second@example.test"
-        });
-        expect(soleTrader.mode).toBe("sole_trader");
-        expect($("#company_id").val()).toBe("TWO:ST2");
-
-        // The FIRST flight's stale response lands after — no match against
-        // the current email, and must not stomp what the newer flight
-        // already adopted.
-        callbacks[0](null);
-        expect(soleTrader.mode).toBe("sole_trader");
-        expect($("#company_id").val()).toBe("TWO:ST2");
-      });
 
       test("the Business chip works once adopted even while the popup-close poll hasn't caught up yet", () => {
         soleTrader.setMode("sole_trader");
@@ -2060,12 +2371,6 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
 
       test("a real country change does not wipe an already-adopted sole trader while leaving mode stranded", () => {
         primeCountry();
-        // A real adopted buyer always has an email — that's how the match
-        // happened — so `refresh()`'s own trailing `onEmailChanged()` (which
-        // otherwise correctly reverts on NO email at all) is a no-op re-entry
-        // here, dedupe against the already-recorded `lastPrefetchEmail`.
-        $("#billing_email").val("buyer@example.test");
-        soleTrader.lastPrefetchEmail = "buyer@example.test";
         soleTrader.setMode("sole_trader");
         soleTrader.setCompany("TWO:ST1", "A Sole Trader");
         soleTrader.availabilityByCountry.SE = true;
@@ -2080,7 +2385,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
 
       test("a real country change does not wipe a sole-trader flight still in progress", () => {
         primeCountry();
-        const flight = armPendingPrefetch();
+        const flight = armUndecidedSignup();
         soleTrader.onModeChipClick("sole_trader");
         soleTrader.availabilityByCountry.SE = true;
 
@@ -2262,22 +2567,10 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         soleTrader.getDifferentSoleTraderBtnNode().trigger("click");
         expect(soleTrader.soleTraderReconfirmingCount).toBe(1);
 
-        // `#billing_email` is never locked, unlike the captured fields — the
-        // buyer edits it while the re-signup popup is still open, and a
-        // fresh autofill flight resolves with a match. `applyPrefetch`'s
-        // match branch calls `setMode("sole_trader")` while mode is ALREADY
-        // `sole_trader` — a redundant same-mode call that must not reset
-        // the re-signup this popup is still deciding.
-        $("#billing_email").val("returning@example.test");
-        jest.spyOn(soleTrader, "fetchTokens").mockImplementation((cb) => cb(true));
-        jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) =>
-          cb({
-            organization_number: "TWO:ST3",
-            company_name: "Returning Co",
-            email: "returning@example.test"
-          })
-        );
-        soleTrader.onEmailChanged();
+        // A redundant same-mode `setMode("sole_trader")` — mode is ALREADY
+        // `sole_trader` — must not reset the re-signup this popup is still
+        // deciding.
+        soleTrader.setMode("sole_trader");
 
         expect(soleTrader.soleTraderReconfirmingCount).toBe(1);
         expect(soleTrader.isDeciding()).toBe(true);
@@ -2301,30 +2594,6 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         expect(soleTrader.mode).toBe("business");
       });
     });
-
-    describe("item 2 — a later, unrelated flight must not revert an already-adopted sole trader", () => {
-      // `#billing_email` is never locked (see the round-6 test above), so a
-      // buyer who has ALREADY been adopted can still edit it afterwards.
-      // Before this fix, `applyPrefetch`'s revert branch checked only
-      // `mode === "sole_trader" && !isBusy()` — a fresh flight for the
-      // edited email settling with no match (the ordinary case: the
-      // autofill cookie has no reason to agree with an adoption already
-      // settled) reverted straight to business and wiped the captured
-      // company, live-reported by Doug.
-      test("editing the email post-adoption to one autofill does not match leaves the adoption alone", () => {
-        soleTrader.setMode("sole_trader");
-        soleTrader.setCompany("TWO:ST1", "First Trader");
-        expect(soleTrader.soleTraderAdopted).toBe(true);
-
-        $("#billing_email").val("unrelated@example.test");
-        jest.spyOn(soleTrader, "fetchTokens").mockImplementation((cb) => cb(true));
-        jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => cb(null));
-        soleTrader.onEmailChanged();
-
-        expect(soleTrader.mode).toBe("sole_trader");
-        expect($("#company_id").val()).toBe("TWO:ST1");
-      });
-    });
   });
 
   describe("TWO-40 §7 direction (a) — Doug's live-tested regressions on the widget-selection PR", () => {
@@ -2342,34 +2611,8 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       // was the one deliberate re-signup entry point once adopted. Doug has
       // now ruled that wrong — re-clicking the chip must act exactly like
       // that link, not do nothing.
-      test("acts exactly like the 'select a different sole trader' link, not a no-op", () => {
+      test("opens a re-signup popup for an adoption that came through the hosted flow", () => {
         $("#billing_email").val("buyer@example.test");
-        jest.spyOn(soleTrader, "fetchTokens").mockImplementation((cb) => cb(true));
-        jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) =>
-          cb({
-            organization_number: "TWO:ST1",
-            company_name: "A Sole Trader",
-            email: "buyer@example.test"
-          })
-        );
-        soleTrader.onModeChipClick("sole_trader");
-        expect($("#billing_company_display_field").hasClass("hidden")).toBe(false);
-
-        const setCompanySpy = jest.spyOn(soleTrader, "setCompany");
-        soleTrader.onModeChipClick("sole_trader");
-
-        expect(setCompanySpy).not.toHaveBeenCalled();
-        // The first click matched and adopted synchronously — no popup at
-        // all. This one IS the popup: the chip's own re-signup.
-        expect(opened).toHaveLength(1);
-        expect(opened[0].url).toContain("&autoselect=false");
-        expect(soleTrader.mode).toBe("sole_trader");
-      });
-
-      test("opens a re-signup popup for an adoption that came through the hosted flow rather than a prefetch match", () => {
-        $("#billing_email").val("buyer@example.test");
-        jest.spyOn(soleTrader, "fetchTokens").mockImplementation((cb) => cb(true));
-        jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => cb(null));
         soleTrader.onModeChipClick("sole_trader");
         expect(opened).toHaveLength(1);
 
@@ -2396,21 +2639,12 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       });
 
       test("still lets the buyer through while genuinely deciding (not yet adopted)", () => {
-        const flight = (() => {
-          $("#billing_email").val("buyer@example.test");
-          jest.spyOn(soleTrader, "fetchTokens").mockImplementation((cb) => cb(true));
-          let resolveBuyer;
-          jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => {
-            resolveBuyer = cb;
-          });
-          return { settle: (buyer) => resolveBuyer(buyer) };
-        })();
+        const flight = armUndecidedSignup();
         soleTrader.onModeChipClick("sole_trader");
         expect(soleTrader.isDeciding()).toBe(true);
 
-        // A second click mid-decision is untouched by this guard — it only
-        // refuses once actually adopted.
-        soleTrader.onModeChipClick("sole_trader");
+        // The adopted-re-signup branch is untouched by a click mid-decision —
+        // it only takes over once actually adopted.
         flight.settle({
           organization_number: "TWO:ST1",
           company_name: "A Sole Trader",
@@ -2429,8 +2663,6 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         // "open" (and therefore still `isBusy()`) at the moment the buyer
         // clicks Enter manually.
         $("#billing_email").val("buyer@example.test");
-        jest.spyOn(soleTrader, "fetchTokens").mockImplementation((cb) => cb(true));
-        jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => cb(null));
         soleTrader.onModeChipClick("sole_trader");
 
         soleTrader.bindPopupMessageListener();
@@ -2468,8 +2700,6 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         // only shows up once the widget is genuinely live cannot hide behind
         // a call that skips it.
         $("#billing_email").val("buyer@example.test");
-        jest.spyOn(soleTrader, "fetchTokens").mockImplementation((cb) => cb(true));
-        jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => cb(null));
         soleTrader.onModeChipClick("sole_trader");
 
         soleTrader.bindPopupMessageListener();
@@ -2562,6 +2792,53 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     });
   });
 
+  /**
+   * TWO-40 §14 — leaving sole-trader mode takes the popup with it, rather
+   * than dropping the record and orphaning a live window (ported from the two
+   * PrestaShop bugs of this shape).
+   *
+   * Needs `isDeciding()` false while a popup is still outstanding, which is
+   * exactly the adopted state: the outcome is settled, so a buyer action to
+   * LEAVE is deliberately allowed through (see that predicate's own comment).
+   */
+  describe("TWO-40 §14 — leaving sole-trader mode abandons the whole flow at once", () => {
+    beforeEach(() => {
+      // The click-to-reopen binding is delegated from `Twoinc#initialize()`,
+      // the real checkout-page wiring — same as the bug-3 block above.
+      $("form[name='checkout']").after('<div id="order_review"></div>');
+      ctx.Twoinc.getInstance().initialize(false);
+    });
+
+    test("a popup still on screen is CLOSED, not merely dropped from tracking", () => {
+      const popup = {
+        closed: false,
+        close: jest.fn(() => {
+          popup.closed = true;
+        }),
+        focus: jest.fn()
+      };
+      window.open = jest.fn(() => popup);
+
+      // Given: a signup popup still undecided, with a company already adopted
+      // — so a buyer action to LEAVE is allowed through.
+      soleTrader.setMode("sole_trader");
+      soleTrader.launchSignup();
+      expect(soleTrader.activePopupWatchers).toHaveLength(1);
+      soleTrader.setCompany("TWO:ST1", "A Sole Trader");
+      expect(soleTrader.soleTraderAdopted).toBe(true);
+      expect(soleTrader.isDeciding()).toBe(false);
+
+      // When: the buyer leaves sole-trader mode.
+      $("#billing_company").trigger("click");
+
+      // Then: the window went with the record. Dropping the record alone left
+      // a live popup on screen with nothing holding it, and the next Sole
+      // trader click opened a SECOND one over it.
+      expect(popup.close).toHaveBeenCalled();
+      expect(soleTrader.activePopupWatchers).toHaveLength(0);
+    });
+  });
+
   describe("TWO-40 — delegated-auth token refresh", () => {
     let ajax;
 
@@ -2575,11 +2852,9 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       jest.useRealTimers();
     });
 
-    /** Drive `onEmailChanged()` through a REAL (stubbed-network) token mint. */
+    /** Drive a REAL (stubbed-network) token mint, as `render()` does. */
     function realMint() {
-      $("#billing_email").val("buyer@example.test");
-      jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => cb(null));
-      soleTrader.onEmailChanged();
+      soleTrader.fetchTokens();
       ajax.last().succeed({
         success: true,
         data: {

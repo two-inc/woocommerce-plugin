@@ -274,9 +274,8 @@ changes reaches. Every single transition here is covered by one of the files abo
 is the pair of invariants that two separately-correct changes disagree about (#486):
 
 - **the visible company-name surface must be one that can actually render a name.** Manual entry
-  destroys the picker, and the email-driven autofill prefetch adopts a sole trader with no guard
-  in that direction — so adoption from manual entry pointed the buyer at a picker that was not
-  there. Pinned on the rendered container, on `getCompanyName()`, and on `getCompanyData()`,
+  destroys the picker, and the Sole trader chip is not hidden there — so adoption from manual
+  entry pointed the buyer at a picker that was not there. Pinned on the rendered container, on `getCompanyName()`, and on `getCompanyData()`,
   because an empty `company_name` is what stops an order intent firing at all. The counterweight
   is pinned too: abandoning that adoption still lands the buyer back in manual entry.
 - **the slot directly after the visible name field belongs to whichever of its two followers is

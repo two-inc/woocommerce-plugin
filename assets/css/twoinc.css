@@ -640,6 +640,44 @@
 }
 
 /*
+ * The same spinner, over the company-NAME field, for the sole-trader flow
+ * (Doug 2026-08-20 — see syncSoleTraderSpinner). Reuses .twoinc-search-spinner
+ * above for the asset and the 16px box; only the positioning context and the
+ * horizontal inset are per-host.
+ *
+ * The host is the input BOX (selectWoo's rendered selection, or WooCommerce's
+ * own .woocommerce-input-wrapper around the native input), so the 50%-based
+ * vertical centring above lands on the control rather than on the field's
+ * label as well.
+ */
+.twoinc-name-searching {
+  position: relative;
+}
+/*
+ * WooCommerce core's own wrapper is not reliably a block across themes, and an
+ * inline positioning context puts the spinner against the text run rather than
+ * the input box. Only while the spinner is up, so the native field's own layout
+ * is untouched the rest of the time.
+ */
+.woocommerce-input-wrapper.twoinc-name-searching {
+  display: block;
+}
+/*
+ * Clear of selectWoo's own dropdown arrow, which owns the right edge of the
+ * rendered selection (.select2-selection__arrow, right: 1px, 20px wide), and
+ * the company name kept clear of the spinner in turn.
+ */
+.select2-selection.twoinc-name-searching > .twoinc-sole-trader-spinner {
+  right: 32px;
+}
+.select2-selection.twoinc-name-searching .select2-selection__rendered {
+  padding-right: 48px;
+}
+.woocommerce-input-wrapper.twoinc-name-searching > input {
+  padding-right: 30px;
+}
+
+/*
  * Company-search placeholder / selected-value text (#30.x.5, round 2).
  *
  * Some host themes apply a blanket `text-transform: uppercase` broad enough
@@ -820,11 +858,10 @@
  * control already shows (.twoinc-search-spinner) rather than a separate
  * overlay.
  *
- * Deliberately INDICATIVE only — no `pointer-events: none`, no dimming. The
- * prefetch runs in the background off an email change the buyer may not
- * associate with the chips at all, so blocking the chips would leave them
- * unable to pick "Registered company" for the duration of a request they
- * never asked for. Stacking a second signup popup is prevented by the
+ * Deliberately INDICATIVE only — no `pointer-events: none`, no dimming.
+ * Blocking the chips would leave the buyer unable to pick "Registered
+ * company" for the duration of a round trip they may not associate with the
+ * chips at all. Stacking a second signup popup is prevented by the
  * re-entrancy guard on the launch itself, which is where that belongs.
  */
 .twoinc-sole-trader-toggle--busy .twoinc-mode-chip {

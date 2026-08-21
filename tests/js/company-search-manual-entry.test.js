@@ -1789,8 +1789,7 @@ describe("company-search manual-entry affordance", () => {
 
       // The search button (and the widget it goes with) is torn down only
       // once a sole trader is actually adopted — see `setCompany`'s own
-      // comment (TWO-40 §7 correction) — not on the mode switch alone, so
-      // the round trip is simulated the same way a real prefetch match is.
+      // comment (TWO-40 §7 correction) — not on the mode switch alone.
       ctx.soleTrader.setMode("sole_trader");
       ctx.soleTrader.setCompany("TWO:ST1", "A Sole Trader");
       expect($("#" + helper.searchCompanyBtnId)[0].style.display).toBe("none");
@@ -1803,8 +1802,7 @@ describe("company-search manual-entry affordance", () => {
 
     test("adopting a sole trader with the dropdown open closes it, but leaves the widget alive (TWO-40 §7 direction (a))", () => {
       // A buyer can reach sole-trader mode with the search dropdown still
-      // OPEN — via the mode chip directly, or via the email-driven autofill
-      // prefetch (onEmailChanged) — without ever going through manual entry
+      // OPEN — via the mode chip — without ever going through manual entry
       // first. Adoption must still close that open dropdown (selectWoo's own
       // close cleanup unbinds its document-level Tab/Enter-as-select
       // interceptor, the same page-wide-Tab-shaped gap #30.x.13 fixed for
@@ -1838,10 +1836,10 @@ describe("company-search manual-entry affordance", () => {
       // button synchronously but defers the actual mode switch via
       // `setTimeout(enterManualCompanyEntry, 0)` (so destroying the widget
       // doesn't happen from inside its own still-unwinding click handler).
-      // Separately, the email-driven autofill prefetch can call
-      // `twoincSoleTrader.setMode("sole_trader")` on its own, asynchronously,
-      // regardless of what the dropdown/manual-entry button is doing (see
-      // the comment on `savedCaptureMode`). If that prefetch's
+      // Separately, the hosted signup's own ACCEPTED handler reaches
+      // `twoincSoleTrader.setMode("sole_trader")` asynchronously, regardless
+      // of what the dropdown/manual-entry button is doing (see the comment on
+      // `savedCaptureMode`). If that
       // callback lands in the SAME tick window as the pending deferred
       // `enterManualCompanyEntry` — entirely plausible, both are macrotask/
       // microtask-scheduled independently of each other — `setMode` runs

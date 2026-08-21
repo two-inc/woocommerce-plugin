@@ -545,10 +545,8 @@ describe("read-only captured-company summary", () => {
 
     test("stays name-only after a round trip through sole-trader mode (#30.x.13, round 1 review — Vader)", () => {
       // Real dead end found live by Vader's review: sole-trader mode is
-      // reachable WHILE in manual entry — the mode chip is not hidden during
-      // manual entry, and the email-driven autofill prefetch can call
-      // twoincSoleTrader.setMode("sole_trader") on its own regardless of
-      // capture mode. setMode snapshots and restores the capture mode around
+      // reachable WHILE in manual entry — the mode chip is not hidden there.
+      // setMode snapshots and restores the capture mode around
       // the trip, so a buyer who was in manual entry lands back on `manual`
       // rather than `search` — without that restore toggleBusinessFields would
       // show + REQUIRE #company_id_field with no working search widget behind
