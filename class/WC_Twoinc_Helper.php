@@ -18,7 +18,11 @@ if (!class_exists('WC_Twoinc_Helper')) {
             return number_format($amt, wc_get_price_decimals(), '.', '');
         }
 
-        // 6dp precision.
+        /**
+         * 6dp precision.
+         *
+         * @return string
+         */
         public static function round_rate($rate)
         {
             return number_format($rate, 6, '.', '');
@@ -217,6 +221,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
             return $order && $order->get_payment_method() && $order->get_payment_method() === WC_Twoinc_Brand::get('gateway_id');
         }
 
+        /**
+         * @return bool
+         */
         public static function is_twoinc_address_empty($twoinc_address)
         {
 
@@ -397,6 +404,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
             return strval(WC_Twoinc_Helper::round_rate($tax_rate['rate'])) . '|' . $tax_rate['name'];
         }
 
+        /**
+         * @return array
+         */
         public static function get_tax_subtotals($line_items, $shippings, $fees, $order)
         {
 
@@ -1161,6 +1171,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
             return md5(json_encode(WC_Twoinc_Helper::utf8ize($obj)));
         }
 
+        /**
+         * @return array
+         */
         public static function array_diff_r($src_arr, $dst_arr)
         {
             $diff = array();

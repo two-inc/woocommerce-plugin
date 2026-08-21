@@ -42,6 +42,9 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             add_action('woocommerce_pay_order_before_submit', [$this, 'order_pay_page_customize'], 24);
         }
 
+        /**
+         * @return mixed
+         */
         public function apply_brand_checkout_fields($fields)
         {
             return apply_filters('twoinc_checkout_fields', $fields);

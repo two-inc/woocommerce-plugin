@@ -38,6 +38,9 @@ if (!class_exists('WC_Twoinc_Brand')) {
             return array_key_exists($key, $config) ? $config[$key] : null;
         }
 
+        /**
+         * @return array
+         */
         public static function config()
         {
             if (self::$config !== null) {
