@@ -681,16 +681,16 @@ msgid "Click here to login or sign up as a sole trader."
 msgstr "Klik hier om in te loggen of u te registreren als eenmanszaak."
 
 #: class/WC_Twoinc.php
-msgid "Custom Payment Term (days)"
-msgstr "Aangepaste betalingstermijn (dagen)"
+msgid "Custom Payment Terms (days)"
+msgstr "Aangepaste betalingstermijnen (dagen)"
 
 #: class/WC_Twoinc.php
 msgid "Custom Payment Term (days) must be a whole number of days."
 msgstr "Aangepaste betalingstermijn (dagen) moet een geheel aantal dagen zijn."
 
 #: class/WC_Twoinc.php
-msgid "Default Payment Term"
-msgstr "Standaard betalingstermijn"
+msgid "Default Payment Terms"
+msgstr "Standaard betalingstermijnen"
 
 #: class/WC_Twoinc.php
 msgid "Down"
@@ -713,18 +713,21 @@ msgid "End of month"
 msgstr "Einde van de maand"
 
 #: class/WC_Twoinc.php
-msgid "Enter the amount you want to charge your customer. Max %s."
-msgstr "Vul het bedrag in dat je bij je klant in rekening wilt brengen. Max %s."
+msgid "Enter the amount you want to charge your customer."
+msgstr "Vul het bedrag in dat je bij je klant in rekening wilt brengen."
 
 #: class/WC_Twoinc.php
 #, php-format
-msgid "Enter the amount and percentage of the fee you want to charge your customer. Max %1$s / %2$s."
-msgstr "Vul het bedrag en het percentage van de fee in dat je bij je klant in rekening wilt brengen. Max %1$s / %2$s."
+msgid "Max %s."
+msgstr "Max %s."
 
 #: class/WC_Twoinc.php
-#, php-format
-msgid "Enter the percentage of the fee you want to charge your customer. Max: %s."
-msgstr "Vul het percentage van de fee in dat je bij je klant in rekening wilt brengen. Max: %s."
+msgid "Enter the amount and percentage of the fee charged to you that you want to offset with a surcharge. Max 100%."
+msgstr "Vul het bedrag en percentage in van de fee die aan jou in rekening wordt gebracht en die je wilt compenseren met een toeslag. Max 100%."
+
+#: class/WC_Twoinc.php
+msgid "Enter the percentage of the fee's cost to you that you want the surcharge to recover. 100% means the fee no longer reduces your revenue at all."
+msgstr "Vul het percentage in van de kosten van de fee voor jou dat je met de toeslag wilt terugverdienen. 100% betekent dat de fee je omzet niet langer verlaagt."
 
 #: class/WC_Twoinc.php
 #, php-format
@@ -833,8 +836,8 @@ msgid "Percentage"
 msgstr "Percentage"
 
 #: class/WC_Twoinc.php
-msgid "Percentage (%)"
-msgstr "Percentage (%)"
+msgid "Percent of Fee"
+msgstr "Percentage van de fee"
 
 #: class/WC_Twoinc.php
 msgid "Platform minimum %1$s, %2$s tax. A value here is interpreted in the store currency on the tax basis selected below and must exceed it."
@@ -1068,7 +1071,7 @@ msgid "This API key could not be verified."
 msgstr "Deze API-sleutel kon niet worden geverifieerd."
 
 #: class/WC_Twoinc.php
-msgid "Surcharge tax treatment"
+msgid "Surcharge Tax Treatment"
 msgstr "Btw-behandeling van de toeslag"
 
 #: class/WC_Twoinc.php
@@ -1076,7 +1079,7 @@ msgid "How the surcharge line is taxed. Standard applies your store's default ta
 msgstr "Hoe de toeslagregel wordt belast. Standaard past de standaard btw-regels van uw winkel toe op het bedrag. Specifieke btw-klasse belast het bedrag onder een WooCommerce-btw-klasse die u hieronder selecteert — om het bedrag onbelast te laten, maakt u een btw-klasse met een tarief van 0% en selecteert u die hier."
 
 #: class/WC_Twoinc.php
-msgid "Surcharge tax class"
+msgid "Surcharge Tax Class"
 msgstr "Btw-klasse van de toeslag"
 
 #: class/WC_Twoinc.php

@@ -636,7 +636,7 @@ msgid "Click here to login or sign up as a sole trader."
 msgstr ""
 
 #: class/WC_Twoinc.php
-msgid "Custom Payment Term (days)"
+msgid "Custom Payment Terms (days)"
 msgstr ""
 
 #: class/WC_Twoinc.php
@@ -644,7 +644,7 @@ msgid "Custom Payment Term (days) must be a whole number of days."
 msgstr ""
 
 #: class/WC_Twoinc.php
-msgid "Default Payment Term"
+msgid "Default Payment Terms"
 msgstr ""
 
 #: class/WC_Twoinc.php
@@ -668,17 +668,20 @@ msgid "End of month"
 msgstr ""
 
 #: class/WC_Twoinc.php
-msgid "Enter the amount you want to charge your customer. Max %s."
+msgid "Enter the amount you want to charge your customer."
 msgstr ""
 
 #: class/WC_Twoinc.php
 #, php-format
-msgid "Enter the amount and percentage of the fee you want to charge your customer. Max %1$s / %2$s."
+msgid "Max %s."
 msgstr ""
 
 #: class/WC_Twoinc.php
-#, php-format
-msgid "Enter the percentage of the fee you want to charge your customer. Max: %s."
+msgid "Enter the amount and percentage of the fee charged to you that you want to offset with a surcharge. Max 100%."
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "Enter the percentage of the fee's cost to you that you want the surcharge to recover. 100% means the fee no longer reduces your revenue at all."
 msgstr ""
 
 #: class/WC_Twoinc.php
@@ -788,7 +791,7 @@ msgid "Percentage"
 msgstr ""
 
 #: class/WC_Twoinc.php
-msgid "Percentage (%)"
+msgid "Percent of Fee"
 msgstr ""
 
 #: class/WC_Twoinc.php
@@ -1033,7 +1036,7 @@ msgid "This API key could not be verified."
 msgstr ""
 
 #: class/WC_Twoinc.php
-msgid "Surcharge tax treatment"
+msgid "Surcharge Tax Treatment"
 msgstr ""
 
 #: class/WC_Twoinc.php
@@ -1041,7 +1044,7 @@ msgid "How the surcharge line is taxed. Standard applies your store's default ta
 msgstr ""
 
 #: class/WC_Twoinc.php
-msgid "Surcharge tax class"
+msgid "Surcharge Tax Class"
 msgstr ""
 
 #: class/WC_Twoinc.php

@@ -673,6 +673,35 @@ msgid "The cap applies to the whole fee: the percentage and the fixed fee togeth
 msgstr "Maxbeloppet gäller hela avgiften: procenten och den fasta avgiften tillsammans, inte bara procenten."
 
 #: class/WC_Twoinc.php
+msgid "Custom Payment Terms (days)"
+msgstr "Anpassade betalningsvillkor (dagar)"
+
+#: class/WC_Twoinc.php
+msgid "Default Payment Terms"
+msgstr "Standardbetalningsvillkor"
+
+#: class/WC_Twoinc.php
+msgid "Percent of Fee"
+msgstr "Procent av avgiften"
+
+#: class/WC_Twoinc.php
+msgid "Enter the amount you want to charge your customer."
+msgstr "Ange beloppet du vill debitera din kund."
+
+#: class/WC_Twoinc.php
+#, php-format
+msgid "Max %s."
+msgstr "Max %s."
+
+#: class/WC_Twoinc.php
+msgid "Enter the amount and percentage of the fee charged to you that you want to offset with a surcharge. Max 100%."
+msgstr "Ange beloppet och procentandelen av avgiften som debiteras dig som du vill kompensera med ett tillägg. Max 100 %."
+
+#: class/WC_Twoinc.php
+msgid "Enter the percentage of the fee's cost to you that you want the surcharge to recover. 100% means the fee no longer reduces your revenue at all."
+msgstr "Ange hur stor procentandel av avgiftens kostnad för dig du vill att tillägget ska kompensera för. 100 % innebär att avgiften inte längre minskar din omsättning alls."
+
+#: class/WC_Twoinc.php
 msgid "This API key is invalid or has expired."
 msgstr "Den här API-nyckeln är ogiltig eller har upphört att gälla."
 
@@ -709,7 +738,7 @@ msgid "This API key could not be verified."
 msgstr "Den här API-nyckeln kunde inte verifieras."
 
 #: class/WC_Twoinc.php
-msgid "Surcharge tax treatment"
+msgid "Surcharge Tax Treatment"
 msgstr "Skattehantering av tillägg"
 
 #: class/WC_Twoinc.php
@@ -717,7 +746,7 @@ msgid "How the surcharge line is taxed. Standard applies your store's default ta
 msgstr "Hur tilläggsraden beskattas. Standard tillämpar butikens standardskatteregler på avgiften. Specifik skatteklass beskattar avgiften enligt en WooCommerce-skatteklass du väljer nedan — för att lämna avgiften obeskattad, skapa en skatteklass med 0 % skattesats och välj den här."
 
 #: class/WC_Twoinc.php
-msgid "Surcharge tax class"
+msgid "Surcharge Tax Class"
 msgstr "Skatteklass för tillägg"
 
 #: class/WC_Twoinc.php
