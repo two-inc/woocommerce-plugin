@@ -864,16 +864,14 @@ if (!class_exists('WC_Twoinc_Helper')) {
         }
 
         /**
-         * Always true for a Swedish base country. Also true when the
-         * merchant opted in via "Send tax subtotals in payload" (TWO-25386,
-         * ported from Magento/PrestaShop) — that setting only adds shops
-         * that send tax_subtotals, never turns the Swedish requirement off.
+         * The merchant's "Validate tax subtotals" setting is the only source
+         * of truth (TWO-25502). Swedish shops need it on, which the one-time
+         * backfill in WC_Twoinc::migrate_se_tax_subtotals() takes care of.
+         *
+         * @return bool
          */
         public static function is_tax_subtotals_required_by_twoinc()
         {
-            if (strtolower(WC()->countries->get_base_country()) == 'se') {
-                return true;
-            }
             $gateway = WC_Twoinc::get_instance();
             return $gateway && 'yes' === $gateway->get_option('enable_tax_subtotals');
         }

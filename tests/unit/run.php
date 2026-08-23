@@ -244,6 +244,9 @@ final class BrandConfigSpec
             'testPaymentSubtitlePrefersMerchantFreeTextOverBrandTagline',
             'testPaymentSubtitleFallsBackToBrandTaglineWhenBlank',
             'testTaxSubtotalsRequiredWhenMerchantOptsIn',
+            'testTaxSubtotalsSettingIsOnByDefaultForNewInstalls',
+            'testSeTaxSubtotalsBackfill',
+            'testSeTaxSubtotalsBackfillDoesNotUndoAMerchantOptOut',
         ];
         foreach ($tests as $test) {
             self::reset();
@@ -266,6 +269,7 @@ final class BrandConfigSpec
         // non-default store currency into every test after it — turning one
         // failure into a cascade in unrelated specs. Reset both together.
         unset($GLOBALS['__twoinc_test_store_currency']);
+        unset($GLOBALS['__twoinc_test_base_country']);
         unset($GLOBALS['test_home_url']);
         // Developer host overrides (TWO-40 §9). Real process env vars, so a
         // test that sets one and then fails an assertion before its own
@@ -4443,25 +4447,116 @@ final class BrandConfigSpec
     }
 
     /**
-     * TWO-25386: the new "Send tax subtotals in payload" checkbox adds
-     * shops on top of the pre-existing unconditional Swedish requirement —
-     * it never turns that requirement off.
+     * TWO-25502: the merchant setting is the only source of truth. A Swedish
+     * base country no longer forces it on at read time — the one-time
+     * backfill below is what keeps Swedish shops sending subtotals.
      */
     private static function testTaxSubtotalsRequiredWhenMerchantOptsIn(): void
     {
-        // WC()->countries->get_base_country() is stubbed to 'NO' (not 'SE'),
-        // so the pre-existing unconditional requirement is off here and the
-        // merchant setting is the only thing this asserts.
         $prop = new ReflectionProperty(WC_Twoinc::class, 'instance');
         $prop->setAccessible(true);
 
-        $prop->setValue(null, self::fulfilmentTriggerGateway(['enable_tax_subtotals' => 'no']));
-        TinyAssert::same(false, WC_Twoinc_Helper::is_tax_subtotals_required_by_twoinc());
-
-        $prop->setValue(null, self::fulfilmentTriggerGateway(['enable_tax_subtotals' => 'yes']));
-        TinyAssert::same(true, WC_Twoinc_Helper::is_tax_subtotals_required_by_twoinc());
+        foreach ([['NO', 'no', false], ['NO', 'yes', true], ['SE', 'no', false], ['SE', 'yes', true]] as $case) {
+            list($country, $stored, $expected) = $case;
+            $GLOBALS['__twoinc_test_base_country'] = $country;
+            $prop->setValue(null, self::fulfilmentTriggerGateway(['enable_tax_subtotals' => $stored]));
+            TinyAssert::same(
+                $expected,
+                WC_Twoinc_Helper::is_tax_subtotals_required_by_twoinc(),
+                "base country $country with stored '$stored'"
+            );
+        }
 
         $prop->setValue(null, null);
+    }
+
+    private static function testTaxSubtotalsSettingIsOnByDefaultForNewInstalls(): void
+    {
+        $gateway = new class () extends WC_Twoinc {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+        };
+        $gateway->init_form_fields();
+        $field = $gateway->form_fields['enable_tax_subtotals'];
+
+        TinyAssert::same('Validate tax subtotals', $field['title']);
+        TinyAssert::same('yes', $field['default']);
+        TinyAssert::true(
+            strpos($field['description'], 'Sweden') === false,
+            "description must not claim Sweden is unconditional, got: {$field['description']}"
+        );
+    }
+
+    /**
+     * Gateway whose settings blob comes from the seeded wp option, so
+     * update_option() writes back through the same row the migration reads.
+     */
+    private static function taxSubtotalsGateway(): WC_Twoinc
+    {
+        return new class () extends WC_Twoinc {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+                $this->init_settings();
+            }
+        };
+    }
+
+    private static function seedTaxSubtotalsSettings(?string $stored): string
+    {
+        $key = 'woocommerce_' . WC_Twoinc_Brand::get('gateway_id') . '_settings';
+        // A brand-new install has no row at all; WC_Settings_API then serves
+        // the field default rather than anything the migration could read.
+        $GLOBALS['__twoinc_test_options'][$key] = $stored === null ? [] : ['enable_tax_subtotals' => $stored];
+        return $key;
+    }
+
+    private static function runTaxSubtotalsBackfill(WC_Twoinc $gateway): void
+    {
+        $method = new ReflectionMethod(WC_Twoinc::class, 'migrate_se_tax_subtotals');
+        $method->setAccessible(true);
+        $method->invoke($gateway);
+    }
+
+    /**
+     * TWO-25502: the backfill opts a Swedish install in exactly once, and
+     * touches nothing else. Each case runs twice to prove the marker holds.
+     */
+    private static function testSeTaxSubtotalsBackfill(): void
+    {
+        $cases = [
+            ['SE', 'no', 'yes', 'Swedish install that stored no is opted in'],
+            ['SE', 'yes', 'yes', 'Swedish install already on is left alone'],
+            ['NO', 'no', 'no', 'non-Swedish install is never touched'],
+            ['SE', null, null, 'install with no stored key keeps the field default'],
+        ];
+        foreach ($cases as $case) {
+            list($country, $stored, $expected, $description) = $case;
+            $GLOBALS['__twoinc_test_base_country'] = $country;
+            $key = self::seedTaxSubtotalsSettings($stored);
+            delete_option(WC_Twoinc_Brand::prefixed_name('tax_subtotals_se_backfilled'));
+
+            self::runTaxSubtotalsBackfill(self::taxSubtotalsGateway());
+            self::runTaxSubtotalsBackfill(self::taxSubtotalsGateway());
+
+            $actual = $GLOBALS['__twoinc_test_options'][$key]['enable_tax_subtotals'] ?? null;
+            TinyAssert::same($expected, $actual, $description);
+        }
+    }
+
+    private static function testSeTaxSubtotalsBackfillDoesNotUndoAMerchantOptOut(): void
+    {
+        $GLOBALS['__twoinc_test_base_country'] = 'SE';
+        $key = self::seedTaxSubtotalsSettings('no');
+
+        self::runTaxSubtotalsBackfill(self::taxSubtotalsGateway());
+        TinyAssert::same('yes', $GLOBALS['__twoinc_test_options'][$key]['enable_tax_subtotals']);
+
+        $GLOBALS['__twoinc_test_options'][$key]['enable_tax_subtotals'] = 'no';
+        self::runTaxSubtotalsBackfill(self::taxSubtotalsGateway());
+        TinyAssert::same('no', $GLOBALS['__twoinc_test_options'][$key]['enable_tax_subtotals']);
     }
 
     private static function testCheckoutEnvOptionsPreserveStoredModeWithoutSettingsApi(): void

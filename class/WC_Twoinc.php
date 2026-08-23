@@ -67,6 +67,7 @@ if (!class_exists('WC_Twoinc')) {
             $this->init_settings();
             $this->drop_removed_settings();
             $this->drop_renamed_option_rows();
+            $this->migrate_se_tax_subtotals();
 
             $this->title = sprintf(
                 __($this->get_option('title'), 'twoinc-payment-gateway'),
@@ -650,6 +651,46 @@ if (!class_exists('WC_Twoinc')) {
                 unset($this->settings[$key]);
             }
             update_option($this->get_option_key(), $this->settings);
+        }
+
+        /**
+         * One-time backfill of `enable_tax_subtotals` for Swedish shops
+         * (TWO-25502). Tax subtotals used to be forced on for a Swedish base
+         * country in code, ignoring the setting; now the setting is the only
+         * source of truth, so a Swedish install that stored 'no' would
+         * silently stop sending them. Unlike the self-limiting cleanups
+         * above this needs its own marker row: without one, a merchant who
+         * deliberately switches the setting back off is re-enabled on the
+         * next page load.
+         *
+         * @return void
+         */
+        private function migrate_se_tax_subtotals()
+        {
+            $marker = WC_Twoinc_Brand::prefixed_name('tax_subtotals_se_backfilled');
+            if (get_option($marker, null) !== null) {
+                return;
+            }
+            // Retry on a later load rather than burning the marker if the
+            // countries service is not up yet.
+            $countries = WC() ? WC()->countries : null;
+            if (!$countries) {
+                return;
+            }
+            update_option($marker, 'yes');
+
+            // A fresh install carries the field default ('yes'), so the only
+            // rows to fix are stored ones that say otherwise.
+            if (!is_array($this->settings) || !array_key_exists('enable_tax_subtotals', $this->settings)) {
+                return;
+            }
+            if ('yes' === $this->settings['enable_tax_subtotals']) {
+                return;
+            }
+            if ('se' !== strtolower((string) $countries->get_base_country())) {
+                return;
+            }
+            $this->update_option('enable_tax_subtotals', 'yes');
         }
 
         private function get_abt_twoinc_html()
@@ -4495,16 +4536,16 @@ if (!class_exists('WC_Twoinc')) {
                     'desc_tip'    => true,
                 ],
                 'enable_tax_subtotals' => [
-                    'title'       => __('Send tax subtotals in payload', 'twoinc-payment-gateway'),
+                    'title'       => __('Validate tax subtotals', 'twoinc-payment-gateway'),
                     'label'       => ' ',
                     'type'        => 'checkbox',
                     'description' => sprintf(
                         /* translators: %s is the brand product name (e.g. "Two") */
-                        __('When enabled, a breakdown of tax subtotals is included in the order payload sent to %s. Always sent for shops whose store base country is Sweden, regardless of this setting.', 'twoinc-payment-gateway'),
+                        __('When enabled, a breakdown of tax subtotals is included in the order payload sent to %s.', 'twoinc-payment-gateway'),
                         WC_Twoinc_Brand::get('product_name')
                     ),
                     'desc_tip'    => true,
-                    'default'     => 'no'
+                    'default'     => 'yes'
                 ],
                 // ── F. Diagnostics ──────────────────────────────────────
                 'section_diagnostics' => [
