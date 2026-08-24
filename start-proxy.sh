@@ -6,12 +6,12 @@
 # (requires an active @two.inc gcloud login).
 
 # Preserve an inline override (e.g. `TWO_API_BASE_URL=https://api.release.two.inc ./start-proxy.sh`)
-# so sourcing .env.local below doesn't clobber it.
+# so sourcing .env below doesn't clobber it.
 _TWO_API_BASE_URL_OVERRIDE="${TWO_API_BASE_URL}"
 
-if [ -f .env.local ]; then
+if [ -f .env ]; then
   set -a
-  source .env.local
+  source .env
   set +a
 fi
 TWO_API_BASE_URL="${_TWO_API_BASE_URL_OVERRIDE:-${TWO_API_BASE_URL}}"
