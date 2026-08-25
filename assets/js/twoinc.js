@@ -631,6 +631,15 @@ class TwoCompanySearch {
     return template.replace(/%(\d+\$)?d/, twoincSelectWooHelper.companySearchMinLength);
   }
 
+  /**
+   * Manual entry captures no company number, and Two's method requires one
+   * that only the address-step lookup can capture — so with company search out
+   * of the address area the chip is a dead end (TWO-25503).
+   */
+  manualEntryIsAvailable() {
+    return window.twoinc.company_search_location === "address_area";
+  }
+
   /** Label of the "Enter manually" mode chip (TWO-40 §0). */
   enterManuallyText() {
     return (
@@ -820,9 +829,9 @@ class TwoCompanySearch {
    * it sits outside the scrollable part of the dropdown but stays inside
    * `.select2-results`, the same wrapper the results list lives in.
    *
-   * Holds all three chips as one group in this order — "Registered company",
-   * "Sole trader" (while available), "Enter manually" — so the manual-entry
-   * chip and its Tab shortcut stay the last tabbable element.
+   * Holds the chips as one group in this order — "Registered company",
+   * "Sole trader" (while available), "Enter manually" (while available) — so
+   * the manual-entry chip and its Tab shortcut stay the last tabbable element.
    *
    * Visibility rule is "search UI active", not the search threshold and not
    * "company already captured" (both regressed live 2026-08-02): the group
@@ -869,7 +878,7 @@ class TwoCompanySearch {
         role: "radiogroup"
       });
       $wrapper.append(helper.buildBusinessChip());
-      $wrapper.append(helper.buildManualEntryButton());
+      if (helper.manualEntryIsAvailable()) $wrapper.append(helper.buildManualEntryButton());
       $list.after($wrapper);
     }
 
