@@ -538,6 +538,50 @@ describe("company-search manual-entry affordance", () => {
     });
   });
 
+  describe("the chip set follows the address-area company-search setting (TWO-25503)", () => {
+    const SOLE_TRADER_CONFIG = {
+      availability_url: "/?wc-ajax=two_sole_trader_availability",
+      tokens_url: "/?wc-ajax=two_sole_trader_tokens",
+      nonce: "nonce",
+      text: { registered_business: "Registered company", sole_trader: "Sole trader" }
+    };
+
+    function chipModes() {
+      return chipsWrapper()
+        .children("." + helper.modeChipClass)
+        .map(function () {
+          return $(this).data("mode");
+        })
+        .get();
+    }
+
+    test.each([
+      ["address_area", ["business", "sole_trader", "manual"], "all three offered"],
+      [
+        "payment_tile",
+        ["business", "sole_trader"],
+        "manual entry withheld, the other two untouched"
+      ]
+    ])("company_search_location %s → %p — %s", (location, expected) => {
+      ctx = harness.loadTwoinc({
+        text: TEXT,
+        supported_buyer_countries: ["GB"],
+        enable_company_search: "yes",
+        company_search_location: location,
+        enable_address_lookup: "no",
+        sole_trader: SOLE_TRADER_CONFIG
+      });
+      $ = ctx.$;
+      helper = ctx.helper;
+      harness.buildCheckoutForm({ country: "GB" });
+      ctx.soleTrader.availabilityByCountry = { GB: true };
+
+      openWithAffordance();
+
+      expect(chipModes()).toEqual(expected);
+    });
+  });
+
   describe("Tab-to-button shortcut (#30.x.6)", () => {
     // `which: 9` because the production handler reads `e.which` (matching the
     // vendored selectWoo bundle's own convention), not `e.key` — a test built on

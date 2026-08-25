@@ -142,6 +142,7 @@ function loadTwoinc(twoinc) {
     {
       gateway_id: "woocommerce-gateway-tillit",
       enable_company_search: "yes",
+      company_search_location: "address_area",
       twoinc_checkout_host: "https://api.example.test",
       client_name: "woocommerce",
       client_version: "0.0.0-test",

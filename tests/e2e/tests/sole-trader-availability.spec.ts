@@ -14,9 +14,10 @@ import * as store from "../pages/store.js";
  *
  * The mode-chips group is a DOM child of the company-search dropdown, not a
  * standalone widget (TWO-40 §0): it only exists in the document while the
- * dropdown is open. "Registered company" and "Enter manually" render
- * unconditionally; only the "Sole trader" chip is added/removed per country,
- * so the group itself never disappears — only that one chip does.
+ * dropdown is open. "Registered company" always renders, and "Enter manually"
+ * renders here because this store has company search in the address area
+ * (TWO-25503); only the "Sole trader" chip is added/removed per country, so
+ * the group itself never disappears — only that one chip does.
  */
 test("sole trader mode chooser follows registry country support", async ({ page }) => {
   await store.addProductToCart(page, "Product 1");
@@ -40,8 +41,8 @@ test("sole trader mode chooser follows registry country support", async ({ page 
   await expect(soleTraderChip).not.toHaveClass(/twoinc-mode-chip--selected/);
   await page.keyboard.press("Escape");
 
-  // Norway is not sole-trader capable: the group stays (business + manual
-  // entry are always offered), only the sole-trader chip drops out of it.
+  // Norway is not sole-trader capable: the group stays (business and manual
+  // entry are unaffected by country), only the sole-trader chip drops out.
   await checkout.setBillingCountry(page, "Norway");
   await checkout.openCompanySearch(page);
   await expect(chips).toBeVisible({ timeout: LONG_TIMEOUT });
