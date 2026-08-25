@@ -39,6 +39,10 @@ tests/e2e/playwright-report/
 .review/
 dev/stubs/
 
+# Local dev config
+.frpc.pid
+.serena/
+
 # Local worktrees (org convention: <repo>/.worktrees/<branch-slug>/)
 .worktrees/
 
