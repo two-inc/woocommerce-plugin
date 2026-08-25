@@ -4556,7 +4556,7 @@ if (!class_exists('WC_Twoinc')) {
                     'title'       => __('Disable SSL verification', 'twoinc-payment-gateway'),
                     'label'       => __('Skip SSL certificate verification on outbound API requests', 'twoinc-payment-gateway'),
                     'type'        => 'checkbox',
-                    'description' => __('WARNING: this is unsafe for production and only intended for local/dev debugging behind a corporate proxy with custom SSL certificates. Ignored whenever the environment (General section) is set to Production.', 'twoinc-payment-gateway'),
+                    'description' => __('WARNING: this is unsafe for production and only intended for local/dev debugging behind a corporate proxy with custom SSL certificates. Applies in every environment, including Production, while enabled.', 'twoinc-payment-gateway'),
                     'default'     => 'no'
                 ],
                 'enable_api_logging' => [
