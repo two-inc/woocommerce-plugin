@@ -1,8 +1,9 @@
 {
   "enabled": "yes",
-  "title": "Business invoice %s days",
+  "title": "Business invoice",
   "subtitle": "Receive the invoice via PDF and email",
   "clear_options_on_deactivation": "no",
+  "payment_terms_days": [14, 30, 60, 90],
   "section_api_credentials": "",
   "api_key": "secret_test_ePLc4yzRw2w-sUzJTtUABPMvTfnI0WrazJ1aotjX2Bw",
   "section_checkout_options": "",
