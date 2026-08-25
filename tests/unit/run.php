@@ -238,9 +238,7 @@ final class BrandConfigSpec
             'testFulfilmentTriggerStatusDoesNotFireForUnconfiguredStatus',
             'testFulfilmentTriggerExcludesCancelledAndRefundedFromOptionsAndStoredValue',
             'testCancelledOrderNeverMisdispatchesAsFulfilmentEvenIfConfiguredAsTrigger',
-            'testShouldDisableSslVerifyOffByDefault',
-            'testShouldDisableSslVerifyIgnoredInProduction',
-            'testShouldDisableSslVerifyHonouredOutsideProduction',
+            'testShouldDisableSslVerifyFollowsToggleInEveryEnvironment',
             'testPaymentSubtitlePrefersMerchantFreeTextOverBrandTagline',
             'testPaymentSubtitleFallsBackToBrandTaglineWhenBlank',
             'testTaxSubtotalsRequiredWhenMerchantOptsIn',
@@ -4395,33 +4393,25 @@ final class BrandConfigSpec
         TinyAssert::same([], $gateway->completedCalls, 'cancelled must never dispatch on_order_completed');
     }
 
-    private static function testShouldDisableSslVerifyOffByDefault(): void
-    {
-        $gateway = self::fulfilmentTriggerGateway([]);
-        $method = new ReflectionMethod(WC_Twoinc::class, 'should_disable_ssl_verify');
-        $method->setAccessible(true);
-        TinyAssert::same(false, $method->invoke($gateway));
-    }
-
     /**
-     * Mirrors PrestaShop's production hardening: the flag is never honoured
-     * once the environment mode is production, however the merchant left
-     * the checkbox.
+     * The toggle alone decides the outcome — no environment carve-out.
+     * Merchants behind a corporate TLS-terminating proxy need the bypass
+     * in production too.
      */
-    private static function testShouldDisableSslVerifyIgnoredInProduction(): void
+    private static function testShouldDisableSslVerifyFollowsToggleInEveryEnvironment(): void
     {
-        $gateway = self::fulfilmentTriggerGateway(['disable_ssl_verify' => 'yes', 'checkout_env' => 'PROD']);
-        $method = new ReflectionMethod(WC_Twoinc::class, 'should_disable_ssl_verify');
-        $method->setAccessible(true);
-        TinyAssert::same(false, $method->invoke($gateway));
-    }
-
-    private static function testShouldDisableSslVerifyHonouredOutsideProduction(): void
-    {
-        $gateway = self::fulfilmentTriggerGateway(['disable_ssl_verify' => 'yes', 'checkout_env' => 'staging']);
-        $method = new ReflectionMethod(WC_Twoinc::class, 'should_disable_ssl_verify');
-        $method->setAccessible(true);
-        TinyAssert::same(true, $method->invoke($gateway));
+        $cases = [
+            ['no', 'PROD', false, 'toggle off must never bypass, even in production'],
+            ['no', 'staging', false, 'toggle off must never bypass, even outside production'],
+            ['yes', 'PROD', true, 'toggle on must bypass in production'],
+            ['yes', 'staging', true, 'toggle on must bypass outside production'],
+        ];
+        foreach ($cases as [$toggle, $env, $expected, $message]) {
+            $gateway = self::fulfilmentTriggerGateway(['disable_ssl_verify' => $toggle, 'checkout_env' => $env]);
+            $method = new ReflectionMethod(WC_Twoinc::class, 'should_disable_ssl_verify');
+            $method->setAccessible(true);
+            TinyAssert::same($expected, $method->invoke($gateway), $message);
+        }
     }
 
     private static function testPaymentSubtitlePrefersMerchantFreeTextOverBrandTagline(): void

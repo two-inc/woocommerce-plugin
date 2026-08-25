@@ -5084,22 +5084,16 @@ if (!class_exists('WC_Twoinc')) {
 
         /**
          * Whether outbound API requests should skip SSL certificate
-         * verification (TWO-25386, ported from PrestaShop). Debug/dev
-         * escape hatch for corporate networks with custom certificates
-         * only — never honoured when the configured environment is
-         * production, matching PrestaShop's enforcement.
+         * verification (TWO-25386). Merchants behind a corporate proxy
+         * that terminates TLS with its own certificate need this in any
+         * environment, so it applies unconditionally whenever the admin
+         * toggle is on.
          *
          * @return bool
          */
         private function should_disable_ssl_verify()
         {
-            if ('yes' !== $this->get_option('disable_ssl_verify')) {
-                return false;
-            }
-            if (WC_Twoinc_Helper::get_environment_mode($this) === 'production') {
-                return false;
-            }
-            return true;
+            return 'yes' === $this->get_option('disable_ssl_verify');
         }
 
         /**
