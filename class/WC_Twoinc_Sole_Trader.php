@@ -273,12 +273,7 @@ if (!class_exists('WC_Twoinc_Sole_Trader')) {
                 'delegation_token' => $tokens['delegation_token'],
                 'autofill_token' => $tokens['autofill_token'],
                 'signup_url' => self::get_signup_page_url($gateway),
-                // The country the hosted signup builds its form for (PDEV-4669).
-                // Echoed from the gate above so the browser sends back a value
-                // this endpoint already vetted against the registry, never a
-                // fresh DOM read — the popup writes this country onto the
-                // proposal, and a US proposal filed as GB skips the biometric
-                // consent US buyers must be shown.
+                // PDEV-4669: registry-vetted country, echoed back — never re-derived from a DOM read.
                 'country' => $country,
             ]);
         }

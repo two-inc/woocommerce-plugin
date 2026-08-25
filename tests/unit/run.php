@@ -3491,11 +3491,7 @@ final class BrandConfigSpec
         TinyAssert::same('GB', $response['data']['country']);
     }
 
-    /**
-     * The popup's country comes back from here rather than from a DOM read
-     * (PDEV-4669), so it must be the normalised ISO code the registry gate
-     * accepted — the hosted signup validates against /^[A-Z]{2}$/.
-     */
+    /** PDEV-4669: echoed country is normalised to the ISO code the hosted signup expects. */
     private static function testSoleTraderTokensEchoNormalisedCountry(): void
     {
         $gateway = self::tokenMintingGateway(['SOLE_TRADER']);
