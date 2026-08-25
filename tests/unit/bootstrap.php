@@ -240,7 +240,7 @@ function WC()
                 $this->countries = new class () {
                     public function get_base_country()
                     {
-                        return 'NO';
+                        return $GLOBALS['__twoinc_test_base_country'] ?? 'NO';
                     }
                 };
             }
