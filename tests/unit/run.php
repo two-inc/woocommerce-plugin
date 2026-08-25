@@ -108,6 +108,7 @@ final class BrandConfigSpec
             'testSoleTraderAvailableWhenRegistryListsIt',
             'testSoleTraderTokensRefusedForNonCapableCountry',
             'testSoleTraderTokensMintedForCapableCountry',
+            'testSoleTraderTokensEchoNormalisedCountry',
             'testSoleTraderHasNoMerchantToggleSetting',
             'testSkipConfirmAuthRendersUnderDebugOptions',
             'testSkipConfirmAuthStoredValueSurvivesSectionMove',
@@ -3487,6 +3488,22 @@ final class BrandConfigSpec
             'https://checkout.two.inc/soletrader/signup',
             $response['data']['signup_url']
         );
+        TinyAssert::same('GB', $response['data']['country']);
+    }
+
+    /**
+     * The popup's country comes back from here rather than from a DOM read
+     * (PDEV-4669), so it must be the normalised ISO code the registry gate
+     * accepted — the hosted signup validates against /^[A-Z]{2}$/.
+     */
+    private static function testSoleTraderTokensEchoNormalisedCountry(): void
+    {
+        $gateway = self::tokenMintingGateway(['SOLE_TRADER']);
+        $_REQUEST = ['country' => ' gb '];
+        $response = self::runTokensHandler($gateway);
+        $_REQUEST = [];
+        TinyAssert::true($response['success']);
+        TinyAssert::same('GB', $response['data']['country']);
     }
 
     /**

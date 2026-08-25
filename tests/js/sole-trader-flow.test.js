@@ -325,6 +325,34 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       expect(prefill.billing_address.city).toBe("Registryville");
       expect(prefill.billing_address.country_code).toBe("GB");
     });
+
+    describe("PDEV-4669 — the country the hosted signup builds its form for", () => {
+      // Given a token response / When the popup opens / Then the `country`
+      // param carries the server's value, or is absent.
+      test.each([
+        ["US", "US", "passed straight through"],
+        ["us", "US", "upper-cased for the page's ISO check"],
+        ["", null, "empty stays absent, not an empty param"],
+        [undefined, null, "a response without one leaves the page on its default"]
+      ])("tokens.country %p -> country=%p (%s)", (tokenCountry, expected) => {
+        soleTrader.tokens.country = tokenCountry;
+
+        soleTrader.launchSignup();
+
+        expect(new URL(opened[0].url).searchParams.get("country")).toBe(expected);
+      });
+
+      test("never the DOM — a tampered field must not pick the buyer's jurisdiction", () => {
+        // The popup writes this country onto the proposal, so a DOM read would
+        // let a buyer self-select which verification flow they are put through.
+        $("#billing_country").append('<option value="US">US</option>').val("US");
+        soleTrader.tokens.country = "GB";
+
+        soleTrader.launchSignup();
+
+        expect(new URL(opened[0].url).searchParams.get("country")).toBe("GB");
+      });
+    });
   });
 
   describe("§7 — popup stacking across sequential activations", () => {

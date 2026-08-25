@@ -5030,6 +5030,15 @@ let twoincSoleTrader = {
       encodeURIComponent(twoincSoleTrader.tokens.autofill_token) +
       "&autofillData=" +
       encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(prefill)))));
+    // PDEV-4669: without `country` the hosted signup defaults its whole form to
+    // GB, and the proposal it files decides which verification flow the buyer
+    // gets — a US buyer filed as GB never sees the biometric consent screen.
+    // Read from the token response, never `currentCountry()`: the server vetted
+    // that value against the registry, a DOM read would let a buyer pick their
+    // own jurisdiction. Omitted rather than sent empty when absent, leaving the
+    // page on its own default. Upper-cased for the page's /^[A-Z]{2}$/ check.
+    const country = (twoincSoleTrader.tokens.country || "").toUpperCase();
+    if (country) url += "&country=" + encodeURIComponent(country);
     // Wired through unconditionally when asked for, with no branching on what
     // the hosted flow does with it — that is the flow's business, not this
     // plugin's.
