@@ -4782,7 +4782,7 @@ let twoincSoleTrader = {
    * @param {string} companyId
    * @param {string} companyName
    * @param {Object} [buyer] the autofill buyer, when one was resolved; its
-   *   address is written too (§2.6, §5)
+   *   address and phone number are written too (§2.6, §5)
    * @returns {void}
    */
   setCompany: function (companyId, companyName, buyer) {
@@ -4815,6 +4815,9 @@ let twoincSoleTrader = {
     if (companyId && buyerAddress) {
       instance.setAddress(buyerAddress);
       instance.registryAddressApplied = true;
+    }
+    if (companyId && buyer && buyer.phone_number) {
+      jQuery("#billing_phone").val(buyer.phone_number);
     }
     // Re-evaluate which company fields are shown, after the write above
     // (TWO-25326 §12): `#company_id`'s visibility depends on the value it

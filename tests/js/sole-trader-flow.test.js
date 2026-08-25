@@ -1101,6 +1101,33 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     });
   });
 
+  describe("TWO-25503 — the autofill buyer's phone number", () => {
+    test.each([
+      {
+        buyerPhone: "+442012345678",
+        priorPhone: "",
+        expectedPhone: "+442012345678",
+        description: "a phone number on the buyer is written to the checkout phone field"
+      },
+      {
+        buyerPhone: undefined,
+        priorPhone: "+441234567890",
+        expectedPhone: "+441234567890",
+        description: "no phone number on the buyer leaves the checkout phone field untouched"
+      }
+    ])("$description", ({ buyerPhone, priorPhone, expectedPhone }) => {
+      $("#billing_phone").val(priorPhone);
+
+      soleTrader.setCompany("TWO:ST1", "A Sole Trader", {
+        organization_number: "TWO:ST1",
+        company_name: "A Sole Trader",
+        phone_number: buyerPhone
+      });
+
+      expect($("#billing_phone").val()).toBe(expectedPhone);
+    });
+  });
+
   describe("TWO-40 §7 correction — live-reported by Doug", () => {
     describe("a chip click resolves to the popup, never a note", () => {
       /**
