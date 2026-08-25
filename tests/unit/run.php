@@ -4396,12 +4396,13 @@ final class BrandConfigSpec
      */
     private static function testShouldDisableSslVerifyFollowsToggleInEveryEnvironment(): void
     {
-        foreach ([
+        $cases = [
             ['no', 'PROD', false, 'toggle off must never bypass, even in production'],
             ['no', 'staging', false, 'toggle off must never bypass, even outside production'],
             ['yes', 'PROD', true, 'toggle on must bypass in production'],
             ['yes', 'staging', true, 'toggle on must bypass outside production'],
-        ] as [$toggle, $env, $expected, $message]) {
+        ];
+        foreach ($cases as [$toggle, $env, $expected, $message]) {
             $gateway = self::fulfilmentTriggerGateway(['disable_ssl_verify' => $toggle, 'checkout_env' => $env]);
             $method = new ReflectionMethod(WC_Twoinc::class, 'should_disable_ssl_verify');
             $method->setAccessible(true);
