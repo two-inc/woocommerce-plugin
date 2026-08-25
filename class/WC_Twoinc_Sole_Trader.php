@@ -254,6 +254,7 @@ if (!class_exists('WC_Twoinc_Sole_Trader')) {
             // server-side, so spoofing only permits minting for a country the
             // registry already supports — no privilege gain.
             $country = isset($_REQUEST['country']) ? sanitize_text_field(wp_unslash($_REQUEST['country'])) : '';
+            $country = strtoupper(trim($country));
             if (!self::is_available($gateway, (string) $country)) {
                 self::log_refusal(
                     'token mint',
@@ -272,6 +273,8 @@ if (!class_exists('WC_Twoinc_Sole_Trader')) {
                 'delegation_token' => $tokens['delegation_token'],
                 'autofill_token' => $tokens['autofill_token'],
                 'signup_url' => self::get_signup_page_url($gateway),
+                // PDEV-4669: registry-vetted country, echoed back — never re-derived from a DOM read.
+                'country' => $country,
             ]);
         }
 

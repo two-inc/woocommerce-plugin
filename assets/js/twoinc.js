@@ -5030,6 +5030,10 @@ let twoincSoleTrader = {
       encodeURIComponent(twoincSoleTrader.tokens.autofill_token) +
       "&autofillData=" +
       encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(prefill)))));
+    // PDEV-4669: server-vetted country only — a DOM read would let the buyer
+    // pick their own verification flow.
+    const country = (twoincSoleTrader.tokens.country || "").toUpperCase();
+    if (country) url += "&country=" + encodeURIComponent(country);
     // Wired through unconditionally when asked for, with no branching on what
     // the hosted flow does with it — that is the flow's business, not this
     // plugin's.
