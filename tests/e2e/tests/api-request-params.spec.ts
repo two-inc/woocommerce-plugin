@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 
+import { LONG_TIMEOUT } from "../config.js";
 import * as checkout from "../pages/checkout.js";
 import * as store from "../pages/store.js";
 
@@ -8,7 +9,10 @@ test("company search request carries client, client_v and merchant params", asyn
   await store.goToCheckout(page);
   await checkout.selectTwoPayment(page);
 
-  const searchRequest = page.waitForRequest((req) => req.url().includes("/companies/v2/company"));
+  // fillCompanySearch retries up to 3x on its own timeouts, so give the request a matching budget.
+  const searchRequest = page.waitForRequest((req) => req.url().includes("/companies/v2/company"), {
+    timeout: LONG_TIMEOUT
+  });
   await checkout.fillCompanySearch(page);
   const url = new URL((await searchRequest).url());
 
