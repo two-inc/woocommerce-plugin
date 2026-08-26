@@ -20,6 +20,7 @@ let twoincUtilHelper = {
     if (!params) params = {};
     params["client"] = window.twoinc.client_name;
     params["client_v"] = window.twoinc.client_version;
+    params["merchant"] = window.twoinc.merchant?.short_name ?? "";
     return window.twoinc.twoinc_checkout_host + path + "?" + new URLSearchParams(params).toString();
   },
 

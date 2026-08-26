@@ -161,6 +161,16 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
+         * Get merchant's short name, used as the "merchant" query param on Two API calls
+         *
+         * @return string
+         */
+        public function get_merchant_short_name()
+        {
+            return $this->get_option('merchant_short_name');
+        }
+
+        /**
          * Get enable company search
          *
          * @return string
@@ -323,6 +333,9 @@ if (!class_exists('WC_Twoinc')) {
                 if ($code == 200 && isset($body['id']) && !$api_key) {
                     // Only update merchant_id if we're verifying the saved API key
                     $this->update_option('merchant_id', $body['id']);
+                    if (isset($body['short_name'])) {
+                        $this->update_option('merchant_short_name', $body['short_name']);
+                    }
                 }
                 return ['body' => $body, 'code' => $code];
             }
@@ -2136,6 +2149,7 @@ if (!class_exists('WC_Twoinc')) {
         {
             $params['client'] = 'wp';
             $params['client_v'] = get_twoinc_plugin_version();
+            $params['merchant'] = $this->get_merchant_short_name();
             # If api_key_override is defined, use that key instead of the saved key
             $api_key = $api_key_override ?: $this->get_option('api_key');
             $headers = [
