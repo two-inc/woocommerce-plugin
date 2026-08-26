@@ -17,10 +17,13 @@ let twoincUtilHelper = {
    * Construct url to Twoinc checkout api
    */
   constructTwoincUrl: function (path, params) {
-    if (!params) params = {};
-    params["client"] = window.twoinc.client_name;
-    params["client_v"] = window.twoinc.client_version;
-    return window.twoinc.twoinc_checkout_host + path + "?" + new URLSearchParams(params).toString();
+    // .set(), not bracket assignment: params may already be a URLSearchParams (company search),
+    // which silently drops bracket-assigned keys instead of adding them as query params.
+    const searchParams = new URLSearchParams(params || {});
+    searchParams.set("client", window.twoinc.client_name);
+    searchParams.set("client_v", window.twoinc.client_version);
+    searchParams.set("merchant", window.twoinc.merchant?.short_name ?? "");
+    return window.twoinc.twoinc_checkout_host + path + "?" + searchParams.toString();
   },
 
   /**
