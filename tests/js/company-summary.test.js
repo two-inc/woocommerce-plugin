@@ -55,7 +55,7 @@ describe("read-only captured-company summary", () => {
   });
 
   afterEach(() => {
-    harness.releaseWidgets($);
+    harness.releasePanel(helper);
     document.body.innerHTML = "";
   });
 
@@ -142,25 +142,15 @@ describe("read-only captured-company summary", () => {
     return summary().length > 0 && !summary().hasClass("hidden");
   }
 
-  // Driven through `enableCompanySearch`'s real `select2:select` binding rather
-  // than by calling the render function: the point of the test is that picking a
-  // company renders the summary, and a direct call would pass even if the
-  // handler had never been wired to it.
+  // The panel's own selection sequence: paint the field, then hand the row to
+  // `onPick`, which is what its `onSelect` callback calls. Driven through that
+  // handler rather than the render function, so a summary that were never wired
+  // to a pick could not pass.
   function pickCompany(name, companyId) {
     const ajax = harness.stubAjax($);
     ctx.Twoinc.getInstance().enableCompanySearch();
-    // The <option> select2's array adapter appends for the chosen result, and
-    // leaves behind on destroy. Modelled explicitly because the event below is
-    // dispatched rather than driven through a real result list, and its being
-    // left behind is the whole subject of the resurrection tests further down —
-    // without it those tests assert against a select that was never populated.
-    $("#billing_company_display").append(
-      '<option value="' + name + '" selected>' + name + "</option>"
-    );
-    $("#billing_company_display").trigger({
-      type: "select2:select",
-      params: { data: { id: name, company_id: companyId } }
-    });
+    helper.panel.setDisplayText(name);
+    helper.onPick({ id: name, text: name, company_id: companyId });
     ajax.restore();
   }
 
@@ -642,9 +632,9 @@ describe("read-only captured-company summary", () => {
       jest.useRealTimers();
     });
 
-    test("the picker's empty placeholder is not rendered as a name", () => {
-      // The empty option's label is U+00A0, not a plain space: truthy,
-      // invisible, and rendered as a company by anything that only checks for
+    test("a whitespace-only name is not rendered as a company", () => {
+      // U+00A0, not a plain space: truthy, invisible, and rendered as a
+      // company by anything that only checks for
       // "". Written as the escape rather than pasted in, so neither a reader
       // nor an editor has to tell the two space characters apart — pasted, it
       // was mistaken for U+0020 in review.
@@ -653,11 +643,9 @@ describe("read-only captured-company summary", () => {
       expect(renderedName()).toBe("");
       expect(isShown()).toBe(false);
 
-      // And through the live read, against the real unselected state: the empty
-      // option's VALUE is "" — the non-breaking space is only its label, which
-      // is why the live read cannot see one and the guard above is defensive.
+      // And through the live read: the posted field is what it goes to, and it
+      // is empty, so the guard above is defensive.
       $("#billing_company").val("");
-      expect($("#billing_company_display").val()).toBe("");
       helper.renderCompanySummary();
 
       expect(renderedName()).toBe("");
@@ -667,12 +655,9 @@ describe("read-only captured-company summary", () => {
 
   describe("a company that is no longer captured stays off screen", () => {
     test("the sole-trader round trip does not resurrect the picked company", () => {
-      // The picker appends an <option> to #billing_company_display for every
-      // pick, and neither select2("destroy") nor the clearing setCompany("", "")
-      // removes it. So after search → sole trader → back to business, that
-      // select still held the company while both posted fields were empty. A
-      // summary that read the select back showed a company the order did not
-      // carry.
+      // After search → sole trader → back to business both posted fields are
+      // empty, and the field the buyer reads has to be empty with them: a
+      // display still carrying the company is one the order does not carry.
       const ajax = harness.stubAjax($);
       pickCompany("ACME Widgets Ltd", "12345678");
       expect(isShown()).toBe(true);
@@ -690,8 +675,7 @@ describe("read-only captured-company summary", () => {
 
     test("the summary never shows a name the checkout is not posting", () => {
       // The invariant behind the test above, asserted directly: whatever is on
-      // screen is what #billing_company holds. Stale options on the display
-      // select are exactly what used to break it.
+      // screen is what #billing_company holds.
       const ajax = harness.stubAjax($);
       pickCompany("ACME Widgets Ltd", "12345678");
       $("#billing_company").val("");
@@ -699,7 +683,7 @@ describe("read-only captured-company summary", () => {
 
       helper.renderCompanySummary();
 
-      // The stale option is still on the select — that is the point.
+      // The display still carries the name — that is the point.
       expect($("#billing_company_display").val()).toBe("ACME Widgets Ltd");
       expect(renderedName()).toBe("");
       expect(isShown()).toBe(false);
