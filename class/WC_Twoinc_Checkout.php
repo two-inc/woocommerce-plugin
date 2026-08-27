@@ -160,14 +160,13 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             // payment-tile branch with nothing to relocate.
             $fields['billing']['billing_company_display'] = [
                 'label' => __('Company name', 'twoinc-payment-gateway'),
-                'autocomplete' => 'organization',
-                'type' => 'select',
+                // The browser's own autofill list would paint over the panel
+                // this field opens.
+                'autocomplete' => 'off',
+                'type' => 'text',
                 // form-row-wide carries the `clear: both` this row needs to
                 // clear the first-/last-name float pair (TWO-25160).
-                'class' => array('billing_company_selectwoo', 'form-row-wide', 'hidden'),
-                'options' => [
-                    '' => '&nbsp;'
-                ],
+                'class' => array('billing_company_search', 'form-row-wide', 'hidden'),
                 'required' => false,
                 'priority' => $company_name_priority
             ];
