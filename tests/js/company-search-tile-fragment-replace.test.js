@@ -58,6 +58,12 @@ describe("payment-tile company search across a fragment replace", () => {
     expect(row.querySelector(".two-company-field-wrap > .two-company-dropdown")).not.toBeNull();
   });
 
+  test("the tile label reuses the address row's, without core's optional marker", () => {
+    const label = document.querySelector("#twoinc_tile_company_row label");
+    expect(label.textContent).toBe("Company name");
+    expect(label.getAttribute("for")).toBe("twoinc_tile_company_name");
+  });
+
   test("the tile field posts nothing — #billing_company is the posted company", () => {
     ctx.capture.write("Acme Ltd", "12345678");
     ctx.dom.toggleBusinessFields();
