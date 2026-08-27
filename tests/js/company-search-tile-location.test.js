@@ -59,6 +59,11 @@ describe("company-search tile location (TWO-25326 §7.1)", () => {
    *
    * @returns {void}
    */
+  /** @returns {boolean} whether Two currently holds a capture */
+  function twoincHasCapture() {
+    return ctx.capture.hasCapture();
+  }
+
   function buildTileSlot() {
     $('form[name="checkout"]').append(
       '<div class="woocommerce-checkout-payment">' +
@@ -96,6 +101,7 @@ describe("company-search tile location (TWO-25326 §7.1)", () => {
         gateway_id: GATEWAY_ID,
         enable_company_search: "yes",
         company_search_location: "payment_tile",
+        supported_buyer_countries: ["GB"],
         text: {}
       });
       $ = ctx.$;
@@ -108,6 +114,50 @@ describe("company-search tile location (TWO-25326 §7.1)", () => {
       // decision, so it states the precondition rather than inheriting a
       // fixture that pretends the server never set it.
       $("#billing_company_display_field").removeClass("hidden");
+    });
+
+    /**
+     * Every way a capture can come into being has to reach the visibility
+     * rule, not just the one that happens to re-toggle (TWO-25503). The
+     * sole-trader path re-evaluates through `setCompany()`; the registry pick
+     * writes the capture and previously re-read nothing, so the address row
+     * kept the picked company on screen beside the tile that owns it.
+     *
+     * Driven through the real `select2:select` binding, not by calling the
+     * rule: a direct call passes even when nothing is wired to it.
+     */
+    test("an ordinary registry pick hides the native field, same as an adoption", () => {
+      const ajax = harness.stubAjax($);
+      ctx.Twoinc.getInstance().enableCompanySearch();
+      $("#billing_company_display").append(
+        '<option value="ACME Widgets Ltd" selected>ACME Widgets Ltd</option>'
+      );
+
+      $("#billing_company_display").trigger({
+        type: "select2:select",
+        params: { data: { id: "ACME Widgets Ltd", company_id: "12345678" } }
+      });
+      ajax.restore();
+
+      expect($("#billing_company").val()).toBe("ACME Widgets Ltd");
+      expect($("#billing_company_field").hasClass("hidden")).toBe(true);
+    });
+
+    /**
+     * The relocated control lives inside Two's payment box, which WooCommerce
+     * collapses for every other method — so hiding the address row while
+     * another method is selected leaves the buyer no company surface at all.
+     * That is the "never neither" invariant (Doug 2026-08-19), and it outranks
+     * the narrowing: a capture alone is not enough to take the row away.
+     */
+    test("keeps the native field when Two is not the selected method, capture or no capture", () => {
+      ctx.capture.write("ACME Widgets Ltd", "12345678");
+      $("input[name=payment_method]").prop("checked", false);
+
+      dom.toggleBusinessFields();
+
+      expect(twoincHasCapture()).toBe(true);
+      expect($("#billing_company_field").hasClass("hidden")).toBe(false);
     });
 
     test("moves the search widget into the tile slot, not a clone", () => {

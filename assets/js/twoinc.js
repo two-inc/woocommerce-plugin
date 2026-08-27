@@ -2160,6 +2160,12 @@ class TwoCompanySearch {
     Twoinc.getInstance().registryAddressApplied = false;
 
     Twoinc.getInstance().customerCompany = {};
+
+    // Clearing a capture changes the visible company-name surface exactly as
+    // creating one does — the mirror of the registry-pick trigger (TWO-25503).
+    // Without it a buyer who changes country in tile placement keeps the
+    // address row hidden with nothing captured to justify it.
+    twoincDomHelper.toggleBusinessFields();
     // Re-read rather than forced empty. Forcing it disagreed with the gated
     // clear above: in manual entry the buyer's typed company is deliberately
     // kept, so the summary vanished here and reappeared 3s later when the
@@ -2761,6 +2767,13 @@ class TwoCompanySearch {
       // directly would leave a pair the tag doesn't describe.
       twoincCompanyCapture.write(data.id, data.company_id, { country: self.currentCountry() });
 
+      // A capture changes which company-name surface the buyer should be
+      // looking at, and this is the primary path that creates one — the
+      // sole-trader path re-evaluates through `setCompany()`, this one had
+      // nothing (TWO-25503). Without it the rule is written but never read
+      // for an ordinary registry pick.
+      twoincDomHelper.toggleBusinessFields();
+
       self.renderCompanySummary(data.id, data.company_id);
 
       // Leave any loader alone: getApproval() below only arms a check, the
@@ -2942,7 +2955,12 @@ let twoincDomHelper = {
     // exception is `company_search_location === "payment_tile"` below, where
     // the two are not competing for the same position: the search control has
     // been relocated into the payment tile, so the native field is what the
-    // address area still needs (Doug 2026-08-04, live-verified).
+    // address area still needs (Doug 2026-08-04, live-verified) — until Two
+    // holds a capture AND is the selected method, when the tile is showing
+    // that capture and the address row would only duplicate it into a place
+    // Doug ruled it must not appear (TWO-25503). The "never neither" rule
+    // above is why that second condition is there: the tile collapses with
+    // the method, so its surface only counts while Two is selected.
     //
     // The search control is the visible surface for BOTH capture modes that
     // render a name into it — an ordinary registry pick and an adopted sole
@@ -2976,16 +2994,19 @@ let twoincDomHelper = {
       // required cue): WC owns that field's required-ness, this plugin only
       // decides visibility.
       //
-      // Only while Two has captured nothing (TWO-25503, Doug: an adopted sole
-      // trader "should do neither of these things in the address area"). The
-      // capture is written into `#billing_company` because that is what POSTs,
-      // so leaving the row on screen paints the captured company into the
-      // address area alongside the tile that owns it. This narrows the
-      // 2026-08-04 rule rather than dropping it: with nothing captured, the
-      // stock field is still there for a buyer paying another way.
+      // The stock field goes only when the tile is genuinely showing the
+      // capture instead (TWO-25503, Doug: an adopted sole trader "should do
+      // neither of these things in the address area"). That needs BOTH a
+      // capture and Two selected: the relocated control lives inside Two's
+      // payment box, which WooCommerce collapses for every other method, so
+      // hiding this row while another method is checked would leave the buyer
+      // with no company surface at all — the "never neither" invariant above.
+      //
+      // Narrows the 2026-08-04 rule rather than dropping it: with nothing
+      // captured, or with Two not selected, the stock field is still there.
       if (
         window.twoinc.company_search_location === "payment_tile" &&
-        !twoincCompanyCapture.hasCapture()
+        !(isTwoincSelected && twoincCompanyCapture.hasCapture())
       ) {
         visibleTargets.push("#billing_company_field");
       }
