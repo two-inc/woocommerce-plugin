@@ -148,7 +148,10 @@ describe("company search transport", () => {
     test("the country is read per request, not captured when the panel is built", () => {
       // TWO-24867: the panel outlives a country change on every path that does
       // not rebuild it, and a captured value searched the previous country's
-      // register while the form said otherwise.
+      // register while the form said otherwise. Two searches, so a value read
+      // once and reused fails here rather than agreeing on the first.
+      expect(new URL(search().request.url).searchParams.get("country")).toBe("GB");
+
       ctx.$("#billing_country").append('<option value="SE">Sweden</option>').val("SE");
 
       expect(new URL(search().request.url).searchParams.get("country")).toBe("SE");

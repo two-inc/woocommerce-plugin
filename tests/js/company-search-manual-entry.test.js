@@ -1327,6 +1327,34 @@ describe("company-search manual-entry affordance", () => {
     });
   });
 
+  describe("a checkout re-render while the buyer is in manual entry", () => {
+    test("rebuilds no popover around the field manual entry released", () => {
+      // The address-placement re-bind runs on every `updated_checkout` so a
+      // theme that re-renders the billing fields cannot strand the panel on a
+      // detached node. Manual entry is exempt: the field is the buyer's own
+      // plain input, and re-taking it puts the popover back over what they are
+      // typing.
+      $("form[name='checkout']").append(
+        '<div class="payment_box"><div class="twoinc-company-search-tile-slot hidden"></div></div>'
+      );
+      ctx.Twoinc.getInstance();
+      openPanel();
+      helper.enterManualCompanyEntry();
+      $("#billing_company").val("Buyer Typed Ltd");
+
+      $(".two-company-field-wrap").replaceWith(
+        '<input type="text" id="billing_company_display" name="billing_company_display" value="" />'
+      );
+
+      ctx.dom.toggleBusinessFields();
+
+      expect($(".two-company-dropdown")).toHaveLength(0);
+      expect($(".two-company-field-wrap")).toHaveLength(0);
+      expect($("#billing_company_display").attr("role")).toBeUndefined();
+      expect($("#billing_company").val()).toBe("Buyer Typed Ltd");
+    });
+  });
+
   describe("the pay-for-order surface", () => {
     test("the affordance needs no template markup on the page", () => {
       jest.useFakeTimers();

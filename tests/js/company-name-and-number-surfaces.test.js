@@ -377,4 +377,74 @@ describe("the company name and number surfaces (#486)", () => {
       expect($("#company_id_field").find("label .twoinc-required").length).toBe(0);
     });
   });
+
+  describe("the required cue lands on whichever company-name row is on screen", () => {
+    /**
+     * @param {string} rowSelector
+     * @returns {{required: boolean, asterisks: number}}
+     */
+    function cue(rowSelector) {
+      const $row = $(rowSelector);
+      return {
+        required: Boolean($row.find(":input").attr("required")),
+        asterisks: $row.find("label .twoinc-required").length
+      };
+    }
+
+    const CUED = { required: true, asterisks: 1 };
+    const UNCUED = { required: false, asterisks: 0 };
+
+    test.each([
+      {
+        location: "address_area",
+        capture: false,
+        twoSelected: true,
+        display: CUED,
+        native: UNCUED,
+        description: "address area: the search row"
+      },
+      {
+        location: "address_area",
+        capture: true,
+        twoSelected: true,
+        display: CUED,
+        native: UNCUED,
+        description: "address area with a capture: still the search row"
+      },
+      {
+        location: "payment_tile",
+        capture: false,
+        twoSelected: true,
+        display: UNCUED,
+        native: CUED,
+        description: "tile placement: the native row core still renders"
+      },
+      {
+        location: "payment_tile",
+        capture: true,
+        twoSelected: true,
+        display: UNCUED,
+        native: UNCUED,
+        description: "tile placement showing the capture: no address row to require"
+      },
+      {
+        location: "address_area",
+        capture: true,
+        twoSelected: false,
+        display: UNCUED,
+        native: UNCUED,
+        description: "another method selected: nothing of Two's is required"
+      }
+    ])("$description", ({ location, capture, twoSelected, display, native }) => {
+      load("GB");
+      ctx.twoinc.company_search_location = location;
+      if (capture) ctx.capture.write("ACME Widgets Ltd", "12345678");
+      $("input[name=payment_method]").prop("checked", twoSelected);
+
+      ctx.dom.toggleBusinessFields();
+
+      expect(cue("#billing_company_display_field")).toEqual(display);
+      expect(cue("#billing_company_field")).toEqual(native);
+    });
+  });
 });
