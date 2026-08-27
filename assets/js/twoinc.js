@@ -1346,7 +1346,12 @@ class TwoCompanySearch {
   /** The company-name label, taken from the row WooCommerce renders. */
   companyNameLabelText() {
     const label = jQuery("label[for='billing_company_display']").first().text();
-    return twoincUtilHelper.blankToEmpty(label).replace(/\s*\*\s*$/, "").trim() || "Company name";
+    return (
+      twoincUtilHelper
+        .blankToEmpty(label)
+        .replace(/\s*\*\s*$/, "")
+        .trim() || "Company name"
+    );
   }
 
   // ------------------------------------------------------------------ capture
@@ -3210,9 +3215,7 @@ let twoincSoleTrader = {
     if (twoincSoleTrader.mode !== "sole_trader" || twoincSoleTrader.isDeciding()) return;
     twoincSoleTrader.setMode("business");
     if (!twoincSelectWooHelper.openCompanySearchDropdown()) {
-      twoincSelectWooHelper.focusVisibleCompanyField(
-        twoincSelectWooHelper.companyFieldSelector()
-      );
+      twoincSelectWooHelper.focusVisibleCompanyField(twoincSelectWooHelper.companyFieldSelector());
     }
   },
 

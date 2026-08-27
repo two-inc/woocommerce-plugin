@@ -82,9 +82,11 @@ describe("company-capture panel structure", () => {
         "two-company-dropdown"
       );
     });
-    expect(
-      Array.prototype.map.call(chips, (chip) => chip.getAttribute("data-two-chip"))
-    ).toEqual(["registered", "sole_trader", "manual"]);
+    expect(Array.prototype.map.call(chips, (chip) => chip.getAttribute("data-two-chip"))).toEqual([
+      "registered",
+      "sole_trader",
+      "manual"
+    ]);
   });
 
   test("the query field is the field's next tab stop, by document order alone", () => {
