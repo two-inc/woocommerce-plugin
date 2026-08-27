@@ -3,9 +3,9 @@
  *
  * `assets/js/twoinc.js` is a plain classic script: it declares a handful of
  * top-level helper objects and a `Twoinc` class, and it is enqueued by
- * tillit-payment-gateway.php into a checkout page where jQuery, WooCommerce's
- * selectWoo widget and WooCommerce's own `wc_country_select_params` /
- * `window.twoinc` localisation globals already exist. There is nothing to
+ * tillit-payment-gateway.php into a checkout page where jQuery, the
+ * company-search panel script and WooCommerce's own `wc_country_select_params`
+ * / `window.twoinc` localisation globals already exist. There is nothing to
  * `require()` and nothing to import.
  *
  * So rather than mock the browser, this harness assembles the real one:
@@ -76,7 +76,7 @@ function installCompanySearchPanel() {
 
 /**
  * WooCommerce's `wc_country_select_params` localisation object, reduced to the
- * four strings the plugin's selectWoo `language` callbacks read.
+ * four strings the plugin borrows core copy from for the panel's own messages.
  *
  * @returns {Object}
  */
@@ -138,7 +138,9 @@ function loadPluginSource() {
  * bootstrap is left to no-op and `window.twoinc` is installed afterwards.
  *
  * @param {Object} [twoinc] value for `window.twoinc`, installed post-load
- * @returns {{helper: Object, util: Object, dom: Object, $: Function, twoinc: Object}}
+ * @returns {{helper: Object, util: Object, roles: Object, mirror: Object,
+ *   capture: Object, dom: Object, termChips: Object, soleTrader: Object,
+ *   Twoinc: Function, $: Function, twoinc: Object}}
  */
 function loadTwoinc(twoinc) {
   const $ = installJQuery();
@@ -347,8 +349,9 @@ function resultsText($) {
  * aborts, timeouts — so driving the settlement explicitly is the point, not a
  * shortcut. The returned object is a real jQuery Deferred promise with an
  * `abort` bolted on, which is the jqXHR surface twoinc.js uses
- * (`.done`/`.fail`/`.always`); jQuery fires those callbacks synchronously, so
- * no test needs to await anything.
+ * (`.done`/`.fail`/`.always`). jQuery fires those callbacks synchronously, but
+ * the transport resolves a promise from inside them, so a test asserting on
+ * what the panel painted has to flush a microtask turn after settling.
  *
  * @param {Function} $ jQuery instance
  * @returns {{calls: Array, last: Function, restore: Function}}
@@ -369,7 +372,7 @@ function stubAjax($) {
       // `aborted` alone flips even for an abort of a completed request, where
       // jQuery's own `abort()` is a no-op, so a test asserting `aborted` proves
       // only that the call was MADE. Assert this one to prove a live request was
-      // dropped (review round 5).
+      // dropped.
       abortedWhilePending: false,
       settled: false,
       /** Resolve as HTTP 200 with `data`. */
@@ -382,9 +385,8 @@ function stubAjax($) {
        * 'error', 'parsererror' or 'abort'.
        *
        * `status: 0` on the jqXHR is not incidental: a jQuery timeout and
-       * a cancellation are indistinguishable by status, which is the
-       * whole reason the plugin cannot rely on select2's own failure
-       * handler and keys off textStatus instead.
+       * a cancellation are indistinguishable by status, which is why the
+       * transport decides the outcome from textStatus instead.
        */
       fail: function (textStatus, error) {
         record.settled = true;
@@ -395,7 +397,7 @@ function stubAjax($) {
     jqXHR.abort = function () {
       record.aborted = true;
       // A real jqXHR's `abort()` does nothing once the request has settled — no
-      // state change, no callback — so neither does this (review round 5).
+      // state change, no callback — so neither does this.
       if (record.settled) return;
       record.abortedWhilePending = true;
       // jQuery reports an aborted request through the failure path with
