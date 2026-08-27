@@ -309,7 +309,7 @@ describe("company search hints", () => {
 
   describe("the min-chars hint", () => {
     test.each([
-      [undefined, undefined, "Please enter 3 or more characters", "the plugin's own English msgid"],
+      [undefined, undefined, "Enter 3 or more characters", "the plugin's own English msgid"],
       ["minst %d tegn", 4, "minst 4 tegn", "a localised template plus a non-default threshold"],
       ["Skriv %1$d tegn", undefined, "Skriv 3 tegn", "gettext's positional placeholder form"]
     ])("states the enforced threshold: %s / %s", (template, minLength, expected, description) => {
@@ -338,7 +338,7 @@ describe("company search hints", () => {
       // Guard: the widget has to be open and its search input present, or
       // every assertion below is vacuous.
       expect($search.length).toBe(1);
-      expect($search.attr("placeholder")).toBe("Please enter 3 or more characters");
+      expect($search.attr("placeholder")).toBe("Enter 3 or more characters");
 
       $search.val("ab").trigger("input");
 
@@ -366,7 +366,7 @@ describe("company search hints", () => {
 
       expect(
         ctx.$('input[aria-owns="select2-billing_company_display-results"]').attr("placeholder")
-      ).toBe("Please enter 3 or more characters");
+      ).toBe("Enter 3 or more characters");
     });
   });
 
@@ -560,7 +560,7 @@ describe("company search hints", () => {
 
     test.each([
       ["company_search_placeholder", "Enter company name to search"],
-      ["company_search_too_short", "Please enter %d or more characters"]
+      ["company_search_too_short", "Enter %d or more characters"]
     ])("%s is registered as a translatable string", (key, source) => {
       const entry = new RegExp(
         "'" + key + "' *=> *__\\('" + source.replace(/[$()*+.?[\\\]^{|}]/g, "\\$&") + "'"

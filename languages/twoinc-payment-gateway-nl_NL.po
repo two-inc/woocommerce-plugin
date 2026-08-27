@@ -1019,7 +1019,7 @@ msgstr "Voer bedrijfsnaam in om te zoeken"
 #. before the company search runs. Left unresolved by PHP and
 #. interpolated in JS from the threshold the widget enforces.
 #: class/WC_Twoinc_Checkout.php
-msgid "Please enter %d or more characters"
+msgid "Enter %d or more characters"
 msgstr "Voer %d of meer tekens in"
 #: class/WC_Twoinc.php
 #, php-format

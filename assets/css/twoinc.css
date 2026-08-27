@@ -892,37 +892,6 @@
   font: inherit;
   text-transform: none !important;
 }
-/*
- * Same box-model defect as the company-summary gap above (a3fd6e8), for
- * this link (Doug, item 3): `placeDifferentSoleTraderBtn()` (twoinc.js)
- * inserts it right after `#billing_company_display_field` (or its
- * `.twoinc-inp-container` wrapper on the pay-for-order page) the same way
- * `getCompanySummaryNode()` does, so it stacks against the same field
- * `padding-bottom: 15px` and WooCommerce core's own `.form-row` bottom
- * margin (~22px) on top of its own `margin-top: 4px` above, landing well
- * past the intended small gap.
- *
- * Never doubled up with the summary's own cancellation on the same pair:
- * the two are mutually exclusive by mode (`syncDifferentSoleTraderLink()`
- * only shows this in sole-trader mode, `renderCompanySummary()`'s number
- * label only in registered-search mode), so at most one of the two negative
- * margins is ever live against a given field at once.
- */
-#billing_company_display_field + #select_different_sole_trader_btn,
-.twoinc-inp-container + #select_different_sole_trader_btn {
-  margin-top: -33px;
-}
-
-/*
- * Same reason as `.custom-checkout .twoinc-inp-container + .twoinc-company-summary`
- * above: that page's flex row sizes by its tallest item rather than
- * stacking by margin, so the cancellation above would pull the link up into
- * the field's own row instead of just tightening a stacked gap.
- */
-.custom-checkout .twoinc-inp-container + #select_different_sole_trader_btn {
-  margin-top: 4px;
-}
-
 #select_different_sole_trader_btn:focus {
   border-color: #808080 !important;
 }
