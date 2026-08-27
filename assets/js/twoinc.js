@@ -690,6 +690,10 @@ class TwoCompanySearch {
   activateManualEntry() {
     const helper = twoincSelectWooHelper;
 
+    // On the CLICK path, so Enter/Space take the popup down too (TWO-25503),
+    // and before the guard below, which an outstanding signup makes refuse.
+    twoincSoleTrader.abandonPopupsForChipClick();
+
     // Mid-decision the chip must stay: `enterManualCompanyEntry` refuses in
     // that state anyway, so removing the chip first would leave no chip and
     // no manual mode (TWO-40).
@@ -734,6 +738,15 @@ class TwoCompanySearch {
       .addClass(helper.modeChipClass)
       .text(label)
       .on("click", function () {
+        // On the CLICK, which is the only event Enter and Space produce
+        // (TWO-25503): behind the guard below this chip did nothing at all for
+        // a keyboard buyer, leaving the signup up with no way to dismiss it.
+        //
+        // A signup that has already posted ACCEPTED is marked decided at
+        // receipt and so is excluded from this — that exclusion, not the
+        // ordering here, is what keeps a resolving lookup from being
+        // honoured and then stomped.
+        twoincSoleTrader.abandonPopupsForChipClick();
         // Refused while sole-trader mode is still DECIDING what it is
         // (TWO-40 §7 correction, round-1 review — Han/Vader): this chip only
         // coexists with `sole_trader` mode DURING that wait (an adopted sole
@@ -2379,17 +2392,47 @@ class TwoCompanySearch {
    * WooCommerce core's own `woocommerce_form_field()` produces.
    */
   companyFieldAffordanceSlot() {
-    let $wrapper = jQuery("#billing_company_field .woocommerce-input-wrapper");
+    return twoincSelectWooHelper.affordanceSlotIn(
+      jQuery("#billing_company_field"),
+      "#billing_company"
+    );
+  }
 
-    if (!$wrapper.length) {
-      const $input = jQuery("#billing_company");
-      if ($input.length) {
-        $input.wrap('<span class="woocommerce-input-wrapper"></span>');
-        $wrapper = jQuery("#billing_company_field .woocommerce-input-wrapper");
-      }
+  /**
+   * The affordance slot inside one company field row, self-healing when the
+   * theme's markup lacks core's wrapper — the pay-for-order view renders the
+   * search row without one (TWO-25503).
+   *
+   * Falling back to the row itself would append the button as a sibling of
+   * both the label and the input rather than right after the input, which is
+   * the overlap-with-the-label bug this whole helper exists to avoid, so an
+   * equivalent wrapper is built around just the input instead.
+   *
+   * @param {jQuery} $row the field row
+   * @param {string} inputSelector the input the wrapper belongs around
+   * @returns {jQuery}
+   */
+  affordanceSlotIn($row, inputSelector) {
+    const $input = $row.find(inputSelector).first();
+    if (!$input.length) {
+      const $any = $row.find(".woocommerce-input-wrapper").first();
+      return $any.length ? $any : $row;
     }
 
-    return $wrapper.length ? $wrapper : jQuery("#billing_company_field");
+    // The wrapper CONTAINING the input, never merely the row's first: a
+    // fragment swap can leave a stale empty wrapper ahead of the live one,
+    // and the affordance has to hang beside the input the buyer can see.
+    const $existing = $input.closest(".woocommerce-input-wrapper");
+    if ($existing.length) return $existing;
+
+    // selectWoo hides the <select> and renders its own container as a
+    // SIBLING of it, so a wrapper built around the input alone would leave
+    // the visible control outside the slot and the link above it.
+    const $widget = $input.nextAll(".select2-container").first();
+    const $wrapper = jQuery('<span class="woocommerce-input-wrapper"></span>');
+    $input.before($wrapper);
+    $wrapper.append($input).append($widget);
+    return $wrapper;
   }
 
   /**
@@ -3739,15 +3782,17 @@ let twoincSoleTrader = {
   messageHandler: null,
   /** @type {Function|null} the bound window `focus` listener — see `bindWindowRefocusListener` */
   refocusHandler: null,
+  /** @type {Function|null} the bound `visibilitychange` listener, paired with the above */
+  visibilityHandler: null,
   /**
    * @type {Function|null} the bound capture-phase `mousedown` listener that
-   * tells the refocus above which gesture caused it.
+   * settles a chip click's own effect on an open popup, independently of
+   * whatever the deferred path is doing.
    */
   chipMousedownHandler: null,
   /**
-   * @type {number|null} the pending abandon this refocus scheduled, or
-   * `null` when none is outstanding — also the "is a refocus still
-   * undecided" predicate the chip mousedown reads.
+   * @type {number|null} the pending abandon a return to the checkout
+   * scheduled, or `null` when none is outstanding.
    */
   refocusAbandonTimer: null,
   /**
@@ -4102,8 +4147,7 @@ let twoincSoleTrader = {
     if (!jQuery("#billing_company_field").hasClass("hidden") || !$searchField.length) {
       return twoincSelectWooHelper.companyFieldAffordanceSlot();
     }
-    const $wrapper = $searchField.find(".woocommerce-input-wrapper").first();
-    return $wrapper.length ? $wrapper : $searchField;
+    return twoincSelectWooHelper.affordanceSlotIn($searchField, "#billing_company_display");
   },
 
   /**
@@ -4113,7 +4157,11 @@ let twoincSoleTrader = {
    */
   placeDifferentSoleTraderBtn: function ($btn) {
     const $slot = twoincSoleTrader.differentSoleTraderBtnSlot();
-    if ($btn.parent()[0] !== $slot[0]) $slot.append($btn);
+    // Position as well as parenthood: the link belongs last in the slot, after
+    // the input, and anything appended to that slot after it — the company
+    // summary on a re-render — leaves it stranded mid-slot otherwise.
+    if ($btn.parent()[0] === $slot[0] && $slot.children().last()[0] === $btn[0]) return;
+    $slot.append($btn);
   },
 
   /**
@@ -4137,11 +4185,19 @@ let twoincSoleTrader = {
    */
   onModeChipClick: function (mode) {
     if (mode === "business") {
-      // Same isDeciding() guard the real Business chip's own wiring uses,
-      // so this shared entry point doesn't regress if called elsewhere.
+      // Reached only from tests today — the Registered company chip carries
+      // its own click handler, and that is where this mode's abandon and
+      // guard live. Kept as the shared entry point's business arm, matching
+      // that handler's guard so calling it cannot diverge from the chip.
       if (!twoincSoleTrader.isDeciding()) twoincSoleTrader.setMode("business");
       return;
     }
+    // Cancel any abandon the buyer's return armed, here rather than only in
+    // the capture-phase mousedown (TWO-25503): Enter and Space produce no
+    // mousedown, so keyboard-activating this chip raised the popup and then
+    // let the still-armed timer close it 150ms later.
+    clearTimeout(twoincSoleTrader.refocusAbandonTimer);
+    twoincSoleTrader.refocusAbandonTimer = null;
     // A signup the buyer hasn't finished is still on screen, so this click
     // is asking for it back, not for anything new: raise it and stop.
     // Checked on the chip itself, not the refocus that usually precedes it
@@ -4547,11 +4603,14 @@ let twoincSoleTrader = {
    * Close an abandoned signup popup when the buyer comes back to the
    * checkout.
    *
-   * A window `focus` listener, not `visibilitychange`: the hosted signup is
-   * a separate window, so the checkout's own tab never leaves `visible` for
-   * the round trip and that event never fires. Bound lazily from
-   * `watchPopupClose`, left bound for the window's lifetime like the
-   * `message` listener.
+   * A window `focus` listener AND a `visibilitychange` one. The hosted signup
+   * is a separate window, so a round trip to it and back leaves the checkout's
+   * own tab `visible` throughout and only `focus` reports it; a buyer who
+   * fetches their code from another TAB of the same window is the reverse.
+   * Which of the two Chrome reports for an in-window tab switch is not
+   * established, so both are bound and the arming guard absorbs a duplicate.
+   * Bound lazily from `watchPopupClose`, left bound for the window's lifetime
+   * like the `message` listener.
    *
    * The target check is not defensive noise: jQuery's `.trigger("focus")`
    * does not dispatch natively — it walks the propagation path itself,
@@ -4560,20 +4619,21 @@ let twoincSoleTrader = {
    * without the check, opening the dropdown would close the popup.
    *
    * The refocus only SCHEDULES the abandon — which of three things the
-   * buyer meant depends on what they clicked, and window `focus` fires
-   * before that click's `mousedown` — so the decision has to outlive the
-   * focus handler by `refocusChipGraceMs`, resolved by the capture-phase
-   * `mousedown` below:
+   * buyer meant depends on what they activated, and window `focus` fires
+   * before that gesture completes — so the decision has to outlive the focus
+   * handler by `refocusChipGraceMs`:
    *
-   *  - Sole trader chip → cancel the abandon; re-clicking asks for that
+   *  - Sole trader chip → cancel the abandon; activating it asks for that
    *    popup back and `onModeChipClick` raises it.
-   *  - any other mode chip → abandon now, in the mousedown, so the chip's
-   *    `click` handler runs after against settled state — left to the
-   *    timer it would land after that click and the chip's `isDeciding()`
-   *    guard would wrongly refuse it.
+   *  - any other mode chip → abandon now, so the chip's own handler runs
+   *    against settled state — left to the timer it would land afterwards
+   *    and the chip's `isDeciding()` guard would wrongly refuse it.
    *  - anything else (alt-tab back, a click on the page) → the timer fires
    *    and abandons.
    *
+   * Each chip resolves this from its own `click` handler, which is the only
+   * event Enter and Space produce. The capture-phase `mousedown` below is the
+   * pointer's earlier shortcut to the same decision, not the only route to it.
    * Capture phase, on `document` rather than the chips: chips are rebuilt
    * on every dropdown open, and capture reaches them regardless.
    *
@@ -4583,37 +4643,69 @@ let twoincSoleTrader = {
     if (twoincSoleTrader.refocusHandler) return;
     twoincSoleTrader.refocusHandler = function (event) {
       if (event && event.target && event.target !== window && event.target !== document) return;
-      // Coalesced onto the FIRST focus, never rescheduled onto a later one.
-      // The grace belongs to the gesture that brought the buyer back, and
-      // window-targeted `focus` events arrive in bursts for reasons that are
-      // not that gesture — blurring an element fires one, so select2 closing
-      // its own dropdown produces a stream of them. Restarting the clock on
-      // each would let a busy panel postpone the abandon indefinitely.
-      if (twoincSoleTrader.refocusAbandonTimer !== null) return;
-      twoincSoleTrader.refocusAbandonTimer = setTimeout(function () {
-        twoincSoleTrader.refocusAbandonTimer = null;
-        twoincSoleTrader.closeAbandonedPopups();
-      }, twoincSoleTrader.refocusChipGraceMs);
+      twoincSoleTrader.scheduleRefocusAbandon();
     };
     window.addEventListener("focus", twoincSoleTrader.refocusHandler);
 
+    // Paired with `focus` because neither signal covers the case alone. A
+    // return from another TAB of the same window is a visibility change;
+    // a return from another WINDOW leaves visibility untouched. Whether
+    // Chrome also emits a window `focus` for the first is not something
+    // this plugin should depend on, so both are bound and the arming
+    // guard below makes a duplicate harmless.
+    twoincSoleTrader.visibilityHandler = function () {
+      // Fires on HIDE as well as show, and arming is coalesced onto the first
+      // caller — so arming here would spend the grace the buyer's actual
+      // return needs, leaving them a fraction of it or none.
+      if (document.visibilityState === "hidden") return;
+      twoincSoleTrader.scheduleRefocusAbandon();
+    };
+    document.addEventListener("visibilitychange", twoincSoleTrader.visibilityHandler);
+
     twoincSoleTrader.chipMousedownHandler = function (event) {
-      // Only a mousedown that a still-undecided refocus is waiting on can be
-      // the click that CAUSED that refocus. Every other chip click — the
-      // checkout already had focus — is left entirely alone, popup included.
-      if (twoincSoleTrader.refocusAbandonTimer === null) return;
       const target = event && event.target;
       const chip =
         target && typeof target.closest === "function"
           ? target.closest("." + twoincSelectWooHelper.modeChipClass)
           : null;
       if (!chip) return;
+      // Whatever the deferred path is or is not waiting on: a chip click is
+      // the buyer saying which mode they want, and only Sole trader means
+      // "give me that popup back".
       clearTimeout(twoincSoleTrader.refocusAbandonTimer);
       twoincSoleTrader.refocusAbandonTimer = null;
       if (chip.getAttribute("data-mode") === "sole_trader") return;
       twoincSoleTrader.abandonPopupsForChipClick();
     };
     document.addEventListener("mousedown", twoincSoleTrader.chipMousedownHandler, true);
+  },
+
+  /**
+   * Arm the deferred abandon, decided when the grace elapses rather than now:
+   * the buyer can arrive or leave again inside it, and the answer that matters
+   * is the one at the moment the popup would actually go.
+   *
+   * A refused close is simply a wasted cycle — the next `focus` or visibility
+   * change arms again, and nothing else keys off this timer (TWO-25503: the
+   * chip handler used to, which is how a refused close took the chips with
+   * it).
+   *
+   * @returns {void}
+   */
+  scheduleRefocusAbandon: function () {
+    // Coalesced onto the FIRST arming. Nothing clears an armed timer, so a
+    // second signal would not move the deadline — it would leave a SECOND
+    // timer running past it, coming due against whatever popup exists by then
+    // rather than the one the buyer walked away from. Window-targeted `focus`
+    // arrives in bursts (a blur fires one, so the panel closing its own
+    // dropdown produces a stream), and a single return can legitimately reach
+    // both this and the visibility listener.
+    if (twoincSoleTrader.refocusAbandonTimer !== null) return;
+    twoincSoleTrader.refocusAbandonTimer = setTimeout(function () {
+      twoincSoleTrader.refocusAbandonTimer = null;
+      if (!twoincSoleTrader.checkoutIsInFront()) return;
+      twoincSoleTrader.closeAbandonedPopups();
+    }, twoincSoleTrader.refocusChipGraceMs);
   },
 
   /** Test seam / teardown: drop the window `focus` listener, the mousedown
@@ -4626,6 +4718,10 @@ let twoincSoleTrader = {
     if (twoincSoleTrader.chipMousedownHandler) {
       document.removeEventListener("mousedown", twoincSoleTrader.chipMousedownHandler, true);
       twoincSoleTrader.chipMousedownHandler = null;
+    }
+    if (twoincSoleTrader.visibilityHandler) {
+      document.removeEventListener("visibilitychange", twoincSoleTrader.visibilityHandler);
+      twoincSoleTrader.visibilityHandler = null;
     }
     if (!twoincSoleTrader.refocusHandler) return;
     window.removeEventListener("focus", twoincSoleTrader.refocusHandler);
@@ -4647,15 +4743,12 @@ let twoincSoleTrader = {
    * buyer is decided yet still on screen, and the buyer's retry inside it
    * posts a second ACCEPTED — closing it would take the retry with it.
    *
-   * This is the no-chip refocus only — a chip click is resolved before
-   * this ever runs; see `bindWindowRefocusListener` and
-   * `abandonPopupsForChipClick`.
+   * The deferred path's own closer. A pointer activation of a chip resolves
+   * before this runs, via the capture-phase mousedown; a keyboard one resolves
+   * in the chip's `click` handler, which can land after this has already
+   * fired. See `bindWindowRefocusListener` and `abandonPopupsForChipClick`.
    */
   closeAbandonedPopups: function () {
-    // A window `focus` fires when the browser WINDOW activates even while the
-    // checkout is the background tab, so this is what tells "came back to the
-    // checkout" from "opened the signup email in another tab".
-    if (typeof document.hasFocus === "function" && !document.hasFocus()) return;
     twoincSoleTrader.abandonablePopups().forEach(function (watcher) {
       if (typeof watcher.win.close !== "function") return;
       watcher.win.close();
@@ -4663,14 +4756,35 @@ let twoincSoleTrader = {
   },
 
   /**
-   * Abandon the signup popups because the buyer came back to the checkout
-   * by clicking a mode chip other than Sole trader. Same close as
-   * `closeAbandonedPopups`, but runs in the chip's own `mousedown` and
-   * drains each popup's settle synchronously rather than leaving it to the
-   * 300ms poll, so the chip's `click` handler a moment later sees no
-   * outstanding flight or live popup. Safe to drain early only because
-   * `chipOwnsOutcome` holds back the steps that touch the dropdown — see
-   * `settleClosedPopup`.
+   * Is the buyer actually looking at the checkout right now?
+   *
+   * A window `focus` fires when the browser WINDOW activates even while the
+   * checkout is the background tab, so `focus` alone cannot tell "came back to
+   * the checkout" from "opened the signup email in another tab of the same
+   * window".
+   *
+   * Gates ONLY the deferred refocus path. The chip handlers decide for
+   * themselves and must never consult this: in an iframed checkout it is false
+   * for the whole session unless the frame itself holds focus, and a buyer who
+   * clicks a chip has told us what they want whatever the frame owns.
+   *
+   * @returns {boolean}
+   */
+  checkoutIsInFront: function () {
+    if (typeof document.hasFocus !== "function") return true;
+    return document.hasFocus();
+  },
+
+  /**
+   * Abandon the signup popups because the buyer chose a mode chip other than
+   * Sole trader. Same close as `closeAbandonedPopups`, but drains each
+   * popup's settle synchronously rather than leaving it to the 300ms poll, so
+   * whatever runs next sees no outstanding flight or live popup. Safe to drain
+   * early only because `chipOwnsOutcome` holds back the steps that touch the
+   * dropdown — see `settleClosedPopup`.
+   *
+   * Reached from the chip's `mousedown` where there is one, and from its
+   * `click` regardless, which is the only one Enter and Space produce.
    */
   abandonPopupsForChipClick: function () {
     twoincSoleTrader.abandonablePopups().forEach(function (watcher) {

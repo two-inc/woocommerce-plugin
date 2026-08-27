@@ -36,23 +36,9 @@ function buildForm() {
     '  <input type="text" id="billing_first_name" value="" />',
     '  <input type="text" id="billing_last_name" value="" />',
     '  <input type="text" id="billing_phone" value="" />',
-    '  <p id="billing_company_display_field">',
-    '    <label for="billing_company_display">Company</label>',
-    '    <span class="woocommerce-input-wrapper">',
-    '      <select id="billing_company_display" name="billing_company_display">',
-    '        <option value="">&nbsp;</option>',
-    "      </select>",
-    "    </span>",
-    "  </p>",
-    '  <p id="billing_company_field">',
-    '    <label for="billing_company">Company</label>',
-    '    <span class="woocommerce-input-wrapper">',
-    '      <input type="text" id="billing_company" name="billing_company" value="" />',
-    "    </span>",
-    "  </p>",
-    '  <p id="company_id_field">',
-    '    <input type="text" id="company_id" name="company_id" value="" />',
-    "  </p>",
+    '  <div class="woocommerce-billing-fields__field-wrapper">',
+    harness.companyRowsMarkup(),
+    "  </div>",
     '  <input type="text" id="billing_address_1" value="" />',
     '  <input type="text" id="billing_address_2" value="" />',
     '  <input type="text" id="billing_city" value="" />',
@@ -902,6 +888,78 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       test("leaves behind no sibling-margin correction to fight that slot", () => {
         expect(stylesheetSource()).not.toMatch(/\+\s*#select_different_sole_trader_btn/);
       });
+
+      test("is put back LAST when something else lands in the slot after it", () => {
+        $("#billing_company_field").addClass("hidden");
+        const $btn = soleTrader.getDifferentSoleTraderBtnNode();
+        const $slot = $btn.parent();
+        // The company summary re-rendering into the same slot is what puts the
+        // link mid-slot; parenthood alone would call that already correct.
+        $slot.append('<div id="a_later_arrival"></div>');
+
+        soleTrader.placeDifferentSoleTraderBtn($btn);
+
+        expect($slot.children().last().attr("id")).toBe("select_different_sole_trader_btn");
+      });
+
+      test("hangs in the wrapper holding the INPUT when a re-render leaves the row two", () => {
+        $("#billing_company_field").addClass("hidden");
+        // A fragment swap can strand an empty wrapper AHEAD of the live one, so
+        // positionally-first is the wrong one; and an append onto a two-element
+        // set CLONES the button into both.
+        $("#billing_company_display_field").prepend(
+          '<span class="woocommerce-input-wrapper"></span>'
+        );
+
+        const $btn = soleTrader.getDifferentSoleTraderBtnNode();
+
+        // By attribute, not by id: `$("#id")` goes through `getElementById` and
+        // reports one however many clones are actually in the document.
+        expect(document.querySelectorAll('[id="select_different_sole_trader_btn"]').length).toBe(1);
+        expect($btn.parent().find("#billing_company_display").length).toBe(1);
+      });
+
+      /**
+       * The pay-for-order view renders the search row as a bare `<select>`
+       * inside a `.twoinc-inp-container`, with none of core's wrapper — the
+       * one place the self-heal actually runs. selectWoo then hides that
+       * `<select>` and renders its own container as a SIBLING, so wrapping the
+       * input alone leaves the visible control outside the slot and the link
+       * above it (TWO-25503, R1.1).
+       */
+      test("self-heals around the VISIBLE widget on the pay-for-order markup", () => {
+        $("#billing_company_display_field").replaceWith(
+          '<div class="twoinc-inp-container">' +
+            '<div id="billing_company_display_field">' +
+            '<label for="billing_company_display">Company</label>' +
+            '<select id="billing_company_display" class="select2-hidden-accessible" aria-hidden="true"></select>' +
+            '<span class="select2-container"><span class="select2-selection"></span></span>' +
+            "</div>" +
+            "</div>"
+        );
+        $("#billing_company_field").addClass("hidden");
+
+        const $btn = soleTrader.getDifferentSoleTraderBtnNode();
+        const $slot = $btn.parent();
+
+        expect($slot.hasClass("woocommerce-input-wrapper")).toBe(true);
+        // The visible widget is inside the slot, and the link is after it.
+        expect($slot.find(".select2-container").length).toBe(1);
+        expect($slot.children().last()[0]).toBe($btn[0]);
+        expect($btn.prevAll(".select2-container").length).toBe(1);
+      });
+
+      test("still lands somewhere real when the search row is absent entirely", () => {
+        // Manual-entry-only checkouts render no search row. Without the length
+        // guard the slot resolves to an empty set and `append` drops the link
+        // on the floor.
+        $("#billing_company_display_field").remove();
+        $("#billing_company_field").addClass("hidden");
+
+        const $btn = soleTrader.getDifferentSoleTraderBtnNode();
+
+        expect($btn.closest("form").length).toBe(1);
+      });
     });
 
     describe("item 2 — a sole trader restored by loadUserMetaInputs (live-reported by Doug)", () => {
@@ -1540,6 +1598,240 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       });
 
       /**
+       * The regression #499 shipped (TWO-25503, F1). A background focus used to
+       * spend the 150ms grace on a close that the gate then refused, and the
+       * chip handler keyed off that same timer — so from then until another
+       * window `focus` arrived, NOTHING could take the popup down, chips
+       * included. Arming is refused now instead of closing being refused.
+       */
+      test("a background focus leaves the chip path able to close the popup", () => {
+        openWidgetWithChips();
+        soleTrader.setMode("sole_trader");
+        const win = fakePopup();
+        window.open = jest.fn(() => win);
+        jest.useFakeTimers();
+        soleTrader.launchSignup();
+
+        withCheckoutFocused(false);
+        window.dispatchEvent(new Event("focus"));
+        settleRefocus();
+        expect(win.close).not.toHaveBeenCalled();
+
+        mousedownChip(ctx.helper.businessChipId);
+
+        expect(win.close).toHaveBeenCalledTimes(1);
+        jest.useRealTimers();
+      });
+
+      /**
+       * An iframed checkout answers `hasFocus()` false for the whole session
+       * unless the frame itself holds focus, so the deferred path may never
+       * arm. The chips are then the only close path there is, and they work.
+       */
+      test("a return to visibility re-arms the deferred close after a refused one", () => {
+        openWidgetWithChips();
+        soleTrader.setMode("sole_trader");
+        const win = fakePopup();
+        window.open = jest.fn(() => win);
+        jest.useFakeTimers();
+        soleTrader.launchSignup();
+
+        // Refused: the window took focus while the checkout sat in another tab.
+        withCheckoutFocused(false);
+        window.dispatchEvent(new Event("focus"));
+        settleRefocus();
+        expect(win.close).not.toHaveBeenCalled();
+
+        // The buyer really comes back. Chrome may report this as a visibility
+        // change rather than a window focus, so the plugin listens for both.
+        withCheckoutFocused(true);
+        document.dispatchEvent(new Event("visibilitychange"));
+        settleRefocus();
+
+        expect(win.close).toHaveBeenCalledTimes(1);
+        jest.useRealTimers();
+      });
+
+      /**
+       * Enter/Space fire `click` with no `mousedown`, so an abandon hung off
+       * the mousedown leaves a keyboard buyer unable to take the popup down at
+       * all (TWO-25503, R1.4). The reference build puts it on the click, which
+       * the keyboard reaches. This PR's own argument — that the chips are the
+       * surviving close path where the deferred one never arms — is only true
+       * if that holds for the keyboard too.
+       */
+      /**
+       * Driven through the chip NODES the dropdown actually builds, with a
+       * bare `click` and no `mousedown` — the event pair Enter and Space
+       * produce. Calling the mode-switch helpers directly would exercise a
+       * path production never takes: `onModeChipClick` has exactly one
+       * production caller and it passes `"sole_trader"`.
+       */
+      test.each([
+        ["Registered company", () => ctx.helper.businessChipId],
+        ["Enter manually", () => ctx.helper.manualEntryRowId]
+      ])("%s activated without a mousedown still takes the popup down", (_label, chipId) => {
+        openWidgetWithChips();
+        soleTrader.setMode("sole_trader");
+        const win = fakePopup();
+        window.open = jest.fn(() => win);
+        jest.useFakeTimers();
+        soleTrader.launchSignup();
+
+        const chip = document.getElementById(chipId());
+        expect(chip).not.toBeNull();
+        chip.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+
+        expect(win.close).toHaveBeenCalledTimes(1);
+        jest.useRealTimers();
+      });
+
+      /**
+       * `visibilitychange` fires on HIDE as well as show, and arming is
+       * coalesced onto the first caller — so arming on the hide spends the
+       * grace that the buyer's actual return needs (TWO-25503, R1.5). The
+       * fire-time gate makes the outcome safe but does not give the grace back.
+       */
+      test("a hide does not spend the grace the following return needs", () => {
+        openWidgetWithChips();
+        soleTrader.setMode("sole_trader");
+        const win = fakePopup();
+        window.open = jest.fn(() => win);
+        jest.useFakeTimers();
+        soleTrader.launchSignup();
+
+        jest.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+        withCheckoutFocused(false);
+        document.dispatchEvent(new Event("visibilitychange"));
+        jest.advanceTimersByTime(100);
+
+        // The buyer comes back with most of the grace still unspent.
+        jest.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+        withCheckoutFocused(true);
+        document.dispatchEvent(new Event("visibilitychange"));
+        jest.advanceTimersByTime(100);
+
+        // 100ms into a 150ms grace that started when they RETURNED.
+        expect(win.close).not.toHaveBeenCalled();
+
+        jest.advanceTimersByTime(60);
+        expect(win.close).toHaveBeenCalledTimes(1);
+        jest.useRealTimers();
+      });
+
+      /**
+       * Arming is coalesced onto the FIRST caller. Nothing clears an armed
+       * timer, so a second signal does not move the deadline — it leaves a
+       * SECOND timer running past it, and that one comes due against whatever
+       * popup exists by then. Window-targeted `focus` arrives in bursts (a
+       * blur fires one, so the panel closing its own dropdown produces a
+       * stream), and binding `visibilitychange` alongside `focus` means one
+       * return can legitimately signal twice.
+       */
+      test("a second signal does not leave a stale timer to close a later popup", () => {
+        openWidgetWithChips();
+        soleTrader.setMode("sole_trader");
+        const first = fakePopup();
+        window.open = jest.fn(() => first);
+        jest.useFakeTimers();
+        soleTrader.launchSignup();
+
+        refocusCheckout();
+        jest.advanceTimersByTime(100);
+        refocusCheckout();
+        jest.advanceTimersByTime(60);
+        expect(first.close).toHaveBeenCalledTimes(1);
+
+        // The buyer starts a fresh signup inside the window the second timer
+        // would still be running in.
+        const second = fakePopup();
+        window.open = jest.fn(() => second);
+        soleTrader.setMode("sole_trader");
+        soleTrader.launchSignup();
+
+        jest.advanceTimersByTime(200);
+
+        expect(second.close).not.toHaveBeenCalled();
+        jest.useRealTimers();
+      });
+
+      /**
+       * Keyboard and pointer must reach the same outcome. The chip nodes here
+       * are the ones the dropdown builds and inserts, activated with a bare
+       * `click` — the event pair Enter and Space produce.
+       */
+      test("keyboard and pointer activation of Registered company agree", () => {
+        function activate(withMousedown) {
+          openWidgetWithChips();
+          soleTrader.setMode("sole_trader");
+          const win = fakePopup();
+          window.open = jest.fn(() => win);
+          soleTrader.launchSignup();
+          const chip = document.getElementById(ctx.helper.businessChipId);
+          expect(chip).not.toBeNull();
+          if (withMousedown) {
+            chip.dispatchEvent(new window.MouseEvent("mousedown", { bubbles: true }));
+          }
+          chip.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+          return { closed: win.close.mock.calls.length, mode: soleTrader.mode };
+        }
+
+        jest.useFakeTimers();
+        const pointer = activate(true);
+        const keyboard = activate(false);
+
+        expect(keyboard).toEqual(pointer);
+        expect(keyboard.closed).toBe(1);
+        expect(keyboard.mode).toBe("business");
+        jest.useRealTimers();
+      });
+
+      /**
+       * The Sole trader chip is the one activation that KEEPS the popup, so a
+       * return-armed abandon has to be cancelled by it. Only the capture-phase
+       * mousedown did that, so on the keyboard the chip raised the popup and
+       * the still-armed timer closed it 150ms later.
+       */
+      test("keyboard activation of Sole trader keeps the popup it just raised", () => {
+        openWidgetWithChips();
+        soleTrader.setMode("sole_trader");
+        const win = fakePopup();
+        window.open = jest.fn(() => win);
+        jest.useFakeTimers();
+        soleTrader.launchSignup();
+
+        // The buyer comes back to the checkout, then reaches the chip by
+        // keyboard — no mousedown anywhere in the gesture.
+        refocusCheckout();
+        const chip = document.getElementById(ctx.helper.soleTraderChipId);
+        expect(chip).not.toBeNull();
+        chip.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+        jest.advanceTimersByTime(400);
+
+        expect(win.close).not.toHaveBeenCalled();
+        jest.useRealTimers();
+      });
+
+      test("teardown drops the visibility listener too", () => {
+        openWidgetWithChips();
+        soleTrader.setMode("sole_trader");
+        const win = fakePopup();
+        window.open = jest.fn(() => win);
+        jest.useFakeTimers();
+        soleTrader.launchSignup();
+
+        soleTrader.unbindWindowRefocusListener();
+
+        withCheckoutFocused(true);
+        document.dispatchEvent(new Event("visibilitychange"));
+        window.dispatchEvent(new Event("focus"));
+        settleRefocus();
+
+        expect(win.close).not.toHaveBeenCalled();
+        jest.useRealTimers();
+      });
+
+      /**
        * A native element `focus` never reaches a non-capturing window listener,
        * but jQuery's `.trigger("focus")` walks the propagation path itself,
        * window included — and that is how this file moves focus onto the
@@ -1756,12 +2048,14 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       });
 
       /**
-       * The stale-claim guard. A chip mousedown made while the checkout ALREADY
-       * had focus is not the cause of any refocus, so it must not be read as
-       * one — neither now (the popup is left entirely alone) nor later, by a
-       * genuine alt-tab-back that follows it.
+       * A chip click is the buyer choosing a mode, whatever is or is not in
+       * flight — the reference build takes the popup down on every chip but
+       * Sole trader, with no refocus involved (TWO-25503). Keying this off a
+       * pending refocus left the chips unable to close anything once a
+       * background focus had spent the grace, and unable to close anything at
+       * all in an iframed checkout, where the deferred path never arms.
        */
-      test("a chip mousedown with no refocus pending leaves the popup alone", () => {
+      test("a chip mousedown with no refocus pending still takes the popup down", () => {
         openWidgetWithChips();
         soleTrader.setMode("sole_trader");
         const win = fakePopup();
@@ -1770,10 +2064,11 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         soleTrader.launchSignup();
 
         mousedownChip(ctx.helper.businessChipId);
-        expect(win.close).not.toHaveBeenCalled();
 
-        // And the later genuine refocus still abandons, rather than being
-        // cancelled by that earlier, unrelated mousedown.
+        expect(win.close).toHaveBeenCalledTimes(1);
+
+        // The stale-claim half still holds: a refocus arriving afterwards finds
+        // nothing abandonable and does not close a second time.
         refocusCheckout();
         settleRefocus();
 
@@ -2231,25 +2526,63 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     });
 
     describe("round-1 review regressions (Han/Vader/Leia) — races the dropdown-survives fix opened up", () => {
-      test("the Business chip is refused while a signup is outstanding, not honoured then stomped by its result", () => {
+      test("the Business chip is honoured before ACCEPTED, and its result cannot stomp the switch", () => {
         const flight = armUndecidedSignup();
+        harness.openCompanyWidget($, ctx.helper);
+        ctx.helper.syncManualEntryButton();
         soleTrader.onModeChipClick("sole_trader");
 
-        // The chip lives inside the search dropdown the buyer is still
-        // looking at — clicking Business mid-flight used to force mode back
-        // to business immediately, only for the later result to silently
-        // force it straight back to sole-trader and populate underneath.
-        ctx.helper.buildBusinessChip().trigger("click");
-        expect(soleTrader.mode).toBe("sole_trader");
+        // The chip node the dropdown actually built, not a detached copy: a
+        // node outside the document reaches neither the capture-phase
+        // mousedown listener nor anything else keyed on the live tree.
+        const chip = document.getElementById(ctx.helper.businessChipId);
+        expect(chip).not.toBeNull();
+        chip.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
 
-        flight.settle({
-          organization_number: "TWO:ST1",
-          company_name: "Sole Co",
-          email: "buyer@example.test"
-        });
+        // Nothing has been accepted yet, so the buyer's choice stands and the
+        // signup goes with it (TWO-25503).
+        expect(soleTrader.mode).toBe("business");
+
+        // The stomp this test was written for: a result arriving from the
+        // abandoned signup must not drag the buyer back into the mode they
+        // left. It never reaches a buyer lookup at all — `fetchCurrentBuyer`
+        // is the only thing that can write a company, and it is not called.
+        window.dispatchEvent(
+          new window.MessageEvent("message", {
+            data: "ACCEPTED",
+            origin: "https://checkout.example.test"
+          })
+        );
+
+        expect(soleTrader.fetchCurrentBuyer).not.toHaveBeenCalled();
+        expect(soleTrader.mode).toBe("business");
+        expect($("#company_id").val()).not.toBe("TWO:ST1");
+        expect(flight).toBeTruthy();
+      });
+
+      test("the Business chip is still refused once ACCEPTED is in flight", () => {
+        const flight = armUndecidedSignup();
+        harness.openCompanyWidget($, ctx.helper);
+        ctx.helper.syncManualEntryButton();
+        soleTrader.onModeChipClick("sole_trader");
+
+        // ACCEPTED marks its popup decided at receipt, which excludes it from
+        // the abandon — so the flight it opened still holds `isDeciding()` and
+        // the mode switch is refused, which is what keeps the completing
+        // signup from being honoured and then stomped.
+        window.dispatchEvent(
+          new window.MessageEvent("message", {
+            data: "ACCEPTED",
+            origin: new URL(soleTrader.tokens.signup_url).origin
+          })
+        );
+
+        const chip = document.getElementById(ctx.helper.businessChipId);
+        expect(chip).not.toBeNull();
+        chip.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
 
         expect(soleTrader.mode).toBe("sole_trader");
-        expect($("#company_id").val()).toBe("TWO:ST1");
+        expect(flight).toBeTruthy();
       });
 
       test("the Business chip works normally once the flight has actually settled", () => {
@@ -2519,16 +2852,26 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         expect(soleTrader.soleTraderReconfirmingCount).toBe(0);
       });
 
-      test("the Business chip is refused while a re-signup popup is still open, same as the first one", () => {
+      test("the Business chip takes a re-signup popup down with it, same as the first one", () => {
         soleTrader.setMode("sole_trader");
         soleTrader.setCompany("TWO:ST1", "First Trader");
         const win = { closed: false };
+        win.close = jest.fn(() => {
+          win.closed = true;
+        });
         window.open = jest.fn(() => win);
+        harness.openCompanyWidget($, ctx.helper);
+        ctx.helper.syncManualEntryButton();
 
         soleTrader.getDifferentSoleTraderBtnNode().trigger("click");
-        ctx.helper.buildBusinessChip().trigger("click");
+        const chip = document.getElementById(ctx.helper.businessChipId);
+        expect(chip).not.toBeNull();
+        chip.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
 
-        expect(soleTrader.mode).toBe("sole_trader");
+        // Undecided, so the buyer's choice carries and the window goes with
+        // it — the same rule the first signup follows.
+        expect(win.close).toHaveBeenCalledTimes(1);
+        expect(soleTrader.mode).toBe("business");
       });
 
       test("soleTraderReconfirmingCount clears once the re-signup popup closes without completing", () => {
