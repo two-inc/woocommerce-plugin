@@ -36,23 +36,30 @@ function buildForm() {
     '  <input type="text" id="billing_first_name" value="" />',
     '  <input type="text" id="billing_last_name" value="" />',
     '  <input type="text" id="billing_phone" value="" />',
-    '  <p id="billing_company_display_field">',
-    '    <label for="billing_company_display">Company</label>',
+    // Real row markup, copied from a live checkout — see wc-harness.js's own
+    // note on why the `.form-row` classes and nesting are load-bearing.
+    '  <div class="woocommerce-billing-fields__field-wrapper">',
+    '  <p id="billing_company_display_field" class="form-row billing_company_selectwoo form-row-wide" data-priority="30">',
+    '    <label for="billing_company_display">Company <abbr class="required twoinc-required" title="required">*</abbr></label>',
     '    <span class="woocommerce-input-wrapper">',
     '      <select id="billing_company_display" name="billing_company_display">',
     '        <option value="">&nbsp;</option>',
     "      </select>",
     "    </span>",
     "  </p>",
-    '  <p id="billing_company_field">',
-    '    <label for="billing_company">Company</label>',
+    '  <p id="billing_company_field" class="form-row form-row-wide" data-priority="30">',
+    '    <label for="billing_company">Company <span class="optional">(optional)</span></label>',
     '    <span class="woocommerce-input-wrapper">',
     '      <input type="text" id="billing_company" name="billing_company" value="" />',
     "    </span>",
     "  </p>",
-    '  <p id="company_id_field">',
-    '    <input type="text" id="company_id" name="company_id" value="" />',
+    '  <p id="company_id_field" class="form-row" data-priority="31">',
+    '    <label for="company_id">Company ID <span class="optional">(optional)</span></label>',
+    '    <span class="woocommerce-input-wrapper">',
+    '      <input type="text" id="company_id" name="company_id" value="" />',
+    "    </span>",
     "  </p>",
+    "  </div>",
     '  <input type="text" id="billing_address_1" value="" />',
     '  <input type="text" id="billing_address_2" value="" />',
     '  <input type="text" id="billing_city" value="" />',
@@ -902,6 +909,46 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       test("leaves behind no sibling-margin correction to fight that slot", () => {
         expect(stylesheetSource()).not.toMatch(/\+\s*#select_different_sole_trader_btn/);
       });
+
+      test("is put back LAST when something else lands in the slot after it", () => {
+        $("#billing_company_field").addClass("hidden");
+        const $btn = soleTrader.getDifferentSoleTraderBtnNode();
+        const $slot = $btn.parent();
+        // The company summary re-rendering into the same slot is what puts the
+        // link mid-slot; parenthood alone would call that already correct.
+        $slot.append('<div id="a_later_arrival"></div>');
+
+        soleTrader.placeDifferentSoleTraderBtn($btn);
+
+        expect($slot.children().last().attr("id")).toBe("select_different_sole_trader_btn");
+      });
+
+      test("hangs in exactly ONE wrapper when a re-render leaves the row two", () => {
+        $("#billing_company_field").addClass("hidden");
+        // A duplicated wrapper is what a fragment swap can leave behind, and an
+        // append onto a two-element set CLONES the button into both.
+        $("#billing_company_display_field").append(
+          '<span class="woocommerce-input-wrapper"></span>'
+        );
+
+        soleTrader.getDifferentSoleTraderBtnNode();
+
+        // By attribute, not by id: `$("#id")` goes through `getElementById` and
+        // reports one however many clones are actually in the document.
+        expect(document.querySelectorAll('[id="select_different_sole_trader_btn"]').length).toBe(1);
+      });
+
+      test("still lands somewhere real when the search row is absent entirely", () => {
+        // Manual-entry-only checkouts render no search row. Without the length
+        // guard the slot resolves to an empty set and `append` drops the link
+        // on the floor.
+        $("#billing_company_display_field").remove();
+        $("#billing_company_field").addClass("hidden");
+
+        const $btn = soleTrader.getDifferentSoleTraderBtnNode();
+
+        expect($btn.closest("form").length).toBe(1);
+      });
     });
 
     describe("item 2 — a sole trader restored by loadUserMetaInputs (live-reported by Doug)", () => {
@@ -1540,6 +1587,61 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       });
 
       /**
+       * The regression #499 shipped (TWO-25503, F1). A background focus used to
+       * spend the 150ms grace on a close that the gate then refused, and the
+       * chip handler keyed off that same timer — so from then until another
+       * window `focus` arrived, NOTHING could take the popup down, chips
+       * included. Arming is refused now instead of closing being refused.
+       */
+      test("a background focus leaves the chip path able to close the popup", () => {
+        openWidgetWithChips();
+        soleTrader.setMode("sole_trader");
+        const win = fakePopup();
+        window.open = jest.fn(() => win);
+        jest.useFakeTimers();
+        soleTrader.launchSignup();
+
+        withCheckoutFocused(false);
+        window.dispatchEvent(new Event("focus"));
+        settleRefocus();
+        expect(win.close).not.toHaveBeenCalled();
+
+        mousedownChip(ctx.helper.businessChipId);
+
+        expect(win.close).toHaveBeenCalledTimes(1);
+        jest.useRealTimers();
+      });
+
+      /**
+       * An iframed checkout answers `hasFocus()` false for the whole session
+       * unless the frame itself holds focus, so the deferred path may never
+       * arm. The chips are then the only close path there is, and they work.
+       */
+      test("a return to visibility re-arms the deferred close after a refused one", () => {
+        openWidgetWithChips();
+        soleTrader.setMode("sole_trader");
+        const win = fakePopup();
+        window.open = jest.fn(() => win);
+        jest.useFakeTimers();
+        soleTrader.launchSignup();
+
+        // Refused: the window took focus while the checkout sat in another tab.
+        withCheckoutFocused(false);
+        window.dispatchEvent(new Event("focus"));
+        settleRefocus();
+        expect(win.close).not.toHaveBeenCalled();
+
+        // The buyer really comes back. Chrome may report this as a visibility
+        // change rather than a window focus, so the plugin listens for both.
+        withCheckoutFocused(true);
+        document.dispatchEvent(new Event("visibilitychange"));
+        settleRefocus();
+
+        expect(win.close).toHaveBeenCalledTimes(1);
+        jest.useRealTimers();
+      });
+
+      /**
        * A native element `focus` never reaches a non-capturing window listener,
        * but jQuery's `.trigger("focus")` walks the propagation path itself,
        * window included — and that is how this file moves focus onto the
@@ -1756,12 +1858,14 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       });
 
       /**
-       * The stale-claim guard. A chip mousedown made while the checkout ALREADY
-       * had focus is not the cause of any refocus, so it must not be read as
-       * one — neither now (the popup is left entirely alone) nor later, by a
-       * genuine alt-tab-back that follows it.
+       * A chip click is the buyer choosing a mode, whatever is or is not in
+       * flight — the reference build takes the popup down on every chip but
+       * Sole trader, with no refocus involved (TWO-25503). Keying this off a
+       * pending refocus left the chips unable to close anything once a
+       * background focus had spent the grace, and unable to close anything at
+       * all in an iframed checkout, where the deferred path never arms.
        */
-      test("a chip mousedown with no refocus pending leaves the popup alone", () => {
+      test("a chip mousedown with no refocus pending still takes the popup down", () => {
         openWidgetWithChips();
         soleTrader.setMode("sole_trader");
         const win = fakePopup();
@@ -1770,10 +1874,11 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         soleTrader.launchSignup();
 
         mousedownChip(ctx.helper.businessChipId);
-        expect(win.close).not.toHaveBeenCalled();
 
-        // And the later genuine refocus still abandons, rather than being
-        // cancelled by that earlier, unrelated mousedown.
+        expect(win.close).toHaveBeenCalledTimes(1);
+
+        // The stale-claim half still holds: a refocus arriving afterwards finds
+        // nothing abandonable and does not close a second time.
         refocusCheckout();
         settleRefocus();
 

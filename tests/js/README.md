@@ -278,11 +278,12 @@ is the pair of invariants that two separately-correct changes disagree about (#4
   entry pointed the buyer at a picker that was not there. Pinned on the rendered container, on `getCompanyName()`, and on `getCompanyData()`,
   because an empty `company_name` is what stops an order intent firing at all. The counterweight
   is pinned too: abandoning that adoption still lands the buyer back in manual entry.
-- **the slot directly after the visible name field belongs to whichever of its two followers is
-  visible.** The read-only number label and the "select a different sole trader" link both anchor
-  there, both move only when they are not already there, and only the label is re-anchored on
-  every `toggleBusinessFields()` — so they traded the slot on every payment-method switch, and
-  whichever lost it lost its `+`-selector gap cancellation in twoinc.css with it.
+- **the "select a different sole trader" link belongs INSIDE the visible name field's input
+  wrapper.** The read-only number label anchors after the field row; the link hangs inside it,
+  the same slot the "search for company" link uses, so the two no longer compete for one slot
+  and neither depends on a `+`-selector margin correction. The link is re-anchored on every
+  `toggleBusinessFields()`, by position as well as parenthood, since the label re-rendering into
+  the same row is what used to strand it.
 - **a capture restored from the DOM alone reaches the picker.** Only the user-meta echo was ever
   seeded into it, and the restore path deliberately accepts two further sources with no echo
   behind them — so a returning guest saw the picker's placeholder over a hidden field holding
