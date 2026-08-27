@@ -36,29 +36,8 @@ function buildForm() {
     '  <input type="text" id="billing_first_name" value="" />',
     '  <input type="text" id="billing_last_name" value="" />',
     '  <input type="text" id="billing_phone" value="" />',
-    // Real row markup, copied from a live checkout — see wc-harness.js's own
-    // note on why the `.form-row` classes and nesting are load-bearing.
     '  <div class="woocommerce-billing-fields__field-wrapper">',
-    '  <p id="billing_company_display_field" class="form-row billing_company_selectwoo form-row-wide" data-priority="30">',
-    '    <label for="billing_company_display">Company <abbr class="required twoinc-required" title="required">*</abbr></label>',
-    '    <span class="woocommerce-input-wrapper">',
-    '      <select id="billing_company_display" name="billing_company_display">',
-    '        <option value="">&nbsp;</option>',
-    "      </select>",
-    "    </span>",
-    "  </p>",
-    '  <p id="billing_company_field" class="form-row form-row-wide" data-priority="30">',
-    '    <label for="billing_company">Company <span class="optional">(optional)</span></label>',
-    '    <span class="woocommerce-input-wrapper">',
-    '      <input type="text" id="billing_company" name="billing_company" value="" />',
-    "    </span>",
-    "  </p>",
-    '  <p id="company_id_field" class="form-row" data-priority="31">',
-    '    <label for="company_id">Company ID <span class="optional">(optional)</span></label>',
-    '    <span class="woocommerce-input-wrapper">',
-    '      <input type="text" id="company_id" name="company_id" value="" />',
-    "    </span>",
-    "  </p>",
+    harness.companyRowsMarkup(),
     "  </div>",
     '  <input type="text" id="billing_address_1" value="" />',
     '  <input type="text" id="billing_address_2" value="" />',
@@ -923,19 +902,51 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         expect($slot.children().last().attr("id")).toBe("select_different_sole_trader_btn");
       });
 
-      test("hangs in exactly ONE wrapper when a re-render leaves the row two", () => {
+      test("hangs in the wrapper holding the INPUT when a re-render leaves the row two", () => {
         $("#billing_company_field").addClass("hidden");
-        // A duplicated wrapper is what a fragment swap can leave behind, and an
-        // append onto a two-element set CLONES the button into both.
-        $("#billing_company_display_field").append(
+        // A fragment swap can strand an empty wrapper AHEAD of the live one, so
+        // positionally-first is the wrong one; and an append onto a two-element
+        // set CLONES the button into both.
+        $("#billing_company_display_field").prepend(
           '<span class="woocommerce-input-wrapper"></span>'
         );
 
-        soleTrader.getDifferentSoleTraderBtnNode();
+        const $btn = soleTrader.getDifferentSoleTraderBtnNode();
 
         // By attribute, not by id: `$("#id")` goes through `getElementById` and
         // reports one however many clones are actually in the document.
         expect(document.querySelectorAll('[id="select_different_sole_trader_btn"]').length).toBe(1);
+        expect($btn.parent().find("#billing_company_display").length).toBe(1);
+      });
+
+      /**
+       * The pay-for-order view renders the search row as a bare `<select>`
+       * inside a `.twoinc-inp-container`, with none of core's wrapper — the
+       * one place the self-heal actually runs. selectWoo then hides that
+       * `<select>` and renders its own container as a SIBLING, so wrapping the
+       * input alone leaves the visible control outside the slot and the link
+       * above it (TWO-25503, R1.1).
+       */
+      test("self-heals around the VISIBLE widget on the pay-for-order markup", () => {
+        $("#billing_company_display_field").replaceWith(
+          '<div class="twoinc-inp-container">' +
+            '<div id="billing_company_display_field">' +
+            '<label for="billing_company_display">Company</label>' +
+            '<select id="billing_company_display" class="select2-hidden-accessible" aria-hidden="true"></select>' +
+            '<span class="select2-container"><span class="select2-selection"></span></span>' +
+            "</div>" +
+            "</div>"
+        );
+        $("#billing_company_field").addClass("hidden");
+
+        const $btn = soleTrader.getDifferentSoleTraderBtnNode();
+        const $slot = $btn.parent();
+
+        expect($slot.hasClass("woocommerce-input-wrapper")).toBe(true);
+        // The visible widget is inside the slot, and the link is after it.
+        expect($slot.find(".select2-container").length).toBe(1);
+        expect($slot.children().last()[0]).toBe($btn[0]);
+        expect($btn.prevAll(".select2-container").length).toBe(1);
       });
 
       test("still lands somewhere real when the search row is absent entirely", () => {
@@ -1638,6 +1649,83 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         settleRefocus();
 
         expect(win.close).toHaveBeenCalledTimes(1);
+        jest.useRealTimers();
+      });
+
+      /**
+       * Enter/Space fire `click` with no `mousedown`, so an abandon hung off
+       * the mousedown leaves a keyboard buyer unable to take the popup down at
+       * all (TWO-25503, R1.4). The reference build puts it on the click, which
+       * the keyboard reaches. This PR's own argument — that the chips are the
+       * surviving close path where the deferred one never arms — is only true
+       * if that holds for the keyboard too.
+       */
+      test.each([
+        ["Registered company", () => soleTrader.onModeChipClick("business")],
+        ["Enter manually", () => ctx.helper.activateManualEntry()]
+      ])("%s activated without a mousedown still takes the popup down", (_label, activate) => {
+        openWidgetWithChips();
+        soleTrader.setMode("sole_trader");
+        const win = fakePopup();
+        window.open = jest.fn(() => win);
+        jest.useFakeTimers();
+        soleTrader.launchSignup();
+
+        activate();
+
+        expect(win.close).toHaveBeenCalledTimes(1);
+        jest.useRealTimers();
+      });
+
+      /**
+       * `visibilitychange` fires on HIDE as well as show, and arming is
+       * coalesced onto the first caller — so arming on the hide spends the
+       * grace that the buyer's actual return needs (TWO-25503, R1.5). The
+       * fire-time gate makes the outcome safe but does not give the grace back.
+       */
+      test("a hide does not spend the grace the following return needs", () => {
+        openWidgetWithChips();
+        soleTrader.setMode("sole_trader");
+        const win = fakePopup();
+        window.open = jest.fn(() => win);
+        jest.useFakeTimers();
+        soleTrader.launchSignup();
+
+        jest.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+        withCheckoutFocused(false);
+        document.dispatchEvent(new Event("visibilitychange"));
+        jest.advanceTimersByTime(100);
+
+        // The buyer comes back with most of the grace still unspent.
+        jest.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+        withCheckoutFocused(true);
+        document.dispatchEvent(new Event("visibilitychange"));
+        jest.advanceTimersByTime(100);
+
+        // 100ms into a 150ms grace that started when they RETURNED.
+        expect(win.close).not.toHaveBeenCalled();
+
+        jest.advanceTimersByTime(60);
+        expect(win.close).toHaveBeenCalledTimes(1);
+        jest.useRealTimers();
+      });
+
+      test("teardown drops the visibility listener too", () => {
+        openWidgetWithChips();
+        soleTrader.setMode("sole_trader");
+        const win = fakePopup();
+        window.open = jest.fn(() => win);
+        jest.useFakeTimers();
+        soleTrader.launchSignup();
+
+        soleTrader.unbindWindowRefocusListener();
+
+        withCheckoutFocused(true);
+        document.dispatchEvent(new Event("visibilitychange"));
+        window.dispatchEvent(new Event("focus"));
+        settleRefocus();
+
+        expect(win.close).not.toHaveBeenCalled();
         jest.useRealTimers();
       });
 

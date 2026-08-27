@@ -197,6 +197,62 @@ function loadTwoinc(twoinc) {
  *   HTML, for a test that needs the option markup to differ from production
  * @returns {void}
  */
+/**
+ * The three company rows as WooCommerce's own `woocommerce_form_field()`
+ * renders the declarations in `WC_Twoinc_Checkout::add_company_fields()` —
+ * `form-row` plus each field's declared classes, its `data-priority`, a label
+ * carrying `span.optional` because all three declare `'required' => false`,
+ * and core's `.woocommerce-input-wrapper` around the input alone.
+ *
+ * Built from the SERVER's declarations rather than copied off a rendered
+ * checkout (TWO-25503): a rendered page shows the post-state, where the
+ * plugin's own `toggleBusinessFields()` has already swapped `span.optional`
+ * for `abbr.required` and stripped `hidden` — so a fixture taken from it bakes
+ * in the very transitions the code under test is supposed to perform.
+ *
+ * One definition, shared: fixtures that each grew their own copy disagreed
+ * about nesting, and a fixture that disagrees with the server cannot fail
+ * honestly.
+ *
+ * KNOWN REMAINING GAP: the server also declares `hidden` on the search row and
+ * on `company_id`, which `toggleBusinessFields()` is what clears. Seven tests
+ * across four suites reach for those rows without running it first, so adding
+ * it here is a change to the whole suite's starting state and is deliberately
+ * held back from the regression fix this fixture rides in on. Four further
+ * fixtures still build these rows themselves and want folding in here too.
+ *
+ * @param {Object} [options]
+ * @param {string} [options.companyOptions] inner HTML for the search select
+ * @returns {string}
+ */
+function companyRowsMarkup(options) {
+  const opts = options || {};
+  const companyOptions =
+    opts.companyOptions === undefined ? '<option value="">&nbsp;</option>' : opts.companyOptions;
+  return [
+    '  <p id="billing_company_display_field" class="form-row billing_company_selectwoo form-row-wide" data-priority="30">',
+    '    <label for="billing_company_display">Company name&nbsp;<span class="optional">(optional)</span></label>',
+    '    <span class="woocommerce-input-wrapper">',
+    '      <select id="billing_company_display" name="billing_company_display">' +
+      companyOptions +
+      "</select>",
+    "    </span>",
+    "  </p>",
+    '  <p id="billing_company_field" class="form-row form-row-wide" data-priority="30">',
+    '    <label for="billing_company">Company name&nbsp;<span class="optional">(optional)</span></label>',
+    '    <span class="woocommerce-input-wrapper">',
+    "      <input type='text' id='billing_company' name='billing_company' value='' />",
+    "    </span>",
+    "  </p>",
+    '  <p id="company_id_field" class="form-row" data-priority="31">',
+    '    <label for="company_id">Company ID&nbsp;<span class="optional">(optional)</span></label>',
+    '    <span class="woocommerce-input-wrapper">',
+    "      <input type='text' id='company_id' name='company_id' value='' />",
+    "    </span>",
+    "  </p>"
+  ].join("\n");
+}
+
 function buildCheckoutForm(options) {
   const opts = options || {};
   const country = opts.country || "GB";
@@ -208,39 +264,17 @@ function buildCheckoutForm(options) {
     // it every test here silently exercised that function's no-form early
     // return instead of the snapshotting code (TWO-25288).
     '<form name="checkout" class="checkout woocommerce-checkout">',
-    // Row markup is copied from a live WooCommerce checkout, class attributes
-    // and nesting included, not simplified to bare <p> (TWO-25503). The
-    // `.form-row` bottom margin and the field's own padding are the box model
-    // every affordance placed near these fields stacks against, so a fixture
-    // without them cannot exercise the layout its rules exist for — which is
-    // how a link rendering over the company field survived a green suite.
     '  <div class="woocommerce-billing-fields">',
     '  <div class="woocommerce-billing-fields__field-wrapper">',
-    '  <p id="billing_country_field" class="form-row form-row-wide" data-priority="10">',
-    '    <select id="billing_country" name="billing_country">',
-    '      <option value="' + country + '" selected>Selected country</option>',
-    "    </select>",
-    "  </p>",
-    '  <p id="billing_company_display_field" class="form-row billing_company_selectwoo form-row-wide" data-priority="30">',
-    '    <label for="billing_company_display">Company name <abbr class="required twoinc-required" title="required">*</abbr></label>',
+    '  <p id="billing_country_field" class="form-row address-field update_totals_on_change form-row-wide" data-priority="40">',
+    '    <label for="billing_country">Country / Region&nbsp;<abbr class="required" title="required">*</abbr></label>',
     '    <span class="woocommerce-input-wrapper">',
-    '      <select id="billing_company_display" name="billing_company_display">' +
-      companyOptions +
-      "</select>",
+    '      <select id="billing_country" name="billing_country">',
+    '        <option value="' + country + '" selected>Selected country</option>',
+    "      </select>",
     "    </span>",
     "  </p>",
-    '  <p id="billing_company_field" class="form-row form-row-wide" data-priority="30">',
-    '    <label for="billing_company">Company name <span class="optional">(optional)</span></label>',
-    '    <span class="woocommerce-input-wrapper">',
-    "      <input type='text' id='billing_company' name='billing_company' value='' />",
-    "    </span>",
-    "  </p>",
-    '  <p id="company_id_field" class="form-row" data-priority="31">',
-    '    <label for="company_id">Company ID <span class="optional">(optional)</span></label>',
-    '    <span class="woocommerce-input-wrapper">',
-    "      <input type='text' id='company_id' name='company_id' value='' />",
-    "    </span>",
-    "  </p>",
+    companyRowsMarkup({ companyOptions: companyOptions }),
     "  </div>",
     "  </div>",
     "</form>"
@@ -506,6 +540,7 @@ module.exports = {
   injectStylesheet: injectStylesheet,
   loadTwoinc: loadTwoinc,
   buildCheckoutForm: buildCheckoutForm,
+  companyRowsMarkup: companyRowsMarkup,
   openCompanyWidget: openCompanyWidget,
   resultsText: resultsText,
   stubAjax: stubAjax,

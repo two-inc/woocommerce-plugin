@@ -690,6 +690,10 @@ class TwoCompanySearch {
   activateManualEntry() {
     const helper = twoincSelectWooHelper;
 
+    // On the CLICK path, so Enter/Space take the popup down too (TWO-25503),
+    // and before the guard below, which an outstanding signup makes refuse.
+    twoincSoleTrader.abandonPopupsForChipClick();
+
     // Mid-decision the chip must stay: `enterManualCompanyEntry` refuses in
     // that state anyway, so removing the chip first would leave no chip and
     // no manual mode (TWO-40).
@@ -2402,16 +2406,26 @@ class TwoCompanySearch {
   affordanceSlotIn($row, inputSelector) {
     if (!$row.length) return $row;
 
-    let $wrapper = $row.find(".woocommerce-input-wrapper").first();
-    if ($wrapper.length) return $wrapper;
-
     const $input = $row.find(inputSelector).first();
-    if ($input.length) {
-      $input.wrap('<span class="woocommerce-input-wrapper"></span>');
-      $wrapper = $row.find(".woocommerce-input-wrapper").first();
+    if (!$input.length) {
+      const $any = $row.find(".woocommerce-input-wrapper").first();
+      return $any.length ? $any : $row;
     }
 
-    return $wrapper.length ? $wrapper : $row;
+    // The wrapper CONTAINING the input, never merely the row's first: a
+    // fragment swap can leave a stale empty wrapper ahead of the live one,
+    // and the affordance has to hang beside the input the buyer can see.
+    const $existing = $input.closest(".woocommerce-input-wrapper");
+    if ($existing.length) return $existing;
+
+    // selectWoo hides the <select> and renders its own container as a
+    // SIBLING of it, so a wrapper built around the input alone would leave
+    // the visible control outside the slot and the link above it.
+    const $widget = $input.nextAll(".select2-container").first();
+    const $wrapper = jQuery('<span class="woocommerce-input-wrapper"></span>');
+    $input.before($wrapper);
+    $wrapper.append($input).append($widget);
+    return $wrapper;
   }
 
   /**
@@ -4164,6 +4178,11 @@ let twoincSoleTrader = {
    */
   onModeChipClick: function (mode) {
     if (mode === "business") {
+      // On the CLICK, not the mousedown that usually precedes it: Enter/Space
+      // fire click alone, and the popup has to go for a keyboard buyer too
+      // (TWO-25503). Before the isDeciding() guard, since an outstanding
+      // signup is exactly what makes that guard refuse.
+      twoincSoleTrader.abandonPopupsForChipClick();
       // Same isDeciding() guard the real Business chip's own wiring uses,
       // so this shared entry point doesn't regress if called elsewhere.
       if (!twoincSoleTrader.isDeciding()) twoincSoleTrader.setMode("business");
@@ -4621,6 +4640,10 @@ let twoincSoleTrader = {
     // this plugin should depend on, so both are bound and the arming
     // guard below makes a duplicate harmless.
     twoincSoleTrader.visibilityHandler = function () {
+      // Fires on HIDE as well as show, and arming is coalesced onto the first
+      // caller — so arming here would spend the grace the buyer's actual
+      // return needs, leaving them a fraction of it or none.
+      if (document.visibilityState === "hidden") return;
       twoincSoleTrader.scheduleRefocusAbandon();
     };
     document.addEventListener("visibilitychange", twoincSoleTrader.visibilityHandler);
