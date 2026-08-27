@@ -27,9 +27,9 @@ function buildForm() {
     '    <option value="GB" selected>GB</option><option value="NO">NO</option>',
     "  </select>",
     '  <p id="billing_company_display_field">',
-    '    <select id="billing_company_display" name="billing_company_display">',
-    '      <option value="">&nbsp;</option>',
-    "    </select>",
+    '    <span class="woocommerce-input-wrapper">',
+    '      <input type="text" id="billing_company_display" name="billing_company_display" value="" />',
+    "    </span>",
     "  </p>",
     '  <p id="billing_company_field">',
     '    <span class="woocommerce-input-wrapper">',
@@ -65,7 +65,7 @@ describe("TWO-40 §5 — captured-company write path", () => {
   });
 
   afterEach(() => {
-    harness.releaseWidgets(ctx.$);
+    harness.releasePanel(ctx.helper);
     document.body.innerHTML = "";
   });
 
@@ -275,16 +275,15 @@ describe("TWO-40 §5 — captured-company write path", () => {
     });
   });
 
-  describe("the picker's own select handler", () => {
+  describe("the panel's own selection handler", () => {
     test("goes through the single write path", () => {
       const ajax = harness.stubAjax($);
+      // `onPick` is what the panel's `onSelect` callback calls with the row.
       ctx.Twoinc.getInstance().enableCompanySearch();
-      $("#billing_company_display").append(
-        '<option value="ACME Widgets Ltd" selected>ACME Widgets Ltd</option>'
-      );
-      $("#billing_company_display").trigger({
-        type: "select2:select",
-        params: { data: { id: "ACME Widgets Ltd", company_id: "12345678" } }
+      ctx.helper.onPick({
+        id: "ACME Widgets Ltd",
+        text: "ACME Widgets Ltd",
+        company_id: "12345678"
       });
       ajax.restore();
 
