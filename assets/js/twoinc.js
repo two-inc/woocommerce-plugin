@@ -556,6 +556,10 @@ class TwoCompanySearch {
   /** Class of the wrapper the panel anchors against. */
   fieldWrapClass = "two-company-field-wrap";
 
+  /** `window` is page-wide, so the viewport listener is bound at most once. */
+  fieldWrapRefreshBound = false;
+  fieldWrapRefreshTimer = null;
+
   /**
    * Sequence number of the most recently dispatched company-search request,
    * bumped by every country change too so a response for a country the buyer
@@ -881,11 +885,56 @@ class TwoCompanySearch {
     if (!panel) return null;
 
     panel.bind();
+    helper.syncFieldWrapMetrics();
+    helper.bindFieldWrapRefresh();
     twoincDomHelper.toggleTooltip(
       helper.companyFieldSelector(),
       window.twoinc.text.tooltip_company
     );
     return panel;
+  }
+
+  /**
+   * Pin the panel's wrapper to the INPUT's own box.
+   *
+   * The panel is positioned against the wrapper, which also carries the
+   * sole-trader link in normal flow — so a `100%` anchor drops the panel a
+   * link-height too low the moment one is adopted. The width pin is what makes
+   * the panel match the input rather than the row on a theme where the input
+   * has its own narrower intrinsic width.
+   */
+  syncFieldWrapMetrics() {
+    const helper = twoincSelectWooHelper;
+    const $field = jQuery(helper.companyFieldSelector());
+    const $wrap = $field.closest("." + helper.fieldWrapClass);
+    if (!$field.length || !$wrap.length) return;
+
+    const el = $wrap.get(0);
+    // Released before measuring, or the pin latches: the input fills this
+    // wrapper, so `outerWidth()` reads back whatever was pinned last time.
+    if (el.style.width) el.style.width = "";
+
+    const height = $field.outerHeight();
+    if (height) el.style.setProperty("--two-company-input-height", height + "px");
+    else el.style.removeProperty("--two-company-input-height");
+
+    const width = $field.outerWidth();
+    el.style.width = width ? width + "px" : "";
+  }
+
+  /**
+   * Keep those pins current across a viewport change, not only on the next
+   * re-bind — a buyer who rotates a tablet without typing would otherwise see
+   * the panel drift off the field.
+   */
+  bindFieldWrapRefresh() {
+    const helper = twoincSelectWooHelper;
+    if (helper.fieldWrapRefreshBound) return;
+    helper.fieldWrapRefreshBound = true;
+    jQuery(window).on("resize.twoCompanyWrap orientationchange.twoCompanyWrap", function () {
+      clearTimeout(helper.fieldWrapRefreshTimer);
+      helper.fieldWrapRefreshTimer = setTimeout(helper.syncFieldWrapMetrics, 150);
+    });
   }
 
   // ------------------------------------------------------------------ chips
@@ -4219,10 +4268,6 @@ class Twoinc {
     // Disable or enable actions based on the account type
     $body.on("updated_checkout", Twoinc.getInstance().onUpdatedCheckout);
 
-    // Nothing is dragged out of the payment fragment before WooCommerce
-    // replaces it: the tile's company-name row is plain markup that
-    // `syncCompanySearchTileLocation()` rebuilds on every `updated_checkout`.
-
     // A payment-method switch must re-DECIDE company-field visibility, not
     // just relocate whatever is already there (TWO-25326 bugfix, Doug
     // live-verified: the search control never appeared in the payment tile
@@ -4255,10 +4300,6 @@ class Twoinc {
       .on("change.twoincPaymentMethod", 'input[name="payment_method"]', function () {
         twoincDomHelper.toggleBusinessFields();
       });
-
-    // Manual entry's chip and #search_company_btn bind their own activation
-    // directly on the element: a delegated click from here was measured live
-    // not to reach that button (#30.x.13).
 
     // Handle the representative inputs blur event
     $body.on(

@@ -635,12 +635,16 @@
 /*
  * The 8px gap and the shadow are what make the panel read as a floating
  * control rather than a continuation of the input, matching PrestaShop.
- * The wrapper hugs the input alone, so `100%` is the input's own bottom edge.
+ *
+ * Anchored to the INPUT's height, not to `100%` of the wrapper: the wrapper
+ * also carries the sole-trader link in normal flow, so `100%` grows the moment
+ * one is adopted. `syncFieldWrapMetrics()` keeps the property current; the
+ * `100%` fallback is what a pre-measurement first paint gets.
  */
 .two-company-dropdown {
   position: absolute;
   z-index: 9999;
-  top: calc(100% + 8px);
+  top: calc(var(--two-company-input-height, 100%) + 8px);
   left: 0;
   right: 0;
   box-sizing: border-box;

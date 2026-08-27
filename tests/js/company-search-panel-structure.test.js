@@ -111,6 +111,74 @@ describe("company-capture panel structure", () => {
     expect(document.querySelectorAll(".two-company-field-wrap")).toHaveLength(1);
   });
 
+  test("a billing re-render re-binds the panel to the field that replaced it", () => {
+    ctx.helper.attach();
+    const before = document.querySelector("#billing_company_display");
+    ctx
+      .$("form[name='checkout']")
+      .append(
+        '<div class="payment_box"><div class="twoinc-company-search-tile-slot hidden"></div></div>'
+      );
+
+    // What core's `address-i18n.js` does to the billing wrapper on every load.
+    ctx
+      .$(".two-company-field-wrap")
+      .replaceWith(
+        '<input type="text" id="billing_company_display" name="billing_company_display" />'
+      );
+    ctx.helper.syncCompanySearchTileLocation();
+
+    const after = document.querySelector("#billing_company_display");
+    expect(after).not.toBe(before);
+    expect(ctx.helper.panel.getField()[0]).toBe(after);
+    expect(document.querySelectorAll(".two-company-dropdown")).toHaveLength(1);
+  });
+
+  describe("the wrapper is pinned to the input's own box", () => {
+    const FIELD_HEIGHT = 42;
+    const FIELD_WIDTH = 310;
+    let outerWidth;
+    let outerHeight;
+
+    beforeEach(() => {
+      // jsdom has no layout, so the measurements the pin reads have to come
+      // from somewhere; the row is deliberately WIDER than the input, which is
+      // the case the pin exists for.
+      outerWidth = ctx.$.fn.outerWidth;
+      outerHeight = ctx.$.fn.outerHeight;
+      ctx.$.fn.outerWidth = function () {
+        return this.is("#billing_company_display") ? FIELD_WIDTH : 640;
+      };
+      ctx.$.fn.outerHeight = function () {
+        return this.is("#billing_company_display") ? FIELD_HEIGHT : 96;
+      };
+    });
+
+    afterEach(() => {
+      ctx.$.fn.outerWidth = outerWidth;
+      ctx.$.fn.outerHeight = outerHeight;
+    });
+
+    test("it carries the input's height as the panel's anchor", () => {
+      ctx.helper.attach();
+
+      const wrap = document.querySelector(".two-company-field-wrap");
+      expect(wrap.style.getPropertyValue("--two-company-input-height")).toBe(FIELD_HEIGHT + "px");
+      expect(wrap.style.width).toBe(FIELD_WIDTH + "px");
+    });
+
+    test("a second pass re-measures rather than reading its own pin back", () => {
+      ctx.helper.attach();
+      ctx.$.fn.outerWidth = function () {
+        return this.is("#billing_company_display") ? 220 : 640;
+      };
+
+      ctx.helper.syncFieldWrapMetrics();
+
+      expect(document.querySelector(".two-company-field-wrap").style.width).toBe("220px");
+    });
+  });
+
   test("no selectWoo or select2 node is created for the company field", () => {
     ctx.helper.attach();
     ctx.helper.openCompanySearchDropdown();

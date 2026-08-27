@@ -1,5 +1,5 @@
 /**
- * TWO-25503 #26.3.3. WooCommerce replaces the whole `#payment` fragment on
+ * TWO-25503. WooCommerce replaces the whole `#payment` fragment on
  * every payment-method, coupon, shipping or quantity change, and once on every
  * page load. The tile's company-name row is rebuilt from state rather than
  * dragged out and back, so a replace costs nothing.
