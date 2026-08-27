@@ -2,17 +2,17 @@
  * TWO-25244, re-pinned for TWO-25503. The company-search transport in
  * assets/js/twoinc.js — `searchApi()` and `searchCompanies()`.
  *
- * The transport exists for one reason, unchanged by the panel replacing
- * selectWoo: a cancelled request and a timed-out one are indistinguishable by
- * jqXHR status — jQuery reports `status 0` for both — so the outcome has to be
- * decided from `textStatus`. Get that wrong and a timeout renders as "no
- * companies found", which is a wrong answer rather than a missing one.
+ * The transport exists for one reason: a cancelled request and a timed-out one
+ * are indistinguishable by jqXHR status — jQuery reports `status 0` for both —
+ * so the outcome has to be decided from `textStatus`. Get that wrong and a
+ * timeout renders as "no companies found", a wrong answer rather than a
+ * missing one.
  *
- * What changed is the shape, not the subject. `searchCompanies()` RESOLVES on
- * every outcome with one of three answers — `{items}`, `{aborted: true}`,
- * `{unavailable: true}` — and the panel decides what to paint from that. So the
- * three answers are asserted directly at the transport, and the rendering they
- * produce is asserted separately by driving the real panel.
+ * `searchCompanies()` RESOLVES on every outcome with one of three answers —
+ * `{items}`, `{aborted: true}`, `{unavailable: true}` — and the panel decides
+ * what to paint from that. So the three answers are asserted directly at the
+ * transport, and the rendering they produce separately, by driving the real
+ * panel.
  */
 
 "use strict";
@@ -532,16 +532,10 @@ describe("company search transport", () => {
     });
 
     test("the spinner is painted with the animated loading image", () => {
-      // Everything else here pins markup, which stays green whether the spinner
-      // paints anything at all — the earlier attempt on this ticket shipped a
-      // node that rendered nothing visible with the suite green. So resolve the
-      // real stylesheet and read back what the node paints.
-      //
-      // Two halves, both needed: the computed rule proves the CSS points at the
-      // asset, and the existence check proves the asset is in the tree. A
-      // correct url() aimed at a missing file satisfies the first on its own,
-      // so the URL is resolved relative to the stylesheet's own directory
-      // exactly as a browser would rather than spelled out here.
+      // Markup assertions stay green for a node that paints nothing, and a
+      // correct url() aimed at a missing file is equally invisible — so the
+      // rule and the asset's existence are both read back from the real
+      // stylesheet, the URL resolved the way a browser would.
       harness.injectStylesheet();
       typeQuery("kaffe");
 

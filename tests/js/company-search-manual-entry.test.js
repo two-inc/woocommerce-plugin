@@ -3,12 +3,11 @@
  *
  * The affordance is now the `manual` mode chip inside the company-capture
  * popover: a real `<button>` sitting in `.two-company-mode-chips`, the panel's
- * third and last child, after the query row and the results host. Because the
- * panel is a DOM child of the wrapper around the company-name input rather
- * than a body-appended layer, everything the old select2 build needed custom
- * key handling for — reaching the chip without walking 50 result rows, leaving
- * the dropdown by Tab, nothing being a tab stop while closed — is the
- * browser's own tab order acting on the DOM order this suite asserts.
+ * third and last child, after the query row and the results host. The panel is
+ * a DOM child of the wrapper around the company-name input, so reaching the
+ * chip, leaving the dropdown by Tab and nothing being a tab stop while closed
+ * are all the browser's own tab order acting on the DOM order this suite
+ * asserts, with no key handling of the plugin's own.
  *
  * The real panel is used throughout: the chip's position relative to the
  * results host, and what closing does to the whole subtree, are properties of
@@ -193,10 +192,8 @@ describe("company-search manual-entry affordance", () => {
     });
 
     test("still there after a company has been captured and the panel reopened", () => {
-      // The regression Doug found live on 2026-08-02. A capture gate used to
-      // remove the affordance as soon as the display field held a value, so a
-      // buyer who picked the wrong company and reopened to correct it had no
-      // route into manual entry at all.
+      // A buyer who picked the wrong company reopens to correct it, so the
+      // route into manual entry must survive a capture (live, 2026-08-02).
       openPanel();
       expect(btn().length).toBe(1);
 
@@ -269,9 +266,7 @@ describe("company-search manual-entry affordance", () => {
     });
 
     test("the tab order runs query field, then results, then chips", async () => {
-      // What replaces the old Tab shortcut: result rows are plain <div>s with
-      // no tabindex, so the browser skips them, and the chips follow in DOM
-      // order — no key handling needed for Tab to reach them.
+      // Result rows carry no tabindex, so Tab skips them and lands on the chips.
       jest.useFakeTimers();
       openPanel();
       await search("abc", [{ name: "A company", national_identifier: { id: "12345678" } }]);
@@ -547,9 +542,8 @@ describe("company-search manual-entry affordance", () => {
     });
 
     test("the button sits in normal flow below the input, not absolutely positioned over it (#30.x.9)", () => {
-      // Reported live: the button used to be centred vertically against
-      // `.woocommerce-input-wrapper`, which put it ON TOP of the input. Doug's
-      // ruling: normal block flow below the field, right-aligned.
+      // Doug's ruling (#30.x.9): normal block flow below the field,
+      // right-aligned — never absolutely positioned over the input.
       harness.injectStylesheet();
 
       jest.useFakeTimers();
@@ -637,9 +631,7 @@ describe("company-search manual-entry affordance", () => {
     });
 
     test("a right click (mouseup, button 2) does not activate it", () => {
-      // The bug this replaces: select2's own result-row `mouseup` binding had
-      // no button check, so a right click fired the same activation a left one
-      // did. A real <button>'s `click` never fires for a non-primary button.
+      // A real `<button>`'s `click` never fires for a non-primary button.
       openPanel();
       ctx.Twoinc.getInstance();
       type("abc");
@@ -680,9 +672,8 @@ describe("company-search manual-entry affordance", () => {
     });
 
     test("the panel is closed and the field handed back, not left live behind manual entry", () => {
-      // #30.x.13: a control left live while the buyer types into a different
-      // field is what made Tab unresponsive page-wide under select2. The
-      // panel's own openers have to come off the field with it.
+      // #30.x.13: a control left live over a field the buyer has moved on from
+      // makes Tab unresponsive page-wide.
       openPanel();
       expect($("#billing_company_display").attr("role")).toBe("combobox");
 
@@ -926,12 +917,8 @@ describe("company-search manual-entry affordance", () => {
     });
 
     test("a real click activates the way back out even detached from the document (#30.x.13)", () => {
-      // Live-reported: clicking #search_company_btn did nothing on the real
-      // checkout while Enter on the same button worked. It used to be a
-      // delegated `$body.on("click", ...)` handler, which only fires via
-      // bubbling — an element with no parent cannot bubble anywhere, so
-      // detaching it is what distinguishes a delegated binding from a direct
-      // one without needing a real browser.
+      // Detached, so only a handler bound on the element itself can fire — a
+      // delegated one has nothing left to bubble through.
       openPanel();
       jest.useFakeTimers();
       type("abc");
@@ -1013,10 +1000,8 @@ describe("company-search manual-entry affordance", () => {
       ["Enter", 13],
       ["Space", 32]
     ])("%s activates the button and switches back to search", (name, which) => {
-      // Found live: Tab reaches this real <button> fine, but Enter/Space did
-      // nothing — some other script on the checkout swallows the native button
-      // activation, so this button binds its own keydown directly on the
-      // element, which target-then-bubble dispatch runs before any ancestor's.
+      // Bound directly on the element: something else on the checkout swallows
+      // the native button activation before Enter/Space reach it (live).
       jest.useFakeTimers();
       openPanel();
       ctx.Twoinc.getInstance();
@@ -1228,12 +1213,8 @@ describe("company-search manual-entry affordance", () => {
     });
 
     test("a deferred manual-entry activation that lands AFTER an async sole-trader switch does not stomp it (#30.x.13)", () => {
-      // Real race: `activateManualEntry` defers the mode switch a tick, and
-      // the hosted signup's ACCEPTED handler reaches `setMode("sole_trader")`
-      // asynchronously and independently. If that lands first, the stale
-      // deferred callback would otherwise force the capture mode back to
-      // `manual` — wrong, since sole trader needs `#company_id_field` for its
-      // synthetic id — and wipe the fields out from under it.
+      // The signup's ACCEPTED handler reaches `setMode("sole_trader")`
+      // independently, and can land inside the tick this activation defers.
       jest.useFakeTimers();
       openPanel();
       type("abc");
@@ -1329,11 +1310,8 @@ describe("company-search manual-entry affordance", () => {
 
   describe("a checkout re-render while the buyer is in manual entry", () => {
     test("rebuilds no popover around the field manual entry released", () => {
-      // The address-placement re-bind runs on every `updated_checkout` so a
-      // theme that re-renders the billing fields cannot strand the panel on a
-      // detached node. Manual entry is exempt: the field is the buyer's own
-      // plain input, and re-taking it puts the popover back over what they are
-      // typing.
+      // Manual entry is exempt from the `updated_checkout` re-bind: re-taking
+      // the field puts the popover back over what the buyer is typing.
       $("form[name='checkout']").append(
         '<div class="payment_box"><div class="twoinc-company-search-tile-slot hidden"></div></div>'
       );

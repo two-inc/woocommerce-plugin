@@ -75,15 +75,9 @@ describe("API key verification — categorized failure display", () => {
     expect($("#twoinc-merchant-info").css("display")).toBe("none");
   });
 
-  // Regression guards on the localisation contract, NOT evidence for the brand
-  // fix: the brand is resolved in PHP (WC_Twoinc::get_api_key_notices()
-  // interpolates WC_Twoinc_Brand::get('product_name')), and these three pass
-  // against pre-fix admin.js too, because preferring the localized copy over
-  // the literal is behaviour it already had. What they pin is that it keeps
-  // doing so — a future literal creeping back in front of a `notices.X` lookup
-  // would show an overlay's admin the wrong brand, and nothing else would see
-  // it. The brand resolution itself is covered by the PHP suite's
-  // testApiKeyNoticesUseOverlayProductNameNotTwo.
+  // The localisation contract only: a literal creeping back in front of a
+  // `notices.X` lookup shows an overlay's admin the wrong brand, and nothing
+  // else would see it. Brand resolution itself is the PHP suite's.
   describe("admin.js renders the localized copy, not a literal of its own", () => {
     const OVERLAY_NOTICES = {
       invalid_key: "This API key is invalid or has expired.",

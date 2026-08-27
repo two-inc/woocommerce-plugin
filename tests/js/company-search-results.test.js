@@ -206,11 +206,9 @@ describe("company search results", () => {
  * before it can search: one on the closed company field, one while the typed
  * term is below the threshold.
  *
- * Both strings are plugin-owned and translatable. The min-chars one used to be
- * borrowed from WooCommerce core's `wc_country_select_params`, whose copy counts
- * down the REMAINING characters — so the same field told the buyer "1 or more"
- * after two keystrokes. These tests pin the fixed-number behaviour and the
- * single-source-of-truth wiring, not just the wording.
+ * Both strings are plugin-owned and translatable, and the min-chars one names a
+ * fixed number rather than counting down the remaining characters. These pin
+ * that and the single-source-of-truth wiring, not just the wording.
  */
 describe("company search hints", () => {
   let ctx;
@@ -325,12 +323,10 @@ describe("company search hints", () => {
   });
 
   /**
-   * The empty-field hint must never be mistaken for a company the buyer chose.
-   * It reached `#billing_company` once already — which is POSTED WITH THE ORDER
-   * — because the old control rendered the hint as an element child of the node
-   * `saveCheckoutInputs()` snapshots. It is a `placeholder` attribute now, so
-   * the snapshot has nothing to read, and these pin that outcome rather than
-   * the mechanism that used to break it.
+   * The empty-field hint must never be mistaken for a company the buyer chose:
+   * `#billing_company` is POSTED WITH THE ORDER, and `saveCheckoutInputs()`
+   * snapshots it. A `placeholder` attribute leaves that snapshot nothing to
+   * read.
    */
   describe("the empty-field hint and the saved-input snapshot", () => {
     afterEach(() => {
@@ -394,16 +390,9 @@ describe("company search hints", () => {
     });
 
     test("is not written into the company field posted with the order", async () => {
-      // The assertion that matters, and driven through the plugin's own
-      // page-load bootstrap rather than a copy of its logic: that bootstrap's
-      // deferred "init the hidden Company name field" step is what reads the
-      // snapshot and writes #billing_company.
-      //
-      // Real timers, and awaited rather than advanced. jQuery runs its ready
-      // callbacks — the bootstrap among them — on a macrotask, so installing
-      // fake timers before yielding freezes the bootstrap before it has
-      // registered anything for a fake clock to advance. The wait covers that
-      // macrotask plus the bootstrap's own one-second defer.
+      // Real timers, awaited: jQuery runs its ready callbacks — the bootstrap
+      // that reads the snapshot among them — on a macrotask, which fake timers
+      // installed first would freeze before it registers anything.
       snapshotUntouchedField();
       await new Promise((resolve) => setTimeout(resolve, 1200));
 
@@ -447,14 +436,9 @@ describe("company search hints", () => {
     });
 
     test("leaves the min-chars placeholder for the browser to resolve", () => {
-      // A %d resolved in PHP would put the claimed minimum out of reach of the
-      // constant the control enforces — the drift this design prevents.
-      //
-      // The negative below is not enough on its own: it also passes if PHP grows
-      // a sprintf() around the string, since the literal in the source would
-      // still read "%d". So assert positively that the value PHP registers into
-      // the `text` array still carries an unresolved placeholder by the time it
-      // is emitted.
+      // A %d resolved in PHP would drift from the constant the control enforces.
+      // Asserted positively as well as negatively: a sprintf() wrapped around
+      // the string leaves the source literal reading "%d" either way.
       expect(checkout).not.toMatch(/'company_search_too_short' *=> *__\('Please enter \d/);
       const emitted = checkout.match(/'company_search_too_short' *=> *([^\n]*),\n/);
 

@@ -225,8 +225,8 @@ describe("TWO-40 §5 — captured-company write path", () => {
     });
 
     test("a restored user-meta capture survives the buyer's first keystroke elsewhere", () => {
-      // The regression the helper exists to prevent: user-meta restore used to
-      // write both fields raw, leaving an untagged pair the guard then wiped.
+      // A restore that wrote both fields raw would leave an untagged pair the
+      // retype guard then wipes.
       ctx.twoinc.billing_company = "ACME Widgets Ltd";
       ctx.twoinc.company_id = "12345678";
       ctx.dom.loadUserMetaInputs();
@@ -344,11 +344,8 @@ describe("TWO-40 §5 — captured-company write path", () => {
     });
 
     test("a plugin-written name is dropped by a country change, a typed one is not", () => {
-      // The provenance marker's production consumer (TWO-40 §5).
-      // `clearSelectedCompany` used to gate this on the capture-mode flag,
-      // which got the sole-trader case wrong: that name is plugin-written but
-      // reaches the clear with the flag reading "no", so it survived a country
-      // change that had already taken its organisation number.
+      // The provenance marker's production consumer (TWO-40 §5): a sole trader's
+      // name is plugin-written, whatever the capture-mode flag reads.
       capture.write("Sole Trader Co", "TWO:ST12345");
       ctx.helper.clearSelectedCompany();
       expect($("#billing_company").val()).toBe("");

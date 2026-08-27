@@ -236,14 +236,9 @@ describe("deferred company-search initialisation", () => {
   });
 
   test("the deferred pass early-returns outside search capture mode", () => {
-    // The `twoincCompanyCapture.mode !== "search"` early return sits ABOVE the
-    // first use of the receiver, so the unbound call never dereferenced anything
-    // in manual entry. Those buyers were unaffected by the bug and must stay
-    // unaffected by the fix — no control may appear on the timer.
-    //
-    // Driven off the capture mode rather than `enable_company_search` (#486):
-    // that setting never suppressed the control in the first place, it only ever
-    // relocated it, and it is no longer mutated at runtime at all.
+    // Manual entry must stay untouched by the retry — no control may appear on
+    // the timer. Gated on the capture mode, never on `enable_company_search`,
+    // which only relocates the control (#486).
     ctx.capture.mode = "manual";
 
     const enableCalls = witnessEnableCalls(ctx.Twoinc);

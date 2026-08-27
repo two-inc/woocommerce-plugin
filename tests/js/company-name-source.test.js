@@ -150,9 +150,8 @@ describe("getCompanyName reads the posted field (#486)", () => {
   });
 
   describe("the merchant's admin setting is never mutated at runtime", () => {
-    // The invariant the whole refactor buys, and the one a regression would
-    // quietly undo: `enable_company_search` reaching JS is merchant
-    // configuration. Every mode transition below used to write to it.
+    // `enable_company_search` reaching JS is merchant configuration; no mode
+    // transition may write to it.
     test.each([
       {
         description: "entering manual entry",

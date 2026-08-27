@@ -354,22 +354,10 @@ describe("TWO:-prefixed organisation numbers", () => {
 
   describe("the minted number never reaches the buyer", () => {
     /**
-     * The configuration that used to be §12's problem case: a billing country
-     * with no supported registry, so there is nothing to search and the plain
-     * native name field is what captures the company. That state used to also
-     * show `#company_id` as an editable box, which is how a `TWO:…` value ended
-     * up on screen at all.
-     *
-     * As of 2026-08-19 (Doug, #486) `#company_id_field` is never visible in any
-     * mode or country — the number is a read-only label instead — so §12's
-     * guarantee no longer rests on hiding a field. What these tests pin now is
-     * the other half, which is the half that must not regress: the value stays
-     * on the submitted input, and no surface renders it.
-     *
-     * This fixture used to be driven by `enable_company_search: "no"`. That was
-     * never a real state: the admin checkbox only relocates the search control
-     * (TWO-25326 §7.1), so PHP always sends `'yes'`, and the runtime mutation
-     * that made the fixture "work" is gone.
+     * A billing country with no supported registry: nothing to search, so the
+     * plain native name field captures the company. §12's guarantee is pinned
+     * from both ends here — the minted number stays on the submitted input, and
+     * no surface renders it.
      */
     function loadWithNoRegistry() {
       ctx = harness.loadTwoinc({
@@ -500,14 +488,9 @@ describe("TWO:-prefixed organisation numbers", () => {
         expect($("#company_id_field").hasClass("hidden")).toBe(true);
       });
 
-      // No equivalent for loadStorageInputs(): that replay is deliberately
-      // NOT made to re-toggle. It runs from initialize() before the country
-      // configuration is guaranteed to be populated (an existing suite drives
-      // it with a minimal fixture and toggleBusinessFields() throws there), and
-      // it only ever replays the current session's own inputs — which the
-      // capture path that produced them has already toggled for. The
-      // cross-visit case, which is the one that actually persists a minted
-      // identifier, is the user-meta pass covered above.
+      // No equivalent for loadStorageInputs(): it runs before the country
+      // configuration is guaranteed populated, and replays only this session's
+      // own inputs, which their capture path has already toggled for.
     });
   });
 });

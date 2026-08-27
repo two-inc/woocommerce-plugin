@@ -246,10 +246,8 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     });
 
     test("the company search's own spinner and the sole-trader one do not share a node", () => {
-      // They used to, arbitrated by a two-owner hold, because both painted in
-      // the query row: whichever settled first hid it under the other. Two
-      // nodes in two fields is what removed that contention — asserted so a
-      // future round cannot quietly put them back in one place.
+      // One node in one field would leave whichever spinner settles first
+      // hiding the other.
       const ajax = harness.stubAjax($);
       harness.openCompanyPanel($, ctx.helper);
       typeQuery("acme");
@@ -1000,14 +998,10 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     });
 
     describe("item 2 — a sole trader restored by loadUserMetaInputs (live-reported by Doug)", () => {
-      // The regression: `loadUserMetaInputs()` (a returning buyer's LAST
-      // captured company, restored from user meta) writes straight through
-      // `twoincCompanyCapture.write()`, never through `setCompany()` — the
-      // only place `mode`/`soleTraderAdopted` get set and the link gets
-      // synced. The company populated correctly; the link just never
-      // appeared, and a re-signup completing later would have been silently
-      // dropped by `bindPopupMessageListener`'s own `mode !== "sole_trader"`
-      // gate.
+      // `loadUserMetaInputs()` writes through `twoincCompanyCapture.write()`,
+      // never `setCompany()` — the only place mode/adoption and the link are
+      // set — so without its own sync a restored sole trader has no route back
+      // into signup, and `bindPopupMessageListener` would drop the result.
       test("a restored TWO:-prefixed id shows the link", () => {
         ctx.twoinc.billing_company = "A Sole Trader";
         ctx.twoinc.company_id = "TWO:ST12345";
@@ -1257,12 +1251,8 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
 
       /**
        * The chip ALWAYS opens the hosted signup and populates nothing itself,
-       * whatever the email field happens to hold (Doug 2026-08-21: a company
-       * may only ever be filled in by the buyer's own trip through that flow,
-       * so this chip has no conditional fast path — WC behaving as PrestaShop
-       * does). Every row here used to resolve differently, off a passive
-       * email-driven autofill probe against the Two session cookie; the first
-       * one adopted a company outright with no popup at all.
+       * whatever the email field holds (Doug 2026-08-21: a company may only
+       * ever be filled in by the buyer's own trip through that flow).
        */
       test.each([
         ["an email Two recognises", "buyer@example.test"],
@@ -1390,12 +1380,9 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       });
 
       /**
-       * "Flow complete" is the WRITE, not the popup closing and not the
-       * response landing (Doug 2026-08-20). The ordinary path is the one that
-       * proves it: the hosted flow closes its own window the instant it posts
-       * ACCEPTED, so the popup is long gone by the time `fetchCurrentBuyer`
-       * resolves — and this used to settle the flight before the company name
-       * and number were written, so the spinner came down over empty fields.
+       * "Flow complete" is the WRITE, not the popup closing and not the response
+       * landing (Doug 2026-08-20): the hosted flow closes its own window the
+       * instant it posts ACCEPTED, long before `fetchCurrentBuyer` resolves.
        */
       test("the spinner outlives the popup close, coming down only once the company is written", () => {
         harness.openCompanyPanel($, ctx.helper);
@@ -1625,11 +1612,8 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       });
 
       /**
-       * The regression #499 shipped (TWO-25503, F1). A background focus used to
-       * spend the 150ms grace on a close that the gate then refused, and the
-       * chip handler keyed off that same timer — so from then until another
-       * window `focus` arrived, NOTHING could take the popup down, chips
-       * included. Arming is refused now instead of closing being refused.
+       * TWO-25503 F1: a background focus must not spend the 150ms grace on a
+       * close the gate then refuses — the chip handler keys off that same timer.
        */
       test("a background focus leaves the chip path able to close the popup", () => {
         openWidgetWithChips();
@@ -2382,11 +2366,9 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
           });
 
           /**
-           * Doug 2026-08-20, live: the row-visibility half already worked, but
-           * the dropdown closed anyway — `setMode("business")` destroys this
-           * widget and re-attaches a fresh, CLOSED one, so the chip the buyer
-           * clicked took the whole panel down and the un-hidden row was on a
-           * dropdown that no longer existed.
+           * `setMode("business")` re-attaches a fresh, CLOSED widget, so an
+           * un-hidden query row is worth nothing without the panel around it
+           * (Doug 2026-08-20, live).
            */
           test("clicking Registered company leaves the dropdown open with focus in the query field", () => {
             harness.openCompanyPanel($, ctx.helper);
@@ -2442,10 +2424,8 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
           });
 
           /**
-           * The row used to be given back for the duration of a flight, purely
-           * so the spinner had somewhere to paint. Now the spinner paints over
-           * the company-NAME field, so nothing about a flight makes this row
-           * relevant again (Doug 2026-08-20).
+           * The flight spinner paints over the company-NAME field, so a flight
+           * gives no reason to hand this row back (Doug 2026-08-20).
            */
           test("a re-signup flight from an adopted state leaves the row hidden throughout", () => {
             soleTrader.setMode("sole_trader");
@@ -2462,10 +2442,9 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
           });
 
           /**
-           * Doug 2026-08-20: the hide used to need a close-and-reopen, because
-           * only the open re-synced it — a buyer clicking the chip with
-           * the dropdown already open (which is where the chip LIVES) sat
-           * looking at a search box that no longer searched for their company.
+           * The chip LIVES in the open dropdown, so a hide that only the next
+           * open re-syncs leaves the buyer looking at a dead search box
+           * (Doug 2026-08-20).
            */
           test("clicking the Sole trader chip hides the row immediately, with no reopen", () => {
             harness.injectStylesheet();

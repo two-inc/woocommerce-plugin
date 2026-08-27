@@ -1,13 +1,10 @@
 /**
  * Company-search focus trap (TWO-25288 follow-up, re-pinned for TWO-25503).
  *
- * The old control appended its dropdown to `<body>`, so Tab out of it landed
- * nowhere useful and a polling focus-fix dragged the buyer back into the search
- * field for seconds after they had deliberately left. The panel replaces both:
- * it is a child of the company field's own wrapper, so the browser's native tab
- * order walks field -> query -> results -> chips with no key handling, and
- * `hidden` on the closed panel keeps every one of those out of the tab order
- * until the buyer opens it.
+ * The panel is a child of the company field's own wrapper, so the browser's
+ * native tab order walks field -> query -> results -> chips with no key
+ * handling of the plugin's own, and `hidden` on the closed panel keeps every
+ * one of those out of the tab order until the buyer opens it.
  *
  * So the subject is unchanged — the buyer's own navigation wins — but it is now
  * satisfied by structure, and that is what these assert.
