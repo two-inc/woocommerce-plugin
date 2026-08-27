@@ -21,13 +21,9 @@
      * cloning static markup from this view would leave that page with no
      * way into manual entry and no way back out.
      *
-     * The chip is a real <button>, sibling of the results list rather than
-     * a row inside it (TWO-40 §0): a pseudo-option <li> inside the results
-     * list was tried first for arrow-key reachability, but that list is
-     * exactly what select2/selectWoo apply scroll-and-clip to (the row was
-     * only visible after scrolling past however many results came back),
-     * and selectWoo's option-activation binds on `mouseup` with no mouse
-     * button check, so a right click activated it same as a left click.
+     * The chip is a real <button>, a sibling of the results list rather than
+     * a row inside it (TWO-40 §0), so it stays reachable without scrolling
+     * past however many results came back.
      */
     ?>
 </div>

@@ -2833,7 +2833,7 @@ let twoincSoleTrader = {
     if (twoincSoleTrader.flightDepth === 1) {
       // The note slot and the chip group — the two places busy state is
       // ever visible.
-      jQuery(".twoinc-sole-trader-note-slot, .twoinc-mode-chips").addClass(
+      jQuery(".twoinc-sole-trader-note-slot, .two-company-mode-chips").addClass(
         "twoinc-sole-trader-toggle--busy"
       );
     }
@@ -2860,7 +2860,7 @@ let twoincSoleTrader = {
   settleFlight: function () {
     twoincSoleTrader.flightDepth = Math.max(0, twoincSoleTrader.flightDepth - 1);
     if (twoincSoleTrader.flightDepth === 0) {
-      jQuery(".twoinc-sole-trader-note-slot, .twoinc-mode-chips").removeClass(
+      jQuery(".twoinc-sole-trader-note-slot, .two-company-mode-chips").removeClass(
         "twoinc-sole-trader-toggle--busy"
       );
       if (twoincSoleTrader.closeDropdownOnSettle) {
