@@ -3097,30 +3097,28 @@ let twoincSoleTrader = {
       twoincSoleTrader.soleTraderAdopted = false;
       twoincSoleTrader.soleTraderReconfirmingCount = 0;
     }
-    twoincSoleTrader.updateChips();
-    twoincSoleTrader.syncDifferentSoleTraderLink();
-    // Before the branch below, so a chip click made while the dropdown is
-    // already open hides the query row in the click's own gesture — the
-    // business branch destroys this dropdown a few lines down, so the
-    // restore has to happen while the row still exists.
-    twoincSelectWooHelper.syncSoleTraderSurfaces();
-
     if (mode === "sole_trader") {
       // Sole trader is its own company-capture mode: it renders through the
-      // picker but carries a synthetic id, so neither manual entry nor an
-      // ordinary registry pick's surfaces are right for it. Snapshotted
-      // first so it can be restored on the way out.
+      // panel but carries a synthetic id, so neither manual entry nor an
+      // ordinary registry pick's surfaces are right for it. Snapshotted first
+      // so it can be restored on the way out, and written BEFORE the chip sync
+      // below — `selectedMode()` reads both axes, and manual entry wins the tie.
       if (twoincSoleTrader.savedCaptureMode === null) {
         twoincSoleTrader.savedCaptureMode = twoincCompanyCapture.mode;
       }
       twoincCompanyCapture.mode = "sole_trader";
-      // The search widget teardown is deliberately NOT done here: tearing
-      // it down the instant mode switches would destroy the dropdown before
-      // the autofill round trip (or the signup popup it can lead to) has
-      // had a chance to run — the window `beginFlight()` says the
-      // dropdown+spinner must survive. `lockCapturedFields()` does this
-      // instead, once `setCompany()` actually has a company to show.
-    } else {
+    }
+
+    twoincSoleTrader.updateChips();
+    twoincSoleTrader.syncDifferentSoleTraderLink();
+    // Before the branch below, so a chip click made while the panel is already
+    // open hides the query row in the click's own gesture.
+    twoincSelectWooHelper.syncSoleTraderSurfaces();
+
+    // Nothing is torn down on the way IN: the panel and its spinner have to
+    // survive the autofill round trip and the signup popup it can lead to.
+    // `lockCapturedFields()` closes the panel once there is a company to show.
+    if (mode !== "sole_trader") {
       twoincSoleTrader.leaveSoleTraderMode();
       twoincSoleTrader.setCompany("", "");
       twoincDomHelper.toggleBusinessFields();
