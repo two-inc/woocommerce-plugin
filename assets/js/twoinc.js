@@ -1836,11 +1836,11 @@ let twoincDomHelper = {
     // manual entry takes it away, handing the name over to the native field,
     // and is reachable only via `enterManualCompanyEntry` — never as a side
     // effect of Two being unavailable, of the merchant's admin setting, or of
-    // the billing country (TWO-25232: the control is mounted for every
-    // country; a country with no registry to search degrades inside the
-    // widget, via its "search unavailable" message and manual-entry chip).
-    // WHERE the control renders is `company_search_location`'s business,
-    // below; never whether it's active.
+    // the billing country: the control is mounted for every country
+    // (TWO-25232), and a country the lookup returns nothing for reports that
+    // through the dropdown like any other empty search. WHERE the control
+    // renders is `company_search_location`'s business, below; never whether
+    // it's active.
     const showCompanySearch = twoincCompanyCapture.mode !== "manual";
 
     // `#company_id_field` is never in `visibleTargets`, in any mode: the
