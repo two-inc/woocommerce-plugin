@@ -1,21 +1,16 @@
 /**
- * Company-search focus trap (TWO-25288 follow-up).
+ * Company-search focus trap (TWO-25288 follow-up, re-pinned for TWO-25503).
  *
- * `waitToFocus` polls to land focus in the dropdown's search field after
- * `select2:open`, because the picker's own focus-on-open does not land
- * reliably on every host theme. The poll used to run for its full window
- * (up to ~4.8s from `select2:open`, up to ~12.8s from a results re-render,
- * per `addSelectWooFocusFixHandler`) regardless of what happened after it
- * was scheduled — including the buyer deliberately Tabbing to a completely
- * different field. Each tick only checked "is the search input focused?",
- * never "is the dropdown even still open?", so a buyer who tabbed away
- * got yanked back into the search field until the poll's hit count ran
- * out or they hit Esc (which destroys the dropdown and its search input,
- * so the selector the poll uses stops matching anything).
+ * The old control appended its dropdown to `<body>`, so Tab out of it landed
+ * nowhere useful and a polling focus-fix dragged the buyer back into the search
+ * field for seconds after they had deliberately left. The panel replaces both:
+ * it is a child of the company field's own wrapper, so the browser's native tab
+ * order walks field -> query -> results -> chips with no key handling, and
+ * `hidden` on the closed panel keeps every one of those out of the tab order
+ * until the buyer opens it.
  *
- * These tests drive the REAL selectWoo widget (see wc-harness) so the
- * dropdown's actual open/close state is what is being asserted against,
- * not a mock of it.
+ * So the subject is unchanged — the buyer's own navigation wins — but it is now
+ * satisfied by structure, and that is what these assert.
  */
 
 "use strict";
@@ -48,59 +43,110 @@ describe("company-search focus trap", () => {
   afterEach(() => {
     jest.clearAllTimers();
     jest.useRealTimers();
-    harness.releaseWidgets($);
+    harness.releasePanel(helper);
     document.body.innerHTML = "";
   });
 
-  test("tabbing away from an open dropdown keeps focus on the field the buyer tabbed to", () => {
-    const $select = harness.openCompanyWidget($, helper);
+  /** @returns {Array<Element>} the control's parts, in document order */
+  function controlNodes() {
+    return [
+      document.querySelector("#billing_company_display"),
+      document.querySelector(".two-company-dropdown__query"),
+      document.querySelector(".two-company-dropdown__results"),
+      document.querySelector(".two-company-mode-chips")
+    ];
+  }
 
-    // Mirrors enableCompanySearch's own select2:open wiring: schedule the
-    // focus poll the way production code does.
-    helper.waitToFocus("billing_company_display", null, null);
+  test("tabbing away from an open panel keeps focus on the field the buyer tabbed to", () => {
+    harness.openCompanyPanel($, helper);
 
-    // Let the poll's first tick or two land, same as it would while the
-    // buyer is still looking at the freshly-opened dropdown.
-    jest.advanceTimersByTime(300);
+    const query = document.querySelector(".two-company-dropdown__query");
+    expect(document.activeElement).toBe(query);
 
-    const $searchInput = $('input[aria-owns="select2-billing_company_display-results"]');
-    expect($searchInput.length).toBe(1);
-    expect(document.activeElement).toBe($searchInput.get(0));
-
-    // The buyer tabs to a completely different field. Note the picker does
-    // NOT consider itself closed just because native focus moved elsewhere
-    // (`isOpen()` stays true here) — which is exactly why the poll cannot
-    // rely on the picker's own open/closed state and must look at
-    // `document.activeElement` directly.
     $("#billing_company").get(0).focus();
     expect(document.activeElement).toBe($("#billing_company").get(0));
 
-    // Run the poll's remaining window (up to 16 ticks * 300ms = 4.8s).
+    // Nothing may schedule a focus nudge behind the buyer's back.
     jest.advanceTimersByTime(5000);
 
-    // The buyer's own navigation must win: focus stays on #billing_company,
-    // not yanked back into the (closed) dropdown's search field.
     expect(document.activeElement).toBe($("#billing_company").get(0));
   });
 
-  test("the re-render-triggered poll (addSelectWooFocusFixHandler) is scoped the same way", () => {
-    const $select = harness.openCompanyWidget($, helper);
-    helper.addSelectWooFocusFixHandler("billing_company_display");
+  test("a results re-render does not pull focus back into the panel", async () => {
+    harness.openCompanyPanel($, helper);
+    const ajax = harness.stubAjax($);
+    const query = document.querySelector(".two-company-dropdown__query");
+    query.value = "example";
+    query.dispatchEvent(new window.Event("input", { bubbles: true }));
+    jest.advanceTimersByTime(helper.companySearchDebounceMs);
 
-    // Simulate a results re-render adding a node under the results list,
-    // which is what the MutationObserver in addSelectWooFocusFixHandler
-    // reacts to by scheduling its own (80-hit, 20ms) waitToFocus poll.
-    const $results = $("#select2-billing_company_display-results");
-    $results.append('<li class="select2-results__option">Example Co</li>');
-
-    jest.advanceTimersByTime(40);
-
-    // Buyer tabs away.
     $("#billing_company").get(0).focus();
-
-    // Run well past the 80 * 20ms = 1.6s window this poll would otherwise run for.
+    ajax.last().succeed({ items: [{ name: "Example Co", highlight: "Example Co" }] });
+    await Promise.resolve();
+    await Promise.resolve();
     jest.advanceTimersByTime(2000);
 
+    // Positive control: a fixture that rendered no rows would satisfy the
+    // focus assertion without exercising the re-render at all.
+    expect(document.querySelectorAll(".two-company-dropdown__row")).toHaveLength(1);
     expect(document.activeElement).toBe($("#billing_company").get(0));
+    ajax.restore();
+  });
+
+  test("the whole control is one contiguous run, in reading order", () => {
+    helper.attach();
+
+    const stops = controlNodes();
+    stops.forEach((node) => expect(node).not.toBeNull());
+    for (let i = 0; i < stops.length - 1; i++) {
+      // DOCUMENT_POSITION_FOLLOWING.
+      expect(stops[i].compareDocumentPosition(stops[i + 1]) & 4).toBeTruthy();
+    }
+    // Nothing of the control sits outside the wrapper the field is in.
+    const wrap = document.querySelector(".two-company-field-wrap");
+    stops.slice(1).forEach((node) => expect(wrap.contains(node)).toBe(true));
+  });
+
+  test("a closed panel is out of the tab order entirely", () => {
+    helper.attach();
+    const panel = document.querySelector(".two-company-dropdown");
+
+    expect(panel.hasAttribute("hidden")).toBe(true);
+
+    helper.openCompanySearchDropdown();
+    expect(panel.hasAttribute("hidden")).toBe(false);
+
+    helper.closeCompanySearchDropdown();
+    expect(panel.hasAttribute("hidden")).toBe(true);
+  });
+
+  test("Escape closes the panel and hands focus back to the field", () => {
+    harness.openCompanyPanel($, helper);
+    const query = document.querySelector(".two-company-dropdown__query");
+
+    query.dispatchEvent(
+      new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })
+    );
+
+    expect(helper.companySearchDropdownIsOpen()).toBe(false);
+    expect(document.activeElement).toBe(document.querySelector("#billing_company_display"));
+    // The field's own focus opener must not reopen what Escape just closed.
+    jest.advanceTimersByTime(1000);
+    expect(helper.companySearchDropdownIsOpen()).toBe(false);
+  });
+
+  test("Tab is left to the browser — the panel binds no Tab handling", () => {
+    harness.openCompanyPanel($, helper);
+    const query = document.querySelector(".two-company-dropdown__query");
+    const tab = new window.KeyboardEvent("keydown", {
+      key: "Tab",
+      bubbles: true,
+      cancelable: true
+    });
+
+    query.dispatchEvent(tab);
+
+    expect(tab.defaultPrevented).toBe(false);
+    expect(helper.companySearchDropdownIsOpen()).toBe(true);
   });
 });
