@@ -54,7 +54,7 @@ describe("billing country switch", () => {
 
   afterEach(() => {
     ajax.restore();
-    harness.releaseWidgets(ctx.$);
+    harness.releasePanel(ctx.helper);
     // Load-bearing, not tidying. `initialize()` binds its handlers DELEGATED
     // on document.body, and jsdom's document outlives the test — wiping
     // `innerHTML` removes the elements but not the bindings. Every test that

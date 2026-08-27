@@ -77,7 +77,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
   });
 
   afterEach(() => {
-    harness.releaseWidgets($);
+    harness.releasePanel(ctx.helper);
     jest.clearAllTimers();
     jest.useRealTimers();
     document.body.innerHTML = "";
