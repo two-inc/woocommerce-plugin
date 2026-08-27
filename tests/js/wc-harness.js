@@ -11,21 +11,14 @@
  * So rather than mock the browser, this harness assembles the real one:
  *
  *   - jsdom (Jest's `testEnvironment`) supplies document/window,
- *   - the REAL jQuery and the REAL selectWoo widget are loaded onto that
- *     window,
+ *   - the REAL jQuery is loaded onto that window,
+ *   - the REAL company-search panel script is evaluated onto it too, exactly
+ *     as its own `<script>` tag does, so the tests assert against the shipped
+ *     popover rather than a stand-in for it,
  *   - `wc_country_select_params` and `window.twoinc` are small stubs, because
  *     they are `wp_localize_script` output with no npm distribution,
  *   - the plugin source is then evaluated in global scope, exactly as a
  *     `<script>` tag would evaluate it.
- *
- * Using the real widget rather than a mock is deliberate: the reason the
- * plugin owns a custom `ajax.transport` at all is a property OF select2's
- * ajax adapter (its failure handler treats any status-0 jqXHR as a
- * cancellation, and a jQuery timeout is also status 0), and the
- * "unavailable" message is delivered through the widget's own
- * `results:message` channel and rendered by its results adapter. A mock
- * would have to reproduce both correctly to catch either bug, which is
- * precisely the assumption that let them ship.
  *
  * NO production code was refactored to make this testable. The script loads
  * as-is.
@@ -40,10 +33,12 @@ const REPO_ROOT = path.resolve(__dirname, "..", "..");
 
 const SOURCE_PATH = "assets/js/twoinc.js";
 
+const PANEL_PATH = "assets/js/company-search-panel.js";
+
 const STYLESHEET_PATH = "assets/css/twoinc.css";
 
 /**
- * Put the real jQuery + the real selectWoo widget on the jsdom window.
+ * Put the real jQuery on the jsdom window.
  *
  * @returns {Function} the jQuery instance bound to the current jsdom window
  */
@@ -58,15 +53,25 @@ function installJQuery() {
   global.jQuery = jQuery;
   global.window.$ = jQuery;
   global.window.jQuery = jQuery;
-  // selectWoo's dist bundle is AMD-or-CommonJS-or-globals. Under Jest the
-  // CommonJS branch wins and exports a `function (root, jQuery)` rather than
-  // self-registering, so it has to be invoked by hand. It then defines BOTH
-  // `$.fn.select2` and `$.fn.selectWoo`, which is what the plugin calls.
-  require("selectwoo/dist/js/selectWoo.full.js")(global.window, jQuery);
-  if (typeof jQuery.fn.selectWoo !== "function" || typeof jQuery.fn.select2 !== "function") {
-    throw new Error("harness: selectWoo did not register");
-  }
   return jQuery;
+}
+
+/**
+ * Evaluate the vendored company-search panel the way its own `<script>` tag
+ * does. Its UMD tail assigns `TwoCompanySearchPanel` onto `self`, which under
+ * jsdom is the window — the same global twoinc.js reads it from.
+ *
+ * @returns {Function} the panel constructor
+ */
+function installCompanySearchPanel() {
+  const src = fs.readFileSync(path.join(REPO_ROOT, PANEL_PATH), "utf8");
+  const indirectEval = eval;
+  indirectEval(src);
+  if (typeof global.window.TwoCompanySearchPanel !== "function") {
+    throw new Error("harness: company-search-panel.js did not register");
+  }
+  global.TwoCompanySearchPanel = global.window.TwoCompanySearchPanel;
+  return global.window.TwoCompanySearchPanel;
 }
 
 /**
@@ -122,7 +127,8 @@ function loadPluginSource() {
 }
 
 /**
- * Load twoinc.js with jQuery, selectWoo and the WooCommerce globals in place.
+ * Load twoinc.js with jQuery, the panel script and the WooCommerce globals in
+ * place.
  *
  * Deliberately loaded with `window.twoinc` ABSENT. The file's trailing
  * `jQuery(function () { if (window.twoinc) { ... } })` bootstrap wires the
@@ -137,6 +143,7 @@ function loadPluginSource() {
 function loadTwoinc(twoinc) {
   const $ = installJQuery();
   installWcParams();
+  installCompanySearchPanel();
   const exported = loadPluginSource();
   const settings = Object.assign(
     {
@@ -215,20 +222,19 @@ function loadTwoinc(twoinc) {
  * is the overlap-with-the-label bug, with nothing to signal the fallback.
  *
  * @param {Object} [options]
- * @param {string} [options.companyOptions] inner HTML for the search select
+ * @param {string} [options.companyValue] value the search field starts with
  * @returns {string} the three rows as markup
  */
 function companyRowsMarkup(options) {
   const opts = options || {};
-  const companyOptions =
-    opts.companyOptions === undefined ? '<option value="">&nbsp;</option>' : opts.companyOptions;
+  const companyValue = opts.companyValue === undefined ? "" : opts.companyValue;
   return [
-    '  <p id="billing_company_display_field" class="form-row billing_company_selectwoo form-row-wide hidden" data-priority="30">',
+    '  <p id="billing_company_display_field" class="form-row billing_company_search form-row-wide hidden" data-priority="30">',
     '    <label for="billing_company_display">Company name&nbsp;<span class="optional">(optional)</span></label>',
     '    <span class="woocommerce-input-wrapper">',
-    '      <select id="billing_company_display" name="billing_company_display">' +
-      companyOptions +
-      "</select>",
+    '      <input type="text" id="billing_company_display" name="billing_company_display" autocomplete="off" value="' +
+      companyValue +
+      '" />',
     "    </span>",
     "  </p>",
     '  <p id="billing_company_field" class="form-row form-row-wide" data-priority="30">',
@@ -249,28 +255,19 @@ function companyRowsMarkup(options) {
 /**
  * The subset of the WooCommerce checkout form the company-search code reads.
  *
- * `#billing_company_display` is the select the widget is attached to;
+ * `#billing_company_display` is the input the panel anchors to;
  * `#billing_country` is where the search's country parameter comes from;
  * `#billing_company` is the real (hidden) company field.
  *
- * The company select carries the same empty first option WooCommerce renders
- * for it from WC_Twoinc_Checkout's `options` array — `value=""` with a
- * non-breaking space for its label. That pairing is load-bearing for the
- * empty-field hint (the widget only paints a placeholder while the current
- * selection's value matches the placeholder's), so the harness ships the real
- * markup rather than a bare `<select>`.
- *
  * @param {Object} [options]
  * @param {string} [options.country] ISO code for the selected country option
- * @param {string} [options.companyOptions] override the company select's inner
- *   HTML, for a test that needs the option markup to differ from production
+ * @param {string} [options.companyValue] value the search field starts with
  * @returns {void}
  */
 function buildCheckoutForm(options) {
   const opts = options || {};
   const country = opts.country || "GB";
-  const companyOptions =
-    opts.companyOptions === undefined ? '<option value="">&nbsp;</option>' : opts.companyOptions;
+  const companyValue = opts.companyValue;
   document.body.innerHTML = [
     // `name="checkout"` is what WooCommerce's own checkout form carries, and
     // it is the selector `saveCheckoutInputs()` looks the form up by. Without
@@ -287,7 +284,7 @@ function buildCheckoutForm(options) {
     "      </select>",
     "    </span>",
     "  </p>",
-    companyRowsMarkup({ companyOptions: companyOptions }),
+    companyRowsMarkup({ companyValue: companyValue }),
     "  </div>",
     "  </div>",
     "</form>"
@@ -295,37 +292,51 @@ function buildCheckoutForm(options) {
 }
 
 /**
- * Attach the real selectWoo widget to `#billing_company_display` using the
- * plugin's own params, and open it.
+ * Bind the panel to whichever company-name field is current, and open it.
  *
- * Opening is what creates the search `<input aria-owns="select2-...-results">`
- * that `toggleCompanySearchSpinner()` looks for, and the results container the
- * `results:message` channel renders into — neither exists on a closed widget,
- * which is why the plugin creates the spinner node lazily per search.
+ * Goes through the plugin's own `attach()` rather than constructing a panel
+ * here: the transport, the chips and the mount selector are all wired there,
+ * so a hand-built panel would exercise one the plugin never ships.
  *
  * @param {Function} $ jQuery instance
  * @param {Object} helper twoincSelectWooHelper
- * @returns {Object} the jQuery-wrapped select
+ * @returns {Object} the jQuery-wrapped company-name field
  */
-function openCompanyWidget($, helper) {
-  const $select = $("#billing_company_display");
-  // The plugin's own initialiser, not a bare `.selectWoo(params)`: the query
-  // field's watermark and the suppression of select2's own "input too short"
-  // row are per-instance wiring that lives there, so a raw init here would
-  // exercise a widget the plugin never actually ships.
-  helper.initCompanySearchWidget($select);
-  $select.select2("open");
-  return $select;
+function openCompanyPanel($, helper) {
+  helper.attach();
+  helper.openCompanySearchDropdown();
+  return $(helper.companyFieldSelector());
 }
 
 /**
- * Read the text the widget is currently rendering in its results list.
+ * The panel's structure as the DOM actually holds it — what a structural
+ * assertion compares against PrestaShop's.
+ *
+ * @param {Function} $ jQuery instance
+ * @returns {{wrap: Element, panel: Element, children: Array<string>}|null}
+ */
+function panelStructure($) {
+  const wrap = document.querySelector(".two-company-field-wrap");
+  if (!wrap) return null;
+  const panel = wrap.querySelector(":scope > .two-company-dropdown");
+  if (!panel) return null;
+  return {
+    wrap: wrap,
+    panel: panel,
+    children: Array.prototype.map.call(panel.children, function (child) {
+      return child.className;
+    })
+  };
+}
+
+/**
+ * Read the text the panel is currently rendering in its results list.
  *
  * @param {Function} $ jQuery instance
  * @returns {string}
  */
 function resultsText($) {
-  return $("#select2-billing_company_display-results").text();
+  return $(".two-company-dropdown__results").text();
 }
 
 /**
@@ -406,43 +417,20 @@ function stubAjax($) {
 }
 
 /**
- * Collect every `success` callback invocation the transport makes.
+ * Release the panel bound to the company field.
  *
- * select2's ajax adapter passes `success` in; the transport is expected to
- * call it exactly once per search that is still current, and not at all for
- * one that has been superseded or cancelled.
- *
- * @returns {{fn: Function, calls: Array}}
- */
-function successRecorder() {
-  const calls = [];
-  return {
-    calls: calls,
-    fn: function (data) {
-      calls.push(data);
-    }
-  };
-}
-
-/**
- * Release the selectWoo widget bound to the company select.
- *
- * select2 binds document-level handlers in its `_create` that wiping
- * `document.body.innerHTML` does not unbind, so an abandoned widget keeps
+ * The panel binds a document-level mousedown that wiping
+ * `document.body.innerHTML` does not unbind, so an abandoned panel keeps
  * listening for the rest of the test file. Call this from `afterEach` BEFORE
- * clearing the DOM: without it the handlers accumulate one per test and the
- * first test that dispatches a document-level event inherits `close()` calls
- * from every zombie — which presents as an order-dependent flake rather than
- * as the leak it is.
+ * clearing the DOM.
  *
- * @param {Function} $ jQuery instance
+ * @param {Object} helper twoincSelectWooHelper
  * @returns {void}
  */
-function releaseWidgets($) {
-  const $select = $("#billing_company_display");
-  if ($select.length && $select.data("select2")) {
-    $select.select2("destroy");
-  }
+function releasePanel(helper) {
+  if (!helper || !helper.panel) return;
+  helper.panel.destroy();
+  helper.panel = null;
 }
 
 /**
@@ -554,9 +542,9 @@ module.exports = {
   loadTwoinc: loadTwoinc,
   buildCheckoutForm: buildCheckoutForm,
   companyRowsMarkup: companyRowsMarkup,
-  openCompanyWidget: openCompanyWidget,
+  openCompanyPanel: openCompanyPanel,
+  panelStructure: panelStructure,
   resultsText: resultsText,
   stubAjax: stubAjax,
-  successRecorder: successRecorder,
-  releaseWidgets: releaseWidgets
+  releasePanel: releasePanel
 };
