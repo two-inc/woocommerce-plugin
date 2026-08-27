@@ -813,6 +813,9 @@ class TwoCompanySearch {
         fieldSelector: helper.companyFieldSelector(),
         config: {},
         search: helper.searchApi(),
+        translate: function (text) {
+          return helper.translatePanelText(text);
+        },
         getCountryCode: function () {
           return helper.currentCountry();
         },
@@ -843,6 +846,25 @@ class TwoCompanySearch {
   }
 
   /**
+   * The panel's own source strings, mapped onto this plugin's localised text.
+   * Keyed on the English string because the panel is vendored verbatim and
+   * carries no message ids of its own.
+   *
+   * @param {string} text
+   * @returns {string}
+   */
+  translatePanelText(text) {
+    const helper = twoincSelectWooHelper;
+    const map = {
+      "Enter company name to search": helper.companySearchPlaceholderText(),
+      "Search for company": helper.searchCompanyText(),
+      "Company search is unavailable right now. Please try again shortly.":
+        helper.companySearchUnavailableText()
+    };
+    return map[text] || text;
+  }
+
+  /**
    * Point the panel at whatever host is current and build it there.
    *
    * Called from every path that can have replaced the host: `initialize()` and
@@ -861,14 +883,6 @@ class TwoCompanySearch {
     if (!panel) return null;
 
     panel.bind();
-    // The closed-state watermark. The panel sets its own on the host it binds,
-    // which is the search hint; this is what the field says before the buyer
-    // has ever opened it, and it has to survive a re-render that re-rendered
-    // the input.
-    jQuery(helper.companyFieldSelector()).attr(
-      "placeholder",
-      helper.companySearchPlaceholderText()
-    );
     twoincDomHelper.toggleTooltip(
       helper.companyFieldSelector(),
       window.twoinc.text.tooltip_company
@@ -1522,6 +1536,10 @@ class TwoCompanySearch {
     // raced in during the same tick: without it this would force the capture
     // mode back to `manual` and wipe the synthetic id that switch just wrote.
     if (twoincSoleTrader.mode === "sole_trader" || twoincSoleTrader.isDeciding()) return;
+    // The chip stays on screen through the switch, so a fast second press
+    // queues a second deferred call that would re-clear the field the buyer
+    // has by then started typing into.
+    if (twoincCompanyCapture.mode === "manual") return;
 
     twoincCompanyCapture.mode = "manual";
 
@@ -2940,11 +2958,12 @@ let twoincSoleTrader = {
     // adoption, so a home chosen at that moment is a home chosen from whatever
     // happened to be visible then — which is how it has twice ended up in the
     // wrong region.
-    const $surface = twoincSelectWooHelper.companyNameSurface();
-    if ($surface.is("#billing_company_display_field")) {
-      return twoincSelectWooHelper.affordanceSlotIn($surface, "#billing_company_display");
+    const helper = twoincSelectWooHelper;
+    const $surface = helper.companyNameSurface();
+    if ($surface.find(helper.companyFieldSelector()).length) {
+      return helper.affordanceSlotIn($surface, helper.companyFieldSelector());
     }
-    return twoincSelectWooHelper.companyFieldAffordanceSlot();
+    return helper.companyFieldAffordanceSlot();
   },
 
   /**
