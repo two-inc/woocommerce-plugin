@@ -1307,6 +1307,10 @@ class TwoCompanySearch {
 
     if (!helper.isTileLocation()) {
       $slot.addClass("hidden");
+      // Re-bind anyway: this runs on every `updated_checkout`, and a theme that
+      // re-renders the billing fields would otherwise leave the panel anchored
+      // to a node no longer in the document.
+      if (twoincCompanyCapture.mode !== "manual") helper.attach();
       return;
     }
 
