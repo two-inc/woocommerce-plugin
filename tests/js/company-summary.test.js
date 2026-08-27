@@ -46,6 +46,11 @@ describe("read-only captured-company summary", () => {
     dom = ctx.dom;
     helper = ctx.helper;
     harness.buildCheckoutForm();
+    // The rows ship the server's own `hidden` on the search control;
+    // `toggleBusinessFields()` clears it on a real page. This suite
+    // exercises what happens once it IS the visible surface, so it says so
+    // rather than inheriting a fixture that never set it.
+    ctx.$("#billing_company_display_field").removeClass("hidden");
     selectTwo();
   });
 

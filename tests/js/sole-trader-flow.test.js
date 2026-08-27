@@ -177,6 +177,9 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
      * spinner painted nowhere.
      */
     test("shows the spinner over the company-NAME field, not in the dropdown's query row", () => {
+      // The search control is the visible name surface here, which is what
+      // `toggleBusinessFields()` produces on a real page.
+      $("#billing_company_display_field").removeClass("hidden");
       const $widget = harness.openCompanyWidget($, ctx.helper);
       soleTrader.setMode("sole_trader");
 
@@ -2269,21 +2272,23 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
           expect($("#company_id").val()).toBe("TWO:ST1");
         });
 
-        test("a merchant who relocated the control to the payment tile shows the adoption through the widget there, native field alongside", () => {
-          // Replaces an "enable_company_search: no" case (#486). There is no
-          // such state: the admin checkbox only ever RELOCATES the one search
-          // control (TWO-25326 §7.1), so the adopted sole trader shows through
-          // the widget either way — and in tile placement WooCommerce's own
-          // native field deliberately stays in the address area alongside it,
-          // rather than the two swapping.
+        test("a merchant who relocated the control to the payment tile shows the adoption through the widget there, and only there", () => {
+          // The admin checkbox only ever RELOCATES the one search control
+          // (TWO-25326 §7.1), so the adopted sole trader shows through the
+          // widget either way.
+          //
+          // The native field goes once a capture exists (TWO-25503, Doug: it
+          // "should do neither of these things in the address area"), reversing
+          // the 2026-08-04 placement that kept it visible alongside. It still
+          // carries the value, because that is what POSTs.
           ctx.twoinc.company_search_location = "payment_tile";
 
           soleTrader.setMode("sole_trader");
           soleTrader.setCompany("TWO:ST1", "A Sole Trader");
 
           expect($("#billing_company_display_field").hasClass("hidden")).toBe(false);
-          expect($("#billing_company_field").hasClass("hidden")).toBe(false);
-          expect($("#billing_company").prop("readonly")).toBe(true);
+          expect($("#billing_company_field").hasClass("hidden")).toBe(true);
+          expect($("#billing_company").val()).toBe("A Sole Trader");
         });
 
         describe("item 4.2 / item 2.1 — the dropdown's own free-text query is suppressed for the whole of sole-trader mode", () => {
@@ -3174,19 +3179,21 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         expect(opened[0].url).toContain("&autoselect=false");
       });
 
-      test("falls back to the native field's own slot whenever that field is the visible one, unchanged from before", () => {
-        // Reached via tile placement rather than the old "search off" fixture
-        // (#486): there the native field deliberately stays in the address area
-        // alongside the relocated control, so it is visible and the link belongs
-        // in its slot. The branch is keyed on that visibility, not on any
-        // setting.
+      test("follows the capture into the tile, never the native field left in the address area", () => {
+        // TWO-25503, Doug: an adopted sole trader "prepopulates the sole trader
+        // name into the company name field in the address area and renders the
+        // 'Select a different sole trader' control underneath; it should do
+        // neither of these things in the address area." This reverses the
+        // 2026-08-04 placement, which put the link in the native field's slot
+        // whenever tile mode left that field visible.
         ctx.twoinc.company_search_location = "payment_tile";
         soleTrader.setMode("sole_trader");
         soleTrader.setCompany("TWO:ST1", "A Sole Trader");
 
         const $btn = soleTrader.getDifferentSoleTraderBtnNode();
 
-        expect($btn.parent().is("#billing_company_field .woocommerce-input-wrapper")).toBe(true);
+        expect($btn.closest("#billing_company_display_field").length).toBe(1);
+        expect($btn.closest(".woocommerce-billing-fields").length).toBe(0);
         expect($btn.closest(".hidden").length).toBe(0);
       });
     });

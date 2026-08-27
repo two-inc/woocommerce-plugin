@@ -219,7 +219,7 @@ function companyRowsMarkup(options) {
   const companyOptions =
     opts.companyOptions === undefined ? '<option value="">&nbsp;</option>' : opts.companyOptions;
   return [
-    '  <p id="billing_company_display_field" class="form-row billing_company_selectwoo form-row-wide" data-priority="30">',
+    '  <p id="billing_company_display_field" class="form-row billing_company_selectwoo form-row-wide hidden" data-priority="30">',
     '    <label for="billing_company_display">Company name&nbsp;<span class="optional">(optional)</span></label>',
     '    <span class="woocommerce-input-wrapper">',
     '      <select id="billing_company_display" name="billing_company_display">' +
@@ -233,7 +233,7 @@ function companyRowsMarkup(options) {
     "      <input type='text' id='billing_company' name='billing_company' value='' />",
     "    </span>",
     "  </p>",
-    '  <p id="company_id_field" class="form-row" data-priority="31">',
+    '  <p id="company_id_field" class="form-row hidden" data-priority="31">',
     '    <label for="company_id">Company ID&nbsp;<span class="optional">(optional)</span></label>',
     '    <span class="woocommerce-input-wrapper">',
     "      <input type='text' id='company_id' name='company_id' value='' />",

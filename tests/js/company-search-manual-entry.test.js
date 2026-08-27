@@ -54,6 +54,11 @@ describe("company-search manual-entry affordance", () => {
     $ = ctx.$;
     helper = ctx.helper;
     harness.buildCheckoutForm();
+    // The rows ship the server's own `hidden` on the search control;
+    // `toggleBusinessFields()` clears it on a real page. This suite
+    // exercises what happens once it IS the visible surface, so it says so
+    // rather than inheriting a fixture that never set it.
+    ctx.$("#billing_company_display_field").removeClass("hidden");
   });
 
   afterEach(() => {
@@ -2036,6 +2041,11 @@ describe("company-search manual-entry affordance", () => {
       // selectWoo's post-close refocus — which lands on company-name, exactly
       // what Doug reported.
       openWithAffordance();
+      // `#company_id_field` ships `hidden` from the server and is never in
+      // `visibleTargets`; this suite is about how tab stops are RESOLVED, so
+      // it puts the row in reach rather than asserting a state the checkout
+      // never reaches.
+      $("#company_id_field").removeClass("hidden");
 
       expect(helper.tabbablesAfterCompanyField()).toEqual([
         $("#billing_company").get(0),
@@ -2058,6 +2068,11 @@ describe("company-search manual-entry affordance", () => {
 
     test("`tabindex=-1` and hidden inputs are not tab stops", () => {
       openWithAffordance();
+      // `#company_id_field` ships `hidden` from the server and is never in
+      // `visibleTargets`; this suite is about how tab stops are RESOLVED, so
+      // it puts the row in reach rather than asserting a state the checkout
+      // never reaches.
+      $("#company_id_field").removeClass("hidden");
       $("#billing_company").attr("tabindex", "-1");
       $("#company_id_field").before(
         '<input type="hidden" id="a_hidden_input" name="a_hidden_input" value="x" />'
