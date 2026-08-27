@@ -34,7 +34,9 @@
         <div id="billing_company_display_field">
             <label for="billing_company_display"><?php esc_html_e('Company name', 'twoinc-payment-gateway'); ?> <abbr class="required" title="required">*</abbr></label>
             <br>
-            <input type="text" name="billing_company_display" class="billing_company_search" id="billing_company_display" autocomplete="off">
+            <input type="text" name="billing_company_display"
+                   class="billing_company_search" id="billing_company_display"
+                   autocomplete="off">
         </div>
     </div>
     <div class="twoinc-inp-container hidden">

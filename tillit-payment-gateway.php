@@ -170,11 +170,22 @@ function wc_twoinc_enqueue_styles()
 
 function wc_twoinc_enqueue_scripts()
 {
-    // Vendored verbatim from the Magento plugin — see AGENTS.md for the sync
-    // path. Registered as a dependency so `window.TwoCompanySearchPanel`
-    // exists before twoinc.js runs.
-    wp_enqueue_script('twoinc-company-search-panel', WC_TWOINC_PLUGIN_URL . '/assets/js/company-search-panel.js', [], twoinc_get_asset_version('assets/js/company-search-panel.js'));
-    wp_enqueue_script('twoinc-payment-gateway-js', WC_TWOINC_PLUGIN_URL . '/assets/js/twoinc.js', ['jquery', 'twoinc-company-search-panel'], twoinc_get_asset_version('assets/js/twoinc.js'));
+    // A dependency, not just an earlier enqueue, so `window.TwoCompanySearchPanel`
+    // is guaranteed to exist before twoinc.js runs.
+    $panel = 'assets/js/company-search-panel.js';
+    $frontend = 'assets/js/twoinc.js';
+    wp_enqueue_script(
+        'twoinc-company-search-panel',
+        WC_TWOINC_PLUGIN_URL . '/' . $panel,
+        [],
+        twoinc_get_asset_version($panel)
+    );
+    wp_enqueue_script(
+        'twoinc-payment-gateway-js',
+        WC_TWOINC_PLUGIN_URL . '/' . $frontend,
+        ['jquery', 'twoinc-company-search-panel'],
+        twoinc_get_asset_version($frontend)
+    );
 }
 
 function twoinc_settings_link($links)

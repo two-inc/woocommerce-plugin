@@ -939,10 +939,9 @@ if (!class_exists('WC_Twoinc')) {
             // would let a stale server-rendered term override the chip pick.
             //
             // Sole-trader MODE CHIPS (Registered company / Sole trader) are
-            // NOT rendered here (TWO-40 §0) — they render as children of the
-            // company-search dropdown (twoincSelectWooHelper.syncManualEntryButton()
-            // in twoinc.js). `.twoinc-sole-trader-note-slot` below only ever
-            // holds the signup-prompt note + in-flight error.
+            // NOT rendered here (TWO-40 §0) — they render inside the
+            // company-capture popover. `.twoinc-sole-trader-note-slot` below
+            // only ever holds the signup-prompt note + in-flight error.
             //
             // One resolution of the brand's notice switch feeds both the
             // loading state and the approved notice (TWO-25224), so it isn't
@@ -957,11 +956,11 @@ if (!class_exists('WC_Twoinc')) {
             // This slot (§7.1) is empty/hidden by default. When the merchant
             // unchecks "Enable Company Search In Address Entry",
             // twoincSelectWooHelper.syncCompanySearchTileLocation() in
-            // twoinc.js relocates `#billing_company_display_field` (the only
-            // field eligible to move here — see that function's own doc
-            // comment) into this slot and unhides it only if something moved
-            // in. Always rendered (a hidden empty div is cheap) so the JS
-            // never has to special-case "slot doesn't exist" vs "setting off".
+            // twoinc.js builds the company-name row inside it from state —
+            // never moves the address row here, which this fragment's own
+            // wholesale replacement would destroy. Always rendered (a hidden
+            // empty div is cheap) so the JS never has to special-case
+            // "slot doesn't exist" vs "setting off".
             $company_search_tile_slot = '<div class="twoinc-company-search-tile-slot hidden"></div>';
 
             // The two failure boxes carry role="alert"; the approved notice

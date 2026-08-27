@@ -492,16 +492,14 @@ let twoincCompanyCapture = {
 /**
  * Company capture control: the anchored popover from
  * `assets/js/company-search-panel.js` — vendored verbatim from the Magento
- * plugin, which is where it is maintained — plus everything WooCommerce
- * specific around it: the transport, the chips' meaning, the two mount points,
- * manual entry and the read-only number label.
+ * plugin, where it is maintained — plus everything WooCommerce-specific around
+ * it: the transport, the chips' meaning, the two mount points, manual entry and
+ * the read-only number label.
  *
- * DOM ORDER IS THE DESIGN. The panel is a real child of
- * `.two-company-field-wrap`, the wrapper around the company-name input, with
- * exactly three children of its own — search row, results host, mode chips —
- * so the browser's own tab order walks the control the way it reads and no key
- * handling is needed to make Tab behave. That is the whole reason this replaced
- * selectWoo, whose dropdown is appended to `<body>`.
+ * DOM ORDER IS THE DESIGN. The panel is a real child of the wrapper around the
+ * company-name input, with exactly three children of its own — search row,
+ * results host, mode chips — so the browser's own tab order walks the control
+ * the way it reads and no key handling is needed to make Tab behave.
  */
 class TwoCompanySearch {
   /**
@@ -1016,6 +1014,19 @@ class TwoCompanySearch {
     return true;
   }
 
+  /**
+   * Is the panel's own host on screen? Asked before opening from a control that
+   * lives somewhere else: in tile placement the panel sits inside a payment box
+   * WooCommerce collapses for every other method, so opening it there would
+   * leave the buyer's click with no visible effect at all.
+   *
+   * @returns {boolean}
+   */
+  companySearchIsReachable() {
+    const helper = twoincSelectWooHelper;
+    return helper.isOnScreen(jQuery(helper.companyFieldSelector()));
+  }
+
   closeCompanySearchDropdown() {
     const panel = twoincSelectWooHelper.panel;
     if (panel) panel.close();
@@ -1288,14 +1299,10 @@ class TwoCompanySearch {
    * Render the company-search control into the payment tile, or leave it in the
    * address form, per `window.twoinc.company_search_location` (TWO-25326 §7.1).
    *
-   * REBUILT into the tile, never moved there. WooCommerce replaces the whole
+   * REBUILT into the tile, never moved there: WooCommerce replaces the whole
    * `.woocommerce-checkout-payment` fragment on every payment-method, coupon,
-   * shipping or quantity change, and once on every page load — a form row
-   * relocated into it is a row WooCommerce can destroy with no warning, which
-   * is what the detach-to-safety machinery this replaces was fighting. The
-   * host here is plain markup this function re-creates from state, and the
-   * panel re-binds to whichever input is current, so a fragment swap costs
-   * nothing.
+   * shipping or quantity change, so a form row relocated into it is a row
+   * WooCommerce can destroy with no warning.
    *
    * The tile input carries no `name`: `#billing_company` is what POSTs the
    * company, in every mode and both placements.
@@ -1343,15 +1350,15 @@ class TwoCompanySearch {
     if (show) helper.attach();
   }
 
-  /** The company-name label, taken from the row WooCommerce renders. */
+  /**
+   * The company-name label, reusing the row WooCommerce renders rather than a
+   * second string to keep in step with it. Core's optional/required markers go:
+   * this field is neither posted nor validated.
+   */
   companyNameLabelText() {
-    const label = jQuery("label[for='billing_company_display']").first().text();
-    return (
-      twoincUtilHelper
-        .blankToEmpty(label)
-        .replace(/\s*\*\s*$/, "")
-        .trim() || "Company name"
-    );
+    const $label = jQuery("label[for='billing_company_display']").first().clone();
+    $label.find(".optional, .required, abbr").remove();
+    return twoincUtilHelper.blankToEmpty($label.text()).trim() || "Company name";
   }
 
   // ------------------------------------------------------------------ capture
@@ -2176,10 +2183,9 @@ let twoincDomHelper = {
             textOnly = val.nodeValue.trim();
           } else if (val.nodeType === Node.ELEMENT_NODE) {
             if (val.classList.contains("select2-selection__placeholder")) {
-              // The empty-field hint (TWO-25288) is an element child, so
-              // without this it would be snapshotted as though the buyer had
-              // chosen a company of that name (getCompanyName() reads this
-              // value into #billing_company). Excluded from `subs` too, or
+              // A picker's empty-field hint is an element child, so without
+              // this it would be snapshotted as though the buyer had chosen an
+              // option of that name. Excluded from `subs` too, or
               // loadStorageInputs() would render it twice.
               hasPlaceholder = true;
               return;
@@ -3214,8 +3220,12 @@ let twoincSoleTrader = {
   reopenSearch: function () {
     if (twoincSoleTrader.mode !== "sole_trader" || twoincSoleTrader.isDeciding()) return;
     twoincSoleTrader.setMode("business");
-    if (!twoincSelectWooHelper.openCompanySearchDropdown()) {
-      twoincSelectWooHelper.focusVisibleCompanyField(twoincSelectWooHelper.companyFieldSelector());
+    const helper = twoincSelectWooHelper;
+    // Reached from the captured fields in the ADDRESS area, which stay on
+    // screen while the panel's own host — the payment tile — is collapsed.
+    if (!helper.companySearchIsReachable()) return;
+    if (!helper.openCompanySearchDropdown()) {
+      helper.focusVisibleCompanyField(helper.companyFieldSelector());
     }
   },
 
@@ -4248,20 +4258,9 @@ class Twoinc {
         twoincDomHelper.toggleBusinessFields();
       });
 
-    // No click handler for the manual-entry row (TWO-25288). It is a pseudo-
-    // option inside the results list now, so the picker already turns a click
-    // on it into the same internal select that Enter does, and
-    // bindManualEntryAffordance intercepts that one event for both. A second,
-    // click-only path here would fire alongside it on every mouse activation.
-    //
-    // #search_company_btn's own click activation used to be delegated from
-    // here (`$body.on("click", "#" + searchCompanyBtnId, ...)`). Removed
-    // (#30.x.13) — live reproduction showed a real click on that button
-    // never reached this handler (no console errors, mousedown/focus both
-    // landed on the button correctly), so the activation now lives directly
-    // on the button itself, alongside its Enter/Space handler — see the
-    // comment in getSearchCompanyBtnNode for why binding directly there is
-    // also more robust than delegating here in the first place.
+    // Manual entry's chip and #search_company_btn bind their own activation
+    // directly on the element: a delegated click from here was measured live
+    // not to reach that button (#30.x.13).
 
     // Handle the representative inputs blur event
     $body.on(
@@ -4291,9 +4290,8 @@ class Twoinc {
     // Bound on `input` as well as `change` so the stale number is gone before
     // the buyer can reach Place Order without ever blurring the field.
     //
-    // Only ever fires for a real buyer edit: every plugin write in this file
-    // goes through `.val()` or `.value =`, neither of which dispatches an
-    // event.
+    // Only ever fires for a real buyer edit: every plugin write to THIS field
+    // goes through `.val()`, which dispatches nothing.
     $body
       .off("input.twoincCompanyPairing change.twoincCompanyPairing", "#billing_company")
       .on(

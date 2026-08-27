@@ -6,9 +6,5 @@
   line-height: 40px;
 }
 
-#billing_company_display_field
-  .select2-container--default
-  .select2-selection--single
-  .select2-selection__arrow {
-  height: 40px;
-}
+/* The company field is a plain input, so it takes the theme's own input height
+   rather than the 40px the country picker's rendered selection needs. */
