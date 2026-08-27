@@ -45,7 +45,7 @@ describe("TWO:-prefixed organisation numbers", () => {
   });
 
   afterEach(() => {
-    harness.releaseWidgets($);
+    harness.releasePanel(ctx.helper);
     document.body.innerHTML = "";
   });
 
@@ -156,10 +156,16 @@ describe("TWO:-prefixed organisation numbers", () => {
     });
   });
 
-  describe("the search-results dropdown", () => {
-    /** @returns {Function} the plugin's processResults callback */
-    function processResults() {
-      return ctx.helper.genSelectWooParams().ajax.processResults;
+  describe("the search-results panel", () => {
+    /**
+     * Shape a response into panel rows, as the transport's own success
+     * handler does.
+     *
+     * @param {Object} response
+     * @returns {Array<Object>}
+     */
+    function rows(response) {
+      return ctx.helper.toResultItems(response);
     }
 
     /**
@@ -179,47 +185,45 @@ describe("TWO:-prefixed organisation numbers", () => {
     }
 
     test("renders a minted identifier nowhere in the row", () => {
-      const out = processResults()({ items: [hit("Example Trading Co", SYNTHETIC)] }, {});
+      const out = rows({ items: [hit("Example Trading Co", SYNTHETIC)] });
 
-      expect(out.results[0].html).toBe("<em>Example Trading Co</em>");
-      expect(out.results[0].html).not.toContain("TWO:");
-      expect(out.results[0].html).not.toContain("(");
+      expect(out[0].html).toBe("<em>Example Trading Co</em>");
+      expect(out[0].html).not.toContain("TWO:");
+      expect(out[0].html).not.toContain("(");
     });
 
     test("still carries the raw value as the row's company_id", () => {
       // Selecting this row has to be able to capture the company. The
-      // identifier is what the picker writes to the submitted field, so
+      // identifier is what the pick handler writes to the submitted field, so
       // filtering it out of the DATA as well would break sole-trader
       // checkout in the name of a display rule.
-      const out = processResults()({ items: [hit("Example Trading Co", SYNTHETIC)] }, {});
+      const out = rows({ items: [hit("Example Trading Co", SYNTHETIC)] });
 
-      expect(out.results[0].company_id).toBe(SYNTHETIC);
+      expect(out[0].company_id).toBe(SYNTHETIC);
     });
 
     test("a registry number is untouched", () => {
-      const out = processResults()({ items: [hit("Example Trading Co", "11111111")] }, {});
+      const out = rows({ items: [hit("Example Trading Co", "11111111")] });
 
-      expect(out.results[0].html).toBe("<em>Example Trading Co</em> (11111111)");
-      expect(out.results[0].company_id).toBe("11111111");
+      expect(out[0].html).toBe("<em>Example Trading Co</em> (11111111)");
+      expect(out[0].company_id).toBe("11111111");
     });
 
     test("a hit with no highlight falls back to the plain name", () => {
-      // This loop is written to survive a response that omits a field — the
-      // identifier is already read defensively. Without the same tolerance for
-      // `highlight` the row composes to `undefined` and select2 renders a
-      // blank-but-selectable entry.
+      // The panel writes `html` straight into the row's innerHTML, so an
+      // undefined composition renders a blank-but-selectable entry.
       const withoutHighlight = hit("Example Trading Co", "11111111");
       delete withoutHighlight.highlight;
 
-      const out = processResults()({ items: [withoutHighlight] }, {});
+      const out = rows({ items: [withoutHighlight] });
 
-      expect(out.results[0].html).toBe("Example Trading Co (11111111)");
+      expect(out[0].html).toBe("Example Trading Co (11111111)");
     });
 
     test("a hit with neither highlight nor name yields a string, not undefined", () => {
-      const out = processResults()({ items: [{ national_identifier: { id: "11111111" } }] }, {});
+      const out = rows({ items: [{ national_identifier: { id: "11111111" } }] });
 
-      expect(typeof out.results[0].html).toBe("string");
+      expect(typeof out[0].html).toBe("string");
     });
   });
 
