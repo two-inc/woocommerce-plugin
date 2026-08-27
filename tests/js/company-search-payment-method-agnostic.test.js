@@ -36,7 +36,8 @@ describe("company-field visibility is payment-method-agnostic (#486)", () => {
   });
 
   afterEach(() => {
-    harness.releaseWidgets($);
+    harness.releasePanel(ctx.helper);
+    document.body.innerHTML = "";
   });
 
   test("search stays visible with no payment method selected (Two unavailable)", () => {
