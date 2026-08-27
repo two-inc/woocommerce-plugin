@@ -214,9 +214,12 @@ function buildCheckoutForm(options) {
     "    </select>",
     "  </p>",
     '  <p id="billing_company_display_field">',
-    '    <select id="billing_company_display" name="billing_company_display">' +
+    '    <label for="billing_company_display">Company name</label>',
+    '    <span class="woocommerce-input-wrapper">',
+    '      <select id="billing_company_display" name="billing_company_display">' +
       companyOptions +
       "</select>",
+    "    </span>",
     "  </p>",
     // Label + .woocommerce-input-wrapper mirror WooCommerce core's own
     // woocommerce_form_field() markup (round 3, #30.x.5.3): the field <p>

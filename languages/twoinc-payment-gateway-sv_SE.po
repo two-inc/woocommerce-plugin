@@ -657,7 +657,7 @@ msgstr "Ange företagsnamn för att söka"
 #. before the company search runs. Left unresolved by PHP and
 #. interpolated in JS from the threshold the widget enforces.
 #: class/WC_Twoinc_Checkout.php
-msgid "Please enter %d or more characters"
+msgid "Enter %d or more characters"
 msgstr "Ange %d eller fler tecken"
 #: class/WC_Twoinc.php
 #, php-format

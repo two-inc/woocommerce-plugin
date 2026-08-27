@@ -657,8 +657,8 @@ msgstr "Skriv inn firmanavn for å søke"
 #. before the company search runs. Left unresolved by PHP and
 #. interpolated in JS from the threshold the widget enforces.
 #: class/WC_Twoinc_Checkout.php
-msgid "Please enter %d or more characters"
-msgstr "Vennligst skriv inn %d eller flere tegn"
+msgid "Enter %d or more characters"
+msgstr "Skriv inn %d eller flere tegn"
 #: class/WC_Twoinc.php
 #, php-format
 msgid "Surcharge limit for the %s-day term cannot be 0. To charge nothing on this term, set the percentage and the fixed fee to 0 instead, and leave the limit empty."

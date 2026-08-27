@@ -186,19 +186,28 @@ describe("capture modes composed, not taken one at a time (#486)", () => {
       return $("#billing_company_display_field").next().attr("id");
     }
 
-    test("goes to the LINK in sole-trader mode, and survives a re-toggle", () => {
+    /**
+     * The class of whatever the "select a different sole trader" link currently
+     * hangs in — `woocommerce-input-wrapper` while it is inside a field.
+     *
+     * @returns {string|undefined}
+     */
+    function linkParent() {
+      return $("#select_different_sole_trader_btn").parent().attr("class");
+    }
+
+    test("leaves the slot free in sole-trader mode — the LINK sits inside the field", () => {
       ctx.soleTrader.setMode("sole_trader");
       ctx.soleTrader.setCompany(MATCHED_BUYER.organization_number, MATCHED_BUYER.company_name);
 
-      expect(slotAfterSearchField()).toBe("select_different_sole_trader_btn");
+      expect(linkParent()).toBe("woocommerce-input-wrapper");
 
       // When: anything re-runs the field toggle — a payment-method switch, a
-      // country change, `updated_checkout`. The number label used to take the
-      // slot back here, leaving the link with the ~33px gap above it that
-      // twoinc.css cancels only for a direct sibling.
+      // country change, `updated_checkout`.
       ctx.dom.toggleBusinessFields();
 
-      expect(slotAfterSearchField()).toBe("select_different_sole_trader_btn");
+      expect(linkParent()).toBe("woocommerce-input-wrapper");
+      expect(slotAfterSearchField()).not.toBe("select_different_sole_trader_btn");
     });
 
     test("goes to the number LABEL in registered-search mode, link or no link", () => {

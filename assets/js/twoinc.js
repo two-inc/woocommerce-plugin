@@ -624,7 +624,7 @@ class TwoCompanySearch {
   companySearchTooShortText() {
     const template =
       (window.twoinc && window.twoinc.text && window.twoinc.text.company_search_too_short) ||
-      "Please enter %d or more characters";
+      "Enter %d or more characters";
     // Matches gettext's positional form (`%1$d`) as well as bare `%d`: a
     // translator may reorder arguments via `#, php-format` placeholders. The
     // msgid itself stays `%d` — changing it would invalidate catalogues.
@@ -4082,38 +4082,37 @@ let twoincSoleTrader = {
   },
 
   /**
-   * Where the "select a different sole trader" link currently belongs.
-   * Default home is `companyFieldAffordanceSlot()`, same slot as the
-   * "search for company" link — correct for manual entry and an ordinary
-   * registered-company pick, both of which leave that field visible.
+   * The slot the "select a different sole trader" link hangs in: the input
+   * wrapper INSIDE whichever company-name field is the visible one.
    *
    * TWO-40 §7 makes an adopted sole trader show through the live search
-   * widget instead, which hides `#billing_company_field` outright — a
-   * button appended inside a hidden field never renders. So this follows
-   * the search field itself whenever that (not the native field) is what's
-   * actually shown, re-anchoring on every call the same way
-   * `getCompanySummaryNode()` does.
+   * widget, which hides `#billing_company_field` outright — a button
+   * appended inside a hidden field never renders — so the search row takes
+   * the slot whenever it is the visible surface.
+   *
+   * Inside the row's wrapper rather than after the row (TWO-25503, Doug):
+   * as a sibling it stacked against the row's own bottom margin and needed a
+   * hardcoded negative margin to look right, which over-pulled it onto the
+   * field itself. Inside, it sits where `#search_company_btn` already does.
+   *
+   * @returns {jQuery}
+   */
+  differentSoleTraderBtnSlot: function () {
+    const $searchField = jQuery("#billing_company_display_field");
+    if (!jQuery("#billing_company_field").hasClass("hidden") || !$searchField.length) {
+      return twoincSelectWooHelper.companyFieldAffordanceSlot();
+    }
+    const $wrapper = $searchField.find(".woocommerce-input-wrapper").first();
+    return $wrapper.length ? $wrapper : $searchField;
+  },
+
+  /**
+   * Re-anchor the link on every call, the same way `getCompanySummaryNode()`
+   * does — this runs on every `toggleBusinessFields()`, and the visible
+   * company-name surface can have changed since the last one.
    */
   placeDifferentSoleTraderBtn: function ($btn) {
-    const $searchField = jQuery("#billing_company_display_field");
-    if (jQuery("#billing_company_field").hasClass("hidden") && $searchField.length) {
-      const $wrapper = $searchField.closest(".twoinc-inp-container");
-      let $anchor = $wrapper.length ? $wrapper : $searchField;
-      // Behind the number label while that's the visible one, in front of
-      // it otherwise: this link and the label compete for the one slot
-      // right after the field, and exactly one of the two is ever visible
-      // (label in registered-search mode, link in sole-trader mode), so
-      // ordering by visibility gives the slot to whichever can use it.
-      const $summary = jQuery("#" + twoincSelectWooHelper.companySummaryId);
-      if ($summary.length && !$summary.hasClass("hidden") && $summary.prev()[0] === $anchor[0]) {
-        $anchor = $summary;
-      }
-      if ($btn.prev()[0] !== $anchor[0]) $btn.insertAfter($anchor);
-      return;
-    }
-    // Only move when not already there, same as getCompanySummaryNode():
-    // this runs on every toggleBusinessFields() call.
-    const $slot = twoincSelectWooHelper.companyFieldAffordanceSlot();
+    const $slot = twoincSoleTrader.differentSoleTraderBtnSlot();
     if ($btn.parent()[0] !== $slot[0]) $slot.append($btn);
   },
 
@@ -4653,6 +4652,10 @@ let twoincSoleTrader = {
    * `abandonPopupsForChipClick`.
    */
   closeAbandonedPopups: function () {
+    // A window `focus` fires when the browser WINDOW activates even while the
+    // checkout is the background tab, so this is what tells "came back to the
+    // checkout" from "opened the signup email in another tab".
+    if (typeof document.hasFocus === "function" && !document.hasFocus()) return;
     twoincSoleTrader.abandonablePopups().forEach(function (watcher) {
       if (typeof watcher.win.close !== "function") return;
       watcher.win.close();

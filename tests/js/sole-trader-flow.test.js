@@ -37,9 +37,12 @@ function buildForm() {
     '  <input type="text" id="billing_last_name" value="" />',
     '  <input type="text" id="billing_phone" value="" />',
     '  <p id="billing_company_display_field">',
-    '    <select id="billing_company_display" name="billing_company_display">',
-    '      <option value="">&nbsp;</option>',
-    "    </select>",
+    '    <label for="billing_company_display">Company</label>',
+    '    <span class="woocommerce-input-wrapper">',
+    '      <select id="billing_company_display" name="billing_company_display">',
+    '        <option value="">&nbsp;</option>',
+    "      </select>",
+    "    </span>",
     "  </p>",
     '  <p id="billing_company_field">',
     '    <label for="billing_company">Company</label>',
@@ -882,32 +885,22 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       expect(opened[0].url).not.toContain("autoselect");
     });
 
-    describe("item 3 — the gap above the link (live-reported by Doug)", () => {
-      // Same box-model stack as `.twoinc-company-summary`'s own gap fix
-      // (a3fd6e8): `#billing_company_display_field`'s 15px padding-bottom
-      // plus WooCommerce core's own `.form-row` bottom margin, cancelled on
-      // whichever element actually lands after that field via the adjacent-
-      // sibling selector `placeDifferentSoleTraderBtn()` inserts it with.
-      test("a scoped negative margin-top cancels the field's own padding-bottom + core's form-row margin", () => {
-        const rule =
-          /#billing_company_display_field \+ #select_different_sole_trader_btn,\s*\.twoinc-inp-container \+ #select_different_sole_trader_btn\s*\{([^}]*)\}/.exec(
-            stylesheetSource()
-          );
+    describe("item 3 — the link's slot beside the search field (live-reported by Doug)", () => {
+      // TWO-25503: placed after the field ROW, the link stacked against that
+      // row's own bottom margin and needed a hardcoded negative margin to
+      // close the gap — which over-pulled it onto the field itself.
+      test("hangs inside the search field's input wrapper, never after the row", () => {
+        $("#billing_company_field").addClass("hidden");
 
-        expect(rule).not.toBeNull();
-        expect(rule[1]).toMatch(/margin-top:\s*-\d+px/);
+        const $btn = soleTrader.getDifferentSoleTraderBtnNode();
+
+        expect($btn.parent().is("#billing_company_display_field .woocommerce-input-wrapper")).toBe(
+          true
+        );
       });
 
-      test("never doubles up with the summary's own cancellation — the two never show for the same field", () => {
-        // syncDifferentSoleTraderLink()'s gate and renderCompanySummary()'s
-        // are mode-exclusive (sole_trader vs registered-search), so a real
-        // checkout can show at most one of the two negative margins against
-        // a given field, never both stacked on top of each other.
-        soleTrader.mode = "sole_trader";
-        $("#company_id").val("TWO:ST12345");
-        soleTrader.syncDifferentSoleTraderLink();
-
-        expect($(".twoinc-company-summary").length).toBe(0);
+      test("leaves behind no sibling-margin correction to fight that slot", () => {
+        expect(stylesheetSource()).not.toMatch(/\+\s*#select_different_sole_trader_btn/);
       });
     });
 
@@ -1451,11 +1444,18 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         return win;
       }
 
+      // jsdom answers `document.hasFocus()` false unconditionally, so which
+      // window the buyer is actually looking at has to be stated by each test.
+      function withCheckoutFocused(focused) {
+        jest.spyOn(document, "hasFocus").mockReturnValue(focused);
+      }
+
       // Fires the window-level `focus` a real refocus produces. Deliberately NOT
       // followed by the grace period — the click that caused the focus is
       // dispatched inside it, which is the whole point of the deferral, so every
       // test spends the grace explicitly with `settleRefocus()`.
       function refocusCheckout() {
+        withCheckoutFocused(true);
         window.dispatchEvent(new Event("focus"));
       }
 
@@ -1513,6 +1513,29 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         expect($(".twoinc-sole-trader-spinner").length).toBe(0);
         expect($widget.data("select2").isOpen()).toBe(false);
         expect(soleTrader.mode).toBe("business");
+        jest.useRealTimers();
+      });
+
+      /**
+       * TWO-25503, live-reported by Doug: the rule is "close it when focus
+       * RETURNS TO THE CHECKOUT", not "close it when the popup loses focus". A
+       * window `focus` fires when the browser WINDOW activates even while the
+       * checkout is a background tab, so fetching the signup code from an email
+       * in another tab of that window must leave the popup up.
+       */
+      test("a window focus with the checkout still in the background leaves the popup alone", () => {
+        openWidgetWithChips();
+        soleTrader.setMode("sole_trader");
+        const win = fakePopup();
+        window.open = jest.fn(() => win);
+        jest.useFakeTimers();
+        soleTrader.launchSignup();
+
+        withCheckoutFocused(false);
+        window.dispatchEvent(new Event("focus"));
+        settleRefocus();
+
+        expect(win.close).not.toHaveBeenCalled();
         jest.useRealTimers();
       });
 

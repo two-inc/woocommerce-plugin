@@ -329,7 +329,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     // which is also what the widget enforces, so the number
                     // the buyer is told cannot drift from the number required.
                     /* translators: %d: minimum number of characters the buyer must type before the company search runs. Left unresolved here and interpolated in JS from the threshold the widget enforces, so the two cannot disagree. */
-                    'company_search_too_short' => __('Please enter %d or more characters', 'twoinc-payment-gateway'),
+                    'company_search_too_short' => __('Enter %d or more characters', 'twoinc-payment-gateway'),
                     // The "Enter manually" mode chip inside the company-search
                     // dropdown, and the link back out of manual entry
                     // (TWO-25288). Built in JS from here rather than as
