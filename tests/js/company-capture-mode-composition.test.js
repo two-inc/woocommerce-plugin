@@ -7,12 +7,11 @@
  * one an invariant that two separately-correct rounds disagree about:
  *
  *  1. `toggleBusinessFields()` makes the SEARCH control the visible
- *     company-name surface for sole-trader mode, and `getCompanyName()` reads
- *     that control's rendered container — but manual entry DESTROYS the
- *     control, and the Sole trader chip is not hidden there, so an adoption
- *     can land with no picker attached. Adoption from manual entry therefore
- *     showed the buyer a bare unstyled `<select>` and read the captured name
- *     back empty, which stops an order intent firing at all.
+ *     company-name surface for sole-trader mode — but manual entry RELEASES
+ *     the field to the buyer, and the Sole trader chip is not hidden there, so
+ *     an adoption can land with no panel bound to it. The adoption has to
+ *     re-take the field, or the buyer is left looking at a plain input holding
+ *     nothing.
  *
  *  2. The read-only number label and the "select a different sole trader" link
  *     both anchor themselves directly after the visible company-name field,
@@ -69,7 +68,7 @@ describe("capture modes composed, not taken one at a time (#486)", () => {
 
   afterEach(() => {
     ctx.soleTrader.stopAllPopupWatchers();
-    harness.releaseWidgets($);
+    harness.releasePanel(ctx.helper);
     sessionStorage.clear();
     document.body.innerHTML = "";
   });
@@ -94,12 +93,13 @@ describe("capture modes composed, not taken one at a time (#486)", () => {
       );
     }
 
-    test("is rendered through a LIVE picker, not the bare <select> manual entry left behind", () => {
+    test("is rendered through a LIVE panel, not the field manual entry released", () => {
       ctx.helper.enterManualCompanyEntry();
 
-      // Given: manual entry really did tear the picker down — otherwise this
-      // test proves nothing about re-attaching it.
-      expect($("#billing_company_display").data("select2")).toBeFalsy();
+      // Given: manual entry really did release the field — otherwise this test
+      // proves nothing about re-binding it. `role` is what the panel stamps on
+      // a field it owns, and releasing takes it back off.
+      expect($("#billing_company_display").attr("role")).toBeUndefined();
 
       ctx.soleTrader.setMode("sole_trader");
       ctx.soleTrader.setCompany(
@@ -108,8 +108,8 @@ describe("capture modes composed, not taken one at a time (#486)", () => {
         MATCHED_BUYER
       );
 
-      expect($("#billing_company_display").data("select2")).toBeTruthy();
-      expect($("#select2-billing_company_display-container").text()).toBe("A Sole Trader");
+      expect($("#billing_company_display").attr("role")).toBe("combobox");
+      expect($("#billing_company_display").val()).toBe("A Sole Trader");
     });
 
     /**
@@ -134,7 +134,7 @@ describe("capture modes composed, not taken one at a time (#486)", () => {
       expect($("#company_id").val()).toBe("");
       expect(ctx.soleTrader.mode).toBe("business");
       expect(ctx.capture.mode).toBe("manual");
-      expect($("#billing_company_display").data("select2")).toBeFalsy();
+      expect($("#billing_company_display").attr("role")).toBeUndefined();
     });
 
     test("puts the adopted name where toggleBusinessFields has just pointed the buyer", () => {
@@ -145,12 +145,11 @@ describe("capture modes composed, not taken one at a time (#486)", () => {
       // that actually renders the name.
       expect($("#billing_company_display_field").hasClass("hidden")).toBe(false);
       expect($("#billing_company_field").hasClass("hidden")).toBe(true);
-      expect($("#select2-billing_company_display-container").length).toBe(1);
+      expect($("#billing_company_display").val()).toBe("A Sole Trader");
     });
 
     test("reads the adopted name back, so an order intent can fire", () => {
       adoptFromManualEntry();
-      ctx.dom.saveCheckoutInputs();
 
       expect(ctx.capture.mode).toBe("sole_trader");
       expect(ctx.helper.getCompanyName()).toBe("A Sole Trader");
@@ -188,7 +187,7 @@ describe("capture modes composed, not taken one at a time (#486)", () => {
 
     /**
      * The class of whatever the "select a different sole trader" link currently
-     * hangs in — `woocommerce-input-wrapper` while it is inside a field.
+     * hangs in — the panel's own field wrapper while it is inside a field.
      *
      * @returns {string|undefined}
      */
@@ -200,13 +199,13 @@ describe("capture modes composed, not taken one at a time (#486)", () => {
       ctx.soleTrader.setMode("sole_trader");
       ctx.soleTrader.setCompany(MATCHED_BUYER.organization_number, MATCHED_BUYER.company_name);
 
-      expect(linkParent()).toBe("woocommerce-input-wrapper");
+      expect(linkParent()).toBe("two-company-field-wrap");
 
       // When: anything re-runs the field toggle — a payment-method switch, a
       // country change, `updated_checkout`.
       ctx.dom.toggleBusinessFields();
 
-      expect(linkParent()).toBe("woocommerce-input-wrapper");
+      expect(linkParent()).toBe("two-company-field-wrap");
       expect(slotAfterSearchField()).not.toBe("select_different_sole_trader_btn");
     });
 
@@ -268,26 +267,10 @@ describe("capture modes composed, not taken one at a time (#486)", () => {
       );
     });
 
-    test("opens its dropdown with the free-text query row suppressed, on the FIRST open", () => {
+    test("paints the restored company into the field the buyer reads", () => {
       restore();
-      harness.openCompanyWidget($, ctx.helper);
 
-      const $row = ctx.helper.getCompanySearchFieldContainer();
-
-      expect($row.attr("hidden")).toBe("hidden");
-      expect($row.find(".select2-search__field").prop("readonly")).toBe(true);
-    });
-
-    test("gives the query row back on the way out through the Registered company chip", () => {
-      restore();
-      harness.openCompanyWidget($, ctx.helper);
-
-      ctx.soleTrader.setMode("business");
-      harness.openCompanyWidget($, ctx.helper);
-      const $row = ctx.helper.getCompanySearchFieldContainer();
-
-      expect($row.attr("hidden")).toBeUndefined();
-      expect($row.find(".select2-search__field").prop("readonly")).toBe(false);
+      expect($("#billing_company_display").val()).toBe(MATCHED_BUYER.company_name);
     });
   });
 
@@ -296,39 +279,84 @@ describe("capture modes composed, not taken one at a time (#486)", () => {
     // live-confirmed: WooCommerce's rendered value (or loadStorageInputs') is
     // the only source, so `window.twoinc.billing_company`/`company_id` are both
     // undefined. Round 4 taught this function to CAPTURE such a pair; the
-    // picker is now the surface that has to SHOW it, and only the echo path was
-    // ever seeded into it.
+    // search field is now the surface that has to SHOW it, and only the echo
+    // path was ever painted into it.
     test.each([
       ["a sole trader", "TWO:ST:GB:0f8c2b1a", "A Sole Trader"],
       ["a registry company", "912345678", "ACME Widgets Ltd"]
-    ])("%s is rendered in the picker, not left as its placeholder", (_label, id, name) => {
+    ])("%s is painted into the search field, not left blank", (_label, id, name) => {
       $("#billing_company").val(name);
       $("#company_id").val(id);
 
       ctx.dom.restoreCapturedCompany();
-      ctx.dom.saveCheckoutInputs();
 
-      // Given the native field is the hidden one of the two, an unrendered
-      // picker leaves the buyer no company name on screen at all.
+      // Given the native field is the hidden one of the two, an unpainted
+      // search field leaves the buyer no company name on screen at all.
       expect($("#billing_company_field").hasClass("hidden")).toBe(true);
-      expect($("#select2-billing_company_display-container").text()).toBe(name);
+      expect($("#billing_company_display").val()).toBe(name);
       expect(ctx.helper.getCompanyName()).toBe(name);
     });
 
-    test("never overrides a selection an earlier restore pass already made", () => {
+    test("a second restore pass paints the same company the first captured", () => {
       // `initialize()` runs this twice — once from `loadUserMetaInputs()` and
-      // once after `loadStorageInputs()` — and both of those seed the picker
-      // themselves.
-      $("#billing_company_display")
-        .append('<option value="Seeded By The Echo">Seeded By The Echo</option>')
-        .val("Seeded By The Echo")
-        .trigger("change");
+      // once after `loadStorageInputs()` — and the field is painted from the
+      // captured pair each time, so the two passes cannot disagree.
       $("#billing_company").val("ACME Widgets Ltd");
       $("#company_id").val("912345678");
 
       ctx.dom.restoreCapturedCompany();
+      ctx.dom.restoreCapturedCompany();
 
-      expect($("#billing_company_display").val()).toBe("Seeded By The Echo");
+      expect($("#billing_company_display").val()).toBe("ACME Widgets Ltd");
+      expect($("#billing_company").val()).toBe("ACME Widgets Ltd");
+    });
+  });
+
+  describe("every path that can create a capture reaches the visibility rule", () => {
+    // `toggleBusinessFields()` is the only place the visible company-name
+    // surface is decided, so a path that skips it leaves the rule computed and
+    // never read — the buyer keeps looking at the surface the PREVIOUS state
+    // chose (TWO-25503).
+    test.each([
+      [
+        "a registry pick",
+        () => ctx.helper.onPick({ id: "ACME Widgets Ltd", company_id: "912345678" })
+      ],
+      [
+        "a sole-trader adoption",
+        () => {
+          ctx.soleTrader.setMode("sole_trader");
+          ctx.soleTrader.setCompany(
+            MATCHED_BUYER.organization_number,
+            MATCHED_BUYER.company_name,
+            MATCHED_BUYER
+          );
+        }
+      ],
+      ["manual entry", () => ctx.helper.enterManualCompanyEntry()],
+      [
+        "the user-meta echo",
+        () => {
+          ctx.twoinc.billing_company = MATCHED_BUYER.company_name;
+          ctx.twoinc.company_id = MATCHED_BUYER.organization_number;
+          ctx.dom.loadUserMetaInputs();
+        }
+      ],
+      [
+        "the DOM restore",
+        () => {
+          $("#billing_company").val("ACME Widgets Ltd");
+          $("#company_id").val("912345678");
+          ctx.dom.restoreCapturedCompany();
+        }
+      ]
+    ])("%s re-evaluates it", (_label, act) => {
+      const toggled = jest.spyOn(ctx.dom, "toggleBusinessFields");
+
+      act();
+
+      expect(toggled).toHaveBeenCalled();
+      toggled.mockRestore();
     });
   });
 });
