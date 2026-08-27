@@ -9,7 +9,7 @@
  *      only on a buyer's country change, and each one destroyed the captured
  *      company (observed live, TWO-25326).
  *   2. The company search took its country from a closure captured when the
- *      selectWoo widget was built, so a widget that outlived a country change
+ *      search control was built, so a control that outlived a country change
  *      searched the previous country's register.
  *   3. The registry address lookup had no supersession guard, so a response
  *      for a company picked under the OLD country wrote its address over the
@@ -17,7 +17,7 @@
  *
  * The same three behaviours were fixed on the PrestaShop checkout first; this
  * is the WooCommerce equivalent, in this plugin's own delegated-handler and
- * selectWoo shape. See the ticket for the cross-platform parity notes.
+ * search-panel shape. See the ticket for the cross-platform parity notes.
  */
 
 "use strict";
@@ -127,6 +127,27 @@ describe("billing country switch", () => {
     };
   }
 
+  // The panel binds its query field with addEventListener, which jQuery's
+  // `.trigger()` does not reach.
+  function typeCompanyQuery(term) {
+    const query = document.querySelector(".two-company-dropdown__query");
+    query.value = term;
+    query.dispatchEvent(new window.Event("input", { bubbles: true }));
+    jest.advanceTimersByTime(ctx.helper.companySearchDebounceMs);
+  }
+
+  function clickFirstResultRow() {
+    document
+      .querySelector(".two-company-dropdown__row")
+      .dispatchEvent(new window.MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+  }
+
+  // The transport resolves a Promise, so a settled deferred reaches the panel
+  // only once the microtask queue has drained.
+  function flushPromises() {
+    return Promise.resolve().then(() => Promise.resolve());
+  }
+
   describe("a change event that is not a country change (TWO-25326)", () => {
     test("leaves the captured company alone", () => {
       initializeCheckout();
@@ -227,21 +248,21 @@ describe("billing country switch", () => {
       expect(ctx.helper.companySearchSeq).toBeGreaterThan(seqBefore);
     });
 
-    test("a search response for the previous country cannot repopulate the list", () => {
+    test("a search response for the previous country cannot repopulate the list", async () => {
       initializeCheckout();
-      const $select = harness.openCompanyWidget(ctx.$, ctx.helper);
-      const transport = ctx.helper.genSelectWooParams().ajax.transport;
-      const success = harness.successRecorder();
-      transport({ term: "example", page: 0 }, success.fn);
+      harness.openCompanyPanel(ctx.$, ctx.helper);
+      typeCompanyQuery("example");
       const inFlight = ajax.last();
+      // Positive control: without it a fixture that issued no search at all
+      // would satisfy the "not repopulated" assertion below.
+      expect(inFlight.url).toContain("/companies/v2/company");
 
       ctx.$("#billing_country").val("ES");
       fireCountryChange();
       inFlight.succeed({ items: [{ name: "Example Co", highlight: "Example Co" }] });
+      await flushPromises();
 
-      expect(success.calls).toHaveLength(0);
       expect(harness.resultsText(ctx.$)).not.toContain("Example Co");
-      $select.select2("close");
     });
   });
 
@@ -976,16 +997,14 @@ describe("billing country switch", () => {
       expect(ctx.Twoinc.getInstance().customerCompany.organization_number).toBeFalsy();
 
       // CHARACTERISATION, not endorsement. `clearSelectedCompany` re-attaches
-      // selectWoo to #billing_company_display unconditionally, so a clear in
-      // manual-entry mode resurrects the picker the buyer had dismissed even
-      // with company search off. That is PRE-EXISTING — the `change` path has
-      // called this on every real country change in manual entry since long
-      // before this ticket — and fixing it means changing a shared destructive
-      // function's behaviour on that path too, which is exactly the kind of
-      // stacking TWO-25333 was split out of TWO-24867 to avoid. Pinned here so
-      // the behaviour is recorded and a later fix has something to flip, not
-      // because it is right.
-      expect(ctx.$("#billing_company_display").data("select2")).toBeTruthy();
+      // the search panel unconditionally, so a clear in manual-entry mode
+      // resurrects the picker the buyer had dismissed even with company search
+      // off. Pre-existing on the `change` path, and fixing it means changing a
+      // shared destructive function on that path too — the stacking TWO-25333
+      // was split out of TWO-24867 to avoid. Pinned so a later fix has
+      // something to flip, not because it is right.
+      expect(ctx.helper.panel.isBound()).toBe(true);
+      expect(harness.panelStructure(ctx.$)).not.toBeNull();
     });
 
     test("does NOT clear the matching pair in manual entry either", () => {
@@ -1010,17 +1029,20 @@ describe("billing country switch", () => {
     // as a self-consistent pair, and which the discriminator above would read
     // as a mismatch and clear, destroying a capture that was never stale.
 
-    test("the picker's select handler pins the country it picked under", () => {
+    test("the picker's select handler pins the country it picked under", async () => {
       initializeCheckout();
       // A silent country move that the record-only path has not seen yet, so
       // customerCompany.country_prefix still holds the country before it.
       ctx.Twoinc.getInstance().customerCompany.country_prefix = "GB";
       ctx.$("#billing_country").val("ES");
 
-      ctx.$("#billing_company_display").trigger({
-        type: "select2:select",
-        params: { data: { id: "Ejemplo SL", company_id: "B12345678" } }
+      harness.openCompanyPanel(ctx.$, ctx.helper);
+      typeCompanyQuery("ejemplo");
+      ajax.last().succeed({
+        items: [{ name: "Ejemplo SL", national_identifier: { id: "B12345678" } }]
       });
+      await flushPromises();
+      clickFirstResultRow();
 
       expect(ctx.Twoinc.getInstance().customerCompany.country_prefix).toBe("ES");
     });
@@ -1142,16 +1164,17 @@ describe("billing country switch", () => {
   });
 
   describe("the search country is read live, not captured (TWO-24867)", () => {
-    test("a widget built under GB searches ES after the field changes", () => {
-      // The widget is deliberately NOT rebuilt between the two searches: it
+    test("a panel built under GB searches ES after the field changes", () => {
+      // The panel is deliberately NOT rebuilt between the two searches: it
       // survives a country change on every path that does not go through
       // clearSelectedCompany, which is where the captured-closure bug bit.
-      const params = ctx.helper.genSelectWooParams();
-      harness.openCompanyWidget(ctx.$, ctx.helper);
+      harness.openCompanyPanel(ctx.$, ctx.helper);
 
-      const before = params.ajax.url({ term: "example", page: 0 });
+      typeCompanyQuery("example");
+      const before = ajax.last().url;
       ctx.$("#billing_country").val("ES");
-      const after = params.ajax.url({ term: "example", page: 0 });
+      typeCompanyQuery("ejemplo");
+      const after = ajax.last().url;
 
       expect(before).toContain("country=GB");
       expect(after).toContain("country=ES");

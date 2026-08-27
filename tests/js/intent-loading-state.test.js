@@ -13,7 +13,7 @@
  * every route into a check passes through. Four of the five routes —
  * `setSoleTraderCompany()`, `onCompanyInputBlur()`,
  * `onRepresentativeInputBlur()` and `onCountryChange()` — cleared nothing at
- * all, and the fifth (the company picker's `select2:select`) still left a
+ * all, and the fifth (the company picker's own select handler) still left a
  * second of stale verdict on screen because the check is armed on a 1s
  * interval. So the assertions below are deliberately about `getApproval()`
  * and the interval's own ticks rather than about any one caller: a new route
@@ -801,7 +801,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
           GATEWAY_ID +
           "' checked />"
       );
-      // initialize() builds a real selectWoo widget whose transport would reach
+      // initialize() builds the real search panel, whose transport would reach
       // for the network, and arms its own 1s bootstrap pass.
       ajax = harness.stubAjax($);
       instance.initialize(false);
@@ -1790,7 +1790,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
   });
 
   describe("picking a company does not blank a live loader", () => {
-    test("select2:select clears the verdict and leaves an in-flight loader up", () => {
+    test("a pick clears the verdict and leaves an in-flight loader up", () => {
       // The picker's own handler blanket-hid before calling `getApproval()`, which
       // only ARMS — so the spinner for a request already in flight went down and the
       // replacement was a second away. Mutation, not review, is what proved this
@@ -1805,14 +1805,8 @@ describe("order-intent loading state and stale-verdict clearing", () => {
         revealVerdictBox(".twoinc-err-payment-default");
 
         instance.enableCompanySearch();
-        // The <option> select2's array adapter would append for a chosen result.
-        $("#billing_company_display").append(
-          '<option value="Beta Traders Ltd" selected>Beta Traders Ltd</option>'
-        );
-        $("#billing_company_display").trigger({
-          type: "select2:select",
-          params: { data: { id: "Beta Traders Ltd", company_id: "87654321" } }
-        });
+        // `onPick` is what the panel's own `onSelect` calls for a chosen row.
+        ctx.helper.onPick({ id: "Beta Traders Ltd", company_id: "87654321" });
 
         // The checkout still shows that it is working. Under the blanket hide this
         // was false, and stayed false until the replacement request went out a
@@ -1826,11 +1820,10 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     });
   });
 
-  describe("the company-field change handlers", () => {
-    // Both handlers are bound in `initialize()`, and BOTH were entirely untested:
-    // swapping either to the blanket hide, and deleting either's clear outright, all
-    // survived the whole suite (review round 6, found by mutation). One of them is
-    // the manual-entry path a buyer actually types into.
+  describe("the company-field change handler", () => {
+    // Bound in `initialize()` and entirely untested: swapping it to the blanket
+    // hide, and deleting its clear outright, both survived the whole suite (review
+    // round 6, found by mutation). It is the manual-entry path a buyer types into.
     let ajax;
 
     beforeEach(() => {
@@ -1865,21 +1858,19 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       $(document.body).off();
     });
 
-    for (const target of ["#select2-billing_company_display-container", "#billing_company"]) {
-      test("a change on " + target + " clears the verdict and keeps the loader", () => {
-        issueACheck(ajax);
-        revealVerdictBox(".twoinc-err-payment-default");
+    test("a change on #billing_company clears the verdict and keeps the loader", () => {
+      issueACheck(ajax);
+      revealVerdictBox(".twoinc-err-payment-default");
 
-        $(target).trigger("change");
+      $("#billing_company").trigger("change");
 
-        expect(shown(".twoinc-err-payment-default")).toBe(false);
-        // Positive control, since `shown()` is false for an absent box too.
-        expect($(".twoinc-pay-box.twoinc-err-payment-default").length).toBe(1);
-        // And the spinner for the request still in flight is untouched — the blanket
-        // hide took it down, with nothing to put it back until the next request.
-        expect(shown(".twoinc-loader")).toBe(true);
-      });
-    }
+      expect(shown(".twoinc-err-payment-default")).toBe(false);
+      // Positive control, since `shown()` is false for an absent box too.
+      expect($(".twoinc-pay-box.twoinc-err-payment-default").length).toBe(1);
+      // And the spinner for the request still in flight is untouched — the blanket
+      // hide took it down, with nothing to put it back until the next request.
+      expect(shown(".twoinc-loader")).toBe(true);
+    });
   });
 
   describe("clearSelectedCompany's deferred re-read", () => {
@@ -1993,11 +1984,8 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       // The guard must not be so broad that the re-read never happens — putting the
       // country prefix back is what it exists for.
       //
-      // Asserted on the NUMBER and the country, not the name: with company search
-      // on, `getCompanyData()` reads the name out of the select2 container via the
-      // checkout-inputs snapshot rather than from `#billing_company`, so the name
-      // is not a usable signal here. The number comes straight from `#company_id`.
-      // Written after the clear, which empties those fields itself, and with the
+      // Asserted on the NUMBER and the country: both come straight from the DOM,
+      // written after the clear, which empties those fields itself, and with the
       // counter left alone so nothing supersedes the re-read.
       ctx.helper.clearSelectedCompany();
       instance.customerCompany = {};
