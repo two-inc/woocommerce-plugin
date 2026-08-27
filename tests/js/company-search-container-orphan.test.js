@@ -124,6 +124,21 @@ describe("company-search panel orphan sweep (TWO-25469)", () => {
     expect(openPanelCount()).toBe(1);
   });
 
+  test("a capture restored between the replace and the re-attach paints the field on screen", () => {
+    harness.openCompanyPanel(ctx.$, ctx.helper);
+    const orphan = ctx.helper.panel.getField()[0];
+
+    replaceCompanyFragment();
+    // `restoreCapturedCompany()` runs on the same `updated_checkout` as the
+    // replace, and the panel is still anchored to the node that went with it.
+    ctx.$("#billing_company").val("Acme Ltd");
+    ctx.$("#company_id").val("12345678");
+    ctx.dom.restoreCapturedCompany();
+
+    expect(ctx.$("#billing_company_display").val()).toBe("Acme Ltd");
+    expect(orphan.value).toBe("");
+  });
+
   test("moving the panel to the payment tile retires the address-form wrapper", () => {
     // The other way a host is abandoned: the mount moves rather than the
     // fragment being replaced. Two wrappers would be two anchors, and the

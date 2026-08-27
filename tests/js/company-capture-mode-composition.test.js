@@ -272,6 +272,43 @@ describe("capture modes composed, not taken one at a time (#486)", () => {
 
       expect($("#billing_company_display").val()).toBe(MATCHED_BUYER.company_name);
     });
+
+    /**
+     * The only state where the two mode axes disagree about which chip is
+     * selected: `restore()` sets sole-trader mode directly, bypassing the
+     * `setMode()` that would otherwise have taken the capture mode with it.
+     * An `updated_checkout` re-running `loadUserMetaInputs()` is what reaches
+     * it while the buyer is mid-manual-entry.
+     */
+    test("a restore landing mid-manual-entry leaves manual the selected mode", () => {
+      ctx.helper.enterManualCompanyEntry();
+
+      restore();
+
+      expect(ctx.capture.mode).toBe("manual");
+      expect(ctx.soleTrader.mode).toBe("sole_trader");
+      expect(ctx.helper.selectedMode()).toBe("manual");
+
+      // The chip repaint every availability check and `updated_checkout` runs.
+      ctx.helper.syncModeChips();
+
+      expect($(".two-company-mode-chip[data-two-chip='manual']").attr("aria-pressed")).toBe("true");
+      expect($(".two-company-mode-chip[data-two-chip='sole_trader']").attr("aria-pressed")).toBe(
+        "false"
+      );
+    });
+
+    test("and the re-attach that follows leaves the buyer's own field released", () => {
+      ctx.helper.enterManualCompanyEntry();
+      restore();
+
+      // Every `updated_checkout` re-attaches; an adoption does too, before it
+      // paints. Manual entry owns the field until the buyer leaves it.
+      ctx.helper.attach();
+
+      expect($("#billing_company_display").attr("role")).toBeUndefined();
+      expect($("#billing_company_display").attr("aria-expanded")).toBeUndefined();
+    });
   });
 
   describe("a capture restored from the DOM alone, with no user-meta echo", () => {

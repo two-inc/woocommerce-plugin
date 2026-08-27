@@ -2211,6 +2211,23 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         expect($("#billing_company").val()).toBe("A Sole Trader");
       });
 
+      /**
+       * The other half of that gate. A merchant theme can render either field
+       * readonly on its own, and reading the lock alone would then treat every
+       * click into it as "reopen" — dropping the sole-trader mode the buyer
+       * had just chosen, before there is any adoption to reopen out of.
+       */
+      test("clicking a readonly field the plugin never locked leaves an unadopted sole-trader mode alone", () => {
+        $("#billing_company, #company_id").prop("readonly", true);
+        soleTrader.setMode("sole_trader");
+        expect(soleTrader.soleTraderAdopted).toBe(false);
+
+        $("#billing_company").trigger("click");
+
+        expect(soleTrader.mode).toBe("sole_trader");
+        expect($("#billing_company").prop("readonly")).toBe(true);
+      });
+
       test("the 'select a different sole trader' link still works alongside click-to-reopen", () => {
         soleTrader.setMode("sole_trader");
         soleTrader.setCompany("TWO:ST1", "A Sole Trader");
