@@ -1186,12 +1186,16 @@ class TwoCompanySearch {
    */
   isOnScreen($el) {
     if (!$el || !$el.length) return false;
-    if ($el.hasClass("hidden") || $el.closest(".hidden, [hidden]").length) return false;
-    const el = $el.get(0);
-    // jsdom has no layout, so `offsetParent` is undefined there and the class
-    // test above is the whole answer.
-    if (typeof el.offsetParent === "undefined") return true;
-    return el.offsetParent !== null || jQuery(el).css("position") === "fixed";
+    let node = $el.get(0);
+    while (node && node.nodeType === 1) {
+      if (node.classList.contains("hidden") || node.hasAttribute("hidden")) return false;
+      // WooCommerce collapses a payment box by writing `display: none` inline,
+      // which is what makes a relocated row unreachable without ever putting a
+      // class on it.
+      if (node.style && node.style.display === "none") return false;
+      node = node.parentElement;
+    }
+    return true;
   }
 
   /**
