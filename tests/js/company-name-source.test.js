@@ -1,24 +1,20 @@
 /**
- * #486 — which field `getCompanyName()` reads, and the invariant that decides it.
+ * #486 — which field `getCompanyName()` reads.
  *
- * `window.twoinc.enable_company_search` used to carry two unrelated meanings:
- * the merchant's "Enable company search in address entry" checkbox (which only
- * ever RELOCATES the one search control — PHP hardcodes it to 'yes',
- * TWO-25326 §7.1) and, mutated at runtime, "is the search widget the buyer's
- * active surface". `getCompanyName()` branched on the second meaning, so in
- * sole-trader mode it read WooCommerce's native `#billing_company` rather than
- * the picker the adopted company is actually rendered in — the wrong source,
- * agreeing with the right one only for as long as `twoincCompanyCapture.write()`
- * happens to mirror the same name into that field.
+ * `#billing_company` is the single source, in every capture mode: it is what
+ * WooCommerce posts, and every path that can create a capture writes it
+ * through `twoincCompanyCapture.write()`. A mode-dependent source is what this
+ * pins against — the name read back would then agree with the order only for
+ * as long as two writers happened to mirror each other, and an empty
+ * `company_name` is what stops `isReadyApprovalCheck()` ever firing an order
+ * intent.
  *
- * The name now follows `twoincCompanyCapture.mode`: the picker's rendered
- * container for `search` and `sole_trader` alike, the native field only for
- * `manual`. Pinned in all three modes, because a fix keyed on sole-trader mode
- * alone would break manual entry the other way round.
+ * The displayed name is a separate surface, painted by `setDisplayName()`. The
+ * tests below blank it deliberately to prove the read does not depend on it.
  *
- * The second describe block is the one that would actually catch a regression of
- * the refactor itself: the merchant's setting must never be written at runtime
- * again, by any mode transition.
+ * The second describe block pins the invariant the refactor buys: the
+ * merchant's admin setting must never be written at runtime, by any mode
+ * transition.
  */
 
 "use strict";
@@ -38,7 +34,7 @@ const SOLE_TRADER_CONFIG = {
   }
 };
 
-describe("getCompanyName follows the capture mode (#486)", () => {
+describe("getCompanyName reads the posted field (#486)", () => {
   let ctx;
   let $;
 
@@ -51,61 +47,81 @@ describe("getCompanyName follows the capture mode (#486)", () => {
     });
     $ = ctx.$;
     harness.buildCheckoutForm({ country: "GB" });
-    // The picker has to be live for its rendered container to exist at all —
-    // that container is the node `saveCheckoutInputs()` snapshots and the node
-    // `getCompanyName()` reads back.
-    $("#billing_company_display").selectWoo(ctx.helper.genSelectWooParams());
+    ctx.helper.attach();
+    ctx.soleTrader.availabilityByCountry = { GB: true };
     ctx.Twoinc.getInstance();
   });
 
   afterEach(() => {
-    harness.releaseWidgets($);
+    harness.releasePanel(ctx.helper);
     sessionStorage.clear();
     document.body.innerHTML = "";
   });
 
-  /**
-   * Refresh the snapshot `getCompanyName()` reads. Production does this on a
-   * 3-second interval; every test here has to do it explicitly, or it reads a
-   * snapshot taken before the capture it is asserting on.
-   *
-   * @returns {void}
-   */
-  function snapshot() {
-    ctx.dom.saveCheckoutInputs();
+  /** The name the buyer can see, as opposed to the one the checkout posts. */
+  function displayed() {
+    return $(ctx.helper.companyFieldSelector()).val();
   }
 
-  test("search mode reads the picked company out of the picker", () => {
-    $("#billing_company_display")
-      .append('<option value="ACME Widgets Ltd">ACME Widgets Ltd</option>')
-      .val("ACME Widgets Ltd")
-      .trigger("change");
-    snapshot();
+  test.each([
+    {
+      description: "a registry pick",
+      act: () => ctx.helper.onPick({ id: "ACME Widgets Ltd", company_id: "12345678" }),
+      mode: "search",
+      name: "ACME Widgets Ltd"
+    },
+    {
+      description: "a sole-trader adoption",
+      act: () => {
+        ctx.soleTrader.setMode("sole_trader");
+        ctx.soleTrader.setCompany("TWO:ST:GB:0f8c2b1a", "A Sole Trader");
+      },
+      mode: "sole_trader",
+      name: "A Sole Trader"
+    },
+    {
+      description: "manual entry",
+      act: () => {
+        ctx.helper.enterManualCompanyEntry();
+        $("#billing_company").val("Sole Proprietor Bakery");
+      },
+      mode: "manual",
+      name: "Sole Proprietor Bakery"
+    },
+    {
+      description: "the user-meta echo",
+      act: () => {
+        ctx.twoinc.billing_company = "Returning Buyer Ltd";
+        ctx.twoinc.company_id = "912345678";
+        ctx.dom.loadUserMetaInputs();
+      },
+      mode: "search",
+      name: "Returning Buyer Ltd"
+    },
+    {
+      description: "a capture restored from the DOM alone",
+      act: () => {
+        $("#billing_company").val("Guest Restored Ltd");
+        $("#company_id").val("912345678");
+        ctx.dom.restoreCapturedCompany();
+      },
+      mode: "search",
+      name: "Guest Restored Ltd"
+    }
+  ])("$description is read back off #billing_company", ({ act, mode, name }) => {
+    act();
 
-    expect(ctx.capture.mode).toBe("search");
-    expect(ctx.helper.getCompanyName()).toBe("ACME Widgets Ltd");
+    expect(ctx.capture.mode).toBe(mode);
+    expect($("#billing_company").val()).toBe(name);
+    expect(ctx.helper.getCompanyName()).toBe(name);
   });
 
-  test("sole-trader mode reads the ADOPTED company out of the picker, not the native field", () => {
-    // Driven through the real adoption path rather than by assigning the mode:
-    // `setCompany()` → `lockCapturedFields()` is what seeds the picker with the
-    // adopted company and selects it (TWO-40 §7 direction (a)), and that seeding
-    // is precisely what makes the picker the right thing to read here.
-    ctx.soleTrader.availabilityByCountry = { GB: true };
+  test("the displayed name is not the source — blanking it does not move the answer", () => {
     ctx.soleTrader.setMode("sole_trader");
     ctx.soleTrader.setCompany("TWO:ST:GB:0f8c2b1a", "A Sole Trader");
-    snapshot();
 
-    expect(ctx.capture.mode).toBe("sole_trader");
-    expect(ctx.helper.getCompanyName()).toBe("A Sole Trader");
-
-    // The picker is genuinely the source, not the native mirror agreeing with
-    // it: blank the native field and the answer must not move. Under the old
-    // `enable_company_search` branch this returned "" here, and an empty
-    // `company_name` is what stops `isReadyApprovalCheck()` ever firing an
-    // order intent — the buyer then gets the generic unavailability fallback
-    // instead of the message naming their own business.
-    $("#billing_company").val("");
+    expect(displayed()).toBe("A Sole Trader");
+    ctx.helper.setDisplayName("");
 
     expect(ctx.helper.getCompanyName()).toBe("A Sole Trader");
   });
@@ -113,10 +129,8 @@ describe("getCompanyName follows the capture mode (#486)", () => {
   test("the adopted name reaches customerCompany, so an intent check can fire at all", () => {
     // `isReadyApprovalCheck()` refuses to fire while any value on
     // `customerCompany` is empty, so this is the record the whole flow hangs on.
-    ctx.soleTrader.availabilityByCountry = { GB: true };
     ctx.soleTrader.setMode("sole_trader");
     ctx.soleTrader.setCompany("TWO:ST:GB:0f8c2b1a", "A Sole Trader");
-    snapshot();
 
     const company = ctx.dom.getCompanyData();
 
@@ -125,16 +139,8 @@ describe("getCompanyName follows the capture mode (#486)", () => {
     expect(company.country_prefix).toBe("GB");
   });
 
-  test("manual entry reads the buyer's own typed field, NOT the picker", () => {
-    // The counterweight: a company picked before the buyer said "my company
-    // isn't in the registry" is still sitting on the picker's <select>, so a fix
-    // that simply always read the picker would post the company they had just
-    // rejected.
-    $("#billing_company_display")
-      .append('<option value="ACME Widgets Ltd">ACME Widgets Ltd</option>')
-      .val("ACME Widgets Ltd")
-      .trigger("change");
-    snapshot();
+  test("manual entry keeps the buyer's typed name, not the company they rejected", () => {
+    ctx.helper.onPick({ id: "ACME Widgets Ltd", company_id: "12345678" });
 
     ctx.helper.enterManualCompanyEntry();
     $("#billing_company").val("Sole Proprietor Bakery");
