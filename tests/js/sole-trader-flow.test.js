@@ -1755,6 +1755,63 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         jest.useRealTimers();
       });
 
+      /**
+       * Keyboard and pointer must reach the same outcome. The chip nodes here
+       * are the ones the dropdown builds and inserts, activated with a bare
+       * `click` — the event pair Enter and Space produce.
+       */
+      test("keyboard and pointer activation of Registered company agree", () => {
+        function activate(withMousedown) {
+          openWidgetWithChips();
+          soleTrader.setMode("sole_trader");
+          const win = fakePopup();
+          window.open = jest.fn(() => win);
+          soleTrader.launchSignup();
+          const chip = document.getElementById(ctx.helper.businessChipId);
+          expect(chip).not.toBeNull();
+          if (withMousedown) {
+            chip.dispatchEvent(new window.MouseEvent("mousedown", { bubbles: true }));
+          }
+          chip.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+          return { closed: win.close.mock.calls.length, mode: soleTrader.mode };
+        }
+
+        jest.useFakeTimers();
+        const pointer = activate(true);
+        const keyboard = activate(false);
+
+        expect(keyboard).toEqual(pointer);
+        expect(keyboard.closed).toBe(1);
+        expect(keyboard.mode).toBe("business");
+        jest.useRealTimers();
+      });
+
+      /**
+       * The Sole trader chip is the one activation that KEEPS the popup, so a
+       * return-armed abandon has to be cancelled by it. Only the capture-phase
+       * mousedown did that, so on the keyboard the chip raised the popup and
+       * the still-armed timer closed it 150ms later.
+       */
+      test("keyboard activation of Sole trader keeps the popup it just raised", () => {
+        openWidgetWithChips();
+        soleTrader.setMode("sole_trader");
+        const win = fakePopup();
+        window.open = jest.fn(() => win);
+        jest.useFakeTimers();
+        soleTrader.launchSignup();
+
+        // The buyer comes back to the checkout, then reaches the chip by
+        // keyboard — no mousedown anywhere in the gesture.
+        refocusCheckout();
+        const chip = document.getElementById(ctx.helper.soleTraderChipId);
+        expect(chip).not.toBeNull();
+        chip.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+        jest.advanceTimersByTime(400);
+
+        expect(win.close).not.toHaveBeenCalled();
+        jest.useRealTimers();
+      });
+
       test("teardown drops the visibility listener too", () => {
         openWidgetWithChips();
         soleTrader.setMode("sole_trader");
@@ -2469,25 +2526,63 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     });
 
     describe("round-1 review regressions (Han/Vader/Leia) — races the dropdown-survives fix opened up", () => {
-      test("the Business chip is refused while a signup is outstanding, not honoured then stomped by its result", () => {
+      test("the Business chip is honoured before ACCEPTED, and its result cannot stomp the switch", () => {
         const flight = armUndecidedSignup();
+        harness.openCompanyWidget($, ctx.helper);
+        ctx.helper.syncManualEntryButton();
         soleTrader.onModeChipClick("sole_trader");
 
-        // The chip lives inside the search dropdown the buyer is still
-        // looking at — clicking Business mid-flight used to force mode back
-        // to business immediately, only for the later result to silently
-        // force it straight back to sole-trader and populate underneath.
-        ctx.helper.buildBusinessChip().trigger("click");
-        expect(soleTrader.mode).toBe("sole_trader");
+        // The chip node the dropdown actually built, not a detached copy: a
+        // node outside the document reaches neither the capture-phase
+        // mousedown listener nor anything else keyed on the live tree.
+        const chip = document.getElementById(ctx.helper.businessChipId);
+        expect(chip).not.toBeNull();
+        chip.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
 
-        flight.settle({
-          organization_number: "TWO:ST1",
-          company_name: "Sole Co",
-          email: "buyer@example.test"
-        });
+        // Nothing has been accepted yet, so the buyer's choice stands and the
+        // signup goes with it (TWO-25503).
+        expect(soleTrader.mode).toBe("business");
+
+        // The stomp this test was written for: a result arriving from the
+        // abandoned signup must not drag the buyer back into the mode they
+        // left. It never reaches a buyer lookup at all — `fetchCurrentBuyer`
+        // is the only thing that can write a company, and it is not called.
+        window.dispatchEvent(
+          new window.MessageEvent("message", {
+            data: "ACCEPTED",
+            origin: "https://checkout.example.test"
+          })
+        );
+
+        expect(soleTrader.fetchCurrentBuyer).not.toHaveBeenCalled();
+        expect(soleTrader.mode).toBe("business");
+        expect($("#company_id").val()).not.toBe("TWO:ST1");
+        expect(flight).toBeTruthy();
+      });
+
+      test("the Business chip is still refused once ACCEPTED is in flight", () => {
+        const flight = armUndecidedSignup();
+        harness.openCompanyWidget($, ctx.helper);
+        ctx.helper.syncManualEntryButton();
+        soleTrader.onModeChipClick("sole_trader");
+
+        // ACCEPTED marks its popup decided at receipt, which excludes it from
+        // the abandon — so the flight it opened still holds `isDeciding()` and
+        // the mode switch is refused, which is what keeps the completing
+        // signup from being honoured and then stomped.
+        window.dispatchEvent(
+          new window.MessageEvent("message", {
+            data: "ACCEPTED",
+            origin: new URL(soleTrader.tokens.signup_url).origin
+          })
+        );
+
+        const chip = document.getElementById(ctx.helper.businessChipId);
+        expect(chip).not.toBeNull();
+        chip.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
 
         expect(soleTrader.mode).toBe("sole_trader");
-        expect($("#company_id").val()).toBe("TWO:ST1");
+        expect(flight).toBeTruthy();
       });
 
       test("the Business chip works normally once the flight has actually settled", () => {
@@ -2757,16 +2852,26 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         expect(soleTrader.soleTraderReconfirmingCount).toBe(0);
       });
 
-      test("the Business chip is refused while a re-signup popup is still open, same as the first one", () => {
+      test("the Business chip takes a re-signup popup down with it, same as the first one", () => {
         soleTrader.setMode("sole_trader");
         soleTrader.setCompany("TWO:ST1", "First Trader");
         const win = { closed: false };
+        win.close = jest.fn(() => {
+          win.closed = true;
+        });
         window.open = jest.fn(() => win);
+        harness.openCompanyWidget($, ctx.helper);
+        ctx.helper.syncManualEntryButton();
 
         soleTrader.getDifferentSoleTraderBtnNode().trigger("click");
-        ctx.helper.buildBusinessChip().trigger("click");
+        const chip = document.getElementById(ctx.helper.businessChipId);
+        expect(chip).not.toBeNull();
+        chip.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
 
-        expect(soleTrader.mode).toBe("sole_trader");
+        // Undecided, so the buyer's choice carries and the window goes with
+        // it — the same rule the first signup follows.
+        expect(win.close).toHaveBeenCalledTimes(1);
+        expect(soleTrader.mode).toBe("business");
       });
 
       test("soleTraderReconfirmingCount clears once the re-signup popup closes without completing", () => {

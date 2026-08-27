@@ -204,6 +204,12 @@ function loadTwoinc(twoinc) {
  * The country row alongside them carries `priority - 1`, which is what
  * `WC_Twoinc_Checkout` assigns `billing_country` relative to the company rows.
  *
+ * `.woocommerce-input-wrapper` bounds the INPUT alone where the row's `<p>`
+ * wraps label and input together, and the affordance links are appended into
+ * it so they centre against the visible input box rather than the pair — a
+ * fixture without it lets that regress to appending on the row itself, which
+ * is the overlap-with-the-label bug, with nothing to signal the fallback.
+ *
  * @param {Object} [options]
  * @param {string} [options.companyOptions] inner HTML for the search select
  * @returns {string} the three rows as markup
