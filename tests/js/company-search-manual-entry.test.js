@@ -644,7 +644,9 @@ describe("company-search manual-entry affordance", () => {
       ctx.Twoinc.getInstance();
       type("abc");
       const clicked = [];
-      btn().get(0).addEventListener("click", () => clicked.push(1));
+      btn()
+        .get(0)
+        .addEventListener("click", () => clicked.push(1));
 
       btn()
         .get(0)

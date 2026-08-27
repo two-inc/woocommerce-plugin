@@ -3,10 +3,9 @@
  * — WooCommerce's checkout-AJAX fragment `replaceWith()` is the documented
  * trigger — with no teardown call ever reaching the control attached to it.
  *
- * Under selectWoo that left an orphan by construction: the dropdown was a node
- * appended straight to `<body>`, so removing the field took the inline container
- * with it and left the dropdown behind, and reopening the re-attached widget
- * then rendered a SECOND open dropdown alongside it.
+ * A body-appended dropdown outlives the field it belonged to, so the replace
+ * leaves it orphaned and the next open renders a second one alongside it. The
+ * panel is a child of the field's own wrapper, so it goes with the field.
  *
  * The panel closes that whole class of defect structurally — it is a child of
  * the field's own wrapper, so a fragment replace takes it with the field, and

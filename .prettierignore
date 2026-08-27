@@ -1,0 +1,4 @@
+# Vendored verbatim from the Two Magento plugin, where it is maintained.
+# Formatting it here would fork the file from upstream and turn every future
+# re-copy into a whole-file diff. See AGENTS.md.
+assets/js/company-search-panel.js

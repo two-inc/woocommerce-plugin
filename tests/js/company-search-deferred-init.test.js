@@ -235,13 +235,9 @@ describe("deferred company-search initialisation", () => {
   });
 
   test("the deferred pass leaves the field's handlers bound exactly once", () => {
-    // TWO-25338 was a real defect under selectWoo: the plugin bound its
-    // `select2:select` / `select2:open` handlers unnamespaced with no preceding
-    // `.off()`, so a namespaced destroy could not match them and every ordinary
-    // page load ended with one pick running getApproval(), addressLookup() and
+    // TWO-25338: a duplicate pick handler runs getApproval(), addressLookup() and
     // renderCompanySummary() twice over. The panel takes its own listeners back
-    // before re-binding, so the retry is genuinely idempotent — this is the
-    // guarantee that replaced the characterisation.
+    // before re-binding, which is what makes the retry idempotent.
     ctx.Twoinc.getInstance().initialize(false);
     const before = fieldListenerTypes();
     expect(before.length).toBeGreaterThan(0);

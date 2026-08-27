@@ -1934,9 +1934,8 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     });
 
     test("a capture inside the window is left alone, because the DOM is its source", () => {
-      // No capture path bumps `companySearchSeq` — `select2:select`, sole trader and
-      // manual entry all write `customerCompany` and the two mirror inputs and bump
-      // nothing (review round 5 flagged this as only incidentally guarded).
+      // No capture path bumps `companySearchSeq` — a registry pick, sole trader and
+      // manual entry all write `customerCompany` and the two mirror inputs only.
       //
       // It needs no bump: every capture mode writes `#billing_company` and
       // `#company_id`, which is exactly what the re-read reads back, so the re-read

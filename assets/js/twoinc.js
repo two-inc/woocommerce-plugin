@@ -3445,7 +3445,7 @@ let twoincSoleTrader = {
       // "give me that popup back".
       clearTimeout(twoincSoleTrader.refocusAbandonTimer);
       twoincSoleTrader.refocusAbandonTimer = null;
-      if (chip.getAttribute("data-mode") === "sole_trader") return;
+      if (chip.getAttribute("data-two-chip") === "sole_trader") return;
       twoincSoleTrader.abandonPopupsForChipClick();
     };
     document.addEventListener("mousedown", twoincSoleTrader.chipMousedownHandler, true);
