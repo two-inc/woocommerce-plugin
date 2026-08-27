@@ -416,6 +416,19 @@ let twoincCompanyCapture = {
     }
   },
 
+  /**
+   * Has Two captured a company — a registry pick or an adopted sole trader?
+   *
+   * Keyed on the org number rather than the name: manual entry captures a name
+   * alone, and it is the number that makes a capture Two's rather than
+   * WooCommerce's own field content.
+   *
+   * @returns {boolean}
+   */
+  hasCapture: function () {
+    return twoincUtilHelper.blankToEmpty(twoincCompanyCapture.numberField().val()) !== "";
+  },
+
   /** Drop the pairing tag and both provenance markers. */
   forgetPairing: function () {
     twoincCompanyCapture
@@ -1392,10 +1405,10 @@ class TwoCompanySearch {
    * the spinner over the label too.
    */
   soleTraderSpinnerHost() {
-    const $picker = jQuery("#billing_company_display_field");
-    if ($picker.length && !$picker.hasClass("hidden")) {
-      const $selection = $picker.find(".select2-selection").first();
-      return $selection.length ? $selection : $picker;
+    const $surface = twoincSelectWooHelper.companyNameSurface();
+    if ($surface.is("#billing_company_display_field")) {
+      const $selection = $surface.find(".select2-selection").first();
+      return $selection.length ? $selection : $surface;
     }
     return twoincSelectWooHelper.companyFieldAffordanceSlot();
   }
@@ -2242,15 +2255,10 @@ class TwoCompanySearch {
     let $node = jQuery("#" + twoincSelectWooHelper.companySummaryId);
     const isNew = !$node.length;
 
-    let $field = jQuery("#billing_company_display_field");
-    // The label belongs immediately below whichever company-NAME element is
-    // currently visible: the search control wins while showing, the native
-    // field takes over only when it's hidden (anchoring against a
-    // `display: none` row would strand the label above whatever sits there).
-    if ($field.hasClass("hidden")) {
-      const $native = jQuery("#billing_company_field");
-      if ($native.length && !$native.hasClass("hidden")) $field = $native;
-    }
+    // Immediately below whichever company-NAME element is currently visible —
+    // anchoring against a `display: none` row would strand the label above
+    // whatever sits there. `companyNameSurface()` is the single answer.
+    let $field = twoincSelectWooHelper.companyNameSurface();
     if (!$field.length) $field = jQuery("#company_id_field");
     if (!$field.length) $field = jQuery("#billing_company_field");
     if (!$field.length) return $node;
@@ -2391,6 +2399,29 @@ class TwoCompanySearch {
    * is built around just the `<input>` instead, matching the DOM shape
    * WooCommerce core's own `woocommerce_form_field()` produces.
    */
+  /**
+   * The row that is the buyer's visible company-NAME surface right now.
+   *
+   * THE one place that decides it (TWO-25503). Every surface that has to sit
+   * beside the company name — the read-only number label, the sole-trader
+   * link, the in-flight spinner — asks here instead of re-deriving it. Each
+   * deriving its own answer, at whatever moment it happened to be created, is
+   * what let them disagree and strand one of them in the wrong region.
+   *
+   * The search control wins wherever it is showing, address area or payment
+   * tile. The native field takes over only when the search control is hidden:
+   * manual entry, or a billing country with no registry to search.
+   *
+   * @returns {jQuery}
+   */
+  companyNameSurface() {
+    const $search = jQuery("#billing_company_display_field");
+    if ($search.length && !$search.hasClass("hidden")) return $search;
+    const $native = jQuery("#billing_company_field");
+    if ($native.length && !$native.hasClass("hidden")) return $native;
+    return $search.length ? $search : $native;
+  }
+
   companyFieldAffordanceSlot() {
     return twoincSelectWooHelper.affordanceSlotIn(
       jQuery("#billing_company_field"),
@@ -2941,9 +2972,21 @@ let twoincDomHelper = {
       // our search control lives: unchecking "Enable company search in
       // address entry" moves the search control into the payment tile but
       // must never take WooCommerce's stock field away from the address
-      // area — the two coexist. Left untouched (no required cue): WC owns
-      // that field's required-ness, this plugin only decides visibility.
-      if (window.twoinc.company_search_location === "payment_tile") {
+      // area — the two coexist (Doug 2026-08-04). Left untouched (no
+      // required cue): WC owns that field's required-ness, this plugin only
+      // decides visibility.
+      //
+      // Only while Two has captured nothing (TWO-25503, Doug: an adopted sole
+      // trader "should do neither of these things in the address area"). The
+      // capture is written into `#billing_company` because that is what POSTs,
+      // so leaving the row on screen paints the captured company into the
+      // address area alongside the tile that owns it. This narrows the
+      // 2026-08-04 rule rather than dropping it: with nothing captured, the
+      // stock field is still there for a buyer paying another way.
+      if (
+        window.twoinc.company_search_location === "payment_tile" &&
+        !twoincCompanyCapture.hasCapture()
+      ) {
         visibleTargets.push("#billing_company_field");
       }
     } else {
@@ -4143,11 +4186,16 @@ let twoincSoleTrader = {
    * @returns {jQuery}
    */
   differentSoleTraderBtnSlot: function () {
-    const $searchField = jQuery("#billing_company_display_field");
-    if (!jQuery("#billing_company_field").hasClass("hidden") || !$searchField.length) {
-      return twoincSelectWooHelper.companyFieldAffordanceSlot();
+    // Follows `companyNameSurface()` in both mount locations rather than
+    // deciding once at creation (TWO-25503): this link is built late, only on
+    // adoption, so a home chosen at that moment is a home chosen from whatever
+    // happened to be visible then — which is how it has twice ended up in the
+    // wrong region.
+    const $surface = twoincSelectWooHelper.companyNameSurface();
+    if ($surface.is("#billing_company_display_field")) {
+      return twoincSelectWooHelper.affordanceSlotIn($surface, "#billing_company_display");
     }
-    return twoincSelectWooHelper.affordanceSlotIn($searchField, "#billing_company_display");
+    return twoincSelectWooHelper.companyFieldAffordanceSlot();
   },
 
   /**

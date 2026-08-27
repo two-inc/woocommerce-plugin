@@ -102,6 +102,12 @@ describe("company-search tile location (TWO-25326 §7.1)", () => {
       dom = ctx.dom;
       helper = ctx.helper;
       buildTileSlot();
+      // The fixture ships the server's markup, where this row is `hidden`;
+      // `toggleBusinessFields()` clears it on a real page once Two is selected
+      // and the country is supported. This suite is about RELOCATION, not that
+      // decision, so it states the precondition rather than inheriting a
+      // fixture that pretends the server never set it.
+      $("#billing_company_display_field").removeClass("hidden");
     });
 
     test("moves the search widget into the tile slot, not a clone", () => {
