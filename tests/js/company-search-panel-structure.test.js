@@ -136,18 +136,25 @@ describe("company-capture panel structure", () => {
 
   describe("the wrapper is pinned to the input's own box", () => {
     const FIELD_HEIGHT = 42;
+    const FIELD_WIDTH_HOLDER = { value: 310 };
     const FIELD_WIDTH = 310;
     let outerWidth;
     let outerHeight;
 
     beforeEach(() => {
+      FIELD_WIDTH_HOLDER.value = FIELD_WIDTH;
       // jsdom has no layout, so the measurements the pin reads have to come
       // from somewhere; the row is deliberately WIDER than the input, which is
       // the case the pin exists for.
       outerWidth = ctx.$.fn.outerWidth;
       outerHeight = ctx.$.fn.outerHeight;
       ctx.$.fn.outerWidth = function () {
-        return this.is("#billing_company_display") ? FIELD_WIDTH : 640;
+        if (!this.is("#billing_company_display")) return 640;
+        const pinned = this.closest(".two-company-field-wrap").get(0);
+        // The input is `width: 100%` of the wrapper, so a pin left in place is
+        // what a re-measurement reads back.
+        if (pinned && pinned.style.width) return parseInt(pinned.style.width, 10);
+        return FIELD_WIDTH_HOLDER.value;
       };
       ctx.$.fn.outerHeight = function () {
         return this.is("#billing_company_display") ? FIELD_HEIGHT : 96;
@@ -169,14 +176,28 @@ describe("company-capture panel structure", () => {
 
     test("a second pass re-measures rather than reading its own pin back", () => {
       ctx.helper.attach();
-      ctx.$.fn.outerWidth = function () {
-        return this.is("#billing_company_display") ? 220 : 640;
-      };
+      expect(document.querySelector(".two-company-field-wrap").style.width).toBe(
+        FIELD_WIDTH + "px"
+      );
+      FIELD_WIDTH_HOLDER.value = 220;
 
       ctx.helper.syncFieldWrapMetrics();
 
       expect(document.querySelector(".two-company-field-wrap").style.width).toBe("220px");
     });
+  });
+
+  test("the stylesheet anchors the panel to the input's height, not the wrapper's", () => {
+    const style = harness.injectStylesheet();
+    const rule = Array.prototype.find.call(style.sheet.cssRules, function (candidate) {
+      return candidate.selectorText === ".two-company-dropdown";
+    });
+
+    expect(rule).toBeDefined();
+    // `100%` here is the WRAPPER, which grows by the sole-trader link's height
+    // the moment one is adopted.
+    expect(rule.style.top).toBe("calc(var(--two-company-input-height, 100%) + 8px)");
+    style.remove();
   });
 
   test("no selectWoo or select2 node is created for the company field", () => {
