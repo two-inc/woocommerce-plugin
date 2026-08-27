@@ -178,26 +178,6 @@ function loadTwoinc(twoinc) {
 }
 
 /**
- * The subset of the WooCommerce checkout form the company-search code reads.
- *
- * `#billing_company_display` is the select the widget is attached to;
- * `#billing_country` is where the search's country parameter comes from;
- * `#billing_company` is the real (hidden) company field.
- *
- * The company select carries the same empty first option WooCommerce renders
- * for it from WC_Twoinc_Checkout's `options` array — `value=""` with a
- * non-breaking space for its label. That pairing is load-bearing for the
- * empty-field hint (the widget only paints a placeholder while the current
- * selection's value matches the placeholder's), so the harness ships the real
- * markup rather than a bare `<select>`.
- *
- * @param {Object} [options]
- * @param {string} [options.country] ISO code for the selected country option
- * @param {string} [options.companyOptions] override the company select's inner
- *   HTML, for a test that needs the option markup to differ from production
- * @returns {void}
- */
-/**
  * The three company rows as WooCommerce's own `woocommerce_form_field()`
  * renders the declarations in `WC_Twoinc_Checkout::add_company_fields()` —
  * `form-row` plus each field's declared classes, its `data-priority`, a label
@@ -221,9 +201,12 @@ function loadTwoinc(twoinc) {
  * held back from the regression fix this fixture rides in on. Four further
  * fixtures still build these rows themselves and want folding in here too.
  *
+ * The country row alongside them carries `priority - 1`, which is what
+ * `WC_Twoinc_Checkout` assigns `billing_country` relative to the company rows.
+ *
  * @param {Object} [options]
  * @param {string} [options.companyOptions] inner HTML for the search select
- * @returns {string}
+ * @returns {string} the three rows as markup
  */
 function companyRowsMarkup(options) {
   const opts = options || {};
@@ -253,6 +236,26 @@ function companyRowsMarkup(options) {
   ].join("\n");
 }
 
+/**
+ * The subset of the WooCommerce checkout form the company-search code reads.
+ *
+ * `#billing_company_display` is the select the widget is attached to;
+ * `#billing_country` is where the search's country parameter comes from;
+ * `#billing_company` is the real (hidden) company field.
+ *
+ * The company select carries the same empty first option WooCommerce renders
+ * for it from WC_Twoinc_Checkout's `options` array — `value=""` with a
+ * non-breaking space for its label. That pairing is load-bearing for the
+ * empty-field hint (the widget only paints a placeholder while the current
+ * selection's value matches the placeholder's), so the harness ships the real
+ * markup rather than a bare `<select>`.
+ *
+ * @param {Object} [options]
+ * @param {string} [options.country] ISO code for the selected country option
+ * @param {string} [options.companyOptions] override the company select's inner
+ *   HTML, for a test that needs the option markup to differ from production
+ * @returns {void}
+ */
 function buildCheckoutForm(options) {
   const opts = options || {};
   const country = opts.country || "GB";
@@ -266,7 +269,7 @@ function buildCheckoutForm(options) {
     '<form name="checkout" class="checkout woocommerce-checkout">',
     '  <div class="woocommerce-billing-fields">',
     '  <div class="woocommerce-billing-fields__field-wrapper">',
-    '  <p id="billing_country_field" class="form-row address-field update_totals_on_change form-row-wide" data-priority="40">',
+    '  <p id="billing_country_field" class="form-row address-field update_totals_on_change form-row-wide" data-priority="29">',
     '    <label for="billing_country">Country / Region&nbsp;<abbr class="required" title="required">*</abbr></label>',
     '    <span class="woocommerce-input-wrapper">',
     '      <select id="billing_country" name="billing_country">',

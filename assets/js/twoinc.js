@@ -738,6 +738,16 @@ class TwoCompanySearch {
       .addClass(helper.modeChipClass)
       .text(label)
       .on("click", function () {
+        // Read BEFORE the abandon below, which settles the popup watcher this
+        // predicate counts: the mode switch must still be refused mid-decision
+        // (see the guard's own reasoning), and abandoning would otherwise make
+        // this read false and let the click through.
+        const wasDeciding = twoincSoleTrader.isDeciding();
+        // The popup goes on the CLICK, whatever the guard then decides about
+        // the mode (TWO-25503): Enter and Space fire `click` with no
+        // `mousedown`, so behind the guard this chip did nothing at all for a
+        // keyboard buyer — the signup stayed up with no way to dismiss it.
+        twoincSoleTrader.abandonPopupsForChipClick();
         // Refused while sole-trader mode is still DECIDING what it is
         // (TWO-40 §7 correction, round-1 review — Han/Vader): this chip only
         // coexists with `sole_trader` mode DURING that wait (an adopted sole
@@ -749,7 +759,7 @@ class TwoCompanySearch {
         // outcome is already settled and only the popup-close poll hasn't
         // caught up yet — refusing the click for that stretch too is a UX
         // regression, not a safety guard.
-        if (twoincSoleTrader.mode === "business" || twoincSoleTrader.isDeciding()) return;
+        if (twoincSoleTrader.mode === "business" || wasDeciding) return;
         // Read BEFORE the switch, reopened after (Doug 2026-08-20, live):
         // `setMode`'s business branch destroys this dropdown and re-attaches a
         // fresh, CLOSED widget — see its own comment — so the chip took the
@@ -4178,11 +4188,6 @@ let twoincSoleTrader = {
    */
   onModeChipClick: function (mode) {
     if (mode === "business") {
-      // On the CLICK, not the mousedown that usually precedes it: Enter/Space
-      // fire click alone, and the popup has to go for a keyboard buyer too
-      // (TWO-25503). Before the isDeciding() guard, since an outstanding
-      // signup is exactly what makes that guard refuse.
-      twoincSoleTrader.abandonPopupsForChipClick();
       // Same isDeciding() guard the real Business chip's own wiring uses,
       // so this shared entry point doesn't regress if called elsewhere.
       if (!twoincSoleTrader.isDeciding()) twoincSoleTrader.setMode("business");
@@ -4679,11 +4684,13 @@ let twoincSoleTrader = {
    * @returns {void}
    */
   scheduleRefocusAbandon: function () {
-    // Coalesced onto the FIRST arming, never rescheduled onto a later one:
-    // window-targeted `focus` events arrive in bursts for reasons that are not
-    // the buyer's gesture — blurring an element fires one, so select2 closing
-    // its own dropdown produces a stream — and restarting the clock on each
-    // would let a busy panel postpone the abandon indefinitely.
+    // Coalesced onto the FIRST arming. Nothing clears an armed timer, so a
+    // second signal would not move the deadline — it would leave a SECOND
+    // timer running past it, coming due against whatever popup exists by then
+    // rather than the one the buyer walked away from. Window-targeted `focus`
+    // arrives in bursts (a blur fires one, so the panel closing its own
+    // dropdown produces a stream), and a single return can legitimately reach
+    // both this and the visibility listener.
     if (twoincSoleTrader.refocusAbandonTimer !== null) return;
     twoincSoleTrader.refocusAbandonTimer = setTimeout(function () {
       twoincSoleTrader.refocusAbandonTimer = null;
@@ -4759,14 +4766,15 @@ let twoincSoleTrader = {
   },
 
   /**
-   * Abandon the signup popups because the buyer came back to the checkout
-   * by clicking a mode chip other than Sole trader. Same close as
-   * `closeAbandonedPopups`, but runs in the chip's own `mousedown` and
-   * drains each popup's settle synchronously rather than leaving it to the
-   * 300ms poll, so the chip's `click` handler a moment later sees no
-   * outstanding flight or live popup. Safe to drain early only because
-   * `chipOwnsOutcome` holds back the steps that touch the dropdown — see
-   * `settleClosedPopup`.
+   * Abandon the signup popups because the buyer chose a mode chip other than
+   * Sole trader. Same close as `closeAbandonedPopups`, but drains each
+   * popup's settle synchronously rather than leaving it to the 300ms poll, so
+   * whatever runs next sees no outstanding flight or live popup. Safe to drain
+   * early only because `chipOwnsOutcome` holds back the steps that touch the
+   * dropdown — see `settleClosedPopup`.
+   *
+   * Reached from the chip's `mousedown` where there is one, and from its
+   * `click` regardless, which is the only one Enter and Space produce.
    */
   abandonPopupsForChipClick: function () {
     twoincSoleTrader.abandonablePopups().forEach(function (watcher) {

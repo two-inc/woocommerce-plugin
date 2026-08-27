@@ -1660,10 +1660,17 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
        * surviving close path where the deferred one never arms — is only true
        * if that holds for the keyboard too.
        */
+      /**
+       * Driven through the chip NODES the dropdown actually builds, with a
+       * bare `click` and no `mousedown` — the event pair Enter and Space
+       * produce. Calling the mode-switch helpers directly would exercise a
+       * path production never takes: `onModeChipClick` has exactly one
+       * production caller and it passes `"sole_trader"`.
+       */
       test.each([
-        ["Registered company", () => soleTrader.onModeChipClick("business")],
-        ["Enter manually", () => ctx.helper.activateManualEntry()]
-      ])("%s activated without a mousedown still takes the popup down", (_label, activate) => {
+        ["Registered company", () => ctx.helper.businessChipId],
+        ["Enter manually", () => ctx.helper.manualEntryRowId]
+      ])("%s activated without a mousedown still takes the popup down", (_label, chipId) => {
         openWidgetWithChips();
         soleTrader.setMode("sole_trader");
         const win = fakePopup();
@@ -1671,7 +1678,9 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         jest.useFakeTimers();
         soleTrader.launchSignup();
 
-        activate();
+        const chip = document.getElementById(chipId());
+        expect(chip).not.toBeNull();
+        chip.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
 
         expect(win.close).toHaveBeenCalledTimes(1);
         jest.useRealTimers();
@@ -1707,6 +1716,42 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
 
         jest.advanceTimersByTime(60);
         expect(win.close).toHaveBeenCalledTimes(1);
+        jest.useRealTimers();
+      });
+
+      /**
+       * Arming is coalesced onto the FIRST caller. Nothing clears an armed
+       * timer, so a second signal does not move the deadline — it leaves a
+       * SECOND timer running past it, and that one comes due against whatever
+       * popup exists by then. Window-targeted `focus` arrives in bursts (a
+       * blur fires one, so the panel closing its own dropdown produces a
+       * stream), and binding `visibilitychange` alongside `focus` means one
+       * return can legitimately signal twice.
+       */
+      test("a second signal does not leave a stale timer to close a later popup", () => {
+        openWidgetWithChips();
+        soleTrader.setMode("sole_trader");
+        const first = fakePopup();
+        window.open = jest.fn(() => first);
+        jest.useFakeTimers();
+        soleTrader.launchSignup();
+
+        refocusCheckout();
+        jest.advanceTimersByTime(100);
+        refocusCheckout();
+        jest.advanceTimersByTime(60);
+        expect(first.close).toHaveBeenCalledTimes(1);
+
+        // The buyer starts a fresh signup inside the window the second timer
+        // would still be running in.
+        const second = fakePopup();
+        window.open = jest.fn(() => second);
+        soleTrader.setMode("sole_trader");
+        soleTrader.launchSignup();
+
+        jest.advanceTimersByTime(200);
+
+        expect(second.close).not.toHaveBeenCalled();
         jest.useRealTimers();
       });
 
