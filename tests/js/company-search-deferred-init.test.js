@@ -140,23 +140,6 @@ describe("deferred company-search initialisation", () => {
     return jest.spyOn(Twoinc.prototype, "enableCompanySearch");
   }
 
-  /**
-   * The event types the panel currently has bound on the company field.
-   *
-   * Read out of the panel's own listener ledger, because the duplication being
-   * counted is invisible from the DOM: `addEventListener` exposes nothing, and
-   * a second identical binding is a second entry against the same node.
-   *
-   * @returns {Array<string>}
-   */
-  function fieldListenerTypes() {
-    const field = ctx.$("#billing_company_display")[0];
-    if (!field || !ctx.helper.panel) return [];
-    return ctx.helper.panel._listeners
-      .filter((entry) => entry.target === field)
-      .map((entry) => entry.type);
-  }
-
   test("the deferred pass stores its panel on the instance", () => {
     const instance = ctx.Twoinc.getInstance();
     instance.initialize(false);
@@ -235,18 +218,21 @@ describe("deferred company-search initialisation", () => {
   });
 
   test("the deferred pass leaves the field's handlers bound exactly once", () => {
-    // TWO-25338: a duplicate pick handler runs getApproval(), addressLookup() and
-    // renderCompanySummary() twice over. The panel takes its own listeners back
-    // before re-binding, which is what makes the retry idempotent.
+    // TWO-25338: the retry re-binds a field that already has openers on it, and
+    // a second copy of the `input` opener re-reads the field AFTER the first has
+    // already put the captured name back into it — so the buyer's keystrokes
+    // reach the query box as the company name instead.
     ctx.Twoinc.getInstance().initialize(false);
-    const before = fieldListenerTypes();
-    expect(before.length).toBeGreaterThan(0);
+    ctx.capture.write("Acme Ltd", "12345678");
 
     jest.advanceTimersByTime(800);
 
-    const after = fieldListenerTypes();
-    expect(after.slice().sort()).toEqual(before.slice().sort());
-    expect(new Set(after).size).toBe(after.length);
+    const field = ctx.$("#billing_company_display")[0];
+    field.value = "beta";
+    field.dispatchEvent(new window.Event("input", { bubbles: true }));
+
+    expect(ctx.$(".two-company-dropdown__query").val()).toBe("beta");
+    expect(field.value).toBe("Acme Ltd");
   });
 
   test("the deferred pass early-returns outside search capture mode", () => {

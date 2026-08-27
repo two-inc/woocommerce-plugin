@@ -349,15 +349,26 @@ describe("capture modes composed, not taken one at a time (#486)", () => {
     });
   });
 
-  describe("every path that can create a capture reaches the visibility rule", () => {
-    // `toggleBusinessFields()` is the only place the visible company-name
-    // surface is decided, so a path that skips it leaves the rule computed and
-    // never read — the buyer keeps looking at the surface the PREVIOUS state
-    // chose (TWO-25503).
+  describe("every path that can create a capture leaves the right surface on screen", () => {
+    /**
+     * Exactly one of the two company-name rows is on screen (TWO-25503), so
+     * naming the visible one names the hidden one too.
+     *
+     * @param {string} id the row expected to be the visible one
+     * @returns {void}
+     */
+    function expectVisibleCompanyRow(id) {
+      const rows = ["#billing_company_field", "#billing_company_display_field"];
+      expect($(id).hasClass("hidden")).toBe(false);
+      expect($(rows[rows[0] === id ? 1 : 0]).hasClass("hidden")).toBe(true);
+    }
+
     test.each([
       [
         "a registry pick",
-        () => ctx.helper.onPick({ id: "ACME Widgets Ltd", company_id: "912345678" })
+        () => ctx.helper.onPick({ id: "ACME Widgets Ltd", company_id: "912345678" }),
+        "#billing_company_display_field",
+        "ACME Widgets Ltd"
       ],
       [
         "a sole-trader adoption",
@@ -368,16 +379,19 @@ describe("capture modes composed, not taken one at a time (#486)", () => {
             MATCHED_BUYER.company_name,
             MATCHED_BUYER
           );
-        }
+        },
+        "#billing_company_display_field",
+        MATCHED_BUYER.company_name
       ],
-      ["manual entry", () => ctx.helper.enterManualCompanyEntry()],
       [
         "the user-meta echo",
         () => {
           ctx.twoinc.billing_company = MATCHED_BUYER.company_name;
           ctx.twoinc.company_id = MATCHED_BUYER.organization_number;
           ctx.dom.loadUserMetaInputs();
-        }
+        },
+        "#billing_company_display_field",
+        MATCHED_BUYER.company_name
       ],
       [
         "the DOM restore",
@@ -385,15 +399,27 @@ describe("capture modes composed, not taken one at a time (#486)", () => {
           $("#billing_company").val("ACME Widgets Ltd");
           $("#company_id").val("912345678");
           ctx.dom.restoreCapturedCompany();
-        }
+        },
+        "#billing_company_display_field",
+        "ACME Widgets Ltd"
       ]
-    ])("%s re-evaluates it", (_label, act) => {
-      const toggled = jest.spyOn(ctx.dom, "toggleBusinessFields");
-
+    ])("%s leaves the search control showing it", (_label, act, visible, name) => {
       act();
 
-      expect(toggled).toHaveBeenCalled();
-      toggled.mockRestore();
+      expectVisibleCompanyRow(visible);
+      expect(ctx.helper.getCompanyName()).toBe(name);
+      expect($("#billing_company").val()).toBe(name);
+    });
+
+    test("manual entry hands the surface back to the native field, cleared", () => {
+      ctx.helper.onPick({ id: "ACME Widgets Ltd", company_id: "912345678" });
+      expectVisibleCompanyRow("#billing_company_display_field");
+
+      ctx.helper.enterManualCompanyEntry();
+
+      expectVisibleCompanyRow("#billing_company_field");
+      expect($("#billing_company").val()).toBe("");
+      expect($("#company_id").val()).toBe("");
     });
   });
 });
