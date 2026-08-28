@@ -304,8 +304,8 @@ let twoincAddressMirror = {
  *  4. The CAPTURE MODE — which of the three capture UIs the buyer is currently
  *     using. See the property's own comment.
  *
- * The name and number fields are the INVOICE-role ones — they are what
- * WooCommerce posts and what the order intent is authorised against.
+ * The number field is fixed; the name field moves with the control's mount
+ * (see `nameFieldSelector`).
  */
 let twoincCompanyCapture = {
   /**
