@@ -614,6 +614,10 @@ let twoincCompanyCapture = {
 
     twoincCompanyCapture.write($name.val(), "", { role: role });
 
+    // Everything below is invoice-bound: the order intent, and the surfaces the
+    // primary control owns.
+    if ((role || twoincAddressRoles.primary()) !== twoincAddressRoles.invoice()) return true;
+
     const instance = Twoinc.getInstance();
     instance.customerCompany.country_prefix = twoincSelectWooHelper.currentCountry();
     instance.registryAddressApplied = false;
@@ -675,7 +679,7 @@ class TwoCompanySearch {
     this.soleTraderSpinnerHostClass = options.soleTraderSpinnerHostClass || "twoinc-name-searching";
   }
 
-  /** The one panel instance, built on first `attach()`. */
+  /** This control's panel, built on first `attach()`. */
   panel = null;
 
   /** The Twoinc singleton, so a pick can be written onto it. */
@@ -939,10 +943,9 @@ class TwoCompanySearch {
   /**
    * Build the panel, or re-point the existing one at the current mount.
    *
-   * One instance for the page's lifetime: the mount moves between the address
-   * form and the payment tile, and the panel's own `fieldSelector` is what
-   * carries that, so a second instance would mean two controls writing one
-   * capture.
+   * One panel per control: the mount moves between the address form and the
+   * payment tile, and the panel's own `fieldSelector` is what carries that, so
+   * rebuilding would leave the control with two anchors.
    *
    * @returns {Object|null} the panel, or null where the script did not load
    */
@@ -1328,12 +1331,12 @@ class TwoCompanySearch {
   // ------------------------------------------------------------------ country
 
   /**
-   * The billing country the checkout form currently holds, upper-cased, or ""
+   * The country this control's address role currently holds, upper-cased, or ""
    * when absent/unset (TWO-24867). The single reader for every
    * country-sensitive path, so they cannot disagree on "the current country".
    */
   currentCountry() {
-    return twoincAddressRoles.value(twoincAddressRoles.invoice(), "country").toUpperCase();
+    return twoincAddressRoles.value(this.role, "country").toUpperCase();
   }
 
   /**
