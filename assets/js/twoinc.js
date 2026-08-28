@@ -1359,16 +1359,18 @@ class TwoCompanySearch {
   syncCompanySearchTileLocation() {
     const helper = twoincSelectWooHelper;
     const $slot = jQuery("." + helper.companySearchTileSlotClass);
-    if (!$slot.length) return;
 
     if (!helper.isTileLocation()) {
       $slot.addClass("hidden");
-      // Re-bind anyway: this runs on every `updated_checkout`, and a theme that
-      // re-renders the billing fields would otherwise leave the panel anchored
-      // to a node no longer in the document.
+      // Ahead of the slot check, not behind it: the slot lives in the Two
+      // gateway's description, so on a checkout not offering Two this
+      // `updated_checkout` re-bind is the only thing rescuing the panel from
+      // the billing row WooCommerce has just replaced.
       if (twoincCompanyCapture.mode !== "manual") helper.attach();
       return;
     }
+
+    if (!$slot.length) return;
 
     let $row = $slot.find("#" + helper.tileRowId);
     if (!$row.length) {

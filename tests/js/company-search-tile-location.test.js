@@ -281,6 +281,44 @@ describe("company-search tile location (TWO-25326 §7.1)", () => {
     });
   });
 
+  describe("address_area setting, no tile slot rendered", () => {
+    beforeEach(() => {
+      ctx = harness.loadTwoinc({
+        gateway_id: GATEWAY_ID,
+        enable_company_search: "yes",
+        company_search_location: "address_area",
+        supported_buyer_countries: ["GB"],
+        text: {}
+      });
+      $ = ctx.$;
+      dom = ctx.dom;
+      helper = ctx.helper;
+      // Deliberately no buildTileSlot(): the slot server-renders inside Two's
+      // payment-box description, so a checkout not offering Two has none — and
+      // this is the only sync that can rescue the panel there.
+    });
+
+    test.each([
+      { mode: "search", rebinds: true, description: "the panel follows the replaced field" },
+      { mode: "sole_trader", rebinds: true, description: "an adopted company's panel follows too" },
+      { mode: "manual", rebinds: false, description: "manual entry gets no panel back" }
+    ])("$mode capture mode: $description", ({ mode, rebinds }) => {
+      // Given a bound panel, when WooCommerce replaces the billing fragment...
+      helper.attach();
+      const $row = $("#billing_company_display_field");
+      $row.replaceWith($row.prop("outerHTML"));
+      const live = $("#billing_company_display")[0];
+      expect(helper.panel.getField()[0]).not.toBe(live);
+
+      // ...then the `updated_checkout` sync decides on capture mode alone.
+      ctx.capture.mode = mode;
+      helper.syncCompanySearchTileLocation();
+
+      expect(helper.panel.getField()[0] === live).toBe(rebinds);
+      expect($("#billing_company_display_field .two-company-dropdown").length).toBe(rebinds ? 1 : 0);
+    });
+  });
+
   describe("no gateway/tile present yet", () => {
     beforeEach(() => {
       ctx = harness.loadTwoinc({
