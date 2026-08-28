@@ -478,7 +478,8 @@ describe("company-search manual-entry affordance", () => {
 
       expect(visibleChipModes()).toEqual(expected);
       expect(chips().hasClass("two-hidden")).toBe(rowHidden);
-      // Hidden, never removed: the panel keeps its three children in order.
+      // Hidden, never removed — a removed row could not come back when the
+      // buyer switches to a country that does offer sole traders.
       expect(chips().length).toBe(1);
     });
   });
