@@ -401,6 +401,78 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
+         * The merchant's buyer-country allowlist as uppercase ISO-3166-1
+         * alpha-2 codes, or null when unrestricted (TWO-40).
+         *
+         * @return array|null
+         */
+        public function get_supported_buyer_countries()
+        {
+            $countries_option = WC_Twoinc_Brand::prefixed_name('supported_buyer_countries');
+            $checked_option = WC_Twoinc_Brand::prefixed_name('supported_buyer_countries_checked_on');
+
+            if (!$this->get_merchant_id() || !$this->get_option('api_key')) {
+                return null;
+            }
+
+            $checked_on = get_option($checked_option);
+            if (!$checked_on || ((int) $checked_on + 900) <= time()) {
+                update_option($checked_option, time(), false);
+
+                $countries = null;
+                $record = $this->fetch_merchant_record();
+                if (is_array($record)) {
+                    $countries = self::normalize_buyer_countries($record['supported_buyer_countries'] ?? null);
+                }
+
+                update_option($countries_option, $countries ? wp_json_encode($countries) : '', false);
+                return $countries;
+            }
+
+            $cached = get_option($countries_option);
+            if (!$cached) {
+                return null;
+            }
+            return self::normalize_buyer_countries(json_decode((string) $cached, true));
+        }
+
+        /**
+         * Null (no restriction) for anything that is not a usable list of
+         * two-letter codes (TWO-40).
+         *
+         * @param mixed $raw
+         *
+         * @return array|null
+         */
+        private static function normalize_buyer_countries($raw)
+        {
+            if (!is_array($raw)) {
+                return null;
+            }
+            $codes = [];
+            foreach ($raw as $code) {
+                if (is_string($code) && strlen(trim($code)) === 2) {
+                    $codes[] = strtoupper(trim($code));
+                }
+            }
+            return $codes ? array_values(array_unique($codes)) : null;
+        }
+
+        /**
+         * The buyer country the merchant allowlist is judged on: billing,
+         * falling back to shipping, empty string when neither is set (TWO-40).
+         */
+        private static function resolve_buyer_country(): string
+        {
+            $customer = WC()->customer;
+            if (!$customer) {
+                return '';
+            }
+            $billing = strtoupper(trim((string) $customer->get_billing_country()));
+            return $billing !== '' ? $billing : strtoupper(trim((string) $customer->get_shipping_country()));
+        }
+
+        /**
          * The merchant's fixed-fee surcharge cap from GET /v1/merchant
          * (surcharge_limit_amount/_currency — the funding partner's upper
          * bound on what a merchant may pass on per order, TWO-24950), as
@@ -582,6 +654,8 @@ if (!class_exists('WC_Twoinc')) {
                 'platform_minimum_order_checked_on',
                 'merchant_surcharge_limit',
                 'merchant_surcharge_limit_checked_on',
+                'supported_buyer_countries',
+                'supported_buyer_countries_checked_on',
             ];
             foreach ($names as $name) {
                 delete_option(WC_Twoinc_Brand::prefixed_name($name));
@@ -3437,9 +3511,12 @@ if (!class_exists('WC_Twoinc')) {
          * Remove the gateway from checkout when the platform minimum
          * (API-resolved, see get_platform_minimum_order()), the brand's
          * billing-country restriction (availability_gate in the brand
-         * config), the merchant's own minimum is unmet, or the configured
-         * surcharge cannot be quoted in the checkout currency at all
-         * (TWO-25269). Mirrors the brand availability gate semantics:
+         * config), the merchant's buyer-country allowlist (TWO-40), the
+         * merchant's own minimum is unmet, or the configured surcharge
+         * cannot be quoted in the checkout currency at all (TWO-25269).
+         * The two country gates are independent and ANDed: neither reads
+         * the other.
+         * Mirrors the brand availability gate semantics:
          * front-end only, minimum is inclusive (an exactly-minimum basket
          * passes).
          *
@@ -3477,7 +3554,8 @@ if (!class_exists('WC_Twoinc')) {
             }
             $platform_minimum = $this->get_platform_minimum_order();
             $merchant_minimum = $this->get_merchant_minimum_order();
-            if (!$gate && !$platform_minimum && !$merchant_minimum) {
+            $supported_buyer_countries = $this->get_supported_buyer_countries();
+            if (!$gate && !$platform_minimum && !$merchant_minimum && !$supported_buyer_countries) {
                 return $available_gateways;
             }
             if (!function_exists('WC') || !WC()->cart || !WC()->customer) {
@@ -3531,6 +3609,12 @@ if (!class_exists('WC_Twoinc')) {
             if ($satisfied && $gate) {
                 $satisfied = in_array(WC()->customer->get_billing_country(), $gate['billing_countries'], true);
             }
+            if ($satisfied && $supported_buyer_countries) {
+                $buyer_country = self::resolve_buyer_country();
+                // An unresolved country cannot disprove the allowlist.
+                $satisfied = $buyer_country === ''
+                    || in_array($buyer_country, $supported_buyer_countries, true);
+            }
             if ($satisfied && $merchant_minimum && $basket_is_judgeable) {
                 $satisfied = $meets_minimum($merchant_minimum);
             }
@@ -3544,18 +3628,20 @@ if (!class_exists('WC_Twoinc')) {
                     $logged = true;
                     wc_get_logger()->info(
                         sprintf(
-                            'Availability gate removed %s from checkout (gross=%s net=%s currency=%s country=%s; platform min %s, merchant min %s)',
+                            'Availability gate removed %s from checkout (gross=%s net=%s currency=%s billing_country=%s buyer_country=%s; platform min %s, merchant min %s, supported buyer countries %s)',
                             $this->id,
                             $basket_value('gross'),
                             $basket_value('net'),
                             get_woocommerce_currency(),
                             WC()->customer->get_billing_country(),
+                            self::resolve_buyer_country(),
                             $platform_minimum
                                 ? $platform_minimum['amount'] . ' ' . $platform_minimum['currency'] . ' ' . $platform_minimum['basis']
                                 : 'none',
                             $merchant_minimum
                                 ? $merchant_minimum['amount'] . ' ' . $merchant_minimum['currency'] . ' ' . $merchant_minimum['basis']
-                                : 'none'
+                                : 'none',
+                            $supported_buyer_countries ? implode(',', $supported_buyer_countries) : 'any'
                         ),
                         ['source' => 'twoinc-payment-gateway']
                     );

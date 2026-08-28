@@ -60,6 +60,9 @@ final class BrandConfigSpec
             'testAvailabilityGateKeepsGatewayAtExactMinimum',
             'testAvailabilityGateComparesNetNotGross',
             'testAvailabilityGateRestrictsBillingCountry',
+            'testSupportedBuyerCountriesNormalisesApiField',
+            'testAvailabilityGateJudgesMerchantBuyerCountryAllowlist',
+            'testMerchantBuyerCountryAllowlistIntersectsBrandGate',
             'testAvailabilityGateSkipsMinimumsOnEmptyCart',
             'testAvailabilityGateSkipsMinimumsOnOrderPayPage',
             'testMerchantMinimumRaisesTheBar',
@@ -301,22 +304,31 @@ final class BrandConfigSpec
     /**
      * Gateway instance with only the brand-derived id set — the full
      * constructor needs a WooCommerce install. The API-resolved platform
-     * minimum is injected per test; null = none configured.
+     * minimum and buyer-country allowlist are injected per test; null =
+     * none configured.
      */
-    private static function gateway(?array $platform_minimum = null): WC_Twoinc
+    private static function gateway(?array $platform_minimum = null, ?array $buyer_countries = null): WC_Twoinc
     {
-        return new class ($platform_minimum) extends WC_Twoinc {
+        return new class ($platform_minimum, $buyer_countries) extends WC_Twoinc {
             private $test_platform_minimum;
 
-            public function __construct($platform_minimum = null)
+            private $test_buyer_countries;
+
+            public function __construct($platform_minimum = null, $buyer_countries = null)
             {
                 $this->id = WC_Twoinc_Brand::get('gateway_id');
                 $this->test_platform_minimum = $platform_minimum;
+                $this->test_buyer_countries = $buyer_countries;
             }
 
             public function get_platform_minimum_order()
             {
                 return $this->test_platform_minimum;
+            }
+
+            public function get_supported_buyer_countries()
+            {
+                return $this->test_buyer_countries;
             }
 
             public function get_merchant_available_terms(bool $refresh = false): array
@@ -1253,6 +1265,118 @@ final class BrandConfigSpec
         $result = self::gateway(self::EUR_250_NET)->apply_brand_availability_gate($gateways);
 
         TinyAssert::true(!isset($result['woocommerce-gateway-testbrand']));
+    }
+
+    private static function testSupportedBuyerCountriesNormalisesApiField(): void
+    {
+        $gateway = new class () extends WC_Twoinc {
+            public $responses = [];
+
+            public function __construct()
+            {
+            }
+
+            public function get_merchant_id()
+            {
+                return 'mid';
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                return $key === 'api_key' ? 'key' : ($empty_value ?? '');
+            }
+
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            {
+                return array_shift($this->responses);
+            }
+        };
+
+        $checked = WC_Twoinc_Brand::prefixed_name('supported_buyer_countries_checked_on');
+
+        $cases = [
+            [[], null, 'field absent'],
+            [['supported_buyer_countries' => null], null, 'field null'],
+            [['supported_buyer_countries' => []], null, 'empty list'],
+            [['supported_buyer_countries' => 'NL'], null, 'not a list'],
+            [['supported_buyer_countries' => ['NL', 'DE']], ['NL', 'DE'], 'uppercase codes'],
+            [['supported_buyer_countries' => ['nl', 'De']], ['NL', 'DE'], 'lowercase normalised'],
+            [['supported_buyer_countries' => ['NL', 'nl']], ['NL'], 'duplicates collapsed'],
+            [['supported_buyer_countries' => ['NL', 'NLD', 7, '']], ['NL'], 'unusable entries dropped'],
+        ];
+
+        foreach ($cases as $case) {
+            list($record, $expected, $description) = $case;
+            WC_Twoinc::reset_merchant_record_memo();
+            unset($GLOBALS['__twoinc_test_options'][$checked]);
+            $gateway->responses = [['response' => ['code' => 200], 'body' => json_encode($record)]];
+
+            TinyAssert::same($expected, $gateway->get_supported_buyer_countries(), $description);
+
+            // The unrestricted outcome is cached too — the common case must
+            // not cost an API call per checkout render.
+            $gateway->responses = [];
+            TinyAssert::same($expected, $gateway->get_supported_buyer_countries(), $description . ', served from cache');
+        }
+
+        WC_Twoinc::reset_merchant_record_memo();
+        unset($GLOBALS['__twoinc_test_options'][$checked]);
+        $gateway->responses = [new WP_Error('http_request_failed', 'down')];
+        TinyAssert::same(null, $gateway->get_supported_buyer_countries(), 'fetch failure means no restriction');
+    }
+
+    private static function testAvailabilityGateJudgesMerchantBuyerCountryAllowlist(): void
+    {
+        // TWO-40. No brand gate on the Two brand, so the merchant allowlist
+        // judges alone here.
+        $GLOBALS['__twoinc_test_currency'] = 'EUR';
+        $gateways = ['woocommerce-gateway-tillit' => 'gw'];
+
+        $cases = [
+            [null, 'DE', '', true, 'no allowlist: every country allowed'],
+            [['NL', 'DE'], 'DE', '', true, 'billing country on the allowlist'],
+            [['NL'], 'DE', '', false, 'billing country off the allowlist'],
+            [['NL'], 'nl', '', true, 'lowercase billing country matches'],
+            [['NL'], '', 'NL', true, 'shipping country used when billing is unset'],
+            [['NL'], '', 'DE', false, 'shipping fallback off the allowlist'],
+            [['NL'], 'NL', 'DE', true, 'billing wins over shipping'],
+            [['NL'], 'DE', 'NL', false, 'billing wins over shipping when it fails'],
+            [['NL'], '', '', true, 'no country to judge: availability is not withheld'],
+        ];
+
+        foreach ($cases as $case) {
+            list($allowlist, $billing, $shipping, $expected, $description) = $case;
+            WC()->cart = new StubCart(1000.0);
+            WC()->customer = new StubCustomer($billing, $shipping);
+            $result = self::gateway(self::EUR_250_NET, $allowlist)->apply_brand_availability_gate($gateways);
+            TinyAssert::same($expected, isset($result['woocommerce-gateway-tillit']), $description);
+        }
+    }
+
+    private static function testMerchantBuyerCountryAllowlistIntersectsBrandGate(): void
+    {
+        // TWO-40: the two country mechanisms are independent gates, ANDed —
+        // the brand fixture restricts billing to NL, and neither gate reads
+        // the other.
+        self::useTestbrand();
+        $GLOBALS['__twoinc_test_currency'] = 'EUR';
+        $gateways = ['woocommerce-gateway-testbrand' => 'gw'];
+
+        $cases = [
+            [null, 'NL', true, 'brand allows, no merchant allowlist'],
+            [['NL', 'DE'], 'NL', true, 'both gates allow'],
+            [['DE'], 'NL', false, 'brand allows, merchant allowlist does not'],
+            [['NL', 'DE'], 'DE', false, 'merchant allowlist allows, brand gate does not'],
+            [['SE'], 'DE', false, 'neither gate allows'],
+        ];
+
+        foreach ($cases as $case) {
+            list($allowlist, $billing, $expected, $description) = $case;
+            WC()->cart = new StubCart(1000.0);
+            WC()->customer = new StubCustomer($billing);
+            $result = self::gateway(self::EUR_250_NET, $allowlist)->apply_brand_availability_gate($gateways);
+            TinyAssert::same($expected, isset($result['woocommerce-gateway-testbrand']), $description);
+        }
     }
 
     private static function testAvailabilityGateSkipsMinimumsOnEmptyCart(): void
