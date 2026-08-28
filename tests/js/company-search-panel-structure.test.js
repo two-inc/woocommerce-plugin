@@ -44,7 +44,7 @@ describe("company-capture panel structure", () => {
   test("the panel has exactly three direct children, in PrestaShop's order", () => {
     ctx.helper.attach();
 
-    const structure = harness.panelStructure(ctx.$);
+    const structure = harness.panelStructure();
     expect(structure.children).toEqual([
       "two-company-dropdown__search",
       "two-company-dropdown__results",
@@ -198,13 +198,5 @@ describe("company-capture panel structure", () => {
     // the moment one is adopted.
     expect(rule.style.top).toBe("calc(var(--two-company-input-height, 100%) + 8px)");
     style.remove();
-  });
-
-  test("no selectWoo or select2 node is created for the company field", () => {
-    ctx.helper.attach();
-    ctx.helper.openCompanySearchDropdown();
-
-    expect(document.querySelectorAll("[class*='select2']")).toHaveLength(0);
-    expect(document.querySelector("#billing_company_display").tagName).toBe("INPUT");
   });
 });

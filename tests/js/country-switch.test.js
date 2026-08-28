@@ -943,7 +943,7 @@ describe("billing country switch", () => {
       // the panel unconditionally, resurrecting a picker manual entry had
       // dismissed. Pinned so a later fix has something to flip.
       expect(ctx.helper.panel.isBound()).toBe(true);
-      expect(harness.panelStructure(ctx.$)).not.toBeNull();
+      expect(harness.panelStructure()).not.toBeNull();
     });
 
     test("does NOT clear the matching pair in manual entry either", () => {

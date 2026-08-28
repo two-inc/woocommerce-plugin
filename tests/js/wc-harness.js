@@ -314,10 +314,9 @@ function openCompanyPanel($, helper) {
  * The panel's structure as the DOM actually holds it — what a structural
  * assertion compares against PrestaShop's.
  *
- * @param {Function} $ jQuery instance
  * @returns {{wrap: Element, panel: Element, children: Array<string>}|null}
  */
-function panelStructure($) {
+function panelStructure() {
   const wrap = document.querySelector(".two-company-field-wrap");
   if (!wrap) return null;
   const panel = wrap.querySelector(":scope > .two-company-dropdown");

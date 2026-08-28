@@ -126,7 +126,7 @@ describe("company-search manual-entry affordance", () => {
   test("the panel actually binds — guard for every test below", () => {
     openPanel();
 
-    const structure = harness.panelStructure($);
+    const structure = harness.panelStructure();
     expect(structure).not.toBeNull();
     expect(structure.children).toEqual([
       "two-company-dropdown__search",

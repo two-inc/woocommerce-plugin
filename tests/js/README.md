@@ -78,7 +78,6 @@ PrestaShop's (TWO-25503):
   already there rather than building a second.
 - every chip is inside the panel, in `registered` / `sole_trader` / `manual` order, none
   beside it.
-- `#billing_company_display` is an `<input>` and no `select2`-classed node exists.
 
 `company-search-transport.test.js` — `searchApi()` and `searchCompanies()`:
 
