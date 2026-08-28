@@ -324,10 +324,6 @@
         if (this.getSelectedMode() === 'manual') return;
 
         this._bindFieldOpeners(field);
-        // The closed-state watermark. Set here rather than left to the host
-        // form: on the address step core renders this field with no
-        // placeholder at all, so nothing would say what clicking it does.
-        field.setAttribute('placeholder', this.translate('Enter company name to search'));
         // The field is what a keyboard buyer actually reaches, so it — not the
         // query input inside the panel — is what has to announce that this is a
         // combobox and whether its list is showing.
@@ -410,17 +406,18 @@
         const searchRow = document.createElement('div');
         searchRow.className = SEARCH_ROW_CLASS;
 
-        // `placeholder` carries the LENGTH REQUIREMENT, not the watermark the
-        // company field already showed to get here. `aria-label` deliberately
-        // does not mirror it: that is the field's accessible NAME, and naming
-        // the field after a transient hint leaves a screen-reader user tabbing
-        // back in after a full query still hearing "Enter 3 or more
-        // characters" as what the field IS.
+        // `aria-label` deliberately does not mirror the placeholder: that is the
+        // field's accessible NAME, and naming the field after a transient hint
+        // leaves a screen-reader user tabbing back in after a full query still
+        // hearing "Enter 3 or more characters" as what the field IS.
         const query = document.createElement('input');
         query.type = 'text';
         query.autocomplete = 'off';
         query.className = QUERY_CLASS;
-        query.setAttribute('placeholder', this.search.minInputLengthMessage());
+        const minInputHint = this.search.minInputLengthMessage();
+        query.setAttribute('placeholder', minInputHint);
+        // The stylesheet clips the placeholder, so `title` keeps the full hint.
+        query.setAttribute('title', minInputHint);
         query.setAttribute('aria-label', this.translate('Search for company'));
         query.setAttribute('role', 'combobox');
         query.setAttribute('aria-autocomplete', 'list');
@@ -996,9 +993,8 @@
     /**
      * Remove the return link and unbind it.
      *
-     * The class-wide sweep is deliberate: this panel's own reference does not
-     * cover a link left on a host it has since moved off, and two of these on
-     * one form is worse than none.
+     * The sweep covers the current field's wrapper, not the document: a link an
+     * earlier bind left on this field still has to go, a second panel's must not.
      */
     CompanySearchPanel.prototype.removeBackToSearchLink = function () {
         const self = this;
@@ -1007,8 +1003,10 @@
             this._back.remove();
             this._back = null;
         }
+        const scope = this._field && this._field.parentElement;
+        if (!scope) return;
         Array.prototype.forEach.call(
-            document.querySelectorAll('.' + BACK_CLASS),
+            scope.querySelectorAll('.' + BACK_CLASS),
             function (node) {
                 self._unbind(node);
                 node.remove();

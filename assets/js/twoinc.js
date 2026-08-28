@@ -748,14 +748,6 @@ class TwoCompanySearch {
     );
   }
 
-  /** Hint shown in the empty company-search field (TWO-25288). */
-  companySearchPlaceholderText() {
-    return (
-      (window.twoinc && window.twoinc.text && window.twoinc.text.company_search_placeholder) ||
-      "Enter company name to search"
-    );
-  }
-
   /**
    * Hint stating the search threshold (TWO-25288), the query field's
    * watermark. A fixed number rather than a countdown — the buyer is told what
@@ -1005,7 +997,6 @@ class TwoCompanySearch {
    */
   translatePanelText(text) {
     const map = {
-      "Enter company name to search": this.companySearchPlaceholderText(),
       "Search for company": this.searchCompanyText(),
       "Company search is unavailable right now. Please try again shortly.":
         this.companySearchUnavailableText()

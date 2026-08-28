@@ -202,13 +202,12 @@ describe("company search results", () => {
 });
 
 /**
- * TWO-25288, elements 3 and 4. The two hints the company-search control shows
- * before it can search: one on the closed company field, one while the typed
- * term is below the threshold.
+ * TWO-25288, element 4. The one hint the company-search control shows before it
+ * can search: the below-threshold message on the panel's query field.
  *
- * Both strings are plugin-owned and translatable, and the min-chars one names a
- * fixed number rather than counting down the remaining characters. These pin
- * that and the single-source-of-truth wiring, not just the wording.
+ * It is plugin-owned, translatable, and names a fixed number rather than
+ * counting down the remaining characters. These pin that and the
+ * single-source-of-truth wiring, not just the wording.
  */
 describe("company search hints", () => {
   let ctx;
@@ -281,28 +280,69 @@ describe("company search hints", () => {
         document.querySelector(".two-company-dropdown__query").getAttribute("placeholder")
       ).toBe("Enter 3 or more characters");
     });
+
+    test("hovers the FULL hint, not the form the field has room for", () => {
+      ctx = harness.loadTwoinc();
+      harness.buildCheckoutForm();
+      harness.openCompanyPanel(ctx.$, ctx.helper);
+
+      const query = document.querySelector(".two-company-dropdown__query");
+      expect(query.getAttribute("title")).toBe("Enter 3 or more characters");
+      expect(query.getAttribute("title")).toBe(query.getAttribute("placeholder"));
+    });
+
+    // jsdom does not lay text out, so nothing here proves the hint visibly
+    // clips; it proves the declarations that do the clipping are shipped.
+    test.each([
+      [".two-company-dropdown__query {", "text-overflow: ellipsis;", "the input itself (Firefox)"],
+      [
+        ".two-company-dropdown__query::placeholder {",
+        "text-overflow: ellipsis;",
+        "the pseudo-element (Chrome, Safari)"
+      ],
+      [
+        ".two-company-dropdown__query::placeholder {",
+        "overflow: hidden;",
+        "the pseudo-element clips"
+      ],
+      [
+        ".two-company-dropdown__query::placeholder {",
+        "white-space: nowrap;",
+        "the hint stays on one line"
+      ]
+    ])("%s declares %s for %s", (selector, declaration) => {
+      const css = fs.readFileSync(path.join(harness.REPO_ROOT, "assets/css/twoinc.css"), "utf8");
+      const block = css.slice(css.indexOf(selector));
+
+      expect(css).toContain(selector);
+      expect(block.slice(0, block.indexOf("}"))).toContain(declaration);
+    });
   });
 
-  describe("the empty-field hint", () => {
-    test("is what the closed company field renders", () => {
-      // Set by the panel rather than left to the host form: core renders this
-      // field with no placeholder at all, so nothing would say what clicking it
-      // does.
+  describe("the closed company field", () => {
+    test("carries no watermark", () => {
       ctx = harness.loadTwoinc();
       harness.buildCheckoutForm();
       ctx.helper.attach();
 
-      expect(ctx.$("#billing_company_display").attr("placeholder")).toBe(
-        "Enter company name to search"
-      );
+      // Guard: an unattached panel would leave any placeholder assertion vacuous.
+      expect(document.querySelector(".two-company-field-wrap")).not.toBeNull();
+      expect(ctx.$("#billing_company_display").attr("placeholder")).toBeUndefined();
     });
 
-    test("uses the localised string when PHP supplies one", () => {
-      ctx = harness.loadTwoinc({ text: { company_search_placeholder: "Zoek een bedrijf" } });
-      harness.buildCheckoutForm();
-      ctx.helper.attach();
+    test.each([
+      ["assets/js/twoinc.js", "the checkout script"],
+      ["assets/js/company-search-panel.js", "the vendored panel"],
+      ["class/WC_Twoinc_Checkout.php", "the localisation array"],
+      ["languages/twoinc-payment-gateway.pot", "the template catalogue"],
+      ["languages/twoinc-payment-gateway-nb_NO.po", "the nb_NO catalogue"],
+      ["languages/twoinc-payment-gateway-nl_NL.po", "the nl_NL catalogue"],
+      ["languages/twoinc-payment-gateway-sv_SE.po", "the sv_SE catalogue"]
+    ])("%s keeps no trace of the removed watermark (%s)", (relPath) => {
+      const source = fs.readFileSync(path.join(harness.REPO_ROOT, relPath), "utf8");
 
-      expect(ctx.$("#billing_company_display").attr("placeholder")).toBe("Zoek een bedrijf");
+      expect(source).not.toContain("Enter company name to search");
+      expect(source).not.toContain("company_search_placeholder");
     });
 
     test("the pay-for-order template renders a field the panel can anchor to", () => {
@@ -323,20 +363,18 @@ describe("company search hints", () => {
   });
 
   /**
-   * The empty-field hint must never be mistaken for a company the buyer chose:
-   * `#billing_company` is POSTED WITH THE ORDER, and `saveCheckoutInputs()`
-   * snapshots it. A `placeholder` attribute leaves that snapshot nothing to
-   * read.
+   * `#billing_company` is POSTED WITH THE ORDER and `saveCheckoutInputs()`
+   * snapshots it, so an untouched company field has to snapshot as empty.
    */
-  describe("the empty-field hint and the saved-input snapshot", () => {
+  describe("the untouched company field and the saved-input snapshot", () => {
     afterEach(() => {
       sessionStorage.clear();
       jest.useRealTimers();
     });
 
     /**
-     * Attach the panel to the real form so the hint is rendered, then snapshot
-     * the form the way the plugin does at page load.
+     * Attach the panel to the real form, then snapshot the form the way the
+     * plugin does at page load.
      *
      * @returns {Object} the snapshot entry for the company-search field
      */
@@ -345,10 +383,8 @@ describe("company search hints", () => {
       harness.buildCheckoutForm();
       ctx.helper.attach();
 
-      // Guard: no rendered hint means the rest of this asserts nothing.
-      expect(ctx.$("#billing_company_display").attr("placeholder")).toBe(
-        "Enter company name to search"
-      );
+      // Guard: an unattached panel means the rest of this asserts nothing.
+      expect(document.querySelector(".two-company-field-wrap")).not.toBeNull();
 
       ctx.dom.saveCheckoutInputs();
       const saved = JSON.parse(sessionStorage.getItem("checkoutInputs"));
@@ -377,9 +413,6 @@ describe("company search hints", () => {
       jest.advanceTimersByTime(2000);
 
       expect(ctx.$("#billing_company_display").val()).toBe("");
-      expect(ctx.$("#billing_company_display").attr("placeholder")).toBe(
-        "Enter company name to search"
-      );
     });
 
     test("is not what getCompanyName and getCompanyData report", () => {
@@ -425,8 +458,8 @@ describe("company search hints", () => {
     );
 
     test.each([
-      ["company_search_placeholder", "Enter company name to search"],
-      ["company_search_too_short", "Enter %d or more characters"]
+      ["company_search_too_short", "Enter %d or more characters"],
+      ["company_search_unavailable", "Company search is temporarily unavailable. Please try again."]
     ])("%s is registered as a translatable string", (key, source) => {
       const entry = new RegExp(
         "'" + key + "' *=> *__\\('" + source.replace(/[$()*+.?[\\\]^{|}]/g, "\\$&") + "'"
