@@ -269,21 +269,13 @@ if (!class_exists('WC_Twoinc_Sole_Trader')) {
                 wp_send_json_error('Could not initialise the sole trader flow');
                 return;
             }
-            $response = [
+            wp_send_json_success([
                 'delegation_token' => $tokens['delegation_token'],
                 'autofill_token' => $tokens['autofill_token'],
                 'signup_url' => self::get_signup_page_url($gateway),
                 // PDEV-4669: registry-vetted country, echoed back — never re-derived from a DOM read.
                 'country' => $country,
-            ];
-            // The one call no server hop can make (its subject is an API-domain
-            // cookie), so its token reaches the page — but only here, past the
-            // nonce and the registry's verdict.
-            $firewall_token = $gateway->get_firewall_token();
-            if ($firewall_token !== '') {
-                $response['firewall_token'] = $firewall_token;
-            }
-            wp_send_json_success($response);
+            ]);
         }
 
         /**

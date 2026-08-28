@@ -258,7 +258,7 @@ final class BrandConfigSpec
             'testFirewallTokenHonouredOnTheSaveThatSetsIt',
             'testFirewallTokenNewlinesNeverReachTheHeader',
             'testFirewallTokenRedactedFromTheApiLog',
-            'testSoleTraderTokensCarryTheFirewallTokenWhenConfigured',
+            'testSoleTraderTokensNeverPublishTheFirewallToken',
             'testApiProxyRefusesEveryCallWithoutTheCheckoutNonce',
             'testApiProxyRelaysUpstreamBodyAndStatusVerbatim',
             'testApiProxyRelaysAnEmptyUpstreamBodyAsAnObject',
@@ -3673,25 +3673,21 @@ final class BrandConfigSpec
         TinyAssert::same('GB', $response['data']['country']);
     }
 
-    private static function testSoleTraderTokensCarryTheFirewallTokenWhenConfigured(): void
+    private static function testSoleTraderTokensNeverPublishTheFirewallToken(): void
     {
-        // The token reaches the page here and nowhere else: this response is
-        // nonce-checked and registry-gated, whereas the checkout bootstrap
-        // renders on every page for every visitor.
-        $cases = [
-            ['waf-token-1', 'waf-token-1', 'a configured token travels with the minted pair'],
-            ['', null, 'an unconfigured token puts nothing in the page'],
-        ];
-        foreach ($cases as [$configured, $expected, $description]) {
-            WC_Twoinc_Sole_Trader::reset_cache();
-            $gateway = self::tokenMintingGateway(['SOLE_TRADER'], ['firewall_token' => $configured]);
-            $_REQUEST = ['country' => 'GB'];
-            $response = self::runTokensHandler($gateway);
-            $_REQUEST = [];
+        // The token gates the merchant's own network egress; a buyer's browser
+        // never traverses it, so no browser-reachable response may carry it.
+        WC_Twoinc_Sole_Trader::reset_cache();
+        $gateway = self::tokenMintingGateway(['SOLE_TRADER'], ['firewall_token' => 'waf-token-1']);
+        $_REQUEST = ['country' => 'GB'];
+        $response = self::runTokensHandler($gateway);
+        $_REQUEST = [];
 
-            TinyAssert::true($response['success']);
-            TinyAssert::same($expected, $response['data']['firewall_token'] ?? null, $description);
-        }
+        TinyAssert::true($response['success']);
+        TinyAssert::true(
+            strpos(json_encode($response), 'waf-token-1') === false,
+            'the minted-token response must not publish the firewall token'
+        );
     }
 
     /** PDEV-4669: echoed country is normalised to the ISO code the hosted signup expects. */
@@ -8416,7 +8412,11 @@ final class BrandConfigSpec
 
             public function get_option($key, $empty_value = null)
             {
-                return $key === 'merchant_short_name' ? 'shortname-from-settings' : ($empty_value ?? '');
+                $seeded = [
+                    'merchant_short_name' => 'shortname-from-settings',
+                    'firewall_token' => 'waf-token-1',
+                ];
+                return $seeded[$key] ?? $empty_value ?? '';
             }
 
             public function get_merchant_id()
@@ -8596,9 +8596,12 @@ final class BrandConfigSpec
             ($params['api_proxy']['nonce'] ?? '') !== '',
             'the proxy bootstrap must carry a nonce for the handlers to check'
         );
-        // The firewall token rides on the sole-trader token mint instead, which
-        // is where the one browser-direct call gets it.
-        TinyAssert::same(false, array_key_exists('firewall_token', $params));
+        // The token gates the merchant's own network egress, so nothing the
+        // browser can read may carry it — key or value, at any depth.
+        TinyAssert::true(
+            strpos(json_encode($params), 'waf-token-1') === false,
+            'the checkout bootstrap must not publish the firewall token'
+        );
     }
 
     private static function poTranslation(string $po, string $msgid): string

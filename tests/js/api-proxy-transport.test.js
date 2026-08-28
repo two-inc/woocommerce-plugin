@@ -2,8 +2,8 @@
  * The browser-side half of the firewall-token work: which checkout calls go
  * through the store's own wc-ajax proxy, and the single one that does not.
  *
- * The address lookup, the payment-terms lookup and the browser-direct autofill
- * exception are asserted here. Company search has its own file
+ * The address lookup, the payment-terms lookup and the autofill read that stays
+ * browser-direct are asserted here. Company search has its own file
  * (company-search-transport.test.js), and order intent lives with the rest of
  * its behaviour in intent-loading-state.test.js.
  */
@@ -76,7 +76,6 @@ describe("checkout API calls and the firewall-token proxy", () => {
       fetchMock = jest.fn(() => Promise.resolve({ ok: false, status: 404 }));
       global.fetch = fetchMock;
       ctx.soleTrader.tokens = { autofill_token: "autofill" };
-      window.twoinc.firewall_token = "never-read-from-the-page";
     });
 
     afterEach(() => {
@@ -95,26 +94,18 @@ describe("checkout API calls and the firewall-token proxy", () => {
       expect(options.headers["two-delegated-authority-token"]).toBe("autofill");
     });
 
-    test.each([
-      {
-        configured: "waf-token-1",
-        expected: "waf-token-1",
-        description: "a configured token travels as X-WAF-TOKEN"
-      },
-      {
-        configured: undefined,
-        expected: undefined,
-        description: "no configured token sends no header"
-      },
-      { configured: "", expected: undefined, description: "an empty setting is not a token" }
-    ])("$description", ({ configured, expected }) => {
-      // Carried with the minted tokens, not the page bootstrap, so it only
-      // reaches a checkout whose sole-trader path the registry has vetted.
-      ctx.soleTrader.tokens.firewall_token = configured;
+    test("sends no firewall token, whatever a page happens to hold", () => {
+      // The token gates the merchant's own network egress. This request leaves
+      // the buyer's machine, never the store's, so the token buys nothing here
+      // and must not be shipped to a browser to be attached.
+      window.twoinc.firewall_token = "waf-token-1";
+      ctx.soleTrader.tokens.firewall_token = "waf-token-1";
 
       ctx.soleTrader.fetchCurrentBuyer(function () {});
 
-      expect(fetchMock.mock.calls[0][1].headers["X-WAF-TOKEN"]).toBe(expected);
+      const headers = fetchMock.mock.calls[0][1].headers;
+      expect(Object.keys(headers)).toEqual(["two-delegated-authority-token"]);
+      expect(JSON.stringify(headers)).not.toContain("waf-token-1");
     });
   });
 });

@@ -4341,9 +4341,9 @@ if (!class_exists('WC_Twoinc')) {
                     'type'        => 'text',
                     'description' => sprintf(
                         /* translators: %s is the brand product name (e.g. "Two") */
-                        __('If your IT administrator asks you to add a firewall token, place it in this field. It will then be transmitted as header X-WAF-TOKEN on all calls to the %s API.', 'twoinc-payment-gateway'),
+                        __('If your IT administrator asks you to add a firewall token, place it in this field. It will then be transmitted as header X-WAF-TOKEN on all calls your store makes to the %s API.', 'twoinc-payment-gateway'),
                         WC_Twoinc_Brand::get('product_name')
-                    ) . ' ' . __('This is a coarse network gate rather than a secret credential, so unlike the API key it is not masked here and one checkout request sends it from the browser.', 'twoinc-payment-gateway'),
+                    ) . ' ' . __('This is a coarse network gate rather than a secret credential, so unlike the API key it is not masked here.', 'twoinc-payment-gateway'),
                 ],
                 'vendor_name' => [
                     'title'       => __('Vendor name (optional)', 'twoinc-payment-gateway'),
