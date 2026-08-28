@@ -161,6 +161,8 @@
         this._destroyed = false;
         /** Listeners this panel owns, so teardown removes exactly its own. */
         this._listeners = [];
+        /** Pending focus-out close, re-armed by the next focusout, dropped on teardown. */
+        this._closeTimerId = null;
     }
 
     // ------------------------------------------------------------- DOM helpers
@@ -395,6 +397,12 @@
             return;
         }
 
+        // A host that discarded the wrapper but KEPT the field re-binds through
+        // `_attach`'s rebinding path, which skips `_releaseWrap()` — so nothing
+        // else ever takes back the listeners on the panel that went with it, and
+        // each entry pins the detached subtree it names.
+        if (this._panel) this._unbind(this._panel);
+
         const panel = document.createElement('div');
         panel.className = PANEL_CLASS;
         panel.setAttribute('hidden', 'hidden');
@@ -447,6 +455,10 @@
         this._panel = panel;
 
         this._bindPanelHandlers();
+        // A checkout that discards the wrapper brings this method back to build
+        // a second time, and the listener below is on `document`, which no
+        // wrapper-scoped teardown reaches.
+        this._unbind(document);
         // Closing on an outside click is the panel's own business, and one
         // listener serves every open/close cycle for its lifetime.
         this._bindEvent(document, 'mousedown', function (event) {
@@ -455,6 +467,49 @@
             if (self._field === event.target) return;
             self.close();
         });
+
+        // A mouse click is not the only way to leave: tabbing off the last chip
+        // walks focus into the form behind a panel that is `position: absolute`
+        // over it, and Escape is bound to nodes that no longer hold focus, so
+        // without this the buyer has no keyboard route out at all.
+        this._bindEvent(this._panel, 'focusout', function () {
+            self._scheduleFocusOutClose();
+        });
+    };
+
+    /** @returns {boolean} whether focus is somewhere inside the panel */
+    CompanySearchPanel.prototype._holdsFocus = function () {
+        const active = document.activeElement;
+        return !!active && !!this._panel && this._panel.contains(active);
+    };
+
+    /**
+     * Close once focus has actually settled somewhere else.
+     *
+     * Deferred by one tick because moving between two controls INSIDE the panel
+     * is a `focusout` followed by a `focusin`, so closing on the `focusout`
+     * alone would tear the panel down mid-Tab and drop the buyer on `<body>`.
+     */
+    CompanySearchPanel.prototype._scheduleFocusOutClose = function () {
+        const self = this;
+        this._cancelFocusOutClose();
+        this._closeTimerId = setTimeout(function () {
+            self._closeTimerId = null;
+            if (self._destroyed || !self._open) return;
+            if (self._holdsFocus()) return;
+            // TWO-25503: focus DROPPED, not moved on. Hiding the query row on a
+            // mode change lands it here, and so does a scrollbar drag in Chrome
+            // — in neither case has the buyer left the control.
+            const active = document.activeElement;
+            if (!active || active === document.body || active === document.documentElement) return;
+            self.close();
+        }, 0);
+    };
+
+    CompanySearchPanel.prototype._cancelFocusOutClose = function () {
+        if (this._closeTimerId === null) return;
+        clearTimeout(this._closeTimerId);
+        this._closeTimerId = null;
     };
 
     // --------------------------------------------------------------- handlers
@@ -796,6 +851,10 @@
      * Rebuilt from `getChips()` rather than mutated in place: the set itself
      * changes with the country and the admin setting, and a rebuild cannot
      * leave a stale chip wired to a mode that is no longer offered.
+     *
+     * The row itself is hidden when it is down to one chip: the survivor is
+     * always the mode the buyer is already in, so it offers no choice. Hidden
+     * rather than removed, so the panel keeps its three children in order.
      */
     CompanySearchPanel.prototype.syncChips = function () {
         const self = this;
@@ -804,12 +863,15 @@
         this._syncQueryVisibility(selected);
         this._unbind(this._chips);
         this._chips.innerHTML = '';
+        let offered = 0;
         this.getChips().forEach(function (chip) {
+            const visible = self.isChipVisible(chip.mode);
+            if (visible) offered++;
             const button = document.createElement('button');
             button.type = 'button';
             button.className = CHIP_CLASS;
             button.classList.toggle(CHIP_SELECTED_CLASS, chip.mode === selected);
-            button.classList.toggle(HIDDEN_CLASS, !self.isChipVisible(chip.mode));
+            button.classList.toggle(HIDDEN_CLASS, !visible);
             button.setAttribute('data-two-chip', chip.mode);
             button.setAttribute('data-element', 'click-element');
             button.setAttribute('aria-pressed', chip.mode === selected ? 'true' : 'false');
@@ -829,6 +891,7 @@
             });
             self._chips.appendChild(button);
         });
+        this._chips.classList.toggle(HIDDEN_CLASS, offered < 2);
     };
 
     /**
@@ -967,9 +1030,19 @@
         return this._field ? [this._field] : [];
     };
 
-    /** @returns {boolean} whether the panel is built and anchored */
+    /**
+     * @returns {boolean} whether the panel is built and anchored
+     *
+     * A host that re-renders by MORPHING its server markup over the live DOM
+     * deletes the wrapper this panel built — the panel and the chips with it —
+     * while KEEPING the field node, so a field-only test answers true for a
+     * control that is no longer on the page. Sharing a parent is what says the
+     * field and the panel are still one control.
+     */
     CompanySearchPanel.prototype.isBound = function () {
-        return !!(this._field && this._field.isConnected && this._panel);
+        return !!(this._field && this._field.isConnected
+            && this._panel && this._panel.isConnected
+            && this._field.parentElement === this._panel.parentElement);
     };
 
     /** @returns {object|null} the current bind identity — for tests that pin it */
@@ -987,6 +1060,7 @@
      */
     CompanySearchPanel.prototype.destroy = function () {
         this._destroyed = true;
+        this._cancelFocusOutClose();
         this._cancelPendingSearch();
         this.search.abortActiveRequest(this._token);
         this._unbind();
