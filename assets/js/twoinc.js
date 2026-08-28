@@ -960,13 +960,18 @@ class TwoCompanySearch {
   }
 
   /**
-   * Pin the panel's wrapper to the INPUT's own box.
+   * Pin the panel's drop point to the INPUT's own height.
    *
    * The panel is positioned against the wrapper, which also carries the
    * sole-trader link in normal flow — so a `100%` anchor drops the panel a
-   * link-height too low the moment one is adopted. The width pin is what makes
-   * the panel match the input rather than the row on a theme where the input
-   * has its own narrower intrinsic width.
+   * link-height too low the moment one is adopted.
+   *
+   * Width is never pinned here. A measured width latches: it only re-runs on
+   * a re-attach or a viewport resize, so any layout change that widens the
+   * wrapper's parent without either — a checkout column settling after the
+   * tile is built — left the control and its panel stuck at the old, narrower
+   * pixel value. The stylesheet sizes the input off the wrapper instead, so
+   * the two agree at every width with nothing to go stale.
    */
   syncFieldWrapMetrics() {
     const helper = twoincSelectWooHelper;
@@ -975,20 +980,13 @@ class TwoCompanySearch {
     if (!$field.length || !$wrap.length) return;
 
     const el = $wrap.get(0);
-    // Released before measuring, or the pin latches: the input fills this
-    // wrapper, so `outerWidth()` reads back whatever was pinned last time.
-    if (el.style.width) el.style.width = "";
-
     const height = $field.outerHeight();
     if (height) el.style.setProperty("--two-company-input-height", height + "px");
     else el.style.removeProperty("--two-company-input-height");
-
-    const width = $field.outerWidth();
-    el.style.width = width ? width + "px" : "";
   }
 
   /**
-   * Keep those pins current across a viewport change, not only on the next
+   * Keep that pin current across a viewport change, not only on the next
    * re-bind — a buyer who rotates a tablet without typing would otherwise see
    * the panel drift off the field.
    */

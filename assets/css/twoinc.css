@@ -625,6 +625,18 @@
   position: relative;
 }
 
+/*
+ * The wrapper takes its width from the layout and the input takes its width
+ * from the wrapper — never the other way round. The payment tile builds its
+ * company row outside the address form, where a theme's own input sizing may
+ * not reach, and an input left at its intrinsic size would drag the panel
+ * (`left: 0; right: 0` on the wrapper) narrow with it.
+ */
+.two-company-field-wrap > input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
 /* This plugin's own, because a bare `.hidden` is a theme's to define or not,
    and a chip that silently fails to hide offers a mode the country cannot
    serve. */
