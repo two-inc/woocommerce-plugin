@@ -440,6 +440,9 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       // The buyer's return to the checkout arms the abandon, and the
       // activation lands inside its grace.
       window.dispatchEvent(new Event("focus"));
+      // Pinned, or the close assertion below passes on an abandon that was
+      // never armed.
+      expect(soleTrader.refocusAbandonTimer).not.toBeNull();
       activate();
       jest.advanceTimersByTime(soleTrader.refocusChipGraceMs);
 
@@ -464,6 +467,9 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       // Window `focus` arrives in bursts — a blur fires one — so an activation
       // can arm the abandon in the same gesture that opens the popup.
       window.dispatchEvent(new Event("focus"));
+      // Pinned, or the close assertion below passes on an abandon that was
+      // never armed.
+      expect(soleTrader.refocusAbandonTimer).not.toBeNull();
       soleTrader.launchSignup();
       jest.advanceTimersByTime(soleTrader.refocusChipGraceMs);
 
