@@ -792,11 +792,6 @@
   outline-offset: -2px;
 }
 
-.two-company-mode-chip.two-hidden,
-.two-company-dropdown__search.two-hidden {
-  display: none;
-}
-
 .twoinc-sole-trader-note {
   display: flex;
   align-items: center;
