@@ -638,8 +638,8 @@ final class BrandConfigSpec
             'billing_company must not be server-side required'
         );
         // NOT pre-hidden, unlike billing_company_display and company_id: this
-        // is the surface a buyer on an unsupported country sees, and it must be
-        // on screen before this plugin's JS has run at all.
+        // is the surface a manual-entry buyer sees, and it must be on screen
+        // before this plugin's JS has run at all.
         TinyAssert::true(
             !in_array('hidden', $fields['billing']['billing_company']['class'], true),
             'billing_company must not start hidden'
