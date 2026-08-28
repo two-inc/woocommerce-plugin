@@ -27,14 +27,50 @@ const NAME_SURFACES = [
  * toggle, and what the cell is for.
  */
 const CASES = [
-  ["address_area", true, "two", ["#billing_company_display_field"], "search control carries the capture"],
-  ["address_area", true, "other", ["#billing_company_display_field"], "the control outlives the method"],
+  [
+    "address_area",
+    true,
+    "two",
+    ["#billing_company_display_field"],
+    "search control carries the capture"
+  ],
+  [
+    "address_area",
+    true,
+    "other",
+    ["#billing_company_display_field"],
+    "the control outlives the method"
+  ],
   ["address_area", true, "none", ["#billing_company_display_field"], "no method chosen yet"],
-  ["address_area", false, "two", ["#billing_company_display_field"], "empty control is still the surface"],
-  ["address_area", false, "other", ["#billing_company_display_field"], "another method, control stays"],
+  [
+    "address_area",
+    false,
+    "two",
+    ["#billing_company_display_field"],
+    "empty control is still the surface"
+  ],
+  [
+    "address_area",
+    false,
+    "other",
+    ["#billing_company_display_field"],
+    "another method, control stays"
+  ],
   ["address_area", false, "none", ["#billing_company_display_field"], "cold checkout"],
-  ["payment_tile", true, "two", ["#twoinc_tile_company_row"], "the narrowing: tile is the only surface"],
-  ["payment_tile", true, "other", ["#billing_company_field"], "tile collapsed, native row carries it"],
+  [
+    "payment_tile",
+    true,
+    "two",
+    ["#twoinc_tile_company_row"],
+    "the narrowing: tile is the only surface"
+  ],
+  [
+    "payment_tile",
+    true,
+    "other",
+    ["#billing_company_field"],
+    "tile collapsed, native row carries it"
+  ],
   ["payment_tile", true, "none", ["#billing_company_field"], "no tile open, native row carries it"],
   [
     "payment_tile",
