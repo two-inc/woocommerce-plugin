@@ -1207,9 +1207,9 @@ describe("billing country switch", () => {
   });
 
   describe("the company-search control is mounted for every country (TWO-25232)", () => {
-    // A country with no registry behind it degrades INSIDE the widget — the
-    // "search unavailable" message and the manual-entry chip — never by
-    // taking the control off screen.
+    // A country with no registry behind it degrades INSIDE the widget, through
+    // the no-matches message and the manual-entry chip — never by taking the
+    // control off screen.
     test.each([
       { country: "GB", description: "a country with a registry" },
       { country: "NO", description: "another country with a registry" },
