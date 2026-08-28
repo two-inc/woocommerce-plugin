@@ -304,8 +304,8 @@ let twoincAddressMirror = {
  *  4. The CAPTURE MODE — which of the three capture UIs the buyer is currently
  *     using. See the property's own comment.
  *
- * The name and number fields are the INVOICE-role ones — they are what
- * WooCommerce posts and what the order intent is authorised against.
+ * The number field is fixed; the name field moves with the control's mount
+ * (see `nameFieldSelector`).
  */
 let twoincCompanyCapture = {
   /**
@@ -340,8 +340,31 @@ let twoincCompanyCapture = {
   /** Attribute marking a value as plugin-written rather than buyer-typed. */
   PROVENANCE_ATTR: "data-two-plugin-written",
 
+  /**
+   * Selector of the field carrying the captured NAME, paired with
+   * `#company_id`. It moves with the control's mount: in tile placement
+   * `#billing_company` is the buyer's own address line and may hold a
+   * different company (Doug 2026-08-28), so the capture keeps its own hidden
+   * carrier; in address placement the control replaced that row.
+   */
+  nameFieldSelector: function () {
+    return twoincSelectWooHelper.isTileLocation()
+      ? "#company_name"
+      : twoincAddressRoles.field(twoincAddressRoles.invoice(), "company");
+  },
+
   nameField: function () {
-    return jQuery(twoincAddressRoles.field(twoincAddressRoles.invoice(), "company"));
+    return jQuery(twoincCompanyCapture.nameFieldSelector());
+  },
+
+  /**
+   * Is this element the field the capture's name lives on right now?
+   *
+   * Asked by everything bound to buyer input on `#billing_company`: in tile
+   * placement that field is an address line the capture must ignore.
+   */
+  isNameField: function (element) {
+    return jQuery(element).is(twoincCompanyCapture.nameFieldSelector());
   },
 
   numberField: function () {
@@ -899,7 +922,7 @@ class TwoCompanySearch {
           helper.onPick(item);
         },
         getDisplayText: function () {
-          return twoincUtilHelper.blankToEmpty(jQuery("#billing_company").val());
+          return twoincUtilHelper.blankToEmpty(twoincCompanyCapture.nameField().val());
         },
         onExitManualEntry: function () {
           helper.exitManualCompanyEntry();
@@ -1413,8 +1436,10 @@ class TwoCompanySearch {
    * shipping or quantity change, so a form row relocated into it is a row
    * WooCommerce can destroy with no warning.
    *
-   * The tile input carries no `name`: `#billing_company` is what POSTs the
-   * company, in every mode and both placements.
+   * The tile input carries no `name` and holds no capture: it is painted from
+   * the capture pair. It has to be — this fragment is replaced wholesale, so
+   * anything the tile input alone held would be gone on the next coupon or
+   * shipping change.
    */
   syncCompanySearchTileLocation() {
     const helper = twoincSelectWooHelper;
@@ -1473,12 +1498,12 @@ class TwoCompanySearch {
   // ------------------------------------------------------------------ capture
 
   /**
-   * The captured company name. `#billing_company` is the single source: every
-   * capture path — registry pick, sole-trader adoption, manual entry, user-meta
-   * restore, storage restore — writes it, and it is what WooCommerce POSTs.
+   * The captured company name. The capture pair's own name field is the single
+   * source: every capture path — registry pick, sole-trader adoption, manual
+   * entry, user-meta restore, storage restore — writes it.
    */
   getCompanyName() {
-    return twoincUtilHelper.blankToEmpty(jQuery("#billing_company").val());
+    return twoincUtilHelper.blankToEmpty(twoincCompanyCapture.nameField().val());
   }
 
   /**
@@ -1490,14 +1515,14 @@ class TwoCompanySearch {
     helper.setDisplayName("");
     helper.attach();
 
-    // Gated on PROVENANCE (TWO-40 §5), not capture mode: in manual entry
-    // #billing_company is the buyer's own typed input, and this runs on every
+    // Gated on PROVENANCE (TWO-40 §5), not capture mode: in manual entry the
+    // capture name field is the buyer's own typed input, and this runs on every
     // country change, so clearing unconditionally would wipe a name typed for
     // reasons of their own.
     const plugin_wrote_name = twoincCompanyCapture.isPluginWritten(
       twoincCompanyCapture.nameField()
     );
-    twoincCompanyCapture.write(plugin_wrote_name ? "" : jQuery("#billing_company").val(), "");
+    twoincCompanyCapture.write(plugin_wrote_name ? "" : twoincCompanyCapture.nameField().val(), "");
 
     // `clearAddress()`, not a blank `setAddress()` payload: the latter leaves
     // line 2 untouched by design (TWO-40 §2.6), which would strand the outgoing
@@ -1605,11 +1630,11 @@ class TwoCompanySearch {
 
   /**
    * Read the captured company straight out of the live inputs (TWO-25288) —
-   * the fields WooCommerce posts, written by every capture mode.
+   * the capture pair's own fields, written by every capture mode.
    */
   readCapturedCompany() {
     return {
-      company_name: twoincUtilHelper.blankToEmpty(jQuery("#billing_company").val()),
+      company_name: twoincUtilHelper.blankToEmpty(twoincCompanyCapture.nameField().val()),
       organization_number: twoincUtilHelper.blankToEmpty(jQuery("#company_id").val())
     };
   }
@@ -1669,7 +1694,7 @@ class TwoCompanySearch {
     twoincCompanyCapture.mode = "manual";
 
     jQuery(helper.companyFieldSelector()).val("");
-    jQuery("#billing_company").val("");
+    twoincCompanyCapture.nameField().val("");
     jQuery("#company_id").val("");
 
     // The registry address too, mirroring clearSelectedCompany — but ONLY when
@@ -1707,7 +1732,7 @@ class TwoCompanySearch {
     const helper = twoincSelectWooHelper;
     twoincCompanyCapture.mode = "search";
 
-    jQuery("#billing_company").val("");
+    twoincCompanyCapture.nameField().val("");
     jQuery("#company_id").val("");
     Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData();
 
@@ -1857,6 +1882,7 @@ let twoincDomHelper = {
       "#billing_phone_field",
       "#billing_company_display_field",
       "#billing_company_field",
+      "#company_name_field",
       "#company_id_field",
       "#invoice_email_field",
       "#purchase_order_number_field",
@@ -1884,12 +1910,7 @@ let twoincDomHelper = {
     // exception is `company_search_location === "payment_tile"` below, where
     // the two are not competing for the same position: the search control has
     // been relocated into the payment tile, so the native field is what the
-    // address area still needs (Doug 2026-08-04, live-verified) — until Two
-    // holds a capture AND is the selected method, when the tile is showing
-    // that capture and the address row would only duplicate it into a place
-    // Doug ruled it must not appear (TWO-25503). The "never neither" rule
-    // above is why that second condition is there: the tile collapses with
-    // the method, so its surface only counts while Two is selected.
+    // address area still needs (Doug 2026-08-04, live-verified).
     //
     // The search control is the visible surface for BOTH capture modes that
     // render a name into it — an ordinary registry pick and an adopted sole
@@ -1906,24 +1927,15 @@ let twoincDomHelper = {
     // it's active.
     const showCompanySearch = twoincCompanyCapture.mode !== "manual";
 
-    // `#company_id_field` is never in `visibleTargets`, in any mode: the
-    // captured number is never typed into, only reaches the buyer as the
-    // read-only label `renderCompanySummary()` renders. The input itself
-    // stays permanently hidden but posted, since its value is what the order
-    // intent is authorised against.
+    // The capture pair's own rows are never in `visibleTargets`, in any mode:
+    // hidden but posted, they reach the buyer only through the control they
+    // are painted into and the label `renderCompanySummary()` renders.
+    //
+    // Tile placement keeps WooCommerce's stock row whatever the tile is
+    // showing (Doug 2026-08-28): the two may disagree, so neither the capture
+    // nor the selected method is read here.
     if (showCompanySearch && !twoincSelectWooHelper.isTileLocation()) {
       visibleTargets.push("#billing_company_display_field");
-    } else if (showCompanySearch) {
-      // Tile placement: the search control renders inside Two's payment box, so
-      // the address area keeps WooCommerce's stock field (Doug 2026-08-04). The
-      // stock field goes only when the tile is genuinely showing the capture
-      // instead (TWO-25503, Doug: an adopted sole trader "should do neither of
-      // these things in the address area") — which needs BOTH a capture and Two
-      // selected, since the tile collapses with the method and hiding this row
-      // under another method would leave no company surface at all.
-      if (!(isTwoincSelected && twoincCompanyCapture.hasCapture())) {
-        visibleTargets.push("#billing_company_field");
-      }
     } else {
       visibleTargets.push("#billing_company_field");
     }
@@ -1938,8 +1950,7 @@ let twoincDomHelper = {
       requiredTargets.push("#billing_phone_field");
 
       // Whichever company row is actually on screen, and only while Two is the
-      // selected method. In tile placement with a capture showing, neither row
-      // is — the tile is the surface, and there is nothing left to require.
+      // selected method.
       const companyRows = ["#billing_company_display_field", "#billing_company_field"];
       const visibleCompanyRow = visibleTargets.filter(function (target) {
         return companyRows.indexOf(target) >= 0;
@@ -1980,14 +1991,14 @@ let twoincDomHelper = {
    * wrappers.
    */
   syncCompanyFieldWrappers: function () {
-    jQuery("#billing_company_display_field, #billing_company_field, #company_id_field").each(
-      function () {
-        const $field = jQuery(this);
-        const $wrapper = $field.closest(".twoinc-inp-container");
-        if (!$wrapper.length) return;
-        $wrapper.toggleClass("hidden", $field.hasClass("hidden"));
-      }
-    );
+    jQuery(
+      "#billing_company_display_field, #billing_company_field, #company_name_field, #company_id_field"
+    ).each(function () {
+      const $field = jQuery(this);
+      const $wrapper = $field.closest(".twoinc-inp-container");
+      if (!$wrapper.length) return;
+      $wrapper.toggleClass("hidden", $field.hasClass("hidden"));
+    });
   },
   deselectPaymentMethod: function () {
     const paymentMethodRadioObj = jQuery(':input[value="' + window.twoinc.gateway_id + '"]');
@@ -2338,7 +2349,7 @@ let twoincDomHelper = {
     for (let inp of checkoutInputs) {
       // Skip load company id/name if user logged in and has Two meta set
       if (window.twoinc.user_meta_exists) {
-        let skipIds = ["company_id", "billing_company", "billing_company_display"];
+        let skipIds = ["company_id", "company_name", "billing_company", "billing_company_display"];
         if (skipIds.includes(inp.id)) continue;
       }
       // Load all other fields
@@ -3059,9 +3070,8 @@ let twoincSoleTrader = {
    * wrapper INSIDE whichever company-name field is the visible one.
    *
    * TWO-40 §7 makes an adopted sole trader show through the live search
-   * widget, which hides `#billing_company_field` outright — a button
-   * appended inside a hidden field never renders — so the search row takes
-   * the slot whenever it is the visible surface.
+   * widget, so the search row takes the slot whenever it is the visible
+   * surface — a button appended inside a hidden field never renders.
    *
    * Inside the row's wrapper rather than after the row (TWO-25503, Doug):
    * as a sibling it stacked against the row's own bottom margin and needed a
@@ -3246,7 +3256,7 @@ let twoincSoleTrader = {
    */
   leaveSoleTraderMode: function () {
     twoincSoleTrader.showNote(false);
-    jQuery("#billing_company, #company_id").prop("readonly", false);
+    twoincCompanyCapture.nameField().add("#company_id").prop("readonly", false);
     if (twoincSoleTrader.savedCaptureMode !== null) {
       twoincCompanyCapture.mode = twoincSoleTrader.savedCaptureMode;
       twoincSoleTrader.savedCaptureMode = null;
@@ -3298,7 +3308,7 @@ let twoincSoleTrader = {
     twoincSelectWooHelper.setDisplayName(companyName);
 
     jQuery("#" + twoincSelectWooHelper.searchCompanyBtnId).hide();
-    jQuery("#billing_company, #company_id").prop("readonly", true);
+    twoincCompanyCapture.nameField().add("#company_id").prop("readonly", true);
   },
 
   /**
@@ -3306,9 +3316,11 @@ let twoincSoleTrader = {
    * captured fields readonly-lock and the query row is suppressed, leaving
    * no way back to an ordinary company search except the "select a
    * different sole trader" link, which only leads back into the same
-   * hosted signup. Clicking into either captured field instead reverts to
+   * hosted signup. Clicking into a locked captured field instead reverts to
    * business mode and lands the buyer in the reopened dropdown, same as
-   * `exitManualCompanyEntry()` does leaving manual entry.
+   * `exitManualCompanyEntry()` does leaving manual entry. In tile placement the
+   * lock lands on the hidden `#company_name`, never on the on-screen
+   * `#billing_company`, so the mode chips are the route back instead.
    *
    * Refused while `isDeciding()`, not the wider `isBusy()`: a captured
    * field only readonly-locks once `lockCapturedFields()` runs (deferred
@@ -4024,7 +4036,7 @@ let twoincSoleTrader = {
       email: read("email"),
       first_name: read("first_name"),
       last_name: read("last_name"),
-      company_name: read("company"),
+      company_name: twoincSelectWooHelper.getCompanyName(),
       phone_number: read("phone"),
       billing_address: {
         street: read("address_1"),
@@ -4370,6 +4382,7 @@ class Twoinc {
     // so it did the right thing by accident and would break the moment
     // togglePaySubtitleDesc grew a truthy-action branch.
     $body.on("change", "#billing_company", function () {
+      if (!twoincCompanyCapture.isNameField(this)) return;
       Twoinc.getInstance().customerCompany.company_name = twoincSelectWooHelper.getCompanyName();
       twoincSelectWooHelper.renderCompanySummary();
       // Verdicts only — same mid-request blanking as the picker's own handler.
@@ -4383,12 +4396,17 @@ class Twoinc {
     //
     // Only ever fires for a real buyer edit: every plugin write to THIS field
     // goes through `.val()`, which dispatches nothing.
+    //
+    // Gated on the field still BEING the capture's name field: in tile
+    // placement `#billing_company` is an address line, and an edit there must
+    // not touch the captured number.
     $body
       .off("input.twoincCompanyPairing change.twoincCompanyPairing", "#billing_company")
       .on(
         "input.twoincCompanyPairing change.twoincCompanyPairing",
         "#billing_company",
         function () {
+          if (!twoincCompanyCapture.isNameField(this)) return;
           twoincCompanyCapture.guardCompanyRetype();
         }
       );
@@ -4793,8 +4811,8 @@ class Twoinc {
       // The company this request is about, captured now rather than
       // re-read when its verdict is painted, and read from
       // `customerCompany` — the same record the request body above is
-      // built from, rather than `#billing_company`/`#company_id`, which
-      // can diverge from it (see `clearCompanyIfCountryStale()`).
+      // built from, rather than the capture pair's fields, which can
+      // diverge from it (see `clearCompanyIfCountryStale()`).
       const companyLabel = twoincDomHelper.readCompanyLabelFromRecord();
 
       /**
@@ -5442,7 +5460,7 @@ class Twoinc {
     twoincSelectWooHelper.closeCompanySearchDropdown();
 
     // Skipped entirely while sole-trader mode owns the field: this
-    // rebuilds the search widget and wipes `#company_id`/`#billing_company`
+    // rebuilds the search widget and wipes the capture pair
     // unconditionally, including a company already adopted this
     // sole-trader session and the dropdown a flight/popup wait is
     // deliberately keeping alive. `refresh()` below (sole-trader
@@ -5533,7 +5551,7 @@ class Twoinc {
     // always is — an un-normalised compare would turn a type mismatch
     // into either a laundered stale pair or a destructive clear.
     const domNumber = twoincUtilHelper.blankToEmpty(jQuery("#company_id").val());
-    const domName = twoincUtilHelper.blankToEmpty(jQuery("#billing_company").val());
+    const domName = twoincUtilHelper.blankToEmpty(twoincCompanyCapture.nameField().val());
     const recordedNumber = twoincUtilHelper.blankToEmpty(company.organization_number);
     const recordedName = twoincUtilHelper.blankToEmpty(company.company_name);
 
@@ -5549,16 +5567,14 @@ class Twoinc {
     // number no capture path had witnessed, next to the previous
     // company's name.
     //
-    // This rule holds on WooCommerce's own re-render paths because
-    // `#company_id` is a registered billing field
-    // (`$fields['billing']['company_id']` in WC_Twoinc_Checkout), living
-    // in the same billing fragment as `#billing_company`, so every
-    // WC-driven re-render writes both from the same vintage. One mirror
-    // moving alone is therefore evidence of something other than a
-    // re-render.
+    // This rule holds on WooCommerce's own re-render paths because both
+    // halves of the capture pair are registered billing fields in the same
+    // billing fragment, so every WC-driven re-render writes them from the
+    // same vintage. One mirror moving alone is therefore evidence of
+    // something other than a re-render.
     //
     // Anything else falls through to the clear, deliberately fail-closed:
-    // a diverged number with an empty `#billing_company` is not trusted,
+    // a diverged number with an empty captured name is not trusted,
     // since taking the name from the record instead would pair company
     // A's name with company B's number and leave `isReadyApprovalCheck()`
     // refusing forever with no deferred re-read to recover it.
@@ -5567,10 +5583,9 @@ class Twoinc {
     // company-search mode that takes the name from `getCompanyName()`,
     // which reads the `checkoutInputs` sessionStorage snapshot rather
     // than the DOM, so the name would come from a different moment than
-    // the number and the country. `#billing_company` is the field
-    // WooCommerce posts, the mirror a restore writes, and the one
-    // `clearSelectedCompany` and `enterManualCompanyEntry` already treat as
-    // authoritative.
+    // the number and the country. The capture pair's own name field is the
+    // mirror a restore writes and the one `clearSelectedCompany` and
+    // `enterManualCompanyEntry` already treat as authoritative.
     //
     // Normalising is load-bearing on ALL FOUR values, not defence in depth — an
     // earlier version of this comment claimed the name condition made the
@@ -5706,17 +5721,5 @@ jQuery(function () {
 
       // Otherwise do not run Twoinc code
     }
-
-    // Nothing to relocate or hide here any more (TWO-25288): the manual-entry
-    // row is created inside the results list only while it should be visible,
-    // and the link back to search is created hidden, in place, on first use.
-
-    setTimeout(function () {
-      // Init the hidden Company name field
-      const companyName = twoincSelectWooHelper.getCompanyName().trim();
-      if (companyName) {
-        jQuery("#billing_company").val(companyName);
-      }
-    }, 1000);
   }
 });

@@ -83,12 +83,13 @@ describe("company-search tile location (TWO-25326 §7.1)", () => {
     });
 
     /**
-     * Every way a capture can come into being has to reach the visibility
-     * rule, not just the one that happens to re-toggle (TWO-25503). Driven
-     * through the callback the plugin hands the panel, not by calling the rule:
-     * a direct call passes even when nothing is wired to it.
+     * The tile's company and the address company are allowed to disagree in
+     * this placement (Doug 2026-08-28), so a capture is not a reason to take
+     * the native row away. Driven through the callback the plugin hands the
+     * panel, not by calling the visibility rule: a direct call passes even
+     * when nothing is wired to it.
      */
-    test("an ordinary registry pick hides the native field, same as an adoption", () => {
+    test("an ordinary registry pick leaves the native field alone", () => {
       const ajax = harness.stubAjax($);
       dom.toggleBusinessFields();
 
@@ -99,17 +100,17 @@ describe("company-search tile location (TWO-25326 §7.1)", () => {
       });
       ajax.restore();
 
-      expect($("#billing_company").val()).toBe("ACME Widgets Ltd");
-      expect($("#billing_company_field").hasClass("hidden")).toBe(true);
+      expect($("#company_name").val()).toBe("ACME Widgets Ltd");
+      expect($("#billing_company").val()).toBe("");
+      expect($("#billing_company_field").hasClass("hidden")).toBe(false);
       expect(helper.isOnScreen(tileRow())).toBe(true);
     });
 
     /**
      * The control lives inside Two's payment box, which WooCommerce collapses
-     * for every other method — so hiding the address row while another method
-     * is selected leaves the buyer no company surface at all. That is the
-     * "never neither" invariant (Doug 2026-08-19), and it outranks the
-     * narrowing: a capture alone is not enough to take the row away.
+     * for every other method — so a rule that took the address row away under
+     * another method would leave the buyer no company surface at all. That is
+     * the "never neither" invariant (Doug 2026-08-19).
      */
     test("keeps the native field when Two is not the selected method, capture or no capture", () => {
       ctx.capture.write("ACME Widgets Ltd", "12345678");

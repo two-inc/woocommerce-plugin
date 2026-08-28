@@ -39,6 +39,7 @@ final class BrandConfigSpec
             'testNativeBillingCompanyNeverOverwritten',
             'testCompanyPriorityClampPreventsInversionAboveOptionals',
             'testLocaleDefaultCountryPriorityStaysBelowCompany',
+            'testBuyerCompanyNameComesFromTheCapture',
             'testConfirmationUrlHookReceivesUrlAndOrderId',
             'testOrderPayloadHookAugmentsBody',
             'testPaymentTermsLineHookAdjustsLineItems',
@@ -791,6 +792,32 @@ final class BrandConfigSpec
         // be treated as the field's real definition downstream.
         $no_country = $checkout->sync_locale_country_priority(['company' => ['priority' => 30]]);
         TinyAssert::true(!isset($no_country['country']), 'must not fabricate a country entry when WC did not provide one');
+    }
+
+    private static function testBuyerCompanyNameComesFromTheCapture(): void
+    {
+        $captured = new StubOrder();
+        $captured->meta['company_name'] = 'Captured Buyer AS';
+
+        $cases = [
+            [$captured, 'Captured Buyer AS', 'the capture wins over the billing address line'],
+            [new StubOrder(), 'Test Buyer AS', 'no capture recorded falls back to the address line']
+        ];
+
+        foreach ($cases as [$order, $expected, $description]) {
+            $body = WC_Twoinc_Helper::compose_twoinc_order(
+                $order,
+                'test-order-reference',
+                '912345678',
+                'IT',
+                'Project X',
+                '',
+                []
+            );
+            TinyAssert::same($expected, $body['buyer']['company']['company_name'], $description);
+            // The address's own organisation name is never the capture's.
+            TinyAssert::same('Test Buyer AS', $body['billing_address']['organization_name'], $description);
+        }
     }
 
     private static function testConfirmationUrlHookReceivesUrlAndOrderId(): void

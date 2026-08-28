@@ -2403,20 +2403,18 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
           expect($("#company_id").val()).toBe("TWO:ST1");
         });
 
-        test("a merchant who relocated the control to the payment tile leaves neither address row on screen", () => {
-          // The tile is the surface once a capture exists (TWO-25503, Doug: an
-          // adopted sole trader "should do neither of these things in the
-          // address area"), reversing the 2026-08-04 placement that kept the
-          // native field visible alongside. It still carries the value, because
-          // that is what POSTs.
+        test("a merchant who relocated the control to the payment tile keeps the native address row", () => {
+          // An adoption is a tile capture like any other, and in this placement
+          // a capture never takes the address row away (Doug 2026-08-28).
           ctx.twoinc.company_search_location = "payment_tile";
 
           soleTrader.setMode("sole_trader");
           soleTrader.setCompany("TWO:ST1", "A Sole Trader");
 
           expect($("#billing_company_display_field").hasClass("hidden")).toBe(true);
-          expect($("#billing_company_field").hasClass("hidden")).toBe(true);
-          expect($("#billing_company").val()).toBe("A Sole Trader");
+          expect($("#billing_company_field").hasClass("hidden")).toBe(false);
+          expect($("#company_name").val()).toBe("A Sole Trader");
+          expect($("#billing_company").val()).toBe("");
         });
 
         describe("item 4.2 / item 2.1 — the panel's own free-text query is suppressed for the whole of sole-trader mode", () => {

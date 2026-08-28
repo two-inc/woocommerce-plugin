@@ -36,6 +36,9 @@ function buildForm() {
     '      <input type="text" id="billing_company" name="billing_company" value="" />',
     "    </span>",
     "  </p>",
+    '  <p id="company_name_field">',
+    '    <input type="text" id="company_name" name="company_name" value="" />',
+    "  </p>",
     '  <p id="company_id_field">',
     '    <input type="text" id="company_id" name="company_id" value="" />',
     "  </p>",
@@ -174,15 +177,81 @@ describe("TWO-40 §5 — captured-company write path", () => {
       expect(tag()).toBeUndefined();
     });
 
-    test("the guard is bound, not merely defined", () => {
-      // Driven through a real event on a real initialize()-bound checkout,
-      // because a direct call would pass even if nothing were wired to it.
+    // Driven through a real event on a real initialize()-bound checkout,
+    // because a direct call would pass even if nothing were wired to it.
+    //
+    // The tile row is the defect this pair exists to pin (Doug, live
+    // 2026-08-28): there `#billing_company` is the buyer's own address line,
+    // and one keystroke in it took the tile's captured number with it.
+    test.each([
+      {
+        location: "address_area",
+        numberAfter: "",
+        description:
+          "the guard is bound: the control replaced the address row, so retyping it drops the number"
+      },
+      {
+        location: "payment_tile",
+        numberAfter: "12345678",
+        description:
+          "the guard ignores the address row in tile placement — the capture survives an edit there"
+      }
+    ])("$description", ({ location, numberAfter }) => {
+      window.twoinc.company_search_location = location;
       ctx.Twoinc.getInstance().initialize(false);
       capture.write("ACME Widgets Ltd", "12345678");
 
       $("#billing_company").val("Some Other Ltd").trigger("input");
 
-      expect($("#company_id").val()).toBe("");
+      expect($("#company_id").val()).toBe(numberAfter);
+    });
+
+    // Provenance decides whether a later country change may clear the captured
+    // name (`clearSelectedCompany`), so an edit to a field the capture does not
+    // own must not strip it.
+    test.each([
+      {
+        location: "address_area",
+        stillPluginWritten: false,
+        description: "retyping the address row is the buyer taking the captured name over"
+      },
+      {
+        location: "payment_tile",
+        stillPluginWritten: true,
+        description: "retyping the address line leaves the tile capture's provenance intact"
+      }
+    ])("$description", ({ location, stillPluginWritten }) => {
+      window.twoinc.company_search_location = location;
+      ctx.Twoinc.getInstance().initialize(false);
+      capture.write("ACME Widgets Ltd", "12345678");
+
+      $("#billing_company").val("Some Other Ltd").trigger("input");
+
+      expect(capture.isPluginWritten(capture.nameField())).toBe(stillPluginWritten);
+    });
+
+    // The same field, the other binding: an address line the capture does not
+    // own must not blank a verdict the captured company earned.
+    test.each([
+      {
+        location: "address_area",
+        verdictCleared: true,
+        description: "retyping the address row clears the verdict it earned"
+      },
+      {
+        location: "payment_tile",
+        verdictCleared: false,
+        description: "retyping the address line leaves the tile capture's verdict standing"
+      }
+    ])("$description", ({ location, verdictCleared }) => {
+      window.twoinc.company_search_location = location;
+      ctx.Twoinc.getInstance().initialize(false);
+      capture.write("ACME Widgets Ltd", "12345678");
+      const clearVerdicts = jest.spyOn(ctx.dom, "clearIntentVerdicts");
+
+      $("#billing_company").val("Some Other Ltd").trigger("change");
+
+      expect(clearVerdicts.mock.calls.length > 0).toBe(verdictCleared);
     });
 
     test("an untouched name leaves the capture alone", () => {

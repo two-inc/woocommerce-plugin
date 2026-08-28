@@ -7,9 +7,9 @@
  * enter the company name is the regression this exists to catch, and it has
  * reached staging twice.
  *
- * The second half of the ruling narrows it: once Two holds a capture AND is
- * the selected method in tile placement, the address area shows NEITHER the
- * captured name nor the sole-trader affordance — the tile is the surface.
+ * Tile placement shows two of them at once, and that is intended: the tile
+ * drives the intent and the order, the address row is an address line, and
+ * the two are allowed to carry different companies.
  */
 
 "use strict";
@@ -61,8 +61,8 @@ const CASES = [
     "payment_tile",
     true,
     "two",
-    ["#twoinc_tile_company_row"],
-    "the narrowing: tile is the only surface"
+    ["#billing_company_field", "#twoinc_tile_company_row"],
+    "a capture: address row still stays beside the tile"
   ],
   [
     "payment_tile",
@@ -166,15 +166,37 @@ describe("company-name surface: never neither", () => {
     expect(ctx.$("#billing_company_display_field .two-company-field-wrap").length).toBe(0);
   });
 
-  test("#billing_company carries the captured name whatever is on screen", () => {
-    ctx.twoinc.company_search_location = "payment_tile";
+  // The captured name moves with the control's mount, exactly as the number
+  // does. Serialised, not read off the inputs: the POST is what the order
+  // carries.
+  test.each([
+    {
+      location: "address_area",
+      companyName: "",
+      billingCompany: "Acme Ltd",
+      description: "address placement: the control replaced that row, so the row IS the capture"
+    },
+    {
+      location: "payment_tile",
+      companyName: "Acme Ltd",
+      billingCompany: "",
+      description: "tile placement: the address row is the buyer's own line, left untouched"
+    }
+  ])("$description", ({ location, companyName, billingCompany }) => {
+    ctx.twoinc.company_search_location = location;
     selectMethod("two");
     ctx.capture.write("Acme Ltd", "12345678");
     ctx.dom.toggleBusinessFields();
 
-    // Serialised, not read off the input: the POST is what the order carries.
     const posted = new URLSearchParams(ctx.$("form[name='checkout']").serialize());
-    expect(posted.get("billing_company")).toBe("Acme Ltd");
-    expect(posted.get("company_id")).toBe("12345678");
+    expect({
+      company_name: posted.get("company_name"),
+      billing_company: posted.get("billing_company"),
+      company_id: posted.get("company_id")
+    }).toEqual({
+      company_name: companyName,
+      billing_company: billingCompany,
+      company_id: "12345678"
+    });
   });
 });

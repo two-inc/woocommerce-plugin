@@ -654,7 +654,9 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     'company' => [
                         'organization_number' => $company_id,
                         'country_prefix' => $order->get_billing_country(),
-                        'company_name' => $order->get_billing_company()
+                        // The captured company, not the address's organisation
+                        // name: the two may differ, and the number is this one's.
+                        'company_name' => $order->get_meta('company_name') ?: $order->get_billing_company()
                     ],
                     'representative' => [
                         'email' => $order->get_billing_email(),
