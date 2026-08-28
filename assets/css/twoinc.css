@@ -788,8 +788,13 @@
 }
 
 .two-company-mode-chip:focus {
-  background-color: #f2f4fd;
   outline-offset: -2px;
+}
+
+/* Tint only the unselected chips: `:focus` outranks `--selected`, so tinting
+   every chip leaves the selected one's white label on a near-white fill. */
+.two-company-mode-chip:not(.two-company-mode-chip--selected):focus {
+  background-color: #f2f4fd;
 }
 
 .twoinc-sole-trader-note {
