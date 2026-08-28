@@ -134,27 +134,19 @@ describe("company-capture panel structure", () => {
     expect(document.querySelectorAll(".two-company-dropdown")).toHaveLength(1);
   });
 
-  describe("the wrapper is pinned to the input's own box", () => {
+  describe("the wrapper is anchored to the input's height, never to its width", () => {
     const FIELD_HEIGHT = 42;
-    const FIELD_WIDTH_HOLDER = { value: 310 };
-    const FIELD_WIDTH = 310;
     let outerWidth;
     let outerHeight;
 
     beforeEach(() => {
-      FIELD_WIDTH_HOLDER.value = FIELD_WIDTH;
-      // jsdom has no layout, so the measurements the pin reads have to come
-      // from somewhere; the row is deliberately WIDER than the input, which is
-      // the case the pin exists for.
+      // jsdom has no layout, so a measurement has to come from somewhere; the
+      // row is deliberately WIDER than the input, the case a width pin would
+      // once have latched onto.
       outerWidth = ctx.$.fn.outerWidth;
       outerHeight = ctx.$.fn.outerHeight;
       ctx.$.fn.outerWidth = function () {
-        if (!this.is("#billing_company_display")) return 640;
-        const pinned = this.closest(".two-company-field-wrap").get(0);
-        // The input is `width: 100%` of the wrapper, so a pin left in place is
-        // what a re-measurement reads back.
-        if (pinned && pinned.style.width) return parseInt(pinned.style.width, 10);
-        return FIELD_WIDTH_HOLDER.value;
+        return this.is("#billing_company_display") ? 310 : 640;
       };
       ctx.$.fn.outerHeight = function () {
         return this.is("#billing_company_display") ? FIELD_HEIGHT : 96;
@@ -171,19 +163,45 @@ describe("company-capture panel structure", () => {
 
       const wrap = document.querySelector(".two-company-field-wrap");
       expect(wrap.style.getPropertyValue("--two-company-input-height")).toBe(FIELD_HEIGHT + "px");
-      expect(wrap.style.width).toBe(FIELD_WIDTH + "px");
     });
 
-    test("a second pass re-measures rather than reading its own pin back", () => {
-      ctx.helper.attach();
-      expect(document.querySelector(".two-company-field-wrap").style.width).toBe(
-        FIELD_WIDTH + "px"
-      );
-      FIELD_WIDTH_HOLDER.value = 220;
+    // A measured width only refreshes on a re-attach or a viewport resize, so
+    // a checkout column that settles wider than it was when the tile was built
+    // left the control and its panel stuck at the narrower value.
+    test.each([
+      [
+        "on the first attach",
+        () => ctx.helper.attach(),
+        "attaching pins a width the layout can outgrow"
+      ],
+      [
+        "on a later re-sync",
+        () => {
+          ctx.helper.attach();
+          ctx.helper.syncFieldWrapMetrics();
+        },
+        "re-syncing pins a width the layout can outgrow"
+      ]
+    ])("%s the wrapper takes no inline width", (label, run, description) => {
+      run();
 
-      ctx.helper.syncFieldWrapMetrics();
+      const width = document.querySelector(".two-company-field-wrap").style.width;
 
-      expect(document.querySelector(".two-company-field-wrap").style.width).toBe("220px");
+      expect({ width: width, description: description }).toEqual({
+        width: "",
+        description: description
+      });
+    });
+
+    test("the stylesheet sizes the input off the wrapper, so the two cannot disagree", () => {
+      const style = harness.injectStylesheet();
+      const rule = Array.prototype.find.call(style.sheet.cssRules, function (candidate) {
+        return candidate.selectorText === ".two-company-field-wrap > input";
+      });
+
+      expect(rule).toBeDefined();
+      expect(rule.style.width).toBe("100%");
+      style.remove();
     });
   });
 
