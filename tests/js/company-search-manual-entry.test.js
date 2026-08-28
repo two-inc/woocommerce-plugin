@@ -451,6 +451,36 @@ describe("company-search manual-entry affordance", () => {
       expect(chips().children(".two-company-mode-chip").length).toBe(3);
       expect(visibleChipModes()).toEqual(expected);
     });
+
+    // A lone chip is a label dressed as a choice. The panel owns this gate —
+    // it counts what `isChipVisible` offers — so the row must never be hidden
+    // or removed a second time on this side (TWO-40).
+    test.each([
+      [true, ["registered", "sole_trader"], false, "two chips offered, the row stands"],
+      [false, ["registered"], true, "sole trader withheld, one chip left, row gone"]
+    ])("sole trader available %s → %p, row hidden %s — %s", (available, expected, rowHidden) => {
+      ctx = harness.loadTwoinc({
+        text: TEXT,
+        enable_company_search: "yes",
+        company_search_location: "payment_tile",
+        enable_address_lookup: "no",
+        sole_trader: SOLE_TRADER_CONFIG
+      });
+      $ = ctx.$;
+      helper = ctx.helper;
+      harness.buildCheckoutForm({ country: "GB" });
+      $("#billing_company_display_field").removeClass("hidden");
+      ctx.soleTrader.availabilityByCountry = { GB: available };
+      $(document.body).append('<div class="twoinc-company-search-tile-slot"></div>');
+      helper.syncCompanySearchTileLocation();
+
+      openPanel();
+
+      expect(visibleChipModes()).toEqual(expected);
+      expect(chips().hasClass("two-hidden")).toBe(rowHidden);
+      // Hidden, never removed: the panel keeps its three children in order.
+      expect(chips().length).toBe(1);
+    });
   });
 
   describe("nothing in the panel is a tab stop while it is closed", () => {
