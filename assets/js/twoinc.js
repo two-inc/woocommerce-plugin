@@ -3355,17 +3355,15 @@ let twoincSoleTrader = {
     // `isDeciding()`, which would strand a chip click when no popup exists
     // and only a stale flight is outstanding.
     if (twoincSoleTrader.signupConfirming) return;
+    // The abandon a return to the checkout armed goes, whatever this
+    // activation then does: left running it closes the popup 150ms later,
+    // raised or freshly opened. Only the mode chips cancel it on their own.
+    clearTimeout(twoincSoleTrader.refocusAbandonTimer);
+    twoincSoleTrader.refocusAbandonTimer = null;
     // Raised, not silently dropped: the popup that would answer this
     // activation is already on screen, and a refusal that does nothing at all
-    // reads as a dead control to a buyer who cannot see it. The abandon a
-    // return to the checkout armed is cancelled with it — left running it
-    // closes the popup this just raised 150ms later, and only the mode chips
-    // cancel it on their own.
-    if (twoincSoleTrader.refocusOpenPopups()) {
-      clearTimeout(twoincSoleTrader.refocusAbandonTimer);
-      twoincSoleTrader.refocusAbandonTimer = null;
-      return;
-    }
+    // reads as a dead control to a buyer who cannot see it.
+    if (twoincSoleTrader.refocusOpenPopups()) return;
     if (
       options &&
       options.autoselect === false &&

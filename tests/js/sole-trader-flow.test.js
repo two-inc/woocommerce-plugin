@@ -451,6 +451,26 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       jest.useRealTimers();
     });
 
+    test("a freshly opened signup survives an abandon armed in the same gesture", () => {
+      const win = { closed: false, focus: () => {}, close: jest.fn() };
+      window.open = jest.fn(() => win);
+      jest.spyOn(document, "hasFocus").mockReturnValue(true);
+      jest.useFakeTimers();
+      // Bound for the window's lifetime by the session's first popup, so a
+      // later activation with none outstanding still arms the abandon.
+      soleTrader.bindWindowRefocusListener();
+      soleTrader.setMode("sole_trader");
+
+      // Window `focus` arrives in bursts — a blur fires one — so an activation
+      // can arm the abandon in the same gesture that opens the popup.
+      window.dispatchEvent(new Event("focus"));
+      soleTrader.launchSignup();
+      jest.advanceTimersByTime(soleTrader.refocusChipGraceMs);
+
+      expect(win.close).not.toHaveBeenCalled();
+      jest.useRealTimers();
+    });
+
     /**
      * Every launch path the undecided-popup guard must leave alone. Each case
      * arranges its state, launches, and must end with exactly the popups it
