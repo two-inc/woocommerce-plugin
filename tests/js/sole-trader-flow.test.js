@@ -2404,8 +2404,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         });
 
         test("a merchant who relocated the control to the payment tile keeps the native address row", () => {
-          // An adoption is a tile capture like any other, and in this placement
-          // a capture never takes the address row away (Doug 2026-08-28).
+          // An adoption is a tile capture like any other — the address row stays.
           ctx.twoinc.company_search_location = "payment_tile";
 
           soleTrader.setMode("sole_trader");

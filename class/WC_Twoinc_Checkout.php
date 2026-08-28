@@ -171,10 +171,8 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 'priority' => $company_name_priority
             ];
 
-            // The capture's own name field, never `billing_company`: in
-            // payment-tile placement that row is an address line the buyer
-            // owns and may hold a different company (Doug 2026-08-28).
-            // Registered so it survives a fragment refresh with its number.
+            // Registered as a billing field so it survives a fragment refresh
+            // with its number.
             $fields['billing']['company_name'] = [
                 'label' => __('Company name', 'twoinc-payment-gateway'),
                 'class' => array('hidden'),

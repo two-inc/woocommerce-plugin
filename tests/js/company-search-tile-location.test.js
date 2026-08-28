@@ -83,11 +83,8 @@ describe("company-search tile location (TWO-25326 §7.1)", () => {
     });
 
     /**
-     * The tile's company and the address company are allowed to disagree in
-     * this placement (Doug 2026-08-28), so a capture is not a reason to take
-     * the native row away. Driven through the callback the plugin hands the
-     * panel, not by calling the visibility rule: a direct call passes even
-     * when nothing is wired to it.
+     * Driven through the callback the plugin hands the panel, not by calling
+     * the visibility rule: a direct call passes even when nothing is wired.
      */
     test("an ordinary registry pick leaves the native field alone", () => {
       const ajax = harness.stubAjax($);
@@ -108,9 +105,7 @@ describe("company-search tile location (TWO-25326 §7.1)", () => {
 
     /**
      * The control lives inside Two's payment box, which WooCommerce collapses
-     * for every other method — so a rule that took the address row away under
-     * another method would leave the buyer no company surface at all. That is
-     * the "never neither" invariant (Doug 2026-08-19).
+     * for every other method — the "never neither" invariant.
      */
     test("keeps the native field when Two is not the selected method, capture or no capture", () => {
       ctx.capture.write("ACME Widgets Ltd", "12345678");
