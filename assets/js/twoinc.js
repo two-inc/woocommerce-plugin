@@ -1884,12 +1884,7 @@ let twoincDomHelper = {
     // exception is `company_search_location === "payment_tile"` below, where
     // the two are not competing for the same position: the search control has
     // been relocated into the payment tile, so the native field is what the
-    // address area still needs (Doug 2026-08-04, live-verified) — until Two
-    // holds a capture AND is the selected method, when the tile is showing
-    // that capture and the address row would only duplicate it into a place
-    // Doug ruled it must not appear (TWO-25503). The "never neither" rule
-    // above is why that second condition is there: the tile collapses with
-    // the method, so its surface only counts while Two is selected.
+    // address area still needs (Doug 2026-08-04, live-verified).
     //
     // The search control is the visible surface for BOTH capture modes that
     // render a name into it — an ordinary registry pick and an adopted sole
@@ -1914,16 +1909,12 @@ let twoincDomHelper = {
     if (showCompanySearch && !twoincSelectWooHelper.isTileLocation()) {
       visibleTargets.push("#billing_company_display_field");
     } else if (showCompanySearch) {
-      // Tile placement: the search control renders inside Two's payment box, so
-      // the address area keeps WooCommerce's stock field (Doug 2026-08-04). The
-      // stock field goes only when the tile is genuinely showing the capture
-      // instead (TWO-25503, Doug: an adopted sole trader "should do neither of
-      // these things in the address area") — which needs BOTH a capture and Two
-      // selected, since the tile collapses with the method and hiding this row
-      // under another method would leave no company surface at all.
-      if (!(isTwoincSelected && twoincCompanyCapture.hasCapture())) {
-        visibleTargets.push("#billing_company_field");
-      }
+      // Tile placement: the search control renders inside Two's payment box and
+      // the address area keeps WooCommerce's stock field, untouched, whatever
+      // the tile is showing (Doug 2026-08-28). The two are allowed to disagree
+      // — the tile's company drives the intent and the order, the address one
+      // is an address line — so nothing here reads the capture or the method.
+      visibleTargets.push("#billing_company_field");
     } else {
       visibleTargets.push("#billing_company_field");
     }
