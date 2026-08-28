@@ -303,9 +303,6 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             // …) then see the fresh list.
             $offered_terms = WC_Twoinc_Payment_Terms::get_available_terms($this->wc_twoinc, true);
 
-            // TODO: Make this dynamic based on active merchant payee accounts
-            $supported_buyer_countries = WC_Twoinc_Brand::get('supported_buyer_countries');
-
             // Read once, fed to both `enable_company_search` below and
             // `derive_company_search_location()` — same option chain, same
             // request, no reason to hit `get_option()` twice.
@@ -353,7 +350,6 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 'enable_address_lookup' => $this->wc_twoinc->get_option('enable_address_lookup'),
                 'enable_order_intent' => $this->wc_twoinc->get_option('enable_order_intent'),
                 'display_tooltips' => $this->wc_twoinc->get_option('display_tooltips'),
-                'supported_buyer_countries' => $supported_buyer_countries,
                 'gateway_id' => WC_Twoinc_Brand::get('gateway_id'),
                 'merchant' => $merchant,
                 'merchant_due_in_days' => $this->wc_twoinc->get_merchant_due_in_days(),

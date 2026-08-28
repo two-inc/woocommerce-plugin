@@ -1389,7 +1389,7 @@ class TwoCompanySearch {
       $slot.append($row);
     }
 
-    const show = twoincDomHelper.isCountrySupported() && twoincCompanyCapture.mode !== "manual";
+    const show = twoincCompanyCapture.mode !== "manual";
     $row.toggleClass("hidden", !show);
     $slot.toggleClass("hidden", !show);
 
@@ -1832,17 +1832,16 @@ let twoincDomHelper = {
     // render a name into it — an ordinary registry pick and an adopted sole
     // trader (TWO-40 §7 direction (a): `lockCapturedFields()` seeds the widget
     // with the adopted company as its own selection, the same way PrestaShop's
-    // `adoptSoleTraderBuyer()` never swaps its own search field away). Two
-    // things take it away, both handing the name over to the native field:
-    // manual entry, and a billing country with no registry to search. Manual
-    // entry is reachable only via `enterManualCompanyEntry` — never as a side
-    // effect of Two being unavailable or of the merchant's admin setting, both
-    // of which used to silently downgrade a registered-company/sole-trader
-    // buyer into manual entry the moment Two stopped being selected. WHERE the
-    // control renders is `company_search_location`'s business, below; never
-    // whether it's active.
-    const showCompanySearch =
-      twoincDomHelper.isCountrySupported() && twoincCompanyCapture.mode !== "manual";
+    // `adoptSoleTraderBuyer()` never swaps its own search field away). Only
+    // manual entry takes it away, handing the name over to the native field,
+    // and is reachable only via `enterManualCompanyEntry` — never as a side
+    // effect of Two being unavailable, of the merchant's admin setting, or of
+    // the billing country (TWO-25232: the control is mounted for every
+    // country; a country with no registry to search degrades inside the
+    // widget, via its "search unavailable" message and manual-entry chip).
+    // WHERE the control renders is `company_search_location`'s business,
+    // below; never whether it's active.
+    const showCompanySearch = twoincCompanyCapture.mode !== "manual";
 
     // `#company_id_field` is never in `visibleTargets`, in any mode: the
     // captured number is never typed into, only reaches the buyer as the
@@ -2129,15 +2128,6 @@ let twoincDomHelper = {
     representativeData["first_name"] = jQuery("#billing_first_name").val();
     representativeData["last_name"] = jQuery("#billing_last_name").val();
     return representativeData;
-  },
-  /**
-   * Check if selected country is supported by Twoinc
-   */
-  isCountrySupported: function () {
-    // Same one country resolver as everything else (TWO-40 §1). The brand's
-    // `supported_buyer_countries` list is upper-case ISO, which is what the
-    // resolver returns.
-    return window.twoinc.supported_buyer_countries.includes(twoincSelectWooHelper.currentCountry());
   },
   /**
    * Check if twoinc payment is currently selected

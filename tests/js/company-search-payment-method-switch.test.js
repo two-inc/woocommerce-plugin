@@ -166,7 +166,6 @@ describe("payment-method switch onto the Two gateway (TWO-25326 / #486)", () => 
       company_search_location: "payment_tile",
       enable_order_intent: "yes",
       enable_address_lookup: "no",
-      supported_buyer_countries: ["GB"],
       twoinc_checkout_host: "https://api.example.test",
       client_name: "woocommerce",
       client_version: "0.0.0-test",

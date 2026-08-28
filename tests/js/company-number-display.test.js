@@ -35,7 +35,6 @@ describe("TWO:-prefixed organisation numbers", () => {
   beforeEach(() => {
     ctx = harness.loadTwoinc({
       gateway_id: GATEWAY_ID,
-      supported_buyer_countries: ["GB"],
       enable_company_search: "yes",
       enable_address_lookup: "no",
       text: {}
@@ -362,7 +361,6 @@ describe("TWO:-prefixed organisation numbers", () => {
     function loadWithNoRegistry() {
       ctx = harness.loadTwoinc({
         gateway_id: GATEWAY_ID,
-        supported_buyer_countries: ["NO"],
         enable_address_lookup: "no",
         text: {}
       });

@@ -33,9 +33,7 @@ describe("billing country switch", () => {
     // would outlive the test on real timers and run against a torn-down DOM.
     // Nothing here needs either to fire.
     jest.useFakeTimers();
-    // `supported_buyer_countries` is read by isCountrySupported(), which
-    // toggleBusinessFields() calls — the first thing the country handler does.
-    ctx = harness.loadTwoinc({ supported_buyer_countries: ["GB", "ES"] });
+    ctx = harness.loadTwoinc({});
     harness.buildCheckoutForm({ country: "GB" });
     // The harness fixture carries a single country option, which is all the
     // search tests need. Switching country needs somewhere to switch TO.
@@ -1205,6 +1203,45 @@ describe("billing country switch", () => {
 
       expect(ctx.$("#billing_address_1").val()).toBe("1 Example Street");
       expect(ctx.Twoinc.getInstance().registryAddressApplied).toBe(true);
+    });
+  });
+
+  describe("the company-search control is mounted for every country (TWO-25232)", () => {
+    // A country with no registry behind it degrades INSIDE the widget — the
+    // "search unavailable" message and the manual-entry chip — never by
+    // taking the control off screen.
+    test.each([
+      { country: "GB", description: "a country with a registry" },
+      { country: "NO", description: "another country with a registry" },
+      { country: "ES", description: "a country with no registry" },
+      { country: "US", description: "a country the checkout has never offered" }
+    ])("$description keeps the search control", ({ country }) => {
+      ctx.$("#billing_country").append('<option value="' + country + '">x</option>');
+      ctx.$("#billing_country").val(country);
+      ctx.$('input[name="payment_method"]').prop("checked", true);
+
+      ctx.dom.toggleBusinessFields();
+
+      expect(ctx.$("#billing_company_display_field").hasClass("hidden")).toBe(false);
+    });
+
+    test.each([
+      { from: "GB", to: "ES", description: "registry country to one without" },
+      { from: "ES", to: "GB", description: "no-registry country back to one with" },
+      { from: "ES", to: "US", description: "one no-registry country to another" }
+    ])("switching $description keeps the control", ({ from, to }) => {
+      for (const code of [from, to]) {
+        ctx.$("#billing_country").append('<option value="' + code + '">x</option>');
+      }
+      ctx.$('input[name="payment_method"]').prop("checked", true);
+      initializeCheckout();
+
+      ctx.$("#billing_country").val(from);
+      fireCountryChange();
+      ctx.$("#billing_country").val(to);
+      fireCountryChange();
+
+      expect(ctx.$("#billing_company_display_field").hasClass("hidden")).toBe(false);
     });
   });
 });

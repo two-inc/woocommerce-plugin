@@ -46,14 +46,13 @@ describe("the company name and number surfaces (#486)", () => {
   let $;
 
   /**
-   * @param {string} [country] the billing country the fixture selects; "GB" is
-   *   in `supported_buyer_countries`, "US" deliberately is not
+   * @param {string} [country] the billing country the fixture selects; "US" is
+   *   deliberately one with no registry behind it
    * @returns {void}
    */
   function load(country) {
     ctx = harness.loadTwoinc({
       gateway_id: GATEWAY_ID,
-      supported_buyer_countries: ["GB"],
       enable_order_intent: "no",
       enable_address_lookup: "no",
       company_search_location: "address_area",
@@ -107,18 +106,18 @@ describe("the company name and number surfaces (#486)", () => {
   }
 
   describe("the company NAME is always exactly one of the two elements", () => {
-    // The whole matrix in one table: three capture modes crossed with
-    // supported/unsupported billing country. `search` and `sole_trader` both
-    // render the name through the picker (TWO-40 §7 direction (a) seeds the
-    // adopted sole trader into it as its own selection); manual entry and an
-    // unsupported country both hand the name to the native field.
+    // The whole matrix in one table: three capture modes crossed with billing
+    // country. `search` and `sole_trader` both render the name through the
+    // picker (TWO-40 §7 direction (a) seeds the adopted sole trader into it as
+    // its own selection); only manual entry hands the name to the native
+    // field. Country is not a factor (TWO-25232).
     test.each([
-      { mode: "search", country: "GB", picker: true, description: "search on a supported country" },
+      { mode: "search", country: "GB", picker: true, description: "search on GB" },
       {
         mode: "sole_trader",
         country: "GB",
         picker: true,
-        description: "sole trader on a supported country — the adopted name renders in the picker"
+        description: "sole trader on GB — the adopted name renders in the picker"
       },
       {
         mode: "manual",
@@ -129,14 +128,14 @@ describe("the company name and number surfaces (#486)", () => {
       {
         mode: "search",
         country: "US",
-        picker: false,
-        description: "search on a country with no registry falls back to the native field"
+        picker: true,
+        description: "search on a country with no registry keeps the picker"
       },
       {
         mode: "sole_trader",
         country: "US",
-        picker: false,
-        description: "sole trader on a country with no registry does too"
+        picker: true,
+        description: "sole trader on a country with no registry keeps the picker"
       },
       {
         mode: "manual",
@@ -155,11 +154,11 @@ describe("the company name and number surfaces (#486)", () => {
     });
 
     test.each([
-      { mode: "search", country: "GB", description: "search, supported country" },
+      { mode: "search", country: "GB", description: "search, GB" },
       { mode: "search", country: "US", description: "search, no registry" },
-      { mode: "sole_trader", country: "GB", description: "sole trader, supported country" },
+      { mode: "sole_trader", country: "GB", description: "sole trader, GB" },
       { mode: "sole_trader", country: "US", description: "sole trader, no registry" },
-      { mode: "manual", country: "GB", description: "manual entry, supported country" },
+      { mode: "manual", country: "GB", description: "manual entry, GB" },
       { mode: "manual", country: "US", description: "manual entry, no registry" }
     ])(
       "$description shows a name element whichever payment method is selected",

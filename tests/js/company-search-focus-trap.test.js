@@ -28,7 +28,6 @@ describe("company-search focus trap", () => {
     jest.useFakeTimers();
     ctx = harness.loadTwoinc({
       text: TEXT,
-      supported_buyer_countries: ["GB"],
       enable_company_search: "yes",
       enable_address_lookup: "no"
     });

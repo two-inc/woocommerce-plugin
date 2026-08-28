@@ -73,7 +73,6 @@ describe("TWO-40 §5 — captured-company write path", () => {
     return harness.loadTwoinc(
       Object.assign(
         {
-          supported_buyer_countries: ["GB", "NO"],
           enable_address_lookup: "no",
           enable_order_intent: "no"
         },

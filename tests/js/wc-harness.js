@@ -151,10 +151,6 @@ function loadTwoinc(twoinc) {
     {
       gateway_id: "woocommerce-gateway-tillit",
       enable_company_search: "yes",
-      // Emitted unconditionally by WC_Twoinc_Checkout, so every fixture has it.
-      // `isCountrySupported()` reads it on every toggle, and a fixture without
-      // it throws where production cannot.
-      supported_buyer_countries: ["GB", "NO", "SE", "NL"],
       company_search_location: "address_area",
       twoinc_checkout_host: "https://api.example.test",
       client_name: "woocommerce",

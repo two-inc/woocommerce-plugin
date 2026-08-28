@@ -35,7 +35,6 @@ describe("company-search manual-entry affordance", () => {
   beforeEach(() => {
     ctx = harness.loadTwoinc({
       text: TEXT,
-      supported_buyer_countries: ["GB"],
       enable_company_search: "yes",
       enable_address_lookup: "no"
     });
@@ -431,7 +430,6 @@ describe("company-search manual-entry affordance", () => {
     ])("company_search_location %s → %p — %s", (location, expected) => {
       ctx = harness.loadTwoinc({
         text: TEXT,
-        supported_buyer_countries: ["GB"],
         enable_company_search: "yes",
         company_search_location: location,
         enable_address_lookup: "no",

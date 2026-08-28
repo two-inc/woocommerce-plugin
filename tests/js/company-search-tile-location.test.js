@@ -74,7 +74,6 @@ describe("company-search tile location (TWO-25326 §7.1)", () => {
         gateway_id: GATEWAY_ID,
         enable_company_search: "yes",
         company_search_location: "payment_tile",
-        supported_buyer_countries: ["GB"],
         text: {}
       });
       $ = ctx.$;
@@ -287,7 +286,6 @@ describe("company-search tile location (TWO-25326 §7.1)", () => {
         gateway_id: GATEWAY_ID,
         enable_company_search: "yes",
         company_search_location: "address_area",
-        supported_buyer_countries: ["GB"],
         text: {}
       });
       $ = ctx.$;
@@ -339,6 +337,80 @@ describe("company-search tile location (TWO-25326 §7.1)", () => {
       expect(() => helper.syncCompanySearchTileLocation()).not.toThrow();
       expect(tileRow().length).toBe(0);
       expect($("#billing_company_field").length).toBeGreaterThan(0);
+    });
+  });
+
+  describe("the tile keeps a company surface in every country (TWO-25232)", () => {
+    beforeEach(() => {
+      ctx = harness.loadTwoinc({
+        gateway_id: GATEWAY_ID,
+        enable_company_search: "yes",
+        company_search_location: "payment_tile",
+        text: {}
+      });
+      $ = ctx.$;
+      dom = ctx.dom;
+      helper = ctx.helper;
+      buildTileSlot();
+    });
+
+    /**
+     * @param {string} country
+     * @returns {void}
+     */
+    function selectCountry(country) {
+      $("#billing_country").append('<option value="' + country + '">x</option>');
+      $("#billing_country").val(country);
+    }
+
+    // Asserted on the slot and the row it builds, never on a country list:
+    // a gate reintroduced anywhere in the placement path fails here.
+    test.each([
+      { country: "GB", description: "a country with a registry" },
+      { country: "NO", description: "another country with a registry" },
+      { country: "ES", description: "a country with no registry" },
+      { country: "US", description: "a country the checkout has never offered" }
+    ])("$description leaves the tile slot showing a company row", ({ country }) => {
+      selectCountry(country);
+
+      dom.toggleBusinessFields();
+
+      expect(tileSlot().hasClass("hidden")).toBe(false);
+      expect(helper.isOnScreen(tileRow())).toBe(true);
+      expect(helper.panel.getField()[0]).toBe($("#twoinc_tile_company_name")[0]);
+    });
+
+    // See the `requiredTargets` rule in `toggleBusinessFields()` (TWO-25232).
+    test.each([
+      { country: "GB", description: "a country with a registry" },
+      { country: "US", description: "a country with no registry" }
+    ])("$description requires the native field, not the tile input", ({ country }) => {
+      selectCountry(country);
+
+      dom.toggleBusinessFields();
+
+      expect($("#billing_company").attr("required")).toBe("required");
+      expect($("#twoinc_tile_company_name").attr("required")).toBeUndefined();
+    });
+  });
+
+  describe("the address area still requires the search control (TWO-25232)", () => {
+    test("required-ness stays on the display field when the control is in the address area", () => {
+      ctx = harness.loadTwoinc({
+        gateway_id: GATEWAY_ID,
+        enable_company_search: "yes",
+        company_search_location: "address_area",
+        text: {}
+      });
+      $ = ctx.$;
+      dom = ctx.dom;
+      $('form[name="checkout"]').append(
+        '<input type="radio" name="payment_method" value="' + GATEWAY_ID + '" checked />'
+      );
+
+      dom.toggleBusinessFields();
+
+      expect($("#billing_company_display").attr("required")).toBe("required");
     });
   });
 });

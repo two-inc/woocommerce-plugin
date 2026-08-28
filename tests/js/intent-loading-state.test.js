@@ -43,7 +43,6 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     ctx = harness.loadTwoinc({
       gateway_id: GATEWAY_ID,
       enable_order_intent: "yes",
-      supported_buyer_countries: ["GB"],
       enable_company_search: "yes",
       enable_address_lookup: "no",
       currency: "GBP",
