@@ -4397,8 +4397,8 @@ class Twoinc {
     // goes through `.val()`, which dispatches nothing.
     //
     // Gated on the field still BEING the capture's name field: in tile
-    // placement typing in `#billing_company` used to take the captured
-    // organisation number with it.
+    // placement `#billing_company` is an address line, and an edit there must
+    // not touch the captured number.
     $body
       .off("input.twoincCompanyPairing change.twoincCompanyPairing", "#billing_company")
       .on(
@@ -5720,9 +5720,5 @@ jQuery(function () {
 
       // Otherwise do not run Twoinc code
     }
-
-    // Nothing to relocate or hide here any more (TWO-25288): the manual-entry
-    // row is created inside the results list only while it should be visible,
-    // and the link back to search is created hidden, in place, on first use.
   }
 });
