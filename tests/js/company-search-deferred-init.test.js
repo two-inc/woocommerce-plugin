@@ -6,15 +6,11 @@
  * returns on is `#order_review`, which a multi-step or late-rendering theme can
  * put in the document before the billing fragment — so the synchronous pass can
  * find no `#billing_company_display` to bind to. `updated_checkout` re-binds
- * too, but only once something triggers a fragment refresh, so on a checkout
- * the buyer does not disturb this timer is the one that has to work.
+ * too, but only on a fragment refresh, so this timer is the only thing serving
+ * a buyer who disturbs nothing.
  *
- * The call is wrapped rather than passed as a bare method reference: with
- * `setTimeout(this.enableCompanySearch, 800)` the deferred pass runs with the
- * global as its receiver, and `attach(this)` then files `window` as the plugin
- * instance. Jest's fake timers pass `null` where a browser passes the global,
- * so that shape throws here instead of misbehaving quietly — which is why every
- * assertion below is on the panel and the DOM, not on `not.toThrow()`.
+ * The timer's callback is wrapped, not a bare method reference, so it keeps its
+ * receiver — every assertion below is on the panel and the DOM for that reason.
  */
 
 "use strict";
@@ -64,9 +60,8 @@ describe("deferred company-search initialisation", () => {
   /**
    * Is the panel bound to the company field?
    *
-   * Read through the panel's own `isBound()`: `attach()` builds a panel whether
-   * or not it found a field to anchor to, so panel-exists says nothing about
-   * whether the buyer has a control.
+   * `attach()` builds a panel whether or not it found a field, so panel-exists
+   * says nothing about whether the buyer has a control.
    *
    * @returns {boolean}
    */
@@ -143,8 +138,7 @@ describe("deferred company-search initialisation", () => {
     // late-rendering theme left the checkout in permanently.
     expect(panelBound()).toBe(false);
 
-    // `attach()` still built a panel: it does that whether or not a host was
-    // there for it, so panel-exists is not the same question as panel-bound.
+    // Built, but anchored to nothing — panel-exists is not panel-bound.
     expect(ctx.helper.panel).not.toBeNull();
     expect(ctx.helper.panel.getField()).toHaveLength(0);
 
@@ -220,8 +214,7 @@ describe("deferred company-search initialisation", () => {
     expect(enableCalls).toHaveBeenCalledTimes(2);
 
     expect(panelBound()).toBe(false);
-    // The early return sits above the attach, so no panel was built at all —
-    // not even one anchored to nothing.
+    // The early return sits above the attach, so nothing was built at all.
     expect(ctx.helper.panel).toBeNull();
     expect(panelCount()).toBe(0);
   });

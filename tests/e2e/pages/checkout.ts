@@ -30,13 +30,11 @@ export const COMPANY_FIELD = "#billing_company_display";
  * the registry says the billing country supports sole traders — GB does, and
  * since TWO-25163 there is no merchant toggle left to suppress it. A business
  * buyer picks Registered company; do the same before driving the company
- * search, so the specs exercise the real GB checkout instead of assuming a
- * checkout with no mode chooser at all.
+ * search.
  *
- * The chips live inside the popover, so the popover has to be open first.
- * No-op when the address-area field is not on screen (payment-tile placement)
- * or the chip is absent (country not sole-trader capable), so the helper is
- * safe to call from every spec.
+ * The chips live inside the popover, so it has to be open first. A no-op with
+ * no address-area field (payment-tile placement) or no chip (country without
+ * sole traders), so every spec can call it.
  */
 export async function selectRegisteredCompany(page: Page) {
   try {

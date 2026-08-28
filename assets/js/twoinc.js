@@ -1362,10 +1362,8 @@ class TwoCompanySearch {
 
     if (!helper.isTileLocation()) {
       $slot.addClass("hidden");
-      // Ahead of the slot check, not behind it: the slot lives in the Two
-      // gateway's description, so on a checkout not offering Two this
-      // `updated_checkout` re-bind is the only thing rescuing the panel from
-      // the billing row WooCommerce has just replaced.
+      // Ahead of the slot check: the slot lives in Two's gateway description,
+      // so a checkout not offering Two has no other re-bind.
       if (twoincCompanyCapture.mode !== "manual") helper.attach();
       return;
     }
@@ -4183,10 +4181,8 @@ class Twoinc {
   /**
    * Bind the company-search panel to whichever company-name field is current.
    *
-   * Gated on the capture mode being `search` (#486). Sole-trader mode is
-   * re-bound anyway by `syncCompanySearchTileLocation()` on every
-   * `updated_checkout`; this gate only keeps the bootstrap and its retry off a
-   * field manual entry has released.
+   * The mode gate only keeps the bootstrap and its retry off a field manual
+   * entry has released; `syncCompanySearchTileLocation()` re-binds sole trader.
    */
   enableCompanySearch() {
     if (twoincCompanyCapture.mode !== "search") return;

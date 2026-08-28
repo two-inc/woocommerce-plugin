@@ -293,9 +293,8 @@ describe("company-search tile location (TWO-25326 §7.1)", () => {
       $ = ctx.$;
       dom = ctx.dom;
       helper = ctx.helper;
-      // Deliberately no buildTileSlot(): the slot server-renders inside Two's
-      // payment-box description, so a checkout not offering Two has none — and
-      // this is the only sync that can rescue the panel there.
+      // Deliberately no buildTileSlot(): the slot renders inside Two's
+      // payment-box description, so a checkout not offering Two has none.
     });
 
     test.each([
