@@ -399,6 +399,85 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     );
 
     /**
+     * Doug, live: the "select a different sole trader" link "takes focus but
+     * opens nothing". The popup that would answer the activation was already
+     * on screen, and a refusal that does nothing at all leaves a buyer who
+     * cannot see it with a dead control.
+     */
+    test.each([
+      {
+        // Off the live node the mode switch put on the page, not the
+        // build-on-demand accessor: reachability is half of what Doug reported.
+        activate: () => $("#select_different_sole_trader_btn").trigger("click"),
+        description: "the select-a-different-sole-trader link"
+      },
+      {
+        activate: () => soleTrader.launchSignup({ autoselect: false }),
+        description: "a re-signup"
+      },
+      {
+        activate: () => soleTrader.launchSignup(),
+        description: "a fresh signup launch"
+      }
+    ])("$description raises the outstanding popup instead of doing nothing", ({ activate }) => {
+      const raised = [];
+      const win = {
+        closed: false,
+        focus: () => {
+          raised.push(win);
+        },
+        close: jest.fn()
+      };
+      window.open = jest.fn(() => win);
+      // jsdom answers `document.hasFocus()` false unconditionally, so the
+      // abandon path needs telling the checkout is the window in front.
+      jest.spyOn(document, "hasFocus").mockReturnValue(true);
+      jest.useFakeTimers();
+      soleTrader.setMode("sole_trader");
+      soleTrader.launchSignup();
+      expect(window.open).toHaveBeenCalledTimes(1);
+
+      // The buyer's return to the checkout arms the abandon, and the
+      // activation lands inside its grace.
+      window.dispatchEvent(new Event("focus"));
+      // Pinned, or the close assertion below passes on an abandon that was
+      // never armed.
+      expect(soleTrader.refocusAbandonTimer).not.toBeNull();
+      activate();
+      jest.advanceTimersByTime(soleTrader.refocusChipGraceMs);
+
+      expect(window.open).toHaveBeenCalledTimes(1);
+      expect(raised).toHaveLength(1);
+      // The armed abandon must go with the raise, or it closes the popup the
+      // activation just asked to see.
+      expect(win.close).not.toHaveBeenCalled();
+      jest.useRealTimers();
+    });
+
+    test("a freshly opened signup survives an abandon armed in the same gesture", () => {
+      const win = { closed: false, focus: () => {}, close: jest.fn() };
+      window.open = jest.fn(() => win);
+      jest.spyOn(document, "hasFocus").mockReturnValue(true);
+      jest.useFakeTimers();
+      // Bound for the window's lifetime by the session's first popup, so a
+      // later activation with none outstanding still arms the abandon.
+      soleTrader.bindWindowRefocusListener();
+      soleTrader.setMode("sole_trader");
+
+      // Window `focus` arrives in bursts — a blur fires one — so an activation
+      // can arm the abandon in the same gesture that opens the popup.
+      window.dispatchEvent(new Event("focus"));
+      // Pinned, or the close assertion below passes on an abandon that was
+      // never armed.
+      expect(soleTrader.refocusAbandonTimer).not.toBeNull();
+      soleTrader.launchSignup();
+      jest.advanceTimersByTime(soleTrader.refocusChipGraceMs);
+
+      expect(win.close).not.toHaveBeenCalled();
+      jest.useRealTimers();
+    });
+
+    /**
      * Every launch path the undecided-popup guard must leave alone. Each case
      * arranges its state, launches, and must end with exactly the popups it
      * asked for — refusing any of these is the regression the two earlier,
@@ -1005,13 +1084,19 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       // companies in some countries too, so the shape cannot tell them apart.
       function recordPreviousCapture(name, id, mode) {
         const before = soleTrader.mode;
+        const adoptedBefore = soleTrader.soleTraderAdopted;
         $("#billing_company").val(name);
         $("#company_id").val(id);
-        soleTrader.mode = mode === "sole_trader" ? "sole_trader" : "business";
+        const isSoleTrader = mode === "sole_trader";
+        soleTrader.mode = isSoleTrader ? "sole_trader" : "business";
+        // The pair on the fields is a sole trader's only once one has actually
+        // been adopted — the chip alone leaves an earlier capture in place.
+        soleTrader.soleTraderAdopted = isSoleTrader;
         // Through the real snapshotter, so the wiring that writes the record
         // is under test alongside the restore that reads it.
         if (mode) ctx.dom.saveCheckoutInputs();
         soleTrader.mode = before;
+        soleTrader.soleTraderAdopted = adoptedBefore;
         $("#billing_company").val("");
         $("#company_id").val("");
       }
@@ -3368,6 +3453,45 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
 
       jest.advanceTimersByTime(30 * 60 * 1000);
       expect(ajax.calls).toHaveLength(2);
+    });
+  });
+
+  /**
+   * Doug, live: a registered company restored after a reload showed the
+   * "select a different sole trader" link beneath it. The 3-second form
+   * snapshot recorded the CHIP the buyer had switched to against a pair that
+   * chip had not captured — mode from one source, entity from another.
+   */
+  describe("TWO-40 — the recorded capture mode describes the pair on the fields", () => {
+    test.each([
+      {
+        arrange: () => {},
+        expected: "search",
+        description: "a registry pick with no sole-trader detour"
+      },
+      {
+        arrange: () => soleTrader.onModeChipClick("sole_trader"),
+        expected: "search",
+        description: "a registry pick still on the fields while a signup popup is open"
+      },
+      {
+        arrange: () => {
+          soleTrader.onModeChipClick("sole_trader");
+          soleTrader.setCompany("TWO:ST12345", "A Sole Trader");
+        },
+        expected: "sole_trader",
+        description: "a sole trader actually adopted"
+      }
+    ])("$description records $expected", ({ arrange, expected }) => {
+      harness.openCompanyPanel($, ctx.helper);
+      ctx.helper.onPick({ id: "ACME Widgets Ltd", company_id: "12345678" });
+
+      arrange();
+      ctx.dom.saveCheckoutInputs();
+
+      expect(
+        ctx.capture.recallCaptureMode($("#billing_company").val(), $("#company_id").val())
+      ).toBe(expected);
     });
   });
 

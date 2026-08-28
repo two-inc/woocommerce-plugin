@@ -433,6 +433,24 @@ let twoincCompanyCapture = {
   CAPTURE_MODE_KEY: "twoincCaptureMode",
 
   /**
+   * Which capture UI produced the pair the fields hold RIGHT NOW.
+   *
+   * The chip alone does not answer it: switching into sole-trader mode clears
+   * nothing, so an earlier pick stays on the fields for the whole signup round
+   * trip. Adoption is the discriminator — until one lands, the pair still
+   * belongs to the mode `savedCaptureMode` holds.
+   *
+   * @returns {string}
+   */
+  capturedMode: function () {
+    if (twoincSoleTrader.mode !== "sole_trader") return twoincCompanyCapture.mode;
+    if (twoincSoleTrader.soleTraderAdopted) return "sole_trader";
+    return twoincSoleTrader.savedCaptureMode === null
+      ? twoincCompanyCapture.mode
+      : twoincSoleTrader.savedCaptureMode;
+  },
+
+  /**
    * Record which capture UI produced the company now on the form, against the
    * pair it describes, so a later restore can read the mode back rather than
    * infer it. Nothing about a captured value carries that fact: a `TWO:`
@@ -440,16 +458,14 @@ let twoincCompanyCapture = {
    * too, so its shape says nothing about how the buyer was captured.
    *
    * A restored sole trader leaves the capture axis at `search` — that is what
-   * `enableCompanySearch()` gates on — so the chip axis is what carries the
-   * fact forward across a second return.
+   * `enableCompanySearch()` gates on — so adoption is what carries the fact
+   * forward across a second return.
    */
   rememberCaptureMode: function () {
-    const mode =
-      twoincSoleTrader.mode === "sole_trader" ? "sole_trader" : twoincCompanyCapture.mode;
     sessionStorage.setItem(
       twoincCompanyCapture.CAPTURE_MODE_KEY,
       JSON.stringify({
-        mode: mode,
+        mode: twoincCompanyCapture.capturedMode(),
         tag: twoincCompanyCapture.pairingTag(
           twoincCompanyCapture.nameField().val(),
           twoincCompanyCapture.numberField().val()
@@ -3319,9 +3335,9 @@ let twoincSoleTrader = {
   /**
    * Open the hosted signup popup, falling back to the visible link if the
    * browser blocks the window. Re-entrancy-guarded (TWO-40 §7): a second
-   * activation while one is already opening is dropped, and a later
-   * activation is dropped for as long as an already-open popup's outcome
-   * is still undecided.
+   * activation while one is already opening is dropped, and an activation
+   * while an already-open popup's outcome is undecided raises that popup
+   * instead of opening a second one.
    *
    * A re-signup (`options.autoselect === false`) is also refused while a
    * different one is already outstanding: `openingSignup` only guards two
@@ -3338,14 +3354,16 @@ let twoincSoleTrader = {
     // `findPopupWatcher`). Scoped to each popup's own outcome rather than
     // `isDeciding()`, which would strand a chip click when no popup exists
     // and only a stale flight is outstanding.
-    if (
-      twoincSoleTrader.signupConfirming ||
-      twoincSoleTrader.activePopupWatchers.some(function (watcher) {
-        return !watcher.decided && !watcher.win.closed;
-      })
-    ) {
-      return;
-    }
+    if (twoincSoleTrader.signupConfirming) return;
+    // The abandon a return to the checkout armed goes, whatever this
+    // activation then does: left running it closes the popup 150ms later,
+    // raised or freshly opened. Only the mode chips cancel it on their own.
+    clearTimeout(twoincSoleTrader.refocusAbandonTimer);
+    twoincSoleTrader.refocusAbandonTimer = null;
+    // Raised, not silently dropped: the popup that would answer this
+    // activation is already on screen, and a refusal that does nothing at all
+    // reads as a dead control to a buyer who cannot see it.
+    if (twoincSoleTrader.refocusOpenPopups()) return;
     if (
       options &&
       options.autoselect === false &&
