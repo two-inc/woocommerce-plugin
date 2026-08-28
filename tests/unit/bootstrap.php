@@ -1122,6 +1122,21 @@ function wp_send_json($data, $status_code = null, $flags = 0)
     $GLOBALS['__twoinc_test_ajax_json'] = ['relayed' => $data, 'status' => $status_code];
 }
 
+// The settings-page notice surface the API-key save writes to.
+
+class WC_Admin_Settings
+{
+    public static function add_message($text)
+    {
+        $GLOBALS['__twoinc_test_admin_messages'][] = $text;
+    }
+
+    public static function add_error($text)
+    {
+        $GLOBALS['__twoinc_test_admin_errors'][] = $text;
+    }
+}
+
 class WC_AJAX
 {
     public static function get_endpoint($request)

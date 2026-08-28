@@ -364,11 +364,8 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 'price_decimal_separator' => wc_get_price_decimal_separator(),
                 'price_thousand_separator' => wc_get_price_thousand_separator(),
                 'twoinc_plugin_url' => WC_TWOINC_PLUGIN_URL,
-                'client_name' => 'wp',
-                'client_version' => get_twoinc_plugin_version(),
-                // Company search, address lookup, order intent and payment
-                // terms go through these instead of the API host, so
-                // make_request() can add the firewall token server-side.
+                // Addressed instead of the API host so make_request() can add
+                // the merchant's firewall token server-side.
                 'api_proxy' => [
                     'company_search_url' => class_exists('WC_AJAX') ? WC_AJAX::get_endpoint('two_company_search') : '',
                     'company_by_id_url' => class_exists('WC_AJAX') ? WC_AJAX::get_endpoint('two_company_by_id') : '',
@@ -376,11 +373,6 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     'payment_terms_url' => class_exists('WC_AJAX') ? WC_AJAX::get_endpoint('two_payment_terms') : '',
                     'nonce' => wp_create_nonce('twoinc_checkout'),
                 ],
-                // GET /autofill/v1/buyer/current stays browser-direct — it
-                // resolves its subject from an API-domain cookie no server hop
-                // carries — so its firewall token has to reach the page to get
-                // past the WAF at all.
-                'firewall_token' => (string) $this->wc_twoinc->get_option('firewall_token'),
                 // Chip selector bootstrap (TWO-24751). JS renders only; the
                 // live data (fees, selection) comes from the wc-ajax
                 // endpoints in WC_Twoinc_Payment_Terms.

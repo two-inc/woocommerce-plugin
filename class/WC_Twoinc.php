@@ -16,6 +16,9 @@ if (!class_exists('WC_Twoinc')) {
     {
         private static $instance;
 
+        // Firewall token from the settings POST in flight; null outside a save.
+        private $firewall_token_override = null;
+
         // Per-request memo for GET /v1/merchant/{id} (TWO-25024): one wire
         // fetch per request shared by every consumer, failures included.
         private static $merchant_record = null;
@@ -5195,6 +5198,16 @@ if (!class_exists('WC_Twoinc')) {
             return 'yes' === $this->get_option('disable_ssl_verify');
         }
 
+        /** @return string the token as a header value: never newline-bearing. */
+        public function get_firewall_token()
+        {
+            $token = $this->firewall_token_override !== null
+                ? $this->firewall_token_override
+                : (string) $this->get_option('firewall_token');
+            // WC's text field keeps interior newlines, which would split the header.
+            return trim((string) preg_replace('/[\r\n\t]+/', '', $token));
+        }
+
         /**
          * @param string $method
          *
@@ -5211,7 +5224,7 @@ if (!class_exists('WC_Twoinc')) {
                 'Content-Type' => 'application/json; charset=utf-8',
                 'X-API-Key' => $api_key
             ];
-            $firewall_token = (string) $this->get_option('firewall_token');
+            $firewall_token = $this->get_firewall_token();
             if ($firewall_token !== '') {
                 $headers['X-WAF-TOKEN'] = $firewall_token;
             }
@@ -5229,9 +5242,8 @@ if (!class_exists('WC_Twoinc')) {
 
             if ('yes' === $this->get_option('enable_api_logging')) {
                 $logger = wc_get_logger();
-                // Redact the key headers from request headers for logging.
-                // X-WAF-TOKEN only when it was actually sent, or the log would
-                // imply a firewall token is configured when none is.
+                // Redacted only when actually sent, so the log does not imply
+                // a firewall token is configured when none is.
                 $redacted_headers = array_merge($headers, ['X-API-Key' => '[REDACTED]']);
                 if (isset($redacted_headers['X-WAF-TOKEN'])) {
                     $redacted_headers['X-WAF-TOKEN'] = '[REDACTED]';
@@ -5501,6 +5513,14 @@ if (!class_exists('WC_Twoinc')) {
         public function process_admin_options()
         {
             $post_data = $this->get_post_data();
+            $firewall_token_field = 'woocommerce_' . $this->id . '_firewall_token';
+            if (array_key_exists($firewall_token_field, $post_data)) {
+                // Honour a token pasted in the same save as the API key: the
+                // verification call below runs before the settings persist, so
+                // reading the stored value would send it without X-WAF-TOKEN
+                // and a merchant WAF would revert the key.
+                $this->firewall_token_override = (string) $post_data[$firewall_token_field];
+            }
             $api_key_field = 'woocommerce_' . $this->id . '_api_key';
             $api_key_in_post = array_key_exists($api_key_field, $post_data);
             $api_key = $api_key_in_post ? $post_data[$api_key_field] : '';

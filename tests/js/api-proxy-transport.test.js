@@ -2,8 +2,10 @@
  * The browser-side half of the firewall-token work: which checkout calls go
  * through the store's own wc-ajax proxy, and the single one that does not.
  *
- * Company search has its own file (company-search-transport.test.js); the other
- * three proxied calls and the browser-direct exception are asserted here.
+ * The address lookup, the payment-terms lookup and the browser-direct autofill
+ * exception are asserted here. Company search has its own file
+ * (company-search-transport.test.js), and order intent lives with the rest of
+ * its behaviour in intent-loading-state.test.js.
  */
 
 "use strict";
@@ -74,6 +76,7 @@ describe("checkout API calls and the firewall-token proxy", () => {
       fetchMock = jest.fn(() => Promise.resolve({ ok: false, status: 404 }));
       global.fetch = fetchMock;
       ctx.soleTrader.tokens = { autofill_token: "autofill" };
+      window.twoinc.firewall_token = "never-read-from-the-page";
     });
 
     afterEach(() => {
@@ -105,9 +108,9 @@ describe("checkout API calls and the firewall-token proxy", () => {
       },
       { configured: "", expected: undefined, description: "an empty setting is not a token" }
     ])("$description", ({ configured, expected }) => {
-      // The accepted cost of the exception: the token is in the page for this
-      // request, because a WAF would otherwise reject it and nothing else.
-      window.twoinc.firewall_token = configured;
+      // Carried with the minted tokens, not the page bootstrap, so it only
+      // reaches a checkout whose sole-trader path the registry has vetted.
+      ctx.soleTrader.tokens.firewall_token = configured;
 
       ctx.soleTrader.fetchCurrentBuyer(function () {});
 

@@ -167,8 +167,6 @@ function loadTwoinc(twoinc) {
       enable_company_search: "yes",
       company_search_location: "address_area",
       twoinc_checkout_host: "https://api.example.test",
-      client_name: "woocommerce",
-      client_version: "0.0.0-test",
       api_proxy: Object.assign({}, API_PROXY),
       text: {}
     },
@@ -374,21 +372,6 @@ function resultsText($) {
  * @param {Function} $ jQuery instance
  * @returns {{calls: Array, last: Function, restore: Function}}
  */
-/**
- * The query a recorded request carries, whichever way jQuery was handed it.
- *
- * Proxied calls put their parameters in `data` — a serialised string from the
- * company search, a plain object elsewhere — so a test cannot read them off
- * the URL the way it could when the browser addressed the API host itself.
- *
- * @param {Object} record one entry from `stubAjax().calls`
- * @returns {URLSearchParams}
- */
-function requestParams(record) {
-  const data = (record && record.settings && record.settings.data) || "";
-  return new URLSearchParams(typeof data === "string" ? data : data);
-}
-
 function stubAjax($) {
   const original = $.ajax;
   const calls = [];
@@ -449,6 +432,21 @@ function stubAjax($) {
       $.ajax = original;
     }
   };
+}
+
+/**
+ * The query a recorded request carries, whichever way jQuery was handed it.
+ *
+ * Proxied calls put their parameters in `data` — a serialised string from the
+ * company search, a plain object elsewhere — so a test cannot read them off
+ * the URL the way it could when the browser addressed the API host itself.
+ *
+ * @param {Object} record one entry from `stubAjax().calls`
+ * @returns {URLSearchParams}
+ */
+function requestParams(record) {
+  const data = (record && record.settings && record.settings.data) || "";
+  return new URLSearchParams(typeof data === "string" ? data : data);
 }
 
 /**

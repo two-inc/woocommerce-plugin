@@ -1501,6 +1501,24 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       expect(dom.resolveCompanyLabel(undefined)).toBe("Beta Traders Ltd (87654321)");
     });
 
+    test("the proxied check carries the checkout nonce and no merchant identity", () => {
+      // The proxy refuses a request without the nonce, and resolves merchant
+      // identity from the store's settings — a page-supplied one would let any
+      // visitor spend the merchant's API key against another merchant.
+      const ajax = harness.stubAjax($);
+      try {
+        issueACheck(ajax);
+        const posted = ajax.last().settings.data;
+
+        expect(posted.nonce).toBe(harness.API_PROXY.nonce);
+        const intent = JSON.parse(posted.intent);
+        expect(intent.merchant_id).toBeUndefined();
+        expect(intent.merchant_short_name).toBeUndefined();
+      } finally {
+        ajax.restore();
+      }
+    });
+
     test("the label and the request body name the same company", () => {
       // They used to come from different places — the body from `customerCompany`, the
       // label from `#billing_company`/`#company_id` — and `clearCompanyIfCountryStale()`

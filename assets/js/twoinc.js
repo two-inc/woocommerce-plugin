@@ -72,22 +72,7 @@ let twoincUtilHelper = {
     return twoincUtilHelper.composeCompanyLabel(twoincUtilHelper.blankToEmpty(name), value);
   },
 
-  /**
-   * Construct url to Twoinc checkout api. `client`/`client_v` identify plugin
-   * + version for the company-search endpoint (the only attribution
-   * available, since the request runs in the buyer's browser); kept in the
-   * query string rather than a header to avoid a CORS preflight per keystroke.
-   *
-   * `params` may be a plain object or URLSearchParams — normalise to
-   * URLSearchParams first since `new URLSearchParams(obj)` copies entries,
-   * not JS properties, and would silently drop fields from an existing one.
-   */
-  /**
-   * A wc-ajax proxy endpoint, by its key in the `api_proxy` bootstrap.
-   *
-   * These stand in for what used to be direct calls to the API host, so the
-   * merchant's firewall token is added server-side and never reaches the page.
-   */
+  /** A wc-ajax proxy endpoint, by its key in the `api_proxy` bootstrap. */
   proxyUrl: function (key) {
     return (window.twoinc.api_proxy || {})[key] || "";
   },
@@ -4025,13 +4010,12 @@ let twoincSoleTrader = {
       cb(null);
       return;
     }
-    // The one call that cannot go through the server-side proxy: the buyer it
-    // reads is whoever holds the API-domain cookie the signup popup set, which
-    // no server hop carries. So the firewall token travels from the page here,
-    // or a merchant WAF would reject this request and nothing else.
+    // The one call no server hop can make: its subject is whoever holds the
+    // API-domain cookie the signup popup set. So the firewall token comes with
+    // the minted tokens, or a merchant WAF rejects this request alone.
     const headers = { "two-delegated-authority-token": twoincSoleTrader.tokens.autofill_token };
-    if (window.twoinc.firewall_token) {
-      headers["X-WAF-TOKEN"] = window.twoinc.firewall_token;
+    if (twoincSoleTrader.tokens.firewall_token) {
+      headers["X-WAF-TOKEN"] = twoincSoleTrader.tokens.firewall_token;
     }
     fetch(window.twoinc.twoinc_checkout_host + "/autofill/v1/buyer/current", {
       credentials: "include",
@@ -4776,9 +4760,8 @@ class Twoinc {
       }
       let net_amount = gross_amount - tax_amount;
 
+      // Merchant identity is not sent: the proxy resolves it server-side.
       let jsonBody = JSON.stringify({
-        merchant_id: window.twoinc.merchant?.id,
-        merchant_short_name: window.twoinc.merchant?.short_name,
         gross_amount: gross_amount.toFixed(2),
         net_amount: net_amount.toFixed(2),
         tax_amount: tax_amount.toFixed(2),
