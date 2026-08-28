@@ -326,11 +326,6 @@ let twoincCompanyCapture = {
     return twoincCompanyCapture.records[key];
   },
 
-  /** Test seam: forget every role's record. */
-  reset: function () {
-    twoincCompanyCapture.records = {};
-  },
-
   /**
    * Which of the three company-capture UIs is the buyer's ACTIVE input surface
    * (#486, Doug): `'search'` (the registry search panel, the default),
@@ -1390,6 +1385,11 @@ class TwoCompanySearch {
     return true;
   }
 
+  /** Whether this control's role is the one `buyer.company` on the order intent describes. */
+  ownsOrderIntent() {
+    return this.role === twoincAddressRoles.invoice();
+  }
+
   /** WooCommerce's own company row for this control's address role. */
   nativeCompanyRowSelector() {
     return twoincAddressRoles.field(this.role, "company") + "_field";
@@ -1563,15 +1563,16 @@ class TwoCompanySearch {
       { role: this.role }
     );
 
-    // `clearAddress()`, not a blank `setAddress()` payload: the latter leaves
-    // line 2 untouched by design (TWO-40 §2.6), which would strand the outgoing
-    // company's registry-written line 2 on the form.
-    if (window.twoinc.enable_address_lookup === "yes") {
-      Twoinc.getInstance().clearAddress();
+    if (this.ownsOrderIntent()) {
+      // `clearAddress()`, not a blank `setAddress()` payload: the latter leaves
+      // line 2 untouched by design (TWO-40 §2.6), which would strand the
+      // outgoing company's registry-written line 2 on the form.
+      if (window.twoinc.enable_address_lookup === "yes") {
+        Twoinc.getInstance().clearAddress();
+      }
+      Twoinc.getInstance().registryAddressApplied = false;
+      Twoinc.getInstance().customerCompany = {};
     }
-    Twoinc.getInstance().registryAddressApplied = false;
-
-    Twoinc.getInstance().customerCompany = {};
 
     // Clearing a capture changes the visible company-name surface exactly as
     // creating one does (TWO-25503).
@@ -1586,7 +1587,9 @@ class TwoCompanySearch {
     const seq = this.companySearchSeq;
     setTimeout(() => {
       if (seq !== this.companySearchSeq) return;
-      Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData();
+      if (this.ownsOrderIntent()) {
+        Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData();
+      }
       this.renderCompanySummary();
     }, 3000);
   }
@@ -1734,16 +1737,17 @@ class TwoCompanySearch {
     twoincCompanyCapture.nameField(this.role).val("");
     twoincCompanyCapture.numberField(this.role).val("");
 
-    // The registry address too, mirroring clearSelectedCompany — but ONLY when
-    // a registry lookup actually wrote it. Reaching manual entry does not imply
-    // one ran, and clearing unconditionally would blank a logged-in buyer's own
-    // account-prefilled address for no reason.
-    if (Twoinc.getInstance().registryAddressApplied) {
-      Twoinc.getInstance().clearAddress();
-      Twoinc.getInstance().registryAddressApplied = false;
+    if (this.ownsOrderIntent()) {
+      // The registry address too, mirroring clearSelectedCompany — but ONLY
+      // when a registry lookup actually wrote it. Reaching manual entry does
+      // not imply one ran, and clearing unconditionally would blank a
+      // logged-in buyer's own account-prefilled address for no reason.
+      if (Twoinc.getInstance().registryAddressApplied) {
+        Twoinc.getInstance().clearAddress();
+        Twoinc.getInstance().registryAddressApplied = false;
+      }
+      Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData();
     }
-
-    Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData();
 
     if (this.panel) {
       this.panel.releaseField();
@@ -1770,7 +1774,9 @@ class TwoCompanySearch {
 
     twoincCompanyCapture.nameField(this.role).val("");
     twoincCompanyCapture.numberField(this.role).val("");
-    Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData();
+    if (this.ownsOrderIntent()) {
+      Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData();
+    }
 
     this.getSearchCompanyBtnNode().hide();
     twoincDomHelper.toggleBusinessFields();

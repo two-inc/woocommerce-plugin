@@ -212,7 +212,8 @@ buyer can see (TWO-25469):
 (TWO-25503). A second instance, mounted on the delivery role with its own ids, resolves its
 own selectors, holds its own request state, builds its own panel, back-to-search button and
 number label, and captures into its own per-role record — switching it into manual entry
-leaves the primary control in search. The class was previously instance-shaped but bound to
+leaves the primary control in search, and clearing its capture leaves `buyer.company` and the
+registry-address flag, both invoice-bound, alone. The class was previously instance-shaped but bound to
 the module-level `twoincSelectWooHelper`, so a second construction was silently ignored;
 these are what stop that returning. The fixture carries `#shipping_*` company rows the plugin
 does not register server-side, because WooCommerce ships one control, on the primary role.

@@ -190,6 +190,24 @@ describe("TwoCompanySearch is instantiable", () => {
     expect($("#search_company_btn").length).toBe(0);
   });
 
+  test("a second control does not clear the invoice role's order intent", () => {
+    // Given a company captured on the invoice role, from a registry lookup
+    const { capture, roles, Twoinc, helper, second } = loadTwoControls();
+    helper.attach();
+    second.attach();
+    capture.write("Alpha Ltd", "111111", { role: roles.invoice() });
+    Twoinc.getInstance().registryAddressApplied = true;
+
+    // When the delivery-role control throws its own capture away
+    second.clearSelectedCompany();
+
+    // Then `buyer.company` and the registry-address flag, both invoice-bound,
+    // are untouched
+    expect(Twoinc.getInstance().customerCompany.company_name).toBe("Alpha Ltd");
+    expect(Twoinc.getInstance().customerCompany.organization_number).toBe("111111");
+    expect(Twoinc.getInstance().registryAddressApplied).toBe(true);
+  });
+
   test("the module singleton is one of these instances, not a separate path", () => {
     // Given the shipped singleton
     const { helper, TwoCompanySearch, roles } = loadTwoControls();
