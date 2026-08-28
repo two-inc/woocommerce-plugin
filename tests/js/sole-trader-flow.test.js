@@ -406,7 +406,9 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
      */
     test.each([
       {
-        activate: () => soleTrader.getDifferentSoleTraderBtnNode().trigger("click"),
+        // Off the live node the mode switch put on the page, not the
+        // build-on-demand accessor: reachability is half of what Doug reported.
+        activate: () => $("#select_different_sole_trader_btn").trigger("click"),
         description: "the select-a-different-sole-trader link"
       },
       {
@@ -419,23 +421,34 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       }
     ])("$description raises the outstanding popup instead of doing nothing", ({ activate }) => {
       const raised = [];
-      window.open = jest.fn(() => {
-        const win = {
-          closed: false,
-          focus: () => {
-            raised.push(win);
-          }
-        };
-        return win;
-      });
+      const win = {
+        closed: false,
+        focus: () => {
+          raised.push(win);
+        },
+        close: jest.fn()
+      };
+      window.open = jest.fn(() => win);
+      // jsdom answers `document.hasFocus()` false unconditionally, so the
+      // abandon path needs telling the checkout is the window in front.
+      jest.spyOn(document, "hasFocus").mockReturnValue(true);
+      jest.useFakeTimers();
       soleTrader.setMode("sole_trader");
       soleTrader.launchSignup();
       expect(window.open).toHaveBeenCalledTimes(1);
 
+      // The buyer's return to the checkout arms the abandon, and the
+      // activation lands inside its grace.
+      window.dispatchEvent(new Event("focus"));
       activate();
+      jest.advanceTimersByTime(soleTrader.refocusChipGraceMs);
 
       expect(window.open).toHaveBeenCalledTimes(1);
       expect(raised).toHaveLength(1);
+      // The armed abandon must go with the raise, or it closes the popup the
+      // activation just asked to see.
+      expect(win.close).not.toHaveBeenCalled();
+      jest.useRealTimers();
     });
 
     /**

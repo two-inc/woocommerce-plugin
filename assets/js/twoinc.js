@@ -3357,8 +3357,15 @@ let twoincSoleTrader = {
     if (twoincSoleTrader.signupConfirming) return;
     // Raised, not silently dropped: the popup that would answer this
     // activation is already on screen, and a refusal that does nothing at all
-    // reads as a dead control to a buyer who cannot see it.
-    if (twoincSoleTrader.refocusOpenPopups()) return;
+    // reads as a dead control to a buyer who cannot see it. The abandon a
+    // return to the checkout armed is cancelled with it — left running it
+    // closes the popup this just raised 150ms later, and only the mode chips
+    // cancel it on their own.
+    if (twoincSoleTrader.refocusOpenPopups()) {
+      clearTimeout(twoincSoleTrader.refocusAbandonTimer);
+      twoincSoleTrader.refocusAbandonTimer = null;
+      return;
+    }
     if (
       options &&
       options.autoselect === false &&
