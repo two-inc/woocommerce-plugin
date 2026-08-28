@@ -108,9 +108,42 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     // a test that reaches a real successful mint starts it, and it would
     // otherwise keep firing against a stale module for the rest of the file.
     soleTrader.stopTokenRefresh();
-    harness.releaseWidgets($);
+    harness.releasePanel(ctx.helper);
+    // `initialize()` delegates from document.body, which survives the wipe
+    // below along with the module instance that bound it — and a stale
+    // click-to-reopen handler running first unlocks the fields the live one
+    // then reads as "not locked".
+    $(document.body).off();
     document.body.innerHTML = "";
   });
+
+  // The chips render as children of the company-search panel, so anything that
+  // reaches one has to have attached the panel first.
+  function chipNode(mode) {
+    return document.querySelector('.two-company-mode-chip[data-two-chip="' + mode + '"]');
+  }
+
+  function clickChip(mode) {
+    const chip = chipNode(mode);
+    expect(chip).not.toBeNull();
+    chip.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  }
+
+  /** @returns {Object} jQuery-wrapped `.two-company-dropdown__search` row */
+  function queryRow() {
+    return $(".two-company-dropdown__search");
+  }
+
+  /** @returns {Object} jQuery-wrapped query input inside that row */
+  function queryField() {
+    return $(".two-company-dropdown__query");
+  }
+
+  function typeQuery(term) {
+    const query = queryField().get(0);
+    query.value = term;
+    query.dispatchEvent(new window.Event("input", { bubbles: true }));
+  }
 
   // Puts the flow in its one genuinely-undecided state — a chip click with the
   // signup popup open and no outcome posted yet — and hands back
@@ -180,17 +213,18 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       // The search control is the visible name surface here, which is what
       // `toggleBusinessFields()` produces on a real page.
       $("#billing_company_display_field").removeClass("hidden");
-      const $widget = harness.openCompanyWidget($, ctx.helper);
+      harness.openCompanyPanel($, ctx.helper);
       soleTrader.setMode("sole_trader");
 
       soleTrader.beginFlight();
 
       expect(
-        $("#billing_company_display_field .select2-selection > .twoinc-sole-trader-spinner").length
+        $("#billing_company_display_field .two-company-field-wrap > .twoinc-sole-trader-spinner")
+          .length
       ).toBe(1);
-      expect($(".select2-search--dropdown .twoinc-search-spinner").length).toBe(0);
+      expect($(".two-company-dropdown__search .twoinc-search-spinner").length).toBe(0);
       // And the control is left OPEN under it.
-      expect($widget.data("select2").isOpen()).toBe(true);
+      expect(ctx.helper.companySearchDropdownIsOpen()).toBe(true);
 
       soleTrader.settleFlight();
       expect($(".twoinc-sole-trader-spinner").length).toBe(0);
@@ -212,25 +246,26 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     });
 
     test("the company search's own spinner and the sole-trader one do not share a node", () => {
-      // They used to, arbitrated by a two-owner hold, because both painted in
-      // the query row: whichever settled first hid it under the other. Two
-      // nodes in two fields is what removed that contention — asserted so a
-      // future round cannot quietly put them back in one place.
-      harness.openCompanyWidget($, ctx.helper);
+      // One node in one field would leave whichever spinner settles first
+      // hiding the other.
+      const ajax = harness.stubAjax($);
+      harness.openCompanyPanel($, ctx.helper);
+      typeQuery("acme");
       soleTrader.setMode("sole_trader");
-      ctx.helper.toggleCompanySearchSpinner(true);
 
       soleTrader.beginFlight();
-      expect($(".select2-search--dropdown .twoinc-search-spinner").length).toBe(1);
+      expect($(".two-company-dropdown__spinner--active").length).toBe(1);
       expect($(".twoinc-sole-trader-spinner").length).toBe(1);
 
       soleTrader.settleFlight();
-      expect($(".select2-search--dropdown .twoinc-search-spinner").length).toBe(1);
+      expect($(".two-company-dropdown__spinner--active").length).toBe(1);
       expect($(".twoinc-sole-trader-spinner").length).toBe(0);
+      ctx.helper.panel.abortActiveRequest();
+      ajax.restore();
     });
 
     test("a flight running in business mode paints nothing over the company name", () => {
-      harness.openCompanyWidget($, ctx.helper);
+      harness.openCompanyPanel($, ctx.helper);
 
       soleTrader.beginFlight();
 
@@ -240,7 +275,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     test("the spinner is DERIVED from mode, not held from beginFlight alone", () => {
       // A mode switch made while a flight is already in the air still has to
       // paint — a spinner HELD at `beginFlight` would have missed the wait.
-      harness.openCompanyWidget($, ctx.helper);
+      harness.openCompanyPanel($, ctx.helper);
       soleTrader.beginFlight();
 
       soleTrader.setMode("sole_trader");
@@ -817,11 +852,11 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       // Ground-truth PrestaShop finding this ports: the button is a
       // following SIBLING of the search dropdown, appended as the LAST
       // child of the outer field wrapper — never a descendant of the
-      // dropdown panel or of `.twoinc-mode-chips`.
+      // dropdown panel or of `.two-company-mode-chips`.
       const $btn = soleTrader.getDifferentSoleTraderBtnNode();
 
       expect($btn.closest("#billing_company_display_field").length).toBe(0);
-      expect($btn.closest(".twoinc-mode-chips").length).toBe(0);
+      expect($btn.closest(".two-company-mode-chips").length).toBe(0);
 
       const search = $("#billing_company_display_field").get(0);
       const differentBtn = $btn.get(0);
@@ -879,6 +914,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       // row's own bottom margin and needed a hardcoded negative margin to
       // close the gap — which over-pulled it onto the field itself.
       test("hangs inside the search field's input wrapper, never after the row", () => {
+        $("#billing_company_display_field").removeClass("hidden");
         $("#billing_company_field").addClass("hidden");
 
         const $btn = soleTrader.getDifferentSoleTraderBtnNode();
@@ -906,6 +942,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       });
 
       test("hangs in the wrapper holding the INPUT when a re-render leaves the row two", () => {
+        $("#billing_company_display_field").removeClass("hidden");
         $("#billing_company_field").addClass("hidden");
         // A fragment swap can strand an empty wrapper AHEAD of the live one, so
         // positionally-first is the wrong one; and an append onto a two-element
@@ -923,20 +960,16 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       });
 
       /**
-       * The pay-for-order view renders the search row as a bare `<select>`
-       * inside a `.twoinc-inp-container`, with none of core's wrapper — the
-       * one place the self-heal actually runs. selectWoo then hides that
-       * `<select>` and renders its own container as a SIBLING, so wrapping the
-       * input alone leaves the visible control outside the slot and the link
-       * above it (TWO-25503, R1.1).
+       * The pay-for-order view renders the search row inside a
+       * `.twoinc-inp-container` with none of core's wrapper — the one place the
+       * self-heal actually runs (TWO-25503, R1.1).
        */
-      test("self-heals around the VISIBLE widget on the pay-for-order markup", () => {
+      test("self-heals a wrapper around the input on the pay-for-order markup", () => {
         $("#billing_company_display_field").replaceWith(
           '<div class="twoinc-inp-container">' +
             '<div id="billing_company_display_field">' +
             '<label for="billing_company_display">Company</label>' +
-            '<select id="billing_company_display" class="select2-hidden-accessible" aria-hidden="true"></select>' +
-            '<span class="select2-container"><span class="select2-selection"></span></span>' +
+            '<input type="text" id="billing_company_display" />' +
             "</div>" +
             "</div>"
         );
@@ -946,10 +979,9 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         const $slot = $btn.parent();
 
         expect($slot.hasClass("woocommerce-input-wrapper")).toBe(true);
-        // The visible widget is inside the slot, and the link is after it.
-        expect($slot.find(".select2-container").length).toBe(1);
+        // The input is inside the slot, and the link is after it.
+        expect($slot.find("#billing_company_display").length).toBe(1);
         expect($slot.children().last()[0]).toBe($btn[0]);
-        expect($btn.prevAll(".select2-container").length).toBe(1);
       });
 
       test("still lands somewhere real when the search row is absent entirely", () => {
@@ -966,14 +998,10 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     });
 
     describe("item 2 — a sole trader restored by loadUserMetaInputs (live-reported by Doug)", () => {
-      // The regression: `loadUserMetaInputs()` (a returning buyer's LAST
-      // captured company, restored from user meta) writes straight through
-      // `twoincCompanyCapture.write()`, never through `setCompany()` — the
-      // only place `mode`/`soleTraderAdopted` get set and the link gets
-      // synced. The company populated correctly; the link just never
-      // appeared, and a re-signup completing later would have been silently
-      // dropped by `bindPopupMessageListener`'s own `mode !== "sole_trader"`
-      // gate.
+      // `loadUserMetaInputs()` writes through `twoincCompanyCapture.write()`,
+      // never `setCompany()` — the only place mode/adoption and the link are
+      // set — so without its own sync a restored sole trader has no route back
+      // into signup, and `bindPopupMessageListener` would drop the result.
       test("a restored TWO:-prefixed id shows the link", () => {
         ctx.twoinc.billing_company = "A Sole Trader";
         ctx.twoinc.company_id = "TWO:ST12345";
@@ -1223,12 +1251,8 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
 
       /**
        * The chip ALWAYS opens the hosted signup and populates nothing itself,
-       * whatever the email field happens to hold (Doug 2026-08-21: a company
-       * may only ever be filled in by the buyer's own trip through that flow,
-       * so this chip has no conditional fast path — WC behaving as PrestaShop
-       * does). Every row here used to resolve differently, off a passive
-       * email-driven autofill probe against the Two session cookie; the first
-       * one adopted a company outright with no popup at all.
+       * whatever the email field holds (Doug 2026-08-21: a company may only
+       * ever be filled in by the buyer's own trip through that flow).
        */
       test.each([
         ["an email Two recognises", "buyer@example.test"],
@@ -1319,26 +1343,27 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
 
     describe("bug 2 — the search dropdown stays visible with a spinner until the popup closes", () => {
       test("dropdown survives the mode switch, with nothing adopted yet", () => {
-        const $widget = harness.openCompanyWidget($, ctx.helper);
+        harness.openCompanyPanel($, ctx.helper);
+        const panel = ctx.helper.panel;
 
         soleTrader.setMode("sole_trader");
 
-        expect($widget.data("select2").isOpen()).toBe(true);
-        expect(jQuery("#billing_company_display").data("select2")).toBeTruthy();
+        expect(ctx.helper.companySearchDropdownIsOpen()).toBe(true);
+        expect(ctx.helper.panel).toBe(panel);
       });
 
       test("popup opening does not tear the dropdown down, matched or not", () => {
-        const $widget = harness.openCompanyWidget($, ctx.helper);
+        harness.openCompanyPanel($, ctx.helper);
         soleTrader.setMode("sole_trader");
 
         soleTrader.launchSignup();
 
         expect(opened).toHaveLength(1);
-        expect($widget.data("select2").isOpen()).toBe(true);
+        expect(ctx.helper.companySearchDropdownIsOpen()).toBe(true);
       });
 
       test("the spinner is up for as long as the popup is open, and comes down when it closes", () => {
-        harness.openCompanyWidget($, ctx.helper);
+        harness.openCompanyPanel($, ctx.helper);
         soleTrader.setMode("sole_trader");
         const win = { closed: false };
         window.open = jest.fn(() => win);
@@ -1355,15 +1380,12 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       });
 
       /**
-       * "Flow complete" is the WRITE, not the popup closing and not the
-       * response landing (Doug 2026-08-20). The ordinary path is the one that
-       * proves it: the hosted flow closes its own window the instant it posts
-       * ACCEPTED, so the popup is long gone by the time `fetchCurrentBuyer`
-       * resolves — and this used to settle the flight before the company name
-       * and number were written, so the spinner came down over empty fields.
+       * "Flow complete" is the WRITE, not the popup closing and not the response
+       * landing (Doug 2026-08-20): the hosted flow closes its own window the
+       * instant it posts ACCEPTED, long before `fetchCurrentBuyer` resolves.
        */
       test("the spinner outlives the popup close, coming down only once the company is written", () => {
-        harness.openCompanyWidget($, ctx.helper);
+        harness.openCompanyPanel($, ctx.helper);
         soleTrader.setMode("sole_trader");
         const win = { closed: false };
         window.open = jest.fn(() => win);
@@ -1414,7 +1436,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       });
 
       test("the dropdown the chip was clicked from is closed once the flow completes", () => {
-        const $widget = harness.openCompanyWidget($, ctx.helper);
+        harness.openCompanyPanel($, ctx.helper);
         soleTrader.setMode("sole_trader");
         soleTrader.setCompany("TWO:ST1", "A Sole Trader");
         const win = { closed: false };
@@ -1422,16 +1444,16 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         jest.useFakeTimers();
 
         // A re-signup from an adopted state: nothing else in this path reverts
-        // mode or re-attaches the widget, so the dropdown would otherwise be
+        // mode or re-attaches the panel, so the dropdown would otherwise be
         // left open on a query row that is hidden and chips that are settled.
         soleTrader.launchSignup({ autoselect: false });
-        $widget.select2("open");
-        expect($widget.data("select2").isOpen()).toBe(true);
+        ctx.helper.openCompanySearchDropdown();
+        expect(ctx.helper.companySearchDropdownIsOpen()).toBe(true);
 
         win.closed = true;
         jest.advanceTimersByTime(300);
 
-        expect($widget.data("select2").isOpen()).toBe(false);
+        expect(ctx.helper.companySearchDropdownIsOpen()).toBe(false);
         jest.useRealTimers();
       });
 
@@ -1439,9 +1461,8 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         // The one genuine difference between the two entry points: this one is
         // clicked with nothing open. The close is conditional, so it is a
         // no-op here rather than a second code path.
-        harness.openCompanyWidget($, ctx.helper);
-        const $widget = $("#billing_company_display");
-        $widget.select2("close");
+        harness.openCompanyPanel($, ctx.helper);
+        ctx.helper.closeCompanySearchDropdown();
         soleTrader.setMode("sole_trader");
         soleTrader.setCompany("TWO:ST1", "A Sole Trader");
         const win = { closed: false };
@@ -1454,7 +1475,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         win.closed = true;
         jest.advanceTimersByTime(300);
 
-        expect($widget.data("select2").isOpen()).toBe(false);
+        expect(ctx.helper.companySearchDropdownIsOpen()).toBe(false);
         expect($(".twoinc-sole-trader-spinner").length).toBe(0);
         jest.useRealTimers();
       });
@@ -1528,30 +1549,20 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       // Mousedown a real chip, the way the browser dispatches it after handing
       // the checkout window its focus back. Real DOM and real bubbling: the
       // listener that reads this is a capture-phase one on `document`, so a
-      // detached chip built with `buildBusinessChip()` would never reach it.
-      function mousedownChip(id) {
-        const chip = document.getElementById(id);
+      // detached chip node would never reach it.
+      function mousedownChip(mode) {
+        const chip = chipNode(mode);
         expect(chip).not.toBeNull();
         chip.dispatchEvent(new window.MouseEvent("mousedown", { bubbles: true }));
       }
 
-      // The chips live in the dropdown panel, built on open.
+      // The chips live in the panel, built on attach.
       function openWidgetWithChips() {
-        const $widget = harness.openCompanyWidget($, ctx.helper);
-        ctx.helper.syncManualEntryButton();
-        return $widget;
-      }
-
-      function dropdownQueryField() {
-        return $("#select2-billing_company_display-results")
-          .closest(".select2-dropdown")
-          .find(".select2-search--dropdown")
-          .first()
-          .find(".select2-search__field");
+        return harness.openCompanyPanel($, ctx.helper);
       }
 
       test("closes the popup, and the existing poll then settles spinner, dropdown and mode", () => {
-        const $widget = openWidgetWithChips();
+        openWidgetWithChips();
         soleTrader.setMode("sole_trader");
         const win = fakePopup();
         window.open = jest.fn(() => win);
@@ -1572,7 +1583,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         jest.advanceTimersByTime(300);
 
         expect($(".twoinc-sole-trader-spinner").length).toBe(0);
-        expect($widget.data("select2").isOpen()).toBe(false);
+        expect(ctx.helper.companySearchDropdownIsOpen()).toBe(false);
         expect(soleTrader.mode).toBe("business");
         jest.useRealTimers();
       });
@@ -1601,11 +1612,8 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       });
 
       /**
-       * The regression #499 shipped (TWO-25503, F1). A background focus used to
-       * spend the 150ms grace on a close that the gate then refused, and the
-       * chip handler keyed off that same timer — so from then until another
-       * window `focus` arrived, NOTHING could take the popup down, chips
-       * included. Arming is refused now instead of closing being refused.
+       * TWO-25503 F1: a background focus must not spend the 150ms grace on a
+       * close the gate then refuses — the chip handler keys off that same timer.
        */
       test("a background focus leaves the chip path able to close the popup", () => {
         openWidgetWithChips();
@@ -1620,7 +1628,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         settleRefocus();
         expect(win.close).not.toHaveBeenCalled();
 
-        mousedownChip(ctx.helper.businessChipId);
+        mousedownChip("registered");
 
         expect(win.close).toHaveBeenCalledTimes(1);
         jest.useRealTimers();
@@ -1671,9 +1679,9 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
        * production caller and it passes `"sole_trader"`.
        */
       test.each([
-        ["Registered company", () => ctx.helper.businessChipId],
-        ["Enter manually", () => ctx.helper.manualEntryRowId]
-      ])("%s activated without a mousedown still takes the popup down", (_label, chipId) => {
+        ["Registered company", "registered"],
+        ["Enter manually", "manual"]
+      ])("%s activated without a mousedown still takes the popup down", (_label, mode) => {
         openWidgetWithChips();
         soleTrader.setMode("sole_trader");
         const win = fakePopup();
@@ -1681,9 +1689,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         jest.useFakeTimers();
         soleTrader.launchSignup();
 
-        const chip = document.getElementById(chipId());
-        expect(chip).not.toBeNull();
-        chip.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+        clickChip(mode);
 
         expect(win.close).toHaveBeenCalledTimes(1);
         jest.useRealTimers();
@@ -1770,12 +1776,8 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
           const win = fakePopup();
           window.open = jest.fn(() => win);
           soleTrader.launchSignup();
-          const chip = document.getElementById(ctx.helper.businessChipId);
-          expect(chip).not.toBeNull();
-          if (withMousedown) {
-            chip.dispatchEvent(new window.MouseEvent("mousedown", { bubbles: true }));
-          }
-          chip.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+          if (withMousedown) mousedownChip("registered");
+          clickChip("registered");
           return { closed: win.close.mock.calls.length, mode: soleTrader.mode };
         }
 
@@ -1806,9 +1808,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         // The buyer comes back to the checkout, then reaches the chip by
         // keyboard — no mousedown anywhere in the gesture.
         refocusCheckout();
-        const chip = document.getElementById(ctx.helper.soleTraderChipId);
-        expect(chip).not.toBeNull();
-        chip.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+        clickChip("sole_trader");
         jest.advanceTimersByTime(400);
 
         expect(win.close).not.toHaveBeenCalled();
@@ -1899,7 +1899,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
        * all.
        */
       test("clicking the page outside the chips closes the popup with no chip side effects", () => {
-        const $widget = openWidgetWithChips();
+        openWidgetWithChips();
         soleTrader.setMode("sole_trader");
         const win = fakePopup();
         window.open = jest.fn(() => win);
@@ -1921,7 +1921,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         jest.advanceTimersByTime(300);
 
         expect(soleTrader.mode).toBe("business");
-        expect($widget.data("select2").isOpen()).toBe(false);
+        expect(ctx.helper.companySearchDropdownIsOpen()).toBe(false);
         expect($(".twoinc-sole-trader-spinner").length).toBe(0);
         jest.useRealTimers();
       });
@@ -1933,7 +1933,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
        * flow it is halfway through survives.
        */
       test("the Sole trader chip keeps the popup and raises it instead", () => {
-        const $widget = openWidgetWithChips();
+        openWidgetWithChips();
         soleTrader.setMode("sole_trader");
         const win = fakePopup();
         win.focus = jest.fn();
@@ -1942,8 +1942,8 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         soleTrader.launchSignup();
 
         refocusCheckout();
-        mousedownChip(ctx.helper.soleTraderChipId);
-        $("#" + ctx.helper.soleTraderChipId).trigger("click");
+        mousedownChip("sole_trader");
+        clickChip("sole_trader");
         settleRefocus();
         jest.advanceTimersByTime(300);
 
@@ -1952,7 +1952,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         // No second window, and the wait the buyer is still in is intact.
         expect(window.open).toHaveBeenCalledTimes(1);
         expect(soleTrader.mode).toBe("sole_trader");
-        expect($widget.data("select2").isOpen()).toBe(true);
+        expect(ctx.helper.companySearchDropdownIsOpen()).toBe(true);
         expect($(".twoinc-sole-trader-spinner").length).toBe(1);
         jest.useRealTimers();
       });
@@ -1964,13 +1964,12 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
        * it is what TWO-40 §14 spent four rounds removing.
        */
       test("the Sole trader chip raises an outstanding re-signup rather than launching another", () => {
-        harness.openCompanyWidget($, ctx.helper);
+        harness.openCompanyPanel($, ctx.helper);
         soleTrader.setMode("sole_trader");
         soleTrader.setCompany("TWO:ST1", "A Sole Trader");
-        // Chips built AFTER the adoption: it closes the dropdown panel they
-        // live in, and this flow's entry point is the buyer reopening it.
-        $("#billing_company_display").select2("open");
-        ctx.helper.syncManualEntryButton();
+        // Reopened after the adoption, which closes the panel the chips live
+        // in — this flow's entry point is the buyer opening it again.
+        ctx.helper.openCompanySearchDropdown();
         const first = fakePopup();
         first.focus = jest.fn();
         window.open = jest.fn(() => first);
@@ -1980,8 +1979,8 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         refocusCheckout();
         const relaunch = jest.fn(() => fakePopup());
         window.open = relaunch;
-        mousedownChip(ctx.helper.soleTraderChipId);
-        $("#" + ctx.helper.soleTraderChipId).trigger("click");
+        mousedownChip("sole_trader");
+        clickChip("sole_trader");
         settleRefocus();
 
         expect(relaunch).not.toHaveBeenCalled();
@@ -1999,7 +1998,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
        * closing the dropdown would destroy the chip before its `click` fired.
        */
       test("the Registered company chip closes the popup AND shows and focuses the query field", () => {
-        const $widget = openWidgetWithChips();
+        openWidgetWithChips();
         soleTrader.setMode("sole_trader");
         const win = fakePopup();
         window.open = jest.fn(() => win);
@@ -2007,18 +2006,16 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         soleTrader.launchSignup();
 
         refocusCheckout();
-        mousedownChip(ctx.helper.businessChipId);
+        mousedownChip("registered");
         expect(win.close).toHaveBeenCalledTimes(1);
-        $("#" + ctx.helper.businessChipId).trigger("click");
+        clickChip("registered");
         settleRefocus();
         jest.advanceTimersByTime(300);
 
         expect(soleTrader.mode).toBe("business");
-        expect($widget.data("select2").isOpen()).toBe(true);
-        expect(dropdownQueryField().closest(".select2-search--dropdown").attr("hidden")).toBe(
-          undefined
-        );
-        expect(document.activeElement).toBe(dropdownQueryField()[0]);
+        expect(ctx.helper.companySearchDropdownIsOpen()).toBe(true);
+        expect(queryRow().hasClass("two-hidden")).toBe(false);
+        expect(document.activeElement).toBe(queryField()[0]);
         expect($(".twoinc-sole-trader-spinner").length).toBe(0);
         jest.useRealTimers();
       });
@@ -2037,9 +2034,9 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         soleTrader.launchSignup();
 
         refocusCheckout();
-        mousedownChip(ctx.helper.manualEntryRowId);
+        mousedownChip("manual");
         expect(win.close).toHaveBeenCalledTimes(1);
-        $("#" + ctx.helper.manualEntryRowId).trigger("click");
+        clickChip("manual");
         jest.runAllTimers();
 
         expect(soleTrader.mode).toBe("business");
@@ -2066,7 +2063,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         jest.useFakeTimers();
         soleTrader.launchSignup();
 
-        mousedownChip(ctx.helper.businessChipId);
+        mousedownChip("registered");
 
         expect(win.close).toHaveBeenCalledTimes(1);
 
@@ -2094,7 +2091,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         soleTrader.launchSignup();
 
         refocusCheckout();
-        mousedownChip(ctx.helper.soleTraderChipId);
+        mousedownChip("sole_trader");
         settleRefocus();
         jest.advanceTimersByTime(300);
 
@@ -2122,27 +2119,23 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
 
         expect(soleTrader.mode).toBe("business");
         expect($("#billing_company").prop("readonly")).toBe(false);
-        expect($("#billing_company_display").data("select2").isOpen()).toBe(true);
+        expect(ctx.helper.companySearchDropdownIsOpen()).toBe(true);
       });
 
       /**
-       * TWO-40 §7 direction (a), PR 1 of 2: `lockCapturedFields()` used to
-       * destroy the select2 widget outright the moment a sole trader was
-       * adopted. It now leaves the same instance alive (closed and hidden
-       * behind the locked native fields) for as long as the buyer stays
-       * adopted — `reopenSearch()`'s own `setMode("business")` is still what
-       * tears it down and rebuilds a fresh one on the way OUT, unchanged; see
-       * that block's own comment. This locks in only the adoption half.
+       * TWO-40 §7 direction (a): adoption leaves the same panel instance alive,
+       * closed behind the locked native fields, for as long as the buyer stays
+       * adopted.
        */
-      test("adopting a sole trader leaves its search widget instance alive rather than destroying it", () => {
+      test("adopting a sole trader leaves its panel instance alive rather than destroying it", () => {
         soleTrader.setMode("sole_trader");
-        const $display = $("#billing_company_display");
-        const widgetBeforeAdoption = $display.data("select2");
+        ctx.helper.attach();
+        const panelBeforeAdoption = ctx.helper.panel;
 
         soleTrader.setCompany("TWO:ST1", "A Sole Trader");
 
-        expect($display.data("select2")).toBe(widgetBeforeAdoption);
-        expect(widgetBeforeAdoption.isOpen()).toBe(false);
+        expect(ctx.helper.panel).toBe(panelBeforeAdoption);
+        expect(ctx.helper.companySearchDropdownIsOpen()).toBe(false);
       });
 
       test("clicking #company_id after adoption does the same", () => {
@@ -2155,29 +2148,22 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       });
 
       test("clicking a picked REGISTERED company reopens the dropdown too", () => {
-        // Registered-company reopen is the picker's own open-on-click, not a
+        // Registered-company reopen is the panel's own open-on-mousedown, not a
         // plugin handler — so what this locks in is the plugin-owned
-        // precondition for it: business mode must leave the widget live and
+        // precondition for it: business mode must leave the panel bound and
         // the field unlocked after a pick, unlike an adopted sole trader.
         const ajax = harness.stubAjax($);
-        const $widget = harness.openCompanyWidget($, ctx.helper);
-        $widget.trigger({
-          type: "select2:select",
-          params: { data: { id: "A Registered Co", company_id: "12345678" } }
-        });
-        $widget.select2("close");
-        expect($widget.data("select2").isOpen()).toBe(false);
+        harness.openCompanyPanel($, ctx.helper);
+        ctx.helper.onPick({ id: "A Registered Co", company_id: "12345678" });
+        ctx.helper.closeCompanySearchDropdown();
+        expect(ctx.helper.companySearchDropdownIsOpen()).toBe(false);
         expect($("#company_id").val()).toBe("12345678");
 
-        // `which: 1` deliberately: the picker's own open-on-click handler
-        // early-returns on anything but a primary button, so a bare
-        // `trigger("mousedown")` never reaches it.
-        $("#billing_company_display_field .select2-selection").trigger({
-          type: "mousedown",
-          which: 1
-        });
+        document
+          .getElementById("billing_company_display")
+          .dispatchEvent(new window.MouseEvent("mousedown", { bubbles: true }));
 
-        expect($widget.data("select2").isOpen()).toBe(true);
+        expect(ctx.helper.companySearchDropdownIsOpen()).toBe(true);
         expect($("#billing_company").prop("readonly")).toBe(false);
         expect($("#billing_company_display").prop("disabled")).toBe(false);
         ajax.restore();
@@ -2189,6 +2175,41 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         $("#billing_company").trigger("click");
 
         expect(setModeSpy).not.toHaveBeenCalled();
+      });
+
+      /**
+       * The readonly lock is what makes a click into these fields mean
+       * "reopen". Ungated (PR #502) the same click destroyed a perfectly good
+       * capture on a field the buyer was allowed to be typing in.
+       */
+      test("clicking a NON-readonly captured field neither clears the capture nor leaves sole-trader mode", () => {
+        soleTrader.setMode("sole_trader");
+        soleTrader.setCompany("TWO:ST1", "A Sole Trader");
+        $("#billing_company, #company_id").prop("readonly", false);
+
+        $("#billing_company").trigger("click");
+
+        expect(soleTrader.mode).toBe("sole_trader");
+        expect(soleTrader.soleTraderAdopted).toBe(true);
+        expect($("#company_id").val()).toBe("TWO:ST1");
+        expect($("#billing_company").val()).toBe("A Sole Trader");
+      });
+
+      /**
+       * The other half of that gate. A merchant theme can render either field
+       * readonly on its own, and reading the lock alone would then treat every
+       * click into it as "reopen" — dropping the sole-trader mode the buyer
+       * had just chosen, before there is any adoption to reopen out of.
+       */
+      test("clicking a readonly field the plugin never locked leaves an unadopted sole-trader mode alone", () => {
+        $("#billing_company, #company_id").prop("readonly", true);
+        soleTrader.setMode("sole_trader");
+        expect(soleTrader.soleTraderAdopted).toBe(false);
+
+        $("#billing_company").trigger("click");
+
+        expect(soleTrader.mode).toBe("sole_trader");
+        expect($("#billing_company").prop("readonly")).toBe(true);
       });
 
       test("the 'select a different sole trader' link still works alongside click-to-reopen", () => {
@@ -2217,38 +2238,29 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
           ).appendTo("form[name='checkout']");
         });
 
-        test("with company search enabled, adoption shows the search widget itself, not the native field, seeded with the sole trader's own selection", () => {
+        test("with company search enabled, adoption shows the search field itself, not the native one, painted with the sole trader's own name", () => {
           soleTrader.setMode("sole_trader");
           soleTrader.setCompany("TWO:ST1", "A Sole Trader");
 
           expect($("#billing_company_display_field").hasClass("hidden")).toBe(false);
           expect($("#billing_company_field").hasClass("hidden")).toBe(true);
-          expect($("#billing_company_display").val()).toBe("TWO:ST1");
-          expect($("#billing_company_display").find('option[value="TWO:ST1"]').text()).toBe(
-            "A Sole Trader"
-          );
+          expect($("#billing_company_display").val()).toBe("A Sole Trader");
         });
 
-        test("picking a different company directly off the still-open widget leaves sole-trader mode and writes the new pick, without destroying the widget", () => {
+        test("picking a different company directly off the still-bound panel leaves sole-trader mode and writes the new pick, without destroying the panel", () => {
           soleTrader.setMode("sole_trader");
           soleTrader.setCompany("TWO:ST1", "A Sole Trader");
-          const $display = $("#billing_company_display");
-          const widgetInstance = $display.data("select2");
+          const panelInstance = ctx.helper.panel;
 
-          $display.trigger({
-            type: "select2:select",
-            params: { data: { id: "A Registered Co", company_id: "12345678" } }
-          });
+          ctx.helper.onPick({ id: "A Registered Co", company_id: "12345678" });
 
           expect(soleTrader.mode).toBe("business");
           expect(soleTrader.soleTraderAdopted).toBe(false);
           expect($("#company_id").val()).toBe("12345678");
           expect($("#billing_company").val()).toBe("A Registered Co");
-          // Same instance throughout — a pick made off the live widget must
-          // never trigger the destroy/rebuild `setMode("business")`'s OWN
-          // branch does on the way out via reopenSearch/the Business chip;
-          // doing so here would blank the very pick this test just made.
-          expect($display.data("select2")).toBe(widgetInstance);
+          // Same instance throughout — a pick made off the live panel must
+          // never trigger a rebuild, which would blank the very pick just made.
+          expect(ctx.helper.panel).toBe(panelInstance);
         });
 
         test("a pick landing while still genuinely deciding (signup undecided) is refused, not silently adopted", () => {
@@ -2256,10 +2268,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
           soleTrader.onModeChipClick("sole_trader");
           expect(soleTrader.isDeciding()).toBe(true);
 
-          $("#billing_company_display").trigger({
-            type: "select2:select",
-            params: { data: { id: "A Registered Co", company_id: "12345678" } }
-          });
+          ctx.helper.onPick({ id: "A Registered Co", company_id: "12345678" });
 
           expect(soleTrader.mode).toBe("sole_trader");
           expect($("#company_id").val()).toBe("");
@@ -2272,52 +2281,23 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
           expect($("#company_id").val()).toBe("TWO:ST1");
         });
 
-        test("a merchant who relocated the control to the payment tile shows the adoption through the widget there, and only there", () => {
-          // The admin checkbox only ever RELOCATES the one search control
-          // (TWO-25326 §7.1), so the adopted sole trader shows through the
-          // widget either way.
-          //
-          // The native field goes once a capture exists (TWO-25503, Doug: it
-          // "should do neither of these things in the address area"), reversing
-          // the 2026-08-04 placement that kept it visible alongside. It still
-          // carries the value, because that is what POSTs.
+        test("a merchant who relocated the control to the payment tile leaves neither address row on screen", () => {
+          // The tile is the surface once a capture exists (TWO-25503, Doug: an
+          // adopted sole trader "should do neither of these things in the
+          // address area"), reversing the 2026-08-04 placement that kept the
+          // native field visible alongside. It still carries the value, because
+          // that is what POSTs.
           ctx.twoinc.company_search_location = "payment_tile";
 
           soleTrader.setMode("sole_trader");
           soleTrader.setCompany("TWO:ST1", "A Sole Trader");
 
-          expect($("#billing_company_display_field").hasClass("hidden")).toBe(false);
+          expect($("#billing_company_display_field").hasClass("hidden")).toBe(true);
           expect($("#billing_company_field").hasClass("hidden")).toBe(true);
           expect($("#billing_company").val()).toBe("A Sole Trader");
         });
 
-        describe("item 4.2 / item 2.1 — the dropdown's own free-text query is suppressed for the whole of sole-trader mode", () => {
-          /** @returns {Object} jQuery-wrapped `.select2-search--dropdown` row */
-          function queryRow() {
-            return $("#select2-billing_company_display-results")
-              .closest(".select2-dropdown")
-              .find(".select2-search--dropdown")
-              .first();
-          }
-
-          /** @returns {Object} jQuery-wrapped query input inside that row */
-          function queryField() {
-            return queryRow().find(".select2-search__field");
-          }
-
-          test("reopening the widget after adoption leaves its search input readonly", () => {
-            soleTrader.setMode("sole_trader");
-            soleTrader.setCompany("TWO:ST1", "A Sole Trader");
-            const $display = $("#billing_company_display");
-
-            $display.select2("open");
-
-            expect($display.data("select2").isOpen()).toBe(true);
-            expect(
-              $('input[aria-owns="select2-billing_company_display-results"]').prop("readonly")
-            ).toBe(true);
-          });
-
+        describe("item 4.2 / item 2.1 — the panel's own free-text query is suppressed for the whole of sole-trader mode", () => {
           /**
            * Item 2.1, live-reported by Doug: "the field should not be
            * VISIBLE. I did not tell you it was editable, I told you it was
@@ -2325,196 +2305,171 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
            * working.
            */
           test("the whole query row is hidden, not merely readonly", () => {
+            harness.injectStylesheet();
             soleTrader.setMode("sole_trader");
             soleTrader.setCompany("TWO:ST1", "A Sole Trader");
 
-            $("#billing_company_display").select2("open");
+            ctx.helper.openCompanySearchDropdown();
 
-            expect(queryRow().attr("hidden")).toBe("hidden");
+            expect(queryRow().hasClass("two-hidden")).toBe(true);
             expect(queryRow().css("display")).toBe("none");
           });
 
           /**
-           * `display: none` and the `hidden` attribute, not
-           * `visibility`/`opacity`: only the former take the input out of the
-           * tab order. selectWoo's own open handler sets `tabindex="0"` on it
-           * unconditionally, so the hide is the ONLY thing keeping a
-           * keyboard-only buyer off a field they cannot see — asserted here so
-           * a later switch to a paint-only mechanism cannot pass.
+           * `display: none`, not `visibility`/`opacity`: only the former takes
+           * the input out of the tab order, and it is the only thing keeping a
+           * keyboard-only buyer off a field they cannot see.
            */
           test("the hidden query field is out of the tab order, not just unpainted", () => {
+            harness.injectStylesheet();
             soleTrader.setMode("sole_trader");
             soleTrader.setCompany("TWO:ST1", "A Sole Trader");
 
-            $("#billing_company_display").select2("open");
+            ctx.helper.openCompanySearchDropdown();
 
-            expect(queryField().attr("tabindex")).toBe("0");
+            expect(queryField().closest(".two-hidden").length).toBe(1);
             expect(queryRow().css("display")).toBe("none");
           });
 
           test("a term typed before adopting is dropped rather than left above stale results", () => {
-            const $display = $("#billing_company_display");
-            $display.select2("open");
+            harness.openCompanyPanel($, ctx.helper);
             queryField().val("some other company");
 
             soleTrader.setMode("sole_trader");
             soleTrader.setCompany("TWO:ST1", "A Sole Trader");
-            $display.select2("open");
+            ctx.helper.openCompanySearchDropdown();
 
             expect(queryField().val()).toBe("");
           });
 
-          test("an ordinary (non-adopted) open leaves the search input typable and visible", () => {
-            const $display = $("#billing_company_display");
+          test("an ordinary (non-adopted) open leaves the search row visible", () => {
+            harness.injectStylesheet();
 
-            $display.select2("open");
+            harness.openCompanyPanel($, ctx.helper);
 
-            expect(
-              $('input[aria-owns="select2-billing_company_display-results"]').prop("readonly")
-            ).toBe(false);
-            expect(queryRow().attr("hidden")).toBeUndefined();
+            expect(queryRow().hasClass("two-hidden")).toBe(false);
             expect(queryRow().css("display")).not.toBe("none");
           });
 
-          test('the row is visible and typable again once "Registered company" is clicked', () => {
+          test('the row is visible again once "Registered company" is clicked', () => {
+            harness.injectStylesheet();
             soleTrader.setMode("sole_trader");
             soleTrader.setCompany("TWO:ST1", "A Sole Trader");
-            jest.useFakeTimers();
-            $("#billing_company_display").select2("open");
-            // The chip group is appended a tick after `select2:open` — see
-            // bindManualEntryAffordance's own comment.
-            jest.advanceTimersByTime(1);
+            ctx.helper.openCompanySearchDropdown();
             expect(queryRow().css("display")).toBe("none");
 
-            $("#" + ctx.helper.businessChipId).trigger("click");
-            $("#billing_company_display").select2("open");
-            jest.advanceTimersByTime(1);
-            jest.useRealTimers();
+            clickChip("registered");
 
             expect(soleTrader.mode).toBe("business");
-            expect(queryRow().attr("hidden")).toBeUndefined();
+            expect(queryRow().hasClass("two-hidden")).toBe(false);
             expect(queryRow().css("display")).not.toBe("none");
-            expect(queryField().prop("readonly")).toBe(false);
           });
 
           /**
-           * Doug 2026-08-20, live: the row-visibility half already worked, but
-           * the dropdown closed anyway — `setMode("business")` destroys this
-           * widget and re-attaches a fresh, CLOSED one, so the chip the buyer
-           * clicked took the whole panel down and the un-hidden row was on a
-           * dropdown that no longer existed.
+           * `setMode("business")` re-attaches a fresh, CLOSED widget, so an
+           * un-hidden query row is worth nothing without the panel around it
+           * (Doug 2026-08-20, live).
            */
           test("clicking Registered company leaves the dropdown open with focus in the query field", () => {
-            harness.openCompanyWidget($, ctx.helper);
+            harness.openCompanyPanel($, ctx.helper);
             // Stubbed for the same reason the Sole trader chip test below stubs
             // it: this click's other outcome is a popup, whose own flight would
             // keep `isDeciding()` true and make the Business chip a no-op.
             jest.spyOn(soleTrader, "launchSignup").mockImplementation(() => {});
-            ctx.helper.buildSoleTraderChip().trigger("click");
-            expect(queryRow().attr("hidden")).toBe("hidden");
+            clickChip("sole_trader");
+            expect(queryRow().hasClass("two-hidden")).toBe(true);
 
-            ctx.helper.buildBusinessChip().trigger("click");
+            clickChip("registered");
 
             expect(soleTrader.mode).toBe("business");
             expect(ctx.helper.companySearchDropdownIsOpen()).toBe(true);
-            expect(queryRow().attr("hidden")).toBeUndefined();
+            expect(queryRow().hasClass("two-hidden")).toBe(false);
             expect(document.activeElement).toBe(queryField()[0]);
           });
 
           /**
-           * The conditional half of the same fix: `setMode("business")` has
-           * other callers with no dropdown in sight (`hide()` on an
-           * `updated_checkout`, `watchPopupClose`'s abandon revert), and none
-           * of them may pop one open at the buyer.
+           * `setMode("business")` has callers with no dropdown in sight
+           * (`hide()` on an `updated_checkout`, `watchPopupClose`'s abandon
+           * revert), and none of them may pop one open at the buyer.
            */
           test("a mode revert with the dropdown already closed does not open one", () => {
-            harness.openCompanyWidget($, ctx.helper);
+            harness.openCompanyPanel($, ctx.helper);
             jest.spyOn(soleTrader, "launchSignup").mockImplementation(() => {});
-            ctx.helper.buildSoleTraderChip().trigger("click");
-            $("#billing_company_display").select2("close");
+            clickChip("sole_trader");
+            ctx.helper.closeCompanySearchDropdown();
 
-            ctx.helper.buildBusinessChip().trigger("click");
+            soleTrader.setMode("business");
 
             expect(soleTrader.mode).toBe("business");
             expect(ctx.helper.companySearchDropdownIsOpen()).toBe(false);
           });
 
           /**
-           * The one path that leaves sole-trader mode WITHOUT destroying the
-           * widget (see the `select2:select` handler's `sole_trader` branch),
-           * so it is the one where a suppression applied on a previous open
-           * would otherwise never be undone — selectWoo renders this row once
-           * per instance, not once per open.
+           * The one path that leaves sole-trader mode WITHOUT rebuilding the
+           * panel (see `onPick`'s `sole_trader` branch), so it is the one where
+           * a suppression applied on a previous open would otherwise never be
+           * undone — the row is rendered once per panel, not once per open.
            */
-          test("picking a different company off the still-live widget gives the row back on the next open", () => {
+          test("picking a different company off the still-live panel gives the row back on the next open", () => {
+            harness.injectStylesheet();
             soleTrader.setMode("sole_trader");
             soleTrader.setCompany("TWO:ST1", "A Sole Trader");
-            const $display = $("#billing_company_display");
-            $display.select2("open");
+            ctx.helper.openCompanySearchDropdown();
             expect(queryRow().css("display")).toBe("none");
 
-            $display.trigger({
-              type: "select2:select",
-              params: { data: { id: "A Registered Co", company_id: "12345678" } }
-            });
-            // The relayed `select2:select` this test fires does not drive
-            // select2's own close, so the reopen needs the close first.
-            $display.select2("close");
-            $display.select2("open");
+            ctx.helper.onPick({ id: "A Registered Co", company_id: "12345678" });
+            ctx.helper.openCompanySearchDropdown();
 
-            expect(queryRow().attr("hidden")).toBeUndefined();
-            expect(queryField().prop("readonly")).toBe(false);
+            expect(queryRow().hasClass("two-hidden")).toBe(false);
           });
 
           /**
-           * The row used to be given back for the duration of a flight, purely
-           * so the spinner had somewhere to paint. Now the spinner paints over
-           * the company-NAME field, so nothing about a flight makes this row
-           * relevant again (Doug 2026-08-20).
+           * The flight spinner paints over the company-NAME field, so a flight
+           * gives no reason to hand this row back (Doug 2026-08-20).
            */
           test("a re-signup flight from an adopted state leaves the row hidden throughout", () => {
             soleTrader.setMode("sole_trader");
             soleTrader.setCompany("TWO:ST1", "A Sole Trader");
-            $("#billing_company_display").select2("open");
+            ctx.helper.openCompanySearchDropdown();
 
             soleTrader.beginFlight();
-            expect(queryRow().attr("hidden")).toBe("hidden");
+            expect(queryRow().hasClass("two-hidden")).toBe(true);
             expect(queryRow().find(".twoinc-search-spinner").length).toBe(0);
             expect($(".twoinc-sole-trader-spinner").length).toBe(1);
 
             soleTrader.settleFlight();
-            expect(queryRow().attr("hidden")).toBe("hidden");
+            expect(queryRow().hasClass("two-hidden")).toBe(true);
           });
 
           /**
-           * Doug 2026-08-20: the hide used to need a close-and-reopen, because
-           * only `select2:open` re-synced it — a buyer clicking the chip with
-           * the dropdown already open (which is where the chip LIVES) sat
-           * looking at a search box that no longer searched for their company.
+           * The chip LIVES in the open dropdown, so a hide that only the next
+           * open re-syncs leaves the buyer looking at a dead search box
+           * (Doug 2026-08-20).
            */
           test("clicking the Sole trader chip hides the row immediately, with no reopen", () => {
-            harness.openCompanyWidget($, ctx.helper);
+            harness.injectStylesheet();
+            harness.openCompanyPanel($, ctx.helper);
             // Stubbed so the hide can only be the mode write's doing: this
             // click's other outcome is a popup, and a popup's own flight
             // re-syncs these surfaces too — which would let the assertion pass
             // for a reason that has nothing to do with the chip.
             jest.spyOn(soleTrader, "launchSignup").mockImplementation(() => {});
-            expect(queryRow().attr("hidden")).toBeUndefined();
+            expect(queryRow().hasClass("two-hidden")).toBe(false);
 
-            ctx.helper.buildSoleTraderChip().trigger("click");
+            clickChip("sole_trader");
 
             expect(soleTrader.mode).toBe("sole_trader");
-            expect(queryRow().attr("hidden")).toBe("hidden");
+            expect(queryRow().hasClass("two-hidden")).toBe(true);
             expect(queryRow().css("display")).toBe("none");
           });
 
           test("suppression is a function of mode alone, not of what has been adopted", () => {
-            harness.openCompanyWidget($, ctx.helper);
+            harness.openCompanyPanel($, ctx.helper);
 
             soleTrader.setMode("sole_trader");
 
             expect(soleTrader.soleTraderAdopted).toBe(false);
-            expect(queryRow().attr("hidden")).toBe("hidden");
+            expect(queryRow().hasClass("two-hidden")).toBe(true);
           });
 
           test("re-clicking the chip to open a fresh re-signup goes through launchSignup, not a typed query", () => {
@@ -2533,16 +2488,13 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     describe("round-1 review regressions (Han/Vader/Leia) — races the dropdown-survives fix opened up", () => {
       test("the Business chip is honoured before ACCEPTED, and its result cannot stomp the switch", () => {
         const flight = armUndecidedSignup();
-        harness.openCompanyWidget($, ctx.helper);
-        ctx.helper.syncManualEntryButton();
+        harness.openCompanyPanel($, ctx.helper);
         soleTrader.onModeChipClick("sole_trader");
 
-        // The chip node the dropdown actually built, not a detached copy: a
+        // The chip node the panel actually built, not a detached copy: a
         // node outside the document reaches neither the capture-phase
         // mousedown listener nor anything else keyed on the live tree.
-        const chip = document.getElementById(ctx.helper.businessChipId);
-        expect(chip).not.toBeNull();
-        chip.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+        clickChip("registered");
 
         // Nothing has been accepted yet, so the buyer's choice stands and the
         // signup goes with it (TWO-25503).
@@ -2567,8 +2519,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
 
       test("the Business chip is still refused once ACCEPTED is in flight", () => {
         const flight = armUndecidedSignup();
-        harness.openCompanyWidget($, ctx.helper);
-        ctx.helper.syncManualEntryButton();
+        harness.openCompanyPanel($, ctx.helper);
         soleTrader.onModeChipClick("sole_trader");
 
         // ACCEPTED marks its popup decided at receipt, which excludes it from
@@ -2582,9 +2533,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
           })
         );
 
-        const chip = document.getElementById(ctx.helper.businessChipId);
-        expect(chip).not.toBeNull();
-        chip.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+        clickChip("registered");
 
         expect(soleTrader.mode).toBe("sole_trader");
         expect(flight).toBeTruthy();
@@ -2594,7 +2543,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         soleTrader.setMode("sole_trader");
         soleTrader.setCompany("TWO:ST1", "A Sole Trader");
 
-        ctx.helper.buildBusinessChip().trigger("click");
+        clickChip("registered");
 
         expect(soleTrader.mode).toBe("business");
       });
@@ -2744,7 +2693,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         // outcome (adopted) is already settled.
         expect(soleTrader.isBusy()).toBe(true);
 
-        ctx.helper.buildBusinessChip().trigger("click");
+        clickChip("registered");
 
         expect(soleTrader.mode).toBe("business");
       });
@@ -2865,13 +2814,10 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
           win.closed = true;
         });
         window.open = jest.fn(() => win);
-        harness.openCompanyWidget($, ctx.helper);
-        ctx.helper.syncManualEntryButton();
+        harness.openCompanyPanel($, ctx.helper);
 
         soleTrader.getDifferentSoleTraderBtnNode().trigger("click");
-        const chip = document.getElementById(ctx.helper.businessChipId);
-        expect(chip).not.toBeNull();
-        chip.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+        clickChip("registered");
 
         // Undecided, so the buyer's choice carries and the window goes with
         // it — the same rule the first signup follows.
@@ -3097,13 +3043,13 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         expect($("#billing_company_display_field").hasClass("hidden")).toBe(true);
       });
 
-      test("still switches to manual entry via a REAL click on the REAL button inside the reopened widget", () => {
+      test("still switches to manual entry via a REAL click on the REAL chip inside the reopened panel", () => {
         // The test above calls `activateManualEntry()` directly. This one
-        // drives the same scenario through the actual selectWoo widget the
-        // adopted sole trader is rendered through (TWO-40 §7 direction (a)) —
-        // attached, reopened, and clicked for real — so a regression that
-        // only shows up once the widget is genuinely live cannot hide behind
-        // a call that skips it.
+        // drives the same scenario through the actual panel the adopted sole
+        // trader is rendered through (TWO-40 §7 direction (a)) — attached,
+        // reopened, and clicked for real — so a regression that only shows up
+        // once the panel is genuinely live cannot hide behind a call that
+        // skips it.
         $("#billing_email").val("buyer@example.test");
         soleTrader.onModeChipClick("sole_trader");
 
@@ -3124,15 +3070,12 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         expect(soleTrader.soleTraderAdopted).toBe(true);
         expect($("#billing_company_display_field").hasClass("hidden")).toBe(false);
 
-        // The buyer reopens the (still-live) widget and clicks Enter manually
+        // The buyer reopens the (still-live) panel and clicks Enter manually
         // for real.
-        $("#billing_company_display").select2("open");
-        ctx.helper.syncManualEntryButton();
-        const $btn = $("#" + ctx.helper.manualEntryRowId);
-        expect($btn.length).toBe(1);
+        ctx.helper.openCompanySearchDropdown();
 
         jest.useFakeTimers();
-        $btn.trigger("click");
+        clickChip("manual");
         jest.runAllTimers();
         jest.useRealTimers();
 
@@ -3187,12 +3130,14 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         // 2026-08-04 placement, which put the link in the native field's slot
         // whenever tile mode left that field visible.
         ctx.twoinc.company_search_location = "payment_tile";
+        $("form[name='checkout']").append('<div class="twoinc-company-search-tile-slot"></div>');
+        ctx.helper.syncCompanySearchTileLocation();
         soleTrader.setMode("sole_trader");
         soleTrader.setCompany("TWO:ST1", "A Sole Trader");
 
         const $btn = soleTrader.getDifferentSoleTraderBtnNode();
 
-        expect($btn.closest("#billing_company_display_field").length).toBe(1);
+        expect($btn.closest("#twoinc_tile_company_row").length).toBe(1);
         expect($btn.closest(".woocommerce-billing-fields").length).toBe(0);
         expect($btn.closest(".hidden").length).toBe(0);
       });
@@ -3398,7 +3343,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
    */
   describe("item 4 — the chip row fills its full width", () => {
     test("each chip declares a half-row flex basis, so two share a row and a third grows to fill its own", () => {
-      const rule = /^\.twoinc-mode-chip\s*\{([^}]*)\}/m.exec(stylesheetSource());
+      const rule = /^\.two-company-mode-chip\s*\{([^}]*)\}/m.exec(stylesheetSource());
 
       expect(rule).not.toBeNull();
       // `flex-grow: 1` is what fills the row; the `calc(50% - <gap>)` basis is
@@ -3407,7 +3352,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     });
 
     test("the row itself wraps, or the third chip has nowhere to go", () => {
-      const rule = /^\.twoinc-mode-chips\s*\{([^}]*)\}/m.exec(stylesheetSource());
+      const rule = /^\.two-company-mode-chips\s*\{([^}]*)\}/m.exec(stylesheetSource());
 
       expect(rule).not.toBeNull();
       expect(rule[1]).toMatch(/flex-wrap:\s*wrap/);

@@ -34,18 +34,9 @@
         <div id="billing_company_display_field">
             <label for="billing_company_display"><?php esc_html_e('Company name', 'twoinc-payment-gateway'); ?> <abbr class="required" title="required">*</abbr></label>
             <br>
-            <select name="billing_company_display" class="billing_company_selectwoo" id="billing_company_display">
-            <?php
-            /*
-             * value="" is load-bearing: the widget only paints its empty-field
-             * hint while the current selection's value matches the
-             * placeholder's, and an <option> with no value attribute takes its
-             * own text — a non-breaking space — as its value. Without it this
-             * page silently lost the hint the checkout page shows (TWO-25288).
-             */
-            ?>
-                <option value="">&nbsp;</option>
-            </select>
+            <input type="text" name="billing_company_display"
+                   class="billing_company_search" id="billing_company_display"
+                   autocomplete="off">
         </div>
     </div>
     <div class="twoinc-inp-container hidden">
@@ -69,10 +60,6 @@
             jQuery('[aria-labelledby="select2-billing_country-container"]').outerHeight(inpHeight)
             jQuery('#billing_country_field .select2-container').outerWidth(inpWidth)
             jQuery('#billing_country_field .select2-container').outerHeight(inpHeight)
-            jQuery('[aria-labelledby="select2-billing_company_display-container"]').outerWidth(inpWidth)
-            jQuery('[aria-labelledby="select2-billing_company_display-container"]').outerHeight(inpHeight)
-            jQuery('#billing_company_display_field .select2-container').outerWidth(inpWidth)
-            jQuery('#billing_company_display_field .select2-container').outerHeight(inpHeight)
         }
 
         jQuery('#order_review #payment').prepend(jQuery('.custom-checkout'))

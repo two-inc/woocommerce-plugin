@@ -45,7 +45,7 @@ describe("TWO:-prefixed organisation numbers", () => {
   });
 
   afterEach(() => {
-    harness.releaseWidgets($);
+    harness.releasePanel(ctx.helper);
     document.body.innerHTML = "";
   });
 
@@ -156,10 +156,16 @@ describe("TWO:-prefixed organisation numbers", () => {
     });
   });
 
-  describe("the search-results dropdown", () => {
-    /** @returns {Function} the plugin's processResults callback */
-    function processResults() {
-      return ctx.helper.genSelectWooParams().ajax.processResults;
+  describe("the search-results panel", () => {
+    /**
+     * Shape a response into panel rows, as the transport's own success
+     * handler does.
+     *
+     * @param {Object} response
+     * @returns {Array<Object>}
+     */
+    function rows(response) {
+      return ctx.helper.toResultItems(response);
     }
 
     /**
@@ -179,47 +185,45 @@ describe("TWO:-prefixed organisation numbers", () => {
     }
 
     test("renders a minted identifier nowhere in the row", () => {
-      const out = processResults()({ items: [hit("Example Trading Co", SYNTHETIC)] }, {});
+      const out = rows({ items: [hit("Example Trading Co", SYNTHETIC)] });
 
-      expect(out.results[0].html).toBe("<em>Example Trading Co</em>");
-      expect(out.results[0].html).not.toContain("TWO:");
-      expect(out.results[0].html).not.toContain("(");
+      expect(out[0].html).toBe("<em>Example Trading Co</em>");
+      expect(out[0].html).not.toContain("TWO:");
+      expect(out[0].html).not.toContain("(");
     });
 
     test("still carries the raw value as the row's company_id", () => {
       // Selecting this row has to be able to capture the company. The
-      // identifier is what the picker writes to the submitted field, so
+      // identifier is what the pick handler writes to the submitted field, so
       // filtering it out of the DATA as well would break sole-trader
       // checkout in the name of a display rule.
-      const out = processResults()({ items: [hit("Example Trading Co", SYNTHETIC)] }, {});
+      const out = rows({ items: [hit("Example Trading Co", SYNTHETIC)] });
 
-      expect(out.results[0].company_id).toBe(SYNTHETIC);
+      expect(out[0].company_id).toBe(SYNTHETIC);
     });
 
     test("a registry number is untouched", () => {
-      const out = processResults()({ items: [hit("Example Trading Co", "11111111")] }, {});
+      const out = rows({ items: [hit("Example Trading Co", "11111111")] });
 
-      expect(out.results[0].html).toBe("<em>Example Trading Co</em> (11111111)");
-      expect(out.results[0].company_id).toBe("11111111");
+      expect(out[0].html).toBe("<em>Example Trading Co</em> (11111111)");
+      expect(out[0].company_id).toBe("11111111");
     });
 
     test("a hit with no highlight falls back to the plain name", () => {
-      // This loop is written to survive a response that omits a field — the
-      // identifier is already read defensively. Without the same tolerance for
-      // `highlight` the row composes to `undefined` and select2 renders a
-      // blank-but-selectable entry.
+      // The panel writes `html` straight into the row's innerHTML, so an
+      // undefined composition renders a blank-but-selectable entry.
       const withoutHighlight = hit("Example Trading Co", "11111111");
       delete withoutHighlight.highlight;
 
-      const out = processResults()({ items: [withoutHighlight] }, {});
+      const out = rows({ items: [withoutHighlight] });
 
-      expect(out.results[0].html).toBe("Example Trading Co (11111111)");
+      expect(out[0].html).toBe("Example Trading Co (11111111)");
     });
 
     test("a hit with neither highlight nor name yields a string, not undefined", () => {
-      const out = processResults()({ items: [{ national_identifier: { id: "11111111" } }] }, {});
+      const out = rows({ items: [{ national_identifier: { id: "11111111" } }] });
 
-      expect(typeof out.results[0].html).toBe("string");
+      expect(typeof out[0].html).toBe("string");
     });
   });
 
@@ -350,22 +354,10 @@ describe("TWO:-prefixed organisation numbers", () => {
 
   describe("the minted number never reaches the buyer", () => {
     /**
-     * The configuration that used to be §12's problem case: a billing country
-     * with no supported registry, so there is nothing to search and the plain
-     * native name field is what captures the company. That state used to also
-     * show `#company_id` as an editable box, which is how a `TWO:…` value ended
-     * up on screen at all.
-     *
-     * As of 2026-08-19 (Doug, #486) `#company_id_field` is never visible in any
-     * mode or country — the number is a read-only label instead — so §12's
-     * guarantee no longer rests on hiding a field. What these tests pin now is
-     * the other half, which is the half that must not regress: the value stays
-     * on the submitted input, and no surface renders it.
-     *
-     * This fixture used to be driven by `enable_company_search: "no"`. That was
-     * never a real state: the admin checkbox only relocates the search control
-     * (TWO-25326 §7.1), so PHP always sends `'yes'`, and the runtime mutation
-     * that made the fixture "work" is gone.
+     * A billing country with no supported registry: nothing to search, so the
+     * plain native name field captures the company. §12's guarantee is pinned
+     * from both ends here — the minted number stays on the submitted input, and
+     * no surface renders it.
      */
     function loadWithNoRegistry() {
       ctx = harness.loadTwoinc({
@@ -496,14 +488,9 @@ describe("TWO:-prefixed organisation numbers", () => {
         expect($("#company_id_field").hasClass("hidden")).toBe(true);
       });
 
-      // No equivalent for loadStorageInputs(): that replay is deliberately
-      // NOT made to re-toggle. It runs from initialize() before the country
-      // configuration is guaranteed to be populated (an existing suite drives
-      // it with a minimal fixture and toggleBusinessFields() throws there), and
-      // it only ever replays the current session's own inputs — which the
-      // capture path that produced them has already toggled for. The
-      // cross-visit case, which is the one that actually persists a minted
-      // identifier, is the user-meta pass covered above.
+      // No equivalent for loadStorageInputs(): it runs before the country
+      // configuration is guaranteed populated, and replays only this session's
+      // own inputs, which their capture path has already toggled for.
     });
   });
 });

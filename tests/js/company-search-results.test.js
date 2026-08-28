@@ -1,13 +1,15 @@
 /**
- * TWO-25244. `processResults` and the request envelope of the company search
- * in assets/js/twoinc.js.
+ * TWO-25244, re-pinned for TWO-25503. `toResultItems()` — the shaping step
+ * between the companies endpoint's response and the rows the panel renders.
  *
- * `processResults` is fed three different shapes of body: a real search
- * response, the synthesised `{items: []}` the transport substitutes for a
- * degraded response, and — if the API or a proxy in front of it ever answers
- * with something unexpected — whatever that was. It runs inside select2's
- * query pipeline, so a throw there does not surface as an error message: it
- * leaves the dropdown stuck on "Searching…".
+ * It is fed three different shapes of body: a real search response, an empty
+ * one, and — if the API or a proxy in front of it ever answers with something
+ * unexpected — whatever that was. It runs inside the transport's own `done`
+ * handler, so a throw there does not surface as an error message: it leaves the
+ * panel showing whatever the previous search left in it, spinner still up.
+ *
+ * The request envelope itself is asserted in company-search-transport.test.js,
+ * where the URL is now built.
  */
 
 "use strict";
@@ -26,14 +28,9 @@ describe("company search results", () => {
   });
 
   afterEach(() => {
-    harness.releaseWidgets(ctx.$);
+    harness.releasePanel(ctx.helper);
     document.body.innerHTML = "";
   });
-
-  /** @returns {Function} the plugin's processResults callback */
-  function processResults() {
-    return ctx.helper.genSelectWooParams().ajax.processResults;
-  }
 
   /**
    * One well-formed search hit, in the shape the companies endpoint returns.
@@ -52,10 +49,10 @@ describe("company search results", () => {
   }
 
   describe("a well-formed response", () => {
-    test("maps every field selectWoo and the selection handler need", () => {
-      const out = processResults()({ items: [hit("Example Trading Co", "11111111")] }, {});
+    test("maps every field the panel and the selection handler need", () => {
+      const rows = ctx.helper.toResultItems({ items: [hit("Example Trading Co", "11111111")] });
 
-      expect(out.results).toEqual([
+      expect(rows).toEqual([
         {
           id: "Example Trading Co",
           text: "Example Trading Co",
@@ -68,21 +65,11 @@ describe("company search results", () => {
     });
 
     test("preserves order and maps every item", () => {
-      const out = processResults()(
-        { items: [hit("Alpha Example", "1"), hit("Beta Example", "2")] },
-        {}
-      );
+      const rows = ctx.helper.toResultItems({
+        items: [hit("Alpha Example", "1"), hit("Beta Example", "2")]
+      });
 
-      expect(out.results.map((r) => r.text)).toEqual(["Alpha Example", "Beta Example"]);
-    });
-
-    test("never asks select2 for another page", () => {
-      // The url() callback does compute an offset from params.page, but
-      // pagination is switched off here; if that ever changes, `more`
-      // has to start telling the truth or the last page repeats forever.
-      const out = processResults()({ items: [hit("Example Co", "1")] }, {});
-
-      expect(out.pagination).toEqual({ more: false });
+      expect(rows.map((r) => r.text)).toEqual(["Alpha Example", "Beta Example"]);
     });
   });
 
@@ -98,22 +85,20 @@ describe("company search results", () => {
       ["items as an object", { items: { 0: hit("Example Co", "1") } }],
       ["items as a string", { items: "Example Co" }],
       ["items as a number", { items: 3 }],
-      ["the synthesised degraded body", { items: [] }]
-    ])("%s yields no results and does not throw", (_label, response) => {
-      const run = () => processResults()(response, {});
+      ["an empty result set", { items: [] }]
+    ])("%s yields no rows and does not throw", (_label, response) => {
+      const run = () => ctx.helper.toResultItems(response);
 
       expect(run).not.toThrow();
-      expect(run().results).toEqual([]);
-      expect(run().pagination).toEqual({ more: false });
+      expect(run()).toEqual([]);
     });
   });
 
   describe("a hit with no usable national_identifier", () => {
-    // `national_identifier` is optional in the search response and its `id`
-    // may be null or empty, so every one of these shapes is reachable. A
-    // throw here happens inside select2's query pipeline, which would take
-    // the whole result list down with it and leave the dropdown on
-    // "Searching…" — so the hit renders with whatever it has instead.
+    // `national_identifier` is optional in the search response and its `id` may
+    // be null or empty, so every one of these shapes is reachable. A throw here
+    // would take the whole result list down with it, so the hit renders with
+    // whatever it has instead.
     test.each([
       ["national_identifier absent", { name: "Example Co", highlight: "<em>Example Co</em>" }],
       [
@@ -122,21 +107,17 @@ describe("company search results", () => {
       ],
       [
         "id null",
-        {
-          name: "Example Co",
-          highlight: "<em>Example Co</em>",
-          national_identifier: { id: null }
-        }
+        { name: "Example Co", highlight: "<em>Example Co</em>", national_identifier: { id: null } }
       ],
       [
         "id empty",
         { name: "Example Co", highlight: "<em>Example Co</em>", national_identifier: { id: "" } }
       ]
     ])("%s renders the company without an identifier suffix", (_label, item) => {
-      const run = () => processResults()({ items: [item] }, {});
+      const run = () => ctx.helper.toResultItems({ items: [item] });
 
       expect(run).not.toThrow();
-      expect(run().results).toEqual([
+      expect(run()).toEqual([
         {
           id: "Example Co",
           text: "Example Co",
@@ -149,161 +130,91 @@ describe("company search results", () => {
     });
 
     test("does not take the rest of the result list down with it", () => {
-      // The point of the guard: one unusable hit must not cost the buyer
-      // every other company that matched.
-      const out = processResults()(
-        {
-          items: [
-            { name: "Example Co", highlight: "<em>Example Co</em>" },
-            hit("Other Example Co", "22222222")
-          ]
-        },
-        {}
-      );
+      // The point of the guard: one unusable hit must not cost the buyer every
+      // other company that matched.
+      const rows = ctx.helper.toResultItems({
+        items: [
+          { name: "Example Co", highlight: "<em>Example Co</em>" },
+          hit("Other Example Co", "22222222")
+        ]
+      });
 
-      expect(out.results.map((r) => r.text)).toEqual(["Example Co", "Other Example Co"]);
-      expect(out.results.map((r) => r.company_id)).toEqual(["", "22222222"]);
+      expect(rows.map((r) => r.text)).toEqual(["Example Co", "Other Example Co"]);
+      expect(rows.map((r) => r.company_id)).toEqual(["", "22222222"]);
     });
   });
 
-  describe("request url", () => {
+  describe("what the buyer sees", () => {
+    let ajax;
+
+    beforeEach(() => {
+      jest.useFakeTimers();
+      ajax = harness.stubAjax(ctx.$);
+      harness.openCompanyPanel(ctx.$, ctx.helper);
+    });
+
+    afterEach(() => {
+      ajax.restore();
+      jest.clearAllTimers();
+      jest.useRealTimers();
+    });
+
     /**
-     * @param {Object} [params] select2 request params
-     * @returns {URL} the url the plugin would request
+     * Type into the panel's query field and settle the search it dispatches.
+     * The panel binds with `addEventListener`, which jQuery's `.trigger()` does
+     * not reach.
+     *
+     * @param {string} term
+     * @param {Array<Object>} items response items
+     * @returns {Promise}
      */
-    function urlFor(params) {
-      return new URL(ctx.helper.genSelectWooParams().ajax.url(params || { term: "exampleco" }));
+    function searchYielding(term, items) {
+      const query = document.querySelector(".two-company-dropdown__query");
+      query.value = term;
+      query.dispatchEvent(new window.Event("input", { bubbles: true }));
+      jest.advanceTimersByTime(ctx.helper.companySearchDebounceMs);
+      ajax.last().succeed({ items: items });
+      return Promise.resolve().then(() => Promise.resolve());
     }
 
-    test("targets the companies endpoint on the configured host", () => {
-      const url = urlFor();
+    test("the highlighted markup renders as markup in the list", async () => {
+      // The endpoint returns `highlight` as markup built from the buyer's own
+      // query server-side, so the row renders it rather than escaping it.
+      await searchYielding("example", [hit("Example Trading Co", "11111111")]);
 
-      expect(url.origin).toBe("https://api.example.test");
-      expect(url.pathname).toBe("/companies/v2/company");
+      const row = document.querySelector(".two-company-dropdown__row");
+      expect(row.querySelector("em").textContent).toBe("Example Trading Co");
+      expect(row.textContent).toBe("Example Trading Co (11111111)");
     });
 
-    test("carries the country selected in the checkout form", () => {
-      expect(urlFor().searchParams.get("country")).toBe("GB");
+    test("the field takes the plain name, never the markup", async () => {
+      await searchYielding("example", [hit("Example Trading Co", "11111111")]);
 
-      harness.buildCheckoutForm({ country: "NO" });
+      document
+        .querySelector(".two-company-dropdown__row")
+        .dispatchEvent(new window.MouseEvent("mousedown", { bubbles: true, cancelable: true }));
 
-      expect(urlFor().searchParams.get("country")).toBe("NO");
-    });
-
-    test("bounds the result set and pages by that same bound", () => {
-      expect(urlFor({ term: "exampleco" }).searchParams.get("limit")).toBe("50");
-      expect(urlFor({ term: "exampleco" }).searchParams.get("offset")).toBe("0");
-      expect(urlFor({ term: "exampleco", page: 2 }).searchParams.get("offset")).toBe("100");
-    });
-
-    test("sends the search term decoded exactly once", () => {
-      // select2 hands the raw term over; the plugin decodeURIComponent()s
-      // it and then URLSearchParams re-encodes. A term containing a
-      // percent sign is where a double-decode would show up.
-      expect(urlFor({ term: "a%20b" }).searchParams.get("q")).toBe("a b");
-      expect(urlFor({ term: "Example & Co" }).searchParams.get("q")).toBe("Example & Co");
-    });
-
-    test("the country is read per request, not captured when the widget is built", () => {
-      // Inverted by TWO-24867. genSelectWooParams() used to close over the
-      // country, on the reasoning that clearSelectedCompany() re-runs
-      // selectWoo() with fresh params on a country change. That coupling
-      // only held while EVERY country change reached that handler, and it
-      // no longer does: the handler now ignores the re-render `change`
-      // events WooCommerce emits with the value unchanged (TWO-25326), and
-      // a country written programmatically fires no `change` at all. Both
-      // leave the widget alive with a stale closure, searching the previous
-      // country's register. Reading the field per request removes the
-      // dependency instead of documenting it.
-      const url = ctx.helper.genSelectWooParams().ajax.url;
-      ctx.$("#billing_country").append('<option value="SE">Sweden</option>').val("SE");
-
-      expect(new URL(url({ term: "exampleco" })).searchParams.get("country")).toBe("SE");
-    });
-
-    test("identifies the plugin and its version to the API", () => {
-      // The only attribution this endpoint can get: the widget runs in the
-      // buyer's browser, so the user-agent is the shopper's. In the query
-      // string rather than a header on purpose — a custom header would make
-      // the request non-simple and cost a CORS preflight per keystroke.
-      // This caller hands constructTwoincUrl() a URLSearchParams, which is
-      // the shape that used to lose both fields.
-      const url = urlFor();
-
-      expect(url.searchParams.get("client")).toBe("woocommerce");
-      expect(url.searchParams.get("client_v")).toBe("0.0.0-test");
-    });
-
-    test("keeps the search params it was given alongside them", () => {
-      // Guards against a fix that replaces the params instead of adding to
-      // them, which would lose the query itself.
-      const url = urlFor({ term: "exampleco" });
-
-      expect(url.searchParams.get("q")).toBe("exampleco");
-      expect(url.searchParams.get("country")).toBe("GB");
-      expect(url.searchParams.get("client")).toBe("woocommerce");
-    });
-  });
-
-  describe("widget params", () => {
-    test("waits for three characters before searching", () => {
-      expect(ctx.helper.genSelectWooParams().minimumInputLength).toBe(3);
-    });
-
-    test("takes the threshold from the helper's constant, not a literal", () => {
-      // The enforced minimum and the minimum the buyer is told about have to
-      // be one value (TWO-25288), so this asserts the wiring rather than the
-      // number: a second literal 3 anywhere in the widget params would
-      // survive the number changing, and this test would not.
-      ctx.helper.companySearchMinLength = 7;
-
-      expect(ctx.helper.genSelectWooParams().minimumInputLength).toBe(7);
-    });
-
-    test("debounces at 300ms, matching the other plugin checkouts", () => {
-      expect(ctx.helper.genSelectWooParams().ajax.delay).toBe(300);
-    });
-
-    test("renders the highlighted markup unescaped in the list and plain text in the field", () => {
-      // The endpoint returns `highlight` as markup, so escapeMarkup has
-      // to be a pass-through for the list. templateSelection therefore
-      // has to use `text` rather than `html`, or the markup would be
-      // injected into the closed field too.
-      const params = ctx.helper.genSelectWooParams();
-      const data = { text: "Example Co", html: "<em>Example</em> Co" };
-
-      expect(params.escapeMarkup("<em>x</em>")).toBe("<em>x</em>");
-      expect(params.templateResult(data)).toBe("<em>Example</em> Co");
-      expect(params.templateSelection(data)).toBe("Example Co");
-    });
-
-    test("borrows WooCommerce core copy for the non-error messages", () => {
-      // These come from wc_country_select_params, so the buyer sees the
-      // same wording the rest of the checkout uses.
-      const language = ctx.helper.genSelectWooParams().language;
-
-      expect(language.noResults()).toBe("No matches found");
-      expect(language.searching()).toBe("Searching…");
+      expect(ctx.$("#billing_company_display").val()).toBe("Example Trading Co");
+      expect(ctx.$("#billing_company").val()).toBe("Example Trading Co");
+      expect(ctx.$("#company_id").val()).toBe("11111111");
     });
   });
 });
 
 /**
- * TWO-25288, elements 3 and 4. The two hints the company-search field shows
- * before it can search: one in the empty closed field, one while the typed
+ * TWO-25288, elements 3 and 4. The two hints the company-search control shows
+ * before it can search: one on the closed company field, one while the typed
  * term is below the threshold.
  *
- * Both strings are plugin-owned and translatable. The min-chars one used to be
- * borrowed from WooCommerce core's `wc_country_select_params`, whose copy
- * counts down the REMAINING characters — so the same field told the buyer "1
- * or more" after two keystrokes. These tests pin the fixed-number behaviour
- * and the single-source-of-truth wiring, not just the wording.
+ * Both strings are plugin-owned and translatable, and the min-chars one names a
+ * fixed number rather than counting down the remaining characters. These pin
+ * that and the single-source-of-truth wiring, not just the wording.
  */
 describe("company search hints", () => {
   let ctx;
 
   afterEach(() => {
-    if (ctx) harness.releaseWidgets(ctx.$);
+    if (ctx) harness.releasePanel(ctx.helper);
     document.body.innerHTML = "";
   });
 
@@ -314,7 +225,7 @@ describe("company search hints", () => {
       ["Skriv %1$d tegn", undefined, "Skriv 3 tegn", "gettext's positional placeholder form"]
     ])("states the enforced threshold: %s / %s", (template, minLength, expected, description) => {
       // The %d reaches the browser unresolved so PHP cannot state a number the
-      // widget does not enforce; `%1$d` is legitimate because `#, php-format`
+      // control does not enforce; `%1$d` is legitimate because `#, php-format`
       // entitles a translator to reorder arguments. `template` left undefined
       // asserts against the msgid PHP registers, not a wording the harness
       // invented.
@@ -324,124 +235,98 @@ describe("company search hints", () => {
       expect(ctx.helper.companySearchTooShortText()).toBe(expected, description);
     });
 
-    test("is the query field's own watermark, not a row under it", () => {
+    test("is the query field's own watermark, and states a fixed number", () => {
       // Doug 2026-08-20, live: two hints for one rule, the second sitting
-      // directly beneath the field the first is in. PrestaShop folded them
-      // into the one placeholder slot and this matches it — so the wording must
-      // be ON the input, and must NOT appear in the results panel once the
-      // buyer types below the threshold.
+      // directly beneath the field the first is in. The panel folds them into
+      // one surface — the wording is ON the query input, and the results host
+      // carries nothing at all until the buyer types.
       ctx = harness.loadTwoinc();
       harness.buildCheckoutForm();
-      const $select = harness.openCompanyWidget(ctx.$, ctx.helper);
-      const $search = ctx.$('input[aria-owns="select2-billing_company_display-results"]');
+      harness.openCompanyPanel(ctx.$, ctx.helper);
 
-      // Guard: the widget has to be open and its search input present, or
-      // every assertion below is vacuous.
-      expect($search.length).toBe(1);
-      expect($search.attr("placeholder")).toBe("Enter 3 or more characters");
-
-      $search.val("ab").trigger("input");
-
-      expect(harness.resultsText(ctx.$)).not.toContain("or more characters");
-      // Not merely blanked: an empty `<li>` still paints a strip, which is the
-      // thing being removed.
-      expect(ctx.$(".select2-results__message").length).toBe(0);
-      // …and core's countdown copy has not crept back in through selectWoo's
-      // own defaults now that the plugin no longer overrides `inputTooShort`.
-      expect(harness.resultsText(ctx.$)).not.toContain("1 or more");
-      expect($select.data("select2")).toBeTruthy();
+      const query = document.querySelector(".two-company-dropdown__query");
+      expect(query.getAttribute("placeholder")).toBe("Enter 3 or more characters");
+      expect(harness.resultsText(ctx.$)).toBe("");
     });
 
-    test("the watermark survives the dropdown being closed and reopened", () => {
-      // Applied once per widget INSTANCE, on a node selectWoo keeps detached
-      // from the document until the first open — so an implementation that
-      // reached for the document instead would find nothing and this asserts
-      // it did not.
+    test("a below-threshold term is answered inside the panel, not under the field", () => {
+      // Where the buyer needs telling why nothing came back — and core's
+      // countdown copy, which is what said "1 or more" after two keystrokes,
+      // must not have crept back in.
       ctx = harness.loadTwoinc();
       harness.buildCheckoutForm();
-      const $select = harness.openCompanyWidget(ctx.$, ctx.helper);
+      harness.openCompanyPanel(ctx.$, ctx.helper);
 
-      $select.select2("close");
-      $select.select2("open");
+      const query = document.querySelector(".two-company-dropdown__query");
+      query.value = "ab";
+      query.dispatchEvent(new window.Event("input", { bubbles: true }));
+
+      expect(harness.resultsText(ctx.$)).toBe("Enter 3 or more characters");
+      expect(harness.resultsText(ctx.$)).not.toContain("1 or more");
+      // One surface, inside the panel: nothing is appended beside the field.
+      expect(
+        document.querySelectorAll(".two-company-field-wrap > .two-company-dropdown__message")
+      ).toHaveLength(0);
+    });
+
+    test("the watermark survives the panel being closed and reopened", () => {
+      ctx = harness.loadTwoinc();
+      harness.buildCheckoutForm();
+      harness.openCompanyPanel(ctx.$, ctx.helper);
+
+      ctx.helper.closeCompanySearchDropdown();
+      ctx.helper.openCompanySearchDropdown();
 
       expect(
-        ctx.$('input[aria-owns="select2-billing_company_display-results"]').attr("placeholder")
+        document.querySelector(".two-company-dropdown__query").getAttribute("placeholder")
       ).toBe("Enter 3 or more characters");
     });
   });
 
   describe("the empty-field hint", () => {
-    test("is passed to the widget as its placeholder", () => {
-      ctx = harness.loadTwoinc();
-
-      expect(ctx.helper.genSelectWooParams().placeholder).toBe("Enter company name to search");
-    });
-
-    test("uses the localised string when PHP supplies one", () => {
-      ctx = harness.loadTwoinc({ text: { company_search_placeholder: "Zoek een bedrijf" } });
-
-      expect(ctx.helper.genSelectWooParams().placeholder).toBe("Zoek een bedrijf");
-    });
-
-    test("is what the closed field actually renders", () => {
-      // Against the real widget and the real empty-option markup: the
-      // non-breaking-space label must not defeat the placeholder.
+    test("is what the closed company field renders", () => {
+      // Set by the panel rather than left to the host form: core renders this
+      // field with no placeholder at all, so nothing would say what clicking it
+      // does.
       ctx = harness.loadTwoinc();
       harness.buildCheckoutForm();
-      const $select = ctx.$("#billing_company_display");
-      $select.selectWoo(ctx.helper.genSelectWooParams());
+      ctx.helper.attach();
 
-      const $rendered = ctx.$("#select2-billing_company_display-container");
-
-      // Guard: no rendered container means the widget never attached.
-      expect($rendered.length).toBe(1);
-      expect($rendered.find(".select2-selection__placeholder").text()).toBe(
+      expect(ctx.$("#billing_company_display").attr("placeholder")).toBe(
         "Enter company name to search"
       );
     });
 
-    test("would be suppressed by an empty option carrying a value", () => {
-      // Pins WHY the shipped markup needs value="": with the option's value
-      // defaulting to its own label, the widget treats the field as having a
-      // selection and paints that label instead of the hint. This is the
-      // regression the pay-for-order template had.
-      ctx = harness.loadTwoinc();
-      harness.buildCheckoutForm({ companyOptions: "<option>&nbsp;</option>" });
-      ctx.$("#billing_company_display").selectWoo(ctx.helper.genSelectWooParams());
+    test("uses the localised string when PHP supplies one", () => {
+      ctx = harness.loadTwoinc({ text: { company_search_placeholder: "Zoek een bedrijf" } });
+      harness.buildCheckoutForm();
+      ctx.helper.attach();
 
-      expect(
-        ctx.$("#select2-billing_company_display-container").find(".select2-selection__placeholder")
-          .length
-      ).toBe(0);
+      expect(ctx.$("#billing_company_display").attr("placeholder")).toBe("Zoek een bedrijf");
     });
 
-    test("the pay-for-order template's empty option carries an empty value", () => {
-      // That page renders the company select from its own template rather
-      // than through WooCommerce's field API, so it needs the attribute in
-      // its own markup. Asserted against the shipped file.
+    test("the pay-for-order template renders a field the panel can anchor to", () => {
+      // That page renders the company field from its own template rather than
+      // through WooCommerce's field API, so the input shape has to be right in
+      // its own markup — a `<select>` there would leave the panel with nothing
+      // to write a value into.
       const markup = fs.readFileSync(
         path.join(harness.REPO_ROOT, "views/woocommerce_order_pay.php"),
         "utf8"
       );
-      const select = markup.match(/<select[^>]*id="billing_company_display"[\s\S]*?<\/select>/);
+      const field = markup.match(/<input[^>]*id="billing_company_display"[^>]*>/);
 
-      expect(select).not.toBeNull();
-      expect(select[0]).toMatch(/<option value="">/);
+      expect(field).not.toBeNull();
+      expect(field[0]).toMatch(/type="text"/);
+      expect(markup).not.toMatch(/<select[^>]*id="billing_company_display"/);
     });
   });
 
   /**
-   * The empty-field hint is a rendered widget node, and `saveCheckoutInputs()`
-   * snapshots the widget's rendered container as the buyer's company name.
-   *
-   * Before this hint existed the container's only child was a text node
-   * holding a non-breaking space, which trimmed to empty — so the "did the
-   * buyer choose a company" guard was falsy for an untouched field. The hint
-   * is an ELEMENT child, so that guard stopped firing and the snapshot became
-   * the hint's own text. From there it reaches `getCompanyName()`,
-   * `Twoinc.customerCompany`, the sole-trader signup prefill, the
-   * intent-approved sentence, and — worst — `#billing_company`, which is
-   * POSTED WITH THE ORDER.
+   * The empty-field hint must never be mistaken for a company the buyer chose:
+   * `#billing_company` is POSTED WITH THE ORDER, and `saveCheckoutInputs()`
+   * snapshots it. A `placeholder` attribute leaves that snapshot nothing to
+   * read.
    */
   describe("the empty-field hint and the saved-input snapshot", () => {
     afterEach(() => {
@@ -450,31 +335,31 @@ describe("company search hints", () => {
     });
 
     /**
-     * Attach the real widget to the real form so the hint is rendered, then
-     * snapshot the form the way the plugin does at page load.
+     * Attach the panel to the real form so the hint is rendered, then snapshot
+     * the form the way the plugin does at page load.
      *
-     * @returns {Object} the snapshot entry for the rendered company container
+     * @returns {Object} the snapshot entry for the company-search field
      */
     function snapshotUntouchedField() {
       ctx = harness.loadTwoinc();
       harness.buildCheckoutForm();
-      ctx.$("#billing_company_display").selectWoo(ctx.helper.genSelectWooParams());
+      ctx.helper.attach();
 
       // Guard: no rendered hint means the rest of this asserts nothing.
-      expect(
-        ctx.$("#select2-billing_company_display-container .select2-selection__placeholder").length
-      ).toBe(1);
+      expect(ctx.$("#billing_company_display").attr("placeholder")).toBe(
+        "Enter company name to search"
+      );
 
       ctx.dom.saveCheckoutInputs();
       const saved = JSON.parse(sessionStorage.getItem("checkoutInputs"));
 
       // Guard: the snapshot has to have found the checkout form at all. It
-      // looks the form up by `form[name="checkout"]`, so a harness form
-      // missing that attribute would take the early return and leave every
-      // assertion below vacuously true.
+      // looks the form up by `form[name="checkout"]`, so a harness form missing
+      // that attribute would take the early return and leave every assertion
+      // below vacuously true.
       expect(saved).not.toHaveLength(0);
 
-      return saved.find((inp) => inp.id === "select2-billing_company_display-container");
+      return saved.find((inp) => inp.id === "billing_company_display");
     }
 
     test("is not snapshotted as the buyer's company name", () => {
@@ -484,26 +369,15 @@ describe("company search hints", () => {
       expect(entry.val).toBe("");
     });
 
-    test("is not carried in the sub-nodes the restore path re-appends", () => {
-      // Kept out of `subs` because it is not a selection, and because
-      // loadStorageInputs() re-appends every sub onto a container whose
-      // restored html already carries the hint.
-      const entry = snapshotUntouchedField();
-
-      expect(entry.subs).toEqual([]);
-    });
-
-    test("survives a restore from storage without doubling", () => {
+    test("survives a restore from storage without being written into the field", () => {
       snapshotUntouchedField();
       jest.useFakeTimers();
       ctx.dom.loadStorageInputs();
-      // The sub-node re-append is deferred a second by the plugin.
+      // The restore path defers part of its work a second.
       jest.advanceTimersByTime(2000);
 
-      expect(
-        ctx.$("#select2-billing_company_display-container .select2-selection__placeholder").length
-      ).toBe(1);
-      expect(ctx.$("#select2-billing_company_display-container").text()).toBe(
+      expect(ctx.$("#billing_company_display").val()).toBe("");
+      expect(ctx.$("#billing_company_display").attr("placeholder")).toBe(
         "Enter company name to search"
       );
     });
@@ -516,16 +390,9 @@ describe("company search hints", () => {
     });
 
     test("is not written into the company field posted with the order", async () => {
-      // The assertion that matters, and driven through the plugin's own
-      // page-load bootstrap rather than a copy of its logic: that bootstrap's
-      // deferred "init the hidden Company name field" step is what reads the
-      // snapshot and writes #billing_company.
-      //
-      // Real timers, and awaited rather than advanced. jQuery runs its ready
-      // callbacks — the bootstrap among them — on a macrotask, so installing
-      // fake timers before yielding freezes the bootstrap before it has
-      // registered anything for a fake clock to advance. The wait covers that
-      // macrotask plus the bootstrap's own one-second defer.
+      // Real timers, awaited: jQuery runs its ready callbacks — the bootstrap
+      // that reads the snapshot among them — on a macrotask, which fake timers
+      // installed first would freeze before it registers anything.
       snapshotUntouchedField();
       await new Promise((resolve) => setTimeout(resolve, 1200));
 
@@ -534,25 +401,24 @@ describe("company search hints", () => {
     });
 
     test("gives way to a real selection once the buyer picks a company", () => {
-      // The mirror image: the fix must not blank a container that legitimately
+      // The mirror image: the fix must not blank a field that legitimately
       // holds a chosen company, which is the snapshot's whole purpose.
       ctx = harness.loadTwoinc();
-      harness.buildCheckoutForm({
-        companyOptions:
-          '<option value=""></option><option value="Example Trading Co" selected>Example Trading Co</option>'
-      });
-      ctx.$("#billing_company_display").selectWoo(ctx.helper.genSelectWooParams());
+      harness.buildCheckoutForm();
+      ctx.capture.write("Example Trading Co", "11111111", { country: "GB" });
+      ctx.helper.attach();
       ctx.dom.saveCheckoutInputs();
 
       expect(ctx.helper.getCompanyName()).toBe("Example Trading Co");
+      expect(ctx.$("#billing_company_display").val()).toBe("Example Trading Co");
     });
   });
 
   describe("the strings PHP registers", () => {
     // The keys are the contract between the checkout's localisation array and
     // the helper functions above, and nothing else in the suite can see both
-    // sides: a renamed key would leave the browser silently falling back to
-    // the untranslated English and every other test here still passing.
+    // sides: a renamed key would leave the browser silently falling back to the
+    // untranslated English and every other test here still passing.
     const checkout = fs.readFileSync(
       path.join(harness.REPO_ROOT, "class/WC_Twoinc_Checkout.php"),
       "utf8"
@@ -570,14 +436,9 @@ describe("company search hints", () => {
     });
 
     test("leaves the min-chars placeholder for the browser to resolve", () => {
-      // A %d resolved in PHP would put the claimed minimum out of reach of
-      // the constant the widget enforces — the drift this design prevents.
-      //
-      // The negative below is not enough on its own: it also passes if PHP
-      // grows a sprintf() around the string, since the literal in the source
-      // would still read "%d". So assert positively that the value PHP
-      // registers into the `text` array still carries an unresolved
-      // placeholder by the time it is emitted.
+      // A %d resolved in PHP would drift from the constant the control enforces.
+      // Asserted positively as well as negatively: a sprintf() wrapped around
+      // the string leaves the source literal reading "%d" either way.
       expect(checkout).not.toMatch(/'company_search_too_short' *=> *__\('Please enter \d/);
       const emitted = checkout.match(/'company_search_too_short' *=> *([^\n]*),\n/);
 

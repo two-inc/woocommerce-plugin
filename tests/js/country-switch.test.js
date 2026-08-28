@@ -9,7 +9,7 @@
  *      only on a buyer's country change, and each one destroyed the captured
  *      company (observed live, TWO-25326).
  *   2. The company search took its country from a closure captured when the
- *      selectWoo widget was built, so a widget that outlived a country change
+ *      search control was built, so a control that outlived a country change
  *      searched the previous country's register.
  *   3. The registry address lookup had no supersession guard, so a response
  *      for a company picked under the OLD country wrote its address over the
@@ -17,7 +17,7 @@
  *
  * The same three behaviours were fixed on the PrestaShop checkout first; this
  * is the WooCommerce equivalent, in this plugin's own delegated-handler and
- * selectWoo shape. See the ticket for the cross-platform parity notes.
+ * search-panel shape. See the ticket for the cross-platform parity notes.
  */
 
 "use strict";
@@ -54,16 +54,10 @@ describe("billing country switch", () => {
 
   afterEach(() => {
     ajax.restore();
-    harness.releaseWidgets(ctx.$);
-    // Load-bearing, not tidying. `initialize()` binds its handlers DELEGATED
-    // on document.body, and jsdom's document outlives the test — wiping
-    // `innerHTML` removes the elements but not the bindings. Every test that
-    // calls initializeCheckout() would otherwise leave a live handler closed
-    // over its own evaluation of the source (the harness re-evaluates per
-    // test, so each has its own `lastObservedCountry` and its own singleton),
-    // and the next test's `change` event would run all of them against the
-    // current DOM. That presents as an order-dependent flake — a company
-    // cleared by a predecessor's zombie guard — rather than as the leak it is.
+    harness.releasePanel(ctx.helper);
+    // Load-bearing, not tidying: `initialize()` delegates on document.body,
+    // which outlives the test, so a predecessor's handler — closed over its own
+    // evaluation of the source — would clear a company in the next test.
     ctx.$(document.body).off();
     document.body.innerHTML = "";
     // jsdom's sessionStorage outlives the test too, and one test seeds a
@@ -125,6 +119,27 @@ describe("billing country switch", () => {
       name: ctx.$("#billing_company").val(),
       id: ctx.$("#company_id").val()
     };
+  }
+
+  // The panel binds its query field with addEventListener, which jQuery's
+  // `.trigger()` does not reach.
+  function typeCompanyQuery(term) {
+    const query = document.querySelector(".two-company-dropdown__query");
+    query.value = term;
+    query.dispatchEvent(new window.Event("input", { bubbles: true }));
+    jest.advanceTimersByTime(ctx.helper.companySearchDebounceMs);
+  }
+
+  function clickFirstResultRow() {
+    document
+      .querySelector(".two-company-dropdown__row")
+      .dispatchEvent(new window.MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+  }
+
+  // The transport resolves a Promise, so a settled deferred reaches the panel
+  // only once the microtask queue has drained.
+  function flushPromises() {
+    return Promise.resolve().then(() => Promise.resolve());
   }
 
   describe("a change event that is not a country change (TWO-25326)", () => {
@@ -227,21 +242,21 @@ describe("billing country switch", () => {
       expect(ctx.helper.companySearchSeq).toBeGreaterThan(seqBefore);
     });
 
-    test("a search response for the previous country cannot repopulate the list", () => {
+    test("a search response for the previous country cannot repopulate the list", async () => {
       initializeCheckout();
-      const $select = harness.openCompanyWidget(ctx.$, ctx.helper);
-      const transport = ctx.helper.genSelectWooParams().ajax.transport;
-      const success = harness.successRecorder();
-      transport({ term: "example", page: 0 }, success.fn);
+      harness.openCompanyPanel(ctx.$, ctx.helper);
+      typeCompanyQuery("example");
       const inFlight = ajax.last();
+      // Positive control: without it a fixture that issued no search at all
+      // would satisfy the "not repopulated" assertion below.
+      expect(inFlight.url).toContain("/companies/v2/company");
 
       ctx.$("#billing_country").val("ES");
       fireCountryChange();
       inFlight.succeed({ items: [{ name: "Example Co", highlight: "Example Co" }] });
+      await flushPromises();
 
-      expect(success.calls).toHaveLength(0);
       expect(harness.resultsText(ctx.$)).not.toContain("Example Co");
-      $select.select2("close");
     });
   });
 
@@ -299,19 +314,11 @@ describe("billing country switch", () => {
     });
 
     test("updated_checkout records WITHOUT clearing the captured company", () => {
-      // The other half, and the reason this entry point records rather than
-      // running the whole handler. Those re-renders restore the country and
-      // the company TOGETHER, so clearing here destroys what the same
-      // re-render just put back — TWO-25326 again on a new trigger. Nothing
-      // is thrown away without the buyer's gesture, and a `change` event is
-      // the only signal of one this checkout has.
-      //
-      // The company is captured under ES, the country the re-render moves the
-      // field to, because "together" is the whole point: this fixture used to
-      // pair a GB company with a move to ES, which is not the restore case at
-      // all but the stale-pairing case TWO-25333 now clears. The assertion the
-      // test was written to make — a record-only path throws nothing away —
-      // needs a pair the re-render could actually have supplied.
+      // A re-render restores the country and the company TOGETHER, so clearing
+      // here destroys what it just put back; a `change` event is the only
+      // signal of the buyer's own gesture this checkout has. Captured under ES,
+      // the country the re-render moves to, since a GB pair would be the
+      // stale-pairing case instead (TWO-25333).
       initializeCheckout();
       ctx.$("#billing_country").val("ES");
       captureCompany("Ejemplo SL", "B12345678", "ES");
@@ -322,13 +329,9 @@ describe("billing country switch", () => {
     });
 
     test("the seed is taken AFTER the saved-input restore, not before", () => {
-      // `loadStorageInputs()` writes #billing_country with `selectElem.value`
-      // and fires no `change`. Seeded before it ran, the tracker held the
-      // country the page was RENDERED with while the field held the RESTORED
-      // one, and the first re-render afterwards read the difference as a real
-      // country change — destroying the company and address that same restore
-      // had just put back. `initialize(true)` is the bootstrap's own call, so
-      // this is the production path.
+      // `loadStorageInputs()` writes #billing_country and fires no `change`, so
+      // a tracker seeded before it runs reads the restore as a real country
+      // change. `initialize(true)` is the bootstrap's own call.
       // The shape saveCheckoutInputs() actually writes.
       window.sessionStorage.setItem(
         "checkoutInputs",
@@ -393,14 +396,9 @@ describe("billing country switch", () => {
     });
 
     test("updated_checkout invalidates in-flight work for the outgoing country", () => {
-      // Record-only would otherwise leave a hole: nothing on this path bumps
-      // either counter, so a registry address for the country just left could
-      // still land. The lookup's own country comparison does not cover it —
-      // an empty reading on either side waves the response through by design,
-      // and the field being mid-replacement is exactly what this path is
-      // about. Invalidating pending answers is safe in a way clearing the
-      // capture is not: it discards replies to questions asked under a
-      // country that is no longer selected, which the buyer cannot lose.
+      // The lookup's own country comparison waves a response through when
+      // either reading is empty, which is exactly this path's mid-replacement
+      // field — so pending answers have to be invalidated here instead.
       ctx
         .$("form[name='checkout']")
         .append(
@@ -439,16 +437,10 @@ describe("billing country switch", () => {
     });
 
     test("the updated_checkout re-sync terminates instead of looping", () => {
-      // The loop this must not become: `updated_checkout` -> a country change
-      // -> clearSelectedCompany() -> setAddress() -> `update_checkout` ->
-      // WooCommerce refreshes -> `updated_checkout` again. Two things stop it
-      // — this entry point only RECORDS, so it never reaches
-      // clearSelectedCompany at all; and even if it did, the country was
-      // recorded on the way through, so the second pass sees no change.
-      // Pinned rather than reasoned about because both guards live in
-      // different functions from the recursion, and the setAddress leg is
-      // behind `enable_address_lookup`, so a regression here would only
-      // appear on shops that turn address lookup on.
+      // The loop this must not become: `updated_checkout` -> country change ->
+      // clearSelectedCompany -> setAddress -> `update_checkout` -> refresh.
+      // Pinned rather than reasoned about: both guards live in other functions,
+      // and the setAddress leg only runs with address lookup on.
       ctx.twoinc.enable_address_lookup = "yes";
       ctx
         .$("form[name='checkout']")
@@ -544,20 +536,11 @@ describe("billing country switch", () => {
     });
 
     test("the cleared capture takes the approval gate back down", () => {
-      // Named for what it proves, which is narrower than "the payment method
-      // becomes unusable". `isReadyApprovalCheck` is the gate deciding whether
-      // an intent is asked for at all, so it coming back down is what stops a
-      // fresh approval being sought for the dropped pair — and it is a real
-      // assertion the emptied fields would not give us.
-      //
-      // What it does NOT prove: the gateway radio stays `checked` and
-      // `isTwoincApproved` stays true after this, because nothing in the file
-      // deselects the method and `isTwoincApproved` is written but never read.
-      // So a buyer who had already been approved keeps a selected Two method
-      // over an emptied company until the next intent pass. Enforcing §6 by
-      // deselecting is the DEFERRED half of that design and belongs to its own
-      // ticket, not to this one — recorded here so the gap is not mistaken for
-      // something this test covers.
+      // `isReadyApprovalCheck` coming back down is what stops a fresh approval
+      // being sought for the dropped pair. It does NOT prove the method becomes
+      // unusable: nothing deselects the gateway radio, so an already-approved
+      // buyer keeps a selected Two over an emptied company until the next
+      // intent pass. Deselecting is §6's deferred half, on its own ticket.
       ctx.twoinc.enable_order_intent = "yes";
       addAddressFields();
       initializeCheckout();
@@ -720,16 +703,10 @@ describe("billing country switch", () => {
     });
 
     test("a sole-trader numeric number survives a re-render of the NAME alone", () => {
-      // The reachable chain the recorded-number normalisation actually guards,
-      // driven through the real setter rather than by poking the record.
-      // `setCompany` writes the organisation number straight out of parsed
-      // JSON, so the record holds a NUMBER while `#company_id` holds a string.
-      // Then a re-render rewrites WooCommerce's own `#billing_company` and
-      // leaves the plugin's `#company_id` untouched — the mirror asymmetry this
-      // whole ticket is about. Un-normalised, the number reads as diverged, the
-      // name genuinely has diverged, and the re-sync branch launders a
-      // GB-captured number into a self-consistent ES pair with nothing left
-      // downstream to catch it.
+      // `setCompany` writes the number straight out of parsed JSON, so the
+      // record holds a NUMBER against `#company_id`'s string. Un-normalised
+      // that reads as diverged, and the re-sync branch launders a GB-captured
+      // number into a self-consistent ES pair.
       addAddressFields();
       initializeCheckout();
       ctx.soleTrader.setCompany(123456789, "Sole Trader Co");
@@ -904,14 +881,9 @@ describe("billing country switch", () => {
     });
 
     test("the clear terminates instead of looping", () => {
-      // The loop the record-only design used to be immune to by construction,
-      // and is not any more: this path now CAN reach clearSelectedCompany, so
-      // `updated_checkout` -> clear -> setAddress -> `update_checkout` ->
-      // WooCommerce refreshes -> `updated_checkout` is live again. What stops
-      // it is that the country was recorded on the way through and the capture
-      // is gone by the second pass, so neither the change test nor the
-      // mismatch test is true a second time. Behind `enable_address_lookup`,
-      // so a regression would only show on shops that turn it on.
+      // This path CAN reach clearSelectedCompany, so the `updated_checkout` ->
+      // clear -> setAddress -> refresh loop is live. What stops it is that the
+      // country is recorded and the capture gone by the second pass.
       ctx.twoinc.enable_address_lookup = "yes";
       addAddressFields();
       initializeCheckout();
@@ -953,17 +925,9 @@ describe("billing country switch", () => {
     });
 
     test("clears in manual entry as well as in search mode", () => {
-      // The manual-entry leg behaves differently inside
-      // `clearSelectedCompany`: it deliberately KEEPS the buyer's typed
-      // `#billing_company` (it is their own input, not a picked company) while
-      // still blanking `#company_id`. So the assertion is not the same one the
-      // search-mode tests make, and running only those left this leg unproven.
-      //
-      // Typed by hand rather than captured (TWO-40 §5): what decides this leg
-      // is PROVENANCE — did the plugin write this name — not the capture mode.
-      // `enable_company_search === "no"` was a proxy for that question, and a
-      // sole-trader name is plugin-written while reaching there with the flag
-      // reading "no", so the proxy kept a name whose number had already gone.
+      // `clearSelectedCompany` keeps a hand-typed `#billing_company` — the
+      // buyer's own input — while still blanking `#company_id`. What decides
+      // the leg is PROVENANCE, not the capture mode (TWO-40 §5).
       ctx.capture.mode = "manual";
       addAddressFields();
       initializeCheckout();
@@ -975,17 +939,11 @@ describe("billing country switch", () => {
       expect(ctx.$("#billing_company").val()).toBe("Example Co");
       expect(ctx.Twoinc.getInstance().customerCompany.organization_number).toBeFalsy();
 
-      // CHARACTERISATION, not endorsement. `clearSelectedCompany` re-attaches
-      // selectWoo to #billing_company_display unconditionally, so a clear in
-      // manual-entry mode resurrects the picker the buyer had dismissed even
-      // with company search off. That is PRE-EXISTING — the `change` path has
-      // called this on every real country change in manual entry since long
-      // before this ticket — and fixing it means changing a shared destructive
-      // function's behaviour on that path too, which is exactly the kind of
-      // stacking TWO-25333 was split out of TWO-24867 to avoid. Pinned here so
-      // the behaviour is recorded and a later fix has something to flip, not
-      // because it is right.
-      expect(ctx.$("#billing_company_display").data("select2")).toBeTruthy();
+      // CHARACTERISATION, not endorsement: `clearSelectedCompany` re-attaches
+      // the panel unconditionally, resurrecting a picker manual entry had
+      // dismissed. Pinned so a later fix has something to flip.
+      expect(ctx.helper.panel.isBound()).toBe(true);
+      expect(harness.panelStructure()).not.toBeNull();
     });
 
     test("does NOT clear the matching pair in manual entry either", () => {
@@ -1010,17 +968,20 @@ describe("billing country switch", () => {
     // as a self-consistent pair, and which the discriminator above would read
     // as a mismatch and clear, destroying a capture that was never stale.
 
-    test("the picker's select handler pins the country it picked under", () => {
+    test("the picker's select handler pins the country it picked under", async () => {
       initializeCheckout();
       // A silent country move that the record-only path has not seen yet, so
       // customerCompany.country_prefix still holds the country before it.
       ctx.Twoinc.getInstance().customerCompany.country_prefix = "GB";
       ctx.$("#billing_country").val("ES");
 
-      ctx.$("#billing_company_display").trigger({
-        type: "select2:select",
-        params: { data: { id: "Ejemplo SL", company_id: "B12345678" } }
+      harness.openCompanyPanel(ctx.$, ctx.helper);
+      typeCompanyQuery("ejemplo");
+      ajax.last().succeed({
+        items: [{ name: "Ejemplo SL", national_identifier: { id: "B12345678" } }]
       });
+      await flushPromises();
+      clickFirstResultRow();
 
       expect(ctx.Twoinc.getInstance().customerCompany.country_prefix).toBe("ES");
     });
@@ -1103,18 +1064,10 @@ describe("billing country switch", () => {
     });
 
     test("a blur on an empty untouched field pins nothing (conjunction)", () => {
-      // "" !== null counts as movement without normalisation, so a fresh
-      // checkout's first stray blur pinned a country onto a capture that does
-      // not exist. Inert downstream, but a witness that looks authoritative and
-      // is not is how this class of bug arrives.
-      //
-      // Labelled a CONJUNCTION test on purpose: no single revert breaks it, and
-      // it should not be read as independent coverage of either guard.
-      // Un-normalising `previousNumber` alone is still stopped by the emptiness
-      // check, and dropping the emptiness check alone is still stopped by
-      // `numberMoved` being false. The two tests above cover each guard on its
-      // own; this one covers them holding together on the path a real page
-      // takes first.
+      // Un-normalised, "" !== null reads as movement, so a fresh checkout's
+      // first stray blur pins a country onto a capture that does not exist.
+      // A CONJUNCTION test: no single revert breaks it — the two above cover
+      // each guard alone, this one covers them holding together.
       initializeCheckout();
       ctx.$("#billing_country").val("ES");
 
@@ -1142,16 +1095,17 @@ describe("billing country switch", () => {
   });
 
   describe("the search country is read live, not captured (TWO-24867)", () => {
-    test("a widget built under GB searches ES after the field changes", () => {
-      // The widget is deliberately NOT rebuilt between the two searches: it
+    test("a panel built under GB searches ES after the field changes", () => {
+      // The panel is deliberately NOT rebuilt between the two searches: it
       // survives a country change on every path that does not go through
       // clearSelectedCompany, which is where the captured-closure bug bit.
-      const params = ctx.helper.genSelectWooParams();
-      harness.openCompanyWidget(ctx.$, ctx.helper);
+      harness.openCompanyPanel(ctx.$, ctx.helper);
 
-      const before = params.ajax.url({ term: "example", page: 0 });
+      typeCompanyQuery("example");
+      const before = ajax.last().url;
       ctx.$("#billing_country").val("ES");
-      const after = params.ajax.url({ term: "example", page: 0 });
+      typeCompanyQuery("ejemplo");
+      const after = ajax.last().url;
 
       expect(before).toContain("country=GB");
       expect(after).toContain("country=ES");

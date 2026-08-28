@@ -27,9 +27,9 @@ function buildForm() {
     '    <option value="GB" selected>GB</option><option value="NO">NO</option>',
     "  </select>",
     '  <p id="billing_company_display_field">',
-    '    <select id="billing_company_display" name="billing_company_display">',
-    '      <option value="">&nbsp;</option>',
-    "    </select>",
+    '    <span class="woocommerce-input-wrapper">',
+    '      <input type="text" id="billing_company_display" name="billing_company_display" value="" />',
+    "    </span>",
     "  </p>",
     '  <p id="billing_company_field">',
     '    <span class="woocommerce-input-wrapper">',
@@ -65,7 +65,7 @@ describe("TWO-40 §5 — captured-company write path", () => {
   });
 
   afterEach(() => {
-    harness.releaseWidgets(ctx.$);
+    harness.releasePanel(ctx.helper);
     document.body.innerHTML = "";
   });
 
@@ -225,8 +225,8 @@ describe("TWO-40 §5 — captured-company write path", () => {
     });
 
     test("a restored user-meta capture survives the buyer's first keystroke elsewhere", () => {
-      // The regression the helper exists to prevent: user-meta restore used to
-      // write both fields raw, leaving an untagged pair the guard then wiped.
+      // A restore that wrote both fields raw would leave an untagged pair the
+      // retype guard then wipes.
       ctx.twoinc.billing_company = "ACME Widgets Ltd";
       ctx.twoinc.company_id = "12345678";
       ctx.dom.loadUserMetaInputs();
@@ -275,16 +275,15 @@ describe("TWO-40 §5 — captured-company write path", () => {
     });
   });
 
-  describe("the picker's own select handler", () => {
+  describe("the panel's own selection handler", () => {
     test("goes through the single write path", () => {
       const ajax = harness.stubAjax($);
+      // `onPick` is what the panel's `onSelect` callback calls with the row.
       ctx.Twoinc.getInstance().enableCompanySearch();
-      $("#billing_company_display").append(
-        '<option value="ACME Widgets Ltd" selected>ACME Widgets Ltd</option>'
-      );
-      $("#billing_company_display").trigger({
-        type: "select2:select",
-        params: { data: { id: "ACME Widgets Ltd", company_id: "12345678" } }
+      ctx.helper.onPick({
+        id: "ACME Widgets Ltd",
+        text: "ACME Widgets Ltd",
+        company_id: "12345678"
       });
       ajax.restore();
 
@@ -345,11 +344,8 @@ describe("TWO-40 §5 — captured-company write path", () => {
     });
 
     test("a plugin-written name is dropped by a country change, a typed one is not", () => {
-      // The provenance marker's production consumer (TWO-40 §5).
-      // `clearSelectedCompany` used to gate this on the capture-mode flag,
-      // which got the sole-trader case wrong: that name is plugin-written but
-      // reaches the clear with the flag reading "no", so it survived a country
-      // change that had already taken its organisation number.
+      // The provenance marker's production consumer (TWO-40 §5): a sole trader's
+      // name is plugin-written, whatever the capture-mode flag reads.
       capture.write("Sole Trader Co", "TWO:ST12345");
       ctx.helper.clearSelectedCompany();
       expect($("#billing_company").val()).toBe("");

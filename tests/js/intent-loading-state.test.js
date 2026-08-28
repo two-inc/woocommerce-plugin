@@ -13,7 +13,7 @@
  * every route into a check passes through. Four of the five routes —
  * `setSoleTraderCompany()`, `onCompanyInputBlur()`,
  * `onRepresentativeInputBlur()` and `onCountryChange()` — cleared nothing at
- * all, and the fifth (the company picker's `select2:select`) still left a
+ * all, and the fifth (the company picker's own select handler) still left a
  * second of stale verdict on screen because the check is armed on a 1s
  * interval. So the assertions below are deliberately about `getApproval()`
  * and the interval's own ticks rather than about any one caller: a new route
@@ -77,7 +77,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
   });
 
   afterEach(() => {
-    harness.releaseWidgets($);
+    harness.releasePanel(ctx.helper);
     jest.clearAllTimers();
     jest.useRealTimers();
     document.body.innerHTML = "";
@@ -322,11 +322,8 @@ describe("order-intent loading state and stale-verdict clearing", () => {
 
   describe("a checkout re-render clears the verdict, not the loading state", () => {
     test("updateElements() does not blink off a loader for a request in flight", () => {
-      // `updateElements()` runs on every `updated_checkout`, which WooCommerce
-      // fires for a shipping-method change or a coupon — neither of which has any
-      // bearing on a request already outstanding. The blanket hide-every-pay-box
-      // that used to be here blinked the spinner off mid-request and left the tile
-      // blank until the response landed (review round 5).
+      // `updateElements()` runs on every `updated_checkout` — a coupon, a
+      // shipping change — none of which bears on a request already outstanding.
       const ajax = harness.stubAjax($);
       try {
         issueACheck(ajax);
@@ -623,20 +620,11 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     });
 
     test("a cart total of ZERO gives up too, and posts nothing", () => {
-      // The give-up tests claimed this case in their comments from round 1 and only
-      // ever exercised MISSING markup, so it is pinned here for the first time.
-      //
-      // Worth knowing WHY narrowing `!gross_amount` to `gross_amount === undefined`
-      // does not fail: `getPrice()` cannot return 0. `getPriceRecursively()` gates its
-      // recursion on `if (val)`, so a text node reading "0.00" is discarded as falsy
-      // and the walk falls through to `undefined` — verified directly, a 0.00 total and
-      // absent totals markup are indistinguishable at that boundary. The mutation is
-      // therefore equivalent, not a gap.
-      //
-      // The behaviour that leaves is a real, PRE-EXISTING one and this test records it:
-      // a fully-discounted order can never obtain an order-intent verdict. Out of scope
-      // to change here — it lives in `getPrice`, which this branch does not touch — and
-      // reported for its own ticket.
+      // `getPrice()` cannot return 0: `getPriceRecursively()` gates on `if
+      // (val)`, so "0.00" is discarded as falsy and the walk falls through to
+      // undefined — a zero total and absent markup are indistinguishable there.
+      // The pre-existing consequence this records: a fully-discounted order can
+      // never obtain a verdict. Its own ticket, in `getPrice`.
       const ajax = harness.stubAjax($);
       try {
         $(".order-total .woocommerce-Price-amount").text("0.00");
@@ -655,13 +643,9 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     });
 
     test("no readable cart total gives up rather than spinning forever", () => {
-      // Absent totals markup — a theme `getPrice()` cannot read. The zero-total cart
-      // is its own test above; this comment used to claim both and cover only this one
-      // (review round 8). The interval retried indefinitely for either — a leaked 1s
-      // timer for the life of the page, keeping `pendingCheck` alive with it
-      // (review round 1).
-      // No loader is involved: it goes up with the request, which is downstream of
-      // reading the total.
+      // Absent totals markup — a theme `getPrice()` cannot read. Retrying leaks a
+      // 1s timer for the life of the page and keeps `pendingCheck` alive with it.
+      // No loader is involved: it goes up with the request, downstream of this.
       const ajax = harness.stubAjax($);
       try {
         $(".order-total").remove();
@@ -703,10 +687,8 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     }
 
     test("the cached branch clears the timer and the pendingCheck flag", () => {
-      // It used to return with the interval still armed, which left
-      // `pendingCheck` permanently true — the guard in getApproval() sets it
-      // whenever an interval exists, and nothing could ever clear it. The 3s
-      // poller in initialize() then re-entered getApproval() indefinitely.
+      // A cached branch returning with the interval armed pins `pendingCheck`
+      // true for good, and initialize()'s 3s poller then re-enters for ever.
       const ajax = harness.stubAjax($);
       try {
         completeADeclinedCheck(ajax);
@@ -776,14 +758,9 @@ describe("order-intent loading state and stale-verdict clearing", () => {
   });
 
   describe("the ways a check ends without a response", () => {
-    // Driven through the REAL delegated handlers, not by calling
-    // abandonOrderIntentCheck() directly: the defect being fixed is that those
-    // two handlers disarmed the timer and said nothing about the UI, so a test
-    // that calls the method itself would pass with the handlers still wired to
-    // the old inline three lines.
-    //
-    // `initialize()` needs two things this suite's fixture does not otherwise
-    // have: the `#order_review` gate it returns on, and the gateway radio by id.
+    // Driven through the REAL delegated handlers: calling
+    // abandonOrderIntentCheck() directly passes however the handlers are wired.
+    // `initialize()` needs the `#order_review` gate and the gateway radio by id.
     let ajax;
 
     beforeEach(() => {
@@ -801,7 +778,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
           GATEWAY_ID +
           "' checked />"
       );
-      // initialize() builds a real selectWoo widget whose transport would reach
+      // initialize() builds the real search panel, whose transport would reach
       // for the network, and arms its own 1s bootstrap pass.
       ajax = harness.stubAjax($);
       instance.initialize(false);
@@ -989,11 +966,8 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     });
 
     test("abandoning the check cancels a pending paint, so no verdict lands afterwards", () => {
-      // The wait used to be held in a local, unreachable from
-      // abandonOrderIntentCheck(): a Place Order click reset the tile and an
-      // orphan copy of the wait then painted a verdict back onto a checkout
-      // already mid-submit, with the gateway radio already deselected (review
-      // round 2).
+      // A wait held in a local is unreachable from abandonOrderIntentCheck(), and
+      // paints its verdict back onto a checkout already mid-submit.
       const ajax = harness.stubAjax($);
       try {
         blockCheckout();
@@ -1017,13 +991,9 @@ describe("order-intent loading state and stale-verdict clearing", () => {
 
   describe("the loading state is never handed to a check that has not asked yet", () => {
     test("a stuck-overlay give-up does not raise the loader for a merely ARMED check", () => {
-      // The give-up used to hand the tile to a check that was only armed — no request
-      // issued — and raise the loader for it. That check then died in the cart-total
-      // give-up, which disarms with NO UI touch because it is entitled to assume no
-      // loading state of its own is up. Nothing could lower it afterwards:
-      // `clearIntentVerdicts()` excludes the loader, and the abandon gate reads false
-      // on every flag. On exactly the carts the bound exists for, the spinner stuck
-      // for the rest of the page (review round 7).
+      // A loader raised for a merely ARMED check can never come down: the
+      // cart-total give-up disarms with no UI touch, `clearIntentVerdicts()`
+      // excludes the loader, and the abandon gate reads false on every flag.
       const ajax = harness.stubAjax($);
       try {
         $(document.body).append('<div id="payment"><div class="blockOverlay"></div></div>');
@@ -1054,15 +1024,9 @@ describe("order-intent loading state and stale-verdict clearing", () => {
   describe("what gets cached, and against which request", () => {
     test("a superseded response is ignored outright — not painted, not cached", () => {
       // The interval is disarmed BEFORE the request goes out, so a second check
-      // can be armed while the first is in flight, and the two can arrive in
-      // either order.
-      //
-      // Round 2 fixed only the FILING of this (the hash used to be one shared
-      // slot, so the first response was cached under the second body). Round 3
-      // found the older response was still being ACTED on: arriving last it won,
-      // and the buyer read a verdict about a cart they had already changed. So
-      // the assertion is not "two entries" any more — it is that the stale answer
-      // has no effect at all, and only the newest one paints.
+      // can be armed while the first is in flight and the two can arrive in
+      // either order. What is asserted is that the stale answer has no effect at
+      // all, not merely that it is filed separately.
       const ajax = harness.stubAjax($);
       try {
         instance.getApproval();
@@ -1070,11 +1034,8 @@ describe("order-intent loading state and stale-verdict clearing", () => {
         expect(ajax.calls.length).toBe(1);
 
         // A different cart total, so the two checks are genuinely different
-        // questions. Note this test proves SUPERSESSION, not hash separation —
-        // nothing is cached until a response settles, so it passes either way if
-        // the two share a hash (review round 4). Hash separation is not something
-        // this suite can pin, and the filing it used to guard is now moot: a
-        // superseded response is never filed at all.
+        // questions. This proves SUPERSESSION, not hash separation — nothing is
+        // cached until a response settles.
         $(".order-total .woocommerce-Price-amount").text("250.00");
         instance.getApproval();
         jest.advanceTimersByTime(1000);
@@ -1086,9 +1047,8 @@ describe("order-intent loading state and stale-verdict clearing", () => {
         expect(shown(".twoinc-err-payment-default")).toBe(true);
         expect(Object.keys(instance.orderIntentLog).length).toBe(1);
 
-        // The superseded one settles afterwards, approving. Before round 3 this
-        // repainted the tile as APPROVED — the buyer would have been told a cart
-        // total they no longer had was fine.
+        // The superseded one settles afterwards, approving: repainting the tile
+        // would tell the buyer a cart total they no longer have is fine.
         ajax.calls[0].succeed({ approved: true });
         jest.advanceTimersByTime(1000);
 
@@ -1102,16 +1062,10 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     });
 
     test("the request is issued with a timeout, so it cannot hang unbounded", () => {
-      // Named for what it asserts (review round 4): the CONFIG, not the
-      // behaviour. Both the loader coming down and the verdict appearing hang off
-      // the ajax handlers, and a request that never settles calls neither — so a
-      // hung connection meant "Checking availability" for the rest of the page.
-      // jQuery honours `timeout` by aborting the XHR, which is beyond this
-      // harness; what is assertable here is that the option is passed at all, and
-      // the settled-timeout path is covered by the transport-failure test below
-      // (production's `.fail` handler cannot distinguish a timeout from any other
-      // transport failure — it never reads `textStatus` — so a separate
-      // "timed out" test was a duplicate of it).
+      // The CONFIG, not the behaviour: jQuery honours `timeout` by aborting the
+      // XHR, which is beyond this harness, so all that is assertable is that
+      // the option is passed. The settled path is the transport-failure test
+      // below — production's `.fail` never reads `textStatus`.
       const ajax = harness.stubAjax($);
       try {
         instance.getApproval();
@@ -1126,15 +1080,10 @@ describe("order-intent loading state and stale-verdict clearing", () => {
 
     for (const status of [401, 403, 408, 429]) {
       test("a " + status + " means ask again, so it is not cached", () => {
-        // Round 2 cached the whole 4xx range as verdicts. These four mean "ask
-        // again" rather than "no" — a refreshable session or key, a server-side
-        // timeout, rate limiting — and caching one froze the decline in place for
-        // the rest of the page, because the cached branch issues no request
-        // (review round 3).
-        // No getApproval() preamble: it issued a real request under a different
-        // hash than the one under test, so it proved nothing (review round 4).
-        // The positive controls for "the guard is not just 'never cache'" are the
-        // 422 and the declining-200 tests below.
+        // These four mean "ask again", not "no" — caching one freezes the
+        // decline for the rest of the page, since the cached branch issues no
+        // request. The 422 and declining-200 tests below are the positive
+        // controls against a blanket "never cache".
         instance.processOrderIntentResponse({ approved: false, status: status }, "h", true);
 
         expect(instance.orderIntentLog["h"]).toBeUndefined();
@@ -1413,16 +1362,9 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     });
 
     test("a country change retires the request issued under the old country", () => {
-      // The request carries the company AND the country it was captured under, so
-      // an answer for the outgoing country would land on a tile whose company the
-      // country handler has just cleared, and approve or decline an order that no
-      // longer exists (review round 5).
-      //
-      // What retires it is the readiness guard in getApproval(): the country
-      // handler resets `customerCompany` wholesale via clearSelectedCompany() and
-      // then calls getApproval(), which finds an incomplete form. Asserted as the
-      // outcome rather than the mechanism, so it holds whichever way that is
-      // arranged.
+      // An answer for the outgoing country would approve or decline an order
+      // that no longer exists. Asserted as the outcome, not the mechanism
+      // (today, getApproval()'s readiness guard on a wholesale-cleared record).
       const ajax = harness.stubAjax($);
       try {
         // Seed the country tracker. Unseeded, the FIRST country it sees is adopted
@@ -1525,16 +1467,11 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     });
 
     test("a whitespace-only company name is no name, not a blank-prefixed label", () => {
-      // What this pins is `formatCompanyLabel()`'s OWN blank-collapse. The
-      // `blankToEmpty()` call in `readCompanyLabelFromDom()` is redundant against it
-      // — removing that call changes nothing, an equivalent mutation, which is why
-      // round 6's sweep saw it survive. Kept there anyway to honour
-      // `getCompanyLabelText()`'s documented "already blank-collapsed" contract, and
-      // recorded here so the survival is not read as a coverage hole.
-      // Set on the RECORD, not the input: the label is read from `customerCompany` now,
-      // the same source the request body is built from (review round 8). A
-      // whitespace-only name still passes `isReadyApprovalCheck()` — truthy, non-zero
-      // length — so this stays reachable.
+      // `formatCompanyLabel()`'s OWN blank-collapse — `readCompanyLabelFromDom`'s
+      // `blankToEmpty()` is redundant against it, kept only to honour
+      // `getCompanyLabelText()`'s documented contract. Set on the RECORD, the
+      // source the request body is built from; a whitespace-only name still
+      // passes `isReadyApprovalCheck()`, so this stays reachable.
       const ajax = harness.stubAjax($);
       try {
         instance.customerCompany.company_name = "   ";
@@ -1551,16 +1488,11 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     });
 
     test("an empty snapshot is honoured, not replaced by a live read", () => {
-      // A UNIT test, because sourcing the label from `customerCompany` made this
-      // unreachable end to end (review round 8): `isReadyApprovalCheck()` refuses to
-      // issue a request unless every field of the record is non-empty, so a request in
-      // flight always has a company. That is a better invariant than the one this used
-      // to assert against blanked DOM inputs — but the contract still has to hold,
-      // because it is what stops a live re-read at paint time substituting whatever
-      // company the buyer has moved to by then.
-      //
-      // `typeof`, not truthiness: "" means "no company recorded when the request went
-      // out", and the served no-company sentence is the right output for that.
+      // A UNIT test: `isReadyApprovalCheck()` makes this unreachable end to end,
+      // but the contract still has to hold — it is what stops a live re-read at
+      // paint time substituting whatever company the buyer has moved to.
+      // `typeof`, not truthiness: "" is a recorded absence, and the no-company
+      // sentence is the right output for it.
       $("#billing_company").val("Beta Traders Ltd");
       $("#company_id").val("87654321");
 
@@ -1790,7 +1722,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
   });
 
   describe("picking a company does not blank a live loader", () => {
-    test("select2:select clears the verdict and leaves an in-flight loader up", () => {
+    test("a pick clears the verdict and leaves an in-flight loader up", () => {
       // The picker's own handler blanket-hid before calling `getApproval()`, which
       // only ARMS — so the spinner for a request already in flight went down and the
       // replacement was a second away. Mutation, not review, is what proved this
@@ -1805,14 +1737,8 @@ describe("order-intent loading state and stale-verdict clearing", () => {
         revealVerdictBox(".twoinc-err-payment-default");
 
         instance.enableCompanySearch();
-        // The <option> select2's array adapter would append for a chosen result.
-        $("#billing_company_display").append(
-          '<option value="Beta Traders Ltd" selected>Beta Traders Ltd</option>'
-        );
-        $("#billing_company_display").trigger({
-          type: "select2:select",
-          params: { data: { id: "Beta Traders Ltd", company_id: "87654321" } }
-        });
+        // `onPick` is what the panel's own `onSelect` calls for a chosen row.
+        ctx.helper.onPick({ id: "Beta Traders Ltd", company_id: "87654321" });
 
         // The checkout still shows that it is working. Under the blanket hide this
         // was false, and stayed false until the replacement request went out a
@@ -1826,11 +1752,10 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     });
   });
 
-  describe("the company-field change handlers", () => {
-    // Both handlers are bound in `initialize()`, and BOTH were entirely untested:
-    // swapping either to the blanket hide, and deleting either's clear outright, all
-    // survived the whole suite (review round 6, found by mutation). One of them is
-    // the manual-entry path a buyer actually types into.
+  describe("the company-field change handler", () => {
+    // Bound in `initialize()` and entirely untested: swapping it to the blanket
+    // hide, and deleting its clear outright, both survived the whole suite (review
+    // round 6, found by mutation). It is the manual-entry path a buyer types into.
     let ajax;
 
     beforeEach(() => {
@@ -1865,21 +1790,19 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       $(document.body).off();
     });
 
-    for (const target of ["#select2-billing_company_display-container", "#billing_company"]) {
-      test("a change on " + target + " clears the verdict and keeps the loader", () => {
-        issueACheck(ajax);
-        revealVerdictBox(".twoinc-err-payment-default");
+    test("a change on #billing_company clears the verdict and keeps the loader", () => {
+      issueACheck(ajax);
+      revealVerdictBox(".twoinc-err-payment-default");
 
-        $(target).trigger("change");
+      $("#billing_company").trigger("change");
 
-        expect(shown(".twoinc-err-payment-default")).toBe(false);
-        // Positive control, since `shown()` is false for an absent box too.
-        expect($(".twoinc-pay-box.twoinc-err-payment-default").length).toBe(1);
-        // And the spinner for the request still in flight is untouched — the blanket
-        // hide took it down, with nothing to put it back until the next request.
-        expect(shown(".twoinc-loader")).toBe(true);
-      });
-    }
+      expect(shown(".twoinc-err-payment-default")).toBe(false);
+      // Positive control, since `shown()` is false for an absent box too.
+      expect($(".twoinc-pay-box.twoinc-err-payment-default").length).toBe(1);
+      // And the spinner for the request still in flight is untouched — the blanket
+      // hide took it down, with nothing to put it back until the next request.
+      expect(shown(".twoinc-loader")).toBe(true);
+    });
   });
 
   describe("clearSelectedCompany's deferred re-read", () => {
@@ -1943,9 +1866,8 @@ describe("order-intent loading state and stale-verdict clearing", () => {
     });
 
     test("a capture inside the window is left alone, because the DOM is its source", () => {
-      // No capture path bumps `companySearchSeq` — `select2:select`, sole trader and
-      // manual entry all write `customerCompany` and the two mirror inputs and bump
-      // nothing (review round 5 flagged this as only incidentally guarded).
+      // No capture path bumps `companySearchSeq` — a registry pick, sole trader and
+      // manual entry all write `customerCompany` and the two mirror inputs only.
       //
       // It needs no bump: every capture mode writes `#billing_company` and
       // `#company_id`, which is exactly what the re-read reads back, so the re-read
@@ -1993,11 +1915,8 @@ describe("order-intent loading state and stale-verdict clearing", () => {
       // The guard must not be so broad that the re-read never happens — putting the
       // country prefix back is what it exists for.
       //
-      // Asserted on the NUMBER and the country, not the name: with company search
-      // on, `getCompanyData()` reads the name out of the select2 container via the
-      // checkout-inputs snapshot rather than from `#billing_company`, so the name
-      // is not a usable signal here. The number comes straight from `#company_id`.
-      // Written after the clear, which empties those fields itself, and with the
+      // Asserted on the NUMBER and the country: both come straight from the DOM,
+      // written after the clear, which empties those fields itself, and with the
       // counter left alone so nothing supersedes the re-read.
       ctx.helper.clearSelectedCompany();
       instance.customerCompany = {};
@@ -2394,23 +2313,12 @@ describe("order-intent loading state and stale-verdict clearing", () => {
   });
 
   describe("the stylesheet paints what the classes promise", () => {
-    // Against jsdom's REAL cascade rather than a grep over the CSS source
-    // (review round 1). Three mutations passed a source-text check and fail
-    // here: commenting out a declaration, adding a later overriding rule, and
-    // wrapping a rule in an at-rule.
-    //
-    // TWO known gaps, both of which have already produced a green-but-wrong
-    // assertion in this file, so do not assume a third one is safe:
-    //
-    //  - jsdom does NOT honour `!important` from an EARLIER rule. It resolved
-    //    `.twoinc-loader.hidden` as `display: flex`, because the blanket
-    //    `.hidden { display: none !important }` sits at the top of the
-    //    stylesheet and the loader's `display: flex` below it — so the layout
-    //    assertion below was measuring a state that never exists in a browser.
-    //    Hence `unhidden()`, and hence the loader's own two-class hiding rule.
-    //  - it does not lay out or animate anything. Whether the box is visible,
-    //    whether the GIF moves — beyond this suite, needs a real browser. See
-    //    the known gaps in tests/js/README.md.
+    // Against jsdom's REAL cascade, not a grep over the CSS source: commenting
+    // out a declaration, a later overriding rule and an at-rule wrapper all
+    // pass a source-text check. Two known gaps, both of which have already
+    // produced a green-but-wrong assertion here — jsdom does not honour
+    // `!important` from an EARLIER rule (hence `unhidden()`), and it lays out
+    // and animates nothing. See the known gaps in tests/js/README.md.
     let injected;
 
     beforeEach(() => {

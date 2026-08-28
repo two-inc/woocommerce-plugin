@@ -351,95 +351,16 @@
 }
 
 /*
- * The "Enter manually" mode chip (TWO-25288, restyled as a chip TWO-40 §0).
- * Visual styling (pill shape, colours, focus-safe font/cursor) now comes
- * from the shared `.twoinc-mode-chip` class this button also carries — see
- * that rule. This id-selector rule survives ALONE for one property: round
- * 2's `text-transform: none !important` (#30.x.5), which a host theme's own
- * `button { text-transform: uppercase !important; }` styling can otherwise
- * still beat by importance regardless of specificity. Kept as a flat
- * single-id selector, same as `#search_company_btn` below, so a brand
- * overlay recolouring it keeps matching without raising its own specificity.
- */
-#company_not_in_btn {
-  text-transform: none !important;
-}
-
-/*
- * FOCUS only, deliberately not hover (TWO-40): a flat single-id selector
- * outbids the host theme's own `button:hover`, so this was the one mode chip
- * the store's brand colour could not reach — the other two carry only the
- * shared `.twoinc-mode-chip` class and fall through to the theme. Hover is
- * the theme's to paint, identically for all three.
+ * The link back out of manual entry, in normal block flow as the wrapper's
+ * last child so it sits below the input rather than over it.
  *
- * The fill stays on `:focus`, which is what it was added for (#30.x.7:
- * tabbing landed here with no visible sign of it).
- */
-#company_not_in_btn:focus {
-  background-color: #f2f4fd;
-  outline-offset: -2px;
-}
-
-/*
- * The link back out of manual entry. A <button> now, for keyboard
- * reachability, so the browser's button chrome has to be reset for it to look
- * like the link it did before.
+ * `width: 100%` is what makes `text-align: end` mean anything: a <button> is a
+ * form control and shrink-wraps at `width: auto` even when blockified.
+ * `text-transform: none !important` because a host theme's own button rule is
+ * routinely `!important` itself.
  *
- * `text-transform: none !important` is new (round 3, #30.x.5.1). Round 2 only
- * added this to #company_not_in_btn, on the reasoning that becoming a real
- * `<button>` (since #416) made it a target for a host theme's own
- * `button { text-transform: uppercase }` styling. That reasoning applies
- * exactly as much to THIS button — it has been a real `<button>` since the
- * same PR — but the override was never added here, so a theme's `!important`
- * button rule kept winning on this element specifically while the other one
- * was already fixed. Same fix, same reason, just missed the first time.
- *
- * Appended into `.woocommerce-input-wrapper` (WooCommerce core's own wrapper
- * around just the <input>, no label inside it — see `getSearchCompanyBtnNode`
- * in twoinc.js), the same container round 3 (#30.x.5.3) introduced. That
- * round centred the button with `position: absolute; top: 50%; transform:
- * translateY(-50%)` against the wrapper, which lined it up vertically with
- * the input but placed it ON TOP of it, right-pinned 4px from the edge —
- * overlapping the input itself. Reported live (#30.x.9, Doug's canonical
- * cross-platform ruling): that overlap is exactly the "search-again link
- * renders inside/over the field" bug. With the absolute positioning removed
- * the button falls into NORMAL block flow as the wrapper's last child — i.e.
- * immediately below the input, inside the same box the input's own border
- * defines. Matches the pattern Magento/Luma (`magento-plugin`
- * `.search_for_company`) and Hyvä already use: a plain block appended after
- * the field, right-aligned, no absolute positioning.
- *
- * `width: 100%` is still required for `text-align: end` to mean anything
- * (round 2 review — Vader, correcting round 1): a `<button>` is a form
- * control, and form controls use intrinsic (shrink-to-fit) sizing at
- * `width: auto` REGARDLESS of `display: block` — unlike an ordinary
- * element, which fills its containing block at `width: auto` once
- * blockified. Round 1 deleted `width: 100%` believing `display: block`
- * alone was sufficient (the same belief `#company_not_in_btn`'s own
- * comment above already contradicts: "`display: block` + full width keeps
- * it filling the dropdown"). Without it, this button shrink-wraps its own
- * label and sits at the input's LEFT edge — `text-align: end` becomes a
- * no-op on a box already exactly the text's width, silently reintroducing
- * a left-aligned link where the design calls for right-aligned. `box-
- * sizing: border-box` is what round 1's original concern (no global
- * border-box guaranteed in this stylesheet — verified, zero hits) actually
- * needed: it keeps `width: 100%` + this rule's own padding/border from
- * overflowing the containing block by 6px, without giving up the width
- * declaration itself.
- *
- * The wrapper itself gets an explicit `display: block` (round 1 review —
- * Han/Vader, convergent), replacing the `position: relative` this rule used
- * to carry for the absolute button. `.woocommerce-input-wrapper` is a
- * `<span>` — inline by default — and this repo has no control over what a
- * host theme declares for it; a theme that happens to set it to
- * `display: flex` would put the button back on the same line as the input
- * at `width: 100%`, silently re-creating the overlap this change removes.
- * Declaring `display: block` here, at the same specificity this plugin
- * already uses to reason about this wrapper, removes that dependency on
- * whatever the host theme leaves undeclared. `position: relative` is kept
- * alongside it, at zero cost, purely so this element's positioning context
- * doesn't silently change out from under some theme-supplied decoration
- * nobody here can see.
+ * The wrapper is a `<span>`, inline by default, and a theme that made it
+ * `display: flex` would put the button back on the input's own line.
  */
 #billing_company_field .woocommerce-input-wrapper {
   display: block;
@@ -602,26 +523,13 @@
 }
 
 /*
- * Company-search spinner (TWO-25232, respun TWO-25288). Sits inside the
- * select2 search field itself, not in the results list, so it reads as "this
- * field is working" and does not fight the results message it would otherwise
- * replace. The reserved right-hand gutter is only laid out while
- * .twoinc-searching is set, so it appears with the spinner instead of
- * permanently narrowing the input.
+ * The sole-trader in-flight spinner, painted over the company-NAME field.
  *
- * The motion comes from an animated GIF — the same loading GIF the PrestaShop
- * plugin already ships — painted as a background-image on one childless node.
- * A background-image, not an <img>: the URL then resolves relative to this
- * stylesheet, so no asset URL has to be plumbed through the platform's asset
- * helper and into the markup. No inner markup either, so there is nothing for
- * the stylesheet to stay in step with.
- *
- * Sized at a fixed 16px because the asset is natively 16x16; scaling it with
- * an em-relative box would blur it.
+ * The motion comes from an animated GIF painted as a background-image on one
+ * childless node: the URL then resolves relative to this stylesheet, so no
+ * asset URL has to be plumbed into the markup. Fixed 16px because the asset is
+ * natively 16x16 and scaling it only blurs it.
  */
-.select2-search--dropdown.twoinc-searching {
-  position: relative;
-}
 .twoinc-search-spinner {
   display: inline-block;
   position: absolute;
@@ -635,20 +543,16 @@
   background-position: center;
   background-size: 16px 16px;
 }
-.select2-search--dropdown.twoinc-searching .select2-search__field {
-  padding-right: 30px;
-}
-
 /*
  * The same spinner, over the company-NAME field, for the sole-trader flow
  * (Doug 2026-08-20 — see syncSoleTraderSpinner). Reuses .twoinc-search-spinner
  * above for the asset and the 16px box; only the positioning context and the
  * horizontal inset are per-host.
  *
- * The host is the input BOX (selectWoo's rendered selection, or WooCommerce's
- * own .woocommerce-input-wrapper around the native input), so the 50%-based
- * vertical centring above lands on the control rather than on the field's
- * label as well.
+ * The host is the input's own wrapper — the panel's `.two-company-field-wrap`,
+ * or WooCommerce's `.woocommerce-input-wrapper` around the native input — so
+ * the 50%-based vertical centring above lands on the control rather than on
+ * the field's label as well.
  */
 .twoinc-name-searching {
   position: relative;
@@ -662,77 +566,17 @@
 .woocommerce-input-wrapper.twoinc-name-searching {
   display: block;
 }
-/*
- * Clear of selectWoo's own dropdown arrow, which owns the right edge of the
- * rendered selection (.select2-selection__arrow, right: 1px, 20px wide), and
- * the company name kept clear of the spinner in turn.
- */
-.select2-selection.twoinc-name-searching > .twoinc-sole-trader-spinner {
-  right: 32px;
-}
-.select2-selection.twoinc-name-searching .select2-selection__rendered {
-  padding-right: 48px;
-}
 .woocommerce-input-wrapper.twoinc-name-searching > input {
   padding-right: 30px;
-}
-
-/*
- * Company-search placeholder / selected-value text (#30.x.5, round 2).
- *
- * Some host themes apply a blanket `text-transform: uppercase` broad enough
- * to catch select2's own rendered span, and give the selection box a custom
- * height with no matching `.select2-selection__rendered` line-height —
- * leaving the placeholder text a few pixels above true vertical centre.
- * Scoped to this one field's combobox so it never touches an unrelated
- * select2 instance a theme already renders correctly.
- *
- * Round 1 (first #30.x.5) set `text-transform: none` and `line-height:
- * normal` here, plus `display: flex; align-items: center` on the PARENT
- * `.select2-selection--single`. Two gaps, reported back live:
- *
- *  - `text-transform: none` with no `!important` loses to any host theme rule
- *    that is itself `!important` — routine for theme form-control styling.
- *    Escalated deliberately rather than hoping a bare declaration outranks a
- *    rule this stylesheet never sees.
- *  - Flex-centring the PARENT only centres the `.select2-selection__rendered`
- *    BOX within it; it does nothing for text sitting off-centre WITHIN that
- *    box, which is what a theme-supplied height + mismatched line-height on
- *    the rendered span itself produces. The rendered span is now a flex
- *    container in its own right too, with `height: 100%` so it always fills
- *    whatever height the parent (and by extension the theme) gives it,
- *    instead of assuming a fixed line-height.
- *
- * Known limitation, not fixed here: `height: 100%` only resolves against a
- * PARENT with a definite (fixed or otherwise resolved) height. A theme that
- * gives `.select2-selection--single` only a `min-height` (content-driven auto
- * height, no fixed value) leaves this `100%` computing to `auto`, and this
- * fix quietly does nothing extra for that theme — the parent-level
- * flex-centring above still applies regardless, so the box itself still
- * centres; only the "fill whatever height the theme gives it" refinement for
- * a taller-than-content rendered span is theme-dependent. No way to verify
- * this against every host theme from here; flag if it recurs.
- */
-#billing_company_display_field .select2-selection--single {
-  display: flex;
-  align-items: center;
-}
-#billing_company_display_field .select2-selection__rendered {
-  display: flex;
-  align-items: center;
-  height: 100%;
-  text-transform: none !important;
-  line-height: normal;
-  padding-right: 3px;
 }
 
 /* Sole trader toggle (TWO-24754) */
 /*
  * The signup-prompt note + in-flight error only (TWO-40 §0 correction). The
- * mode CHIPS themselves render inside the company-search dropdown — see
- * `.twoinc-mode-chips`/`.twoinc-mode-chip` below — never in this
- * always-present payment-tile slot; this was the same DOM-placement defect
- * ported wrong twice before this correction.
+ * mode CHIPS themselves render inside the company-search panel — see
+ * `.two-company-mode-chips` below — never in this always-present payment-tile
+ * slot; this was the same DOM-placement defect ported wrong twice before this
+ * correction.
  */
 .twoinc-sole-trader-note-slot {
   margin: 12px 0;
@@ -766,44 +610,161 @@
   display: none;
 }
 /*
- * Mode chips (TWO-40 §0): `.two-company-mode-chips` equivalent, one wrapper
- * level in from the company-search dropdown — see
- * twoincSelectWooHelper.syncManualEntryButton() in twoinc.js, which is the
- * ONE place these render, as children of the dropdown's own results panel,
- * never as a separate persistent tile. Palette mirrors the Magento
- * .mode_selector / .mode_item toggle this replaces: brand-blue text on
- * white for the unselected chip, solid brand blue with white text when
- * selected — selection is cosmetic only, never a visibility mechanism.
+ * The company-capture popover (TWO-25503), the structure PrestaShop and
+ * Magento already render: one anchored panel whose three children are the
+ * query row, the results host and the mode chips, and which is a real DOM
+ * child of the wrapper around the company-name input. Because it is a child
+ * and not a body-appended layer, the browser's own tab order walks the control
+ * the way it reads and no key handling is needed to make Tab behave.
+ *
+ * Class names and modifiers are the panel script's, not this stylesheet's —
+ * it is vendored verbatim, so a name changed here silently stops matching.
  */
-.twoinc-mode-chips {
+.two-company-field-wrap {
+  display: block;
+  position: relative;
+}
+
+/* This plugin's own, because a bare `.hidden` is a theme's to define or not,
+   and a chip that silently fails to hide offers a mode the country cannot
+   serve. */
+.two-hidden {
+  display: none !important;
+}
+
+/*
+ * The 8px gap and the shadow are what make the panel read as a floating
+ * control rather than a continuation of the input, matching PrestaShop.
+ *
+ * Anchored to the INPUT's height, not to `100%` of the wrapper: the wrapper
+ * also carries the sole-trader link in normal flow, so `100%` grows the moment
+ * one is adopted. `syncFieldWrapMetrics()` keeps the property current; the
+ * `100%` fallback is what a pre-measurement first paint gets.
+ */
+.two-company-dropdown {
+  position: absolute;
+  z-index: 9999;
+  top: calc(var(--two-company-input-height, 100%) + 8px);
+  left: 0;
+  right: 0;
+  box-sizing: border-box;
+  padding: 8px;
+  border: 1px solid #c4c9e8;
+  border-radius: 5px;
+  background: #fff;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
+}
+
+/* Makes the attribute authoritative even against a theme that resets
+   `[hidden]`. */
+.two-company-dropdown[hidden] {
+  display: none;
+}
+
+/* Anchors the spinner inside the query field. */
+.two-company-dropdown__search {
+  position: relative;
+}
+
+.two-company-dropdown__query {
+  box-sizing: border-box;
+  width: 100%;
+  /* Reserves the spinner's lane so a long query never runs underneath it. */
+  padding: 6px 34px 6px 10px;
+  border: 1px solid #c4c9e8;
+  border-radius: 3px;
+  font: inherit;
+  text-transform: none !important;
+}
+
+/*
+ * Shown only while a search is on the wire, via a modifier on the element
+ * itself rather than a parent state class: brand overlays hook this indicator
+ * with flat single-class rules and win only on load order at equal
+ * specificity.
+ */
+.two-company-dropdown__spinner {
+  display: none;
+  position: absolute;
+  top: calc(50% - 8px);
+  right: 12px;
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
+  background-image: url("../images/loader.gif");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 16px 16px;
+}
+
+.two-company-dropdown__spinner--active {
+  display: inline-block;
+}
+
+/* The scroll lives on the results host, so the chips below stay outside it and
+   are reachable without scrolling past up to 50 results. */
+.two-company-dropdown__results {
+  max-height: 240px;
+  overflow-y: auto;
+  margin-top: 8px;
+}
+
+/* The panel is only as wide as the company field, so a wrapped row runs to
+   three or four lines and gives the scroll container a horizontal scrollbar. */
+.two-company-dropdown__row {
+  padding: 6px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: none !important;
+}
+
+/* The API marks the matched substring with `mark`, whose UA default is a
+   yellow highlighter no theme here resets. */
+.two-company-dropdown__row mark {
+  background: transparent;
+  color: inherit;
+}
+
+.two-company-dropdown__row:hover,
+.two-company-dropdown__row--active {
+  background-color: #f0f2f5;
+}
+
+/* Too-short, or no matches. */
+.two-company-dropdown__message {
+  padding: 6px 10px;
+  color: #6b6b6b;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* The search being DOWN is a different answer from "your company is not here"
+   and must not read like it. */
+.two-company-dropdown__message--unavailable {
+  border-radius: 3px;
+  background: #fdf0d5;
+  color: #6f4900;
+}
+
+/*
+ * The chips, inside the panel and after the results — the tab order the DOM
+ * already describes, and the reason the panel exists in this shape at all.
+ * `white-space: normal` deliberately, not nowrap/ellipsis: a chip label may
+ * wrap onto two lines and must not truncate.
+ */
+.two-company-mode-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  padding: 6px 12px;
+  margin-top: 8px;
+  padding-top: 8px;
   border-top: 1px solid #eeeeee;
 }
-/*
- * Two chips per row, each filling half of it (item 4, live-reported by Doug:
- * content-width chips left visible slack to the right of the row). A 50%
- * flex-basis rather than PrestaShop's `flex: 1 1 auto` + `min-width`: that
- * one's arrangement falls out of however wide the field happens to be, and
- * this dropdown is as wide as whatever column the host theme gives the
- * billing form. A half-row basis pins the arrangement at every width —
- * "Registered company"/"Sole trader" on row one, "Enter manually" grown to
- * the full width of row two, and just the two chips sharing one row where
- * sole trader is unavailable.
- *
- * `box-sizing` spelled out because the basis depends on it: under
- * content-box the chip's own padding and border would sit OUTSIDE the half
- * row and push the second chip onto a line of its own. Buttons default to
- * border-box, so this only matters against a theme that resets it globally.
- *
- * `white-space: normal` + `word-break` deliberately, NOT nowrap/ellipsis
- * (TWO-40 spec: a chip label may wrap onto two lines, and must not
- * truncate). It also keeps a long label's min-content width from beating
- * the half-row basis on a narrow field.
- */
-.twoinc-mode-chip {
+
+.two-company-mode-chip {
   flex: 1 1 calc(50% - 8px);
   box-sizing: border-box;
   text-align: center;
@@ -819,11 +780,23 @@
   word-break: break-word;
   text-transform: none !important;
 }
-.twoinc-mode-chip--selected {
+
+.two-company-mode-chip--selected {
   color: #fff;
   background-color: #3043d1;
   border-color: #3043d1;
 }
+
+.two-company-mode-chip:focus {
+  outline-offset: -2px;
+}
+
+/* Tint only the unselected chips: `:focus` outranks `--selected`, so tinting
+   every chip leaves the selected one's white label on a near-white fill. */
+.two-company-mode-chip:not(.two-company-mode-chip--selected):focus {
+  background-color: #f2f4fd;
+}
+
 .twoinc-sole-trader-note {
   display: flex;
   align-items: center;
@@ -864,7 +837,7 @@
  * chips at all. Stacking a second signup popup is prevented by the
  * re-entrancy guard on the launch itself, which is where that belongs.
  */
-.twoinc-sole-trader-toggle--busy .twoinc-mode-chip {
+.twoinc-sole-trader-toggle--busy .two-company-mode-chip {
   cursor: progress;
 }
 

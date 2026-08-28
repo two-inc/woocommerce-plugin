@@ -5,7 +5,7 @@
  * magento-plugin's Test/Js/jest.config.js): config lives next to the tests,
  * rootDir points back at the repo root so tests read the shipped source files
  * by their real repo-relative paths, and jsdom supplies the document jQuery
- * and selectWoo need.
+ * and the company-search panel need.
  *
  * tests/e2e/ is a separate Playwright project with its own package.json, so
  * testMatch is deliberately narrow rather than a repo-wide glob.

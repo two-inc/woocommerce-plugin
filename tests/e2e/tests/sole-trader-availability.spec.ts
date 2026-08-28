@@ -27,8 +27,8 @@ test("sole trader mode chooser follows registry country support", async ({ page 
   await checkout.selectTwoPayment(page);
 
   const chips = page.locator(checkout.SOLE_TRADER_TOGGLE);
-  const businessChip = chips.locator(`${checkout.MODE_CHIP}[data-mode="business"]`);
-  const soleTraderChip = chips.locator(`${checkout.MODE_CHIP}[data-mode="sole_trader"]`);
+  const businessChip = chips.locator(`${checkout.MODE_CHIP}[data-two-chip="registered"]`);
+  const soleTraderChip = chips.locator(`${checkout.MODE_CHIP}[data-two-chip="sole_trader"]`);
 
   // GB is the store's default country and is sole-trader capable.
   await checkout.openCompanySearch(page);
@@ -37,15 +37,16 @@ test("sole trader mode chooser follows registry country support", async ({ page 
   await expect(soleTraderChip).toHaveText("Sole trader");
   // Registered company is the default mode, so an unattended business
   // checkout is unaffected by the chooser being present.
-  await expect(businessChip).toHaveClass(/twoinc-mode-chip--selected/);
-  await expect(soleTraderChip).not.toHaveClass(/twoinc-mode-chip--selected/);
+  await expect(businessChip).toHaveClass(/two-company-mode-chip--selected/);
+  await expect(soleTraderChip).not.toHaveClass(/two-company-mode-chip--selected/);
   await page.keyboard.press("Escape");
 
-  // Norway is not sole-trader capable: the group stays (business and manual
-  // entry are unaffected by country), only the sole-trader chip drops out.
+  // Norway's registry registers sole traders itself, so the chip is not
+  // offered there. The group stays — business and manual entry are unaffected
+  // by country.
   await checkout.setBillingCountry(page, "Norway");
   await checkout.openCompanySearch(page);
   await expect(chips).toBeVisible({ timeout: LONG_TIMEOUT });
   await expect(businessChip).toBeVisible();
-  await expect(soleTraderChip).toHaveCount(0);
+  await expect(soleTraderChip).not.toBeVisible();
 });

@@ -310,7 +310,7 @@ let twoincAddressMirror = {
 let twoincCompanyCapture = {
   /**
    * Which of the three company-capture UIs is the buyer's ACTIVE input surface
-   * (#486, Doug): `'search'` (the selectWoo registry picker, the default),
+   * (#486, Doug): `'search'` (the registry search panel, the default),
    * `'manual'` (the plain native `#billing_company`, reached only through
    * `enterManualCompanyEntry`) or `'sole_trader'` (the adopted/enrolled sole
    * trader, whose name the picker renders as its own selection — TWO-40 §7
@@ -490,31 +490,40 @@ let twoincCompanyCapture = {
 };
 
 /**
- * Company-search widget: search/dropdown/manual-entry/select2 lifecycle,
- * encapsulated (TWO-25326 architecture rebuild). Mirrors PrestaShop's
- * TwoCompanySearch — a single class owns the entire lifecycle, exactly one
- * construction site (below, `twoincSelectWooHelper`), never a second
- * implementation.
+ * Company capture control: the anchored popover from
+ * `assets/js/company-search-panel.js` — vendored verbatim from the Magento
+ * plugin, where it is maintained — plus everything WooCommerce-specific around
+ * it: the transport, the chips' meaning, the two mount points, manual entry and
+ * the read-only number label.
  *
- * Checkout-wide concerns adjacent to company search — field visibility per
- * account type, intent-message text, sole-trader mode — stay in
- * `twoincDomHelper` / `twoincSoleTrader` and call into this class's public
- * methods, the same way `Twoinc#enableCompanySearch()` does.
+ * DOM ORDER IS THE DESIGN. The panel is a real child of the wrapper around the
+ * company-name input, with exactly three children of its own — search row,
+ * results host, mode chips — so the browser's own tab order walks the control
+ * the way it reads and no key handling is needed to make Tab behave.
  */
 class TwoCompanySearch {
   /**
    * @param {Object} [options]
-   * @param {string} [options.companyFieldSelector] Defaults to
-   *   `#billing_company_display`, the id WooCommerce always renders it
-   *   under on this plugin's checkout.
+   * @param {string} [options.addressFieldSelector] company-name input in the
+   *   address form.
+   * @param {string} [options.tileFieldSelector] company-name input this class
+   *   builds inside the payment tile.
    */
   constructor(options) {
     options = options || {};
-    this.companyFieldSelector = options.companyFieldSelector || "#billing_company_display";
+    this.addressFieldSelector = options.addressFieldSelector || "#billing_company_display";
+    this.tileFieldSelector = options.tileFieldSelector || "#twoinc_tile_company_name";
   }
 
-  /** CSS selector of the <select> this instance attaches selectWoo to. */
-  companyFieldSelector;
+  /** The one panel instance, built on first `attach()`. */
+  panel = null;
+
+  /** The Twoinc singleton, so a pick can be written onto it. */
+  twoincInstance = null;
+
+  /** The jqXHR of the search currently on the wire, and the bind it belongs to. */
+  activeRequest = null;
+  activeToken = null;
 
   /**
    * Hard ceiling on a single company-search request, ms (TWO-25232).
@@ -526,63 +535,37 @@ class TwoCompanySearch {
 
   /**
    * Characters the buyer must type before company search runs (TWO-25288) —
-   * the single source of this threshold: minimumInputLength, the "not in the
-   * list" button visibility, and the min-chars hint all read it, so the
-   * number shown and the number enforced can't drift apart.
+   * the single source of this threshold: the panel's own gate and the
+   * min-chars hint both read it, so the number shown and the number enforced
+   * can't drift apart.
    */
   companySearchMinLength = 3;
 
-  /**
-   * The dropdown's own search field. select2 tears the dropdown down and
-   * rebuilds it on every open, so this node is never the same one twice —
-   * every use is a fresh lookup, every handler delegated.
-   */
-  companySearchInputSelector = 'input[aria-owns="select2-billing_company_display-results"]';
+  /** Debounce between the last keystroke and the request, ms. */
+  companySearchDebounceMs = 300;
 
-  /** DOM id of the manual-entry button. */
-  manualEntryRowId = "company_not_in_btn";
+  /** Companies asked for per search. */
+  companySearchLimit = 50;
 
   /** DOM id of the link back out of manual entry and into search. */
   searchCompanyBtnId = "search_company_btn";
 
-  /**
-   * DOM id of the mode-chips group (TWO-40 §0), sibling of the results list.
-   * Holds "Registered company", "Sole trader" (while available), and "Enter
-   * manually" (`manualEntryRowId`), in that order.
-   */
-  modeChipsWrapperId = "company_mode_chips";
+  /** Shared class on every chip inside the panel. */
+  modeChipClass = "two-company-mode-chip";
 
-  /** Class on the mode-chips group wrapper. */
-  modeChipsWrapperClass = "twoinc-mode-chips";
+  /** Class of the wrapper the panel anchors against. */
+  fieldWrapClass = "two-company-field-wrap";
 
-  /** Shared class on every button inside the mode-chips group. */
-  modeChipClass = "twoinc-mode-chip";
-
-  /** DOM id of the "Registered company" mode chip. */
-  businessChipId = "company_mode_chip_business";
-
-  /** DOM id of the "Sole trader" mode chip. */
-  soleTraderChipId = "company_mode_chip_sole_trader";
+  /** `window` is page-wide, so the viewport listener is bound at most once. */
+  fieldWrapRefreshBound = false;
+  fieldWrapRefreshTimer = null;
 
   /**
-   * Sequence number of the most recently dispatched company-search request.
-   * A superseded request must not act on the shared spinner — select2's own
-   * abort ordering makes this a non-issue today, but that's an internal
-   * detail of its ajax adapter, and this is the guard against it regressing.
+   * Sequence number of the most recently dispatched company-search request,
+   * bumped by every country change too so a response for a country the buyer
+   * has left cannot paint.
    */
   companySearchSeq = 0;
-
-  /**
-   * Elements the browser stops on during Tab traversal. Deliberately a
-   * superset — `[tabindex]` catches both the select2 combobox span
-   * (`tabindex="0"`) and rows opted out via `tabindex="-1"` — so the caller
-   * filters on the live `tabIndex` property rather than trusting the
-   * selector alone.
-   */
-  tabbableSelector =
-    "a[href], area[href], input:not([disabled]):not([type=hidden]), " +
-    "select:not([disabled]), textarea:not([disabled]), button:not([disabled]), " +
-    "iframe, object, embed, [tabindex], [contenteditable]";
 
   /**
    * The last billing country this page has acted on (TWO-24867/TWO-25326).
@@ -591,22 +574,16 @@ class TwoCompanySearch {
    */
   lastObservedCountry = null;
 
-  /** DOM class of the payment-tile slot the company-search control moves into
-   * when `company_search_location` is 'payment_tile' (TWO-25326 §7.1). */
+  /** DOM class of the payment-tile slot the control renders into. */
   companySearchTileSlotClass = "twoinc-company-search-tile-slot";
 
-  /**
-   * DOM id of the wrapper holding the relocated company-search control
-   * (TWO-25326 §7.1). One element, created once; every move is this same
-   * node changing parent, never a clone.
-   */
-  companySearchTileWrapperId = "twoinc-company-search-tile-wrapper";
+  /** DOM id of the row this class builds inside that slot. */
+  tileRowId = "twoinc_tile_company_row";
 
   /**
    * DOM id of the company-number label under the company-name field
    * (TWO-25288, narrowed to number-only by TWO-25326 §7). Id/class kept as
-   * `twoinc_company_summary` since brand overlays style it by that class
-   * (e.g. `.custom-checkout .twoinc-company-summary` in twoinc.css).
+   * `twoinc_company_summary` since brand overlays style it by that class.
    */
   companySummaryId = "twoinc_company_summary";
 
@@ -626,13 +603,9 @@ class TwoCompanySearch {
   }
 
   /**
-   * Hint stating the search threshold (TWO-25288), shown as the query
-   * field's watermark. Deliberately a fixed number rather than select2's own
-   * "N more characters" countdown — the buyer is told what the field needs,
-   * not how far off they are. Rendered into the query-field placeholder
-   * directly, matching PrestaShop (TWO-40) rather than select2's
-   * `language.inputTooShort` hook, which would paint a second on-screen hint.
-   * See `applyQueryFieldPlaceholder`.
+   * Hint stating the search threshold (TWO-25288), the query field's
+   * watermark. A fixed number rather than a countdown — the buyer is told what
+   * the field needs, not how far off they are.
    */
   companySearchTooShortText() {
     const template =
@@ -668,58 +641,397 @@ class TwoCompanySearch {
     );
   }
 
+  /** Whether the control renders in the payment tile rather than the address form. */
+  isTileLocation() {
+    return window.twoinc.company_search_location === "payment_tile";
+  }
+
+  /** Selector of the input the panel is anchored to right now. */
+  companyFieldSelector() {
+    const helper = twoincSelectWooHelper;
+    return helper.isTileLocation() ? helper.tileFieldSelector : helper.addressFieldSelector;
+  }
+
+  // -------------------------------------------------------------- transport
+
   /**
-   * Build the manual-entry affordance as a real, focusable button.
-   * TWO-25288 made it a pseudo-option inside `.select2-results__options`,
-   * which was only reachable by arrowing past every real result (clipped by
-   * select2's own scroll region, `tabindex="-1"` to match the listbox
-   * pattern) and inherited selectWoo's row-activation binding on plain
-   * `mouseup` with no button check, so a right-click activated it too. A
-   * real `<button>` fixes both via native Tab order and native click.
-   *
-   * One of three `.twoinc-mode-chip` buttons inside `.twoinc-mode-chips`
-   * (TWO-40 §0) — see `buildBusinessChip`/`buildSoleTraderChip` and
-   * `syncManualEntryButton`.
+   * The six-member transport the panel asks for. Split out so the panel stays
+   * platform-free: it owns when to search, this owns how.
    */
-  buildManualEntryButton() {
+  searchApi() {
     const helper = twoincSelectWooHelper;
 
-    return jQuery("<button></button>")
-      .attr({ id: helper.manualEntryRowId, type: "button", "data-mode": "manual" })
-      .addClass(helper.modeChipClass)
-      .text(helper.enterManuallyText())
-      .on("click", function () {
-        helper.activateManualEntry();
-      });
+    return {
+      MIN_INPUT_LENGTH: helper.companySearchMinLength,
+      SEARCH_DEBOUNCE_MS: helper.companySearchDebounceMs,
+      minInputLengthMessage: function () {
+        return helper.companySearchTooShortText();
+      },
+      noResultsMessage: function () {
+        return (
+          (window.wc_country_select_params && wc_country_select_params.i18n_no_matches) ||
+          "No matches found"
+        );
+      },
+      abortActiveRequest: function (token) {
+        if (!helper.activeRequest || helper.activeToken !== token) return false;
+        const request = helper.activeRequest;
+        helper.activeRequest = null;
+        helper.activeToken = null;
+        request.abort();
+        return true;
+      },
+      searchCompanies: function (params) {
+        return helper.searchCompanies(params);
+      }
+    };
   }
 
   /**
-   * Switch out of company search into manual entry. Removes the button
-   * before deferring so a second click can't queue a second switch. Deferred
-   * because entering manual entry destroys this widget, and destroying it
-   * from inside the still-unwinding click event would pull the DOM out from
-   * under that unwind.
+   * Issue one company search.
+   *
+   * Resolves rather than rejects on every outcome: the panel distinguishes
+   * "aborted" (paint nothing) from "unavailable" (say the search is down) from
+   * a result set, and a rejection would collapse all three into one.
+   *
+   * @param {Object} params `{config, token, term, getCountryCode}`
+   * @returns {Promise<Object>}
+   */
+  searchCompanies(params) {
+    const helper = twoincSelectWooHelper;
+    const seq = ++helper.companySearchSeq;
+    const searchParams = new URLSearchParams({
+      // Read per request, never captured when the panel was built (TWO-24867):
+      // the panel outlives a country change on every path that does not rebuild
+      // it, and a captured value searched the previous country's register while
+      // the form said otherwise.
+      country: params.getCountryCode(),
+      limit: helper.companySearchLimit,
+      offset: 0,
+      q: params.term
+    });
+
+    const request = jQuery.ajax({
+      url: twoincUtilHelper.constructTwoincUrl("/companies/v2/company", searchParams),
+      dataType: "json",
+      timeout: helper.companySearchTimeoutMs
+    });
+    helper.activeRequest = request;
+    helper.activeToken = params.token;
+
+    return new Promise(function (resolve) {
+      request.done(function (data) {
+        if (seq !== helper.companySearchSeq) {
+          resolve({ aborted: true });
+          return;
+        }
+        // `degraded` marks an HTTP 200 whose (near-empty) result set is
+        // unreliable because the upstream provider lookup timed out. The field
+        // may not be deployed yet, so absent must read as not degraded.
+        if (data && data.degraded === true) {
+          resolve({ unavailable: true });
+          return;
+        }
+        resolve({ items: helper.toResultItems(data) });
+      });
+
+      request.fail(function (jqXHR, textStatus) {
+        // An abort is routine — every keystroke supersedes the last search —
+        // and must stay silent. A timeout or transport error must not: left
+        // silent it renders as "no companies found", a wrong answer rather
+        // than a missing one.
+        if (textStatus === "abort" || seq !== helper.companySearchSeq) {
+          resolve({ aborted: true });
+          return;
+        }
+        resolve({ unavailable: true });
+      });
+
+      request.always(function () {
+        if (helper.activeRequest !== request) return;
+        helper.activeRequest = null;
+        helper.activeToken = null;
+      });
+    });
+  }
+
+  /**
+   * Shape the search response into the rows the panel renders.
+   *
+   * @param {Object} response
+   * @returns {Array<Object>}
+   */
+  toResultItems(response) {
+    const items = [];
+    const rawItems = response && Array.isArray(response.items) ? response.items : [];
+
+    for (let i = 0; i < rawItems.length; i++) {
+      const item = rawItems[i];
+      // `national_identifier` is optional in the search response — the company
+      // may have none in its home registry — and dropping the hit entirely
+      // would remove a selectable company.
+      const identifier =
+        item.national_identifier && item.national_identifier.id
+          ? String(item.national_identifier.id)
+          : "";
+      items.push({
+        id: item.name,
+        text: item.name,
+        // TWO-25326 §12: `identifier` stays raw on `company_id` — that is what
+        // gets posted — while what the buyer READS goes through the shared
+        // composer, which drops an internally minted number along with the
+        // brackets that would otherwise be left empty around it. `highlight` is
+        // the server's own pre-marked-up label, so it is passed through rather
+        // than re-encoded; the plain name is the fallback for a response that
+        // omits it.
+        html: twoincUtilHelper.composeCompanyLabel(item.highlight || item.name || "", identifier),
+        company_id: identifier,
+        lookup_id: item.lookup_id,
+        approved: false
+      });
+    }
+
+    return items;
+  }
+
+  // ------------------------------------------------------------------ panel
+
+  /**
+   * Build the panel, or re-point the existing one at the current mount.
+   *
+   * One instance for the page's lifetime: the mount moves between the address
+   * form and the payment tile, and the panel's own `fieldSelector` is what
+   * carries that, so a second instance would mean two controls writing one
+   * capture.
+   *
+   * @returns {Object|null} the panel, or null where the script did not load
+   */
+  ensurePanel() {
+    const helper = twoincSelectWooHelper;
+    if (typeof window.TwoCompanySearchPanel !== "function") return null;
+
+    if (!helper.panel) {
+      helper.panel = new window.TwoCompanySearchPanel({
+        fieldSelector: helper.companyFieldSelector(),
+        config: {},
+        search: helper.searchApi(),
+        translate: function (text) {
+          return helper.translatePanelText(text);
+        },
+        getCountryCode: function () {
+          return helper.currentCountry();
+        },
+        getChips: function () {
+          return helper.chips();
+        },
+        isChipVisible: function (mode) {
+          return helper.isChipVisible(mode);
+        },
+        getSelectedMode: function () {
+          return helper.selectedMode();
+        },
+        onSelect: function (item) {
+          helper.onPick(item);
+        },
+        getDisplayText: function () {
+          return twoincUtilHelper.blankToEmpty(jQuery("#billing_company").val());
+        },
+        onExitManualEntry: function () {
+          helper.exitManualCompanyEntry();
+        }
+      });
+    } else {
+      helper.panel.fieldSelector = helper.companyFieldSelector();
+    }
+
+    return helper.panel;
+  }
+
+  /**
+   * The panel's own source strings, mapped onto this plugin's localised text.
+   * Keyed on the English string because the panel is vendored verbatim and
+   * carries no message ids of its own.
+   *
+   * @param {string} text
+   * @returns {string}
+   */
+  translatePanelText(text) {
+    const helper = twoincSelectWooHelper;
+    const map = {
+      "Enter company name to search": helper.companySearchPlaceholderText(),
+      "Search for company": helper.searchCompanyText(),
+      "Company search is unavailable right now. Please try again shortly.":
+        helper.companySearchUnavailableText()
+    };
+    return map[text] || text;
+  }
+
+  /**
+   * Point the panel at whatever host is current and build it there.
+   *
+   * Called from every path that can have replaced the host: `initialize()` and
+   * its retry, `updated_checkout`, the tile rebuild, and the returns from
+   * manual entry and sole-trader mode. Idempotent — the panel adopts a panel
+   * already in the wrapper rather than building a second one.
+   *
+   * @param {Twoinc} [twoincInstance]
+   * @returns {Object|null} the panel
+   */
+  attach(twoincInstance) {
+    const helper = twoincSelectWooHelper;
+    if (twoincInstance) helper.twoincInstance = twoincInstance;
+
+    const panel = helper.ensurePanel();
+    if (!panel) return null;
+
+    panel.bind();
+    helper.syncFieldWrapMetrics();
+    helper.bindFieldWrapRefresh();
+    twoincDomHelper.toggleTooltip(
+      helper.companyFieldSelector(),
+      window.twoinc.text.tooltip_company
+    );
+    return panel;
+  }
+
+  /**
+   * Pin the panel's wrapper to the INPUT's own box.
+   *
+   * The panel is positioned against the wrapper, which also carries the
+   * sole-trader link in normal flow — so a `100%` anchor drops the panel a
+   * link-height too low the moment one is adopted. The width pin is what makes
+   * the panel match the input rather than the row on a theme where the input
+   * has its own narrower intrinsic width.
+   */
+  syncFieldWrapMetrics() {
+    const helper = twoincSelectWooHelper;
+    const $field = jQuery(helper.companyFieldSelector());
+    const $wrap = $field.closest("." + helper.fieldWrapClass);
+    if (!$field.length || !$wrap.length) return;
+
+    const el = $wrap.get(0);
+    // Released before measuring, or the pin latches: the input fills this
+    // wrapper, so `outerWidth()` reads back whatever was pinned last time.
+    if (el.style.width) el.style.width = "";
+
+    const height = $field.outerHeight();
+    if (height) el.style.setProperty("--two-company-input-height", height + "px");
+    else el.style.removeProperty("--two-company-input-height");
+
+    const width = $field.outerWidth();
+    el.style.width = width ? width + "px" : "";
+  }
+
+  /**
+   * Keep those pins current across a viewport change, not only on the next
+   * re-bind — a buyer who rotates a tablet without typing would otherwise see
+   * the panel drift off the field.
+   */
+  bindFieldWrapRefresh() {
+    const helper = twoincSelectWooHelper;
+    if (helper.fieldWrapRefreshBound) return;
+    helper.fieldWrapRefreshBound = true;
+    jQuery(window).on("resize.twoCompanyWrap orientationchange.twoCompanyWrap", function () {
+      clearTimeout(helper.fieldWrapRefreshTimer);
+      helper.fieldWrapRefreshTimer = setTimeout(helper.syncFieldWrapMetrics, 150);
+    });
+  }
+
+  // ------------------------------------------------------------------ chips
+
+  /**
+   * The three capture modes, in the order PrestaShop offers them. Rebuilt on
+   * every sync rather than mutated, so a chip cannot outlive the mode it means.
+   */
+  chips() {
+    const helper = twoincSelectWooHelper;
+    const cfg = twoincSoleTrader.config();
+
+    return [
+      {
+        mode: "registered",
+        text: (cfg.text && cfg.text.registered_business) || "Registered company",
+        onActivate: function () {
+          helper.onRegisteredChip();
+        }
+      },
+      {
+        mode: "sole_trader",
+        text: (cfg.text && cfg.text.sole_trader) || "Sole trader",
+        onActivate: function () {
+          twoincSoleTrader.onModeChipClick("sole_trader");
+        }
+      },
+      {
+        mode: "manual",
+        text: helper.enterManuallyText(),
+        onActivate: function () {
+          helper.activateManualEntry();
+        }
+      }
+    ];
+  }
+
+  /**
+   * Sole trader is offered only where the registry does not already register
+   * them; manual entry only where a captured number is not required.
+   *
+   * @param {string} mode
+   * @returns {boolean}
+   */
+  isChipVisible(mode) {
+    if (mode === "sole_trader") return twoincSoleTrader.isAvailable();
+    if (mode === "manual") return twoincSelectWooHelper.manualEntryIsAvailable();
+    return true;
+  }
+
+  /**
+   * Which chip reads as selected. The two mode axes cross — a buyer can be in
+   * `business` sole-trader mode while the capture mode is `manual` — so this
+   * resolves them in one place rather than letting each chip decide.
+   *
+   * @returns {string}
+   */
+  selectedMode() {
+    if (twoincCompanyCapture.mode === "manual") return "manual";
+    if (twoincSoleTrader.mode === "sole_trader") return "sole_trader";
+    return "registered";
+  }
+
+  /**
+   * "Registered company". Refused while sole-trader mode is still DECIDING
+   * what it is: acting mid-wait races the flight/popup's own resolution, which
+   * could silently reassert or drop what the click just tried to undo.
+   */
+  onRegisteredChip() {
+    const helper = twoincSelectWooHelper;
+    // On the CLICK, which is the only event Enter and Space produce: behind the
+    // guard below this chip did nothing at all for a keyboard buyer, leaving
+    // the signup up with no way to dismiss it.
+    twoincSoleTrader.abandonPopupsForChipClick();
+    if (twoincSoleTrader.mode === "business" || twoincSoleTrader.isDeciding()) return;
+    twoincSoleTrader.setMode("business");
+    helper.openCompanySearchDropdown();
+  }
+
+  /**
+   * Switch out of company search into manual entry. Deferred because the
+   * sole-trader revert below can re-enter this file's own mode handling, and
+   * doing that from inside the still-unwinding click event would reorder it
+   * against the panel's own chip rebuild.
    */
   activateManualEntry() {
-    const helper = twoincSelectWooHelper;
-
     // On the CLICK path, so Enter/Space take the popup down too (TWO-25503),
     // and before the guard below, which an outstanding signup makes refuse.
     twoincSoleTrader.abandonPopupsForChipClick();
 
-    // Mid-decision the chip must stay: `enterManualCompanyEntry` refuses in
-    // that state anyway, so removing the chip first would leave no chip and
-    // no manual mode (TWO-40).
     if (twoincSoleTrader.isDeciding()) return;
 
     // Captured synchronously: the deferred callback can't otherwise tell "was
     // already in sole-trader mode" from "switched into it during the defer".
     const leavingSoleTrader = twoincSoleTrader.mode === "sole_trader";
 
-    jQuery("#" + helper.manualEntryRowId).remove();
     setTimeout(function () {
-      // Re-checked: reverting under an in-flight decision is what every other
-      // exit from sole-trader mode refuses to do.
       if (
         leavingSoleTrader &&
         twoincSoleTrader.mode === "sole_trader" &&
@@ -731,665 +1043,119 @@ class TwoCompanySearch {
     }, 0);
   }
 
+  /** Repaint the chips and the query row against the current modes. */
+  syncModeChips() {
+    const panel = twoincSelectWooHelper.panel;
+    if (panel) panel.syncChips();
+  }
+
+  // ------------------------------------------------------------ open / close
+
   /**
-   * "Registered company" mode chip (TWO-40 §0). A no-op while already in
-   * business mode, or while `twoincSoleTrader.isDeciding()` — see the click
-   * handler's own comment (TWO-40 §7 correction: the dropdown/widget this
-   * chip lives in now deliberately survives a sole-trader autofill flight
-   * or open signup popup, so it IS reachable during that wait, not only in
-   * business mode as it used to be).
+   * Open the panel and put the caret in its query field.
    *
-   * @returns {Object} jQuery-wrapped <button>
+   * @returns {boolean} whether there was a panel to open
    */
-  buildBusinessChip() {
-    const helper = twoincSelectWooHelper;
-    const cfg = twoincSoleTrader.config();
-    const label = (cfg.text && cfg.text.registered_business) || "Registered company";
-
-    return jQuery("<button></button>")
-      .attr({ id: helper.businessChipId, type: "button", "data-mode": "business" })
-      .addClass(helper.modeChipClass)
-      .text(label)
-      .on("click", function () {
-        // On the CLICK, which is the only event Enter and Space produce
-        // (TWO-25503): behind the guard below this chip did nothing at all for
-        // a keyboard buyer, leaving the signup up with no way to dismiss it.
-        //
-        // A signup that has already posted ACCEPTED is marked decided at
-        // receipt and so is excluded from this — that exclusion, not the
-        // ordering here, is what keeps a resolving lookup from being
-        // honoured and then stomped.
-        twoincSoleTrader.abandonPopupsForChipClick();
-        // Refused while sole-trader mode is still DECIDING what it is
-        // (TWO-40 §7 correction, round-1 review — Han/Vader): this chip only
-        // coexists with `sole_trader` mode DURING that wait (an adopted sole
-        // trader destroys the widget it lives in), so acting on it mid-wait
-        // raced the buyer against the flight/popup's own resolution — the
-        // ACCEPTED handler could silently reassert or
-        // drop what the click just tried to undo. `isDeciding()`, not the
-        // wider `isBusy()` (round-3 review — Vader): once adopted, the
-        // outcome is already settled and only the popup-close poll hasn't
-        // caught up yet — refusing the click for that stretch too is a UX
-        // regression, not a safety guard.
-        if (twoincSoleTrader.mode === "business" || twoincSoleTrader.isDeciding()) return;
-        // Read BEFORE the switch, reopened after (Doug 2026-08-20, live):
-        // `setMode`'s business branch destroys this dropdown and re-attaches a
-        // fresh, CLOSED widget — see its own comment — so the chip took the
-        // whole panel down with it. `syncQueryFieldSuppression` did un-hide the
-        // query row correctly; it un-hid it on a dropdown that was no longer on
-        // screen. Conditional on it having been open so the other route through
-        // the same branch (a mode revert with no dropdown in sight) does not
-        // pop one open unasked.
-        const wasOpen = twoincSelectWooHelper.companySearchDropdownIsOpen();
-        twoincSoleTrader.setMode("business");
-        if (!wasOpen) return;
-        // Synchronous, still inside the click: selectWoo's outside-click close
-        // is a `document.body` mousedown handler bound per OPEN
-        // (`BaseSelection._attachCloseHandler`), so the mousedown that produced
-        // this click was dispatched before the widget this line opens existed
-        // and cannot close it. Focus lands in the query input — the row is
-        // visible again by then, `attach()`'s own `select2:open` handler having
-        // re-synced the new dropdown's copy of it.
-        twoincSelectWooHelper.openCompanySearchDropdown();
-      });
+  openCompanySearchDropdown() {
+    const panel = twoincSelectWooHelper.panel;
+    if (!panel || !panel.isBound()) return false;
+    panel.open();
+    return true;
   }
 
   /**
-   * "Sole trader" mode chip (TWO-40 §0). Only added while
-   * `twoincSoleTrader.isAvailable()` — see `syncSoleTraderChip`.
-   */
-  buildSoleTraderChip() {
-    const helper = twoincSelectWooHelper;
-    const cfg = twoincSoleTrader.config();
-    const label = (cfg.text && cfg.text.sole_trader) || "Sole trader";
-
-    return jQuery("<button></button>")
-      .attr({ id: helper.soleTraderChipId, type: "button", "data-mode": "sole_trader" })
-      .addClass(helper.modeChipClass)
-      .text(label)
-      .on("click", function () {
-        twoincSoleTrader.onModeChipClick("sole_trader");
-      });
-  }
-
-  /**
-   * Add or remove the sole-trader chip to match current availability
-   * (TWO-40 §0/§1). Split out from `syncManualEntryButton` because
-   * availability resolves asynchronously per country and can change after
-   * the dropdown is already open and the rest of the group already built.
-   */
-  syncSoleTraderChip() {
-    const helper = twoincSelectWooHelper;
-    const $existing = jQuery("#" + helper.soleTraderChipId);
-
-    if (twoincSoleTrader.isAvailable()) {
-      if (!$existing.length) {
-        jQuery("#" + helper.businessChipId).after(helper.buildSoleTraderChip());
-      }
-    } else {
-      $existing.remove();
-    }
-  }
-
-  /**
-   * Cosmetic-only selected-chip class (TWO-40 §0), never a visibility
-   * mechanism — manual entry destroys the widget its chip lives in on
-   * activation, so it has no "selected" state to paint.
-   */
-  updateModeChipsSelection() {
-    const helper = twoincSelectWooHelper;
-    const mode = twoincSoleTrader.mode === "sole_trader" ? "sole_trader" : "business";
-
-    // By class, not id: an id selector only finds one wrapper even when a
-    // stale, orphaned one shares the id (see syncManualEntryButton).
-    jQuery("." + helper.modeChipsWrapperClass)
-      .find("." + helper.modeChipClass)
-      .each(function () {
-        jQuery(this).toggleClass("twoinc-mode-chip--selected", jQuery(this).data("mode") === mode);
-      });
-  }
-
-  /**
-   * Put the mode-chips group right after the results list, or take it away
-   * (TWO-40 §0). A sibling of `.select2-results__options`, not a child, so
-   * it sits outside the scrollable part of the dropdown but stays inside
-   * `.select2-results`, the same wrapper the results list lives in.
-   *
-   * Holds the chips as one group in this order — "Registered company",
-   * "Sole trader" (while available), "Enter manually" (while available) — so
-   * the manual-entry chip and its Tab shortcut stay the last tabbable element.
-   *
-   * Visibility rule is "search UI active", not the search threshold and not
-   * "company already captured" (both regressed live 2026-08-02): the group
-   * only exists inside the dropdown, so dropdown-open already implies
-   * buyer-searching. It stays in the dropdown's subtree while closed —
-   * harmless, since selectWoo's AttachBody decorator detaches the whole
-   * container from the document on close, making it unreachable anyway.
-   */
-  syncManualEntryButton() {
-    const helper = twoincSelectWooHelper;
-
-    const picker = jQuery("#billing_company_display").data("select2");
-    if (!picker || !picker.$results || !picker.$results.length) return;
-
-    const $list = picker.$results;
-
-    // Sweep away any STALE `.select2-results` panel for this field:
-    // WooCommerce's checkout AJAX can `replaceWith()` the underlying <select>
-    // while its dropdown is open without calling `select2("destroy")`,
-    // orphaning the old dropdown in <body> forever and causing a second,
-    // independent panel on the next open (TWO-40). Scoped by the results-list
-    // id prefix (deterministic per field, vendored search.js) rather than a
-    // blanket `.select2-results` query, so this never touches another
-    // widget's open dropdown (e.g. `#billing_country`'s).
-    const resultsIdPrefix = "select2-" + helper.companyFieldSelector.replace("#", "") + "-results";
-    jQuery("[id^='" + resultsIdPrefix + "']")
-      .closest(".select2-results")
-      .not($list.closest(".select2-results"))
-      .closest(".select2-container--open")
-      .remove();
-
-    // By class, not id: a second orphaned wrapper can legitimately exist
-    // (same replaceWith() issue above), and the class selector catches all of
-    // them regardless of which is stale.
-    let $wrapper = jQuery("." + helper.modeChipsWrapperClass);
-
-    // Already correctly placed with no duplicates: skip the rebuild so an
-    // unconditional re-append doesn't tear down/rebuild on every keystroke.
-    if ($wrapper.length !== 1 || !$wrapper.prev().is($list)) {
-      $wrapper.remove();
-      $wrapper = jQuery("<div>", {
-        id: helper.modeChipsWrapperId,
-        class: helper.modeChipsWrapperClass,
-        role: "radiogroup"
-      });
-      $wrapper.append(helper.buildBusinessChip());
-      if (helper.manualEntryIsAvailable()) $wrapper.append(helper.buildManualEntryButton());
-      $list.after($wrapper);
-    }
-
-    helper.syncSoleTraderChip();
-    helper.updateModeChipsSelection();
-  }
-
-  /**
-   * Wire the manual-entry affordance to a company-search widget (TWO-25288).
-   * Idempotent: handler is namespaced and every bind is preceded by the
-   * matching `.off()`, since this runs repeatedly (800ms re-run of
-   * enableCompanySearch, every return from manual entry).
-   *
-   * No separate activation binding: the button from `syncManualEntryButton`
-   * owns its own click handler directly, since it's a real element outside
-   * the results list rather than a pseudo-option needing `select2:selecting`
-   * interception.
-   */
-  bindManualEntryAffordance() {
-    const helper = twoincSelectWooHelper;
-
-    // Delegated on <body>, not bound to the search field: that field is
-    // destroyed/rebuilt on every open.
-    jQuery(document.body)
-      .off("input.twoincManualEntry")
-      .on("input.twoincManualEntry", helper.companySearchInputSelector, function () {
-        helper.syncManualEntryButton();
-      });
-
-    // Also on open (TWO-25326 §2): visibility is no longer keyed on the
-    // search threshold, so a buyer who opens the dropdown and types nothing
-    // fires no `input` event at all. Deferred a tick: `select2:open` fires
-    // while the open is still unwinding, before the results list is in its
-    // post-open state.
-    jQuery(document.body)
-      .off("select2:open.twoincManualEntry")
-      .on("select2:open.twoincManualEntry", "#billing_company_display", function () {
-        setTimeout(helper.syncManualEntryButton, 0);
-      });
-
-    // Tab-to-button shortcut. Only plain Tab is hijacked — Shift+Tab keeps
-    // ordinary reverse-tab behaviour. No-op (not a fallback) when the button
-    // isn't in the DOM yet (below the search threshold).
-    //
-    // `e.which` matches the vendored selectWoo bundle's own convention
-    // (`evt.which` throughout selectWoo.full.js), and is immune to `.key`
-    // coming back blank/"Unidentified" on some real keydowns.
-    //
-    // `stopPropagation` is load-bearing: selectWoo's core document keydown
-    // handler treats a bare Tab like Enter while the dropdown is open — it
-    // fires `results:select` then unconditionally refocuses the search field,
-    // with no `isDefaultPrevented()` check. Without stopping propagation that
-    // handler still runs right after this one and yanks focus back.
-    // `preventDefault` alone doesn't stop the bubble. Side effect (intended):
-    // Tab no longer doubles as "accept highlighted result" the way
-    // selectWoo's own Tab-as-Enter would; Enter itself is untouched.
-    //
-    // A second selectWoo timer needs separate defending, since
-    // stopPropagation on the Tab event can't reach it: the same document
-    // handler also schedules `focusOnActiveElement()` on every typing
-    // keystroke, refocusing the highlighted result row 1000ms later — a timer
-    // armed by the PREVIOUS keystroke, before this Tab handler ever runs. A
-    // fast typer hitting Tab within that ~1s window gets focus yanked back
-    // onto the highlighted row shortly after landing on the button
-    // (confirmed with fake timers). Re-assert focus on the button once, just
-    // past that window, but only if selectWoo's timer actually won and the
-    // button is still there — so a buyer who has since moved on deliberately
-    // is never fought.
-    jQuery(document.body)
-      .off("keydown.twoincManualEntry")
-      .on("keydown.twoincManualEntry", helper.companySearchInputSelector, function (e) {
-        if (e.which !== 9 || e.shiftKey) return;
-
-        // No button to shortcut to — a brand overlay that drops the
-        // affordance, or any future gating — must NOT fall through to the
-        // browser's own Tab. Measured live 2026-08-02, in exactly that state:
-        // selectWoo's document-level handler swallows the keystroke whole
-        // (`preventDefault` + refocus the search field), so focus never left
-        // the query field and the dropdown never closed. That is a keyboard
-        // trap, which §4 forbids outright, and it is what the removed capture
-        // gate above was producing. Close and move on instead, the same way
-        // Tab from the button does.
-        const btn = jQuery("#" + helper.manualEntryRowId).get(0);
-        if (!btn) {
-          const onwards = helper.tabbablesAfterCompanyField();
-          e.preventDefault();
-          e.stopPropagation();
-          helper.closeCompanySearchDropdown();
-          if (!helper.focusFirstThatTakes(onwards)) helper.releaseFocusFromCompanyField();
-          setTimeout(function () {
-            if (!helper.focusIsBackOnCompanyField()) return;
-            if (!helper.focusFirstThatTakes(onwards)) helper.releaseFocusFromCompanyField();
-          }, 20);
-          return;
-        }
-
-        // `.focus()` on a button that is hidden or mid-transition silently
-        // no-ops per the HTML spec, so confirm it landed rather than assume —
-        // same lesson as the Tab-out handler below, which shipped broken for
-        // exactly this reason. If the button will not take focus, fall
-        // through to closing and moving on rather than stranding the buyer.
-        e.preventDefault();
-        e.stopPropagation();
-        btn.focus();
-        if (document.activeElement !== btn) {
-          const onwards = helper.tabbablesAfterCompanyField();
-          helper.closeCompanySearchDropdown();
-          if (!helper.focusFirstThatTakes(onwards)) helper.releaseFocusFromCompanyField();
-          return;
-        }
-
-        setTimeout(function () {
-          const stillThere = jQuery("#" + helper.manualEntryRowId).get(0);
-          const stolenByHighlightedRow = jQuery(document.activeElement).is(
-            ".select2-results__option--highlighted"
-          );
-          if (stillThere && stolenByHighlightedRow) stillThere.focus();
-        }, 1100);
-      });
-
-    // Second Tab press, this time FROM the button (#30.x.6 follow-up, found
-    // under adversarial review before merge — reproduced with a real
-    // `select2:select` listener before this fix was written).
-    //
-    // selectWoo's `isOpen()` (the gate its own document-level Tab-as-Enter
-    // handler checks) is purely a CSS class on the container — entirely
-    // independent of where DOM focus actually is. Moving focus onto the
-    // Landing on this button via the shortcut does not close the dropdown or
-    // clear selectWoo's `isOpen()` class. Without `stopPropagation`, a second
-    // Tab (or Enter/Space) bubbles to selectWoo's still-live document handler
-    // (`Select2.prototype._registerEvents`), which for Tab/Enter silently
-    // fires `results:select` on the highlighted row (wrong company selected)
-    // and for all three unconditionally refocuses the search field —
-    // trapping the buyer and, for Tab/Enter, mis-selecting underneath them.
-    // `_attachCloseHandler` in the vendored bundle only closes on Escape,
-    // a result pick, or an outside mousedown, so the dropdown otherwise stays
-    // open and keeps intercepting every later Tab/Enter/Escape on the page.
-    //
-    // Fix, for Tab: `preventDefault`, resolve the next real tab-stop after
-    // the company-name control while the dropdown/anchor are still in the
-    // document, then close, then focus it. Closing fires selectWoo's own
-    // `container.on('close')`, which unconditionally refocuses the search
-    // field ~1ms later — rather than avoid the close, re-focus the intended
-    // target just past that window, only if the steal actually won.
-    //
-    // Shift+Tab is left alone: reverse Tab should go to the query field,
-    // which native traversal already reaches; hijacking it would close the
-    // dropdown the buyer is trying to move back into.
-    //
-    // Enter/Space need the same protection for the same reason — they fall
-    // through selectWoo's handler to the same unconditional refocus tail
-    // (Enter additionally hits the `results:select` branch). `stopPropagation`
-    // only, deliberately without `preventDefault`, so the browser's native
-    // "activate a focused <button>" action still runs and this button's own
-    // click handler fires.
-    jQuery(document.body)
-      .off("keydown.twoincManualEntryButton")
-      .on("keydown.twoincManualEntryButton", "#" + helper.manualEntryRowId, function (e) {
-        if (e.which !== 9 && e.which !== 13 && e.which !== 32) return;
-        e.stopPropagation();
-
-        // Enter and Space stop here: their native "activate a focused
-        // <button>" default action must still run so this button's own click
-        // handler fires. Shift+Tab stops here too — see above.
-        if (e.which !== 9 || e.shiftKey) return;
-
-        // Resolved before the close, while the company-name control is still
-        // on screen.
-        const candidates = helper.tabbablesAfterCompanyField();
-
-        e.preventDefault();
-        helper.closeCompanySearchDropdown();
-
-        // Walk candidates until one actually takes focus rather than
-        // assuming the first does — `.focus()` can silently no-op, in which
-        // case selectWoo's own post-close refocus would otherwise win by
-        // default. Falling through entirely means <body>, which is at least
-        // distinguishable from Tab having done nothing.
-        if (!helper.focusFirstThatTakes(candidates)) helper.releaseFocusFromCompanyField();
-
-        // selectWoo schedules an unconditional `$selection.focus()` ~1ms
-        // after close (vendored bundle); 20ms clears that. Re-checked rather
-        // than reapplied blindly, so a buyer who clicked elsewhere in the
-        // window is never fought.
-        setTimeout(function () {
-          if (!helper.focusIsBackOnCompanyField()) return;
-          if (!helper.focusFirstThatTakes(candidates)) helper.releaseFocusFromCompanyField();
-        }, 20);
-      });
-    // NOTE: #search_company_btn's equivalent fix (in getSearchCompanyBtnNode)
-    // binds directly on the element and calls preventDefault() +
-    // exitManualCompanyEntry() instead — the two buttons have different
-    // interferers (selectWoo's document handler here; selectWoo isn't even
-    // alive there), so the fix shape differs. See that function's comment.
-  }
-
-  /**
-   * Close the company-search dropdown, if one is open (TWO-25326). Goes
-   * through the instance rather than `.select2('close')` so it's a no-op,
-   * not a thrown error, on a page where the widget was never attached.
-   */
-  closeCompanySearchDropdown() {
-    const picker = jQuery("#billing_company_display").data("select2");
-    if (picker && typeof picker.close === "function") picker.close();
-  }
-
-  /**
-   * Is this element hidden, for the purpose of choosing a Tab target? A
-   * cheap pre-filter, not a guarantee — reads only the `hidden` class/attr
-   * and inline `display: none`, deliberately not jQuery's `:visible` (a
-   * layout query that jsdom/Jest always reports as hidden for everything).
-   * A field hidden by some other stylesheet rule slips through this, which
-   * is why the caller verifies focus actually landed — see
-   * `focusFirstThatTakes`.
-   */
-  isHiddenForTabbing(el) {
-    const $el = jQuery(el);
-    if ($el.closest(".hidden, [hidden]").length) return true;
-    return Boolean(el.style && el.style.display === "none");
-  }
-
-  /**
-   * Every real tab-stop after the company-name control, in tab order
-   * (TWO-25326 §4). Needed because selectWoo attaches the dropdown to the
-   * end of `<body>`, so native Tab out of it walks off the document instead
-   * of continuing through the address form — traversal has to be recomputed
-   * from the control's position in the form.
-   *
-   * Returns a list, not just the first hit, so the caller can keep walking
-   * if one candidate can't take focus (e.g. hidden by a stylesheet rule
-   * `isHiddenForTabbing` can't detect) rather than losing the race to
-   * selectWoo's own unconditional post-close refocus.
-   *
-   * Everything inside an open select2 is excluded — otherwise the answer
-   * would be the query field or manual-entry button, both about to be
-   * detached by the close.
-   *
-   * Uses `compareDocumentPosition` rather than an index into the candidate
-   * list: selectWoo flips the combobox's own `tabindex` while open, so the
-   * anchor isn't reliably a member of that list.
-   */
-  tabbablesAfterCompanyField() {
-    const anchor = twoincSelectWooHelper.companyFieldTabAnchor();
-    if (!anchor) return [];
-
-    const found = [];
-
-    // jQuery returns a grouped selector's matches in document order, so
-    // appending in iteration order gives the list in tab order.
-    jQuery(twoincSelectWooHelper.tabbableSelector).each(function () {
-      if (this.tabIndex < 0) return;
-      if (jQuery(this).closest(".select2-container--open, .select2-dropdown").length) return;
-      if (twoincSelectWooHelper.isHiddenForTabbing(this)) return;
-      if (!((anchor.compareDocumentPosition(this) & 4) /* DOCUMENT_POSITION_FOLLOWING */)) return;
-      found.push(this);
-    });
-
-    return found;
-  }
-
-  /**
-   * The element the Tab traversal is measured from (TWO-25326 §4), in order
-   * of how precisely they locate the control: rendered combobox, its
-   * `.form-row` wrapper (present regardless of select2 render state or field
-   * reordering), then the plain manual-entry input.
-   */
-  companyFieldTabAnchor() {
-    const selectors = [
-      "#billing_company_display_field .select2-selection",
-      "#billing_company_display_field",
-      "#billing_company"
-    ];
-
-    for (let i = 0; i < selectors.length; i++) {
-      const el = jQuery(selectors[i]).get(0);
-      if (el) return el;
-    }
-
-    return null;
-  }
-
-  /**
-   * Focus the first candidate that actually accepts focus (TWO-25326 §4).
-   * `.focus()` silently no-ops on a non-rendered element per the HTML spec,
-   * so this reads `document.activeElement` back and keeps walking on
-   * failure — which makes `isHiddenForTabbing`'s pre-filter an optimisation
-   * rather than a correctness requirement.
-   */
-  focusFirstThatTakes(candidates) {
-    for (let i = 0; i < candidates.length; i++) {
-      candidates[i].focus();
-      if (document.activeElement === candidates[i]) return candidates[i];
-    }
-
-    return null;
-  }
-
-  /**
-   * Is focus back on the company-name control? (TWO-25326 §4)
-   *
-   * Asked after the dropdown closes, to tell selectWoo's unconditional
-   * post-close `$selection.focus()` — scheduled 1ms out, in the vendored
-   * bundle's `container.on('close')` — apart from the buyer having deliberately
-   * gone somewhere themselves in the meantime. Only the former is worth
-   * fighting.
-   *
-   * Nothing focused (`<body>`) counts as yes. Either the traversal found no
-   * target and released focus deliberately, or the browser dropped it when the
-   * dropdown was torn out from under it; both are worth one more attempt at
-   * the candidates now that the dropdown is gone. What must NOT count is focus
-   * sitting on some other real control, which only the buyer can have caused.
+   * Is the panel's own host on screen? Asked before opening from a control that
+   * lives somewhere else: in tile placement the panel sits inside a payment box
+   * WooCommerce collapses for every other method, so opening it there would
+   * leave the buyer's click with no visible effect at all.
    *
    * @returns {boolean}
    */
-  focusIsBackOnCompanyField() {
-    const active = document.activeElement;
-    if (!active || active === document.body) return true;
-
-    return (
-      jQuery(active).closest("#billing_company_display_field").length > 0 ||
-      active === jQuery("#billing_company").get(0)
-    );
-  }
-
-  /**
-   * Give up on finding a tab target, but do not let the buyer be dumped back
-   * where they started (TWO-25326 §4).
-   *
-   * If nothing after the company field can take focus, `<body>` is the honest
-   * answer — the buyer presses Tab again and the browser resumes from the top
-   * of the document. Leaving focus on the company-name control instead is
-   * strictly worse: it is indistinguishable from Tab having done nothing at
-   * all, which is exactly what was reported live.
-   *
-   * @returns {void}
-   */
-  releaseFocusFromCompanyField() {
-    const active = document.activeElement;
-    if (!active || typeof active.blur !== "function") return;
-    if (!twoincSelectWooHelper.focusIsBackOnCompanyField()) return;
-    if (active === document.body) return;
-
-    active.blur();
-  }
-
-  /**
-   * The dropdown's query-field wrapper — where the spinner belongs
-   * (TWO-25326).
-   *
-   * Two lookups, because the primary one is conditional on widget state in a
-   * way that is easy to miss: selectWoo sets `aria-owns` on the query field
-   * in its `container.on('open')` handler and REMOVES it again on close, so
-   * `companySearchInputSelector` matches nothing whenever the dropdown is
-   * shut. That is correct for the spinner (there is nothing to paint on a
-   * closed dropdown) but it makes the selector a state check masquerading as
-   * an element lookup, and a caller that runs a tick early or a tick late
-   * gets a silent no-op rather than a spinner.
-   *
-   * The fallback is anchored on the results list's id instead, which is
-   * static markup: it identifies THIS field's dropdown specifically, so it
-   * can never pick up the country picker's search field, which sits in an
-   * identically-classed wrapper whenever that dropdown happens to be open.
-   *
-   * @returns {Object} jQuery-wrapped wrapper, empty if there is no dropdown
-   */
-  getCompanySearchFieldContainer() {
-    const $byAria = jQuery(twoincSelectWooHelper.companySearchInputSelector).parent();
-    if ($byAria.length) return $byAria;
-
-    return jQuery("#select2-billing_company_display-results")
-      .closest(".select2-dropdown")
-      .find(".select2-search--dropdown")
-      .first();
-  }
-
-  /**
-   * Toggle the in-field search spinner (TWO-25288).
-   *
-   * The spinner is a single childless element (the stylesheet paints the
-   * animated GIF as background-image); aria-hidden since it's decoration and
-   * select2 already announces search state via the results list. Removed
-   * rather than hidden when the search ends, since select2 tears the
-   * dropdown down and rebuilds it on every open anyway.
-   *
-   * Only the company-search request paints here; the sole-trader round trip
-   * paints over the company-NAME field instead (`syncSoleTraderSpinner`) —
-   * two nodes in two places, `companySearchSeq` deciding which of two
-   * overlapping searches owns this one.
-   */
-  toggleCompanySearchSpinner(isSearching) {
-    const $search = twoincSelectWooHelper.getCompanySearchFieldContainer();
-    if ($search.length === 0) return;
-    $search.find(".twoinc-search-spinner").remove();
-    if (isSearching) {
-      $search.append('<span class="twoinc-search-spinner" aria-hidden="true"></span>');
-    }
-    $search.toggleClass("twoinc-searching", !!isSearching);
-  }
-
-  /**
-   * Hide the dropdown's own free-text query row while sole-trader mode owns
-   * the company field (item 2.1, TWO-40). A pure function of mode alone.
-   *
-   * Hidden, not merely readonly — readonly alone leaves it painted, reading
-   * as a broken search box. `display: none` + `hidden` attr (not
-   * visibility/opacity) so it leaves the tab order too. Readonly stays on
-   * top of the hide because selectWoo's `container.on('open')` focuses this
-   * input unconditionally, and a hidden-but-typable field is exactly what
-   * that guards against.
-   *
-   * The whole row is removed, not just the input, to avoid an empty painted
-   * row. Applied on both every open and every mode write: selectWoo renders
-   * this row once per widget instance and re-attaches the same node on every
-   * open, so a suppression from one open would otherwise outlive it.
-   */
-  syncQueryFieldSuppression() {
-    const $row = twoincSelectWooHelper.getCompanySearchFieldContainer();
-    if ($row.length === 0) return;
-    const $query = $row.find(".select2-search__field");
-    const suppressed = twoincSoleTrader.mode === "sole_trader";
-
-    $query.prop("readonly", suppressed);
-    if (suppressed) {
-      // A term typed before switching describes a company the buyer then did
-      // not pick; restoring it would sit above results that no longer match.
-      $query.val("");
-      $row.hide().attr("hidden", "hidden");
-    } else {
-      $row.removeAttr("hidden").show();
-    }
-  }
-
-  /**
-   * (Re-)initialise selectWoo on the company field, with the post-init
-   * wiring every init path owes. Both wirings act on nodes selectWoo creates
-   * in its own constructor, so they can only be applied per widget instance
-   * — hence this function rather than entries in `genSelectWooParams`. Two
-   * init sites exist (`attach()` and `clearSelectedCompany()`, see the
-   * latter for why it doesn't go through the former).
-   */
-  initCompanySearchWidget($field) {
+  companySearchIsReachable() {
     const helper = twoincSelectWooHelper;
-    const widget = $field.selectWoo(helper.genSelectWooParams());
-    helper.applyQueryFieldPlaceholder($field);
-    helper.suppressQueryTooShortMessage($field);
-    return widget;
+    return helper.isOnScreen(jQuery(helper.companyFieldSelector()));
   }
 
+  closeCompanySearchDropdown() {
+    const panel = twoincSelectWooHelper.panel;
+    if (panel) panel.close();
+  }
+
+  /** No production caller: the tests' read of the panel's open state. */
+  companySearchDropdownIsOpen() {
+    const panel = twoincSelectWooHelper.panel;
+    return !!panel && panel.isOpen();
+  }
+
+  // -------------------------------------------------------------- selection
+
   /**
-   * Put the length requirement in the query field's own watermark, a plain
-   * `placeholder` attribute, matching PrestaShop. Read off the instance
-   * rather than the document: selectWoo's AttachBody decorator keeps the
-   * dropdown detached from the document until first open, so a
-   * document-scoped lookup finds nothing at the moment this needs to run.
+   * The buyer picked a company off the registry list.
+   *
+   * @param {Object} item the result row
    */
-  applyQueryFieldPlaceholder($field) {
-    const picker = $field.data("select2");
-    if (!picker || !picker.$dropdown) return;
-    picker.$dropdown
-      .find(".select2-search__field")
-      .attr("placeholder", twoincSelectWooHelper.companySearchTooShortText());
+  onPick(item) {
+    const helper = twoincSelectWooHelper;
+    const instance = helper.twoincInstance || Twoinc.getInstance();
+
+    // The panel deliberately survives a sole-trader autofill flight or an open
+    // signup popup, so a pick can land while `mode === "sole_trader"`. Refused
+    // while still genuinely deciding, the same guard every other sole-trader
+    // exit uses; once adopted, a pick is the buyer choosing a different
+    // company.
+    if (twoincSoleTrader.mode === "sole_trader") {
+      if (twoincSoleTrader.isDeciding()) return;
+      twoincSoleTrader.mode = "business";
+      twoincSoleTrader.soleTraderAdopted = false;
+      twoincSoleTrader.soleTraderReconfirmingCount = 0;
+      twoincSoleTrader.updateChips();
+      twoincSoleTrader.syncDifferentSoleTraderLink();
+      twoincSelectWooHelper.syncSoleTraderSurfaces();
+      twoincSoleTrader.leaveSoleTraderMode();
+    }
+
+    // The single write path (TWO-40 §5): posted fields, instance record,
+    // pairing tag and provenance in one call.
+    twoincCompanyCapture.write(item.id, item.company_id, { country: helper.currentCountry() });
+
+    // A capture changes which company-name surface the buyer should be looking
+    // at, and this is the primary path that creates one (TWO-25503).
+    twoincDomHelper.toggleBusinessFields();
+
+    helper.renderCompanySummary(item.id, item.company_id);
+
+    // Leave any loader alone: getApproval() below only arms a check.
+    twoincDomHelper.clearIntentVerdicts();
+
+    instance.getApproval();
+
+    if (window.twoinc.enable_address_lookup === "yes") {
+      instance.addressLookup(item);
+    }
   }
 
   /**
-   * Stop select2 painting its own "input too short" row under the query
-   * field — the requirement is now the field's watermark
-   * (`applyQueryFieldPlaceholder`), so this removes the redundant hint.
-   * Bound on the instance since `results:message` is internal to select2,
-   * not relayed to the DOM node. Removes the row rather than blanking via
-   * `language.inputTooShort`, which still appends an empty `<li>`.
+   * Paint the company-name field with a name the plugin captured rather than
+   * the buyer picked — a sole-trader adoption or a restore.
+   *
+   * @param {string} name
    */
-  suppressQueryTooShortMessage($field) {
-    const picker = $field.data("select2");
-    if (!picker || typeof picker.on !== "function") return;
-    picker.on("results:message", function (params) {
-      if (!params || params.message !== "inputTooShort") return;
-      if (picker.$results) picker.$results.find(".select2-results__message").remove();
-    });
+  setDisplayName(name) {
+    const helper = twoincSelectWooHelper;
+    const panel = helper.panel;
+    if (panel && panel.isBound()) {
+      panel.setDisplayText(name);
+      return;
+    }
+    jQuery(helper.companyFieldSelector()).val(twoincUtilHelper.blankToEmpty(name));
   }
 
+  // -------------------------------------------------------------- sole trader
+
   /**
-   * Class of the sole-trader in-flight spinner (TWO-40). A class, not an
-   * id, for the same reason as `modeChipsWrapperClass`: a checkout fragment
-   * swap can orphan a duplicate wrapper (see `syncManualEntryButton`), and
-   * an id selector would find only one, leaving the other animating forever.
+   * Class of the sole-trader in-flight spinner (TWO-40). A class, not an id: a
+   * checkout fragment swap can orphan a duplicate host, and an id selector
+   * would find only one, leaving the other animating forever.
    */
   soleTraderSpinnerClass = "twoinc-sole-trader-spinner";
 
@@ -1397,27 +1163,23 @@ class TwoCompanySearch {
   soleTraderSpinnerHostClass = "twoinc-name-searching";
 
   /**
-   * The element the sole-trader spinner paints over: the box of whichever
-   * of the two company-NAME surfaces is currently visible — same question
-   * `getCompanySummaryNode()` answers for the number label, answered the
-   * same way (search control wins while showing, native field otherwise).
-   * The input box, not the field row, so vertically centring doesn't float
-   * the spinner over the label too.
+   * The element the sole-trader spinner paints over: the input box of whichever
+   * company-NAME surface is currently visible. The box, not the field row, so
+   * vertically centring doesn't float the spinner over the label too.
    */
   soleTraderSpinnerHost() {
-    const $surface = twoincSelectWooHelper.companyNameSurface();
-    if ($surface.is("#billing_company_display_field")) {
-      const $selection = $surface.find(".select2-selection").first();
-      return $selection.length ? $selection : $surface;
-    }
-    return twoincSelectWooHelper.companyFieldAffordanceSlot();
+    const helper = twoincSelectWooHelper;
+    const $surface = helper.companyNameSurface();
+    if (!$surface.length) return $surface;
+    const $wrap = $surface.find("." + helper.fieldWrapClass).first();
+    if ($wrap.length) return $wrap;
+    return helper.companyFieldAffordanceSlot();
   }
 
   /**
    * Show the sole-trader spinner for exactly as long as the flow is running.
-   * Derived from state on every call, not held between calls, since mode and
-   * `flightDepth` move independently and the host itself moves with the
-   * visible name surface. Remove-then-add, same as `toggleCompanySearchSpinner`.
+   * Derived from state on every call, since mode and `flightDepth` move
+   * independently and the host moves with the visible name surface.
    */
   syncSoleTraderSpinner() {
     const helper = twoincSelectWooHelper;
@@ -1438,101 +1200,37 @@ class TwoCompanySearch {
   }
 
   /**
-   * Everything the sole-trader flow's two dropdown/field surfaces derive
-   * from `mode` and `flightDepth`. One call site per state change so the
-   * query row and spinner can't be re-synced by different callers and drift
-   * apart.
+   * Everything the sole-trader flow's panel surfaces derive from `mode` and
+   * `flightDepth`. One call site per state change so the chips and the spinner
+   * cannot be re-synced by different callers and drift apart.
    */
   syncSoleTraderSurfaces() {
-    twoincSelectWooHelper.syncQueryFieldSuppression();
+    twoincSelectWooHelper.syncModeChips();
     twoincSelectWooHelper.syncSoleTraderSpinner();
   }
 
-  /**
-   * Close the company-search dropdown if — and only if — it is open. The
-   * mode chip is clicked from inside an open dropdown; the "select a
-   * different sole trader" link is clicked with none on screen. Checking
-   * "is it open" rather than tracking which entry point started the flow
-   * lets both share one sequence, this call a no-op for the link.
-   */
-  closeCompanySearchDropdownIfOpen() {
-    if (!twoincSelectWooHelper.companySearchDropdownIsOpen()) return;
-    jQuery("#billing_company_display").select2("close");
-  }
+  // ------------------------------------------------------------------ country
 
   /**
-   * Is the company-search dropdown currently on screen? Asked by two callers
-   * with opposite intentions — closing what's open vs. reopening what was
-   * open before `setMode()` tore the widget down — so it's one predicate
-   * rather than the same guard written twice.
-   */
-  companySearchDropdownIsOpen() {
-    const select2 = jQuery("#billing_company_display").data("select2");
-    return !!select2 && typeof select2.isOpen === "function" && select2.isOpen();
-  }
-
-  /**
-   * Replace the results list with the "search unavailable" message. Goes
-   * through select2's own results:message channel (the results adapter
-   * listens on the container for it) so the message is cleared on the next
-   * query like any other, instead of us hand-managing dropdown DOM.
-   */
-  showCompanySearchUnavailable() {
-    const select2 = jQuery("#billing_company_display").data("select2");
-    if (select2 && typeof select2.trigger === "function") {
-      select2.trigger("results:message", { message: "errorLoading" });
-    }
-  }
-
-  /**
-   * The billing country the checkout form currently holds, upper-cased, or
-   * "" when absent/unset (TWO-24867). The single reader for every
-   * country-sensitive path (search request, change guard, address-lookup
-   * supersession, `twoincSoleTrader.currentCountry()`), so they can't
-   * disagree on "the current country" — the multi-resolver drift that broke
-   * on the platform this ports from (TWO-40 §1). Reads the invoice-role form
-   * explicitly, not "whichever form is on screen" — see `twoincAddressRoles`.
+   * The billing country the checkout form currently holds, upper-cased, or ""
+   * when absent/unset (TWO-24867). The single reader for every
+   * country-sensitive path, so they cannot disagree on "the current country".
    */
   currentCountry() {
     return twoincAddressRoles.value(twoincAddressRoles.invoice(), "country").toUpperCase();
   }
 
   /**
-   * Whether a `change` event on #billing_country represents a REAL country
-   * change, as opposed to WooCommerce re-emitting one during its own
-   * re-render (TWO-25326).
+   * Whether a `change` on #billing_country is a REAL country change, as
+   * opposed to WooCommerce re-emitting one during its own re-render
+   * (TWO-25326). Records the new value as a side effect, so the caller must
+   * invoke this exactly once per event and act on its answer.
    *
-   * The handler this gates destroys the captured company — #billing_company,
-   * #company_id, the picker's selection and the registry address behind it.
-   * WooCommerce fires `change` on #billing_country for reasons that are not
-   * the buyer changing country: `updated_checkout` re-renders the billing
-   * fields and core's address-i18n.js re-triggers the field on
-   * `country_to_state_changing` at init, not only on a user gesture. Bound
-   * delegated on document.body, this handler saw all of them, so a buyer who
-   * had picked a company watched it vanish on an unrelated re-render with no
-   * action of their own — observed live on TWO-25326.
-   *
-   * Compared by value rather than by `event.originalEvent` being present:
-   * WooCommerce's re-render path re-triggers through jQuery on some themes
-   * and dispatches a native event on others, so an event-source test would
-   * hold on the fixture and fail on the shop. The value comparison is true
-   * to what the handler actually needs to know.
-   *
-   * Records the new value as a side effect, so the caller must invoke this
-   * exactly once per event and act on its answer.
-   *
-   * Two flavours of "unknown" are deliberately NOT a change, and neither is
-   * incidental:
-   *
-   *   - An empty reading. WooCommerce replaces #billing_country wholesale on
-   *     some re-renders, so a poll landing mid-replacement reads "". Treated
-   *     as a change that would clear the captured company for nothing. It is
-   *     also not RECORDED, so a genuine switch that completes after the gap
-   *     is still compared against the last real country and still acts.
-   *   - The first known country, whatever this was called from. There is no
-   *     previous country to have moved away from, so there is nothing to
-   *     invalidate: on a checkout restored from a saved address the company
-   *     and the country arrive together.
+   * An empty reading is neither a change nor recorded: WooCommerce replaces
+   * #billing_country wholesale on some re-renders, and a poll landing
+   * mid-replacement would otherwise clear the captured company for nothing.
+   * The first known country is not a change either — there is no previous
+   * country to have moved away from.
    *
    * @param {string} country upper-cased ISO code currently in the field
    * @returns {boolean}
@@ -1546,614 +1244,201 @@ class TwoCompanySearch {
     return !!previous && country !== previous;
   }
 
-  /**
-   * Generate parameters for selectwoo
-   */
-  genSelectWooParams() {
-    let twoincSearchLimit = 50;
-    return {
-      minimumInputLength: twoincSelectWooHelper.companySearchMinLength,
-      // Empty-field hint (TWO-25288). select2 renders this through
-      // templateSelection below, and only while the current selection's id
-      // matches the placeholder's — which is why the field's empty option has
-      // to carry value="" rather than only a non-breaking space.
-      placeholder: twoincSelectWooHelper.companySearchPlaceholderText(),
-      width: "100%",
-      escapeMarkup: function (markup) {
-        return markup;
-      },
-      templateResult: function (data) {
-        return data.html;
-      },
-      templateSelection: function (data) {
-        return data.text;
-      },
-      language: {
-        errorLoading: function () {
-          // Only ever reached deliberately now: the custom ajax transport
-          // below suppresses the cancelled-request case (which is why this
-          // used to masquerade as "searching…") and raises this message
-          // only for a timeout, a transport error, or a degraded response.
-          return twoincSelectWooHelper.companySearchUnavailableText();
-        },
-        // No `inputTooShort` (Doug 2026-08-20): the threshold is the query
-        // field's watermark now, and select2's row for it is suppressed
-        // outright — see `applyQueryFieldPlaceholder` /
-        // `suppressQueryTooShortMessage`.
-        noResults: function () {
-          return wc_country_select_params.i18n_no_matches;
-        },
-        searching: function () {
-          return wc_country_select_params.i18n_searching;
-        }
-      },
-      ajax: {
-        dataType: "json",
-        // 300ms across all three plugin checkouts (was 200 here).
-        delay: 300,
-        /**
-         * Replaces select2's default transport so the request carries a
-         * timeout and so failures can be told apart. select2's own failure
-         * handler cannot make that distinction — it treats any jqXHR with
-         * status 0 as a cancellation, and a jQuery timeout also reports
-         * status 0 — which is why failure() is not called from here at all
-         * and this code owns the messaging.
-         */
-        transport: function (params, success) {
-          const seq = ++twoincSelectWooHelper.companySearchSeq;
-          twoincSelectWooHelper.toggleCompanySearchSpinner(true);
-
-          const request = jQuery.ajax(
-            jQuery.extend({}, params, {
-              timeout: twoincSelectWooHelper.companySearchTimeoutMs
-            })
-          );
-
-          request.done(function (data) {
-            // Same supersession rule as the failure path: a stale response
-            // must not repopulate the list under a newer search.
-            if (seq !== twoincSelectWooHelper.companySearchSeq) return;
-            // `degraded` marks an HTTP 200 whose (near-empty) result set is
-            // unreliable because the upstream provider lookup timed out.
-            // The field may not be deployed yet, so absent must read as not
-            // degraded — hence the explicit === true rather than truthiness.
-            if (data && data.degraded === true) {
-              success({ items: [] });
-              twoincSelectWooHelper.showCompanySearchUnavailable();
-              return;
-            }
-            success(data);
-          });
-
-          request.fail(function (jqXHR, textStatus) {
-            // A cancelled request is routine: select2 aborts the in-flight
-            // search on every keystroke, and the widget is re-created on
-            // country change. Those must stay silent. A timeout or a real
-            // transport error must not — left silent it renders as "no
-            // companies found", which is a wrong answer, not a missing one.
-            if (textStatus === "abort") return;
-            // A superseded request must not paint over a newer one's results.
-            if (seq !== twoincSelectWooHelper.companySearchSeq) return;
-            twoincSelectWooHelper.showCompanySearchUnavailable();
-          });
-
-          request.always(function () {
-            // Only the newest request owns the spinner (see companySearchSeq).
-            if (seq !== twoincSelectWooHelper.companySearchSeq) return;
-            twoincSelectWooHelper.toggleCompanySearchSpinner(false);
-          });
-
-          return request;
-        },
-        url: function (params) {
-          // Read live, per request — NOT captured when the widget was built
-          // (TWO-24867). The widget outlives a country change on any path
-          // that does not rebuild it: WooCommerce replaces #billing_country
-          // wholesale on some `updated_checkout` re-renders, address-i18n.js
-          // rewrites the field without a user gesture, and a programmatic
-          // `.val()` fires no `change` at all. A captured value made the
-          // search query the PREVIOUS country's register while the form said
-          // otherwise — the buyer saw "no companies found" for a company that
-          // exists, which reads as a broken registry rather than stale state.
-          const searchParams = new URLSearchParams({
-            country: twoincSelectWooHelper.currentCountry(),
-            limit: twoincSearchLimit,
-            offset: (params.page || 0) * twoincSearchLimit,
-            q: decodeURIComponent(params.term)
-          });
-          return twoincUtilHelper.constructTwoincUrl("/companies/v2/company", searchParams);
-        },
-        data: function () {
-          return {};
-        },
-        processResults: function (response, params) {
-          const items = [];
-          // A degraded response is fed through here with a synthesised
-          // empty payload, and a malformed body must not throw either.
-          const rawItems = response && Array.isArray(response.items) ? response.items : [];
-          for (let i = 0; i < rawItems.length; i++) {
-            const item = rawItems[i];
-            // `national_identifier` is optional in the search response — the
-            // company may have none in its home registry, and its `id` may be
-            // null or empty. Reading it unguarded threw here, and a throw in
-            // this callback happens inside select2's query pipeline: it kills
-            // the whole result list, not just this hit, leaving the dropdown
-            // stuck on "Searching…". So render the company with whatever it
-            // has: the identifier is the buyer's disambiguator between two
-            // similarly-named companies, but dropping the hit entirely would
-            // remove a selectable company. Without one the buyer sees the
-            // company name alone and types the organisation number into the
-            // (still required) company_id field themselves.
-            const identifier =
-              item.national_identifier && item.national_identifier.id
-                ? String(item.national_identifier.id)
-                : "";
-            items.push({
-              id: item.name,
-              text: item.name,
-              // TWO-25326 §12: `identifier` stays raw on `company_id` below —
-              // that is the value the picker writes to the submitted field and
-              // sends to the API — while what the buyer READS goes through the
-              // shared composer, which drops an internally minted number along
-              // with the brackets that would otherwise be left empty around it.
-              // `item.highlight` is the response's pre-highlighted HTML, so it
-              // is passed through as an already-marked-up fragment rather than
-              // being re-encoded (composeCompanyLabel does not touch its label).
-              //
-              // Falling back to the plain name for the same reason the
-              // identifier is read defensively above: `highlight` is the
-              // server's presentation of the match and this loop is written to
-              // survive a response that omits a field. Without the fallback a
-              // hit missing `highlight` composes to `undefined`, and select2
-              // renders a blank-but-selectable row.
-              html: twoincUtilHelper.composeCompanyLabel(
-                item.highlight || item.name || "",
-                identifier
-              ),
-              company_id: identifier,
-              lookup_id: item.lookup_id,
-              approved: false
-            });
-          }
-
-          return {
-            results: items,
-            pagination: {
-              more: false
-            }
-          };
-        }
-      }
-    };
-  }
+  // ----------------------------------------------------------------- surfaces
 
   /**
-   * Fix the position bug
-   * https://github.com/select2/select2/issues/4614
+   * Is this row actually on screen? The class test alone is not enough: a row
+   * inside a collapsed payment tile carries no `hidden` class of its own, and
+   * naming it as the visible surface strands the number label and the
+   * sole-trader link inside something the buyer cannot see (TWO-25503).
+   *
+   * @param {Object} $el
+   * @returns {boolean}
    */
-  fixSelectWooPositionCompanyName() {
-    if (twoincCompanyCapture.mode === "search") {
-      const billingCompanyDisplay = jQuery("#billing_company_display").data("select2");
-
-      if (billingCompanyDisplay) {
-        billingCompanyDisplay.on("open", function (e) {
-          this.results.clear();
-          this.dropdown._positionDropdown();
-        });
-        billingCompanyDisplay.on("results:message", function (e) {
-          this.dropdown._resizeDropdown();
-          this.dropdown._positionDropdown();
-        });
-
-        // Spinner also driven off the widget's own query lifecycle, additive
-        // to the ajax-transport hooks in genSelectWooParams (TWO-25326 §1):
-        // covers the 300ms debounce before the transport runs, and is
-        // independent of the transport hook actually firing in a real
-        // browser (observed not to, though root cause unconfirmed, while the
-        // same path under Jest works). `results:all`/`results:message` are
-        // the two terminal states of a query.
-        //
-        // The threshold check is load-bearing: for a below-minimum term the
-        // minimumInputLength decorator answers synchronously with
-        // `results:message` before this handler runs (handlers run in
-        // registration order, and the widget's own `query` handler runs
-        // first) — without the guard every sub-3-character keystroke would
-        // leave the spinner running with no request in flight.
-        billingCompanyDisplay.on("query", function (params) {
-          const term = (params && params.term) || "";
-          if (term.length < twoincSelectWooHelper.companySearchMinLength) return;
-          twoincSelectWooHelper.toggleCompanySearchSpinner(true);
-        });
-        billingCompanyDisplay.on("results:all", function () {
-          twoincSelectWooHelper.toggleCompanySearchSpinner(false);
-        });
-        billingCompanyDisplay.on("results:message", function () {
-          twoincSelectWooHelper.toggleCompanySearchSpinner(false);
-        });
-      }
+  isOnScreen($el) {
+    if (!$el || !$el.length) return false;
+    let node = $el.get(0);
+    while (node && node.nodeType === 1) {
+      if (node.classList.contains("hidden") || node.hasAttribute("hidden")) return false;
+      // WooCommerce collapses a payment box by writing `display: none` inline,
+      // which is what makes a relocated row unreachable without ever putting a
+      // class on it.
+      if (node.style && node.style.display === "none") return false;
+      node = node.parentElement;
     }
+    return true;
   }
 
   /**
-   * Whether focus is still somewhere this poll is allowed to touch.
-   * `waitToFocus` polls to nudge focus into the search field because the
-   * picker's own focus-on-open doesn't land reliably on every host theme;
-   * left unchecked it would keep yanking focus back even after the buyer
-   * deliberately Tabbed elsewhere. "Still allowed" covers everything the
-   * poll's job needs: nothing focused yet, the search field, an option row,
-   * or the collapsed combobox trigger — anything else is the buyer's own
-   * navigation, which must win.
+   * The row that is the buyer's visible company-NAME surface right now.
+   *
+   * THE one place that decides it (TWO-25503). Every surface that has to sit
+   * beside the company name — the read-only number label, the sole-trader link,
+   * the in-flight spinner — asks here instead of re-deriving it.
+   *
+   * @returns {Object} jQuery
    */
-  focusStillWithinCompanySearch(selectWooElemId) {
-    const active = document.activeElement;
-    if (!active || active === document.body) return true;
+  companyNameSurface() {
+    const helper = twoincSelectWooHelper;
+    const $native = jQuery("#billing_company_field");
 
-    const $active = jQuery(active);
-    if ($active.is('input[aria-owns="select2-' + selectWooElemId + '-results"]')) return true;
+    const $search = helper.isTileLocation()
+      ? jQuery("#" + helper.tileRowId)
+      : jQuery("#billing_company_display_field");
+    if (helper.isOnScreen($search)) return $search;
+    if (helper.isOnScreen($native)) return $native;
 
-    return (
-      $active.closest(
-        "#select2-" + selectWooElemId + "-results, #select2-" + selectWooElemId + "-container"
-      ).length > 0
+    return $native.length ? $native : $search;
+  }
+
+  /**
+   * The slot a company-field affordance button hangs in, inside the native
+   * company row.
+   */
+  companyFieldAffordanceSlot() {
+    return twoincSelectWooHelper.affordanceSlotIn(
+      jQuery("#billing_company_field"),
+      "#billing_company"
     );
   }
 
   /**
-   * Wait until element appear and focus
+   * The affordance slot inside one company field row, self-healing when the
+   * theme's markup lacks core's wrapper — the pay-for-order view renders the
+   * row without one (TWO-25503).
+   *
+   * Falling back to the row itself would append the button as a sibling of both
+   * the label and the input rather than right after the input, which is the
+   * overlap-with-the-label bug this helper exists to avoid.
+   *
+   * @param {Object} $row the field row
+   * @param {string} inputSelector the input the wrapper belongs around
+   * @returns {Object} jQuery
    */
-  waitToFocus(selectWooElemId, hitsRequired, intervalDuration, callbackFunc) {
-    if (isNaN(intervalDuration)) intervalDuration = 300;
-    if (isNaN(hitsRequired)) hitsRequired = 2;
-    let attemptsLeft = hitsRequired * 8;
-
-    let focusInterval = setInterval(function () {
-      // The buyer's own navigation always wins over this poll's nudging.
-      if (!twoincSelectWooHelper.focusStillWithinCompanySearch(selectWooElemId)) {
-        clearInterval(focusInterval);
-        return;
-      }
-
-      let inpElem = jQuery('input[aria-owns="select2-' + selectWooElemId + '-results"]').get(0);
-      if (inpElem) {
-        // Focus on the element if not already focused
-        if (inpElem != document.activeElement) inpElem.focus();
-        // Mark this as a hit attempt
-        hitsRequired--;
-        // If reached number of required hits, do not attempt again
-        if (hitsRequired <= 0) attemptsLeft = 0;
-      }
-
-      attemptsLeft--;
-      if (attemptsLeft <= 0) {
-        clearInterval(focusInterval);
-        if (inpElem && callbackFunc) callbackFunc();
-      }
-    }, intervalDuration);
-  }
-
-  /**
-   * Wait until element appear and focus
-   */
-  addSelectWooFocusFixHandler(selectWooElemId) {
-    let billingCompanyDisplayResult = jQuery("#select2-" + selectWooElemId + "-results");
-
-    // Ensure the element exists and the handler hasn't been added already
-    if (
-      billingCompanyDisplayResult.length &&
-      !billingCompanyDisplayResult.attr("two-focused-handler")
-    ) {
-      billingCompanyDisplayResult.attr("two-focused-handler", true);
-
-      // Create a new MutationObserver
-      let observer = new MutationObserver(function (mutations) {
-        mutations.forEach(function (mutation) {
-          for (let addedNode of mutation.addedNodes) {
-            // Ensure the node has a parent and check for the correct parentNode ID
-            if (
-              addedNode.parentNode &&
-              addedNode.parentNode.id === "select2-" + selectWooElemId + "-results"
-            ) {
-              twoincSelectWooHelper.waitToFocus("billing_company_display", 80, 20);
-            }
-          }
-        });
-      });
-
-      // Observe changes to the childList of the raw DOM element
-      observer.observe(billingCompanyDisplayResult[0], {
-        childList: true // Monitor when child nodes are added or removed
-      });
+  affordanceSlotIn($row, inputSelector) {
+    const helper = twoincSelectWooHelper;
+    const $input = $row.find(inputSelector).first();
+    if (!$input.length) {
+      const $any = $row.find(".woocommerce-input-wrapper").first();
+      return $any.length ? $any : $row;
     }
+
+    // The panel is the input's own sibling inside this wrapper, so a link
+    // appended here lands below both rather than between them.
+    const $wrap = $input.closest("." + helper.fieldWrapClass);
+    if ($wrap.length) return $wrap;
+
+    // The wrapper CONTAINING the input, never merely the row's first: a
+    // fragment swap can leave a stale empty wrapper ahead of the live one.
+    const $existing = $input.closest(".woocommerce-input-wrapper");
+    if ($existing.length) return $existing;
+
+    const $wrapper = jQuery('<span class="woocommerce-input-wrapper"></span>');
+    $input.before($wrapper);
+    $wrapper.append($input);
+    return $wrapper;
   }
 
-  /**
-   * DOM id of the safe holding pen the wrapper sits in whenever it is not
-   * inside the live `.twoinc-company-search-tile-slot` (TWO-25326 §7.1).
-   * A direct child of `<form name="checkout">`, stable across every
-   * WooCommerce checkout AJAX refresh (unlike `document.body`), so a buyer
-   * submitting during the brief detached window still posts real inputs.
-   */
-  getCompanySearchTileHoldingPen() {
-    let $pen = jQuery("#twoinc-company-search-tile-holding-pen");
-    if (!$pen.length) {
-      $pen = jQuery('<div id="twoinc-company-search-tile-holding-pen" class="hidden"></div>');
-      const $form = jQuery('form[name="checkout"]');
-      // Falls through to <body> only on a page with no checkout form.
-      (($form.length && $form) || jQuery("body")).append($pen);
-    }
-    return $pen;
-  }
+  // ---------------------------------------------------------------- placement
 
   /**
-   * Detach the company-search tile wrapper to the safe holding pen before
-   * any WooCommerce checkout AJAX refresh can destroy it (TWO-25326 §7.1).
+   * Render the company-search control into the payment tile, or leave it in the
+   * address form, per `window.twoinc.company_search_location` (TWO-25326 §7.1).
    *
-   * WooCommerce's `update_order_review` AJAX (shipping/coupon/quantity
-   * change, not only payment-method or country) replaces the whole
-   * `.woocommerce-checkout-payment` fragment via `replaceWith()`, which the
-   * payment tile's slot lives inside — a live input re-parented there is a
-   * descendant of a subtree WooCommerce can destroy with no warning, and
-   * nothing resurrects a node jQuery already tore down.
+   * REBUILT into the tile, never moved there: WooCommerce replaces the whole
+   * `.woocommerce-checkout-payment` fragment on every payment-method, coupon,
+   * shipping or quantity change, so a form row relocated into it is a row
+   * WooCommerce can destroy with no warning.
    *
-   * Bound to WooCommerce's present-tense `update_checkout` trigger (fired
-   * synchronously before the async AJAX begins), not `updated_checkout`
-   * (past-tense, fires after fragments are already swapped) — jQuery
-   * dispatches every handler on a trigger synchronously in the same tick,
-   * so this always completes before the fragment swap regardless of
-   * registration order against WooCommerce's own handler.
-   *
-   * No-op on 'address_area', or if the wrapper doesn't exist yet or is
-   * already in the pen.
-   *
-   * @returns {void}
-   */
-  detachCompanySearchTileWrapperToSafety() {
-    if (window.twoinc.company_search_location !== "payment_tile") return;
-
-    const $wrapper = jQuery("#" + twoincSelectWooHelper.companySearchTileWrapperId);
-    if (!$wrapper.length) return;
-
-    const $pen = twoincSelectWooHelper.getCompanySearchTileHoldingPen();
-    if ($wrapper.parent()[0] !== $pen[0]) {
-      $wrapper.appendTo($pen);
-    }
-  }
-
-  /**
-   * Close the company-search dropdown before WooCommerce's checkout AJAX can
-   * discard the field it is attached to (TWO-40, live-reported by Doug: two
-   * `.select2-results` panels, each with its own `#company_mode_chips`,
-   * visible at once).
-   *
-   * Paired on `update_checkout` the same way, and for the same ordering
-   * reason, as `detachCompanySearchTileWrapperToSafety` above — and gated
-   * the SAME way too, on `company_search_location`. WooCommerce's own
-   * `update_checkout` AJAX only ever replaces the `.woocommerce-checkout-payment`
-   * fragment; `#billing_company_display` is a descendant of that fragment
-   * only when the search control has been moved into the payment tile —
-   * `'address_area'`, the default, renders it in the ordinary billing
-   * fields, which this AJAX never touches. Closing unconditionally would
-   * slam the buyer's open dropdown shut on every unrelated `update_checkout`
-   * (a coupon apply, a shipping-method change, a quantity edit) for every
-   * merchant on the default config, for a danger that config was never
-   * exposed to.
-   *
-   * Where it IS exposed: a live widget whose `<select>` is torn out from
-   * under it by a fragment replace (`replaceWith`, never
-   * `select2("destroy")`) never runs selectWoo's own AttachBody cleanup, so
-   * its dropdown — appended straight to `<body>`, never a child of the
-   * replaced element — is orphaned there, still visible, forever (TWO-40,
-   * live-reported by Doug: two `.select2-results` panels, each with its own
-   * `#company_mode_chips`, visible at once). `close()` while the widget can
-   * still do it properly detaches that dropdown itself, so there is nothing
-   * left standing for the fragment swap moments later to orphan. A no-op if
-   * nothing is open.
-   *
-   * Goes through `closeCompanySearchDropdown()` rather than
-   * `.select2("close")` directly, matching this file's own established
-   * idiom for the same reason that helper's doc comment gives: the plugin
-   * dispatch throws on a page where the widget was never attached.
-   *
-   * selectWoo's `close()` schedules an unconditional `$selection.focus()`
-   * 1ms later (vendored bundle, `container.on('close')` — the same quirk
-   * `focusIsBackOnCompanyField()`'s own comment documents). This handler
-   * fires for `update_checkout` triggers that have nothing to do with the
-   * company field — a coupon apply, a shipping-method change — so unlike
-   * the Tab-shortcut fix elsewhere in this file, there is no new target to
-   * fight for: whatever legitimately had focus before this ran gets it
-   * back if selectWoo steals it away.
-   *
-   * Refused while `twoincSoleTrader.isBusy()`, same restraint given
-   * elsewhere in the file: the dropdown/busy spinner are deliberately left
-   * open through a sole-trader popup round trip, and closing here mid-flight
-   * would swap that spinner out from under the buyer for no reason.
-   *
-   * Checked again inside the deferred focus-restore, not only at entry: a
-   * flight can start in the gap between the synchronous close and the timer
-   * firing, and the restore would otherwise yank focus back off whatever
-   * that flight's own UI just gave it.
-   *
-   * The restore's steal check deliberately isn't `focusIsBackOnCompanyField()`
-   * — that helper treats nothing-focused (`<body>`) as a steal too, which is
-   * right for its own caller (paired with attempting a new target) but wrong
-   * here: a fragment replace can legitimately remove the previously-focused
-   * node and leave focus on `<body>` with nothing to fight. Only a focus
-   * landing literally back on the company field is the steal guarded here.
-   */
-  closeCompanySearchBeforeCheckoutUpdate() {
-    if (window.twoinc.company_search_location !== "payment_tile") return;
-    if (twoincSoleTrader.isBusy()) return;
-
-    const $previouslyFocused = jQuery(document.activeElement);
-    twoincSelectWooHelper.closeCompanySearchDropdown();
-
-    setTimeout(function () {
-      if (twoincSoleTrader.isBusy()) return;
-      const $active = jQuery(document.activeElement);
-      const stolenBackToCompanyField =
-        $active.closest("#billing_company_display_field").length > 0 ||
-        $active.is("#billing_company, #company_id");
-      if (!stolenBackToCompanyField) return;
-      if ($previouslyFocused.is(document.activeElement)) return;
-      $previouslyFocused.trigger("focus");
-    }, 20);
-  }
-
-  /**
-   * Relocate the one company-search control into the payment tile, or leave
-   * it in the address area, per `window.twoinc.company_search_location`
-   * (TWO-25326 §7.1) — derived from the `enable_company_search` checkbox
-   * admin field (checked = address area, unchecked = payment tile; the
-   * control never disappears, it only moves). See
-   * WC_Twoinc_Checkout::prepare_twoinc_object().
-   *
-   * Same control both ways — `#billing_company_display_field` plus the
-   * read-only number label — moved with `appendTo()`, never cloned. All
-   * existing JS targeting those ids/classes keeps working unchanged.
-   *
-   * `#billing_company_field` (WooCommerce's own native field) is never
-   * moved: it's the plain fallback the buyer types into when the checkbox
-   * is unchecked (`toggleBusinessFields()`'s disabled branch) — moving it
-   * would pull the buyer's only way to enter a company name out of the
-   * address form. `#company_id_field` is also excluded, but only because
-   * it's a hidden input with no visible effect from moving; it stays with
-   * its manual-entry partner.
-   *
-   * Default 'address_area' (checkbox checked): no-op, zero behavioural
-   * change. 'payment_tile': fields move into
-   * `.twoinc-company-search-tile-slot`, the slot `get_pay_box_description()`
-   * server-renders between the sole-trader toggle and the intent
-   * loader/notice. A single wrapper is created once and holds all moved
-   * rows, so the slot only ever has one child to manage. This function only
-   * pulls the wrapper INTO the slot; pulling it back OUT before AJAX can
-   * destroy it is `detachCompanySearchTileWrapperToSafety`'s job.
-   *
-   * Every move is guarded on the node's current parent (same idempotency
-   * check `getCompanySummaryNode()` relies on) so an unconditional
-   * `appendTo()` doesn't detach/reattach a live `<select>` — and silently
-   * close an open dropdown — on every unrelated re-render.
-   *
-   * Called from `onUpdatedCheckout()` and from `toggleBusinessFields()` —
-   * the two paths that can re-decide which company fields are visible, and
-   * so must re-decide where they live.
+   * The tile input carries no `name`: `#billing_company` is what POSTs the
+   * company, in every mode and both placements.
    */
   syncCompanySearchTileLocation() {
-    const $slot = jQuery("." + twoincSelectWooHelper.companySearchTileSlotClass);
-    if (!$slot.length) return;
+    const helper = twoincSelectWooHelper;
+    const $slot = jQuery("." + helper.companySearchTileSlotClass);
 
-    if (window.twoinc.company_search_location !== "payment_tile") {
-      // Address area (default): nothing to move — `window.twoinc` is
-      // written once per page load, so this can't flip mid-session.
-      if (!$slot.hasClass("hidden")) $slot.addClass("hidden");
+    if (!helper.isTileLocation()) {
+      $slot.addClass("hidden");
+      // Ahead of the slot check: the slot lives in Two's gateway description,
+      // so a checkout not offering Two has no other re-bind.
+      if (twoincCompanyCapture.mode !== "manual") helper.attach();
       return;
     }
 
-    let $wrapper = jQuery("#" + twoincSelectWooHelper.companySearchTileWrapperId);
-    if (!$wrapper.length) {
-      $wrapper = jQuery(
-        '<div id="' + twoincSelectWooHelper.companySearchTileWrapperId + '"></div>'
+    if (!$slot.length) return;
+
+    let $row = $slot.find("#" + helper.tileRowId);
+    if (!$row.length) {
+      $row = jQuery(
+        '<div id="' +
+          helper.tileRowId +
+          '" class="twoinc-inp-container form-row form-row-wide">' +
+          '<label for="' +
+          helper.tileFieldSelector.replace("#", "") +
+          '"></label>' +
+          '<span class="woocommerce-input-wrapper">' +
+          '<input type="text" id="' +
+          helper.tileFieldSelector.replace("#", "") +
+          '" autocomplete="off">' +
+          "</span>" +
+          "</div>"
       );
-      $slot.append($wrapper);
-    } else if ($wrapper.parent()[0] !== $slot[0]) {
-      $slot.append($wrapper);
+      // Reuses the address row's own already-translated label rather than a
+      // second string to keep in step with it.
+      $row.find("label").text(helper.companyNameLabelText());
+      $slot.append($row);
     }
 
-    // jQuery's multi-selector returns matches in document order, which is
-    // already the address-form order (search control, then hidden org-number
-    // field). `.appendTo()` on an already-attached node moves it (never
-    // clones), only when not already there, so a stale dropdown/selection
-    // survives an unrelated re-render.
-    //
-    // `#billing_company_field` and `#company_id_field` stay excluded from
-    // this selector — both stay in the address form no matter which branch
-    // runs.
-    jQuery("#billing_company_display_field").each(function () {
-      const $field = jQuery(this);
-      if ($field.parent()[0] !== $wrapper[0]) $field.appendTo($wrapper);
-    });
+    const show = twoincDomHelper.isCountrySupported() && twoincCompanyCapture.mode !== "manual";
+    $row.toggleClass("hidden", !show);
+    $slot.toggleClass("hidden", !show);
 
-    // The read-only company summary is not appended here — no second
-    // implementation of "where does the summary live". It follows the
-    // search control on its own, since `getCompanySummaryNode()` (called
-    // from `renderCompanySummary()`, which always runs right after this)
-    // anchors the summary against `#billing_company_display_field` itself,
-    // already relocated above by the time that lookup runs.
-    //
-    // Unhidden only when the wrapper gained a VISIBLE child: manual entry
-    // and any country with no registry to search hide
-    // `#billing_company_display_field` with the `hidden` class rather than
-    // removing it, but it's still moved into the wrapper by the loop above
-    // — so checking mere child presence would unhide the slot around a
-    // `display: none` field, leaving a bare gap between the sole-trader
-    // toggle and the intent message.
-    if ($wrapper.children(":not(.hidden)").length) {
-      if ($slot.hasClass("hidden")) $slot.removeClass("hidden");
-    } else if (!$slot.hasClass("hidden")) {
-      $slot.addClass("hidden");
-    }
+    if (show) helper.attach();
   }
 
   /**
-   * The native `#billing_company` is read only in manual entry. Sole-trader
-   * mode reads the picker's display span exactly like an ordinary search
-   * pick, because that is where the adopted name is rendered
-   * (`lockCapturedFields()` seeds the widget with it, TWO-40 §7). Branching
-   * on `enable_company_search` instead would send the sole-trader case down
-   * the native-field branch, which isn't what the buyer sees there, so
-   * `getCompanyData()`/`isReadyApprovalCheck()` would silently fail to fire
-   * an order intent for an adopted sole trader.
+   * The company-name label, reusing the row WooCommerce renders rather than a
+   * second string to keep in step with it. Core's optional/required markers go:
+   * this field is neither posted nor validated.
    */
-  getCompanyName() {
-    if (twoincCompanyCapture.mode !== "manual") {
-      let companyNameObj = twoincDomHelper.getCheckoutInput(
-        "SPAN",
-        "select",
-        "select2-billing_company_display-container"
-      );
-      if (companyNameObj) {
-        return companyNameObj.val;
-      }
-    } else {
-      return jQuery("#billing_company").val();
-    }
-
-    return "";
+  companyNameLabelText() {
+    const $label = jQuery("label[for='billing_company_display']").first().clone();
+    $label.find(".optional, .required, abbr").remove();
+    return twoincUtilHelper.blankToEmpty($label.text()).trim() || "Company name";
   }
 
+  // ------------------------------------------------------------------ capture
+
+  /**
+   * The captured company name. `#billing_company` is the single source: every
+   * capture path — registry pick, sole-trader adoption, manual entry, user-meta
+   * restore, storage restore — writes it, and it is what WooCommerce POSTs.
+   */
+  getCompanyName() {
+    return twoincUtilHelper.blankToEmpty(jQuery("#billing_company").val());
+  }
+
+  /**
+   * Throw away the captured company and everything derived from it.
+   */
   clearSelectedCompany() {
-    let billingCompanyDisplay = jQuery("#billing_company_display");
-    billingCompanyDisplay.html("");
-    // Re-inits selectWoo directly rather than through `attach()` (TWO-25469)
-    // — this can run after a fragment replace has already discarded the
-    // field's old `<select>`, the orphan-dropdown trigger `attach()`'s own
-    // sweep exists for. See `sweepOrphanedDropdown()` for the mechanism.
-    twoincSelectWooHelper.sweepOrphanedDropdown(billingCompanyDisplay);
-    twoincSelectWooHelper.initCompanySearchWidget(billingCompanyDisplay);
-    twoincDomHelper.toggleTooltip(
-      "#billing_company_display_field .select2-container",
-      window.twoinc.text.tooltip_company
-    );
-    twoincSelectWooHelper.fixSelectWooPositionCompanyName();
-    // The real company field too, matching enterManualCompanyEntry: without
-    // this the cleared company survives in #billing_company (the field
-    // WooCommerce posts, and the live mirror the read-only summary reads),
-    // so it would reappear on the next render (TWO-25288).
-    //
+    const helper = twoincSelectWooHelper;
+
+    helper.setDisplayName("");
+    helper.attach();
+
     // Gated on PROVENANCE (TWO-40 §5), not capture mode: in manual entry
-    // #billing_company is the buyer's own typed input, and this runs on
-    // every country change, so clearing unconditionally would wipe a name
-    // typed for reasons of their own. The provenance marker distinguishes a
-    // plugin-written name (e.g. sole-trader adoption) from buyer typing
-    // directly, which `enable_company_search` alone can't.
+    // #billing_company is the buyer's own typed input, and this runs on every
+    // country change, so clearing unconditionally would wipe a name typed for
+    // reasons of their own.
     const plugin_wrote_name = twoincCompanyCapture.isPluginWritten(
       twoincCompanyCapture.nameField()
     );
     twoincCompanyCapture.write(plugin_wrote_name ? "" : jQuery("#billing_company").val(), "");
 
-    // Clear the addresses, in case address get request fails.
-    // `clearAddress()`, not a blank `setAddress()` payload: the latter now
-    // leaves line 2 untouched by design (TWO-40 §2.6), which would strand the
-    // outgoing company's registry-written line 2 on the form.
+    // `clearAddress()`, not a blank `setAddress()` payload: the latter leaves
+    // line 2 untouched by design (TWO-40 §2.6), which would strand the outgoing
+    // company's registry-written line 2 on the form.
     if (window.twoinc.enable_address_lookup === "yes") {
       Twoinc.getInstance().clearAddress();
     }
@@ -2162,109 +1447,45 @@ class TwoCompanySearch {
     Twoinc.getInstance().customerCompany = {};
 
     // Clearing a capture changes the visible company-name surface exactly as
-    // creating one does — the mirror of the registry-pick trigger (TWO-25503).
-    // Without it a buyer who changes country in tile placement keeps the
-    // address row hidden with nothing captured to justify it.
+    // creating one does (TWO-25503).
     twoincDomHelper.toggleBusinessFields();
-    // Re-read rather than forced empty. Forcing it disagreed with the gated
-    // clear above: in manual entry the buyer's typed company is deliberately
-    // kept, so the summary vanished here and reappeared 3s later when the
-    // re-read below ran.
-    twoincSelectWooHelper.renderCompanySummary();
+    helper.renderCompanySummary();
     twoincDomHelper.togglePaySubtitleDesc();
 
-    // Update again after all elements are updated.
-    //
-    // Guarded by the company-search counter (review round 5). Three seconds is
-    // long enough for the buyer to change country again, or to pick a company —
-    // and this closure then overwrote `customerCompany` from whatever the DOM
-    // held at that moment and re-rendered from it, undoing the newer capture. The
-    // counter is bumped by every country change and every search, so a stale
-    // deferred read is exactly what it is there to catch.
-    const seq = twoincSelectWooHelper.companySearchSeq;
+    // Guarded by the company-search counter: three seconds is long enough for
+    // the buyer to change country again, or to pick a company, and this closure
+    // would then overwrite `customerCompany` from whatever the DOM held at that
+    // moment, undoing the newer capture.
+    const seq = helper.companySearchSeq;
     setTimeout(function () {
       if (seq !== twoincSelectWooHelper.companySearchSeq) return;
       Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData();
       twoincSelectWooHelper.renderCompanySummary();
-      // This closure touches the TILE not at all (review round 7). It re-reads the
-      // company record and re-renders the summary; the verdict is not its business.
-      //
-      // It carried a blanket hide, then a verdicts-only clear, and both were wrong
-      // for the same reason: it fires three seconds late, by which time a check
-      // armed by the `getApproval()` at the end of the country handler has issued
-      // (~1s) and painted (~1.5-2s). Clearing then wipes a correct, current verdict
-      // — and `interval` is null and `pendingCheck` false by then, and neither a
-      // country change nor `checkout_error` fires `updated_checkout`, so nothing
-      // repaints it. The buyer changed country and got a blank tile.
-      //
-      // Nothing is lost by removing it: the synchronous `togglePaySubtitleDesc()`
-      // above already retired the outgoing verdict at t=0, which is the only moment
-      // at which it was the stale one.
     }, 3000);
   }
 
+  // ------------------------------------------------------------------ summary
+
   /**
-   * The read-only company-number label, built hidden on first use
-   * (TWO-25288; scope narrowed TWO-25326 §7).
+   * The read-only company-number label, built hidden on first use (TWO-25288;
+   * scope narrowed TWO-25326 §7).
    *
    * ONE <span> and no <input>: the captured number is a value the buyer is
-   * shown, not a field they fill in, so there is deliberately nothing here to
-   * type into and no control that removes it. `readonly` inputs are this
-   * plugin's convention for a field that still carries a value the buyer must
-   * not change (sole-trader mode readonly-locks #billing_company and
-   * #company_id) — but those are the SUBMITTED fields, and they keep that job
-   * untouched. This is a display beside them, so a span is the right shape.
+   * shown, not a field they fill in.
    *
-   * It used to render the captured NAME here too, in a
-   * `.twoinc-company-summary-name` span above the number. That span is gone
-   * (TWO-25326 §7): the name is already on screen in the company-name control
-   * immediately above, and the ticket rules out any additional company name
-   * or number text in the address area beyond the company-name field itself
-   * and this number label. The number stays because §5 requires exactly this
-   * — the number as a plain right-aligned text label immediately below the
-   * name field, never as an input — and this element is the only thing on WC
-   * providing it. The name itself no longer renders anywhere in the tile
-   * either, as a standalone label (TWO-25326 §7.2/§7.3, ruling 2026-08-03):
-   * it is substituted directly into the intent-message sentence instead —
-   * see `getCompanyLabelText` and its callers in `togglePaySubtitleDesc`.
-   *
-   * Anchored after the company-search field's enclosing `.twoinc-inp-container`
-   * where there is one, not inside it — the pay-for-order page hides that
-   * container (not just the field), so a summary placed inside would be
-   * invisible there in exactly the search mode it matters most for.
-   * `#billing_company_field` covers the hidden-search-field case, and
-   * `#company_id_field` is the fallback for a page with no name field.
-   *
-   * Anchoring against the search field specifically, rather than
-   * `#company_id_field` (never relocated — see
-   * `syncCompanySearchTileLocation()`), is what makes the summary follow
-   * the control into the payment tile: that function runs before every
-   * `renderCompanySummary()` call, so the anchor is already wherever it's
-   * going to be for this render.
-   *
-   * Re-anchored on every call, not just on first creation: WooCommerce
-   * core's `address-i18n.js` detaches and re-appends every `.form-row` in
-   * the billing wrapper by priority on every checkout load. This summary is
-   * a plain `<div>`, not a `.form-row`, so it never takes part in that
-   * resort and stays stranded above the real fields once WC moves them.
-   * `insertAfter` on an already-attached node moves it rather than cloning,
-   * so re-checking the anchor on every render (already firing on every
-   * pick/switch/change) snaps it back into place.
-   *
-   * Guarded on `$node.prev()`: an unconditional `insertAfter` on every call
-   * detaches/reinserts the node even when nothing drifted, collapsing any
-   * text selection and restarting brand-overlay CSS transitions. `.prev()`
-   * is element-only, so "prev is already the anchor" reliably means
-   * "already positioned, nothing to do".
+   * Re-anchored on every call, not just on creation: WooCommerce core's
+   * `address-i18n.js` detaches and re-appends every `.form-row` in the billing
+   * wrapper by priority on every checkout load, and this is a plain `<div>` that
+   * never takes part in that resort. Guarded on `$node.prev()` so an
+   * unconditional `insertAfter` doesn't collapse a text selection and restart
+   * brand-overlay transitions when nothing drifted.
    */
   getCompanySummaryNode() {
-    let $node = jQuery("#" + twoincSelectWooHelper.companySummaryId);
+    const helper = twoincSelectWooHelper;
+    let $node = jQuery("#" + helper.companySummaryId);
     const isNew = !$node.length;
 
-    // Immediately below whichever company-NAME element is currently visible —
-    // anchoring against a `display: none` row would strand the label above
-    // whatever sits there. `companyNameSurface()` is the single answer.
-    let $field = twoincSelectWooHelper.companyNameSurface();
+    let $field = helper.companyNameSurface();
     if (!$field.length) $field = jQuery("#company_id_field");
     if (!$field.length) $field = jQuery("#billing_company_field");
     if (!$field.length) return $node;
@@ -2272,7 +1493,7 @@ class TwoCompanySearch {
     if (isNew) {
       $node = jQuery(
         '<div id="' +
-          twoincSelectWooHelper.companySummaryId +
+          helper.companySummaryId +
           '" class="twoinc-company-summary hidden">' +
           '<span class="twoinc-company-summary-id"></span>' +
           "</div>"
@@ -2286,60 +1507,42 @@ class TwoCompanySearch {
   }
 
   /**
-   * Render the captured company's name and number, read-only (TWO-25288).
-   * Both render as text in one place across all three capture modes:
-   * company search (name+number from the registry), sole trader (name+number
-   * held by Two), manual entry (typed name, no number until the buyer
-   * supplies one).
+   * Render the captured company's number, read-only (TWO-25288).
    *
-   * Both arguments are optional. Callers that already hold the values pass
-   * them (picker select handler, sole-trader autofill, the user-meta restore
-   * — which writes #company_id after this runs). Everyone else omits them
-   * and the current inputs are read.
+   * Both arguments are optional. Callers that already hold the values pass them
+   * (the pick handler, sole-trader autofill, the user-meta restore, which
+   * writes #company_id after this runs); everyone else omits them and the
+   * current inputs are read.
    */
   renderCompanySummary(companyName, companyId) {
+    const helper = twoincSelectWooHelper;
     const data =
       companyName === undefined && companyId === undefined
-        ? twoincSelectWooHelper.readCapturedCompany()
+        ? helper.readCapturedCompany()
         : { company_name: companyName, organization_number: companyId };
 
-    // The empty selectWoo option's label is a non-breaking space, so an
-    // unselected picker reads back as " " rather than "".
-    const name = twoincUtilHelper.blankToEmpty(data.company_name);
     // Display-normalised (TWO-25326 §12): an internally minted number reads
     // back as "" here, so a sole trader's captured company shows no number
-    // label. The raw value stays untouched on `#company_id` and in instance
-    // state, which is what gets posted.
+    // label. The raw value stays on `#company_id`, which is what gets posted.
     const number = twoincUtilHelper.formatCompanyNumber(data.organization_number);
 
-    const $node = twoincSelectWooHelper.getCompanySummaryNode();
+    const $node = helper.getCompanySummaryNode();
     if (!$node.length) return;
 
     $node.find(".twoinc-company-summary-id").text(number);
 
-    // Visible only in `search` mode (never `manual`, which clears
-    // #company_id; never `sole_trader`, whose minted number isn't the
-    // buyer's own registry identifier) with a non-synthetic number —
-    // `number` is already `formatCompanyNumber()`'s output, so this one
-    // truthiness check covers both "nothing captured" and "must not show".
-    // Deliberately not gated on Two being the selected payment method: the
-    // number belongs to the captured company, not to Two's tile.
+    // Visible only in `search` mode (never `manual`, which clears #company_id;
+    // never `sole_trader`, whose minted number isn't the buyer's own registry
+    // identifier) with a non-synthetic number. Deliberately not gated on Two
+    // being the selected method: the number belongs to the captured company,
+    // not to Two's tile.
     const visible = Boolean(number && twoincCompanyCapture.mode === "search");
     $node.toggleClass("hidden", !visible);
   }
 
   /**
-   * Read the captured company straight out of the live inputs (TWO-25288).
-   * Deliberately not getCompanyData(): in search mode that goes through
-   * getCompanyName(), which reads a sessionStorage snapshot refreshed only
-   * every 3 seconds, so a summary rendered from it could show a stale or
-   * blank name while the number (read live) stayed current.
-   *
-   * `#billing_company` and `#company_id` only — the fields WooCommerce
-   * posts, written by every capture mode. The display select's value was
-   * briefly used as a fallback but had to go: the picker appends an
-   * `<option>` per pick that nothing removes on leaving search mode, so it
-   * could show a company the order didn't actually carry.
+   * Read the captured company straight out of the live inputs (TWO-25288) —
+   * the fields WooCommerce posts, written by every capture mode.
    */
   readCapturedCompany() {
     return {
@@ -2348,37 +1551,29 @@ class TwoCompanySearch {
     };
   }
 
+  // ------------------------------------------------------------ manual entry
+
   /**
-   * Get the link back out of manual entry and into company search, building
-   * it hidden on first use (TWO-25288). A real `<button>` (`type="button"`
-   * so it can't submit the checkout form), not a `<div>` — needed for
-   * keyboard access.
+   * The link back out of manual entry and into company search, built hidden on
+   * first use (TWO-25288). A real `<button type="button">` so it can't submit
+   * the checkout form and so Enter/Space activate it natively.
    *
-   * Appended into `.woocommerce-input-wrapper`, WooCommerce core's own box
-   * around just the `<input>` with no label inside it, so a plain appended
-   * block lands directly below the input regardless of label height. If
-   * that wrapper is missing, one is built around `#billing_company`
-   * directly rather than falling back to `#billing_company_field` itself,
-   * which would reintroduce the overlap bug this avoids.
+   * Bound directly on the element rather than delegated from document.body: a
+   * delegated click handler was found live not to fire even though the mouse
+   * event demonstrably reached this button.
    */
   getSearchCompanyBtnNode() {
-    const id = twoincSelectWooHelper.searchCompanyBtnId;
+    const helper = twoincSelectWooHelper;
+    const id = helper.searchCompanyBtnId;
 
     let $btn = jQuery("#" + id);
     if ($btn.length) return $btn;
 
     $btn = jQuery("<button></button>")
       .attr({ id: id, type: "button" })
-      .text(twoincSelectWooHelper.searchCompanyText())
+      .text(helper.searchCompanyText())
       .hide()
-      // Both click and Enter/Space bound directly on the element rather
-      // than delegated from document.body: a delegated click handler was
-      // previously found not to fire even though the mouse event
-      // demonstrably reached this button, and native Enter/Space activation
-      // alone did nothing for it either. A directly-bound listener always
-      // runs before any bubble-phase ancestor listener regardless of
-      // registration order, so both fire reliably.
-      .on("click", function (e) {
+      .on("click", function () {
         twoincSelectWooHelper.exitManualCompanyEntry();
       })
       .on("keydown", function (e) {
@@ -2388,424 +1583,94 @@ class TwoCompanySearch {
         twoincSelectWooHelper.exitManualCompanyEntry();
       });
 
-    twoincSelectWooHelper.companyFieldAffordanceSlot().append($btn);
+    helper.companyFieldAffordanceSlot().append($btn);
     return $btn;
   }
 
   /**
-   * The slot a company-field affordance button hangs in: WooCommerce core's
-   * own `.woocommerce-input-wrapper` around `#billing_company`'s input.
-   * Extracted so the "select a different sole trader" link (TWO-40 §7)
-   * shares this same visual slot rather than a second near-copy.
-   *
-   * Self-heals rather than degrading: falling back to
-   * `#billing_company_field` directly would append the button as a sibling
-   * of both the label and the input rather than right after the input,
-   * reintroducing an overlap-with-the-label bug — so an equivalent wrapper
-   * is built around just the `<input>` instead, matching the DOM shape
-   * WooCommerce core's own `woocommerce_form_field()` produces.
-   */
-  /**
-   * The row that is the buyer's visible company-NAME surface right now.
-   *
-   * THE one place that decides it (TWO-25503). Every surface that has to sit
-   * beside the company name — the read-only number label, the sole-trader
-   * link, the in-flight spinner — asks here instead of re-deriving it. Each
-   * deriving its own answer, at whatever moment it happened to be created, is
-   * what let them disagree and strand one of them in the wrong region.
-   *
-   * The search control wins wherever it is showing, address area or payment
-   * tile. The native field takes over only when the search control is hidden:
-   * manual entry, or a billing country with no registry to search.
-   *
-   * @returns {jQuery}
-   */
-  companyNameSurface() {
-    const $search = jQuery("#billing_company_display_field");
-    if ($search.length && !$search.hasClass("hidden")) return $search;
-    const $native = jQuery("#billing_company_field");
-    if ($native.length && !$native.hasClass("hidden")) return $native;
-    return $search.length ? $search : $native;
-  }
-
-  companyFieldAffordanceSlot() {
-    return twoincSelectWooHelper.affordanceSlotIn(
-      jQuery("#billing_company_field"),
-      "#billing_company"
-    );
-  }
-
-  /**
-   * The affordance slot inside one company field row, self-healing when the
-   * theme's markup lacks core's wrapper — the pay-for-order view renders the
-   * search row without one (TWO-25503).
-   *
-   * Falling back to the row itself would append the button as a sibling of
-   * both the label and the input rather than right after the input, which is
-   * the overlap-with-the-label bug this whole helper exists to avoid, so an
-   * equivalent wrapper is built around just the input instead.
-   *
-   * @param {jQuery} $row the field row
-   * @param {string} inputSelector the input the wrapper belongs around
-   * @returns {jQuery}
-   */
-  affordanceSlotIn($row, inputSelector) {
-    const $input = $row.find(inputSelector).first();
-    if (!$input.length) {
-      const $any = $row.find(".woocommerce-input-wrapper").first();
-      return $any.length ? $any : $row;
-    }
-
-    // The wrapper CONTAINING the input, never merely the row's first: a
-    // fragment swap can leave a stale empty wrapper ahead of the live one,
-    // and the affordance has to hang beside the input the buyer can see.
-    const $existing = $input.closest(".woocommerce-input-wrapper");
-    if ($existing.length) return $existing;
-
-    // selectWoo hides the <select> and renders its own container as a
-    // SIBLING of it, so a wrapper built around the input alone would leave
-    // the visible control outside the slot and the link above it.
-    const $widget = $input.nextAll(".select2-container").first();
-    const $wrapper = jQuery('<span class="woocommerce-input-wrapper"></span>');
-    $input.before($wrapper);
-    $wrapper.append($input).append($widget);
-    return $wrapper;
-  }
-
-  /**
-   * Switch the company field from search to manual entry (TWO-25288).
-   *
-   * Reached only from the manual-entry row's activation, keyboard or mouse.
-   *
-   * @returns {void}
+   * Switch the company field from search to manual entry (TWO-25288). Reached
+   * only from the manual-entry chip's activation, keyboard or mouse.
    */
   enterManualCompanyEntry() {
-    // Guard against the deferred activation (activateManualEntry's
-    // `setTimeout(enterManualCompanyEntry, 0)`) landing AFTER an async
-    // sole-trader switch raced in during the same tick — a
-    // `twoincSoleTrader.setMode("sole_trader")` independent of
-    // what the dropdown is doing (round 2 review, Han+Vader, convergent:
-    // both independently reproduced this race). Without this guard, this
-    // function would still run after setMode already put the buyer into
-    // sole-trader mode — forcing the capture mode back to
-    // `manual` (wrong: that is the one mode whose name comes off the native
-    // field rather than the picker the adopted sole trader is rendered in),
-    // re-showing the search-again button setMode just hid, and
-    // wiping `#billing_company`/`#company_id` out from under the synthetic
-    // id sole-trader mode may have just written. That reproduces the exact
-    // #30.x.13 symptom (a capture mode disagreeing with what the buyer is
-    // actually looking at) via a path this PR's
-    // own new flag opened up. Same shape as the existing "remove the
-    // button before deferring" reentrancy guard in `activateManualEntry`,
-    // one level further out.
-    //
-    // `isDeciding()` too (TWO-40 §7 round-3 review — Han): the same deferred
-    // landing can arrive while a sole-trader flight is still
-    // outstanding and `mode` hasn't flipped to `sole_trader` yet — without
-    // this, a signup resolving afterwards fully overwrites whatever this
-    // function touched anyway (`setCompany` → `lockCapturedFields`), so
-    // today it's harmless, but only by that
-    // terminal-branch-wins coincidence; guarding here directly is what every
-    // other entry into/out of sole-trader mode already does. Not `isBusy()`
-    // (round-3 review — Vader): once already adopted this is unreachable
-    // anyway (the mode check above already returns), so the distinction is
-    // moot here, but `isDeciding()` is the correct predicate for "the buyer
-    // is choosing something else" and keeps every such guard consistent.
-    if (twoincSoleTrader.mode === "sole_trader" || twoincSoleTrader.isDeciding()) return;
+    const helper = twoincSelectWooHelper;
 
-    // Reset in exitManualCompanyEntry, and snapshotted/restored around a
-    // sole-trader detour by twoincSoleTrader.setMode/leaveSoleTraderMode.
+    // Guards the deferred activation landing AFTER an async sole-trader switch
+    // raced in during the same tick: without it this would force the capture
+    // mode back to `manual` and wipe the synthetic id that switch just wrote.
+    if (twoincSoleTrader.mode === "sole_trader" || twoincSoleTrader.isDeciding()) return;
+    // The chip stays on screen through the switch, so a fast second press
+    // queues a second deferred call that would re-clear the field the buyer
+    // has by then started typing into.
+    if (twoincCompanyCapture.mode === "manual") return;
+
     twoincCompanyCapture.mode = "manual";
 
-    jQuery("#billing_company_display").val("");
-    // The real company field too, not just the display one. Without this the
-    // manual field the buyer is about to be shown is pre-filled with the
-    // company they have just said is NOT theirs, while its org-number twin is
-    // empty — and the exit path clears this same mirror, so leaving it here
-    // would be asymmetric on top of wrong.
+    jQuery(helper.companyFieldSelector()).val("");
     jQuery("#billing_company").val("");
     jQuery("#company_id").val("");
 
     // The registry address too, mirroring clearSelectedCompany — but ONLY when
-    // a registry lookup actually wrote it. Reaching manual entry does not
-    // imply one ran: the row is live from the first keystroke, before any
-    // request goes out, and clearing unconditionally would blank a logged-in
-    // buyer's own account-prefilled address for no reason. `#company_id` is
-    // NOT that signal — it is written by account-restore and sole-trader code
-    // with no lookup behind it, and stays empty for a picked company that
-    // simply carries no organisation number even though its lookup DID run —
-    // so this reads `registryAddressApplied` instead, which is set only on
-    // the branch that actually writes looked-up data.
+    // a registry lookup actually wrote it. Reaching manual entry does not imply
+    // one ran, and clearing unconditionally would blank a logged-in buyer's own
+    // account-prefilled address for no reason.
     if (Twoinc.getInstance().registryAddressApplied) {
-      // `clearAddress()`, for the same reason clearSelectedCompany uses it
-      // (TWO-40 §2.6): a blank `setAddress()` payload now leaves line 2 alone.
       Twoinc.getInstance().clearAddress();
       Twoinc.getInstance().registryAddressApplied = false;
     }
 
     Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData();
 
-    // Looked up from the DOM rather than through the cached
-    // billingCompanySelect: enableCompanySearch can have re-attached the
-    // widget since that reference was taken, and the one to tear down is
-    // whichever one is currently attached.
-    const $display = jQuery("#billing_company_display");
-    if ($display.data("select2")) {
-      // `close()` BEFORE `destroy()` — new, #30.x.13. Reached here the
-      // widget is essentially always still OPEN: this function only runs
-      // from activating the manual-entry row, and that row exists only
-      // INSIDE the open results list.
-      //
-      // CORRECTED mechanism (round 2 review, Han+Vader, both independently
-      // verified directly against the real vendored selectWoo.full.js —
-      // the previous version of this comment had the mechanism wrong):
-      // selectWoo's document-level keydown handler (bound ONCE per widget
-      // instance in `_registerEvents`, `$(document).on('keydown', ...)`,
-      // see the long comment in bindManualEntryAffordance above) is never
-      // unbound by anything — not by `close()`, not by `destroy()`. What
-      // actually neutralizes it: that handler's dangerous branches are
-      // gated on `self.isOpen()`, which just reads a CSS class
-      // (`select2-container--open`) on the container. `close()`
-      // synchronously flips that class off. `destroy()` alone never fires
-      // the close event, so a destroyed-but-still-referenced instance's
-      // container keeps that class (and therefore `isOpen() === true`)
-      // forever — the handler is still bound to `document` and still
-      // "live" by its own gate, just with no widget left for it to
-      // reason about. That is what live reproduction (#30.x.13, Doug)
-      // showed: Tab became unresponsive PAGE-WIDE, not just near the
-      // company field, the moment manual entry was reached — exactly
-      // what that ungated zombie handler produces. Calling `close()`
-      // first is what actually fixes it, by flipping the one flag the
-      // handler checks; the handler itself is still bound afterward and
-      // always will be, so this is a mitigation of a permanent gap, not
-      // a removal of it. Direct empirical repro (round 2, Vader): a real
-      // widget destroyed WITHOUT close() first leaves a subsequent
-      // synthetic document keydown{which:9} reporting
-      // `defaultPrevented === true` (Tab trapped); with close() first,
-      // the same dispatch reports `false` (Tab free).
-      //
-      // Safe to call unconditionally ahead of destroy(): `close()` on an
-      // already-closed widget is a documented no-op in select2/selectWoo.
-      // `close()` does schedule its own `self.$selection.focus()` ~1ms
-      // later (see the same earlier comment) — by the time that timer
-      // fires, `destroy()` below has already run and
-      // `focusVisibleCompanyField("#billing_company")` at the end of this
-      // function has already handed focus to the manual field, and
-      // `toggleBusinessFields()` has hidden `#billing_company_display_field`
-      // — so that stray refocus lands on a `display: none` element, which
-      // is a silent no-op per the HTML focus spec, not a fight over focus.
-      $display.select2("close");
-      $display.select2("destroy");
+    if (helper.panel) {
+      helper.panel.releaseField();
+      // The panel's own return link renders beside the search field, which
+      // manual entry hides; WooCommerce's own `#billing_company` is where the
+      // buyer types, so the link belongs beside that instead.
+      helper.panel.removeBackToSearchLink();
     }
 
-    jQuery("#" + twoincSelectWooHelper.manualEntryRowId).remove();
-    twoincSelectWooHelper.getSearchCompanyBtnNode().show();
+    helper.getSearchCompanyBtnNode().show();
 
     twoincDomHelper.toggleBusinessFields();
 
-    // Destroying the widget leaves focus on nothing — activeElement falls back
-    // to <body> — so a keyboard or AT user loses their place mid-checkout and
-    // has to tab in from the top of the document. Hand focus to the field they
-    // asked to be given.
-    twoincSelectWooHelper.focusVisibleCompanyField("#billing_company");
+    // Releasing the field leaves focus on nothing, so a keyboard or AT user
+    // loses their place mid-checkout.
+    helper.focusVisibleCompanyField("#billing_company");
   }
 
   /**
    * Switch the company field back from manual entry to search (TWO-25288).
-   *
-   * @returns {void}
    */
   exitManualCompanyEntry() {
+    const helper = twoincSelectWooHelper;
     twoincCompanyCapture.mode = "search";
-
-    Twoinc.getInstance().enableCompanySearch();
 
     jQuery("#billing_company").val("");
     jQuery("#company_id").val("");
     Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData();
 
-    twoincSelectWooHelper.getSearchCompanyBtnNode().hide();
+    helper.getSearchCompanyBtnNode().hide();
     twoincDomHelper.toggleBusinessFields();
 
-    // Land the buyer in the open dropdown with the caret in its search box,
-    // so re-entering search costs one click rather than two. After
-    // toggleBusinessFields deliberately: opening positions the dropdown
-    // against its container, which is only laid out once shown.
-    if (!twoincSelectWooHelper.openCompanySearchDropdown()) {
-      // Fallback for a surface with no picker attached (pay-for-order page).
-      // Not #billing_company_display — the picker hides that <select> and
-      // moves its accessible role onto the rendered combobox.
-      if (
-        !twoincSelectWooHelper.focusVisibleCompanyField(
-          "#billing_company_display_field .select2-selection"
-        )
-      ) {
-        twoincSelectWooHelper.focusVisibleCompanyField("#billing_company_display");
-      }
+    // After toggleBusinessFields deliberately: the panel anchors against a
+    // field that is only laid out once shown.
+    Twoinc.getInstance().enableCompanySearch();
+
+    if (!helper.openCompanySearchDropdown()) {
+      helper.focusVisibleCompanyField(helper.companyFieldSelector());
     }
   }
 
   /**
-   * Open the company-search dropdown and put the caret in its search box
-   * (TWO-25288). The explicit focus isn't redundant with the picker's own —
-   * that doesn't reliably land on every host theme (hence the polling
-   * `waitToFocus` fix), so focusing here makes the caret arrive
-   * synchronously instead of waiting on the poll.
-   *
-   * Reports whether the dropdown opened, not whether focus landed — the
-   * caller only falls back to focusing the collapsed combobox when there
-   * was no dropdown to be inside; a failed focus with the dropdown open is
-   * left to the `select2:open` poll.
-   */
-  openCompanySearchDropdown() {
-    const $display = jQuery("#billing_company_display");
-    if (!$display.length || !$display.data("select2")) return false;
-
-    $display.select2("open");
-
-    // Looked up after opening, never cached: the picker tears the dropdown
-    // down and rebuilds the search field on every open, so the node focused
-    // here is the one this open just created.
-    twoincSelectWooHelper.focusVisibleCompanyField(
-      twoincSelectWooHelper.companySearchInputSelector
-    );
-
-    return true;
-  }
-
-  /**
    * Move focus to a company field, if it is actually focusable (TWO-25288).
-   * Guarded rather than a bare `.focus()`: the target may be absent on
-   * surfaces like the pay-for-order page, and `.focus()` on an empty set is
-   * a silent no-op that reads as success.
+   * Guarded rather than a bare `.focus()`: the target may be absent on surfaces
+   * like the pay-for-order page, and `.focus()` on an empty set is a silent
+   * no-op that reads as success.
    */
   focusVisibleCompanyField(selector) {
     const $field = jQuery(selector);
     if (!$field.length || $field.prop("disabled")) return false;
     $field.trigger("focus");
     return jQuery(document.activeElement).is($field);
-  }
-
-  /**
-   * Sweep away an orphaned select2 dropdown clone left behind for this
-   * field before (re-)initialising selectWoo against it (TWO-25469). A
-   * widget discarded by having its `<select>` replaced outright (WooCommerce
-   * checkout-AJAX `replaceWith()`, rather than a `select2("destroy")` call)
-   * loses its inline container but not its dropdown: selectWoo's AttachBody
-   * decorator renders that as a separate node appended to `<body>`, which
-   * nothing then detaches — it sits there forever, and reopening the
-   * freshly re-attached widget renders a second dropdown alongside it.
-   *
-   * Only swept when this field has no live widget right now — the ordinary
-   * re-attach path calls this while a widget is still attached, and
-   * selectWoo's own reinit already cleans up correctly there; sweeping
-   * concurrently would race that cleanup.
-   *
-   * Called from both places that (re-)initialise selectWoo on this field:
-   * `attach()` and `clearSelectedCompany()` (the latter re-inits directly
-   * rather than through `attach()`, so needs this call of its own).
-   */
-  sweepOrphanedDropdown($field) {
-    if ($field.data("select2")) return;
-    const resultsIdPrefix = "select2-" + this.companyFieldSelector.replace("#", "") + "-results";
-    jQuery("[id^='" + resultsIdPrefix + "']")
-      .closest(".select2-container")
-      .remove();
-  }
-
-  /**
-   * Attach (or re-attach) the selectWoo widget to this instance's configured
-   * field and wire up the search/select/open lifecycle (TWO-25326
-   * architecture rebuild). Called from `Twoinc#enableCompanySearch()`
-   * (initialize, its 800ms retry, `exitManualCompanyEntry()`, sole-trader
-   * mode switch back to search) — all of those re-attach the widget rather
-   * than construct a second `TwoCompanySearch`. `clearSelectedCompany()`
-   * re-inits directly instead — see `sweepOrphanedDropdown()`.
-   *
-   * @param {Twoinc} [twoincInstance] the singleton, so `select2:select` can
-   *   write the pick onto it. Falls back to `Twoinc.getInstance()`.
-   */
-  attach(twoincInstance) {
-    const self = this;
-    const $body = jQuery(document.body);
-    const $field = $body.find(self.companyFieldSelector);
-
-    self.sweepOrphanedDropdown($field);
-
-    const widget = self.initCompanySearchWidget($field);
-    twoincDomHelper.toggleTooltip(
-      "#billing_company_display_field .select2-container",
-      window.twoinc.text.tooltip_company
-    );
-
-    widget.on("select2:select", function (e) {
-      // The dropdown now deliberately survives a sole-trader autofill flight
-      // or an open signup popup (TWO-40 §7), so a pick can land here while
-      // `mode === "sole_trader"`. Refused while still genuinely deciding
-      // (isDeciding()), same guard every other sole-trader exit uses.
-      // Once adopted, a pick off this still-live widget is the buyer
-      // choosing a different company — mirrors `setMode("business")`'s
-      // bookkeeping directly rather than calling `setMode()`, which would
-      // also destroy/rebuild this widget and blank the pick being written.
-      if (twoincSoleTrader.mode === "sole_trader") {
-        if (twoincSoleTrader.isDeciding()) return;
-        twoincSoleTrader.mode = "business";
-        twoincSoleTrader.soleTraderAdopted = false;
-        twoincSoleTrader.soleTraderReconfirmingCount = 0;
-        twoincSoleTrader.updateChips();
-        twoincSoleTrader.syncDifferentSoleTraderLink();
-        // Doesn't go through setMode(), so owes the same re-sync itself.
-        twoincSelectWooHelper.syncSoleTraderSurfaces();
-        twoincSoleTrader.leaveSoleTraderMode();
-      }
-
-      const instance = twoincInstance || Twoinc.getInstance();
-      const data = e.params.data;
-
-      // The single write path (TWO-40 §5): posted fields, instance record,
-      // pairing tag and provenance in one call — writing #company_id
-      // directly would leave a pair the tag doesn't describe.
-      twoincCompanyCapture.write(data.id, data.company_id, { country: self.currentCountry() });
-
-      // A capture changes which company-name surface the buyer should be
-      // looking at, and this is the primary path that creates one — the
-      // sole-trader path re-evaluates through `setCompany()`, this one had
-      // nothing (TWO-25503). Without it the rule is written but never read
-      // for an ordinary registry pick.
-      twoincDomHelper.toggleBusinessFields();
-
-      self.renderCompanySummary(data.id, data.company_id);
-
-      // Leave any loader alone: getApproval() below only arms a check, the
-      // replacement request is a moment away.
-      twoincDomHelper.clearIntentVerdicts();
-
-      instance.getApproval();
-
-      if (window.twoinc.enable_address_lookup === "yes") {
-        instance.addressLookup(data);
-      }
-    });
-
-    self.fixSelectWooPositionCompanyName();
-
-    // Bound here, once per widget, not on every dropdown open: the handlers
-    // it installs are delegated and outlive the dropdown, so re-binding per
-    // open only accumulates duplicates.
-    self.bindManualEntryAffordance();
-
-    widget.on("select2:open", function (e) {
-      self.waitToFocus("billing_company_display", null, null);
-      self.addSelectWooFocusFixHandler("billing_company_display");
-
-      // In sole-trader mode this dropdown's free-text query isn't a way to
-      // get a different company — the dedicated "select a different sole
-      // trader" flow is. Re-run every open since selectWoo re-attaches this
-      // row each time, so a suppression from one open doesn't carry over.
-      self.syncSoleTraderSurfaces();
-    });
-
-    return widget;
   }
 }
 
@@ -2816,7 +1681,8 @@ class TwoCompanySearch {
  * nothing else in this file constructs a second one.
  */
 let twoincSelectWooHelper = new TwoCompanySearch({
-  companyFieldSelector: "#billing_company_display"
+  addressFieldSelector: "#billing_company_display",
+  tileFieldSelector: "#twoinc_tile_company_name"
 });
 
 let twoincDomHelper = {
@@ -2869,7 +1735,7 @@ let twoincDomHelper = {
         window.twoinc.text.tooltip_phone
       );
       twoincDomHelper.toggleTooltip(
-        '#billing_company_display_field .select2-container, label[for="billing_company_display"], #billing_company, label[for="billing_company"]',
+        '#billing_company_display, label[for="billing_company_display"], #billing_company, label[for="billing_company"]',
         window.twoinc.text.tooltip_company
       );
     }, 100);
@@ -2983,31 +1849,17 @@ let twoincDomHelper = {
     // read-only label `renderCompanySummary()` renders. The input itself
     // stays permanently hidden but posted, since its value is what the order
     // intent is authorised against.
-    if (showCompanySearch) {
+    if (showCompanySearch && !twoincSelectWooHelper.isTileLocation()) {
       visibleTargets.push("#billing_company_display_field");
-
-      // WooCommerce's own native company field stays independent of where
-      // our search control lives: unchecking "Enable company search in
-      // address entry" moves the search control into the payment tile but
-      // must never take WooCommerce's stock field away from the address
-      // area — the two coexist (Doug 2026-08-04). Left untouched (no
-      // required cue): WC owns that field's required-ness, this plugin only
-      // decides visibility.
-      //
-      // The stock field goes only when the tile is genuinely showing the
-      // capture instead (TWO-25503, Doug: an adopted sole trader "should do
-      // neither of these things in the address area"). That needs BOTH a
-      // capture and Two selected: the relocated control lives inside Two's
-      // payment box, which WooCommerce collapses for every other method, so
-      // hiding this row while another method is checked would leave the buyer
-      // with no company surface at all — the "never neither" invariant above.
-      //
-      // Narrows the 2026-08-04 rule rather than dropping it: with nothing
-      // captured, or with Two not selected, the stock field is still there.
-      if (
-        window.twoinc.company_search_location === "payment_tile" &&
-        !(isTwoincSelected && twoincCompanyCapture.hasCapture())
-      ) {
+    } else if (showCompanySearch) {
+      // Tile placement: the search control renders inside Two's payment box, so
+      // the address area keeps WooCommerce's stock field (Doug 2026-08-04). The
+      // stock field goes only when the tile is genuinely showing the capture
+      // instead (TWO-25503, Doug: an adopted sole trader "should do neither of
+      // these things in the address area") — which needs BOTH a capture and Two
+      // selected, since the tile collapses with the method and hiding this row
+      // under another method would leave no company surface at all.
+      if (!(isTwoincSelected && twoincCompanyCapture.hasCapture())) {
         visibleTargets.push("#billing_company_field");
       }
     } else {
@@ -3023,12 +1875,14 @@ let twoincDomHelper = {
       );
       requiredTargets.push("#billing_phone_field");
 
-      // Required-ness stays gated on Two actually being the selected
-      // method — a buyer paying another way shouldn't be forced to fill in
-      // company data Two itself has no use for right now.
-      requiredTargets.push(
-        showCompanySearch ? "#billing_company_display_field" : "#billing_company_field"
-      );
+      // Whichever company row is actually on screen, and only while Two is the
+      // selected method. In tile placement with a capture showing, neither row
+      // is — the tile is the surface, and there is nothing left to require.
+      const companyRows = ["#billing_company_display_field", "#billing_company_field"];
+      const visibleCompanyRow = visibleTargets.filter(function (target) {
+        return companyRows.indexOf(target) >= 0;
+      })[0];
+      if (visibleCompanyRow) requiredTargets.push(visibleCompanyRow);
     }
 
     allTargets = jQuery(allTargets.join(","));
@@ -3375,10 +2229,9 @@ let twoincDomHelper = {
             textOnly = val.nodeValue.trim();
           } else if (val.nodeType === Node.ELEMENT_NODE) {
             if (val.classList.contains("select2-selection__placeholder")) {
-              // The empty-field hint (TWO-25288) is an element child, so
-              // without this it would be snapshotted as though the buyer had
-              // chosen a company of that name (getCompanyName() reads this
-              // value into #billing_company). Excluded from `subs` too, or
+              // A picker's empty-field hint is an element child, so without
+              // this it would be snapshotted as though the buyer had chosen an
+              // option of that name. Excluded from `subs` too, or
               // loadStorageInputs() would render it twice.
               hasPlaceholder = true;
               return;
@@ -3487,31 +2340,14 @@ let twoincDomHelper = {
   },
   loadUserMetaInputs: function () {
     window.twoinc.user_meta_exists = window.twoinc.billing_company && window.twoinc.company_id;
-    if (document.querySelector("#billing_company_display")) {
-      let selectElem = document.querySelector("#billing_company_display");
-      if (!selectElem.querySelector('option:not([value=""])') && window.twoinc.user_meta_exists) {
-        // Append to selectWoo
-        if (!selectElem.querySelector('option[value="' + window.twoinc.billing_company + '"]')) {
-          selectElem.innerHTML =
-            '<option value="' +
-            window.twoinc.billing_company +
-            '">' +
-            window.twoinc.billing_company +
-            "</option>" +
-            selectElem.innerHTML;
-        }
-        selectElem.value = window.twoinc.billing_company;
-
-        // Show the restored company read-only beside the field. Both values
-        // are passed explicitly: `#company_id` is written further down this
-        // function, so reading the DOM here would render an empty number.
-        if (window.twoinc.user_meta_exists) {
-          twoincSelectWooHelper.renderCompanySummary(
-            window.twoinc.billing_company,
-            window.twoinc.company_id
-          );
-        }
-      }
+    if (window.twoinc.user_meta_exists) {
+      twoincSelectWooHelper.setDisplayName(window.twoinc.billing_company);
+      // Both values passed explicitly: `#company_id` is written further down
+      // this function, so reading the DOM here would render an empty number.
+      twoincSelectWooHelper.renderCompanySummary(
+        window.twoinc.billing_company,
+        window.twoinc.company_id
+      );
     }
     if (document.querySelector("#department") && window.twoinc.department) {
       document.querySelector("#department").value = window.twoinc.department;
@@ -3558,40 +2394,12 @@ let twoincDomHelper = {
 
     twoincCompanyCapture.write(restoredName, restoredId);
 
-    // Seed the PICKER with the restored name too, the same synthetic-`<option>`
-    // mechanism `loadUserMetaInputs()` uses for the user-meta echo — option
-    // VALUE is the name, matching what the picker's own `select2:select`
-    // handler reads back as the company name.
-    //
-    // Only that echo was ever seeded, and this function deliberately restores
-    // from two further sources with no echo behind them (WooCommerce's own
-    // rendered value, and `loadStorageInputs()` — see the note above). The
-    // picker is the visible company-NAME surface for a restored capture, and
-    // `toggleBusinessFields()` hides the native field that used to display it,
-    // so an unseeded picker left a returning guest looking at a placeholder
-    // over a hidden field holding their own company — and `getCompanyName()`
-    // reading it back empty, which stops an order intent firing at all.
-    //
-    // Never over an existing selection: `initialize()` calls this a second time
-    // after `loadStorageInputs()`, and both of the seeding restores run before
-    // that.
-    if (restoredName) {
-      const $display = jQuery("#billing_company_display");
-      if ($display.length && !twoincUtilHelper.blankToEmpty($display.val())) {
-        if (
-          !$display.find("option").filter(function () {
-            return this.value === restoredName;
-          }).length
-        ) {
-          $display.prepend(jQuery("<option></option>").val(restoredName).text(restoredName));
-        }
-        // `.trigger("change")` for the same reason `lockCapturedFields()` uses
-        // it: select2's own documented way to make a PROGRAMMATIC selection
-        // render, without firing `select2:select` and re-entering that
-        // handler's write path.
-        $display.val(restoredName).trigger("change");
-      }
-    }
+    // Paint the restored name into the search field too. It is the visible
+    // company-NAME surface for a restored capture and `toggleBusinessFields()`
+    // hides the native field that would otherwise display it, so an unpainted
+    // field left a returning guest looking at a watermark over a hidden field
+    // holding their own company.
+    if (restoredName) twoincSelectWooHelper.setDisplayName(restoredName);
 
     // A restored sole trader: this restore path writes straight to the
     // capture layer above rather than through `twoincSoleTrader.setCompany()`
@@ -4024,9 +2832,9 @@ let twoincSoleTrader = {
     } else {
       twoincSoleTrader.hide();
     }
-    // The mode chip lives inside the company-search dropdown, not here —
+    // The mode chip lives inside the company-search panel, not here —
     // re-sync so an availability change while it's open adds/removes live.
-    twoincSelectWooHelper.syncManualEntryButton();
+    twoincSelectWooHelper.syncModeChips();
   },
 
   hide: function () {
@@ -4050,8 +2858,8 @@ let twoincSoleTrader = {
     // Bell-icon note + signup link — shown only when sole-trader mode is
     // active and signup is needed, and as the fallback when an
     // auto-launched popup is blocked. The mode chips themselves are NOT
-    // built here — they render as children of the company-search dropdown,
-    // see syncManualEntryButton()/syncSoleTraderChip().
+    // built here — they render as children of the company-search panel, see
+    // TwoCompanySearch#chips().
     const $note = jQuery(
       '<div class="twoinc-sole-trader-note hidden">' +
         '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">' +
@@ -4085,12 +2893,11 @@ let twoincSoleTrader = {
   },
 
   /**
-   * Cosmetic-only selected-chip class (TWO-40 §0), delegated to the group's
-   * own owner — the chips live inside the company-search dropdown, not
-   * here. Kept as a thin alias so `setMode()` below needs no change.
+   * Selected-chip state, delegated to the group's own owner — the chips live
+   * inside the company-search panel, not here.
    */
   updateChips: function () {
-    twoincSelectWooHelper.updateModeChipsSelection();
+    twoincSelectWooHelper.syncModeChips();
   },
 
   showNote: function (show) {
@@ -4109,7 +2916,7 @@ let twoincSoleTrader = {
     if (twoincSoleTrader.flightDepth === 1) {
       // The note slot and the chip group — the two places busy state is
       // ever visible.
-      jQuery(".twoinc-sole-trader-note-slot, .twoinc-mode-chips").addClass(
+      jQuery(".twoinc-sole-trader-note-slot, .two-company-mode-chips").addClass(
         "twoinc-sole-trader-toggle--busy"
       );
     }
@@ -4136,15 +2943,12 @@ let twoincSoleTrader = {
   settleFlight: function () {
     twoincSoleTrader.flightDepth = Math.max(0, twoincSoleTrader.flightDepth - 1);
     if (twoincSoleTrader.flightDepth === 0) {
-      jQuery(".twoinc-sole-trader-note-slot, .twoinc-mode-chips").removeClass(
+      jQuery(".twoinc-sole-trader-note-slot, .two-company-mode-chips").removeClass(
         "twoinc-sole-trader-toggle--busy"
       );
       if (twoincSoleTrader.closeDropdownOnSettle) {
-        // Consumed once, before the surfaces below re-sync: this is the
-        // shared sequence's third step — see
-        // `closeCompanySearchDropdownIfOpen`.
         twoincSoleTrader.closeDropdownOnSettle = false;
-        twoincSelectWooHelper.closeCompanySearchDropdownIfOpen();
+        twoincSelectWooHelper.closeCompanySearchDropdown();
       }
     }
     twoincSelectWooHelper.syncSoleTraderSurfaces();
@@ -4212,11 +3016,12 @@ let twoincSoleTrader = {
     // adoption, so a home chosen at that moment is a home chosen from whatever
     // happened to be visible then — which is how it has twice ended up in the
     // wrong region.
-    const $surface = twoincSelectWooHelper.companyNameSurface();
-    if ($surface.is("#billing_company_display_field")) {
-      return twoincSelectWooHelper.affordanceSlotIn($surface, "#billing_company_display");
+    const helper = twoincSelectWooHelper;
+    const $surface = helper.companyNameSurface();
+    if ($surface.find(helper.companyFieldSelector()).length) {
+      return helper.affordanceSlotIn($surface, helper.companyFieldSelector());
     }
-    return twoincSelectWooHelper.companyFieldAffordanceSlot();
+    return helper.companyFieldAffordanceSlot();
   },
 
   /**
@@ -4335,41 +3140,29 @@ let twoincSoleTrader = {
       twoincSoleTrader.soleTraderAdopted = false;
       twoincSoleTrader.soleTraderReconfirmingCount = 0;
     }
-    twoincSoleTrader.updateChips();
-    twoincSoleTrader.syncDifferentSoleTraderLink();
-    // Before the branch below, so a chip click made while the dropdown is
-    // already open hides the query row in the click's own gesture — the
-    // business branch destroys this dropdown a few lines down, so the
-    // restore has to happen while the row still exists.
-    twoincSelectWooHelper.syncSoleTraderSurfaces();
-
     if (mode === "sole_trader") {
       // Sole trader is its own company-capture mode: it renders through the
-      // picker but carries a synthetic id, so neither manual entry nor an
-      // ordinary registry pick's surfaces are right for it. Snapshotted
-      // first so it can be restored on the way out.
+      // panel but carries a synthetic id, so neither manual entry nor an
+      // ordinary registry pick's surfaces are right for it. Snapshotted first
+      // so it can be restored on the way out, and written BEFORE the chip sync
+      // below — `selectedMode()` reads both axes, and manual entry wins the tie.
       if (twoincSoleTrader.savedCaptureMode === null) {
         twoincSoleTrader.savedCaptureMode = twoincCompanyCapture.mode;
       }
       twoincCompanyCapture.mode = "sole_trader";
-      // The search widget teardown is deliberately NOT done here: tearing
-      // it down the instant mode switches would destroy the dropdown before
-      // the autofill round trip (or the signup popup it can lead to) has
-      // had a chance to run — the window `beginFlight()` says the
-      // dropdown+spinner must survive. `lockCapturedFields()` does this
-      // instead, once `setCompany()` actually has a company to show.
-    } else {
+    }
+
+    twoincSoleTrader.updateChips();
+    twoincSoleTrader.syncDifferentSoleTraderLink();
+    // Before the branch below, so a chip click made while the panel is already
+    // open hides the query row in the click's own gesture.
+    twoincSelectWooHelper.syncSoleTraderSurfaces();
+
+    // Nothing is torn down on the way IN: the panel and its spinner have to
+    // survive the autofill round trip and the signup popup it can lead to.
+    // `lockCapturedFields()` closes the panel once there is a company to show.
+    if (mode !== "sole_trader") {
       twoincSoleTrader.leaveSoleTraderMode();
-      const $display = jQuery("#billing_company_display");
-      if ($display.data("select2")) {
-        // The one teardown this whole switch does — `lockCapturedFields()`
-        // no longer destroys the widget on adoption, so it's alive on every
-        // switch back to business, not just the pre-adoption edge case.
-        // close() before destroy(): destroy() alone on an open widget skips
-        // selectWoo's own close cleanup.
-        $display.select2("close");
-        $display.select2("destroy");
-      }
       twoincSoleTrader.setCompany("", "");
       twoincDomHelper.toggleBusinessFields();
       Twoinc.getInstance().enableCompanySearch();
@@ -4428,61 +3221,22 @@ let twoincSoleTrader = {
   },
 
   /**
-   * Close the company-search widget (left alive, not destroyed — TWO-40 §7
-   * direction (a): a sole trader, once adopted, is meant to look like a
-   * registered company that was just searched and picked, the same way
-   * PrestaShop's `adoptSoleTraderBuyer()` never destroys its own search
-   * field) and lock the captured fields, once a sole trader is actually
-   * adopted. Split out of `setMode()` — see its comment — so switching mode
-   * alone leaves the dropdown and its spinner alone; this is the only moment
-   * there is nothing left to search for.
+   * Close the panel and lock the captured fields, once a sole trader is
+   * actually adopted. Split out of `setMode()` — see its comment — so
+   * switching mode alone leaves the panel and its spinner alone; this is the
+   * only moment there is nothing left to search for.
    *
-   * Not destroyed (TWO-40 §7 direction (a), PR 1 of 2): `reopenSearch()` used
-   * to rebuild the widget from scratch via `attach()` every time it left
-   * sole-trader mode, going through a destroy-then-reinit round trip that
-   * leaves the live instance in place, one fewer destroy/rebuild than
-   * every other re-attach path in the file relies on `attach()` to do
-   * safely. Any fragment replace that discards the underlying `<select>`
-   * without calling destroy is still covered by `attach()`'s own orphan
-   * sweep (`sweepOrphanedDropdown`, TWO-25469).
-   *
-   * Seeds the widget's underlying `<select>` with an option for the
-   * adopted sole trader and selects it (TWO-40 §7), the same
-   * synthetic-`<option>` mechanism `loadUserMetaInputs()` uses to restore a
-   * returning buyer's pick — so the rendered selection reads the sole
-   * trader's name like an ordinary pick, and `getCompanyName()` (which
-   * reads this in sole-trader mode) has something to find.
-   *
-   * `.trigger("change")`, not `select2:select`: select2's own documented
-   * mechanism for a programmatic selection to update its rendered display,
-   * deliberately not re-entering `select2:select`'s own write path
-   * (`setCompany()`, already called above this).
+   * The adopted name is painted into the company-name field the same way a
+   * registry pick is, so an adopted sole trader reads as a company that was
+   * searched and picked (TWO-40 §7 direction (a)).
    */
   lockCapturedFields: function (companyId, companyName) {
-    const $display = jQuery("#billing_company_display");
-    if ($display.data("select2")) {
-      $display.select2("close");
-    } else if ($display.length) {
-      // Attached before the seed below, so that seed's own closing
-      // `.trigger("change")` is what renders the selection: manual entry
-      // destroys this widget and the Sole trader chip isn't hidden there,
-      // so an adoption can land with no picker attached, and
-      // `getCompanyName()` needs the picker's rendered container to read a
-      // name from at all.
-      twoincSelectWooHelper.attach(Twoinc.getInstance());
-    }
-    if (
-      !$display.find("option").filter(function () {
-        return this.value === companyId;
-      }).length
-    ) {
-      $display.prepend(jQuery("<option></option>").val(companyId).text(companyName));
-    }
-    $display.val(companyId).trigger("change");
+    // An adoption can land with no panel bound — manual entry releases the
+    // field and the Sole trader chip is not hidden there.
+    twoincSelectWooHelper.attach(Twoinc.getInstance());
+    twoincSelectWooHelper.closeCompanySearchDropdown();
+    twoincSelectWooHelper.setDisplayName(companyName);
 
-    // Only the link back to search: the manual-entry row lives inside the
-    // dropdown, which stays alive but hidden behind the captured fields
-    // rather than going with a destroyed widget (TWO-25288).
     jQuery("#" + twoincSelectWooHelper.searchCompanyBtnId).hide();
     jQuery("#billing_company, #company_id").prop("readonly", true);
   },
@@ -4507,13 +3261,12 @@ let twoincSoleTrader = {
   reopenSearch: function () {
     if (twoincSoleTrader.mode !== "sole_trader" || twoincSoleTrader.isDeciding()) return;
     twoincSoleTrader.setMode("business");
-    if (
-      !twoincSelectWooHelper.openCompanySearchDropdown() &&
-      !twoincSelectWooHelper.focusVisibleCompanyField(
-        "#billing_company_display_field .select2-selection"
-      )
-    ) {
-      twoincSelectWooHelper.focusVisibleCompanyField("#billing_company_display");
+    const helper = twoincSelectWooHelper;
+    // Reached from the captured fields in the ADDRESS area, which stay on
+    // screen while the panel's own host — the payment tile — is collapsed.
+    if (!helper.companySearchIsReachable()) return;
+    if (!helper.openCompanySearchDropdown()) {
+      helper.focusVisibleCompanyField(helper.companyFieldSelector());
     }
   },
 
@@ -4683,9 +3436,9 @@ let twoincSoleTrader = {
    *
    * The target check is not defensive noise: jQuery's `.trigger("focus")`
    * does not dispatch natively — it walks the propagation path itself,
-   * window included. This file triggers focus that way on the company
-   * fields (`focusVisibleCompanyField`, `releaseFocusFromCompanyField`), so
-   * without the check, opening the dropdown would close the popup.
+   * window included. This file triggers focus that way on the company field
+   * (`focusVisibleCompanyField`), so without the check, opening the dropdown
+   * would close the popup.
    *
    * The refocus only SCHEDULES the abandon — which of three things the
    * buyer meant depends on what they activated, and window `focus` fires
@@ -4743,7 +3496,7 @@ let twoincSoleTrader = {
       // "give me that popup back".
       clearTimeout(twoincSoleTrader.refocusAbandonTimer);
       twoincSoleTrader.refocusAbandonTimer = null;
-      if (chip.getAttribute("data-mode") === "sole_trader") return;
+      if (chip.getAttribute("data-two-chip") === "sole_trader") return;
       twoincSoleTrader.abandonPopupsForChipClick();
     };
     document.addEventListener("mousedown", twoincSoleTrader.chipMousedownHandler, true);
@@ -4992,12 +3745,11 @@ let twoincSoleTrader = {
       twoincSoleTrader.soleTraderAdopted = true;
     }
     twoincCompanyCapture.write(companyName, companyId);
-    // The display select too, when this is the clearing call setMode("business")
-    // makes. select2("destroy") leaves the picker's appended <option> selected,
-    // so without this a company picked before the sole-trader detour stayed on
-    // that select after being cleared from both posted fields (TWO-25288).
+    // The visible field too, when this is the clearing call setMode("business")
+    // makes: without it a company picked before the sole-trader detour stays
+    // painted after being cleared from both posted fields (TWO-25288).
     if (!companyName) {
-      jQuery("#billing_company_display").val("");
+      twoincSelectWooHelper.setDisplayName("");
     }
     const instance = Twoinc.getInstance();
     // The buyer's address, written regardless of the merchant's
@@ -5418,26 +4170,17 @@ class Twoinc {
       last_name: null,
       phone_number: null
     };
-    this.billingCompanySelect = null;
   }
 
   /**
-   * Attach the company-search widget (TWO-25326 architecture rebuild).
+   * Bind the company-search panel to whichever company-name field is current.
    *
-   * All the search/dropdown/manual-entry/select2 lifecycle logic this used
-   * to inline now lives on `TwoCompanySearch` (see `twoincSelectWooHelper`,
-   * constructed once at module load, above). This method's own job is just
-   * the early-return gate and handing this singleton to the widget's
-   * `select2:select` handler.
-   *
-   * Gated on the capture mode being `search` (#486): manual entry has no picker
-   * to attach, and in sole-trader mode the live widget is already showing the
-   * adopted company as its own selection (`lockCapturedFields()`) — re-attaching
-   * over it would blank that selection back out.
+   * The mode gate only keeps the bootstrap and its retry off a field manual
+   * entry has released; `syncCompanySearchTileLocation()` re-binds sole trader.
    */
   enableCompanySearch() {
     if (twoincCompanyCapture.mode !== "search") return;
-    this.billingCompanySelect = twoincSelectWooHelper.attach(this);
+    twoincSelectWooHelper.attach(this);
   }
 
   /**
@@ -5500,29 +4243,13 @@ class Twoinc {
         twoincAddressMirror.sync();
       });
 
-    // Focus on search input on country open
-    jQuery("#billing_country").on("select2:open", function (e) {
-      twoincSelectWooHelper.waitToFocus("billing_country");
-    });
-
     // Enable company search, then again on a delay to catch a billing
     // fragment that WooCommerce had not rendered yet when initialize()
-    // ran. This retry is the only one this code owns: `updated_checkout`
-    // does not re-attach the picker itself.
+    // ran.
     //
     // Wrapped rather than passed by reference (TWO-25337): `setTimeout`
     // invokes a bare method reference with the global as its receiver, so
-    // `this` inside enableCompanySearch would be `window` and the
-    // deferred pass would write `billingCompanySelect` onto `window`
-    // instead of this instance.
-    //
-    // Pre-existing, not fixed here (TWO-25338): the deferred re-run
-    // leaves the picker's `select2:select`/`select2:open` handlers
-    // duplicated, since they're bound unnamespaced and selectWoo's
-    // re-init `.off(".select2")` can't match them. The duplicate
-    // `select2:select` costs nothing beyond idempotent re-renders and
-    // re-entering `getApproval()`'s already-running guard; the duplicate
-    // `select2:open` costs two no-op focus nudges.
+    // `this` inside enableCompanySearch would be `window`.
     this.enableCompanySearch();
     setTimeout(function () {
       self.enableCompanySearch();
@@ -5530,24 +4257,6 @@ class Twoinc {
 
     // Disable or enable actions based on the account type
     $body.on("updated_checkout", Twoinc.getInstance().onUpdatedCheckout);
-
-    // Company-search tile relocation (TWO-25326 §7.1), paired handlers on
-    // WooCommerce's own before/after checkout-update triggers. `update_checkout`
-    // is the PRESENT-tense trigger that starts a recalculation — fired
-    // synchronously, before the async AJAX call WooCommerce's own handler on
-    // this same event kicks off — so detaching the tile wrapper here always
-    // completes before that AJAX response can wholesale-replace the
-    // `.woocommerce-checkout-payment` fragment the tile lives inside (see
-    // `detachCompanySearchTileWrapperToSafety`'s doc comment for the bug this
-    // closes). `onUpdatedCheckout` (the past-tense, after-swap trigger,
-    // already bound above) is what moves the wrapper back into the fresh
-    // slot.
-    $body.on("update_checkout", twoincSelectWooHelper.detachCompanySearchTileWrapperToSafety);
-
-    // Same `update_checkout` timing, defending the widget's OWN dropdown
-    // rather than the tile wrapper — see
-    // `closeCompanySearchBeforeCheckoutUpdate`'s own comment.
-    $body.on("update_checkout", twoincSelectWooHelper.closeCompanySearchBeforeCheckoutUpdate);
 
     // A payment-method switch must re-DECIDE company-field visibility, not
     // just relocate whatever is already there (TWO-25326 bugfix, Doug
@@ -5582,21 +4291,6 @@ class Twoinc {
         twoincDomHelper.toggleBusinessFields();
       });
 
-    // No click handler for the manual-entry row (TWO-25288). It is a pseudo-
-    // option inside the results list now, so the picker already turns a click
-    // on it into the same internal select that Enter does, and
-    // bindManualEntryAffordance intercepts that one event for both. A second,
-    // click-only path here would fire alongside it on every mouse activation.
-    //
-    // #search_company_btn's own click activation used to be delegated from
-    // here (`$body.on("click", "#" + searchCompanyBtnId, ...)`). Removed
-    // (#30.x.13) — live reproduction showed a real click on that button
-    // never reached this handler (no console errors, mousedown/focus both
-    // landed on the button correctly), so the activation now lives directly
-    // on the button itself, alongside its Enter/Space handler — see the
-    // comment in getSearchCompanyBtnNode for why binding directly there is
-    // also more robust than delegating here in the first place.
-
     // Handle the representative inputs blur event
     $body.on(
       "blur",
@@ -5613,9 +4307,6 @@ class Twoinc {
     // to degenerate to the blanket hide, because no action name matches an Event,
     // so it did the right thing by accident and would break the moment
     // togglePaySubtitleDesc grew a truthy-action branch.
-    $body.on("change", "#select2-billing_company_display-container", function () {
-      twoincDomHelper.clearIntentVerdicts();
-    });
     $body.on("change", "#billing_company", function () {
       Twoinc.getInstance().customerCompany.company_name = twoincSelectWooHelper.getCompanyName();
       twoincSelectWooHelper.renderCompanySummary();
@@ -5628,9 +4319,8 @@ class Twoinc {
     // Bound on `input` as well as `change` so the stale number is gone before
     // the buyer can reach Place Order without ever blurring the field.
     //
-    // Only ever fires for a real buyer edit: every plugin write in this file
-    // goes through `.val()` or `.value =`, neither of which dispatches an
-    // event.
+    // Only ever fires for a real buyer edit: every plugin write to THIS field
+    // goes through `.val()`, which dispatches nothing.
     $body
       .off("input.twoincCompanyPairing change.twoincCompanyPairing", "#billing_company")
       .on(
@@ -5651,6 +4341,10 @@ class Twoinc {
     // are static inputs present from page load, not a button built and
     // rebuilt on every dropdown open.
     $body.on("click", "#billing_company, #company_id", function () {
+      // Only where the click has no other meaning: the readonly lock an
+      // adoption applies. Ungated (PR #502) it cleared the capture and
+      // destroyed an adopted sole trader on any click into either field.
+      if (!twoincSoleTrader.soleTraderAdopted || !jQuery(this).prop("readonly")) return;
       twoincSoleTrader.reopenSearch();
     });
 
@@ -6682,12 +5376,8 @@ class Twoinc {
     // wholesale, so `self.getApproval()` at the end of this function finds
     // an incomplete form and retires the in-flight request through its
     // own readiness guard.
-    // The company-search spinner, below — belt and braces: bumping the
-    // counter above orphans the one an in-flight search is showing (its
-    // `always()` sees a stale sequence and returns before hiding it), and
-    // `clearSelectedCompany()` clearing it via widget re-attach is
-    // otherwise only an incidental consequence of an unrelated call.
-    twoincSelectWooHelper.toggleCompanySearchSpinner(false);
+    // The panel drops whatever the outgoing country's search left in it.
+    twoincSelectWooHelper.closeCompanySearchDropdown();
 
     // Skipped entirely while sole-trader mode owns the field: this
     // rebuilds the search widget and wipes `#company_id`/`#billing_company`

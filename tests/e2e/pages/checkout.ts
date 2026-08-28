@@ -16,77 +16,77 @@ export async function selectTwoPayment(page: Page) {
   }
 }
 
-export const SOLE_TRADER_TOGGLE = ".twoinc-mode-chips";
-export const MODE_CHIP = ".twoinc-mode-chip";
+export const SOLE_TRADER_TOGGLE = ".two-company-mode-chips";
+export const MODE_CHIP = ".two-company-mode-chip";
+
+/** The company-capture popover, a child of the company field's own wrapper. */
+export const COMPANY_PANEL = ".two-company-dropdown";
+
+/** The company-name field the popover anchors to. */
+export const COMPANY_FIELD = "#billing_company_display";
 
 /**
  * The pay box renders a "Registered company / Sole trader" chooser whenever
  * the registry says the billing country supports sole traders — GB does, and
  * since TWO-25163 there is no merchant toggle left to suppress it. A business
  * buyer picks Registered company; do the same before driving the company
- * search, so the specs exercise the real GB checkout instead of assuming a
- * checkout with no mode chooser at all.
+ * search.
  *
- * The chip is only clicked when Registered company is not already the live
- * mode: clicking re-initialises the company-search select2 from scratch, so a
- * redundant click would be a source of flakiness rather than fidelity.
- *
- * No-op when the chooser is absent (country not sole-trader capable), so the
- * helper is safe to call from every spec.
+ * The chips live inside the popover, so it has to be open first. A no-op with
+ * no address-area field (payment-tile placement) or no chip (country without
+ * sole traders), so every spec can call it.
  */
 export async function selectRegisteredCompany(page: Page) {
-  const chip = page.locator(`${SOLE_TRADER_TOGGLE} ${MODE_CHIP}[data-mode="business"]`);
+  try {
+    await page.locator(COMPANY_FIELD).waitFor({ state: "visible", timeout: DEFAULT_TIMEOUT });
+  } catch {
+    return;
+  }
+  await openCompanySearch(page);
+  const chip = page.locator(`${COMPANY_PANEL} ${MODE_CHIP}[data-two-chip="registered"]`);
   try {
     await chip.waitFor({ state: "visible", timeout: DEFAULT_TIMEOUT });
   } catch {
     return;
   }
-  const selected = await chip.evaluate((el) => el.classList.contains("twoinc-mode-chip--selected"));
+  const selected = await chip.evaluate((el) =>
+    el.classList.contains("two-company-mode-chip--selected")
+  );
   if (!selected) {
     await chip.click();
   }
-  await expect(chip).toHaveClass(/twoinc-mode-chip--selected/);
+  await expect(chip).toHaveClass(/two-company-mode-chip--selected/);
 }
 
 /**
- * Open the company-search select2 without typing or picking a result — the
- * mode-chips group (TWO-40 §0) only exists in the document while this
- * dropdown is open, so specs asserting on the chips need this instead of
- * the full `fillCompanySearch` flow.
+ * Open the company-capture popover without typing or picking a result — the
+ * chips are inside it, so specs asserting on them need this rather than the
+ * full `fillCompanySearch` flow.
  */
 export async function openCompanySearch(page: Page) {
-  const container = page.locator("#select2-billing_company_display-container");
-  await container.waitFor({ state: "visible" });
-  await container.click();
+  const field = page.locator(COMPANY_FIELD);
+  await field.waitFor({ state: "visible" });
+  await field.click();
   await page
-    .locator(".select2-search__field")
+    .locator(`${COMPANY_PANEL} .two-company-dropdown__query`)
     .waitFor({ state: "visible", timeout: DEFAULT_TIMEOUT });
 }
 
 export async function fillCompanySearch(page: Page, companyName = BUYER_COMPANY, retries = 3) {
-  // Waiting for "networkidle" here used to stand in for "the checkout has
-  // settled", and it deadlocked the whole suite once the sole-trader chooser
-  // started rendering on GB: the autofill prefetch's 404 from
-  // /autofill/v1/buyer/current is never drained by the browser, so Chromium's
-  // in-flight request count never drops to zero and the wait can only time
-  // out. Playwright discourages networkidle for exactly this reason — wait on
-  // the UI that the next step needs instead, which is what the chooser and
-  // the select2 container waits below do.
+  // Never "networkidle": the autofill prefetch's 404 is never drained by the
+  // browser, so the in-flight count never reaches zero. Wait on the UI the next
+  // step needs instead.
   await selectRegisteredCompany(page);
 
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      const container = page.locator("#select2-billing_company_display-container");
-      await container.waitFor({ state: "visible" });
-      await container.click();
+      await openCompanySearch(page);
 
-      const searchInput = page.locator(".select2-search__field");
+      const searchInput = page.locator(`${COMPANY_PANEL} .two-company-dropdown__query`);
       await searchInput.waitFor({ state: "visible", timeout: 5_000 });
       await searchInput.pressSequentially(companyName, { delay: 50 });
 
-      const result = page
-        .locator(".select2-results__option:not(.select2-results__message)")
-        .first();
+      const result = page.locator(`${COMPANY_PANEL} .two-company-dropdown__row`).first();
       await result.waitFor({ state: "visible", timeout: 10_000 });
       await page.waitForTimeout(500);
       await result.click();

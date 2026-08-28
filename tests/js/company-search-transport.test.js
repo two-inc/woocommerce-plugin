@@ -1,12 +1,18 @@
 /**
- * TWO-25244. The custom selectWoo `ajax.transport` in assets/js/twoinc.js.
+ * TWO-25244, re-pinned for TWO-25503. The company-search transport in
+ * assets/js/twoinc.js — `searchApi()` and `searchCompanies()`.
  *
- * The transport exists for one reason: select2's own failure handler cannot
- * tell a cancelled request from a timed-out one. It treats any jqXHR with
- * `status 0` as a cancellation, and a jQuery `timeout` also reports `status 0`
- * — so with the default transport a timeout rendered as "no companies found",
- * which is a wrong answer rather than a missing one. Every assertion here is
- * about that distinction and about which request owns the shared UI.
+ * The transport exists for one reason: a cancelled request and a timed-out one
+ * are indistinguishable by jqXHR status — jQuery reports `status 0` for both —
+ * so the outcome has to be decided from `textStatus`. Get that wrong and a
+ * timeout renders as "no companies found", a wrong answer rather than a
+ * missing one.
+ *
+ * `searchCompanies()` RESOLVES on every outcome with one of three answers —
+ * `{items}`, `{aborted: true}`, `{unavailable: true}` — and the panel decides
+ * what to paint from that. So the three answers are asserted directly at the
+ * transport, and the rendering they produce separately, by driving the real
+ * panel.
  */
 
 "use strict";
@@ -16,7 +22,7 @@ const path = require("path");
 
 const harness = require("./wc-harness");
 
-describe("company search ajax transport", () => {
+describe("company search transport", () => {
   let ctx;
   let ajax;
 
@@ -28,247 +34,212 @@ describe("company search ajax transport", () => {
 
   afterEach(() => {
     ajax.restore();
-    harness.releaseWidgets(ctx.$);
+    harness.releasePanel(ctx.helper);
     document.body.innerHTML = "";
   });
 
   /**
-   * Open the real widget once per test, and keep it.
+   * Issue one search through the transport the panel is given, and hand back
+   * both the promise the panel awaits and the request on the wire.
    *
-   * Re-attaching selectWoo on every search would be the wrong shape: two
-   * concurrent searches in the field the buyer is typing into share ONE
-   * widget, and that shared spinner and results list are exactly what the
-   * supersession guard protects.
+   * The panel's own debounce is deliberately out of the picture here: two
+   * overlapping searches are the subject of half this file, and driving them
+   * through the query field would have the newer one abort the older before it
+   * could be settled out of order.
    *
-   * @returns {Object} the jQuery-wrapped select
+   * @param {Object} [options]
+   * @param {string} [options.term]
+   * @param {Object} [options.token] bind identity, as the panel supplies
+   * @returns {{answer: Promise<Object>, request: Object}}
    */
-  function widget() {
-    const $select = ctx.$("#billing_company_display");
-    if (!$select.data("select2")) {
-      return harness.openCompanyWidget(ctx.$, ctx.helper);
-    }
-    return $select;
-  }
-
-  /**
-   * Run one search through the plugin's own transport, with the real widget
-   * open so the spinner node and the results container both exist.
-   *
-   * @param {Object} [params] select2 request params
-   * @returns {{success: Object, jqXHR: Object, request: Object}}
-   */
-  function search(params) {
-    widget();
-    const transport = ctx.helper.genSelectWooParams().ajax.transport;
-    const success = harness.successRecorder();
-    const jqXHR = transport(params || { term: "exampleco", page: 0 }, success.fn);
-    return { success: success, jqXHR: jqXHR, request: ajax.last() };
-  }
-
-  /** @returns {boolean} is the in-field spinner currently showing */
-  function spinnerVisible() {
-    return ctx.$(".twoinc-searching").length > 0;
+  function search(options) {
+    const opts = options || {};
+    const answer = ctx.helper.searchApi().searchCompanies({
+      config: {},
+      token: opts.token || {},
+      term: opts.term || "exampleco",
+      getCountryCode: function () {
+        return ctx.helper.currentCountry();
+      }
+    });
+    return { answer: answer, request: ajax.last() };
   }
 
   describe("timeout is not a cancellation", () => {
-    test("a timeout raises the unavailable message", () => {
+    test.each([
+      ["timeout", "unavailable"],
+      ["error", "unavailable"],
+      ["parsererror", "unavailable"],
+      ["abort", "aborted"]
+    ])("a %s resolves as %s", async (textStatus, answered) => {
       const run = search();
 
-      run.request.fail("timeout");
+      run.request.fail(textStatus);
 
-      expect(harness.resultsText(ctx.$)).toContain("temporarily unavailable");
+      await expect(run.answer).resolves.toEqual({ [answered]: true });
     });
 
-    test("an abort stays silent", () => {
-      const run = search();
+    test("a timeout and an abort are indistinguishable by jqXHR status alone", async () => {
+      // The premise of the whole transport, asserted rather than assumed: if
+      // these ever diverged, keying off textStatus would be unnecessary. The
+      // jqXHR is read off the helper because that is where the transport keeps
+      // the live request.
+      const timedOut = search();
+      const timedOutXHR = ctx.helper.activeRequest;
+      timedOut.request.fail("timeout");
+      const aborted = search();
+      const abortedXHR = ctx.helper.activeRequest;
+      aborted.request.fail("abort");
 
-      run.request.fail("abort");
-
-      expect(harness.resultsText(ctx.$)).not.toContain("temporarily unavailable");
+      await Promise.all([timedOut.answer, aborted.answer]);
+      expect(timedOutXHR.status).toBe(0);
+      expect(abortedXHR.status).toBe(0);
     });
 
-    test("select2 cancelling the request through the returned jqXHR stays silent", () => {
-      // The route an abort actually arrives by: select2 aborts the in-flight
-      // search on every keystroke by calling abort() on the jqXHR the
-      // transport returned. Driven through that here rather than through the
-      // failure handler directly, so the returned handle is proven to be the
-      // one select2 can cancel.
-      const run = search();
-
-      run.jqXHR.abort();
-
-      expect(run.request.aborted).toBe(true);
-      expect(run.success.calls).toHaveLength(0);
-      expect(harness.resultsText(ctx.$)).not.toContain("temporarily unavailable");
-      expect(spinnerVisible()).toBe(false);
-    });
-
-    test("a transport error raises the unavailable message", () => {
-      const run = search();
-
-      run.request.fail("error");
-
-      expect(harness.resultsText(ctx.$)).toContain("temporarily unavailable");
-    });
-
-    test("a parser error raises the unavailable message", () => {
-      const run = search();
-
-      run.request.fail("parsererror");
-
-      expect(harness.resultsText(ctx.$)).toContain("temporarily unavailable");
-    });
-
-    test("a timeout and an abort are indistinguishable by jqXHR status alone", () => {
-      // The premise of the whole transport, asserted rather than assumed:
-      // if these ever diverged, keying off textStatus would be
-      // unnecessary. Both are status 0, which is what select2's own
-      // failure handler reads.
+    test("no failure resolves as a result set", async () => {
+      // An empty `items` reaching the panel would render as "no matches",
+      // which reads to the buyer as "my company is not registered".
       const timedOut = search();
       timedOut.request.fail("timeout");
       const aborted = search();
       aborted.request.fail("abort");
 
-      expect(timedOut.jqXHR.status).toBe(0);
-      expect(aborted.jqXHR.status).toBe(0);
-    });
-
-    test("neither a timeout nor an abort feeds results to select2", () => {
-      // A failure must not reach `success` as an empty result set: an
-      // empty dropdown reads to the buyer as "my company is not
-      // registered".
-      const timedOut = search();
-      timedOut.request.fail("timeout");
-      const aborted = search();
-      aborted.request.fail("abort");
-
-      expect(timedOut.success.calls).toHaveLength(0);
-      expect(aborted.success.calls).toHaveLength(0);
+      expect(await timedOut.answer).not.toHaveProperty("items");
+      expect(await aborted.answer).not.toHaveProperty("items");
     });
   });
 
   describe("request envelope", () => {
     test("carries the 30s client timeout", () => {
+      // 30s deliberately sits outside the checkout API's own retry envelope, so
+      // the client never abandons a request the server is still retrying.
       const run = search();
 
-      // 30s deliberately sits outside the checkout API's own retry
-      // envelope, so the client never abandons a request the server is
-      // still legitimately retrying.
       expect(ctx.helper.companySearchTimeoutMs).toBe(30000);
       expect(run.request.timeout).toBe(30000);
     });
 
-    test("passes select2 params through to jQuery.ajax", () => {
-      const run = search({ term: "exampleco", page: 0, dataType: "json" });
+    test("targets the companies endpoint on the configured host", () => {
+      const url = new URL(search().request.url);
 
-      expect(run.request.settings.dataType).toBe("json");
+      expect(url.origin).toBe("https://api.example.test");
+      expect(url.pathname).toBe("/companies/v2/company");
+      expect(url.searchParams.get("q")).toBe("exampleco");
+      expect(url.searchParams.get("country")).toBe("GB");
     });
 
-    test("does not mutate the params object select2 owns", () => {
-      widget();
-      const transport = ctx.helper.genSelectWooParams().ajax.transport;
-      const params = { term: "exampleco", page: 0 };
+    test("bounds the result set, and takes the bound from the helper's constant", () => {
+      expect(new URL(search().request.url).searchParams.get("limit")).toBe("50");
+      expect(new URL(search().request.url).searchParams.get("offset")).toBe("0");
 
-      transport(params, harness.successRecorder().fn);
+      ctx.helper.companySearchLimit = 7;
 
-      expect(params).toEqual({ term: "exampleco", page: 0 });
+      expect(new URL(search().request.url).searchParams.get("limit")).toBe("7");
     });
 
-    test("returns the jqXHR so select2 can abort it", () => {
-      const run = search();
+    test("sends the buyer's term verbatim, encoded exactly once", () => {
+      // A term containing a percent sign is where a stray decode would show up.
+      expect(new URL(search({ term: "a%20b" }).request.url).searchParams.get("q")).toBe("a%20b");
+      expect(new URL(search({ term: "Example & Co" }).request.url).searchParams.get("q")).toBe(
+        "Example & Co"
+      );
+    });
 
-      expect(typeof run.jqXHR.abort).toBe("function");
+    test("the country is read per request, not captured when the panel is built", () => {
+      // TWO-24867: the panel outlives a country change on every path that does
+      // not rebuild it, and a captured value searched the previous country's
+      // register while the form said otherwise. Two searches, so a value read
+      // once and reused fails here rather than agreeing on the first.
+      expect(new URL(search().request.url).searchParams.get("country")).toBe("GB");
+
+      ctx.$("#billing_country").append('<option value="SE">Sweden</option>').val("SE");
+
+      expect(new URL(search().request.url).searchParams.get("country")).toBe("SE");
+    });
+
+    test("identifies the plugin and its version to the API", () => {
+      // The only attribution this endpoint can get: the search runs in the
+      // buyer's browser, so the user-agent is the shopper's. In the query
+      // string rather than a header on purpose — a custom header would make the
+      // request non-simple and cost a CORS preflight per keystroke.
+      const url = new URL(search().request.url);
+
+      expect(url.searchParams.get("client")).toBe("woocommerce");
+      expect(url.searchParams.get("client_v")).toBe("0.0.0-test");
     });
   });
 
   describe("degraded responses", () => {
-    test("degraded === true yields an empty result set and the unavailable message", () => {
-      // The API answers HTTP 200 with a near-empty result set when its
-      // upstream provider lookup timed out. Rendering that as results
-      // would be presenting an unreliable list as a complete one.
+    test("degraded === true resolves as unavailable, with no items", async () => {
+      // The API answers HTTP 200 with a near-empty result set when its upstream
+      // provider lookup timed out. Rendering that as results would present an
+      // unreliable list as a complete one.
       const run = search();
 
       run.request.succeed({ degraded: true, items: [{ name: "Example Co" }] });
 
-      expect(run.success.calls).toEqual([{ items: [] }]);
-      expect(harness.resultsText(ctx.$)).toContain("temporarily unavailable");
-    });
-
-    test("an absent degraded field reads as not degraded", () => {
-      // The field may not be deployed yet, so today's healthy responses
-      // must keep working unchanged.
-      const run = search();
-
-      run.request.succeed({ items: [{ name: "Example Co" }] });
-
-      expect(run.success.calls).toHaveLength(1);
-      expect(run.success.calls[0].items).toHaveLength(1);
-      expect(harness.resultsText(ctx.$)).not.toContain("temporarily unavailable");
+      await expect(run.answer).resolves.toEqual({ unavailable: true });
     });
 
     test.each([
+      ["absent", undefined],
       ["a truthy string", "true"],
       ["the number 1", 1],
       ["an object", {}],
       ["false", false],
       ["null", null]
-    ])("degraded as %s reads as not degraded", (_label, value) => {
-      // Explicit `=== true`, not truthiness.
+    ])("degraded as %s reads as not degraded", async (_label, value) => {
+      // Explicit `=== true`, not truthiness. Absent must read as not degraded:
+      // the field may not be deployed yet.
       const run = search();
+      const body = { items: [{ name: "Example Co" }] };
+      if (value !== undefined) body.degraded = value;
 
-      run.request.succeed({ degraded: value, items: [{ name: "Example Co" }] });
+      run.request.succeed(body);
 
-      expect(run.success.calls).toHaveLength(1);
-      expect(run.success.calls[0].items).toHaveLength(1);
-      expect(harness.resultsText(ctx.$)).not.toContain("temporarily unavailable");
+      expect((await run.answer).items).toHaveLength(1);
     });
 
-    test("a null response body does not throw and is passed straight through", () => {
+    test("a null response body does not throw and yields no results", async () => {
       const run = search();
 
       expect(() => run.request.succeed(null)).not.toThrow();
-      expect(run.success.calls).toEqual([null]);
+      await expect(run.answer).resolves.toEqual({ items: [] });
     });
   });
 
   describe("supersession guard", () => {
-    test("a superseded FAILURE does not paint over the newer request", () => {
+    test("a superseded FAILURE resolves as aborted, not unavailable", async () => {
       const first = search();
-      const second = search();
+      search();
 
       first.request.fail("timeout");
 
-      // The newer search is still running; the older one's timeout must
-      // not replace its (pending) results with an error.
-      expect(harness.resultsText(ctx.$)).not.toContain("temporarily unavailable");
-      // ...and the request that IS current still reports its own timeout.
-      second.request.fail("timeout");
-      expect(harness.resultsText(ctx.$)).toContain("temporarily unavailable");
+      // Silent, so the older request's timeout cannot paint an error over the
+      // newer search's results.
+      await expect(first.answer).resolves.toEqual({ aborted: true });
     });
 
-    test("a superseded SUCCESS does not repopulate the list", () => {
-      // Regression: the guard was originally on the failure path only, so
-      // a slow first response could overwrite a newer search's results.
+    test("a superseded SUCCESS resolves as aborted, not as a result set", async () => {
+      // Regression: the guard was originally on the failure path only, so a
+      // slow first response could overwrite a newer search's results.
       const first = search();
       const second = search();
 
       first.request.succeed({ items: [{ name: "Stale Co" }] });
-
-      expect(first.success.calls).toHaveLength(0);
-
       second.request.succeed({ items: [{ name: "Fresh Co" }] });
-      expect(second.success.calls).toHaveLength(1);
-      expect(second.success.calls[0].items[0].name).toBe("Fresh Co");
+
+      await expect(first.answer).resolves.toEqual({ aborted: true });
+      expect((await second.answer).items[0].text).toBe("Fresh Co");
     });
 
-    test("a superseded DEGRADED success neither empties nor warns", () => {
+    test("a superseded DEGRADED success neither empties nor warns", async () => {
       const first = search();
       search();
 
       first.request.succeed({ degraded: true, items: [] });
 
-      expect(first.success.calls).toHaveLength(0);
-      expect(harness.resultsText(ctx.$)).not.toContain("temporarily unavailable");
+      await expect(first.answer).resolves.toEqual({ aborted: true });
     });
 
     test("the sequence number advances once per dispatched search", () => {
@@ -281,171 +252,62 @@ describe("company search ajax transport", () => {
     });
   });
 
-  describe("spinner lifecycle", () => {
-    test("shows while in flight and clears on success", () => {
-      const run = search();
-      expect(spinnerVisible()).toBe(true);
+  describe("abortActiveRequest", () => {
+    test("cancels the live request for the bind it belongs to, and says so", async () => {
+      const token = {};
+      const run = search({ token: token });
 
+      expect(ctx.helper.searchApi().abortActiveRequest(token)).toBe(true);
+
+      expect(run.request.abortedWhilePending).toBe(true);
+      await expect(run.answer).resolves.toEqual({ aborted: true });
+    });
+
+    test("refuses a token that is not the live bind's", () => {
+      // The identity is minted fresh whenever the panel re-points at another
+      // host, so a search issued by the node it left must not be cancellable
+      // by — or cancel — the new one's.
+      const run = search({ token: {} });
+
+      expect(ctx.helper.searchApi().abortActiveRequest({})).toBe(false);
+      expect(run.request.aborted).toBe(false);
+    });
+
+    test("is inert once the request has settled", () => {
+      const token = {};
+      const run = search({ token: token });
       run.request.succeed({ items: [] });
 
-      expect(spinnerVisible()).toBe(false);
+      expect(ctx.helper.searchApi().abortActiveRequest(token)).toBe(false);
+      expect(run.request.abortedWhilePending).toBe(false);
+    });
+  });
+
+  describe("the six-member contract the panel asks for", () => {
+    test("every member the panel checks for is supplied", () => {
+      const api = ctx.helper.searchApi();
+
+      expect(Object.keys(api).sort()).toEqual(
+        window.TwoCompanySearchPanel.SEARCH_API_CONTRACT.slice().sort()
+      );
     });
 
-    test.each([["timeout"], ["error"], ["abort"]])("clears on %s", (textStatus) => {
-      // Zero calls to the hide leaks the spinner for the rest of the
-      // session, including on the paths that stay silent.
-      const run = search();
-      expect(spinnerVisible()).toBe(true);
+    test("the thresholds are the helper's own constants, not literals", () => {
+      // The enforced minimum and the minimum the buyer is told about have to be
+      // one value (TWO-25288).
+      ctx.helper.companySearchMinLength = 7;
+      ctx.helper.companySearchDebounceMs = 900;
+      const api = ctx.helper.searchApi();
 
-      run.request.fail(textStatus);
-
-      expect(spinnerVisible()).toBe(false);
+      expect(api.MIN_INPUT_LENGTH).toBe(7);
+      expect(api.SEARCH_DEBOUNCE_MS).toBe(900);
+      expect(api.minInputLengthMessage()).toBe("Enter 7 or more characters");
     });
 
-    test("a superseded request leaves the spinner up for the request that replaced it", () => {
-      const first = search();
-      search();
-      expect(spinnerVisible()).toBe(true);
-
-      first.request.succeed({ items: [] });
-
-      expect(spinnerVisible()).toBe(true);
-    });
-
-    test("the newest request still clears the spinner after an older one settles", () => {
-      const first = search();
-      const second = search();
-      first.request.fail("abort");
-
-      second.request.succeed({ items: [] });
-
-      expect(spinnerVisible()).toBe(false);
-    });
-
-    test("keeps exactly one spinner node however many searches run", () => {
-      // The search input lives inside the dropdown, which select2 tears
-      // down and rebuilds on every open, so the node is created lazily
-      // per search — that must not accumulate duplicates within one open
-      // dropdown, including while several searches overlap.
-      search().request.succeed({ items: [] });
-      search().request.succeed({ items: [] });
-      search();
-      search();
-
-      expect(ctx.$(".twoinc-search-spinner").length).toBe(1);
-    });
-
-    test("the spinner node is removed once the search ends", () => {
-      // Removed, not merely hidden: a hidden node would leave the animated
-      // loading image decoding behind a closed dropdown, and it is the
-      // removal that guarantees the single-node property above.
-      const run = search();
-      expect(ctx.$(".twoinc-search-spinner").length).toBe(1);
-
-      run.request.succeed({ items: [] });
-
-      expect(ctx.$(".twoinc-search-spinner").length).toBe(0);
-    });
-
-    test("the spinner is a single childless element carrying the styling hook", () => {
-      // The figure (TWO-25288) is a background-image on this one node, which
-      // needs the node to stay empty: any inner markup would sit on top of
-      // the painted background as dead weight the stylesheet does not style.
-      // So pin the emptiness as well as the class.
-      search();
-
-      const $spinner = ctx.$(".twoinc-search-spinner");
-      expect($spinner).toHaveLength(1);
-      expect($spinner.children()).toHaveLength(0);
-      expect($spinner.text()).toBe("");
-    });
-
-    test("the spinner is painted with the animated loading image", () => {
-      // Everything else here pins markup, which stays green whether the
-      // spinner paints anything at all — the earlier attempt on this ticket
-      // shipped a node that rendered nothing visible with the suite green.
-      // So resolve the real stylesheet and read back what the node paints.
-      //
-      // Two halves, both needed: the computed rule proves the CSS points at
-      // the asset, and the existence check proves the asset is actually in
-      // the tree. A correct url() aimed at a missing file satisfies the
-      // first on its own.
-      // The existence check resolves the URL the stylesheet actually
-      // declares, relative to the stylesheet's own directory, exactly as a
-      // browser would — deliberately not a path spelled out here. A
-      // hardcoded path checks that *some* asset exists somewhere, which
-      // stays green when the rule is repointed at a directory that holds
-      // nothing.
-      harness.injectStylesheet();
-      search();
-
-      const spinner = ctx.$(".twoinc-search-spinner")[0];
-      const painted = window.getComputedStyle(spinner);
-      expect(painted.backgroundImage).toContain("loader.gif");
-      expect(painted.backgroundRepeat).toBe("no-repeat");
-
-      const declared = /url\(\s*["']?([^"')]+)["']?\s*\)/.exec(painted.backgroundImage);
-      expect(declared).not.toBeNull();
-
-      const stylesheetDir = path.dirname(path.join(harness.REPO_ROOT, harness.STYLESHEET_PATH));
-      const assetPath = path.resolve(stylesheetDir, declared[1]);
-      expect(fs.existsSync(assetPath)).toBe(true);
-
-      // And that the file found there is the animated 16x16 figure the rule
-      // is sized for. A still image would be a spinner that never spins, and
-      // no CSS assertion can tell the two apart — jsdom evaluates no
-      // animation at all.
-      const bytes = fs.readFileSync(assetPath);
-      expect(bytes.slice(0, 6).toString("latin1")).toBe("GIF89a");
-      expect(bytes.readUInt16LE(6)).toBe(16);
-      expect(bytes.readUInt16LE(8)).toBe(16);
-
-      // One image descriptor means a static picture. The count comes from
-      // walking the block structure, not from scanning for the descriptor
-      // byte: that byte also occurs inside colour tables and compressed
-      // pixel data, so a scan reports frames in a single-frame file and the
-      // assertion below could never fail.
-      expect(harness.countGifFrames(bytes)).toBeGreaterThan(1);
-    });
-
-    test("the spinner lands inside the widget's own search box", () => {
-      // Every other assertion here selects the spinner document-wide, which
-      // would pass just as happily if the helper appended it to <body>. The
-      // spinner is positioned absolutely against the search container, so
-      // landing in the wrong parent means it renders in the wrong place —
-      // or nowhere visible at all — with the whole suite still green.
-      //
-      // The container is created by the widget library when the dropdown
-      // opens, not by any template in this repo, so this pins the one
-      // binding that could actually be got wrong.
-      search();
-
-      const $searchBox = ctx
-        .$('input[aria-owns="select2-billing_company_display-results"]')
-        .parent();
-      expect($searchBox).toHaveLength(1);
-      expect($searchBox.hasClass("select2-search--dropdown")).toBe(true);
-      expect($searchBox.children(".twoinc-search-spinner")).toHaveLength(1);
-      expect(ctx.$(".twoinc-search-spinner").parent().is($searchBox)).toBe(true);
-    });
-
-    test("the spinner is hidden from the accessibility tree", () => {
-      // Decoration only: select2 announces search state through the
-      // results list, so an exposed spinner would double up on it.
-      search();
-
-      expect(ctx.$(".twoinc-search-spinner").attr("aria-hidden")).toBe("true");
-    });
-
-    test("does not throw when the dropdown is closed", () => {
-      // No open dropdown means no search input to hang the spinner on.
-      // The plugin returns early; a search dispatched in that state (a
-      // country change re-creating the widget mid-flight) must not blow
-      // up.
-      const transport = ctx.helper.genSelectWooParams().ajax.transport;
-
-      expect(() => transport({ term: "exampleco" }, harness.successRecorder().fn)).not.toThrow();
-      expect(() => ajax.last().fail("timeout")).not.toThrow();
+    test("borrows WooCommerce core copy for the no-matches message", () => {
+      // From wc_country_select_params, so the buyer sees the same wording the
+      // rest of the checkout uses.
+      expect(ctx.helper.searchApi().noResultsMessage()).toBe("No matches found");
     });
   });
 
@@ -461,193 +323,243 @@ describe("company search ajax transport", () => {
 
       expect(ctx.helper.companySearchUnavailableText()).toBe("Søk er utilgjengelig");
     });
+  });
 
-    test("the widget renders the localised string, not the select2 default", () => {
-      // errorLoading() is select2's own hook; the point of overriding it
-      // is that the buyer sees our sentence instead of "The results
-      // could not be loaded."
+  describe("driven through the real panel, not the transport directly", () => {
+    /*
+     * Everything above proves the transport answers correctly. It proves
+     * nothing about whether the panel ever reaches it, or about what the buyer
+     * ends up looking at — the gap that let a live search on staging show no
+     * spinner at all while results came back normally (2026-08-02).
+     */
+
+    beforeEach(() => {
+      jest.useFakeTimers();
+      harness.openCompanyPanel(ctx.$, ctx.helper);
+    });
+
+    afterEach(() => {
+      jest.clearAllTimers();
+      jest.useRealTimers();
+    });
+
+    /**
+     * Type into the panel's query field. The panel binds with
+     * `addEventListener`, which jQuery's `.trigger()` does not reach.
+     *
+     * @param {string} term
+     * @param {boolean} [runDebounce] let the debounce elapse and dispatch
+     */
+    function typeQuery(term, runDebounce) {
+      const query = document.querySelector(".two-company-dropdown__query");
+      query.value = term;
+      query.dispatchEvent(new window.Event("input", { bubbles: true }));
+      if (runDebounce !== false) jest.advanceTimersByTime(ctx.helper.companySearchDebounceMs);
+    }
+
+    /** The transport resolves a Promise, so its answer lands on a microtask. */
+    function flushPromises() {
+      return Promise.resolve().then(() => Promise.resolve());
+    }
+
+    /** @returns {boolean} is the panel's spinner currently showing */
+    function spinnerVisible() {
+      const spinner = document.querySelector(".two-company-dropdown__spinner");
+      return !!spinner && spinner.classList.contains("two-company-dropdown__spinner--active");
+    }
+
+    test("typing a searchable term dispatches one request carrying that term", () => {
+      typeQuery("kaffe");
+
+      expect(ajax.calls).toHaveLength(1);
+      expect(new URL(ajax.last().url).searchParams.get("q")).toBe("kaffe");
+    });
+
+    test("the spinner is up during the debounce, before any request goes out", () => {
+      // The buyer waits 300ms before the request is even dispatched. Hanging
+      // the spinner off the transport alone left that window blank, which on a
+      // fast connection is most of the visible wait.
+      typeQuery("kaffe", false);
+
+      expect(ajax.calls).toHaveLength(0);
+      expect(spinnerVisible()).toBe(true);
+    });
+
+    test("a below-threshold term dispatches nothing and leaves no spinner running", () => {
+      typeQuery("ka");
+
+      expect(ajax.calls).toHaveLength(0);
+      expect(spinnerVisible()).toBe(false);
+    });
+
+    test("a timeout raises the unavailable message and clears the spinner", async () => {
+      typeQuery("kaffe");
+      expect(spinnerVisible()).toBe(true);
+
+      ajax.last().fail("timeout");
+      await flushPromises();
+
+      expect(harness.resultsText(ctx.$)).toContain("temporarily unavailable");
+      expect(spinnerVisible()).toBe(false);
+    });
+
+    test("the unavailable message is styled apart from the other two", async () => {
+      // TWO-25326: "the search is down" and "your company is not here" are
+      // different answers and must not read alike.
+      typeQuery("kaffe");
+      ajax.last().fail("error");
+      await flushPromises();
+
+      const message = document.querySelector(".two-company-dropdown__message");
+      expect(message.classList.contains("two-company-dropdown__message--unavailable")).toBe(true);
+    });
+
+    test("the buyer sees the localised unavailable string, not the panel's own", async () => {
       ctx.twoinc.text.company_search_unavailable = "Søk er utilgjengelig";
-      const run = search();
+      typeQuery("kaffe");
 
-      run.request.fail("timeout");
+      ajax.last().fail("timeout");
+      await flushPromises();
 
       expect(harness.resultsText(ctx.$)).toContain("Søk er utilgjengelig");
     });
 
-    test("showCompanySearchUnavailable is inert when the widget is absent", () => {
-      document.body.innerHTML = "";
-
-      expect(() => ctx.helper.showCompanySearchUnavailable()).not.toThrow();
-    });
-  });
-
-  describe("spinner wiring — driven through the widget, not the transport directly (TWO-25326 §1)", () => {
-    /*
-     * Every assertion in "spinner lifecycle" above calls
-     * `genSelectWooParams().ajax.transport` by hand. That proves the transport
-     * toggles the spinner; it proves nothing about whether the transport is
-     * ever reached, or whether anything else on the page is required for the
-     * spinner to appear. Live verification on 2026-08-02 found no spinner at
-     * all during a real search on staging while results came back normally —
-     * i.e. exactly the gap a hand-called transport cannot see.
-     *
-     * These drive the real widget instead: type into the query field the
-     * dropdown actually renders, let selectWoo's own `query` → data adapter
-     * → transport chain run, and assert on what the buyer would see.
-     */
-
-    /**
-     * Attach and open the widget with the plugin's own event bindings in
-     * place — `fixSelectWooPositionCompanyName` is where the spinner's
-     * lifecycle handlers live, and `enableCompanySearch` and
-     * `clearSelectedCompany` are the two production callers of it.
-     *
-     * @returns {Object} the jQuery-wrapped select
-     */
-    function openWired() {
-      const $select = harness.openCompanyWidget(ctx.$, ctx.helper);
-      ctx.helper.fixSelectWooPositionCompanyName();
-      return $select;
-    }
-
-    /**
-     * Type into the dropdown's own query field with the events selectWoo
-     * listens on, so its `query` really fires.
-     *
-     * @param {string} term
-     * @returns {void}
-     */
-    function typeQuery(term) {
-      const $search = ctx.$(ctx.helper.companySearchInputSelector);
-      $search.val(term).trigger("input");
-    }
-
-    test("typing a searchable term shows the spinner, and the response clears it", () => {
-      jest.useFakeTimers();
-      openWired();
-
+    test("a degraded 200 raises it too, with no rows painted", async () => {
       typeQuery("kaffe");
-      expect(spinnerVisible()).toBe(true);
 
-      // Still up across the debounce and while the request is in flight.
-      jest.advanceTimersByTime(400);
-      expect(ajax.calls.length).toBe(1);
-      expect(spinnerVisible()).toBe(true);
+      ajax.last().succeed({ degraded: true, items: [{ name: "Example Co" }] });
+      await flushPromises();
+
+      expect(document.querySelectorAll(".two-company-dropdown__row")).toHaveLength(0);
+      expect(harness.resultsText(ctx.$)).toContain("temporarily unavailable");
+    });
+
+    test("an empty result set says no matches, never that the search is down", async () => {
+      typeQuery("kaffe");
 
       ajax.last().succeed({ items: [] });
+      await flushPromises();
 
+      expect(harness.resultsText(ctx.$)).toContain("No matches found");
+      expect(harness.resultsText(ctx.$)).not.toContain("temporarily unavailable");
       expect(spinnerVisible()).toBe(false);
-      jest.useRealTimers();
     });
 
-    test("the spinner is up during the debounce, before any request goes out", () => {
-      // The buyer is waiting for 300ms before the request is even dispatched.
-      // Hanging the spinner off the transport alone left that window blank,
-      // which on a fast connection is most of the visible wait.
-      jest.useFakeTimers();
-      openWired();
-
+    test("results paint and clear the spinner", async () => {
       typeQuery("kaffe");
 
-      expect(ajax.calls.length).toBe(0);
+      ajax.last().succeed({ items: [{ name: "Kaffe AS", highlight: "<em>Kaffe</em> AS" }] });
+      await flushPromises();
+
+      expect(document.querySelectorAll(".two-company-dropdown__row")).toHaveLength(1);
+      expect(spinnerVisible()).toBe(false);
+    });
+
+    test("the next keystroke cancels the request still on the wire", async () => {
+      typeQuery("kaffe");
+      const first = ajax.last();
+
+      typeQuery("kaffebar");
+
+      expect(first.abortedWhilePending).toBe(true);
+      expect(ajax.calls).toHaveLength(2);
+      // Silent: an abort on every keystroke is routine and must not read as an
+      // error to the buyer.
+      await flushPromises();
+      expect(harness.resultsText(ctx.$)).not.toContain("temporarily unavailable");
+    });
+
+    test("a superseded response cannot paint over the newer search", async () => {
+      typeQuery("kaffe");
+      const first = ajax.last();
+      typeQuery("kaffebar");
+
+      first.succeed({ items: [{ name: "Stale Co", highlight: "Stale Co" }] });
+      await flushPromises();
+
+      expect(harness.resultsText(ctx.$)).not.toContain("Stale Co");
+      // ...and the request that IS current still paints.
+      ajax.last().succeed({ items: [{ name: "Fresh Co", highlight: "Fresh Co" }] });
+      await flushPromises();
+      expect(harness.resultsText(ctx.$)).toContain("Fresh Co");
+    });
+
+    test("closing the panel drops the in-flight request and the spinner with it", () => {
+      typeQuery("kaffe");
+      const inFlight = ajax.last();
       expect(spinnerVisible()).toBe(true);
-      jest.useRealTimers();
-    });
 
-    test("a below-threshold term does not leave a spinner running", () => {
-      // The ordering trap this guards: handlers run in registration order and
-      // the widget registered its own `query` handler first, so for a term
-      // under the minimum the minimumInputLength decorator has ALREADY
-      // answered with `results:message` — the hide — by the time the show
-      // would run. Without the length check in the show handler the spinner
-      // would sit there forever over a "Please enter 3 or more characters"
-      // hint with nothing in flight.
-      jest.useFakeTimers();
-      openWired();
+      ctx.helper.closeCompanySearchDropdown();
 
-      typeQuery("ka");
-      jest.advanceTimersByTime(400);
-
-      expect(ajax.calls.length).toBe(0);
+      expect(inFlight.abortedWhilePending).toBe(true);
       expect(spinnerVisible()).toBe(false);
-      jest.useRealTimers();
     });
 
-    test("a message result — no matches, or search unavailable — clears it too", () => {
-      jest.useFakeTimers();
-      const $select = openWired();
-      const picker = $select.data("select2");
-
-      typeQuery("kaffe");
-      expect(spinnerVisible()).toBe(true);
-
-      picker.trigger("results:message", { message: "noResults" });
-
-      expect(spinnerVisible()).toBe(false);
-      jest.useRealTimers();
-    });
-
-    test("the spinner lands inside the query field's own wrapper, at its end", () => {
-      // Position is the requirement: "within and at the right hand end of the
-      // query field". The stylesheet does the placing, so what this asserts is
-      // the anchor the stylesheet needs — the spinner is the last child of the
-      // wrapper the query input lives in, and that wrapper is flagged so the
-      // rule reserving the right-hand gutter applies.
-      jest.useFakeTimers();
-      openWired();
-
+    test("the spinner is a single childless element carrying the styling hook", () => {
+      // The figure (TWO-25288) is a background-image on this one node, which
+      // needs it to stay empty: inner markup would sit on top of the painted
+      // background as dead weight the stylesheet does not style.
       typeQuery("kaffe");
 
-      const $spinner = ctx.$(".twoinc-search-spinner");
-      expect($spinner.length).toBe(1);
-
-      const $wrapper = $spinner.parent();
-      expect($wrapper.hasClass("select2-search--dropdown")).toBe(true);
-      expect($wrapper.hasClass("twoinc-searching")).toBe(true);
-      expect($wrapper.find(ctx.helper.companySearchInputSelector).length).toBe(1);
-      expect($wrapper.children().last().is($spinner)).toBe(true);
-      jest.useRealTimers();
+      const spinners = document.querySelectorAll(".two-company-dropdown__spinner");
+      expect(spinners).toHaveLength(1);
+      expect(spinners[0].children).toHaveLength(0);
+      expect(spinners[0].textContent).toBe("");
+      // Decoration only: the panel announces search state through its results
+      // list, so an exposed spinner would double up on it.
+      expect(spinners[0].getAttribute("aria-hidden")).toBe("true");
     });
 
-    test("the field wrapper is still found once selectWoo has stripped aria-owns", () => {
-      // `companySearchInputSelector` keys on `aria-owns`, which selectWoo sets
-      // on open and REMOVES on close — so the primary lookup is a widget-state
-      // check wearing an element lookup's clothes, and a caller that runs a
-      // tick off gets a silent no-op instead of a spinner. The fallback is
-      // anchored on the results list's static id instead.
-      const $select = harness.openCompanyWidget(ctx.$, ctx.helper);
-      const $search = ctx.$(ctx.helper.companySearchInputSelector);
-      expect($search.length).toBe(1);
+    test("the spinner sits inside the search row, beside the query field", () => {
+      // It is positioned absolutely against that row, so the wrong parent means
+      // it renders in the wrong place — or nowhere visible — with everything
+      // else here still green.
+      typeQuery("kaffe");
 
-      $search.removeAttr("aria-owns");
-      expect(ctx.$(ctx.helper.companySearchInputSelector).length).toBe(0);
-
-      const $found = ctx.helper.getCompanySearchFieldContainer();
-
-      expect($found.length).toBe(1);
-      expect($found.hasClass("select2-search--dropdown")).toBe(true);
-      expect($select.data("select2")).toBeDefined();
+      const row = document.querySelector(".two-company-dropdown__search");
+      expect(row.querySelector(":scope > .two-company-dropdown__spinner")).not.toBeNull();
+      expect(row.querySelector(":scope > .two-company-dropdown__query")).not.toBeNull();
+      expect(document.querySelectorAll(".two-company-dropdown__spinner")).toHaveLength(1);
     });
 
-    test("the fallback cannot pick up a different field's dropdown", () => {
-      // Scoped on this field's own results-list id, not on the generic
-      // `.select2-search--dropdown` class, which the country picker's open
-      // dropdown carries just as well.
-      harness.openCompanyWidget(ctx.$, ctx.helper);
-      ctx.$(ctx.helper.companySearchInputSelector).removeAttr("aria-owns");
+    test("many searches leave exactly one spinner node", () => {
+      typeQuery("kaffe");
+      typeQuery("kaffeb");
+      typeQuery("kaffeba");
+      typeQuery("kaffebar");
 
-      const $found = ctx.helper.getCompanySearchFieldContainer();
-      expect($found.length).toBe(1);
-      expect(
-        $found.closest(".select2-dropdown").find("#select2-billing_company_display-results").length
-      ).toBe(1);
+      expect(document.querySelectorAll(".two-company-dropdown__spinner")).toHaveLength(1);
     });
 
-    test("no widget at all is inert, not a throw", () => {
-      document.body.innerHTML = "";
+    test("the spinner is painted with the animated loading image", () => {
+      // Markup assertions stay green for a node that paints nothing, and a
+      // correct url() aimed at a missing file is equally invisible — so the
+      // rule and the asset's existence are both read back from the real
+      // stylesheet, the URL resolved the way a browser would.
+      harness.injectStylesheet();
+      typeQuery("kaffe");
 
-      expect(() => ctx.helper.toggleCompanySearchSpinner(true)).not.toThrow();
-      expect(ctx.helper.getCompanySearchFieldContainer().length).toBe(0);
+      const painted = window.getComputedStyle(
+        document.querySelector(".two-company-dropdown__spinner")
+      );
+      expect(painted.backgroundImage).toContain("loader.gif");
+      expect(painted.backgroundRepeat).toBe("no-repeat");
+
+      const declared = /url\(\s*["']?([^"')]+)["']?\s*\)/.exec(painted.backgroundImage);
+      expect(declared).not.toBeNull();
+
+      const stylesheetDir = path.dirname(path.join(harness.REPO_ROOT, harness.STYLESHEET_PATH));
+      const assetPath = path.resolve(stylesheetDir, declared[1]);
+      expect(fs.existsSync(assetPath)).toBe(true);
+
+      // And that the file found there is the animated 16x16 figure the rule is
+      // sized for. A still image would be a spinner that never spins, and no
+      // CSS assertion can tell the two apart — jsdom evaluates no animation.
+      const bytes = fs.readFileSync(assetPath);
+      expect(bytes.slice(0, 6).toString("latin1")).toBe("GIF89a");
+      expect(bytes.readUInt16LE(6)).toBe(16);
+      expect(bytes.readUInt16LE(8)).toBe(16);
+      expect(harness.countGifFrames(bytes)).toBeGreaterThan(1);
     });
   });
 });

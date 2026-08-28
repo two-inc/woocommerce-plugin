@@ -64,13 +64,20 @@ describe("the company name and number surfaces (#486)", () => {
     // Two selected by default: every assertion below is about behaviour that
     // must NOT depend on this, so the tests that care flip it explicitly.
     $("form[name='checkout']").append(
-      '<input type="radio" name="payment_method" value="' + GATEWAY_ID + '" checked />'
+      [
+        '<div id="payment"><ul class="payment_methods">',
+        '<li class="wc_payment_method payment_method_woocommerce-gateway-tillit">',
+        '<input type="radio" name="payment_method" value="' + GATEWAY_ID + '" checked />',
+        '<div class="payment_box">',
+        '<div class="twoinc-company-search-tile-slot hidden"></div>',
+        "</div></li></ul></div>"
+      ].join("")
     );
     ctx.Twoinc.getInstance();
   }
 
   afterEach(() => {
-    harness.releaseWidgets($);
+    harness.releasePanel(ctx.helper);
     sessionStorage.clear();
     document.body.innerHTML = "";
   });
@@ -174,18 +181,20 @@ describe("the company name and number surfaces (#486)", () => {
       }
     );
 
-    test("both name elements show when the search control lives in the payment tile", () => {
+    test("the tile row and the native field share the page when the control lives in the tile", () => {
       // The ONE documented exception to "exactly one" (Doug 2026-08-04,
       // live-verified): unchecking "Enable company search in address entry"
       // RELOCATES the search control into the payment tile rather than turning
       // it off, so the two are no longer competing for the same position and
-      // the address area still needs WooCommerce's own field.
+      // the address area still needs WooCommerce's own field. The address
+      // search row is never the relocated control — the tile builds its own.
       load("GB");
       ctx.twoinc.company_search_location = "payment_tile";
 
       ctx.dom.toggleBusinessFields();
 
-      expect(isVisible("#billing_company_display_field")).toBe(true);
+      expect(isVisible("#billing_company_display_field")).toBe(false);
+      expect(isVisible("#twoinc_tile_company_row")).toBe(true);
       expect(isVisible("#billing_company_field")).toBe(true);
     });
   });
@@ -311,6 +320,35 @@ describe("the company name and number surfaces (#486)", () => {
 
       expect(label().prev()[0]).toBe($("#billing_company_field")[0]);
     });
+
+    test("follows the name into the payment tile when that is where the control lives", () => {
+      // The label anchors on `companyNameSurface()`, so tile placement moves it
+      // out of the address area entirely — left behind it would sit under a row
+      // that is no longer showing the company it describes (TWO-25503).
+      load("GB");
+      ctx.twoinc.company_search_location = "payment_tile";
+      ctx.capture.write("ACME Widgets Ltd", "12345678");
+
+      ctx.dom.toggleBusinessFields();
+
+      expect(labelShown()).toBe(true);
+      expect(labelText()).toBe("12345678");
+      expect(label().prev()[0]).toBe($("#twoinc_tile_company_row")[0]);
+    });
+
+    test("comes back to the address area when the tile collapses under another method", () => {
+      // The tile row goes off screen with its payment box, and the label has to
+      // leave with it rather than stay anchored to something invisible.
+      load("GB");
+      ctx.twoinc.company_search_location = "payment_tile";
+      ctx.capture.write("ACME Widgets Ltd", "12345678");
+      ctx.dom.toggleBusinessFields();
+
+      $(".payment_box").css("display", "none");
+      ctx.dom.toggleBusinessFields();
+
+      expect(label().prev()[0]).toBe($("#billing_company_field")[0]);
+    });
   });
 
   describe("#company_id itself stays a real, posted, hidden input", () => {
@@ -337,6 +375,76 @@ describe("the company name and number surfaces (#486)", () => {
       // checkout becomes unsubmittable with no visible reason why.
       expect($("#company_id").attr("required")).toBeFalsy();
       expect($("#company_id_field").find("label .twoinc-required").length).toBe(0);
+    });
+  });
+
+  describe("the required cue lands on whichever company-name row is on screen", () => {
+    /**
+     * @param {string} rowSelector
+     * @returns {{required: boolean, asterisks: number}}
+     */
+    function cue(rowSelector) {
+      const $row = $(rowSelector);
+      return {
+        required: Boolean($row.find(":input").attr("required")),
+        asterisks: $row.find("label .twoinc-required").length
+      };
+    }
+
+    const CUED = { required: true, asterisks: 1 };
+    const UNCUED = { required: false, asterisks: 0 };
+
+    test.each([
+      {
+        location: "address_area",
+        capture: false,
+        twoSelected: true,
+        display: CUED,
+        native: UNCUED,
+        description: "address area: the search row"
+      },
+      {
+        location: "address_area",
+        capture: true,
+        twoSelected: true,
+        display: CUED,
+        native: UNCUED,
+        description: "address area with a capture: still the search row"
+      },
+      {
+        location: "payment_tile",
+        capture: false,
+        twoSelected: true,
+        display: UNCUED,
+        native: CUED,
+        description: "tile placement: the native row core still renders"
+      },
+      {
+        location: "payment_tile",
+        capture: true,
+        twoSelected: true,
+        display: UNCUED,
+        native: UNCUED,
+        description: "tile placement showing the capture: no address row to require"
+      },
+      {
+        location: "address_area",
+        capture: true,
+        twoSelected: false,
+        display: UNCUED,
+        native: UNCUED,
+        description: "another method selected: nothing of Two's is required"
+      }
+    ])("$description", ({ location, capture, twoSelected, display, native }) => {
+      load("GB");
+      ctx.twoinc.company_search_location = location;
+      if (capture) ctx.capture.write("ACME Widgets Ltd", "12345678");
+      $("input[name=payment_method]").prop("checked", twoSelected);
+
+      ctx.dom.toggleBusinessFields();
+
+      expect(cue("#billing_company_display_field")).toEqual(display);
+      expect(cue("#billing_company_field")).toEqual(native);
     });
   });
 });

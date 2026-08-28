@@ -1,142 +1,160 @@
 /**
- * TWO-25469. A widget's underlying `<select>` can be discarded outright —
- * WooCommerce's checkout-AJAX fragment `replaceWith()` is the documented
- * trigger, see `closeCompanySearchBeforeCheckoutUpdate`'s own comment in
- * twoinc.js — without a `select2("destroy")` call ever reaching it. The
- * widget's inline container goes with the removed `<select>`, but selectWoo's
- * AttachBody decorator renders the actual DROPDOWN as a separate node
- * appended straight to `<body>` (vendored bundle, `AttachBody.render`/
- * `.bind`), so it survives untouched — nothing but that same discarded
- * instance's own `destroy()`/`close()` ever detaches it, and nothing calls
- * either once every reference to the instance is gone with the element.
+ * TWO-25469, re-pinned for TWO-25503. A company field can be discarded outright
+ * — WooCommerce's checkout-AJAX fragment `replaceWith()` is the documented
+ * trigger — with no teardown call ever reaching the control attached to it.
  *
- * Confirmed live on staging: reopening the freshly re-attached widget then
- * renders a SECOND open dropdown alongside the orphan, i.e. two
- * `.select2-container--open` elements for the one field.
+ * A body-appended dropdown outlives the field it belonged to, so the replace
+ * leaves it orphaned and the next open renders a second one alongside it. The
+ * panel is a child of the field's own wrapper, so it goes with the field.
+ *
+ * The panel closes that whole class of defect structurally — it is a child of
+ * the field's own wrapper, so a fragment replace takes it with the field, and
+ * `_releaseWrap` retires the wrapper when the panel re-points at a new host.
+ * What has to stay true is unchanged and is what these assert: after any
+ * re-attach there is exactly ONE panel in the document, anchored to the field
+ * the buyer can actually see, and none loose in `<body>`.
  */
 
 "use strict";
 
 const harness = require("./wc-harness");
 
-describe("company-search dropdown-clone orphan sweep (TWO-25469)", () => {
+describe("company-search panel orphan sweep (TWO-25469)", () => {
   let ctx;
 
   beforeEach(() => {
+    // `clearSelectedCompany()` arms a 3s deferred re-read that would otherwise
+    // outlive the test and run against a torn-down DOM.
+    jest.useFakeTimers();
     ctx = harness.loadTwoinc();
     harness.buildCheckoutForm();
   });
 
   afterEach(() => {
-    harness.releaseWidgets(ctx.$);
+    harness.releasePanel(ctx.helper);
     document.body.innerHTML = "";
+    jest.clearAllTimers();
+    jest.useRealTimers();
   });
 
-  /** @returns {number} every `.select2-container` anywhere in the document */
-  function containerCount() {
-    return ctx.$(".select2-container").length;
+  /** @returns {number} every panel anywhere in the document */
+  function panelCount() {
+    return document.querySelectorAll(".two-company-dropdown").length;
   }
 
-  /** @returns {number} every `.select2-container--open` in the document */
-  function openContainerCount() {
-    return ctx.$(".select2-container--open").length;
+  /** @returns {number} every panel currently showing */
+  function openPanelCount() {
+    return document.querySelectorAll(".two-company-dropdown:not([hidden])").length;
   }
 
-  test("an ordinary attach + open renders exactly one open container", () => {
-    ctx.helper.attach();
-    ctx.$("#billing_company_display").select2("open");
+  /** @returns {number} wrappers anywhere in the document */
+  function wrapCount() {
+    return document.querySelectorAll(".two-company-field-wrap").length;
+  }
 
-    expect(openContainerCount()).toBe(2);
+  /** Discard the company row wholesale and render a fresh, un-attached one. */
+  function replaceCompanyFragment() {
+    ctx.$("#billing_company_display_field").remove();
+    ctx
+      .$("form[name='checkout']")
+      .append(
+        '<p id="billing_company_display_field"><span class="woocommerce-input-wrapper">' +
+          '<input type="text" id="billing_company_display" autocomplete="off" /></span></p>'
+      );
+  }
+
+  test("an ordinary attach + open renders exactly one open panel", () => {
+    harness.openCompanyPanel(ctx.$, ctx.helper);
+
+    expect(panelCount()).toBe(1);
+    expect(openPanelCount()).toBe(1);
+    expect(document.body.querySelector(":scope > .two-company-dropdown")).toBeNull();
   });
 
-  test(
-    "re-attaching after the field was discarded while its dropdown was open " +
-      "leaves no orphaned open dropdown behind",
-    () => {
-      ctx.helper.attach();
-      ctx.$("#billing_company_display").select2("open");
-      expect(openContainerCount()).toBe(2);
+  test("re-attaching after the field was discarded while open leaves no orphan behind", () => {
+    harness.openCompanyPanel(ctx.$, ctx.helper);
+    expect(openPanelCount()).toBe(1);
 
-      // Simulate the documented mechanism: WooCommerce's own AJAX discards
-      // the fragment holding the field wholesale — never a select2("destroy")
-      // call — and replaces it with a brand new, un-initialised `<select>`
-      // of the same id. The old widget's AttachBody dropdown clone is a
-      // sibling of <body>, not a descendant of the removed field, so it is
-      // NOT taken down by this removal.
-      ctx.$("#billing_company_display_field").remove();
-      ctx
-        .$("form[name='checkout']")
-        .append(
-          '<p id="billing_company_display_field"><select id="billing_company_display">' +
-            '<option value="">&nbsp;</option></select></p>'
-        );
+    replaceCompanyFragment();
 
-      // The removal took the inline container down with the rest of the
-      // field's subtree; only the body-appended dropdown clone survives,
-      // still marked open — the orphan, and the whole defect on its own
-      // before any re-attach happens.
-      expect(openContainerCount()).toBe(1);
+    // The panel went with the field, because it was inside it — the whole
+    // difference from the body-appended dropdown this defect was about.
+    expect(panelCount()).toBe(0);
 
-      // The re-attach every retry/mode-switch/manual-entry-exit path performs.
-      ctx.helper.attach();
-
-      // Nothing is open yet on the freshly attached widget — the orphan must
-      // be gone, not just outnumbered.
-      expect(openContainerCount()).toBe(0);
-
-      // And reopening the new widget must show exactly the one dropdown a
-      // buyer expects, not a second copy of the orphan alongside it — the
-      // literal defect reported live (TWO-25469).
-      ctx.$("#billing_company_display").select2("open");
-      expect(openContainerCount()).toBe(2);
-      expect(containerCount()).toBe(2); // one inline container + one open dropdown clone
-    }
-  );
-
-  test(
-    "clearSelectedCompany, the OTHER selectWoo re-init site, also sweeps an " +
-      "orphan left by a discard-while-open fragment replace",
-    () => {
-      // `clearSelectedCompany()` re-inits selectWoo directly rather than
-      // through `attach()` — reachable post-fragment-replace from
-      // `onUpdatedCheckout` via `clearCompanyIfCountryStale`. Without its own
-      // sweep call, this path reproduces the exact orphan `attach()` fixes.
-      ctx.helper.attach();
-      ctx.$("#billing_company_display").select2("open");
-      expect(openContainerCount()).toBe(2);
-
-      ctx.$("#billing_company_display_field").remove();
-      ctx
-        .$("form[name='checkout']")
-        .append(
-          '<p id="billing_company_display_field"><select id="billing_company_display">' +
-            '<option value="">&nbsp;</option></select></p>'
-        );
-      expect(openContainerCount()).toBe(1);
-
-      ctx.helper.clearSelectedCompany();
-
-      expect(openContainerCount()).toBe(0);
-      ctx.$("#billing_company_display").select2("open");
-      expect(openContainerCount()).toBe(2);
-      expect(containerCount()).toBe(2);
-    }
-  );
-
-  test("the ordinary re-attach path (widget still live on the SAME field) is unaffected", () => {
-    // Guards the exclusion in the sweep: re-attaching a live, OPEN widget on
-    // the field it is already attached to must still leave exactly one
-    // dropdown clone, via selectWoo's own reinit — not because the sweep
-    // tore it down first, which would double up with that reinit's own
-    // cleanup instead of leaving it alone.
+    // The re-attach every retry / mode-switch / manual-entry-exit path performs.
     ctx.helper.attach();
-    ctx.$("#billing_company_display").select2("open");
-    expect(openContainerCount()).toBe(2);
+
+    expect(panelCount()).toBe(1);
+    expect(wrapCount()).toBe(1);
+    expect(openPanelCount()).toBe(0);
+
+    ctx.helper.openCompanySearchDropdown();
+    expect(openPanelCount()).toBe(1);
+    expect(document.querySelector(".two-company-dropdown").parentElement).toBe(
+      document.querySelector("#billing_company_display").parentElement
+    );
+  });
+
+  test("clearSelectedCompany, the other re-attach site, sweeps the same way", () => {
+    // `clearSelectedCompany()` re-attaches directly rather than through
+    // `enableCompanySearch()` — reachable post-fragment-replace from
+    // `onUpdatedCheckout` via `clearCompanyIfCountryStale`.
+    harness.openCompanyPanel(ctx.$, ctx.helper);
+    replaceCompanyFragment();
+
+    ctx.helper.clearSelectedCompany();
+
+    expect(panelCount()).toBe(1);
+    expect(wrapCount()).toBe(1);
+    expect(openPanelCount()).toBe(0);
+  });
+
+  test("the ordinary re-attach path (panel still live on the SAME field) is unaffected", () => {
+    // Guards the adoption branch: re-attaching to the field the panel is
+    // already on must adopt what is there rather than tear it down and rebuild,
+    // which would drop the buyer's open panel on every `updated_checkout`.
+    harness.openCompanyPanel(ctx.$, ctx.helper);
+    const panel = document.querySelector(".two-company-dropdown");
 
     ctx.helper.attach();
 
-    expect(openContainerCount()).toBe(0);
-    ctx.$("#billing_company_display").select2("open");
-    expect(openContainerCount()).toBe(2);
+    expect(panelCount()).toBe(1);
+    expect(wrapCount()).toBe(1);
+    expect(document.querySelector(".two-company-dropdown")).toBe(panel);
+    expect(openPanelCount()).toBe(1);
+  });
+
+  test("a capture restored between the replace and the re-attach paints the field on screen", () => {
+    harness.openCompanyPanel(ctx.$, ctx.helper);
+    const orphan = ctx.helper.panel.getField()[0];
+
+    replaceCompanyFragment();
+    // `restoreCapturedCompany()` runs on the same `updated_checkout` as the
+    // replace, and the panel is still anchored to the node that went with it.
+    ctx.$("#billing_company").val("Acme Ltd");
+    ctx.$("#company_id").val("12345678");
+    ctx.dom.restoreCapturedCompany();
+
+    expect(ctx.$("#billing_company_display").val()).toBe("Acme Ltd");
+    expect(orphan.value).toBe("");
+  });
+
+  test("moving the panel to the payment tile retires the address-form wrapper", () => {
+    // The other way a host is abandoned: the mount moves rather than the
+    // fragment being replaced. Two wrappers would be two anchors, and the
+    // sole-trader fallback note would render against the one the buyer left.
+    ctx.helper.attach();
+    ctx.$("form[name='checkout']").append('<div class="twoinc-company-search-tile-slot"></div>');
+    ctx.twoinc.company_search_location = "payment_tile";
+
+    ctx.helper.syncCompanySearchTileLocation();
+
+    expect(panelCount()).toBe(1);
+    expect(wrapCount()).toBe(1);
+    expect(
+      document
+        .querySelector(".two-company-field-wrap")
+        .contains(document.querySelector(ctx.helper.tileFieldSelector))
+    ).toBe(true);
   });
 });

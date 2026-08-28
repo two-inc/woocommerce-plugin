@@ -55,7 +55,7 @@ describe("read-only captured-company summary", () => {
   });
 
   afterEach(() => {
-    harness.releaseWidgets($);
+    harness.releasePanel(helper);
     document.body.innerHTML = "";
   });
 
@@ -68,19 +68,11 @@ describe("read-only captured-company summary", () => {
       '<input type="radio" name="payment_method" value="' + GATEWAY_ID + '" checked />'
     );
 
-    // The payment tile, minimally. The captured company now renders INSIDE the
-    // intent-approved notice's own sentence (TWO-25326 §7.2/§7.3, ruling
-    // 2026-08-03) rather than in a separate label element — the
-    // now-removed `.twoinc-company-tile-label` — so without this notice
-    // element every tile-text assertion below would be checking an element
-    // that does not exist. Deliberately outside the billing field wrapper,
-    // which is what the address-area assertions are scoped to.
-    //
-    // The template is deliberately just the bare token, and the fallback text
-    // a distinctive marker: this suite's tile assertions care about WHICH
-    // string is on screen (raw company text vs. the served fallback), not
-    // about a production sentence's wording — that belongs to
-    // WC_Twoinc.php's own tests.
+    // The payment tile, minimally: the captured company renders inside the
+    // intent-approved notice's own sentence (TWO-25326 §7.2/§7.3), outside the
+    // billing wrapper the address-area assertions are scoped to. Bare token and
+    // a marker fallback, since what is asserted is WHICH string is on screen,
+    // never a production sentence's wording.
     $(document.body).append(
       '<li class="wc_payment_method"><div class="payment_box">' +
         '<div class="twoinc-pay-box twoinc-intent-approved hidden" ' +
@@ -142,25 +134,15 @@ describe("read-only captured-company summary", () => {
     return summary().length > 0 && !summary().hasClass("hidden");
   }
 
-  // Driven through `enableCompanySearch`'s real `select2:select` binding rather
-  // than by calling the render function: the point of the test is that picking a
-  // company renders the summary, and a direct call would pass even if the
-  // handler had never been wired to it.
+  // The panel's own selection sequence: paint the field, then hand the row to
+  // `onPick`, which is what its `onSelect` callback calls. Driven through that
+  // handler rather than the render function, so a summary that were never wired
+  // to a pick could not pass.
   function pickCompany(name, companyId) {
     const ajax = harness.stubAjax($);
     ctx.Twoinc.getInstance().enableCompanySearch();
-    // The <option> select2's array adapter appends for the chosen result, and
-    // leaves behind on destroy. Modelled explicitly because the event below is
-    // dispatched rather than driven through a real result list, and its being
-    // left behind is the whole subject of the resurrection tests further down —
-    // without it those tests assert against a select that was never populated.
-    $("#billing_company_display").append(
-      '<option value="' + name + '" selected>' + name + "</option>"
-    );
-    $("#billing_company_display").trigger({
-      type: "select2:select",
-      params: { data: { id: name, company_id: companyId } }
-    });
+    helper.panel.setDisplayText(name);
+    helper.onPick({ id: name, text: name, company_id: companyId });
     ajax.restore();
   }
 
@@ -235,16 +217,10 @@ describe("read-only captured-company summary", () => {
     });
 
     test("self-heals its position after WooCommerce core's own field resort (#30.x.9, found by live post-merge verification)", () => {
-      // Reported live: after picking a company, the summary rendered ABOVE
-      // the company field instead of below it. Root cause, documented in
-      // WC_Twoinc_Checkout.php above move_country_field(): WooCommerce
-      // core's own address-i18n.js detaches and re-appends every
-      // `.form-row` in the billing wrapper by priority, on EVERY checkout
-      // load — not only on country change. This summary is a plain <div>,
-      // not a `.form-row`, so it never takes part in that resort; the OLD
-      // code positioned it once on first creation and never again, so once
-      // WC moved the real fields past it, it stayed stranded above all of
-      // them for the rest of the page's life.
+      // Core's address-i18n.js re-sorts every `.form-row` in the billing
+      // wrapper on EVERY checkout load, not only on a country change. This
+      // summary is a plain <div>, so it never takes part and a position set
+      // once leaves it stranded above the fields.
       pickCompany("ACME Widgets Ltd", "12345678");
       expect(summary().prev().is("#billing_company_display_field")).toBe(true);
 
@@ -274,17 +250,11 @@ describe("read-only captured-company summary", () => {
     });
 
     test("does not physically move the node when it is already correctly positioned (round 1 review — Han)", () => {
-      // Repositioning unconditionally on every call — the first version of
-      // this fix — physically detaches and re-inserts the node even when
-      // nothing has drifted, which collapses any text selection inside the
-      // summary (the only interaction this read-only display affords is
-      // selecting the org number to copy it) and forces an avoidable
-      // reflow. Guarded on `$node.prev()` matching the anchor: spy on
-      // jQuery's own `insertAfter` and assert it is NOT called on an
-      // ordinary re-render once the summary is already positioned right —
-      // a plain node-identity check can't tell "moved but same reference"
-      // from "never touched", since jQuery never clones the element either
-      // way.
+      // Detaching and re-inserting an already-correct node collapses a text
+      // selection inside the summary — selecting the org number to copy it is
+      // the only interaction this display affords. Spied on `insertAfter`
+      // because jQuery never clones, so node identity cannot tell a move from
+      // an untouched node.
       pickCompany("ACME Widgets Ltd", "12345678");
 
       const insertAfterSpy = jest.spyOn($.fn, "insertAfter");
@@ -324,15 +294,9 @@ describe("read-only captured-company summary", () => {
   });
 
   describe("number rendered below the name, right-aligned, not sharing its line (#30.x.9)", () => {
-    // Reported live: picking a search result left the company number
-    // effectively invisible. Root cause was layout, not logic — the number
-    // used to sit on the SAME line as the name, `margin-left: 8px` away from
-    // it, `white-space: nowrap`. A long company name pushed it toward, and
-    // on a narrow viewport past, the right edge of the summary's own box.
-    // Doug's canonical cross-platform ruling: the number gets its own row,
-    // immediately below the name, right-aligned to the input's right edge —
-    // so it can never again compete with the name for the same horizontal
-    // space regardless of how long the name is.
+    // Doug's canonical cross-platform ruling: the number gets its own row below
+    // the name, right-aligned to the input's edge, so however long the name
+    // runs the two never compete for the same horizontal space.
     test("the number is a block of its own, not inline with the name", () => {
       harness.injectStylesheet();
       pickCompany("A Very Long International Holdings Group Company Ltd", "12345678");
@@ -344,14 +308,9 @@ describe("read-only captured-company summary", () => {
     });
 
     test("the summary box carries WooCommerce core's own form-row padding, so the id lines up with the input's real edge (round 2 review — Vader)", () => {
-      // Mutation-caught gap: deleting `padding-left`/`padding-right` from
-      // `.twoinc-company-summary` (round 1's fix for the ~3px offset
-      // against the input) passed the full suite with nothing to catch it.
-      // Asserted against computed style, not a stylesheet-source regex —
-      // the `[^}]*` capture used elsewhere in this file terminates early on
-      // the `}` inside this rule's own CSS *comment* (`.form-row { padding:
-      // 3px }`), so a naive regex test would silently pass regardless of
-      // what the rule actually declares.
+      // Computed style, not a source regex: the `[^}]*` capture used elsewhere
+      // in this file terminates early on the `}` inside this rule's own CSS
+      // comment, so a regex passes whatever the rule declares.
       harness.injectStylesheet();
       pickCompany("ACME Widgets Ltd", "12345678");
 
@@ -361,11 +320,8 @@ describe("read-only captured-company summary", () => {
     });
 
     test("the id element carries no same-line margin from the name any more", () => {
-      // The old inline layout's `margin-left: 8px` on the id is exactly what
-      // let it be squeezed off the visible line by a long name. Asserted
-      // directly against the shipped rule, not just the computed style,
-      // because jsdom does not lay out real text wrapping to prove the
-      // collision — the CSS declaration itself is the fix.
+      // Read off the shipped rule rather than the computed style: jsdom lays out
+      // no real text wrapping, so the declaration itself is the only evidence.
       const m = /\.twoinc-company-summary-id\s*\{([^}]*)\}/.exec(stylesheetSource());
       expect(m).not.toBeNull();
       expect(m[1]).not.toMatch(/margin-left/);
@@ -393,10 +349,8 @@ describe("read-only captured-company summary", () => {
         );
       expect(tileBody).not.toBeNull();
       expect(tileBody[1]).toMatch(/overflow-wrap:\s*anywhere/);
-      // The old nowrap protected the (inline, same-line) id from wrapping
-      // onto an ugly second line — but now that it has its own row, nowrap
-      // would instead let an exceptionally long identifier run past the
-      // row's edge, invisible, which is the exact bug this PR fixes.
+      // On its own row, nowrap would run an exceptionally long identifier past
+      // the row's edge and out of sight.
       expect(idBody[1]).not.toMatch(/white-space:\s*nowrap/);
     });
   });
@@ -417,15 +371,9 @@ describe("read-only captured-company summary", () => {
     });
 
     test("the override actually wins the cascade, not just exists in source (round 2 review — Han)", () => {
-      // The regex test above only proves the rule EXISTS, not that it WINS
-      // against a real rendered element. `.custom-checkout
-      // .twoinc-company-summary-id` outranks the bare `.twoinc-company-
-      // summary-id` on specificity (0,2,0 vs 0,1,0) regardless of source
-      // order, so this isn't guarding against reordering — it's guarding
-      // against the override rule silently stopping applying at all (typo'd
-      // selector, wrong class, etc.), which a source-only regex can't catch.
-      // Render the summary inside a `.custom-checkout` ancestor and read the
-      // actual computed value.
+      // Specificity settles the ordering, so what is guarded here is the
+      // override rule silently ceasing to apply at all — a typo'd selector,
+      // which a source-only regex cannot catch.
       harness.injectStylesheet();
       pickCompany("ACME Widgets Ltd", "12345678");
       summary().wrap('<div class="custom-checkout"></div>');
@@ -447,8 +395,8 @@ describe("read-only captured-company summary", () => {
     }
 
     test("renders the typed name with no number", () => {
-      // Manual entry is reached with a company already picked, which is the
-      // case that used to leave the disowned company's number on screen.
+      // Manual entry is reached with a company already picked, so the disowned
+      // number is what must come off screen with it.
       pickCompany("ACME Widgets Ltd", "12345678");
       expect(renderedNumber()).toBe("12345678");
 
@@ -485,12 +433,8 @@ describe("read-only captured-company summary", () => {
     test("hides #company_id_field — manual entry is name-only, no id (#30.x.13)", () => {
       // Settled cross-platform three-mode company-capture model: search gets
       // name+id, sole-trader gets name+synthetic id, manual entry gets name
-      // ONLY — Two's payment method cannot function without an id, and
-      // showing this field in manual entry invites one that was never
-      // validated against anything (see the capture-mode comment in
-      // toggleBusinessFields). Previously this platform diverged
-      // and kept the field visible/required in manual entry — that was the
-      // bug (#30.x.13, live-reported by Doug).
+      // ONLY — a visible `#company_id` in manual entry invites an id validated
+      // against nothing (#30.x.13, live-reported).
       pickCompany("ACME Widgets Ltd", "12345678");
       helper.enterManualCompanyEntry();
       typeCompanyName("Sole Proprietor Bakery");
@@ -642,9 +586,9 @@ describe("read-only captured-company summary", () => {
       jest.useRealTimers();
     });
 
-    test("the picker's empty placeholder is not rendered as a name", () => {
-      // The empty option's label is U+00A0, not a plain space: truthy,
-      // invisible, and rendered as a company by anything that only checks for
+    test("a whitespace-only name is not rendered as a company", () => {
+      // U+00A0, not a plain space: truthy, invisible, and rendered as a
+      // company by anything that only checks for
       // "". Written as the escape rather than pasted in, so neither a reader
       // nor an editor has to tell the two space characters apart — pasted, it
       // was mistaken for U+0020 in review.
@@ -653,11 +597,9 @@ describe("read-only captured-company summary", () => {
       expect(renderedName()).toBe("");
       expect(isShown()).toBe(false);
 
-      // And through the live read, against the real unselected state: the empty
-      // option's VALUE is "" — the non-breaking space is only its label, which
-      // is why the live read cannot see one and the guard above is defensive.
+      // And through the live read: the posted field is what it goes to, and it
+      // is empty, so the guard above is defensive.
       $("#billing_company").val("");
-      expect($("#billing_company_display").val()).toBe("");
       helper.renderCompanySummary();
 
       expect(renderedName()).toBe("");
@@ -667,12 +609,9 @@ describe("read-only captured-company summary", () => {
 
   describe("a company that is no longer captured stays off screen", () => {
     test("the sole-trader round trip does not resurrect the picked company", () => {
-      // The picker appends an <option> to #billing_company_display for every
-      // pick, and neither select2("destroy") nor the clearing setCompany("", "")
-      // removes it. So after search → sole trader → back to business, that
-      // select still held the company while both posted fields were empty. A
-      // summary that read the select back showed a company the order did not
-      // carry.
+      // After search → sole trader → back to business both posted fields are
+      // empty, and the field the buyer reads has to be empty with them: a
+      // display still carrying the company is one the order does not carry.
       const ajax = harness.stubAjax($);
       pickCompany("ACME Widgets Ltd", "12345678");
       expect(isShown()).toBe(true);
@@ -690,8 +629,7 @@ describe("read-only captured-company summary", () => {
 
     test("the summary never shows a name the checkout is not posting", () => {
       // The invariant behind the test above, asserted directly: whatever is on
-      // screen is what #billing_company holds. Stale options on the display
-      // select are exactly what used to break it.
+      // screen is what #billing_company holds.
       const ajax = harness.stubAjax($);
       pickCompany("ACME Widgets Ltd", "12345678");
       $("#billing_company").val("");
@@ -699,7 +637,7 @@ describe("read-only captured-company summary", () => {
 
       helper.renderCompanySummary();
 
-      // The stale option is still on the select — that is the point.
+      // The display still carries the name — that is the point.
       expect($("#billing_company_display").val()).toBe("ACME Widgets Ltd");
       expect(renderedName()).toBe("");
       expect(isShown()).toBe(false);

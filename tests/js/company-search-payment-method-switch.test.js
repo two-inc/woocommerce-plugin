@@ -24,9 +24,9 @@
  * being the selected/eligible method, silently downgrading a
  * registered-company or sole-trader buyer into manual-entry territory they
  * never asked for. The search-vs-plain decision is payment-method-agnostic
- * now — driven solely by the buyer's own capture mode — so relocation into the
- * tile happens once at bootstrap and no longer depends on the buyer ever
- * switching gateways. What switching TO Two still must re-decide is the
+ * now — driven solely by the buyer's own capture mode — so the tile's own row
+ * is built at bootstrap and does not depend on the buyer ever switching
+ * gateways. What switching TO Two still must re-decide is the
  * genuinely Two-only fields (invoice email, PO number, project,
  * department) — this suite now proves the payment-method listener still
  * fires `toggleBusinessFields()` via one of those instead.
@@ -44,6 +44,7 @@ const path = require("path");
 
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
 const SOURCE_PATH = "assets/js/twoinc.js";
+const PANEL_PATH = "assets/js/company-search-panel.js";
 
 const GATEWAY_ID = "woocommerce-gateway-tillit";
 const OTHER_GATEWAY_ID = "cod";
@@ -57,8 +58,13 @@ function installJQuery() {
   global.jQuery = jQuery;
   global.window.$ = jQuery;
   global.window.jQuery = jQuery;
-  require("selectwoo/dist/js/selectWoo.full.js")(global.window, jQuery);
   return jQuery;
+}
+
+/** Evaluate the vendored panel the way its own `<script>` tag does. */
+function installCompanySearchPanel() {
+  const indirectEval = eval;
+  indirectEval(fs.readFileSync(path.join(REPO_ROOT, PANEL_PATH), "utf8"));
 }
 
 /** @returns {void} */
@@ -88,10 +94,11 @@ function buildCheckoutForm() {
     '      <option value="GB" selected>UK</option>',
     "    </select>",
     "  </p>",
-    '  <p id="billing_company_display_field" class="billing_company_selectwoo form-row-wide hidden">',
-    '    <select id="billing_company_display" name="billing_company_display">' +
-      '<option value="">&nbsp;</option>' +
-      "</select>",
+    '  <p id="billing_company_display_field" class="form-row billing_company_search form-row-wide hidden">',
+    '    <label for="billing_company_display">Company name</label>',
+    '    <span class="woocommerce-input-wrapper">',
+    '      <input type="text" id="billing_company_display" name="billing_company_display" value="" />',
+    "    </span>",
     "  </p>",
     '  <p id="billing_company_field">',
     '    <label for="billing_company">Company name</label>',
@@ -151,6 +158,7 @@ describe("payment-method switch onto the Two gateway (TWO-25326 / #486)", () => 
     buildCheckoutForm();
     installJQuery();
     installWcParams();
+    installCompanySearchPanel();
 
     global.window.twoinc = {
       gateway_id: GATEWAY_ID,
@@ -176,14 +184,15 @@ describe("payment-method switch onto the Two gateway (TWO-25326 / #486)", () => 
 
     const $ = global.window.jQuery;
 
-    // #486: the search control's own visibility no longer depends on which
-    // gateway is selected, so bootstrap already shows and relocates it into
-    // the payment tile with the OTHER gateway checked — the fix under test.
-    expect($("#billing_company_display_field").hasClass("hidden")).toBe(false);
-    expect(
-      $("#billing_company_display_field").closest(".twoinc-company-search-tile-slot").length
-    ).toBe(1);
+    // #486: the control's own visibility no longer depends on which gateway is
+    // selected, so bootstrap already builds it in the payment tile with the
+    // OTHER gateway checked — the fix under test.
+    expect($("#twoinc_tile_company_row").closest(".twoinc-company-search-tile-slot").length).toBe(
+      1
+    );
     expect($(".twoinc-company-search-tile-slot").hasClass("hidden")).toBe(false);
+    // Never both: the address search row belongs to the other placement.
+    expect($("#billing_company_display_field").hasClass("hidden")).toBe(true);
 
     // Sanity check on the fixture itself: the Two-only fields start hidden
     // with the OTHER gateway selected. If this assertion starts failing,

@@ -82,6 +82,15 @@ WordPress and WooCommerce Best Practices
 - Utilize WooCommerce's logging system for debugging.
 - Example: `wc_get_logger()->debug('Your debug message', array('source' => 'your-plugin'));`
 
+Vendored assets
+
+- `assets/js/company-search-panel.js` is a byte-identical copy of the Two Magento
+  plugin's `view/frontend/web/js/model/company-search-panel.js`. It is maintained
+  there and vendored here so the two checkouts render one popover rather than two
+  that drift. **Never edit it in this repo** — change it upstream, then re-copy the
+  whole file and re-run the JS suite. A local edit is invisible to the upstream
+  reviewer and silently forks the control.
+
 Key Conventions
 
 1. Follow WordPress's plugin API for extending functionality.

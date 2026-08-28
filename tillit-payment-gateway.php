@@ -170,7 +170,22 @@ function wc_twoinc_enqueue_styles()
 
 function wc_twoinc_enqueue_scripts()
 {
-    wp_enqueue_script('twoinc-payment-gateway-js', WC_TWOINC_PLUGIN_URL . '/assets/js/twoinc.js', ['jquery'], twoinc_get_asset_version('assets/js/twoinc.js'));
+    // A dependency, not just an earlier enqueue, so `window.TwoCompanySearchPanel`
+    // is guaranteed to exist before twoinc.js runs.
+    $panel = 'assets/js/company-search-panel.js';
+    $frontend = 'assets/js/twoinc.js';
+    wp_enqueue_script(
+        'twoinc-company-search-panel',
+        WC_TWOINC_PLUGIN_URL . '/' . $panel,
+        [],
+        twoinc_get_asset_version($panel)
+    );
+    wp_enqueue_script(
+        'twoinc-payment-gateway-js',
+        WC_TWOINC_PLUGIN_URL . '/' . $frontend,
+        ['jquery', 'twoinc-company-search-panel'],
+        twoinc_get_asset_version($frontend)
+    );
 }
 
 function twoinc_settings_link($links)

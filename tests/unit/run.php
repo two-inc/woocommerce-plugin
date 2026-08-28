@@ -508,7 +508,7 @@ final class BrandConfigSpec
 
         // Country lands right after last name, before company — checked
         // against BOTH the native (possibly-hidden) billing_company field
-        // and the visible billing_company_display select, not just one:
+        // and the visible billing_company_display field, not just one:
         // the two are set independently (update_company_fields() derives
         // company_display's priority from billing_company's, but nothing
         // enforces they stay linked at every call site), so a regression
@@ -577,6 +577,11 @@ final class BrandConfigSpec
                 isset($fields['billing']['billing_company_display']),
                 'billing_company_display must be registered when get_enable_company_search() returns ' . var_export($enableCompanySearch, true)
             );
+
+            // The capture popover anchors to a text input; a <select> here
+            // gives it nothing to attach to and no value to paint into.
+            TinyAssert::same('text', $fields['billing']['billing_company_display']['type']);
+            TinyAssert::same(false, isset($fields['billing']['billing_company_display']['options']));
         }
     }
 

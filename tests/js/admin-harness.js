@@ -4,9 +4,9 @@
  *
  * Sibling of wc-harness.js, which does the same job for the storefront script.
  * Kept separate rather than parameterised because the two files need entirely
- * different worlds: the storefront one needs selectWoo and a checkout form,
- * this one needs the gateway settings page and the `twoinc_admin` localisation
- * object, and nothing needs both.
+ * different worlds: the storefront one needs the company-search panel and a
+ * checkout form, this one needs the gateway settings page and the
+ * `twoinc_admin` localisation object, and nothing needs both.
  *
  * `admin.js` is a plain classic script wrapped in a single
  * `jQuery(function ($) { ... })`. The grid behaviour under test is set up by
