@@ -342,13 +342,10 @@ let twoincCompanyCapture = {
 
   /**
    * Selector of the field carrying the captured NAME, paired with
-   * `#company_id`.
-   *
-   * It moves with the control's mount, exactly as the number does. In tile
-   * placement `#billing_company` is the buyer's own address line and may hold
-   * a different company (Doug 2026-08-28), so the capture keeps its own
-   * hidden carrier there; in address placement the control has replaced the
-   * address company row, so the two are the same thing.
+   * `#company_id`. It moves with the control's mount: in tile placement
+   * `#billing_company` is the buyer's own address line and may hold a
+   * different company (Doug 2026-08-28), so the capture keeps its own hidden
+   * carrier; in address placement the control replaced that row.
    */
   nameFieldSelector: function () {
     return twoincSelectWooHelper.isTileLocation()
@@ -1440,10 +1437,9 @@ class TwoCompanySearch {
    * WooCommerce can destroy with no warning.
    *
    * The tile input carries no `name` and holds no capture: it is painted from
-   * the capture pair, which lives on the hidden `#company_name`/`#company_id`
-   * fields. It has to be — this fragment is replaced wholesale, so anything
-   * the tile input alone held would be gone on the next coupon or shipping
-   * change.
+   * the capture pair. It has to be — this fragment is replaced wholesale, so
+   * anything the tile input alone held would be gone on the next coupon or
+   * shipping change.
    */
   syncCompanySearchTileLocation() {
     const helper = twoincSelectWooHelper;
@@ -1931,18 +1927,13 @@ let twoincDomHelper = {
     // it's active.
     const showCompanySearch = twoincCompanyCapture.mode !== "manual";
 
-    // Neither `#company_id_field` nor `#company_name_field` is ever in
-    // `visibleTargets`, in any mode: the capture pair is never typed into, and
-    // reaches the buyer only through the control it is painted into and the
-    // read-only label `renderCompanySummary()` renders. Both inputs stay
-    // permanently hidden but posted, since their values are what the order
-    // intent is authorised against.
+    // The capture pair's own rows are never in `visibleTargets`, in any mode:
+    // hidden but posted, they reach the buyer only through the control they
+    // are painted into and the label `renderCompanySummary()` renders.
     //
-    // Tile placement keeps WooCommerce's stock field untouched, whatever the
-    // tile is showing (Doug 2026-08-28): the two are allowed to disagree —
-    // the tile's company drives the intent and the order, the address one is
-    // an address line — so neither the capture nor the selected method is
-    // read here.
+    // Tile placement keeps WooCommerce's stock row whatever the tile is
+    // showing (Doug 2026-08-28): the two may disagree, so neither the capture
+    // nor the selected method is read here.
     if (showCompanySearch && !twoincSelectWooHelper.isTileLocation()) {
       visibleTargets.push("#billing_company_display_field");
     } else {
@@ -3325,9 +3316,10 @@ let twoincSoleTrader = {
    * captured fields readonly-lock and the query row is suppressed, leaving
    * no way back to an ordinary company search except the "select a
    * different sole trader" link, which only leads back into the same
-   * hosted signup. Clicking into either captured field instead reverts to
+   * hosted signup. Clicking into a locked captured field instead reverts to
    * business mode and lands the buyer in the reopened dropdown, same as
-   * `exitManualCompanyEntry()` does leaving manual entry.
+   * `exitManualCompanyEntry()` does leaving manual entry. In tile placement
+   * neither bound field is on screen, and the mode chips are the route back.
    *
    * Refused while `isDeciding()`, not the wider `isBusy()`: a captured
    * field only readonly-locks once `lockCapturedFields()` runs (deferred
@@ -4043,7 +4035,7 @@ let twoincSoleTrader = {
       email: read("email"),
       first_name: read("first_name"),
       last_name: read("last_name"),
-      company_name: read("company"),
+      company_name: twoincSelectWooHelper.getCompanyName(),
       phone_number: read("phone"),
       billing_address: {
         street: read("address_1"),
@@ -4405,8 +4397,8 @@ class Twoinc {
     // goes through `.val()`, which dispatches nothing.
     //
     // Gated on the field still BEING the capture's name field: in tile
-    // placement `#billing_company` is an address line the buyer owns, and
-    // typing in it used to take the captured organisation number with it.
+    // placement typing in `#billing_company` used to take the captured
+    // organisation number with it.
     $body
       .off("input.twoincCompanyPairing change.twoincCompanyPairing", "#billing_company")
       .on(
@@ -4818,8 +4810,8 @@ class Twoinc {
       // The company this request is about, captured now rather than
       // re-read when its verdict is painted, and read from
       // `customerCompany` — the same record the request body above is
-      // built from, rather than `#billing_company`/`#company_id`, which
-      // can diverge from it (see `clearCompanyIfCountryStale()`).
+      // built from, rather than the capture pair's fields, which can
+      // diverge from it (see `clearCompanyIfCountryStale()`).
       const companyLabel = twoincDomHelper.readCompanyLabelFromRecord();
 
       /**
@@ -5467,7 +5459,7 @@ class Twoinc {
     twoincSelectWooHelper.closeCompanySearchDropdown();
 
     // Skipped entirely while sole-trader mode owns the field: this
-    // rebuilds the search widget and wipes `#company_id`/`#billing_company`
+    // rebuilds the search widget and wipes the capture pair
     // unconditionally, including a company already adopted this
     // sole-trader session and the dropdown a flight/popup wait is
     // deliberately keeping alive. `refresh()` below (sole-trader
@@ -5732,13 +5724,5 @@ jQuery(function () {
     // Nothing to relocate or hide here any more (TWO-25288): the manual-entry
     // row is created inside the results list only while it should be visible,
     // and the link back to search is created hidden, in place, on first use.
-
-    setTimeout(function () {
-      // Init the hidden Company name field
-      const companyName = twoincSelectWooHelper.getCompanyName().trim();
-      if (companyName) {
-        twoincCompanyCapture.nameField().val(companyName);
-      }
-    }, 1000);
   }
 });

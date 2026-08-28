@@ -122,8 +122,8 @@ if (!class_exists('WC_Twoinc_Checkout')) {
         {
 
             // billing_company may be absent (see move_country_field above).
-            // Clamped below the optional-fields baseline (200, below) so
-            // company/company_id can never invert above invoice_email/PO/
+            // Clamped below the optional-fields baseline (200, below) so the
+            // company rows can never invert above invoice_email/PO/
             // project/department if a future brand overlay ever pushes
             // billing_company's own priority unusually high (#33).
             $company_name_priority = self::clamp_company_priority($fields['billing']['billing_company']['priority'] ?? 30);
@@ -131,8 +131,8 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             // WC core deletes its own company field entirely on stores where
             // `woocommerce_checkout_company_field` is 'hidden' (the default
             // for block-checkout stores), so this plugin's own company
-            // capture — the manual-entry/no-registry surface, and the field
-            // WooCommerce POSTs the name in — cannot work without it.
+            // capture — the manual-entry/no-registry surface, and the buyer's
+            // own company address line — cannot work without it.
             // Registering it here puts it beyond that store-level toggle.
             //
             // Filled in only when absent, never overwritten — a store or
@@ -171,14 +171,10 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 'priority' => $company_name_priority
             ];
 
-            // The captured company, as a pair. Both halves are registered
-            // billing fields so they survive a checkout fragment refresh with
-            // the same vintage, and neither is ever shown: the capture reaches
-            // the buyer through the search control it is painted into.
-            //
-            // The name is its own field rather than `billing_company` because
-            // in payment-tile placement that row stays with the buyer as an
-            // address line and may hold a different company (Doug 2026-08-28).
+            // The capture's own name field, never `billing_company`: in
+            // payment-tile placement that row is an address line the buyer
+            // owns and may hold a different company (Doug 2026-08-28).
+            // Registered so it survives a fragment refresh with its number.
             $fields['billing']['company_name'] = [
                 'label' => __('Company name', 'twoinc-payment-gateway'),
                 'class' => array('hidden'),

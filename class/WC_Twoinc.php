@@ -3762,12 +3762,9 @@ if (!class_exists('WC_Twoinc')) {
             $billing_company_display = array_key_exists('billing_company_display', $_POST) ? sanitize_text_field($_POST['billing_company_display']) : '';
             $billing_company = array_key_exists('billing_company', $_POST) ? sanitize_text_field($_POST['billing_company']) : $billing_company_display;
             $billing_phone = array_key_exists('billing_phone', $_POST) ? sanitize_text_field($_POST['billing_phone']) : '';
-            // The captured company's name, the twin of $company_id. It is not
-            // $billing_company: in payment-tile placement the address company
-            // row belongs to the buyer and may hold a different company, and
-            // it is this pair the order intent was authorised against. Falls
-            // back for the order-pay page and any store that never renders the
-            // capture pair.
+            // The captured company's name, the twin of $company_id — not
+            // $billing_company, which in payment-tile placement is the buyer's
+            // own address line. Falls back where no capture pair was rendered.
             $posted_company_name = array_key_exists('company_name', $_POST) ? sanitize_text_field($_POST['company_name']) : '';
             $company_name = $posted_company_name !== '' ? $posted_company_name : $billing_company;
             $invoice_email = array_key_exists('invoice_email', $_POST) ? sanitize_text_field($_POST['invoice_email']) : '';

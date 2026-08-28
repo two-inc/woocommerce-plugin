@@ -41,6 +41,8 @@
     </div>
     <div class="twoinc-inp-container hidden">
         <div id="billing_company_field">
+            <label for="billing_company"><?php esc_html_e('Company name', 'twoinc-payment-gateway'); ?></label>
+            <br>
             <input type="text" name="billing_company" id="billing_company">
         </div>
     </div>
