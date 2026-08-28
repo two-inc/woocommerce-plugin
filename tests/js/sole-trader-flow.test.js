@@ -399,6 +399,46 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     );
 
     /**
+     * Doug, live: the "select a different sole trader" link "takes focus but
+     * opens nothing". The popup that would answer the activation was already
+     * on screen, and a refusal that does nothing at all leaves a buyer who
+     * cannot see it with a dead control.
+     */
+    test.each([
+      {
+        activate: () => soleTrader.getDifferentSoleTraderBtnNode().trigger("click"),
+        description: "the select-a-different-sole-trader link"
+      },
+      {
+        activate: () => soleTrader.launchSignup({ autoselect: false }),
+        description: "a re-signup"
+      },
+      {
+        activate: () => soleTrader.launchSignup(),
+        description: "the note's own signup link"
+      }
+    ])("$description raises the outstanding popup instead of doing nothing", ({ activate }) => {
+      const raised = [];
+      window.open = jest.fn(() => {
+        const win = {
+          closed: false,
+          focus: () => {
+            raised.push(win);
+          }
+        };
+        return win;
+      });
+      soleTrader.setMode("sole_trader");
+      soleTrader.launchSignup();
+      expect(window.open).toHaveBeenCalledTimes(1);
+
+      activate();
+
+      expect(window.open).toHaveBeenCalledTimes(1);
+      expect(raised).toHaveLength(1);
+    });
+
+    /**
      * Every launch path the undecided-popup guard must leave alone. Each case
      * arranges its state, launches, and must end with exactly the popups it
      * asked for — refusing any of these is the regression the two earlier,

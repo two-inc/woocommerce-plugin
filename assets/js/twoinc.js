@@ -3335,9 +3335,9 @@ let twoincSoleTrader = {
   /**
    * Open the hosted signup popup, falling back to the visible link if the
    * browser blocks the window. Re-entrancy-guarded (TWO-40 §7): a second
-   * activation while one is already opening is dropped, and a later
-   * activation is dropped for as long as an already-open popup's outcome
-   * is still undecided.
+   * activation while one is already opening is dropped, and an activation
+   * while an already-open popup's outcome is undecided raises that popup
+   * instead of opening a second one.
    *
    * A re-signup (`options.autoselect === false`) is also refused while a
    * different one is already outstanding: `openingSignup` only guards two
@@ -3354,14 +3354,11 @@ let twoincSoleTrader = {
     // `findPopupWatcher`). Scoped to each popup's own outcome rather than
     // `isDeciding()`, which would strand a chip click when no popup exists
     // and only a stale flight is outstanding.
-    if (
-      twoincSoleTrader.signupConfirming ||
-      twoincSoleTrader.activePopupWatchers.some(function (watcher) {
-        return !watcher.decided && !watcher.win.closed;
-      })
-    ) {
-      return;
-    }
+    if (twoincSoleTrader.signupConfirming) return;
+    // Raised, not silently dropped: the popup that would answer this
+    // activation is already on screen, and a refusal that does nothing at all
+    // reads as a dead control to a buyer who cannot see it.
+    if (twoincSoleTrader.refocusOpenPopups()) return;
     if (
       options &&
       options.autoselect === false &&
