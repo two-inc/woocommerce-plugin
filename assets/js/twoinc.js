@@ -304,8 +304,7 @@ let twoincAddressMirror = {
  *  4. The CAPTURE MODE — which of the three capture UIs the buyer is currently
  *     using. See the property's own comment.
  *
- * The number field is fixed; the name field moves with the control's mount
- * (see `nameFieldSelector`).
+ * The name field moves with the control's mount (see `nameFieldSelector`).
  */
 let twoincCompanyCapture = {
   /**
@@ -341,11 +340,8 @@ let twoincCompanyCapture = {
   PROVENANCE_ATTR: "data-two-plugin-written",
 
   /**
-   * Selector of the field carrying the captured NAME, paired with
-   * `#company_id`. It moves with the control's mount: in tile placement
-   * `#billing_company` is the buyer's own address line and may hold a
-   * different company (Doug 2026-08-28), so the capture keeps its own hidden
-   * carrier; in address placement the control replaced that row.
+   * In tile placement `#billing_company` is the buyer's own address line and
+   * may hold a different company, so the capture keeps its own hidden carrier.
    */
   nameFieldSelector: function () {
     return twoincSelectWooHelper.isTileLocation()
@@ -357,12 +353,6 @@ let twoincCompanyCapture = {
     return jQuery(twoincCompanyCapture.nameFieldSelector());
   },
 
-  /**
-   * Is this element the field the capture's name lives on right now?
-   *
-   * Asked by everything bound to buyer input on `#billing_company`: in tile
-   * placement that field is an address line the capture must ignore.
-   */
   isNameField: function (element) {
     return jQuery(element).is(twoincCompanyCapture.nameFieldSelector());
   },
@@ -1436,10 +1426,8 @@ class TwoCompanySearch {
    * shipping or quantity change, so a form row relocated into it is a row
    * WooCommerce can destroy with no warning.
    *
-   * The tile input carries no `name` and holds no capture: it is painted from
-   * the capture pair. It has to be — this fragment is replaced wholesale, so
-   * anything the tile input alone held would be gone on the next coupon or
-   * shipping change.
+   * The tile input carries no `name` and holds no capture — it is painted from
+   * the capture pair, since this fragment is replaced wholesale.
    */
   syncCompanySearchTileLocation() {
     const helper = twoincSelectWooHelper;
@@ -1927,13 +1915,8 @@ let twoincDomHelper = {
     // it's active.
     const showCompanySearch = twoincCompanyCapture.mode !== "manual";
 
-    // The capture pair's own rows are never in `visibleTargets`, in any mode:
-    // hidden but posted, they reach the buyer only through the control they
-    // are painted into and the label `renderCompanySummary()` renders.
-    //
-    // Tile placement keeps WooCommerce's stock row whatever the tile is
-    // showing (Doug 2026-08-28): the two may disagree, so neither the capture
-    // nor the selected method is read here.
+    // The capture pair's own rows are hidden but posted; in tile placement the
+    // stock address row stays, whatever the tile shows.
     if (showCompanySearch && !twoincSelectWooHelper.isTileLocation()) {
       visibleTargets.push("#billing_company_display_field");
     } else {
@@ -1949,8 +1932,6 @@ let twoincDomHelper = {
       );
       requiredTargets.push("#billing_phone_field");
 
-      // Whichever company row is actually on screen, and only while Two is the
-      // selected method.
       const companyRows = ["#billing_company_display_field", "#billing_company_field"];
       const visibleCompanyRow = visibleTargets.filter(function (target) {
         return companyRows.indexOf(target) >= 0;
@@ -3319,8 +3300,7 @@ let twoincSoleTrader = {
    * hosted signup. Clicking into a locked captured field instead reverts to
    * business mode and lands the buyer in the reopened dropdown, same as
    * `exitManualCompanyEntry()` does leaving manual entry. In tile placement the
-   * lock lands on the hidden `#company_name`, never on the on-screen
-   * `#billing_company`, so the mode chips are the route back instead.
+   * lock lands on hidden `#company_name`, so the chips are the route back.
    *
    * Refused while `isDeciding()`, not the wider `isBusy()`: a captured
    * field only readonly-locks once `lockCapturedFields()` runs (deferred
@@ -4397,9 +4377,7 @@ class Twoinc {
     // Only ever fires for a real buyer edit: every plugin write to THIS field
     // goes through `.val()`, which dispatches nothing.
     //
-    // Gated on the field still BEING the capture's name field: in tile
-    // placement `#billing_company` is an address line, and an edit there must
-    // not touch the captured number.
+    // In tile placement `#billing_company` is an address line, not the capture.
     $body
       .off("input.twoincCompanyPairing change.twoincCompanyPairing", "#billing_company")
       .on(

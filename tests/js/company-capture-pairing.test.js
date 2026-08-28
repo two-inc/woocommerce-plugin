@@ -177,12 +177,8 @@ describe("TWO-40 §5 — captured-company write path", () => {
       expect(tag()).toBeUndefined();
     });
 
-    // Driven through a real event on a real initialize()-bound checkout,
-    // because a direct call would pass even if nothing were wired to it.
-    //
-    // The tile row is the defect this pair exists to pin (Doug, live
-    // 2026-08-28): there `#billing_company` is the buyer's own address line,
-    // and one keystroke in it took the tile's captured number with it.
+    // Driven through a real event, because a direct call would pass even if
+    // nothing were wired to it.
     test.each([
       {
         location: "address_area",
@@ -206,9 +202,8 @@ describe("TWO-40 §5 — captured-company write path", () => {
       expect($("#company_id").val()).toBe(numberAfter);
     });
 
-    // Provenance decides whether a later country change may clear the captured
-    // name (`clearSelectedCompany`), so an edit to a field the capture does not
-    // own must not strip it.
+    // Provenance gates `clearSelectedCompany`, so an edit to a field the
+    // capture does not own must not strip provenance.
     test.each([
       {
         location: "address_area",
@@ -230,8 +225,8 @@ describe("TWO-40 §5 — captured-company write path", () => {
       expect(capture.isPluginWritten(capture.nameField())).toBe(stillPluginWritten);
     });
 
-    // The same field, the other binding: an address line the capture does not
-    // own must not blank a verdict the captured company earned.
+    // The verdict binding on the same field: an address line must not blank
+    // a verdict the captured company earned.
     test.each([
       {
         location: "address_area",

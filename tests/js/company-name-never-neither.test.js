@@ -7,9 +7,8 @@
  * enter the company name is the regression this exists to catch, and it has
  * reached staging twice.
  *
- * Tile placement shows two of them at once, and that is intended: the tile
- * drives the intent and the order, the address row is an address line, and
- * the two are allowed to carry different companies.
+ * Tile placement shows two at once by design: the tile carries the capture,
+ * the address row is the buyer's own line.
  */
 
 "use strict";
@@ -166,9 +165,7 @@ describe("company-name surface: never neither", () => {
     expect(ctx.$("#billing_company_display_field .two-company-field-wrap").length).toBe(0);
   });
 
-  // The captured name moves with the control's mount, exactly as the number
-  // does. Serialised, not read off the inputs: the POST is what the order
-  // carries.
+  // Serialised, not read off the inputs: the POST is what the order carries.
   test.each([
     {
       location: "address_area",
