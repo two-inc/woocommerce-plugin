@@ -423,8 +423,8 @@ describe("the company name and number surfaces (#486)", () => {
         capture: true,
         twoSelected: true,
         display: UNCUED,
-        native: UNCUED,
-        description: "tile placement showing the capture: no address row to require"
+        native: CUED,
+        description: "tile placement showing the capture: the native row still stands"
       },
       {
         location: "address_area",
