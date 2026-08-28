@@ -415,7 +415,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       },
       {
         activate: () => soleTrader.launchSignup(),
-        description: "the note's own signup link"
+        description: "a fresh signup launch"
       }
     ])("$description raises the outstanding popup instead of doing nothing", ({ activate }) => {
       const raised = [];
