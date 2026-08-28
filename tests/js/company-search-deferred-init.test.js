@@ -5,44 +5,16 @@
  * once on an 800ms timer. The timer exists because the gate `initialize()`
  * returns on is `#order_review`, which a multi-step or late-rendering theme can
  * put in the document before the billing fragment — so the synchronous pass can
- * find no `#billing_company_display` to bind to. That retry is the only one
- * `initialize()` owns: `updated_checkout` re-syncs a good deal of other state
- * but does not re-bind the control itself. The other callers of
- * `enableCompanySearch` are the manual-entry exit and the sole-trader mode
- * switch, so a checkout whose deferred pass misses is not necessarily stuck
- * forever — but nothing is aiming for that, and this timer is the one that has
- * to work.
+ * find no `#billing_company_display` to bind to. `updated_checkout` re-binds
+ * too, but only once something triggers a fragment refresh, so on a checkout
+ * the buyer does not disturb this timer is the one that has to work.
  *
- * The call was `setTimeout(this.enableCompanySearch, 800)` — a bare method
- * reference, so the deferred pass ran with the wrong receiver.
- *
- * ## What that actually did, measured rather than assumed
- *
- * It did NOT throw in a browser. `setTimeout` invokes its callback with the
- * global as the receiver, and a strict-mode class body does not change that,
- * because the global is only substituted for a null/undefined receiver in
- * sloppy mode and here a receiver was passed. Confirmed in real Chromium:
- * receiver is `window`, the assignment succeeds, the console stays clean.
- *
- * So the defect was a misdirected write, not a crash. The deferred pass put its
- * control reference on `window`, and the instance property kept whatever the
- * synchronous pass had left there.
- *
- * ## What this suite can and cannot see
- *
- * Jest's fake timers invoke the callback with `null`, not with the global, so
- * the pre-fix code throws `TypeError` HERE where a browser completes it. The
- * browser's actual misbehaviour — receiver is `window`, write lands on the
- * global — is therefore **not reproducible in this harness at all**, and the
- * evidence for it is the Chromium run recorded above and on the PR.
- *
- * These are still written to assert the deferred pass's *effect on the instance
- * and the DOM* rather than `expect(...).not.toThrow()`, for two reasons. An
- * effect assertion says what the code must achieve, so it keeps its meaning if
- * the timer implementation ever stops manufacturing that TypeError, whereas a
- * not-throw assertion would silently become vacuous. And it forces each test to
- * name a specific consequence of the retry, which is what caught the first
- * draft of this file asserting things the synchronous pass alone satisfied.
+ * The call is wrapped rather than passed as a bare method reference: with
+ * `setTimeout(this.enableCompanySearch, 800)` the deferred pass runs with the
+ * global as its receiver, and `attach(this)` then files `window` as the plugin
+ * instance. Jest's fake timers pass `null` where a browser passes the global,
+ * so that shape throws here instead of misbehaving quietly — which is why every
+ * assertion below is on the panel and the DOM, not on `not.toThrow()`.
  */
 
 "use strict";
@@ -92,9 +64,8 @@ describe("deferred company-search initialisation", () => {
   /**
    * Is the panel bound to the company field?
    *
-   * Read through the panel's own `isBound()` rather than from
-   * `billingCompanySelect`: `attach()` returns the panel whether or not it
-   * found a field to anchor to, so a truthy property says nothing about
+   * Read through the panel's own `isBound()`: `attach()` builds a panel whether
+   * or not it found a field to anchor to, so panel-exists says nothing about
    * whether the buyer has a control.
    *
    * @returns {boolean}
@@ -140,26 +111,23 @@ describe("deferred company-search initialisation", () => {
     return jest.spyOn(Twoinc.prototype, "enableCompanySearch");
   }
 
-  test("the deferred pass stores its panel on the instance", () => {
+  test("the deferred pass builds the panel back onto the company field", () => {
     const instance = ctx.Twoinc.getInstance();
     instance.initialize(false);
 
-    // Discard what the SYNCHRONOUS pass stored. Without this the assertions
+    // Tear down what the SYNCHRONOUS pass built. Without this the assertions
     // below pass on the synchronous pass's own work — deleting the `setTimeout`
     // from initialize() altogether would leave them green.
-    instance.billingCompanySelect = null;
+    harness.releasePanel(ctx.helper);
+    expect(panelBound()).toBe(false);
+    expect(panelCount()).toBe(0);
 
     jest.advanceTimersByTime(800);
 
-    // Only the deferred pass can have put this back.
-    expect(instance.billingCompanySelect).not.toBeNull();
-    expect(instance.billingCompanySelect).toBe(ctx.helper.panel);
-    expect(instance.billingCompanySelect.getField()[0]).toBe(ctx.$("#billing_company_display")[0]);
-
-    // Deliberately NOT asserted: that `window.billingCompanySelect` is
-    // undefined. Pre-fix this harness throws at the assignment before any write
-    // reaches the global, so such an assertion could never fail. The global leak
-    // is real but browser-only observable — see the file docblock.
+    // Only the deferred pass can have put these back.
+    expect(panelBound()).toBe(true);
+    expect(panelCount()).toBe(1);
+    expect(ctx.helper.panel.getField()[0]).toBe(ctx.$("#billing_company_display")[0]);
   });
 
   test("the deferred pass binds a panel the first pass could not find a host for", () => {
@@ -175,12 +143,10 @@ describe("deferred company-search initialisation", () => {
     // late-rendering theme left the checkout in permanently.
     expect(panelBound()).toBe(false);
 
-    // And note what it stored, because it is NOT null: `attach()` hands back the
-    // panel it built whether or not a host was there for it. The property holds
-    // a control-shaped object anchored to nothing, which is worse than null for
-    // any caller testing it for presence.
-    expect(instance.billingCompanySelect).not.toBeNull();
-    expect(instance.billingCompanySelect.getField()).toHaveLength(0);
+    // `attach()` still built a panel: it does that whether or not a host was
+    // there for it, so panel-exists is not the same question as panel-bound.
+    expect(ctx.helper.panel).not.toBeNull();
+    expect(ctx.helper.panel.getField()).toHaveLength(0);
 
     // WooCommerce renders the billing fragment.
     ctx.$("form[name='checkout']").append(markup);
@@ -188,11 +154,10 @@ describe("deferred company-search initialisation", () => {
 
     jest.advanceTimersByTime(800);
 
-    // ...and the retry catches it. The panel appearing is what the buyer sees;
-    // the instance holding the real reference is what the misdirected write cost.
+    // ...and the retry catches it.
     expect(panelBound()).toBe(true);
     expect(panelCount()).toBe(1);
-    expect(instance.billingCompanySelect.getField()).toHaveLength(1);
+    expect(ctx.helper.panel.getField()[0]).toBe(ctx.$("#billing_company_display")[0]);
   });
 
   test("the deferred pass renders no second panel on the ordinary path", () => {
@@ -255,8 +220,9 @@ describe("deferred company-search initialisation", () => {
     expect(enableCalls).toHaveBeenCalledTimes(2);
 
     expect(panelBound()).toBe(false);
-    // The one path that really does leave the property null: the early return is
-    // above the assignment.
-    expect(instance.billingCompanySelect).toBeNull();
+    // The early return sits above the attach, so no panel was built at all —
+    // not even one anchored to nothing.
+    expect(ctx.helper.panel).toBeNull();
+    expect(panelCount()).toBe(0);
   });
 });

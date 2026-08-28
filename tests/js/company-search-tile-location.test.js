@@ -315,7 +315,9 @@ describe("company-search tile location (TWO-25326 §7.1)", () => {
       helper.syncCompanySearchTileLocation();
 
       expect(helper.panel.getField()[0] === live).toBe(rebinds);
-      expect($("#billing_company_display_field .two-company-dropdown").length).toBe(rebinds ? 1 : 0);
+      expect($("#billing_company_display_field .two-company-dropdown").length).toBe(
+        rebinds ? 1 : 0
+      );
     });
   });
 

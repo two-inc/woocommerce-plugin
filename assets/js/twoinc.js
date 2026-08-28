@@ -3444,9 +3444,9 @@ let twoincSoleTrader = {
    *
    * The target check is not defensive noise: jQuery's `.trigger("focus")`
    * does not dispatch natively — it walks the propagation path itself,
-   * window included. This file triggers focus that way on the company
-   * fields (`focusVisibleCompanyField`, `releaseFocusFromCompanyField`), so
-   * without the check, opening the dropdown would close the popup.
+   * window included. This file triggers focus that way on the company field
+   * (`focusVisibleCompanyField`), so without the check, opening the dropdown
+   * would close the popup.
    *
    * The refocus only SCHEDULES the abandon — which of three things the
    * buyer meant depends on what they activated, and window `focus` fires
@@ -4178,20 +4178,19 @@ class Twoinc {
       last_name: null,
       phone_number: null
     };
-    this.billingCompanySelect = null;
   }
 
   /**
    * Bind the company-search panel to whichever company-name field is current.
    *
-   * Gated on the capture mode being `search` (#486): manual entry has released
-   * the field, and in sole-trader mode the panel is already showing the adopted
-   * company (`lockCapturedFields()`) — re-binding over it would repaint the
-   * field from a capture the buyer is mid-way through replacing.
+   * Gated on the capture mode being `search` (#486). Sole-trader mode is
+   * re-bound anyway by `syncCompanySearchTileLocation()` on every
+   * `updated_checkout`; this gate only keeps the bootstrap and its retry off a
+   * field manual entry has released.
    */
   enableCompanySearch() {
     if (twoincCompanyCapture.mode !== "search") return;
-    this.billingCompanySelect = twoincSelectWooHelper.attach(this);
+    twoincSelectWooHelper.attach(this);
   }
 
   /**
@@ -4256,8 +4255,7 @@ class Twoinc {
 
     // Enable company search, then again on a delay to catch a billing
     // fragment that WooCommerce had not rendered yet when initialize()
-    // ran. This retry is the only one this code owns: `updated_checkout`
-    // does not re-attach the picker itself.
+    // ran.
     //
     // Wrapped rather than passed by reference (TWO-25337): `setTimeout`
     // invokes a bare method reference with the global as its receiver, so
