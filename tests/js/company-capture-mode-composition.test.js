@@ -247,6 +247,17 @@ describe("capture modes composed, not taken one at a time (#486)", () => {
      * @returns {void}
      */
     function restore() {
+      // Plus the record the previous page left behind saying how that company
+      // was captured — the `TWO:` shape alone cannot say, since registered
+      // companies in some countries carry one too.
+      $("#billing_company").val(MATCHED_BUYER.company_name);
+      $("#company_id").val(MATCHED_BUYER.organization_number);
+      ctx.soleTrader.mode = "sole_trader";
+      ctx.capture.rememberCaptureMode();
+      ctx.soleTrader.mode = "business";
+      $("#billing_company").val("");
+      $("#company_id").val("");
+
       ctx.twoinc.billing_company = MATCHED_BUYER.company_name;
       ctx.twoinc.company_id = MATCHED_BUYER.organization_number;
       ctx.dom.loadUserMetaInputs();

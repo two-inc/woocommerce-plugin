@@ -76,6 +76,9 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     });
     $ = ctx.$;
     soleTrader = ctx.soleTrader;
+    // jsdom's sessionStorage outlives the module instance that wrote to it, so
+    // one test's capture-mode record would decide the next test's restore.
+    window.sessionStorage.clear();
     buildForm();
     soleTrader.availabilityByCountry = { GB: true };
     soleTrader.tokens = {
@@ -997,24 +1000,56 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     });
 
     describe("item 2 — a sole trader restored by loadUserMetaInputs (live-reported by Doug)", () => {
-      // `loadUserMetaInputs()` writes through `twoincCompanyCapture.write()`,
-      // never `setCompany()` — the only place mode/adoption and the link are
-      // set — so without its own sync a restored sole trader has no route back
-      // into signup, and `bindPopupMessageListener` would drop the result.
-      test("a restored TWO:-prefixed id shows the link", () => {
-        ctx.twoinc.billing_company = "A Sole Trader";
+      // A restored pair's mode comes from the record the previous page left,
+      // never from the number's shape: `TWO:` is minted for registered
+      // companies in some countries too, so the shape cannot tell them apart.
+      function recordPreviousCapture(name, id, mode) {
+        const before = soleTrader.mode;
+        $("#billing_company").val(name);
+        $("#company_id").val(id);
+        soleTrader.mode = mode === "sole_trader" ? "sole_trader" : "business";
+        // Through the real snapshotter, so the wiring that writes the record
+        // is under test alongside the restore that reads it.
+        if (mode) ctx.dom.saveCheckoutInputs();
+        soleTrader.mode = before;
+        $("#billing_company").val("");
+        $("#company_id").val("");
+      }
+
+      test.each([
+        ["TWO:ST12345", "sole_trader", true, "a sole trader captured as one is adopted"],
+        [
+          "TWO:GB:0f8c2b1a",
+          "search",
+          false,
+          "a canonical TWO: number captured as a registered company is not"
+        ],
+        ["12345678", "search", false, "an ordinary registry number is unaffected"],
+        ["TWO:ST12345", "", false, "a TWO: number with no record behind it adopts nothing"]
+      ])(
+        "restored id %s recorded as %s → adopted %s — %s",
+        (id, recordedMode, adopted, _description) => {
+          recordPreviousCapture("A Restored Company", id, recordedMode);
+          ctx.twoinc.billing_company = "A Restored Company";
+          ctx.twoinc.company_id = id;
+
+          ctx.dom.loadUserMetaInputs();
+
+          expect(soleTrader.mode).toBe(adopted ? "sole_trader" : "business");
+          expect(soleTrader.soleTraderAdopted).toBe(adopted);
+          const display = soleTrader.getDifferentSoleTraderBtnNode().css("display");
+          if (adopted) {
+            expect(display).not.toBe("none");
+          } else {
+            expect(display).toBe("none");
+          }
+        }
+      );
+
+      test("a record left by a DIFFERENT company is not read as describing this one", () => {
+        recordPreviousCapture("Someone Else Trading", "TWO:ST99999", "sole_trader");
+        ctx.twoinc.billing_company = "A Restored Company";
         ctx.twoinc.company_id = "TWO:ST12345";
-
-        ctx.dom.loadUserMetaInputs();
-
-        expect(soleTrader.mode).toBe("sole_trader");
-        expect(soleTrader.soleTraderAdopted).toBe(true);
-        expect(soleTrader.getDifferentSoleTraderBtnNode().css("display")).not.toBe("none");
-      });
-
-      test("a restored ORDINARY registry number leaves sole-trader mode untouched", () => {
-        ctx.twoinc.billing_company = "ACME Widgets Ltd";
-        ctx.twoinc.company_id = "12345678";
 
         ctx.dom.loadUserMetaInputs();
 
@@ -1035,6 +1070,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         });
 
         test("a DOM-restored TWO:-prefixed id shows the link", () => {
+          recordPreviousCapture("A Sole Trader", "TWO:ST12345", "sole_trader");
           $("#billing_company").val("A Sole Trader");
           $("#company_id").val("TWO:ST12345");
 
@@ -1086,6 +1122,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
           // fields with a bare `.val()`, so on a guest checkout it is the pass
           // that supplies the pair — and the one restoreCapturedCompany() has
           // to see.
+          recordPreviousCapture("A Sole Trader", "TWO:ST12345", "sole_trader");
           ctx.dom.loadUserMetaInputs();
           $("#billing_company").val("A Sole Trader");
           $("#company_id").val("TWO:ST12345");
@@ -1113,6 +1150,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       ])(
         "a DISAGREEING restore is taken whole from one source — %s",
         (_description, echo, dom, expected) => {
+          recordPreviousCapture("A Sole Trader", "TWO:ST12345", "sole_trader");
           // Otherwise the pairing tag describes a company that never existed —
           // one restore's name against another's number — and the retype
           // guard, which compares the live fields against that tag, is reading

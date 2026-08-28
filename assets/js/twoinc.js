@@ -429,6 +429,55 @@ let twoincCompanyCapture = {
     return twoincUtilHelper.blankToEmpty(twoincCompanyCapture.numberField().val()) !== "";
   },
 
+  /** sessionStorage key holding the last capture's mode and the pair it described. */
+  CAPTURE_MODE_KEY: "twoincCaptureMode",
+
+  /**
+   * Record which capture UI produced the company now on the form, against the
+   * pair it describes, so a later restore can read the mode back rather than
+   * infer it. Nothing about a captured value carries that fact: a `TWO:`
+   * organisation number is minted for registered companies in some countries
+   * too, so its shape says nothing about how the buyer was captured.
+   *
+   * A restored sole trader leaves the capture axis at `search` — that is what
+   * `enableCompanySearch()` gates on — so the chip axis is what carries the
+   * fact forward across a second return.
+   */
+  rememberCaptureMode: function () {
+    const mode =
+      twoincSoleTrader.mode === "sole_trader" ? "sole_trader" : twoincCompanyCapture.mode;
+    sessionStorage.setItem(
+      twoincCompanyCapture.CAPTURE_MODE_KEY,
+      JSON.stringify({
+        mode: mode,
+        tag: twoincCompanyCapture.pairingTag(
+          twoincCompanyCapture.nameField().val(),
+          twoincCompanyCapture.numberField().val()
+        )
+      })
+    );
+  },
+
+  /**
+   * The recorded capture mode for one name/number pair, `""` when none was
+   * recorded for it. Tag-matched, so a record left behind by a different
+   * company can never be read as describing the one being restored.
+   */
+  recallCaptureMode: function (companyName, companyId) {
+    const raw = sessionStorage.getItem(twoincCompanyCapture.CAPTURE_MODE_KEY);
+    if (!raw) return "";
+    let record;
+    try {
+      record = JSON.parse(raw);
+    } catch (e) {
+      return "";
+    }
+    if (!record || record.tag !== twoincCompanyCapture.pairingTag(companyName, companyId)) {
+      return "";
+    }
+    return twoincUtilHelper.blankToEmpty(record.mode);
+  },
+
   /** Drop the pairing tag and both provenance markers. */
   forgetPairing: function () {
     twoincCompanyCapture
@@ -2255,6 +2304,8 @@ let twoincDomHelper = {
       }
     }
     sessionStorage.setItem("checkoutInputs", JSON.stringify(checkoutInputs));
+    // Alongside the field snapshot, since the same restore consumes both.
+    twoincCompanyCapture.rememberCaptureMode();
   },
   getCheckoutInput: function (htmlTag, inpType, inpName) {
     let checkoutInputs = sessionStorage.getItem("checkoutInputs");
@@ -2395,9 +2446,14 @@ let twoincDomHelper = {
     // capture layer above rather than through `twoincSoleTrader.setCompany()`
     // (the only place that sets `mode`/`soleTraderAdopted` and syncs the
     // "select a different sole trader" link), so without this a returning
-    // buyer has no way back into a fresh signup. `isSyntheticCompanyNumber`
-    // tells a restored sole trader's `TWO:…` id apart from a registry number.
-    if (twoincUtilHelper.isSyntheticCompanyNumber(restoredId)) {
+    // buyer has no way back into a fresh signup.
+    //
+    // Keyed on the RECORDED capture mode, never on the number's shape: a
+    // `TWO:` identifier is minted for registered companies in some countries
+    // too, so a shape test reads those buyers as sole traders. With no record
+    // — a capture predating one, or a fresh browser session behind a user-meta
+    // echo — nothing is adopted, which is the safe direction.
+    if (twoincCompanyCapture.recallCaptureMode(restoredName, restoredId) === "sole_trader") {
       twoincSoleTrader.mode = "sole_trader";
       twoincSoleTrader.soleTraderAdopted = true;
       twoincSoleTrader.syncDifferentSoleTraderLink();
