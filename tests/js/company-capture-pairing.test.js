@@ -203,7 +203,7 @@ describe("TWO-40 §5 — captured-company write path", () => {
     });
 
     // Provenance gates `clearSelectedCompany`, so an edit to a field the
-    // capture does not own must not strip it.
+    // capture does not own must not strip provenance.
     test.each([
       {
         location: "address_area",
@@ -225,7 +225,8 @@ describe("TWO-40 §5 — captured-company write path", () => {
       expect(capture.isPluginWritten(capture.nameField())).toBe(stillPluginWritten);
     });
 
-    // The other binding: an address line must not blank the capture's verdict.
+    // The verdict binding on the same field: an address line must not blank
+    // a verdict the captured company earned.
     test.each([
       {
         location: "address_area",

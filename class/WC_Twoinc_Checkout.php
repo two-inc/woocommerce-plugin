@@ -171,8 +171,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 'priority' => $company_name_priority
             ];
 
-            // Registered as a billing field so it survives a fragment refresh
-            // with its number.
+            // A registered billing field, so it survives a fragment refresh.
             $fields['billing']['company_name'] = [
                 'label' => __('Company name', 'twoinc-payment-gateway'),
                 'class' => array('hidden'),
