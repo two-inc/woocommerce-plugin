@@ -128,7 +128,11 @@ describe("checkout API calls and the firewall-token proxy", () => {
     });
 
     test.each([
-      { minted: "waf-token-1", expected: "waf-token-1", description: "an opted-in merchant's token is sent" },
+      {
+        minted: "waf-token-1",
+        expected: "waf-token-1",
+        description: "an opted-in merchant's token is sent"
+      },
       { minted: undefined, expected: undefined, description: "no minted token sends no header" },
       { minted: "", expected: undefined, description: "an empty minted value is not a token" }
     ])("$description", ({ minted, expected }) => {
