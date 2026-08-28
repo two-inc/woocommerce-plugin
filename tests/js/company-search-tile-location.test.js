@@ -105,6 +105,12 @@ describe("company-search tile location (TWO-25326 §7.1)", () => {
       expect(helper.isOnScreen(tileRow())).toBe(true);
     });
 
+    /**
+     * The control lives inside Two's payment box, which WooCommerce collapses
+     * for every other method — so a rule that took the address row away under
+     * another method would leave the buyer no company surface at all. That is
+     * the "never neither" invariant (Doug 2026-08-19).
+     */
     test("keeps the native field when Two is not the selected method, capture or no capture", () => {
       ctx.capture.write("ACME Widgets Ltd", "12345678");
       $("input[name=payment_method]").prop("checked", false);
