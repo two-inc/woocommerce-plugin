@@ -100,7 +100,8 @@ describe("company-search tile location (TWO-25326 §7.1)", () => {
       });
       ajax.restore();
 
-      expect($("#billing_company").val()).toBe("ACME Widgets Ltd");
+      expect($("#company_name").val()).toBe("ACME Widgets Ltd");
+      expect($("#billing_company").val()).toBe("");
       expect($("#billing_company_field").hasClass("hidden")).toBe(false);
       expect(helper.isOnScreen(tileRow())).toBe(true);
     });

@@ -2413,7 +2413,8 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
 
           expect($("#billing_company_display_field").hasClass("hidden")).toBe(true);
           expect($("#billing_company_field").hasClass("hidden")).toBe(false);
-          expect($("#billing_company").val()).toBe("A Sole Trader");
+          expect($("#company_name").val()).toBe("A Sole Trader");
+          expect($("#billing_company").val()).toBe("");
         });
 
         describe("item 4.2 / item 2.1 — the panel's own free-text query is suppressed for the whole of sole-trader mode", () => {

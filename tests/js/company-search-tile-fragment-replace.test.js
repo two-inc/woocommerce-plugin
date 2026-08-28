@@ -64,13 +64,14 @@ describe("payment-tile company search across a fragment replace", () => {
     expect(label.getAttribute("for")).toBe("twoinc_tile_company_name");
   });
 
-  test("the tile field posts nothing — #billing_company is the posted company", () => {
+  test("the tile field posts nothing — the capture pair is what POSTs", () => {
     ctx.capture.write("Acme Ltd", "12345678");
     ctx.dom.toggleBusinessFields();
 
     expect(document.querySelector("#twoinc_tile_company_name").hasAttribute("name")).toBe(false);
     const posted = new URLSearchParams(ctx.$("form[name='checkout']").serialize());
-    expect(posted.get("billing_company")).toBe("Acme Ltd");
+    expect(posted.get("company_name")).toBe("Acme Ltd");
+    expect(posted.get("company_id")).toBe("12345678");
   });
 
   test("a fragment replace leaves the rebuilt tile holding the captured name", () => {

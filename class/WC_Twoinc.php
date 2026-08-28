@@ -3762,6 +3762,14 @@ if (!class_exists('WC_Twoinc')) {
             $billing_company_display = array_key_exists('billing_company_display', $_POST) ? sanitize_text_field($_POST['billing_company_display']) : '';
             $billing_company = array_key_exists('billing_company', $_POST) ? sanitize_text_field($_POST['billing_company']) : $billing_company_display;
             $billing_phone = array_key_exists('billing_phone', $_POST) ? sanitize_text_field($_POST['billing_phone']) : '';
+            // The captured company's name, the twin of $company_id. It is not
+            // $billing_company: in payment-tile placement the address company
+            // row belongs to the buyer and may hold a different company, and
+            // it is this pair the order intent was authorised against. Falls
+            // back for the order-pay page and any store that never renders the
+            // capture pair.
+            $posted_company_name = array_key_exists('company_name', $_POST) ? sanitize_text_field($_POST['company_name']) : '';
+            $company_name = $posted_company_name !== '' ? $posted_company_name : $billing_company;
             $invoice_email = array_key_exists('invoice_email', $_POST) ? sanitize_text_field($_POST['invoice_email']) : '';
             $invoice_emails = $invoice_email ? array_map('sanitize_text_field', explode(',', $invoice_email)) : [];
 
@@ -3787,6 +3795,7 @@ if (!class_exists('WC_Twoinc')) {
             $order->update_meta_data(WC_Twoinc_Brand::meta_key('order_reference'), $order_reference);
             $order->update_meta_data(WC_Twoinc_Brand::meta_key('merchant_id'), $merchant_id);
             $order->update_meta_data('company_id', $company_id);
+            $order->update_meta_data('company_name', $company_name);
             $order->update_meta_data('department', $department);
             $order->update_meta_data('project', $project);
             $order->update_meta_data('purchase_order_number', $purchase_order_number);
@@ -3838,7 +3847,7 @@ if (!class_exists('WC_Twoinc')) {
                     update_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('company_id'), $company_id);
                 }
                 if (!get_the_author_meta(WC_Twoinc_Brand::prefixed_name('billing_company'), $user_id)) {
-                    update_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('billing_company'), $billing_company);
+                    update_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('billing_company'), $company_name);
                 }
                 if (!get_the_author_meta(WC_Twoinc_Brand::prefixed_name('department'), $user_id)) {
                     update_user_meta($user_id, WC_Twoinc_Brand::prefixed_name('department'), $department);

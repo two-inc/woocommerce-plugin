@@ -171,11 +171,26 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 'priority' => $company_name_priority
             ];
 
+            // The captured company, as a pair. Both halves are registered
+            // billing fields so they survive a checkout fragment refresh with
+            // the same vintage, and neither is ever shown: the capture reaches
+            // the buyer through the search control it is painted into.
+            //
+            // The name is its own field rather than `billing_company` because
+            // in payment-tile placement that row stays with the buyer as an
+            // address line and may hold a different company (Doug 2026-08-28).
+            $fields['billing']['company_name'] = [
+                'label' => __('Company name', 'twoinc-payment-gateway'),
+                'class' => array('hidden'),
+                'required' => false,
+                'priority' => $company_name_priority + 1
+            ];
+
             $fields['billing']['company_id'] = [
                 'label' => __('Company ID', 'twoinc-payment-gateway'),
                 'class' => array('hidden'),
                 'required' => false,
-                'priority' => $company_name_priority + 1
+                'priority' => $company_name_priority + 2
             ];
 
             // ORDER IS LOAD-BEARING: WooCommerce sorts billing fields by

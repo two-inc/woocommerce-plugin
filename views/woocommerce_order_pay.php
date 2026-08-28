@@ -45,6 +45,11 @@
         </div>
     </div>
     <div class="twoinc-inp-container hidden">
+        <div id="company_name_field">
+            <input type="text" name="company_name" id="company_name">
+        </div>
+    </div>
+    <div class="twoinc-inp-container hidden">
         <div id="company_id_field">
             <input type="text" name="company_id" id="company_id">
         </div>
