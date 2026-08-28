@@ -386,14 +386,22 @@ class StubCustomer
 {
     private $country;
 
-    public function __construct($country)
+    private $shipping_country;
+
+    public function __construct($country, $shipping_country = '')
     {
         $this->country = $country;
+        $this->shipping_country = $shipping_country;
     }
 
     public function get_billing_country()
     {
         return $this->country;
+    }
+
+    public function get_shipping_country()
+    {
+        return $this->shipping_country;
     }
 }
 
