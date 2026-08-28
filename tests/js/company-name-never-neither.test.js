@@ -61,8 +61,8 @@ const CASES = [
     "payment_tile",
     true,
     "two",
-    ["#twoinc_tile_company_row"],
-    "the narrowing: tile is the only surface"
+    ["#billing_company_field", "#twoinc_tile_company_row"],
+    "a capture: address row still stays beside the tile"
   ],
   [
     "payment_tile",
