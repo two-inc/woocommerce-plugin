@@ -208,6 +208,15 @@ buyer can see (TWO-25469):
 - moving the mount to the payment tile retires the address-form wrapper — two wrappers would
   be two anchors, and the sole-trader note would render against the one the buyer left.
 
+`company-search-multi-instance.test.js` — `TwoCompanySearch` is genuinely instantiable
+(TWO-25503). A second instance, mounted on the delivery role with its own ids, resolves its
+own selectors, holds its own request state, builds its own panel, back-to-search button and
+number label, and captures into its own per-role record — switching it into manual entry
+leaves the primary control in search. The class was previously instance-shaped but bound to
+the module-level `twoincSelectWooHelper`, so a second construction was silently ignored;
+these are what stop that returning. The fixture carries `#shipping_*` company rows the plugin
+does not register server-side, because WooCommerce ships one control, on the primary role.
+
 `company-search-tile-location.test.js` — the `company_search_location` setting (TWO-25326
 §7.1). Under `payment_tile` the tile shows exactly one company-name field, `#billing_company`
 and `#company_id` stay in the address form, the slot is hidden in manual entry, the tile field
