@@ -269,13 +269,24 @@ if (!class_exists('WC_Twoinc_Sole_Trader')) {
                 wp_send_json_error('Could not initialise the sole trader flow');
                 return;
             }
-            wp_send_json_success([
+            $response = [
                 'delegation_token' => $tokens['delegation_token'],
                 'autofill_token' => $tokens['autofill_token'],
                 'signup_url' => self::get_signup_page_url($gateway),
                 // PDEV-4669: registry-vetted country, echoed back — never re-derived from a DOM read.
                 'country' => $country,
-            ]);
+            ];
+            // Only when the merchant has opted in, and only here rather than the
+            // checkout bootstrap: this response is nonce-checked and
+            // registry-gated, so the token stops at a vetted sole-trader
+            // checkout instead of every page render.
+            if ($gateway->should_send_firewall_token_from_browser()) {
+                $firewall_token = $gateway->get_firewall_token();
+                if ($firewall_token !== '') {
+                    $response['firewall_token'] = $firewall_token;
+                }
+            }
+            wp_send_json_success($response);
         }
 
         /**

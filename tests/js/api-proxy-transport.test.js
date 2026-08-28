@@ -69,6 +69,27 @@ describe("checkout API calls and the firewall-token proxy", () => {
     });
   });
 
+  test("the proxied calls never carry a firewall token from the browser", () => {
+    // They get it server-side in make_request(), opt-in or not. A second copy
+    // travelling from the page would be a token in a buyer's request headers
+    // for no gain.
+    window.twoinc.firewall_token = "waf-token-1";
+    ctx.soleTrader.tokens = { firewall_token: "waf-token-1" };
+    ctx.Twoinc.getInstance().customerCompany = {
+      organization_number: "12345678",
+      country_prefix: "GB"
+    };
+
+    ctx.Twoinc.getInstance().addressLookup({ lookup_id: "12345678" });
+    ctx.Twoinc.getInstance().getDueInDays();
+
+    expect(ajax.calls.length).toBeGreaterThan(0);
+    ajax.calls.forEach((record) => {
+      expect(record.settings.headers).toBeUndefined();
+      expect(JSON.stringify(record.settings)).not.toContain("waf-token-1");
+    });
+  });
+
   describe("the sole-trader autofill read stays browser-direct", () => {
     let fetchMock;
 
@@ -94,18 +115,30 @@ describe("checkout API calls and the firewall-token proxy", () => {
       expect(options.headers["two-delegated-authority-token"]).toBe("autofill");
     });
 
-    test("sends no firewall token, whatever a page happens to hold", () => {
-      // The token gates the merchant's own network egress. This request leaves
-      // the buyer's machine, never the store's, so the token buys nothing here
-      // and must not be shipped to a browser to be attached.
+    test("sends no firewall token by default, whatever the page holds", () => {
+      // Default state: the server withheld the token, so no header — and a
+      // value on the bootstrap is not a back door into sending one.
       window.twoinc.firewall_token = "waf-token-1";
-      ctx.soleTrader.tokens.firewall_token = "waf-token-1";
 
       ctx.soleTrader.fetchCurrentBuyer(function () {});
 
       const headers = fetchMock.mock.calls[0][1].headers;
       expect(Object.keys(headers)).toEqual(["two-delegated-authority-token"]);
       expect(JSON.stringify(headers)).not.toContain("waf-token-1");
+    });
+
+    test.each([
+      { minted: "waf-token-1", expected: "waf-token-1", description: "an opted-in merchant's token is sent" },
+      { minted: undefined, expected: undefined, description: "no minted token sends no header" },
+      { minted: "", expected: undefined, description: "an empty minted value is not a token" }
+    ])("$description", ({ minted, expected }) => {
+      // The opt-in is decided server-side: the token is in the mint response or
+      // it is not, and this call carries it only in the former case.
+      ctx.soleTrader.tokens.firewall_token = minted;
+
+      ctx.soleTrader.fetchCurrentBuyer(function () {});
+
+      expect(fetchMock.mock.calls[0][1].headers["X-WAF-TOKEN"]).toBe(expected);
     });
   });
 });

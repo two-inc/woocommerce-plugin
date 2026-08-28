@@ -4010,9 +4010,17 @@ let twoincSoleTrader = {
       cb(null);
       return;
     }
+    // The one call no server hop can make: its subject is whoever holds the
+    // API-domain cookie the hosted signup set. A merchant whose firewall scans
+    // buyer traffic too opts in, and the token then arrives with the minted
+    // tokens; otherwise it is absent and no header is sent.
+    const headers = { "two-delegated-authority-token": twoincSoleTrader.tokens.autofill_token };
+    if (twoincSoleTrader.tokens.firewall_token) {
+      headers["X-WAF-TOKEN"] = twoincSoleTrader.tokens.firewall_token;
+    }
     fetch(window.twoinc.twoinc_checkout_host + "/autofill/v1/buyer/current", {
       credentials: "include",
-      headers: { "two-delegated-authority-token": twoincSoleTrader.tokens.autofill_token }
+      headers: headers
     })
       .then(function (response) {
         if (response.ok) return response.json();

@@ -4345,6 +4345,14 @@ if (!class_exists('WC_Twoinc')) {
                         WC_Twoinc_Brand::get('product_name')
                     ) . ' ' . __('This is a coarse network gate rather than a secret credential, so unlike the API key it is not masked here.', 'twoinc-payment-gateway'),
                 ],
+                'firewall_token_browser' => [
+                    'title'       => __('Add firewall token to browser-originated traffic', 'twoinc-payment-gateway'),
+                    'description' => __("Switch this on if your IT administrator requires the firewall token for calls from the user's browser as well as those from your server.", 'twoinc-payment-gateway'),
+                    'desc_tip'    => true,
+                    'label'       => ' ',
+                    'type'        => 'checkbox',
+                    'default'     => 'no',
+                ],
                 'vendor_name' => [
                     'title'       => __('Vendor name (optional)', 'twoinc-payment-gateway'),
                     'type'        => 'text',
@@ -5206,6 +5214,19 @@ if (!class_exists('WC_Twoinc')) {
                 : (string) $this->get_option('firewall_token');
             // WC's text field keeps interior newlines, which would split the header.
             return trim((string) preg_replace('/[\r\n\t]+/', '', $token));
+        }
+
+        /**
+         * Whether the token may be published to the page for the one call the
+         * browser still makes directly. Off unless the merchant's firewall is
+         * known to scan buyer traffic too, since it puts the token on a device
+         * outside the merchant's network.
+         *
+         * @return bool
+         */
+        public function should_send_firewall_token_from_browser()
+        {
+            return 'yes' === $this->get_option('firewall_token_browser');
         }
 
         /**
