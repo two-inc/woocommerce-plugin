@@ -924,7 +924,12 @@
      */
     CompanySearchPanel.prototype.setDisplayText = function (text) {
         if (!this._field) return;
-        this._field.value = text || '';
+        const next = text || '';
+        // TWO-25503: every rebuild repaints this value, and a host that posts on
+        // `change` then morphs this wrapper away re-enters the rebuild — an
+        // unbounded loop that tears the popover down under the buyer.
+        if (this._field.value === next) return;
+        this._field.value = next;
         // Magento's own KO binding reads the field on `change`, so a value
         // written here is invisible to the quote without it.
         fire(this._field, 'change');
