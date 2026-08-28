@@ -349,6 +349,20 @@ msgstr "Det gick inte att begära återbetalning av beställningen med %s ."
 msgid "Failed to verify API key."
 msgstr "Det gick inte att verifiera API-nyckeln."
 
+#: class/WC_Twoinc.php:4337
+msgid "Firewall Token (optional)"
+msgstr "Brandväggstoken (valfritt)"
+
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc.php:4341
+#, php-format
+msgid "If your IT administrator asks you to add a firewall token, place it in this field. It will then be transmitted as header X-WAF-TOKEN on all calls to the %s API."
+msgstr "Om din IT-administratör ber dig lägga till en brandväggstoken, placera den i det här fältet. Den skickas sedan som header X-WAF-TOKEN vid alla anrop till %s API."
+
+#: class/WC_Twoinc.php:4343
+msgid "This is a coarse network gate rather than a secret credential, so unlike the API key it is not masked here and one checkout request sends it from the browser."
+msgstr "Detta är en grov nätverksspärr snarare än en hemlig uppgift, så till skillnad från API-nyckeln är den inte maskerad här, och en kassaförfrågan skickar den från webbläsaren."
+
 #: class/WC_Twoinc_Helper.php:136
 msgid "First name"
 msgstr "Förnamn"

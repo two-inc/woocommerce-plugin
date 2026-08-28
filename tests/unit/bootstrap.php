@@ -158,6 +158,26 @@ function wc_get_price_decimals()
         : 2;
 }
 
+function wc_get_price_decimal_separator()
+{
+    return '.';
+}
+
+function wc_get_price_thousand_separator()
+{
+    return ',';
+}
+
+// A logged-out visitor: ID 0, so the checkout bootstrap skips its saved-user
+// prefill. get_user_meta is already stubbed further down.
+
+function wp_get_current_user()
+{
+    return new class () {
+        public $ID = 0;
+    };
+}
+
 function determine_locale()
 {
     return $GLOBALS['__twoinc_test_locale'] ?? 'en_US';
@@ -866,6 +886,18 @@ class WP_Error
 {
 }
 
+// The transport itself. Every outbound call funnels through make_request(),
+// so this is where a test sees the URL, method and headers actually sent —
+// recorded in $GLOBALS['__twoinc_test_http_calls']. The canned reply comes
+// from $GLOBALS['__twoinc_test_http_response'] when a test sets one.
+
+function wp_remote_request($url, $args = [])
+{
+    $GLOBALS['__twoinc_test_http_calls'][] = ['url' => $url, 'args' => $args];
+    return $GLOBALS['__twoinc_test_http_response']
+        ?? ['response' => ['code' => 200], 'body' => '{}', 'headers' => []];
+}
+
 // wp_remote_* accessors over the ['response' => ['code' => …], 'body' => …,
 // 'headers' => …] response-array shape the gateway's make_request returns.
 
@@ -883,6 +915,32 @@ function wp_remote_retrieve_body($response)
         return '';
     }
     return $response['body'] ?? '';
+}
+
+// Response headers come back as WP's case-insensitive dictionary, not an
+// array, and the API log reads them through its getAll().
+
+class StubHttpHeaders
+{
+    private $headers;
+
+    public function __construct(array $headers)
+    {
+        $this->headers = $headers;
+    }
+
+    public function getAll(): array
+    {
+        return $this->headers;
+    }
+}
+
+function wp_remote_retrieve_headers($response)
+{
+    if (is_wp_error($response) || !is_array($response)) {
+        return new StubHttpHeaders([]);
+    }
+    return new StubHttpHeaders((array) ($response['headers'] ?? []));
 }
 
 function wp_remote_retrieve_header($response, $header)
@@ -1052,7 +1110,24 @@ function wp_send_json_success($data = null, $status_code = null, $flags = 0)
 
 function wp_send_json_error($data = null, $status_code = null, $flags = 0)
 {
-    $GLOBALS['__twoinc_test_ajax_json'] = ['success' => false, 'data' => $data];
+    $GLOBALS['__twoinc_test_ajax_json'] = ['success' => false, 'data' => $data, 'status' => $status_code];
+}
+
+// The API proxies relay the upstream body and status verbatim rather than
+// wrapping them in the {success, data} envelope, so their outcome is recorded
+// under its own keys.
+
+function wp_send_json($data, $status_code = null, $flags = 0)
+{
+    $GLOBALS['__twoinc_test_ajax_json'] = ['relayed' => $data, 'status' => $status_code];
+}
+
+class WC_AJAX
+{
+    public static function get_endpoint($request)
+    {
+        return 'https://shop.example.test/?wc-ajax=' . $request;
+    }
 }
 
 // ── Action Scheduler stubs (FX recurring refresh, TWO-25104) ────────
@@ -1117,5 +1192,6 @@ require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Helper.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_FX.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Payment_Terms.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Sole_Trader.php';
+require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Api_Proxy.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc_Checkout.php';
 require WC_TWOINC_PLUGIN_PATH . 'class/WC_Twoinc.php';

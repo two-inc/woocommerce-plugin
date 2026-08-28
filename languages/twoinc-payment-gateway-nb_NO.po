@@ -349,6 +349,20 @@ msgstr "Kunne ikke be om tilbakebetaling av ordre med %s ."
 msgid "Failed to verify API key."
 msgstr "Kunne ikke bekrefte API-nøkkelen."
 
+#: class/WC_Twoinc.php:4337
+msgid "Firewall Token (optional)"
+msgstr "Brannmur-token (valgfritt)"
+
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc.php:4341
+#, php-format
+msgid "If your IT administrator asks you to add a firewall token, place it in this field. It will then be transmitted as header X-WAF-TOKEN on all calls to the %s API."
+msgstr "Hvis IT-administratoren din ber deg legge til en brannmur-token, plasser den i dette feltet. Den blir da sendt som header X-WAF-TOKEN på alle kall til %s API."
+
+#: class/WC_Twoinc.php:4343
+msgid "This is a coarse network gate rather than a secret credential, so unlike the API key it is not masked here and one checkout request sends it from the browser."
+msgstr "Dette er en grov nettverksport snarere enn et hemmelig legitimasjonsbevis, så i motsetning til API-nøkkelen er den ikke maskert her, og én kassaforespørsel sender den fra nettleseren."
+
 #: class/WC_Twoinc_Helper.php:136
 msgid "First name"
 msgstr "Fornavn"

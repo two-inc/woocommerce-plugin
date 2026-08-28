@@ -1052,6 +1052,20 @@ msgstr ""
 msgid "Checking availability"
 msgstr ""
 
+#: class/WC_Twoinc.php:4337
+msgid "Firewall Token (optional)"
+msgstr ""
+
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc.php:4341
+#, php-format
+msgid "If your IT administrator asks you to add a firewall token, place it in this field. It will then be transmitted as header X-WAF-TOKEN on all calls to the %s API."
+msgstr ""
+
+#: class/WC_Twoinc.php:4343
+msgid "This is a coarse network gate rather than a secret credential, so unlike the API key it is not masked here and one checkout request sends it from the browser."
+msgstr ""
+
 #: class/WC_Twoinc.php:4408
 msgid "Vendor name (optional)"
 msgstr ""

@@ -4333,6 +4333,15 @@ if (!class_exists('WC_Twoinc')) {
                         esc_html(WC_Twoinc_Brand::get('production_key_contact_email'))
                     ) . '<div id="api-key-status" style="margin-top: 5px;"></div>',
                 ],
+                'firewall_token' => [
+                    'title'       => __('Firewall Token (optional)', 'twoinc-payment-gateway'),
+                    'type'        => 'text',
+                    'description' => sprintf(
+                        /* translators: %s is the brand product name (e.g. "Two") */
+                        __('If your IT administrator asks you to add a firewall token, place it in this field. It will then be transmitted as header X-WAF-TOKEN on all calls to the %s API.', 'twoinc-payment-gateway'),
+                        WC_Twoinc_Brand::get('product_name')
+                    ) . ' ' . __('This is a coarse network gate rather than a secret credential, so unlike the API key it is not masked here and one checkout request sends it from the browser.', 'twoinc-payment-gateway'),
+                ],
                 'vendor_name' => [
                     'title'       => __('Vendor name (optional)', 'twoinc-payment-gateway'),
                     'type'        => 'text',
@@ -5202,6 +5211,10 @@ if (!class_exists('WC_Twoinc')) {
                 'Content-Type' => 'application/json; charset=utf-8',
                 'X-API-Key' => $api_key
             ];
+            $firewall_token = (string) $this->get_option('firewall_token');
+            if ($firewall_token !== '') {
+                $headers['X-WAF-TOKEN'] = $firewall_token;
+            }
             if (isset($_SERVER['HTTP_X_CLOUD_TRACE_CONTEXT'])) {
                 $headers['HTTP_X_CLOUD_TRACE_CONTEXT'] = $_SERVER['HTTP_X_CLOUD_TRACE_CONTEXT'];
             }
@@ -5216,14 +5229,18 @@ if (!class_exists('WC_Twoinc')) {
 
             if ('yes' === $this->get_option('enable_api_logging')) {
                 $logger = wc_get_logger();
-                // Redact X-API-Key from request headers for logging
+                // Redact the key headers from request headers for logging.
+                // X-WAF-TOKEN only when it was actually sent, or the log would
+                // imply a firewall token is configured when none is.
+                $redacted_headers = array_merge($headers, ['X-API-Key' => '[REDACTED]']);
+                if (isset($redacted_headers['X-WAF-TOKEN'])) {
+                    $redacted_headers['X-WAF-TOKEN'] = '[REDACTED]';
+                }
                 $context = [
                     "source" => "twoinc-payment-gateway",
                     "request" => [
                         "body" => $payload,
-                        "headers" => array_merge($headers, [
-                            'X-API-Key' => '[REDACTED]'
-                        ]),
+                        "headers" => $redacted_headers,
                         "params" => $params
                     ],
                     "response" => [

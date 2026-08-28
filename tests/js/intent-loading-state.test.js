@@ -436,7 +436,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
         jest.advanceTimersByTime(1000);
 
         expect(ajax.calls.length).toBe(1);
-        expect(ajax.calls[0].url).toContain("/v1/order_intent");
+        expect(ajax.calls[0].url).toBe(harness.API_PROXY.order_intent_url);
         expect(shown(".twoinc-loader")).toBe(true);
 
         ajax.last().succeed({ approved: true });
@@ -1515,7 +1515,7 @@ describe("order-intent loading state and stale-verdict clearing", () => {
         issueACheck(ajax);
 
         // The body was built from the record...
-        expect(JSON.parse(ajax.last().settings.data).buyer.company.company_name).toBe(
+        expect(JSON.parse(ajax.last().settings.data.intent).buyer.company.company_name).toBe(
           "ACME Widgets Ltd"
         );
 

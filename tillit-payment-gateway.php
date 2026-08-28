@@ -74,6 +74,7 @@ function load_twoinc_classes()
     require_once __DIR__ . '/class/WC_Twoinc_FX.php';
     require_once __DIR__ . '/class/WC_Twoinc_Payment_Terms.php';
     require_once __DIR__ . '/class/WC_Twoinc_Sole_Trader.php';
+    require_once __DIR__ . '/class/WC_Twoinc_Api_Proxy.php';
     require_once __DIR__ . '/class/WC_Twoinc_Checkout.php';
     require_once __DIR__ . '/class/WC_Twoinc.php';
 
@@ -117,6 +118,13 @@ function load_twoinc_classes()
     add_action('wc_ajax_two_select_term', ['WC_Twoinc_Payment_Terms', 'ajax_select_term']);
     add_action('wc_ajax_two_sole_trader_availability', ['WC_Twoinc_Sole_Trader', 'ajax_availability']);
     add_action('wc_ajax_two_sole_trader_tokens', ['WC_Twoinc_Sole_Trader', 'ajax_tokens']);
+
+    // Proxies for the checkout calls the browser used to make against the API
+    // host itself, so the firewall token can be sent server-side (X-WAF-TOKEN).
+    add_action('wc_ajax_two_company_search', ['WC_Twoinc_Api_Proxy', 'ajax_company_search']);
+    add_action('wc_ajax_two_company_by_id', ['WC_Twoinc_Api_Proxy', 'ajax_company_by_id']);
+    add_action('wc_ajax_two_order_intent', ['WC_Twoinc_Api_Proxy', 'ajax_order_intent']);
+    add_action('wc_ajax_two_payment_terms', ['WC_Twoinc_Api_Proxy', 'ajax_payment_terms']);
 
     // Admin invoice / credit-note PDF download from the order edit screen:
     // streams the PDF, or redirects back with a notice after the

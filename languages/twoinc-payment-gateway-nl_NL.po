@@ -353,6 +353,20 @@ msgstr "Het aanvragen van restitutie van de bestelling met %s is mislukt."
 msgid "Failed to verify API key."
 msgstr "Het verifiëren van de API-sleutel is mislukt."
 
+#: class/WC_Twoinc.php:4337
+msgid "Firewall Token (optional)"
+msgstr "Firewalltoken (optioneel)"
+
+#. translators: %s is the brand product name (e.g. "Two")
+#: class/WC_Twoinc.php:4341
+#, php-format
+msgid "If your IT administrator asks you to add a firewall token, place it in this field. It will then be transmitted as header X-WAF-TOKEN on all calls to the %s API."
+msgstr "Als uw IT-beheerder u vraagt een firewalltoken toe te voegen, plaatst u deze in dit veld. Deze wordt vervolgens verzonden als header X-WAF-TOKEN bij alle aanroepen naar de %s API."
+
+#: class/WC_Twoinc.php:4343
+msgid "This is a coarse network gate rather than a secret credential, so unlike the API key it is not masked here and one checkout request sends it from the browser."
+msgstr "Dit is een grove netwerkpoort in plaats van een geheime referentie, dus in tegenstelling tot de API-sleutel wordt deze hier niet gemaskeerd en verstuurt één afrekenverzoek deze vanuit de browser."
+
 #: class/WC_Twoinc_Helper.php:136
 msgid "First name"
 msgstr "Voornaam"
