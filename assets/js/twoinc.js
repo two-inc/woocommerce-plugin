@@ -1081,10 +1081,7 @@ class TwoCompanySearch {
     if (panel) panel.close();
   }
 
-  closeCompanySearchDropdownIfOpen() {
-    twoincSelectWooHelper.closeCompanySearchDropdown();
-  }
-
+  /** No production caller: the tests' read of the panel's open state. */
   companySearchDropdownIsOpen() {
     const panel = twoincSelectWooHelper.panel;
     return !!panel && panel.isOpen();
@@ -2950,11 +2947,8 @@ let twoincSoleTrader = {
         "twoinc-sole-trader-toggle--busy"
       );
       if (twoincSoleTrader.closeDropdownOnSettle) {
-        // Consumed once, before the surfaces below re-sync: this is the
-        // shared sequence's third step — see
-        // `closeCompanySearchDropdownIfOpen`.
         twoincSoleTrader.closeDropdownOnSettle = false;
-        twoincSelectWooHelper.closeCompanySearchDropdownIfOpen();
+        twoincSelectWooHelper.closeCompanySearchDropdown();
       }
     }
     twoincSelectWooHelper.syncSoleTraderSurfaces();
