@@ -253,8 +253,10 @@ describe("capture modes composed, not taken one at a time (#486)", () => {
       $("#billing_company").val(MATCHED_BUYER.company_name);
       $("#company_id").val(MATCHED_BUYER.organization_number);
       ctx.soleTrader.mode = "sole_trader";
+      ctx.soleTrader.soleTraderAdopted = true;
       ctx.capture.rememberCaptureMode();
       ctx.soleTrader.mode = "business";
+      ctx.soleTrader.soleTraderAdopted = false;
       $("#billing_company").val("");
       $("#company_id").val("");
 

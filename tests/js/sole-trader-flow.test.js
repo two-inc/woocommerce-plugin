@@ -1005,13 +1005,19 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       // companies in some countries too, so the shape cannot tell them apart.
       function recordPreviousCapture(name, id, mode) {
         const before = soleTrader.mode;
+        const adoptedBefore = soleTrader.soleTraderAdopted;
         $("#billing_company").val(name);
         $("#company_id").val(id);
-        soleTrader.mode = mode === "sole_trader" ? "sole_trader" : "business";
+        const isSoleTrader = mode === "sole_trader";
+        soleTrader.mode = isSoleTrader ? "sole_trader" : "business";
+        // The pair on the fields is a sole trader's only once one has actually
+        // been adopted — the chip alone leaves an earlier capture in place.
+        soleTrader.soleTraderAdopted = isSoleTrader;
         // Through the real snapshotter, so the wiring that writes the record
         // is under test alongside the restore that reads it.
         if (mode) ctx.dom.saveCheckoutInputs();
         soleTrader.mode = before;
+        soleTrader.soleTraderAdopted = adoptedBefore;
         $("#billing_company").val("");
         $("#company_id").val("");
       }
@@ -3368,6 +3374,45 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
 
       jest.advanceTimersByTime(30 * 60 * 1000);
       expect(ajax.calls).toHaveLength(2);
+    });
+  });
+
+  /**
+   * Doug, live: a registered company restored after a reload showed the
+   * "select a different sole trader" link beneath it. The 3-second form
+   * snapshot recorded the CHIP the buyer had switched to against a pair that
+   * chip had not captured — mode from one source, entity from another.
+   */
+  describe("TWO-40 — the recorded capture mode describes the pair on the fields", () => {
+    test.each([
+      {
+        arrange: () => {},
+        expected: "search",
+        description: "a registry pick with no sole-trader detour"
+      },
+      {
+        arrange: () => soleTrader.onModeChipClick("sole_trader"),
+        expected: "search",
+        description: "a registry pick still on the fields while a signup popup is open"
+      },
+      {
+        arrange: () => {
+          soleTrader.onModeChipClick("sole_trader");
+          soleTrader.setCompany("TWO:ST12345", "A Sole Trader");
+        },
+        expected: "sole_trader",
+        description: "a sole trader actually adopted"
+      }
+    ])("$description records $expected", ({ arrange, expected }) => {
+      harness.openCompanyPanel($, ctx.helper);
+      ctx.helper.onPick({ id: "ACME Widgets Ltd", company_id: "12345678" });
+
+      arrange();
+      ctx.dom.saveCheckoutInputs();
+
+      expect(
+        ctx.capture.recallCaptureMode($("#billing_company").val(), $("#company_id").val())
+      ).toBe(expected);
     });
   });
 

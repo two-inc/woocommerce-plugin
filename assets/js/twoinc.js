@@ -433,6 +433,24 @@ let twoincCompanyCapture = {
   CAPTURE_MODE_KEY: "twoincCaptureMode",
 
   /**
+   * Which capture UI produced the pair the fields hold RIGHT NOW.
+   *
+   * The chip alone does not answer it: switching into sole-trader mode clears
+   * nothing, so an earlier pick stays on the fields for the whole signup round
+   * trip. Adoption is the discriminator — until one lands, the pair still
+   * belongs to the mode `savedCaptureMode` holds.
+   *
+   * @returns {string}
+   */
+  capturedMode: function () {
+    if (twoincSoleTrader.mode !== "sole_trader") return twoincCompanyCapture.mode;
+    if (twoincSoleTrader.soleTraderAdopted) return "sole_trader";
+    return twoincSoleTrader.savedCaptureMode === null
+      ? twoincCompanyCapture.mode
+      : twoincSoleTrader.savedCaptureMode;
+  },
+
+  /**
    * Record which capture UI produced the company now on the form, against the
    * pair it describes, so a later restore can read the mode back rather than
    * infer it. Nothing about a captured value carries that fact: a `TWO:`
@@ -440,16 +458,14 @@ let twoincCompanyCapture = {
    * too, so its shape says nothing about how the buyer was captured.
    *
    * A restored sole trader leaves the capture axis at `search` — that is what
-   * `enableCompanySearch()` gates on — so the chip axis is what carries the
-   * fact forward across a second return.
+   * `enableCompanySearch()` gates on — so adoption is what carries the fact
+   * forward across a second return.
    */
   rememberCaptureMode: function () {
-    const mode =
-      twoincSoleTrader.mode === "sole_trader" ? "sole_trader" : twoincCompanyCapture.mode;
     sessionStorage.setItem(
       twoincCompanyCapture.CAPTURE_MODE_KEY,
       JSON.stringify({
-        mode: mode,
+        mode: twoincCompanyCapture.capturedMode(),
         tag: twoincCompanyCapture.pairingTag(
           twoincCompanyCapture.nameField().val(),
           twoincCompanyCapture.numberField().val()
