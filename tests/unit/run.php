@@ -7808,11 +7808,12 @@ final class BrandConfigSpec
     }
 
     /**
-     * The refusal a buyer meets when no company has been selected. Same shape
-     * as the loader-copy check above; the msgid is read out of the source
-     * rather than retyped, so rewording it without regenerating the catalogues
-     * fails here instead of shipping an English sentence to a Norwegian,
-     * Dutch or Swedish shop.
+     * The refusal a buyer meets when no company has been selected. Weaker than
+     * the loader-copy check above, which reads its msgid off rendered markup:
+     * this sentence lives in a submit branch, so the msgid is retyped here and
+     * the call site is asserted to still spell it that way. Rewording it
+     * without the catalogues therefore fails here rather than shipping English
+     * to a Norwegian, Dutch or Swedish shop.
      */
     private static function testCompanyRequiredCopyIsTranslatedInEveryLocale(): void
     {

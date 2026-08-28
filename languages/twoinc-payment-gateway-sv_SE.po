@@ -779,6 +779,6 @@ msgstr "Vilken/vilka orderstatus(ar) som talar om för %1$s att en order är lev
 msgid "When enabled, a breakdown of tax subtotals is included in the order payload sent to %s. Always sent for shops whose store base country is Sweden, regardless of this setting."
 msgstr "Om aktiverat inkluderas en uppdelning av skattesummor i orderdatan som skickas till %s. Skickas alltid för butiker vars basland är Sverige, oavsett denna inställning."
 
-#: class/WC_Twoinc.php
+#: class/WC_Twoinc.php:3780
 msgid "Please select your company before paying with %s."
 msgstr "Välj ditt företag innan du betalar med %s."
