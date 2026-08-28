@@ -778,3 +778,7 @@ msgstr "Hvilken(e) bestillingsstatus(er) som forteller %1$s at en bestilling er 
 #: class/WC_Twoinc.php:4705
 msgid "When enabled, a breakdown of tax subtotals is included in the order payload sent to %s. Always sent for shops whose store base country is Sweden, regardless of this setting."
 msgstr "Når aktivert, inkluderes en oversikt over skatte-delsummer i bestillingsdataene som sendes til %s. Sendes alltid for butikker hvis basisland er Sverige, uavhengig av denne innstillingen."
+
+#: class/WC_Twoinc.php
+msgid "Please select your company before paying with %s."
+msgstr "Velg selskapet ditt før du betaler med %s."

@@ -209,6 +209,7 @@ final class BrandConfigSpec
             'testIntentVerdictBoxesHoldABareSentence',
             'testIntentVerdictBoxesAreAnnounced',
             'testIntentLoaderCopyIsTranslatedInEveryLocale',
+            'testCompanyRequiredCopyIsTranslatedInEveryLocale',
             'testPoTranslationParserRejectsWhatItMustReject',
             'testIntentLoaderSuppressedWithTheNoticeButErrorBoxesSurvive',
             'testCompanySearchTileSlotAndDeclinedTemplateSurviveNoticeSuppression',
@@ -7796,6 +7797,65 @@ final class BrandConfigSpec
         // asserted which locales it actually found, so narrowing it to a single
         // hardcoded filename passed identically, which is the exact failure the glob
         // was introduced to prevent.
+        sort($visited);
+        $wanted = array_keys($expected);
+        sort($wanted);
+        TinyAssert::same(
+            implode(',', $wanted),
+            implode(',', $visited),
+            'the catalogue discovery did not visit every locale this plugin ships'
+        );
+    }
+
+    /**
+     * The refusal a buyer meets when no company has been selected. Same shape
+     * as the loader-copy check above; the msgid is read out of the source
+     * rather than retyped, so rewording it without regenerating the catalogues
+     * fails here instead of shipping an English sentence to a Norwegian,
+     * Dutch or Swedish shop.
+     */
+    private static function testCompanyRequiredCopyIsTranslatedInEveryLocale(): void
+    {
+        $languages = dirname(__DIR__, 2) . '/languages/';
+        $msgid = 'Please select your company before paying with %s.';
+
+        TinyAssert::true(
+            strpos(
+                (string) file_get_contents(dirname(__DIR__, 2) . '/class/WC_Twoinc.php'),
+                "__('" . $msgid . "', 'twoinc-payment-gateway')"
+            ) !== false,
+            'the company-required sentence has been reworded — update this msgid and the catalogues with it'
+        );
+
+        TinyAssert::true(
+            strpos((string) file_get_contents($languages . 'twoinc-payment-gateway.pot'), $msgid) !== false,
+            'the .pot is missing the company-required sentence — regenerate it'
+        );
+
+        $expected = [
+            'nb_NO' => 'Velg selskapet ditt før du betaler med %s.',
+            'nl_NL' => 'Selecteer uw bedrijf voordat u betaalt met %s.',
+            'sv_SE' => 'Välj ditt företag innan du betalar med %s.',
+        ];
+        $catalogues = glob($languages . 'twoinc-payment-gateway-*.po');
+        TinyAssert::true($catalogues !== false && $catalogues !== [], 'no .po catalogues found at all');
+        $visited = [];
+        foreach ($catalogues as $po) {
+            preg_match('/twoinc-payment-gateway-(.+)\.po$/', $po, $m);
+            $locale = $m[1];
+            $visited[] = $locale;
+            TinyAssert::true(
+                isset($expected[$locale]),
+                "locale $locale has no expected company-required translation in this test — add one"
+            );
+
+            TinyAssert::same(
+                $expected[$locale],
+                self::poTranslation((string) file_get_contents($po), $msgid),
+                "the $locale catalogue does not pair the company-required sentence with its translation"
+            );
+        }
+
         sort($visited);
         $wanted = array_keys($expected);
         sort($wanted);
