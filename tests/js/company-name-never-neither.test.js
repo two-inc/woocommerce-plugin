@@ -7,9 +7,9 @@
  * enter the company name is the regression this exists to catch, and it has
  * reached staging twice.
  *
- * The second half of the ruling narrows it: once Two holds a capture AND is
- * the selected method in tile placement, the address area shows NEITHER the
- * captured name nor the sole-trader affordance — the tile is the surface.
+ * Tile placement shows two of them at once, and that is intended: the tile
+ * drives the intent and the order, the address row is an address line, and
+ * the two are allowed to carry different companies.
  */
 
 "use strict";

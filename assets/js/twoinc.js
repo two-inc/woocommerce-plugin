@@ -1928,8 +1928,7 @@ let twoincDomHelper = {
       requiredTargets.push("#billing_phone_field");
 
       // Whichever company row is actually on screen, and only while Two is the
-      // selected method. In tile placement with a capture showing, neither row
-      // is — the tile is the surface, and there is nothing left to require.
+      // selected method.
       const companyRows = ["#billing_company_display_field", "#billing_company_field"];
       const visibleCompanyRow = visibleTargets.filter(function (target) {
         return companyRows.indexOf(target) >= 0;
@@ -3049,9 +3048,8 @@ let twoincSoleTrader = {
    * wrapper INSIDE whichever company-name field is the visible one.
    *
    * TWO-40 §7 makes an adopted sole trader show through the live search
-   * widget, which hides `#billing_company_field` outright — a button
-   * appended inside a hidden field never renders — so the search row takes
-   * the slot whenever it is the visible surface.
+   * widget, so the search row takes the slot whenever it is the visible
+   * surface — a button appended inside a hidden field never renders.
    *
    * Inside the row's wrapper rather than after the row (TWO-25503, Doug):
    * as a sibling it stacked against the row's own bottom margin and needed a
