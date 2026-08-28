@@ -130,6 +130,11 @@ let twoincAddressRoles = {
     return "shipping";
   },
 
+  /** WooCommerce is billing-first, so the form the buyer meets first IS the invoice one. */
+  primary: function () {
+    return twoincAddressRoles.invoice();
+  },
+
   /** `#`-prefixed selector of one field on a role's form. */
   field: function (role, name) {
     return "#" + role + "_" + name;
@@ -138,6 +143,11 @@ let twoincAddressRoles = {
   /** Live (not saved/session) value of one field on a role's form, trimmed. */
   value: function (role, name) {
     return (jQuery(twoincAddressRoles.field(role, name)).val() || "").trim();
+  },
+
+  /** One role's country, upper-cased, or "" when absent/unset (TWO-24867). */
+  country: function (role) {
+    return twoincAddressRoles.value(role, "country").toUpperCase();
   }
 };
 
@@ -308,6 +318,20 @@ let twoincAddressMirror = {
  */
 let twoincCompanyCapture = {
   /**
+   * Capture state, one record per address ROLE. Keyed by role rather than held
+   * flat so a control mounted on a second role cannot inherit the primary
+   * role's pairing tag, provenance or capture mode.
+   */
+  records: {},
+
+  /** The record for one role, created on first use. */
+  record: function (role) {
+    const key = role || twoincAddressRoles.primary();
+    if (!twoincCompanyCapture.records[key]) twoincCompanyCapture.records[key] = { mode: "search" };
+    return twoincCompanyCapture.records[key];
+  },
+
+  /**
    * Which of the three company-capture UIs is the buyer's ACTIVE input surface
    * (#486, Doug): `'search'` (the registry search panel, the default),
    * `'manual'` (the plain native `#billing_company`, reached only through
@@ -329,9 +353,26 @@ let twoincCompanyCapture = {
    * tracks the CHIP the buyer picked. The two axes cross: a buyer can be
    * `twoincSoleTrader.mode === "business"` while this reads `'manual'`.
    *
+   * This accessor is the PRIMARY role's mode; `modeFor`/`setModeFor` reach any
+   * other role's.
+   *
    * @type {'search'|'manual'|'sole_trader'}
    */
-  mode: "search",
+  get mode() {
+    return twoincCompanyCapture.record().mode;
+  },
+
+  set mode(value) {
+    twoincCompanyCapture.record().mode = value;
+  },
+
+  modeFor: function (role) {
+    return twoincCompanyCapture.record(role).mode;
+  },
+
+  setModeFor: function (role, value) {
+    twoincCompanyCapture.record(role).mode = value;
+  },
 
   /** Attribute holding the name/number pairing tag. */
   PAIRING_ATTR: "data-two-company-pairing",
@@ -342,23 +383,34 @@ let twoincCompanyCapture = {
   /**
    * In tile placement `#billing_company` is the buyer's own address line and
    * may hold a different company, so the capture keeps its own hidden carrier.
+   * The tile hosts the primary role's control only.
    */
-  nameFieldSelector: function () {
-    return twoincSelectWooHelper.isTileLocation()
+  nameFieldSelector: function (role) {
+    const key = role || twoincAddressRoles.primary();
+    return twoincSelectWooHelper.isTileLocation() && key === twoincAddressRoles.primary()
       ? "#company_name"
-      : twoincAddressRoles.field(twoincAddressRoles.invoice(), "company");
+      : twoincAddressRoles.field(key, "company");
   },
 
-  nameField: function () {
-    return jQuery(twoincCompanyCapture.nameFieldSelector());
+  nameField: function (role) {
+    return jQuery(twoincCompanyCapture.nameFieldSelector(role));
   },
 
-  isNameField: function (element) {
-    return jQuery(element).is(twoincCompanyCapture.nameFieldSelector());
+  isNameField: function (element, role) {
+    return jQuery(element).is(twoincCompanyCapture.nameFieldSelector(role));
   },
 
-  numberField: function () {
-    return jQuery("#company_id");
+  /**
+   * `#company_id` is registered server-side on the invoice role alone, so any
+   * other role's number field resolves to markup that does not exist.
+   */
+  numberFieldSelector: function (role) {
+    const key = role || twoincAddressRoles.primary();
+    return key === twoincAddressRoles.invoice() ? "#company_id" : "#" + key + "_company_id";
+  },
+
+  numberField: function (role) {
+    return jQuery(twoincCompanyCapture.numberFieldSelector(role));
   },
 
   /**
@@ -382,21 +434,23 @@ let twoincCompanyCapture = {
 
   /**
    * Write a captured company: number, name, pairing tag and provenance, in one
-   * call. THE only sanctioned writer of `#company_id`.
+   * call. THE only sanctioned writer of the role's number field.
    *
    * @param {*} companyName
    * @param {*} companyId
    * @param {Object} [options]
    * @param {string} [options.country] country the capture belongs to; defaults
    *   to the invoice-role country the form currently holds
+   * @param {string} [options.role] address role captured for; defaults to primary
    * @returns {void}
    */
   write: function (companyName, companyId, options) {
     const opts = options || {};
+    const role = opts.role || twoincAddressRoles.primary();
     const name = twoincUtilHelper.blankToEmpty(companyName);
     const number = twoincUtilHelper.blankToEmpty(companyId);
-    const $name = twoincCompanyCapture.nameField();
-    const $number = twoincCompanyCapture.numberField();
+    const $name = twoincCompanyCapture.nameField(role);
+    const $number = twoincCompanyCapture.numberField(role);
 
     // Written only when the value actually moves. Re-assigning an input's
     // value to what it already holds resets the caret in some browsers, and
@@ -411,8 +465,12 @@ let twoincCompanyCapture = {
       $number.attr(twoincCompanyCapture.PROVENANCE_ATTR, "1");
     } else {
       // A name with no number is not a pair; manual entry captures that.
-      twoincCompanyCapture.forgetPairing();
+      twoincCompanyCapture.forgetPairing(role);
     }
+
+    // `buyer.company` on the order intent is invoice-bound, so only that role's
+    // capture reaches the record.
+    if (role !== twoincAddressRoles.invoice()) return;
 
     const instance = Twoinc.getInstance();
     // RAW onto the record, normalised onto the DOM: the record goes verbatim
@@ -424,8 +482,7 @@ let twoincCompanyCapture = {
     // Pin the country alongside the number so the pair can never be assembled
     // from two different moments (TWO-25333); only on a capturing write.
     if (number) {
-      instance.customerCompany.country_prefix =
-        opts.country || twoincSelectWooHelper.currentCountry();
+      instance.customerCompany.country_prefix = opts.country || twoincAddressRoles.country(role);
     }
   },
 
@@ -438,12 +495,20 @@ let twoincCompanyCapture = {
    *
    * @returns {boolean}
    */
-  hasCapture: function () {
-    return twoincUtilHelper.blankToEmpty(twoincCompanyCapture.numberField().val()) !== "";
+  hasCapture: function (role) {
+    return twoincUtilHelper.blankToEmpty(twoincCompanyCapture.numberField(role).val()) !== "";
   },
 
-  /** sessionStorage key holding the last capture's mode and the pair it described. */
+  /** sessionStorage key holding the last capture mode and the pair it described. */
   CAPTURE_MODE_KEY: "twoincCaptureMode",
+
+  /** Roles past the primary get their own key; the primary keeps the bare one. */
+  captureModeKey: function (role) {
+    const key = role || twoincAddressRoles.primary();
+    return key === twoincAddressRoles.primary()
+      ? twoincCompanyCapture.CAPTURE_MODE_KEY
+      : twoincCompanyCapture.CAPTURE_MODE_KEY + "_" + key;
+  },
 
   /**
    * Which capture UI produced the pair the fields hold RIGHT NOW.
@@ -455,12 +520,11 @@ let twoincCompanyCapture = {
    *
    * @returns {string}
    */
-  capturedMode: function () {
-    if (twoincSoleTrader.mode !== "sole_trader") return twoincCompanyCapture.mode;
+  capturedMode: function (role) {
+    const mode = twoincCompanyCapture.modeFor(role);
+    if (twoincSoleTrader.mode !== "sole_trader") return mode;
     if (twoincSoleTrader.soleTraderAdopted) return "sole_trader";
-    return twoincSoleTrader.savedCaptureMode === null
-      ? twoincCompanyCapture.mode
-      : twoincSoleTrader.savedCaptureMode;
+    return twoincSoleTrader.savedCaptureMode === null ? mode : twoincSoleTrader.savedCaptureMode;
   },
 
   /**
@@ -474,14 +538,14 @@ let twoincCompanyCapture = {
    * `enableCompanySearch()` gates on — so adoption is what carries the fact
    * forward across a second return.
    */
-  rememberCaptureMode: function () {
+  rememberCaptureMode: function (role) {
     sessionStorage.setItem(
-      twoincCompanyCapture.CAPTURE_MODE_KEY,
+      twoincCompanyCapture.captureModeKey(role),
       JSON.stringify({
-        mode: twoincCompanyCapture.capturedMode(),
+        mode: twoincCompanyCapture.capturedMode(role),
         tag: twoincCompanyCapture.pairingTag(
-          twoincCompanyCapture.nameField().val(),
-          twoincCompanyCapture.numberField().val()
+          twoincCompanyCapture.nameField(role).val(),
+          twoincCompanyCapture.numberField(role).val()
         )
       })
     );
@@ -492,8 +556,8 @@ let twoincCompanyCapture = {
    * recorded for it. Tag-matched, so a record left behind by a different
    * company can never be read as describing the one being restored.
    */
-  recallCaptureMode: function (companyName, companyId) {
-    const raw = sessionStorage.getItem(twoincCompanyCapture.CAPTURE_MODE_KEY);
+  recallCaptureMode: function (companyName, companyId, role) {
+    const raw = sessionStorage.getItem(twoincCompanyCapture.captureModeKey(role));
     if (!raw) return "";
     let record;
     try {
@@ -508,12 +572,12 @@ let twoincCompanyCapture = {
   },
 
   /** Drop the pairing tag and both provenance markers. */
-  forgetPairing: function () {
+  forgetPairing: function (role) {
     twoincCompanyCapture
-      .nameField()
+      .nameField(role)
       .removeAttr(twoincCompanyCapture.PAIRING_ATTR)
       .removeAttr(twoincCompanyCapture.PROVENANCE_ATTR);
-    twoincCompanyCapture.numberField().removeAttr(twoincCompanyCapture.PROVENANCE_ATTR);
+    twoincCompanyCapture.numberField(role).removeAttr(twoincCompanyCapture.PROVENANCE_ATTR);
   },
 
   /** Whether a field still holds the value the plugin wrote into it. */
@@ -535,9 +599,9 @@ let twoincCompanyCapture = {
    *
    * @returns {boolean} whether a stale capture was dropped
    */
-  guardCompanyRetype: function () {
-    const $name = twoincCompanyCapture.nameField();
-    const $number = twoincCompanyCapture.numberField();
+  guardCompanyRetype: function (role) {
+    const $name = twoincCompanyCapture.nameField(role);
+    const $number = twoincCompanyCapture.numberField(role);
     const number = twoincUtilHelper.blankToEmpty($number.val());
 
     // The buyer's own typing, whatever else follows.
@@ -552,10 +616,16 @@ let twoincCompanyCapture = {
     const expected = twoincCompanyCapture.pairingTag($name.val(), number);
     if ($name.attr(twoincCompanyCapture.PAIRING_ATTR) === expected) return false;
 
-    twoincCompanyCapture.write($name.val(), "");
+    twoincCompanyCapture.write($name.val(), "", { role: role });
+
+    // Everything below is invoice-bound: the order intent, and the surfaces the
+    // primary control owns.
+    if ((role || twoincAddressRoles.primary()) !== twoincAddressRoles.invoice()) return true;
 
     const instance = Twoinc.getInstance();
-    instance.customerCompany.country_prefix = twoincSelectWooHelper.currentCountry();
+    instance.customerCompany.country_prefix = twoincAddressRoles.country(
+      twoincAddressRoles.invoice()
+    );
     instance.registryAddressApplied = false;
 
     // `#company_id` visibility depends on the value just cleared (TWO-25326
@@ -581,19 +651,41 @@ let twoincCompanyCapture = {
  */
 class TwoCompanySearch {
   /**
+   * Every DOM id and class this control builds or owns is an option, so a
+   * second instance on the same page owns its own nodes rather than reusing
+   * the first's.
+   *
    * @param {Object} [options]
+   * @param {string} [options.role] address role this control captures for.
    * @param {string} [options.addressFieldSelector] company-name input in the
    *   address form.
    * @param {string} [options.tileFieldSelector] company-name input this class
    *   builds inside the payment tile.
+   * @param {string} [options.searchCompanyBtnId] id of the link back into search.
+   * @param {string} [options.tileRowId] id of the row built inside the tile slot.
+   * @param {string} [options.companySummaryId] id of the company-number label;
+   *   brand overlays style it by that name (TWO-25288).
+   * @param {string} [options.companySearchTileSlotClass] class of the tile slot.
+   * @param {string} [options.soleTraderSpinnerClass] class of the in-flight
+   *   spinner — a class, not an id, so a fragment swap that orphans a duplicate
+   *   host cannot leave one animating forever (TWO-40).
+   * @param {string} [options.soleTraderSpinnerHostClass] class marking its host.
    */
   constructor(options) {
     options = options || {};
+    this.role = options.role || twoincAddressRoles.primary();
     this.addressFieldSelector = options.addressFieldSelector || "#billing_company_display";
     this.tileFieldSelector = options.tileFieldSelector || "#twoinc_tile_company_name";
+    this.searchCompanyBtnId = options.searchCompanyBtnId || "search_company_btn";
+    this.tileRowId = options.tileRowId || "twoinc_tile_company_row";
+    this.companySummaryId = options.companySummaryId || "twoinc_company_summary";
+    this.companySearchTileSlotClass =
+      options.companySearchTileSlotClass || "twoinc-company-search-tile-slot";
+    this.soleTraderSpinnerClass = options.soleTraderSpinnerClass || "twoinc-sole-trader-spinner";
+    this.soleTraderSpinnerHostClass = options.soleTraderSpinnerHostClass || "twoinc-name-searching";
   }
 
-  /** The one panel instance, built on first `attach()`. */
+  /** This control's panel, built on first `attach()`. */
   panel = null;
 
   /** The Twoinc singleton, so a pick can be written onto it. */
@@ -625,9 +717,6 @@ class TwoCompanySearch {
   /** Companies asked for per search. */
   companySearchLimit = 50;
 
-  /** DOM id of the link back out of manual entry and into search. */
-  searchCompanyBtnId = "search_company_btn";
-
   /** Shared class on every chip inside the panel. */
   modeChipClass = "two-company-mode-chip";
 
@@ -652,19 +741,6 @@ class TwoCompanySearch {
    */
   lastObservedCountry = null;
 
-  /** DOM class of the payment-tile slot the control renders into. */
-  companySearchTileSlotClass = "twoinc-company-search-tile-slot";
-
-  /** DOM id of the row this class builds inside that slot. */
-  tileRowId = "twoinc_tile_company_row";
-
-  /**
-   * DOM id of the company-number label under the company-name field
-   * (TWO-25288, narrowed to number-only by TWO-25326 §7). Id/class kept as
-   * `twoinc_company_summary` since brand overlays style it by that class.
-   */
-  companySummaryId = "twoinc_company_summary";
-
   companySearchUnavailableText() {
     return (
       (window.twoinc && window.twoinc.text && window.twoinc.text.company_search_unavailable) ||
@@ -684,7 +760,7 @@ class TwoCompanySearch {
     // Matches gettext's positional form (`%1$d`) as well as bare `%d`: a
     // translator may reorder arguments via `#, php-format` placeholders. The
     // msgid itself stays `%d` — changing it would invalidate catalogues.
-    return template.replace(/%(\d+\$)?d/, twoincSelectWooHelper.companySearchMinLength);
+    return template.replace(/%(\d+\$)?d/, this.companySearchMinLength);
   }
 
   /**
@@ -718,8 +794,7 @@ class TwoCompanySearch {
 
   /** Selector of the input the panel is anchored to right now. */
   companyFieldSelector() {
-    const helper = twoincSelectWooHelper;
-    return helper.isTileLocation() ? helper.tileFieldSelector : helper.addressFieldSelector;
+    return this.isTileLocation() ? this.tileFieldSelector : this.addressFieldSelector;
   }
 
   // -------------------------------------------------------------- transport
@@ -729,30 +804,28 @@ class TwoCompanySearch {
    * platform-free: it owns when to search, this owns how.
    */
   searchApi() {
-    const helper = twoincSelectWooHelper;
-
     return {
-      MIN_INPUT_LENGTH: helper.companySearchMinLength,
-      SEARCH_DEBOUNCE_MS: helper.companySearchDebounceMs,
-      minInputLengthMessage: function () {
-        return helper.companySearchTooShortText();
+      MIN_INPUT_LENGTH: this.companySearchMinLength,
+      SEARCH_DEBOUNCE_MS: this.companySearchDebounceMs,
+      minInputLengthMessage: () => {
+        return this.companySearchTooShortText();
       },
-      noResultsMessage: function () {
+      noResultsMessage: () => {
         return (
           (window.wc_country_select_params && wc_country_select_params.i18n_no_matches) ||
           "No matches found"
         );
       },
-      abortActiveRequest: function (token) {
-        if (!helper.activeRequest || helper.activeToken !== token) return false;
-        const request = helper.activeRequest;
-        helper.activeRequest = null;
-        helper.activeToken = null;
+      abortActiveRequest: (token) => {
+        if (!this.activeRequest || this.activeToken !== token) return false;
+        const request = this.activeRequest;
+        this.activeRequest = null;
+        this.activeToken = null;
         request.abort();
         return true;
       },
-      searchCompanies: function (params) {
-        return helper.searchCompanies(params);
+      searchCompanies: (params) => {
+        return this.searchCompanies(params);
       }
     };
   }
@@ -768,15 +841,14 @@ class TwoCompanySearch {
    * @returns {Promise<Object>}
    */
   searchCompanies(params) {
-    const helper = twoincSelectWooHelper;
-    const seq = ++helper.companySearchSeq;
+    const seq = ++this.companySearchSeq;
     const searchParams = new URLSearchParams({
       // Read per request, never captured when the panel was built (TWO-24867):
       // the panel outlives a country change on every path that does not rebuild
       // it, and a captured value searched the previous country's register while
       // the form said otherwise.
       country: params.getCountryCode(),
-      limit: helper.companySearchLimit,
+      limit: this.companySearchLimit,
       offset: 0,
       q: params.term
     });
@@ -784,14 +856,14 @@ class TwoCompanySearch {
     const request = jQuery.ajax({
       url: twoincUtilHelper.constructTwoincUrl("/companies/v2/company", searchParams),
       dataType: "json",
-      timeout: helper.companySearchTimeoutMs
+      timeout: this.companySearchTimeoutMs
     });
-    helper.activeRequest = request;
-    helper.activeToken = params.token;
+    this.activeRequest = request;
+    this.activeToken = params.token;
 
-    return new Promise(function (resolve) {
-      request.done(function (data) {
-        if (seq !== helper.companySearchSeq) {
+    return new Promise((resolve) => {
+      request.done((data) => {
+        if (seq !== this.companySearchSeq) {
           resolve({ aborted: true });
           return;
         }
@@ -802,25 +874,25 @@ class TwoCompanySearch {
           resolve({ unavailable: true });
           return;
         }
-        resolve({ items: helper.toResultItems(data) });
+        resolve({ items: this.toResultItems(data) });
       });
 
-      request.fail(function (jqXHR, textStatus) {
+      request.fail((jqXHR, textStatus) => {
         // An abort is routine — every keystroke supersedes the last search —
         // and must stay silent. A timeout or transport error must not: left
         // silent it renders as "no companies found", a wrong answer rather
         // than a missing one.
-        if (textStatus === "abort" || seq !== helper.companySearchSeq) {
+        if (textStatus === "abort" || seq !== this.companySearchSeq) {
           resolve({ aborted: true });
           return;
         }
         resolve({ unavailable: true });
       });
 
-      request.always(function () {
-        if (helper.activeRequest !== request) return;
-        helper.activeRequest = null;
-        helper.activeToken = null;
+      request.always(() => {
+        if (this.activeRequest !== request) return;
+        this.activeRequest = null;
+        this.activeToken = null;
       });
     });
   }
@@ -869,52 +941,50 @@ class TwoCompanySearch {
   /**
    * Build the panel, or re-point the existing one at the current mount.
    *
-   * One instance for the page's lifetime: the mount moves between the address
-   * form and the payment tile, and the panel's own `fieldSelector` is what
-   * carries that, so a second instance would mean two controls writing one
-   * capture.
+   * One panel per control: the mount moves between the address form and the
+   * payment tile, and the panel's own `fieldSelector` is what carries that, so
+   * rebuilding would leave the control with two anchors.
    *
    * @returns {Object|null} the panel, or null where the script did not load
    */
   ensurePanel() {
-    const helper = twoincSelectWooHelper;
     if (typeof window.TwoCompanySearchPanel !== "function") return null;
 
-    if (!helper.panel) {
-      helper.panel = new window.TwoCompanySearchPanel({
-        fieldSelector: helper.companyFieldSelector(),
+    if (!this.panel) {
+      this.panel = new window.TwoCompanySearchPanel({
+        fieldSelector: this.companyFieldSelector(),
         config: {},
-        search: helper.searchApi(),
-        translate: function (text) {
-          return helper.translatePanelText(text);
+        search: this.searchApi(),
+        translate: (text) => {
+          return this.translatePanelText(text);
         },
-        getCountryCode: function () {
-          return helper.currentCountry();
+        getCountryCode: () => {
+          return this.currentCountry();
         },
-        getChips: function () {
-          return helper.chips();
+        getChips: () => {
+          return this.chips();
         },
-        isChipVisible: function (mode) {
-          return helper.isChipVisible(mode);
+        isChipVisible: (mode) => {
+          return this.isChipVisible(mode);
         },
-        getSelectedMode: function () {
-          return helper.selectedMode();
+        getSelectedMode: () => {
+          return this.selectedMode();
         },
-        onSelect: function (item) {
-          helper.onPick(item);
+        onSelect: (item) => {
+          this.onPick(item);
         },
-        getDisplayText: function () {
-          return twoincUtilHelper.blankToEmpty(twoincCompanyCapture.nameField().val());
+        getDisplayText: () => {
+          return twoincUtilHelper.blankToEmpty(twoincCompanyCapture.nameField(this.role).val());
         },
-        onExitManualEntry: function () {
-          helper.exitManualCompanyEntry();
+        onExitManualEntry: () => {
+          this.exitManualCompanyEntry();
         }
       });
     } else {
-      helper.panel.fieldSelector = helper.companyFieldSelector();
+      this.panel.fieldSelector = this.companyFieldSelector();
     }
 
-    return helper.panel;
+    return this.panel;
   }
 
   /**
@@ -926,11 +996,10 @@ class TwoCompanySearch {
    * @returns {string}
    */
   translatePanelText(text) {
-    const helper = twoincSelectWooHelper;
     const map = {
-      "Search for company": helper.searchCompanyText(),
+      "Search for company": this.searchCompanyText(),
       "Company search is unavailable right now. Please try again shortly.":
-        helper.companySearchUnavailableText()
+        this.companySearchUnavailableText()
     };
     return map[text] || text;
   }
@@ -947,19 +1016,15 @@ class TwoCompanySearch {
    * @returns {Object|null} the panel
    */
   attach(twoincInstance) {
-    const helper = twoincSelectWooHelper;
-    if (twoincInstance) helper.twoincInstance = twoincInstance;
+    if (twoincInstance) this.twoincInstance = twoincInstance;
 
-    const panel = helper.ensurePanel();
+    const panel = this.ensurePanel();
     if (!panel) return null;
 
     panel.bind();
-    helper.syncFieldWrapMetrics();
-    helper.bindFieldWrapRefresh();
-    twoincDomHelper.toggleTooltip(
-      helper.companyFieldSelector(),
-      window.twoinc.text.tooltip_company
-    );
+    this.syncFieldWrapMetrics();
+    this.bindFieldWrapRefresh();
+    twoincDomHelper.toggleTooltip(this.companyFieldSelector(), window.twoinc.text.tooltip_company);
     return panel;
   }
 
@@ -978,9 +1043,8 @@ class TwoCompanySearch {
    * the two agree at every width with nothing to go stale.
    */
   syncFieldWrapMetrics() {
-    const helper = twoincSelectWooHelper;
-    const $field = jQuery(helper.companyFieldSelector());
-    const $wrap = $field.closest("." + helper.fieldWrapClass);
+    const $field = jQuery(this.companyFieldSelector());
+    const $wrap = $field.closest("." + this.fieldWrapClass);
     if (!$field.length || !$wrap.length) return;
 
     const el = $wrap.get(0);
@@ -995,12 +1059,11 @@ class TwoCompanySearch {
    * the panel drift off the field.
    */
   bindFieldWrapRefresh() {
-    const helper = twoincSelectWooHelper;
-    if (helper.fieldWrapRefreshBound) return;
-    helper.fieldWrapRefreshBound = true;
-    jQuery(window).on("resize.twoCompanyWrap orientationchange.twoCompanyWrap", function () {
-      clearTimeout(helper.fieldWrapRefreshTimer);
-      helper.fieldWrapRefreshTimer = setTimeout(helper.syncFieldWrapMetrics, 150);
+    if (this.fieldWrapRefreshBound) return;
+    this.fieldWrapRefreshBound = true;
+    jQuery(window).on("resize.twoCompanyWrap orientationchange.twoCompanyWrap", () => {
+      clearTimeout(this.fieldWrapRefreshTimer);
+      this.fieldWrapRefreshTimer = setTimeout(() => this.syncFieldWrapMetrics(), 150);
     });
   }
 
@@ -1011,29 +1074,28 @@ class TwoCompanySearch {
    * every sync rather than mutated, so a chip cannot outlive the mode it means.
    */
   chips() {
-    const helper = twoincSelectWooHelper;
     const cfg = twoincSoleTrader.config();
 
     return [
       {
         mode: "registered",
         text: (cfg.text && cfg.text.registered_business) || "Registered company",
-        onActivate: function () {
-          helper.onRegisteredChip();
+        onActivate: () => {
+          this.onRegisteredChip();
         }
       },
       {
         mode: "sole_trader",
         text: (cfg.text && cfg.text.sole_trader) || "Sole trader",
-        onActivate: function () {
+        onActivate: () => {
           twoincSoleTrader.onModeChipClick("sole_trader");
         }
       },
       {
         mode: "manual",
-        text: helper.enterManuallyText(),
-        onActivate: function () {
-          helper.activateManualEntry();
+        text: this.enterManuallyText(),
+        onActivate: () => {
+          this.activateManualEntry();
         }
       }
     ];
@@ -1048,7 +1110,7 @@ class TwoCompanySearch {
    */
   isChipVisible(mode) {
     if (mode === "sole_trader") return twoincSoleTrader.isAvailable();
-    if (mode === "manual") return twoincSelectWooHelper.manualEntryIsAvailable();
+    if (mode === "manual") return this.manualEntryIsAvailable();
     return true;
   }
 
@@ -1060,7 +1122,7 @@ class TwoCompanySearch {
    * @returns {string}
    */
   selectedMode() {
-    if (twoincCompanyCapture.mode === "manual") return "manual";
+    if (twoincCompanyCapture.modeFor(this.role) === "manual") return "manual";
     if (twoincSoleTrader.mode === "sole_trader") return "sole_trader";
     return "registered";
   }
@@ -1071,14 +1133,13 @@ class TwoCompanySearch {
    * could silently reassert or drop what the click just tried to undo.
    */
   onRegisteredChip() {
-    const helper = twoincSelectWooHelper;
     // On the CLICK, which is the only event Enter and Space produce: behind the
     // guard below this chip did nothing at all for a keyboard buyer, leaving
     // the signup up with no way to dismiss it.
     twoincSoleTrader.abandonPopupsForChipClick();
     if (twoincSoleTrader.mode === "business" || twoincSoleTrader.isDeciding()) return;
     twoincSoleTrader.setMode("business");
-    helper.openCompanySearchDropdown();
+    this.openCompanySearchDropdown();
   }
 
   /**
@@ -1098,7 +1159,7 @@ class TwoCompanySearch {
     // already in sole-trader mode" from "switched into it during the defer".
     const leavingSoleTrader = twoincSoleTrader.mode === "sole_trader";
 
-    setTimeout(function () {
+    setTimeout(() => {
       if (
         leavingSoleTrader &&
         twoincSoleTrader.mode === "sole_trader" &&
@@ -1106,13 +1167,13 @@ class TwoCompanySearch {
       ) {
         twoincSoleTrader.setMode("business");
       }
-      twoincSelectWooHelper.enterManualCompanyEntry();
+      this.enterManualCompanyEntry();
     }, 0);
   }
 
   /** Repaint the chips and the query row against the current modes. */
   syncModeChips() {
-    const panel = twoincSelectWooHelper.panel;
+    const panel = this.panel;
     if (panel) panel.syncChips();
   }
 
@@ -1124,7 +1185,7 @@ class TwoCompanySearch {
    * @returns {boolean} whether there was a panel to open
    */
   openCompanySearchDropdown() {
-    const panel = twoincSelectWooHelper.panel;
+    const panel = this.panel;
     if (!panel || !panel.isBound()) return false;
     panel.open();
     return true;
@@ -1139,18 +1200,17 @@ class TwoCompanySearch {
    * @returns {boolean}
    */
   companySearchIsReachable() {
-    const helper = twoincSelectWooHelper;
-    return helper.isOnScreen(jQuery(helper.companyFieldSelector()));
+    return this.isOnScreen(jQuery(this.companyFieldSelector()));
   }
 
   closeCompanySearchDropdown() {
-    const panel = twoincSelectWooHelper.panel;
+    const panel = this.panel;
     if (panel) panel.close();
   }
 
   /** No production caller: the tests' read of the panel's open state. */
   companySearchDropdownIsOpen() {
-    const panel = twoincSelectWooHelper.panel;
+    const panel = this.panel;
     return !!panel && panel.isOpen();
   }
 
@@ -1162,8 +1222,7 @@ class TwoCompanySearch {
    * @param {Object} item the result row
    */
   onPick(item) {
-    const helper = twoincSelectWooHelper;
-    const instance = helper.twoincInstance || Twoinc.getInstance();
+    const instance = this.twoincInstance || Twoinc.getInstance();
 
     // The panel deliberately survives a sole-trader autofill flight or an open
     // signup popup, so a pick can land while `mode === "sole_trader"`. Refused
@@ -1177,19 +1236,22 @@ class TwoCompanySearch {
       twoincSoleTrader.soleTraderReconfirmingCount = 0;
       twoincSoleTrader.updateChips();
       twoincSoleTrader.syncDifferentSoleTraderLink();
-      twoincSelectWooHelper.syncSoleTraderSurfaces();
+      this.syncSoleTraderSurfaces();
       twoincSoleTrader.leaveSoleTraderMode();
     }
 
     // The single write path (TWO-40 §5): posted fields, instance record,
     // pairing tag and provenance in one call.
-    twoincCompanyCapture.write(item.id, item.company_id, { country: helper.currentCountry() });
+    twoincCompanyCapture.write(item.id, item.company_id, {
+      country: this.currentCountry(),
+      role: this.role
+    });
 
     // A capture changes which company-name surface the buyer should be looking
     // at, and this is the primary path that creates one (TWO-25503).
     twoincDomHelper.toggleBusinessFields();
 
-    helper.renderCompanySummary(item.id, item.company_id);
+    this.renderCompanySummary(item.id, item.company_id);
 
     // Leave any loader alone: getApproval() below only arms a check.
     twoincDomHelper.clearIntentVerdicts();
@@ -1208,26 +1270,15 @@ class TwoCompanySearch {
    * @param {string} name
    */
   setDisplayName(name) {
-    const helper = twoincSelectWooHelper;
-    const panel = helper.panel;
+    const panel = this.panel;
     if (panel && panel.isBound()) {
       panel.setDisplayText(name);
       return;
     }
-    jQuery(helper.companyFieldSelector()).val(twoincUtilHelper.blankToEmpty(name));
+    jQuery(this.companyFieldSelector()).val(twoincUtilHelper.blankToEmpty(name));
   }
 
   // -------------------------------------------------------------- sole trader
-
-  /**
-   * Class of the sole-trader in-flight spinner (TWO-40). A class, not an id: a
-   * checkout fragment swap can orphan a duplicate host, and an id selector
-   * would find only one, leaving the other animating forever.
-   */
-  soleTraderSpinnerClass = "twoinc-sole-trader-spinner";
-
-  /** Marker class on whichever element currently hosts that spinner. */
-  soleTraderSpinnerHostClass = "twoinc-name-searching";
 
   /**
    * The element the sole-trader spinner paints over: the input box of whichever
@@ -1235,12 +1286,11 @@ class TwoCompanySearch {
    * vertically centring doesn't float the spinner over the label too.
    */
   soleTraderSpinnerHost() {
-    const helper = twoincSelectWooHelper;
-    const $surface = helper.companyNameSurface();
+    const $surface = this.companyNameSurface();
     if (!$surface.length) return $surface;
-    const $wrap = $surface.find("." + helper.fieldWrapClass).first();
+    const $wrap = $surface.find("." + this.fieldWrapClass).first();
     if ($wrap.length) return $wrap;
-    return helper.companyFieldAffordanceSlot();
+    return this.companyFieldAffordanceSlot();
   }
 
   /**
@@ -1249,19 +1299,18 @@ class TwoCompanySearch {
    * independently and the host moves with the visible name surface.
    */
   syncSoleTraderSpinner() {
-    const helper = twoincSelectWooHelper;
-    jQuery("." + helper.soleTraderSpinnerClass).remove();
-    jQuery("." + helper.soleTraderSpinnerHostClass).removeClass(helper.soleTraderSpinnerHostClass);
+    jQuery("." + this.soleTraderSpinnerClass).remove();
+    jQuery("." + this.soleTraderSpinnerHostClass).removeClass(this.soleTraderSpinnerHostClass);
 
     if (twoincSoleTrader.mode !== "sole_trader" || twoincSoleTrader.flightDepth === 0) return;
 
-    const $host = helper.soleTraderSpinnerHost();
+    const $host = this.soleTraderSpinnerHost();
     if ($host.length === 0) return;
     $host
-      .addClass(helper.soleTraderSpinnerHostClass)
+      .addClass(this.soleTraderSpinnerHostClass)
       .append(
         '<span class="twoinc-search-spinner ' +
-          helper.soleTraderSpinnerClass +
+          this.soleTraderSpinnerClass +
           '" aria-hidden="true"></span>'
       );
   }
@@ -1272,19 +1321,19 @@ class TwoCompanySearch {
    * cannot be re-synced by different callers and drift apart.
    */
   syncSoleTraderSurfaces() {
-    twoincSelectWooHelper.syncModeChips();
-    twoincSelectWooHelper.syncSoleTraderSpinner();
+    this.syncModeChips();
+    this.syncSoleTraderSpinner();
   }
 
   // ------------------------------------------------------------------ country
 
   /**
-   * The billing country the checkout form currently holds, upper-cased, or ""
+   * The country this control's address role currently holds, upper-cased, or ""
    * when absent/unset (TWO-24867). The single reader for every
    * country-sensitive path, so they cannot disagree on "the current country".
    */
   currentCountry() {
-    return twoincAddressRoles.value(twoincAddressRoles.invoice(), "country").toUpperCase();
+    return twoincAddressRoles.country(this.role);
   }
 
   /**
@@ -1306,8 +1355,8 @@ class TwoCompanySearch {
     if (!country) {
       return false;
     }
-    const previous = twoincSelectWooHelper.lastObservedCountry;
-    twoincSelectWooHelper.lastObservedCountry = country;
+    const previous = this.lastObservedCountry;
+    this.lastObservedCountry = country;
     return !!previous && country !== previous;
   }
 
@@ -1336,6 +1385,16 @@ class TwoCompanySearch {
     return true;
   }
 
+  /** Whether this control's role is the one `buyer.company` on the order intent describes. */
+  ownsOrderIntent() {
+    return this.role === twoincAddressRoles.invoice();
+  }
+
+  /** WooCommerce's own company row for this control's address role. */
+  nativeCompanyRowSelector() {
+    return twoincAddressRoles.field(this.role, "company") + "_field";
+  }
+
   /**
    * The row that is the buyer's visible company-NAME surface right now.
    *
@@ -1346,14 +1405,13 @@ class TwoCompanySearch {
    * @returns {Object} jQuery
    */
   companyNameSurface() {
-    const helper = twoincSelectWooHelper;
-    const $native = jQuery("#billing_company_field");
+    const $native = jQuery(this.nativeCompanyRowSelector());
 
-    const $search = helper.isTileLocation()
-      ? jQuery("#" + helper.tileRowId)
-      : jQuery("#billing_company_display_field");
-    if (helper.isOnScreen($search)) return $search;
-    if (helper.isOnScreen($native)) return $native;
+    const $search = this.isTileLocation()
+      ? jQuery("#" + this.tileRowId)
+      : jQuery(this.addressFieldSelector + "_field");
+    if (this.isOnScreen($search)) return $search;
+    if (this.isOnScreen($native)) return $native;
 
     return $native.length ? $native : $search;
   }
@@ -1363,9 +1421,9 @@ class TwoCompanySearch {
    * company row.
    */
   companyFieldAffordanceSlot() {
-    return twoincSelectWooHelper.affordanceSlotIn(
-      jQuery("#billing_company_field"),
-      "#billing_company"
+    return this.affordanceSlotIn(
+      jQuery(this.nativeCompanyRowSelector()),
+      twoincAddressRoles.field(this.role, "company")
     );
   }
 
@@ -1383,7 +1441,6 @@ class TwoCompanySearch {
    * @returns {Object} jQuery
    */
   affordanceSlotIn($row, inputSelector) {
-    const helper = twoincSelectWooHelper;
     const $input = $row.find(inputSelector).first();
     if (!$input.length) {
       const $any = $row.find(".woocommerce-input-wrapper").first();
@@ -1392,7 +1449,7 @@ class TwoCompanySearch {
 
     // The panel is the input's own sibling inside this wrapper, so a link
     // appended here lands below both rather than between them.
-    const $wrap = $input.closest("." + helper.fieldWrapClass);
+    const $wrap = $input.closest("." + this.fieldWrapClass);
     if ($wrap.length) return $wrap;
 
     // The wrapper CONTAINING the input, never merely the row's first: a
@@ -1421,46 +1478,45 @@ class TwoCompanySearch {
    * the capture pair, since this fragment is replaced wholesale.
    */
   syncCompanySearchTileLocation() {
-    const helper = twoincSelectWooHelper;
-    const $slot = jQuery("." + helper.companySearchTileSlotClass);
+    const $slot = jQuery("." + this.companySearchTileSlotClass);
 
-    if (!helper.isTileLocation()) {
+    if (!this.isTileLocation()) {
       $slot.addClass("hidden");
       // Ahead of the slot check: the slot lives in Two's gateway description,
       // so a checkout not offering Two has no other re-bind.
-      if (twoincCompanyCapture.mode !== "manual") helper.attach();
+      if (twoincCompanyCapture.modeFor(this.role) !== "manual") this.attach();
       return;
     }
 
     if (!$slot.length) return;
 
-    let $row = $slot.find("#" + helper.tileRowId);
+    let $row = $slot.find("#" + this.tileRowId);
     if (!$row.length) {
       $row = jQuery(
         '<div id="' +
-          helper.tileRowId +
+          this.tileRowId +
           '" class="twoinc-inp-container form-row form-row-wide">' +
           '<label for="' +
-          helper.tileFieldSelector.replace("#", "") +
+          this.tileFieldSelector.replace("#", "") +
           '"></label>' +
           '<span class="woocommerce-input-wrapper">' +
           '<input type="text" id="' +
-          helper.tileFieldSelector.replace("#", "") +
+          this.tileFieldSelector.replace("#", "") +
           '" autocomplete="off">' +
           "</span>" +
           "</div>"
       );
       // Reuses the address row's own already-translated label rather than a
       // second string to keep in step with it.
-      $row.find("label").text(helper.companyNameLabelText());
+      $row.find("label").text(this.companyNameLabelText());
       $slot.append($row);
     }
 
-    const show = twoincCompanyCapture.mode !== "manual";
+    const show = twoincCompanyCapture.modeFor(this.role) !== "manual";
     $row.toggleClass("hidden", !show);
     $slot.toggleClass("hidden", !show);
 
-    if (show) helper.attach();
+    if (show) this.attach();
   }
 
   /**
@@ -1469,7 +1525,9 @@ class TwoCompanySearch {
    * this field is neither posted nor validated.
    */
   companyNameLabelText() {
-    const $label = jQuery("label[for='billing_company_display']").first().clone();
+    const $label = jQuery("label[for='" + this.addressFieldSelector.replace("#", "") + "']")
+      .first()
+      .clone();
     $label.find(".optional, .required, abbr").remove();
     return twoincUtilHelper.blankToEmpty($label.text()).trim() || "Company name";
   }
@@ -1482,52 +1540,57 @@ class TwoCompanySearch {
    * entry, user-meta restore, storage restore — writes it.
    */
   getCompanyName() {
-    return twoincUtilHelper.blankToEmpty(twoincCompanyCapture.nameField().val());
+    return twoincUtilHelper.blankToEmpty(twoincCompanyCapture.nameField(this.role).val());
   }
 
   /**
    * Throw away the captured company and everything derived from it.
    */
   clearSelectedCompany() {
-    const helper = twoincSelectWooHelper;
-
-    helper.setDisplayName("");
-    helper.attach();
+    this.setDisplayName("");
+    this.attach();
 
     // Gated on PROVENANCE (TWO-40 §5), not capture mode: in manual entry the
     // capture name field is the buyer's own typed input, and this runs on every
     // country change, so clearing unconditionally would wipe a name typed for
     // reasons of their own.
     const plugin_wrote_name = twoincCompanyCapture.isPluginWritten(
-      twoincCompanyCapture.nameField()
+      twoincCompanyCapture.nameField(this.role)
     );
-    twoincCompanyCapture.write(plugin_wrote_name ? "" : twoincCompanyCapture.nameField().val(), "");
+    twoincCompanyCapture.write(
+      plugin_wrote_name ? "" : twoincCompanyCapture.nameField(this.role).val(),
+      "",
+      { role: this.role }
+    );
 
-    // `clearAddress()`, not a blank `setAddress()` payload: the latter leaves
-    // line 2 untouched by design (TWO-40 §2.6), which would strand the outgoing
-    // company's registry-written line 2 on the form.
-    if (window.twoinc.enable_address_lookup === "yes") {
-      Twoinc.getInstance().clearAddress();
+    if (this.ownsOrderIntent()) {
+      // `clearAddress()`, not a blank `setAddress()` payload: the latter leaves
+      // line 2 untouched by design (TWO-40 §2.6), which would strand the
+      // outgoing company's registry-written line 2 on the form.
+      if (window.twoinc.enable_address_lookup === "yes") {
+        Twoinc.getInstance().clearAddress();
+      }
+      Twoinc.getInstance().registryAddressApplied = false;
+      Twoinc.getInstance().customerCompany = {};
     }
-    Twoinc.getInstance().registryAddressApplied = false;
-
-    Twoinc.getInstance().customerCompany = {};
 
     // Clearing a capture changes the visible company-name surface exactly as
     // creating one does (TWO-25503).
     twoincDomHelper.toggleBusinessFields();
-    helper.renderCompanySummary();
+    this.renderCompanySummary();
     twoincDomHelper.togglePaySubtitleDesc();
 
     // Guarded by the company-search counter: three seconds is long enough for
     // the buyer to change country again, or to pick a company, and this closure
     // would then overwrite `customerCompany` from whatever the DOM held at that
     // moment, undoing the newer capture.
-    const seq = helper.companySearchSeq;
-    setTimeout(function () {
-      if (seq !== twoincSelectWooHelper.companySearchSeq) return;
-      Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData();
-      twoincSelectWooHelper.renderCompanySummary();
+    const seq = this.companySearchSeq;
+    setTimeout(() => {
+      if (seq !== this.companySearchSeq) return;
+      if (this.ownsOrderIntent()) {
+        Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData();
+      }
+      this.renderCompanySummary();
     }, 3000);
   }
 
@@ -1548,19 +1611,19 @@ class TwoCompanySearch {
    * brand-overlay transitions when nothing drifted.
    */
   getCompanySummaryNode() {
-    const helper = twoincSelectWooHelper;
-    let $node = jQuery("#" + helper.companySummaryId);
+    let $node = jQuery("#" + this.companySummaryId);
     const isNew = !$node.length;
 
-    let $field = helper.companyNameSurface();
-    if (!$field.length) $field = jQuery("#company_id_field");
-    if (!$field.length) $field = jQuery("#billing_company_field");
+    let $field = this.companyNameSurface();
+    if (!$field.length)
+      $field = jQuery(twoincCompanyCapture.numberFieldSelector(this.role) + "_field");
+    if (!$field.length) $field = jQuery(this.nativeCompanyRowSelector());
     if (!$field.length) return $node;
 
     if (isNew) {
       $node = jQuery(
         '<div id="' +
-          helper.companySummaryId +
+          this.companySummaryId +
           '" class="twoinc-company-summary hidden">' +
           '<span class="twoinc-company-summary-id"></span>' +
           "</div>"
@@ -1582,10 +1645,9 @@ class TwoCompanySearch {
    * current inputs are read.
    */
   renderCompanySummary(companyName, companyId) {
-    const helper = twoincSelectWooHelper;
     const data =
       companyName === undefined && companyId === undefined
-        ? helper.readCapturedCompany()
+        ? this.readCapturedCompany()
         : { company_name: companyName, organization_number: companyId };
 
     // Display-normalised (TWO-25326 §12): an internally minted number reads
@@ -1593,7 +1655,7 @@ class TwoCompanySearch {
     // label. The raw value stays on `#company_id`, which is what gets posted.
     const number = twoincUtilHelper.formatCompanyNumber(data.organization_number);
 
-    const $node = helper.getCompanySummaryNode();
+    const $node = this.getCompanySummaryNode();
     if (!$node.length) return;
 
     $node.find(".twoinc-company-summary-id").text(number);
@@ -1603,7 +1665,7 @@ class TwoCompanySearch {
     // identifier) with a non-synthetic number. Deliberately not gated on Two
     // being the selected method: the number belongs to the captured company,
     // not to Two's tile.
-    const visible = Boolean(number && twoincCompanyCapture.mode === "search");
+    const visible = Boolean(number && twoincCompanyCapture.modeFor(this.role) === "search");
     $node.toggleClass("hidden", !visible);
   }
 
@@ -1613,8 +1675,10 @@ class TwoCompanySearch {
    */
   readCapturedCompany() {
     return {
-      company_name: twoincUtilHelper.blankToEmpty(twoincCompanyCapture.nameField().val()),
-      organization_number: twoincUtilHelper.blankToEmpty(jQuery("#company_id").val())
+      company_name: twoincUtilHelper.blankToEmpty(twoincCompanyCapture.nameField(this.role).val()),
+      organization_number: twoincUtilHelper.blankToEmpty(
+        twoincCompanyCapture.numberField(this.role).val()
+      )
     };
   }
 
@@ -1630,27 +1694,26 @@ class TwoCompanySearch {
    * event demonstrably reached this button.
    */
   getSearchCompanyBtnNode() {
-    const helper = twoincSelectWooHelper;
-    const id = helper.searchCompanyBtnId;
+    const id = this.searchCompanyBtnId;
 
     let $btn = jQuery("#" + id);
     if ($btn.length) return $btn;
 
     $btn = jQuery("<button></button>")
       .attr({ id: id, type: "button" })
-      .text(helper.searchCompanyText())
+      .text(this.searchCompanyText())
       .hide()
-      .on("click", function () {
-        twoincSelectWooHelper.exitManualCompanyEntry();
+      .on("click", () => {
+        this.exitManualCompanyEntry();
       })
-      .on("keydown", function (e) {
+      .on("keydown", (e) => {
         if (e.which !== 13 && e.which !== 32) return;
         e.preventDefault();
         e.stopPropagation();
-        twoincSelectWooHelper.exitManualCompanyEntry();
+        this.exitManualCompanyEntry();
       });
 
-    helper.companyFieldAffordanceSlot().append($btn);
+    this.companyFieldAffordanceSlot().append($btn);
     return $btn;
   }
 
@@ -1659,8 +1722,6 @@ class TwoCompanySearch {
    * only from the manual-entry chip's activation, keyboard or mouse.
    */
   enterManualCompanyEntry() {
-    const helper = twoincSelectWooHelper;
-
     // Guards the deferred activation landing AFTER an async sole-trader switch
     // raced in during the same tick: without it this would force the capture
     // mode back to `manual` and wipe the synthetic id that switch just wrote.
@@ -1668,62 +1729,64 @@ class TwoCompanySearch {
     // The chip stays on screen through the switch, so a fast second press
     // queues a second deferred call that would re-clear the field the buyer
     // has by then started typing into.
-    if (twoincCompanyCapture.mode === "manual") return;
+    if (twoincCompanyCapture.modeFor(this.role) === "manual") return;
 
-    twoincCompanyCapture.mode = "manual";
+    twoincCompanyCapture.setModeFor(this.role, "manual");
 
-    jQuery(helper.companyFieldSelector()).val("");
-    twoincCompanyCapture.nameField().val("");
-    jQuery("#company_id").val("");
+    jQuery(this.companyFieldSelector()).val("");
+    twoincCompanyCapture.nameField(this.role).val("");
+    twoincCompanyCapture.numberField(this.role).val("");
 
-    // The registry address too, mirroring clearSelectedCompany — but ONLY when
-    // a registry lookup actually wrote it. Reaching manual entry does not imply
-    // one ran, and clearing unconditionally would blank a logged-in buyer's own
-    // account-prefilled address for no reason.
-    if (Twoinc.getInstance().registryAddressApplied) {
-      Twoinc.getInstance().clearAddress();
-      Twoinc.getInstance().registryAddressApplied = false;
+    if (this.ownsOrderIntent()) {
+      // The registry address too, mirroring clearSelectedCompany — but ONLY
+      // when a registry lookup actually wrote it. Reaching manual entry does
+      // not imply one ran, and clearing unconditionally would blank a
+      // logged-in buyer's own account-prefilled address for no reason.
+      if (Twoinc.getInstance().registryAddressApplied) {
+        Twoinc.getInstance().clearAddress();
+        Twoinc.getInstance().registryAddressApplied = false;
+      }
+      Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData();
     }
 
-    Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData();
-
-    if (helper.panel) {
-      helper.panel.releaseField();
+    if (this.panel) {
+      this.panel.releaseField();
       // The panel's own return link renders beside the search field, which
-      // manual entry hides; WooCommerce's own `#billing_company` is where the
-      // buyer types, so the link belongs beside that instead.
-      helper.panel.removeBackToSearchLink();
+      // manual entry hides; WooCommerce's own company field for this role is
+      // where the buyer types, so the link belongs beside that instead.
+      this.panel.removeBackToSearchLink();
     }
 
-    helper.getSearchCompanyBtnNode().show();
+    this.getSearchCompanyBtnNode().show();
 
     twoincDomHelper.toggleBusinessFields();
 
     // Releasing the field leaves focus on nothing, so a keyboard or AT user
     // loses their place mid-checkout.
-    helper.focusVisibleCompanyField("#billing_company");
+    this.focusVisibleCompanyField(twoincAddressRoles.field(this.role, "company"));
   }
 
   /**
    * Switch the company field back from manual entry to search (TWO-25288).
    */
   exitManualCompanyEntry() {
-    const helper = twoincSelectWooHelper;
-    twoincCompanyCapture.mode = "search";
+    twoincCompanyCapture.setModeFor(this.role, "search");
 
-    twoincCompanyCapture.nameField().val("");
-    jQuery("#company_id").val("");
-    Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData();
+    twoincCompanyCapture.nameField(this.role).val("");
+    twoincCompanyCapture.numberField(this.role).val("");
+    if (this.ownsOrderIntent()) {
+      Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData();
+    }
 
-    helper.getSearchCompanyBtnNode().hide();
+    this.getSearchCompanyBtnNode().hide();
     twoincDomHelper.toggleBusinessFields();
 
     // After toggleBusinessFields deliberately: the panel anchors against a
     // field that is only laid out once shown.
     Twoinc.getInstance().enableCompanySearch();
 
-    if (!helper.openCompanySearchDropdown()) {
-      helper.focusVisibleCompanyField(helper.companyFieldSelector());
+    if (!this.openCompanySearchDropdown()) {
+      this.focusVisibleCompanyField(this.companyFieldSelector());
     }
   }
 
@@ -1742,10 +1805,10 @@ class TwoCompanySearch {
 }
 
 /**
- * The one and only TwoCompanySearch instance (TWO-25326 architecture
- * rebuild). Every company-search behaviour on this checkout — search,
- * dropdown, manual entry, tile relocation — goes through this instance;
- * nothing else in this file constructs a second one.
+ * The PRIMARY TwoCompanySearch instance, on the primary address role. Every
+ * company-search behaviour this checkout ships — search, dropdown, manual
+ * entry, tile relocation — goes through it, and it is the only one this file
+ * constructs.
  */
 let twoincSelectWooHelper = new TwoCompanySearch({
   addressFieldSelector: "#billing_company_display",
@@ -3228,7 +3291,10 @@ let twoincSoleTrader = {
    */
   leaveSoleTraderMode: function () {
     twoincSoleTrader.showNote(false);
-    twoincCompanyCapture.nameField().add("#company_id").prop("readonly", false);
+    twoincCompanyCapture
+      .nameField()
+      .add(twoincCompanyCapture.numberFieldSelector())
+      .prop("readonly", false);
     if (twoincSoleTrader.savedCaptureMode !== null) {
       twoincCompanyCapture.mode = twoincSoleTrader.savedCaptureMode;
       twoincSoleTrader.savedCaptureMode = null;
@@ -3280,7 +3346,10 @@ let twoincSoleTrader = {
     twoincSelectWooHelper.setDisplayName(companyName);
 
     jQuery("#" + twoincSelectWooHelper.searchCompanyBtnId).hide();
-    twoincCompanyCapture.nameField().add("#company_id").prop("readonly", true);
+    twoincCompanyCapture
+      .nameField()
+      .add(twoincCompanyCapture.numberFieldSelector())
+      .prop("readonly", true);
   },
 
   /**

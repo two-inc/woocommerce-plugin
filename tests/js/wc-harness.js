@@ -118,7 +118,7 @@ function loadPluginSource() {
       "\n;({ twoincUtilHelper, twoincAddressRoles, twoincAddressMirror," +
       " twoincCompanyCapture," +
       " twoincSelectWooHelper, twoincDomHelper," +
-      " twoincTermChips, twoincSoleTrader, Twoinc });"
+      " twoincTermChips, twoincSoleTrader, Twoinc, TwoCompanySearch });"
   );
   if (!exported || typeof exported.twoincSelectWooHelper !== "object") {
     throw new Error("harness: twoinc.js did not yield its top-level bindings");
@@ -140,7 +140,7 @@ function loadPluginSource() {
  * @param {Object} [twoinc] value for `window.twoinc`, installed post-load
  * @returns {{helper: Object, util: Object, roles: Object, mirror: Object,
  *   capture: Object, dom: Object, termChips: Object, soleTrader: Object,
- *   Twoinc: Function, $: Function, twoinc: Object}}
+ *   Twoinc: Function, TwoCompanySearch: Function, $: Function, twoinc: Object}}
  */
 function loadTwoinc(twoinc) {
   const $ = installJQuery();
@@ -181,6 +181,8 @@ function loadTwoinc(twoinc) {
     // every call re-evaluates the source, so the `instance` a test creates
     // cannot leak into the next one.
     Twoinc: exported.Twoinc,
+    // The class itself, for the tests that construct a SECOND control.
+    TwoCompanySearch: exported.TwoCompanySearch,
     $: $,
     twoinc: settings
   };
