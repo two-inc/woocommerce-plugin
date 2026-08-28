@@ -709,11 +709,23 @@
   margin-top: 8px;
 }
 
+/* The panel is only as wide as the company field, so a wrapped row runs to
+   three or four lines and gives the scroll container a horizontal scrollbar. */
 .two-company-dropdown__row {
   padding: 6px 10px;
   border-radius: 3px;
   cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   text-transform: none !important;
+}
+
+/* The API marks the matched substring with `mark`, whose UA default is a
+   yellow highlighter no theme here resets. */
+.two-company-dropdown__row mark {
+  background: transparent;
+  color: inherit;
 }
 
 .two-company-dropdown__row:hover,
