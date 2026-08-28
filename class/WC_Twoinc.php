@@ -401,16 +401,8 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * The merchant's buyer-country allowlist, resolved from the Two API,
-         * as uppercase ISO-3166-1 alpha-2 codes — or null when this merchant
-         * may sell to any country (TWO-40).
-         *
-         * Cached for 15 minutes in dedicated brand-prefixed wp_options
-         * (never the settings blob), the unrestricted outcome included.
-         * An absent, null or empty list means NO restriction, and so does a
-         * fetch failure: hiding the payment method on an API blip would be
-         * the worse failure, and the API still enforces the buyer country at
-         * order creation.
+         * The merchant's buyer-country allowlist as uppercase ISO-3166-1
+         * alpha-2 codes, or null when unrestricted (TWO-40).
          *
          * @return array|null
          */
@@ -446,8 +438,7 @@ if (!class_exists('WC_Twoinc')) {
 
         /**
          * Null (no restriction) for anything that is not a usable list of
-         * two-letter codes — absent, null, empty and malformed all mean
-         * unrestricted (TWO-40).
+         * two-letter codes (TWO-40).
          *
          * @param mixed $raw
          *
@@ -469,9 +460,7 @@ if (!class_exists('WC_Twoinc')) {
 
         /**
          * The buyer country the merchant allowlist is judged on: billing,
-         * falling back to shipping — the same value that ultimately reaches
-         * the API as the company's registration country (TWO-40). Empty
-         * string when neither is set.
+         * falling back to shipping, empty string when neither is set (TWO-40).
          */
         private static function resolve_buyer_country(): string
         {
@@ -3522,11 +3511,11 @@ if (!class_exists('WC_Twoinc')) {
          * Remove the gateway from checkout when the platform minimum
          * (API-resolved, see get_platform_minimum_order()), the brand's
          * billing-country restriction (availability_gate in the brand
-         * config), the merchant's server-supplied buyer-country allowlist
-         * (see get_supported_buyer_countries(), TWO-40), the merchant's own
-         * minimum is unmet, or the configured surcharge cannot be quoted in
-         * the checkout currency at all (TWO-25269). The two country
-         * mechanisms are independent gates, ANDed: neither reads the other.
+         * config), the merchant's buyer-country allowlist (TWO-40), the
+         * merchant's own minimum is unmet, or the configured surcharge
+         * cannot be quoted in the checkout currency at all (TWO-25269).
+         * The two country gates are independent and ANDed: neither reads
+         * the other.
          * Mirrors the brand availability gate semantics:
          * front-end only, minimum is inclusive (an exactly-minimum basket
          * passes).
@@ -3622,8 +3611,7 @@ if (!class_exists('WC_Twoinc')) {
             }
             if ($satisfied && $supported_buyer_countries) {
                 $buyer_country = self::resolve_buyer_country();
-                // An unresolved country cannot disprove the allowlist, and
-                // availability is re-evaluated as soon as an address is entered.
+                // An unresolved country cannot disprove the allowlist.
                 $satisfied = $buyer_country === ''
                     || in_array($buyer_country, $supported_buyer_countries, true);
             }
