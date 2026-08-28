@@ -3318,8 +3318,9 @@ let twoincSoleTrader = {
    * different sole trader" link, which only leads back into the same
    * hosted signup. Clicking into a locked captured field instead reverts to
    * business mode and lands the buyer in the reopened dropdown, same as
-   * `exitManualCompanyEntry()` does leaving manual entry. In tile placement
-   * neither bound field is on screen, and the mode chips are the route back.
+   * `exitManualCompanyEntry()` does leaving manual entry. In tile placement the
+   * lock lands on the hidden `#company_name`, never on the on-screen
+   * `#billing_company`, so the mode chips are the route back instead.
    *
    * Refused while `isDeciding()`, not the wider `isBusy()`: a captured
    * field only readonly-locks once `lockCapturedFields()` runs (deferred
