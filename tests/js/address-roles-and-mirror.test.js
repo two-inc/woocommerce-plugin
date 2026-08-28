@@ -74,7 +74,7 @@ describe("TWO-40 §1 — one address-role resolver", () => {
   let $;
 
   beforeEach(() => {
-    ctx = loadTwoinc({ supported_buyer_countries: ["GB", "NO"] });
+    ctx = loadTwoinc({});
     $ = ctx.$;
     buildAddressForm();
   });
@@ -107,12 +107,11 @@ describe("TWO-40 §1 — one address-role resolver", () => {
     $("#billing_country").append('<option value="' + fieldValue + '">x</option>');
     $("#billing_country").val(fieldValue);
 
-    // When/Then: all three readers return the same normalised answer, so a
+    // When/Then: both readers return the same normalised answer, so a
     // country pinned next to a captured company cannot be re-read in a
     // different spelling by the deferred re-read.
     expect(ctx.helper.currentCountry()).toBe(expected);
     expect(ctx.dom.getCompanyData().country_prefix).toBe(expected);
-    expect(ctx.dom.isCountrySupported()).toBe(true);
   });
 
   test("the sole-trader country delegates to the one country resolver", () => {
@@ -128,7 +127,7 @@ describe("TWO-40 §2 — invoice→delivery mirror", () => {
   let mirror;
 
   beforeEach(() => {
-    ctx = loadTwoinc({ supported_buyer_countries: ["GB", "NO"] });
+    ctx = loadTwoinc({});
     $ = ctx.$;
     mirror = ctx.mirror;
     buildAddressForm();
@@ -375,7 +374,7 @@ describe("TWO-40 §2.6 — field routing for an externally supplied address", ()
   let $;
 
   beforeEach(() => {
-    ctx = loadTwoinc({ supported_buyer_countries: ["GB"], enable_address_lookup: "yes" });
+    ctx = loadTwoinc({ enable_address_lookup: "yes" });
     $ = ctx.$;
     buildAddressForm();
     ctx.mirror.seed();

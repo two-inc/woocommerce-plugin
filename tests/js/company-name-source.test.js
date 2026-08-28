@@ -40,7 +40,6 @@ describe("getCompanyName reads the posted field (#486)", () => {
 
   beforeEach(() => {
     ctx = harness.loadTwoinc({
-      supported_buyer_countries: ["GB"],
       enable_order_intent: "no",
       enable_address_lookup: "no",
       sole_trader: SOLE_TRADER_CONFIG

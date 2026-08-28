@@ -35,7 +35,6 @@ describe("TWO:-prefixed organisation numbers", () => {
   beforeEach(() => {
     ctx = harness.loadTwoinc({
       gateway_id: GATEWAY_ID,
-      supported_buyer_countries: ["GB"],
       enable_company_search: "yes",
       enable_address_lookup: "no",
       text: {}
@@ -354,15 +353,12 @@ describe("TWO:-prefixed organisation numbers", () => {
 
   describe("the minted number never reaches the buyer", () => {
     /**
-     * A billing country with no supported registry: nothing to search, so the
-     * plain native name field captures the company. §12's guarantee is pinned
-     * from both ends here — the minted number stays on the submitted input, and
-     * no surface renders it.
+     * §12's guarantee pinned from both ends: the minted number stays on the
+     * submitted input, and no surface renders it.
      */
-    function loadWithNoRegistry() {
+    function loadMintedNumberFixture() {
       ctx = harness.loadTwoinc({
         gateway_id: GATEWAY_ID,
-        supported_buyer_countries: ["NO"],
         enable_address_lookup: "no",
         text: {}
       });
@@ -387,7 +383,7 @@ describe("TWO:-prefixed organisation numbers", () => {
       ["", "nothing captured yet"],
       [SYNTHETIC, "a minted identifier"]
     ])("#company_id holding %s (%s) is hidden but still posted", (value) => {
-      loadWithNoRegistry();
+      loadMintedNumberFixture();
       $("#company_id").val(value);
 
       ctx.dom.toggleBusinessFields();
@@ -415,7 +411,7 @@ describe("TWO:-prefixed organisation numbers", () => {
       // the real flow does not deliver. So drive the actual capture entry
       // point and assert the end state.
       test("enrolling a sole trader leaves no minted number on screen", () => {
-        loadWithNoRegistry();
+        loadMintedNumberFixture();
 
         ctx.soleTrader.setCompany(SYNTHETIC, "Example Ltd");
 
@@ -429,7 +425,7 @@ describe("TWO:-prefixed organisation numbers", () => {
       test("capturing a registry company still surfaces its number, on the label", () => {
         // The counterweight: proves the suppression above is genuinely driven
         // by the filter rather than the label simply never rendering here.
-        loadWithNoRegistry();
+        loadMintedNumberFixture();
 
         ctx.soleTrader.setCompany("11111111", "Example Ltd");
 
@@ -439,7 +435,7 @@ describe("TWO:-prefixed organisation numbers", () => {
       });
 
       test("the summary label shows no minted number after enrollment", () => {
-        loadWithNoRegistry();
+        loadMintedNumberFixture();
 
         ctx.soleTrader.setCompany(SYNTHETIC, "Example Ltd");
 
@@ -456,7 +452,7 @@ describe("TWO:-prefixed organisation numbers", () => {
       // user meta holds a minted identifier, so this is the every-page-load
       // case rather than an edge case.
       test("user-meta restore leaves no minted number on screen", () => {
-        loadWithNoRegistry();
+        loadMintedNumberFixture();
         ctx.dom.toggleBusinessFields();
         // The state initialize() is in when it reaches the restore: fields
         // already toggled, input still empty, so nothing on the label yet.
@@ -474,7 +470,7 @@ describe("TWO:-prefixed organisation numbers", () => {
       });
 
       test("user-meta restore of a registry number reaches the label", () => {
-        loadWithNoRegistry();
+        loadMintedNumberFixture();
         ctx.dom.toggleBusinessFields();
 
         ctx.twoinc.billing_company = "Example Ltd";

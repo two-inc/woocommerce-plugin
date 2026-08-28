@@ -291,8 +291,8 @@ call before advancing and 2 after.
 `company-name-and-number-surfaces.test.js` — the two surfaces the buyer sees (#486):
 
 - **the company NAME is always on screen, as exactly one of two elements** — the search
-  control or WooCommerce's native `#billing_company` — across the full three-modes ×
-  supported/unsupported-country matrix and independently of the selected payment method. The
+  control or WooCommerce's native `#billing_company` — across all three capture modes, in
+  every buyer country, and independently of the selected payment method. The
   documented exception is `payment_tile` placement, where the two are not competing for the
   same position, and it has a test of its own.
 - **the company NUMBER is a read-only label, never a field.** Its two conditions (`search`

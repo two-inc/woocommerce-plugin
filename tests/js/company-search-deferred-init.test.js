@@ -28,7 +28,7 @@ describe("deferred company-search initialisation", () => {
     // installs out of the picture: a 1000ms setTimeout and a 3s setInterval,
     // both of which would fire against this DOM if a test advanced further.
     jest.useFakeTimers();
-    ctx = harness.loadTwoinc({ supported_buyer_countries: ["GB"] });
+    ctx = harness.loadTwoinc({});
     harness.buildCheckoutForm({ country: "GB" });
     // The checkout-page gate initialize() returns on, plus the gateway radio
     // the payment-method checks look for.

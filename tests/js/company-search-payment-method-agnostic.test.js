@@ -28,8 +28,7 @@ describe("company-field visibility is payment-method-agnostic (#486)", () => {
 
   beforeEach(() => {
     ctx = harness.loadTwoinc({
-      enable_company_search: "yes",
-      supported_buyer_countries: ["GB"]
+      enable_company_search: "yes"
     });
     harness.buildCheckoutForm({ country: "GB" });
     $ = ctx.$;
