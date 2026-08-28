@@ -311,10 +311,7 @@ describe("company search hints", () => {
         "the hint stays on one line"
       ]
     ])("%s declares %s for %s", (selector, declaration) => {
-      const css = fs.readFileSync(
-        path.join(harness.REPO_ROOT, "assets/css/twoinc.css"),
-        "utf8"
-      );
+      const css = fs.readFileSync(path.join(harness.REPO_ROOT, "assets/css/twoinc.css"), "utf8");
       const block = css.slice(css.indexOf(selector));
 
       expect(css).toContain(selector);
