@@ -1054,6 +1054,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         ctx.dom.loadUserMetaInputs();
 
         expect(soleTrader.mode).toBe("business");
+        expect(soleTrader.getDifferentSoleTraderBtnNode().css("display")).toBe("none");
       });
 
       // The user-meta echo exists only for a signed-in WordPress user, so for a

@@ -457,7 +457,7 @@ describe("company-search manual-entry affordance", () => {
     // or removed a second time on this side (TWO-40).
     test.each([
       [true, ["registered", "sole_trader"], false, "two chips offered, the row stands"],
-      [false, ["registered"], true, "sole trader withheld, one chip left, row gone"]
+      [false, ["registered"], true, "sole trader withheld, one chip left, row hidden"]
     ])("sole trader available %s → %p, row hidden %s — %s", (available, expected, rowHidden) => {
       ctx = harness.loadTwoinc({
         text: TEXT,
