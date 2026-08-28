@@ -1906,15 +1906,14 @@ let twoincDomHelper = {
     // read-only label `renderCompanySummary()` renders. The input itself
     // stays permanently hidden but posted, since its value is what the order
     // intent is authorised against.
+    //
+    // Tile placement keeps WooCommerce's stock field untouched, whatever the
+    // tile is showing (Doug 2026-08-28): the two are allowed to disagree —
+    // the tile's company drives the intent and the order, the address one is
+    // an address line — so neither the capture nor the selected method is
+    // read here.
     if (showCompanySearch && !twoincSelectWooHelper.isTileLocation()) {
       visibleTargets.push("#billing_company_display_field");
-    } else if (showCompanySearch) {
-      // Tile placement: the search control renders inside Two's payment box and
-      // the address area keeps WooCommerce's stock field, untouched, whatever
-      // the tile is showing (Doug 2026-08-28). The two are allowed to disagree
-      // — the tile's company drives the intent and the order, the address one
-      // is an address line — so nothing here reads the capture or the method.
-      visibleTargets.push("#billing_company_field");
     } else {
       visibleTargets.push("#billing_company_field");
     }
