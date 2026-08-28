@@ -34,10 +34,16 @@ export const COMPANY_FIELD = "#billing_company_display";
  * checkout with no mode chooser at all.
  *
  * The chips live inside the popover, so the popover has to be open first.
- * No-op when the chip is absent (country not sole-trader capable), so the
- * helper is safe to call from every spec.
+ * No-op when the address-area field is not on screen (payment-tile placement)
+ * or the chip is absent (country not sole-trader capable), so the helper is
+ * safe to call from every spec.
  */
 export async function selectRegisteredCompany(page: Page) {
+  try {
+    await page.locator(COMPANY_FIELD).waitFor({ state: "visible", timeout: DEFAULT_TIMEOUT });
+  } catch {
+    return;
+  }
   await openCompanySearch(page);
   const chip = page.locator(`${COMPANY_PANEL} ${MODE_CHIP}[data-two-chip="registered"]`);
   try {
