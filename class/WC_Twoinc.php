@@ -5216,14 +5216,7 @@ if (!class_exists('WC_Twoinc')) {
             return trim((string) preg_replace('/[\r\n\t]+/', '', $token));
         }
 
-        /**
-         * Whether the token may be published to the page for the one call the
-         * browser still makes directly. Off unless the merchant's firewall is
-         * known to scan buyer traffic too, since it puts the token on a device
-         * outside the merchant's network.
-         *
-         * @return bool
-         */
+        // Off by default: publishing the token puts it on a device outside the merchant's network.
         public function should_send_firewall_token_from_browser()
         {
             return 'yes' === $this->get_option('firewall_token_browser');
