@@ -143,6 +143,11 @@ let twoincAddressRoles = {
   /** Live (not saved/session) value of one field on a role's form, trimmed. */
   value: function (role, name) {
     return (jQuery(twoincAddressRoles.field(role, name)).val() || "").trim();
+  },
+
+  /** One role's country, upper-cased, or "" when absent/unset (TWO-24867). */
+  country: function (role) {
+    return twoincAddressRoles.value(role, "country").toUpperCase();
   }
 };
 
@@ -477,8 +482,7 @@ let twoincCompanyCapture = {
     // Pin the country alongside the number so the pair can never be assembled
     // from two different moments (TWO-25333); only on a capturing write.
     if (number) {
-      instance.customerCompany.country_prefix =
-        opts.country || twoincSelectWooHelper.currentCountry();
+      instance.customerCompany.country_prefix = opts.country || twoincAddressRoles.country(role);
     }
   },
 
@@ -619,7 +623,9 @@ let twoincCompanyCapture = {
     if ((role || twoincAddressRoles.primary()) !== twoincAddressRoles.invoice()) return true;
 
     const instance = Twoinc.getInstance();
-    instance.customerCompany.country_prefix = twoincSelectWooHelper.currentCountry();
+    instance.customerCompany.country_prefix = twoincAddressRoles.country(
+      twoincAddressRoles.invoice()
+    );
     instance.registryAddressApplied = false;
 
     // `#company_id` visibility depends on the value just cleared (TWO-25326
@@ -1336,7 +1342,7 @@ class TwoCompanySearch {
    * country-sensitive path, so they cannot disagree on "the current country".
    */
   currentCountry() {
-    return twoincAddressRoles.value(this.role, "country").toUpperCase();
+    return twoincAddressRoles.country(this.role);
   }
 
   /**
@@ -3294,7 +3300,10 @@ let twoincSoleTrader = {
    */
   leaveSoleTraderMode: function () {
     twoincSoleTrader.showNote(false);
-    twoincCompanyCapture.nameField().add("#company_id").prop("readonly", false);
+    twoincCompanyCapture
+      .nameField()
+      .add(twoincCompanyCapture.numberFieldSelector())
+      .prop("readonly", false);
     if (twoincSoleTrader.savedCaptureMode !== null) {
       twoincCompanyCapture.mode = twoincSoleTrader.savedCaptureMode;
       twoincSoleTrader.savedCaptureMode = null;
@@ -3346,7 +3355,10 @@ let twoincSoleTrader = {
     twoincSelectWooHelper.setDisplayName(companyName);
 
     jQuery("#" + twoincSelectWooHelper.searchCompanyBtnId).hide();
-    twoincCompanyCapture.nameField().add("#company_id").prop("readonly", true);
+    twoincCompanyCapture
+      .nameField()
+      .add(twoincCompanyCapture.numberFieldSelector())
+      .prop("readonly", true);
   },
 
   /**

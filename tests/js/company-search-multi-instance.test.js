@@ -46,6 +46,9 @@ function buildTwoRoleCheckout() {
     '  <select id="billing_country" name="billing_country">',
     '    <option value="GB" selected>GB</option>',
     "  </select>",
+    '  <select id="shipping_country" name="shipping_country">',
+    '    <option value="NO" selected>NO</option>',
+    "  </select>",
     row("billing"),
     '  <p id="company_id_field" class="form-row">',
     '    <input type="text" id="company_id" name="company_id" />',
@@ -203,6 +206,35 @@ describe("TwoCompanySearch is instantiable", () => {
 
     // Then `buyer.company` and the registry-address flag, both invoice-bound,
     // are untouched
+    expect(Twoinc.getInstance().customerCompany.company_name).toBe("Alpha Ltd");
+    expect(Twoinc.getInstance().customerCompany.organization_number).toBe("111111");
+    expect(Twoinc.getInstance().registryAddressApplied).toBe(true);
+  });
+
+  test("each instance reads the country off its own address role", () => {
+    // Given a checkout whose two roles sit in different countries
+    const { helper, second } = loadTwoControls();
+
+    // Then neither control reports the other's
+    expect(helper.currentCountry()).toBe("GB");
+    expect(second.currentCountry()).toBe("NO");
+  });
+
+  test("a retype on a second role does not clear the invoice role's order intent", () => {
+    // Given a capture on each role, and a registry address applied for the invoice one
+    const { capture, roles, Twoinc, second } = loadTwoControls();
+    second.attach();
+    capture.write("Alpha Ltd", "111111", { role: roles.invoice() });
+    capture.write("Beta Ltd", "222222", { role: roles.delivery() });
+    Twoinc.getInstance().registryAddressApplied = true;
+
+    // When the buyer retypes the delivery-role company name, staling its pair
+    capture.nameField(roles.delivery()).val("Beta Ltd Renamed");
+    expect(capture.guardCompanyRetype(roles.delivery())).toBe(true);
+
+    // Then that role's stale number is gone, and the invoice-bound intent is not
+    expect(capture.numberField(roles.delivery()).val()).toBe("");
+    expect(capture.numberField(roles.invoice()).val()).toBe("111111");
     expect(Twoinc.getInstance().customerCompany.company_name).toBe("Alpha Ltd");
     expect(Twoinc.getInstance().customerCompany.organization_number).toBe("111111");
     expect(Twoinc.getInstance().registryAddressApplied).toBe(true);
