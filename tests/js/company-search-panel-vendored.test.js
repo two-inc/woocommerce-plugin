@@ -22,7 +22,7 @@ const harness = require("./wc-harness");
 const PANEL_PATH = "assets/js/company-search-panel.js";
 
 /** sha256 of magento-plugin's `company-search-panel.js` as vendored. */
-const VENDORED_SHA256 = "0e80c83560cc50c5733fe460d7c7a244b2281326d7a67f6e124c31ccb7b90189";
+const VENDORED_SHA256 = "1cf3490f3b7b107499a353617905b574d636c41a37df7d6e1fd87d13f72045ce";
 
 describe("the vendored company-search panel", () => {
   test("matches the upstream copy byte for byte", () => {

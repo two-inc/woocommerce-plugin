@@ -60,7 +60,6 @@
     const ROW_CLASS = 'two-company-dropdown__row';
     const ROW_ACTIVE_CLASS = 'two-company-dropdown__row--active';
     const BACK_CLASS = 'two-company-search-back';
-    const BACK_OWNER_ATTR = 'data-two-panel';
     const CHIPS_CLASS = 'two-company-mode-chips';
     const CHIP_CLASS = 'two-company-mode-chip';
     const CHIP_SELECTED_CLASS = 'two-company-mode-chip--selected';
@@ -977,7 +976,6 @@
         const link = document.createElement('button');
         link.type = 'button';
         link.className = BACK_CLASS;
-        link.setAttribute(BACK_OWNER_ATTR, String(this._id));
         link.textContent = this.translate('Search for company');
         this._bindEvent(link, 'click', function (event) {
             event.preventDefault();
@@ -996,9 +994,8 @@
     /**
      * Remove the return link and unbind it.
      *
-     * The sweep stays document-wide because this panel's own reference does not
-     * cover a link left on a host it has since moved off, but it is keyed to
-     * this instance so a second panel on the same page keeps its own.
+     * The sweep covers the current field's wrapper, not the document: a link an
+     * earlier bind left on this field still has to go, a second panel's must not.
      */
     CompanySearchPanel.prototype.removeBackToSearchLink = function () {
         const self = this;
@@ -1007,10 +1004,10 @@
             this._back.remove();
             this._back = null;
         }
+        const scope = this._field && this._field.parentElement;
+        if (!scope) return;
         Array.prototype.forEach.call(
-            document.querySelectorAll(
-                `.${BACK_CLASS}[${BACK_OWNER_ATTR}="${this._id}"]`
-            ),
+            scope.querySelectorAll('.' + BACK_CLASS),
             function (node) {
                 self._unbind(node);
                 node.remove();
