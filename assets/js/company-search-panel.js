@@ -416,8 +416,7 @@
         query.className = QUERY_CLASS;
         const minInputHint = this.search.minInputLengthMessage();
         query.setAttribute('placeholder', minInputHint);
-        // The stylesheet clips the placeholder to the field width, so the full
-        // hint reaches the buyer on hover and assistive tech as the description.
+        // The stylesheet clips the placeholder, so `title` keeps the full hint.
         query.setAttribute('title', minInputHint);
         query.setAttribute('aria-label', this.translate('Search for company'));
         query.setAttribute('role', 'combobox');
