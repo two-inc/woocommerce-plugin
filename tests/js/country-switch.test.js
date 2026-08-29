@@ -247,7 +247,7 @@ describe("billing country switch", () => {
       const inFlight = ajax.last();
       // Positive control: without it a fixture that issued no search at all
       // would satisfy the "not repopulated" assertion below.
-      expect(inFlight.url).toContain("/companies/v2/company");
+      expect(inFlight.url).toBe(harness.API_PROXY.company_search_url);
 
       ctx.$("#billing_country").val("ES");
       fireCountryChange();
@@ -1100,13 +1100,13 @@ describe("billing country switch", () => {
       harness.openCompanyPanel(ctx.$, ctx.helper);
 
       typeCompanyQuery("example");
-      const before = ajax.last().url;
+      const before = harness.requestParams(ajax.last());
       ctx.$("#billing_country").val("ES");
       typeCompanyQuery("ejemplo");
-      const after = ajax.last().url;
+      const after = harness.requestParams(ajax.last());
 
-      expect(before).toContain("country=GB");
-      expect(after).toContain("country=ES");
+      expect(before.get("country")).toBe("GB");
+      expect(after.get("country")).toBe("ES");
     });
   });
 

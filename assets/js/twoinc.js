@@ -72,21 +72,13 @@ let twoincUtilHelper = {
     return twoincUtilHelper.composeCompanyLabel(twoincUtilHelper.blankToEmpty(name), value);
   },
 
-  /**
-   * Construct url to Twoinc checkout api. `client`/`client_v` identify plugin
-   * + version for the company-search endpoint (the only attribution
-   * available, since the request runs in the buyer's browser); kept in the
-   * query string rather than a header to avoid a CORS preflight per keystroke.
-   *
-   * `params` may be a plain object or URLSearchParams — normalise to
-   * URLSearchParams first since `new URLSearchParams(obj)` copies entries,
-   * not JS properties, and would silently drop fields from an existing one.
-   */
-  constructTwoincUrl: function (path, params) {
-    const searchParams = new URLSearchParams(params || {});
-    searchParams.set("client", window.twoinc.client_name);
-    searchParams.set("client_v", window.twoinc.client_version);
-    return window.twoinc.twoinc_checkout_host + path + "?" + searchParams.toString();
+  /** A wc-ajax proxy endpoint, by its key in the `api_proxy` bootstrap. */
+  proxyUrl: function (key) {
+    return (window.twoinc.api_proxy || {})[key] || "";
+  },
+
+  proxyNonce: function () {
+    return (window.twoinc.api_proxy || {}).nonce || "";
   },
 
   getUnsecuredHash: function (inp, seed) {
@@ -850,11 +842,13 @@ class TwoCompanySearch {
       country: params.getCountryCode(),
       limit: this.companySearchLimit,
       offset: 0,
-      q: params.term
+      q: params.term,
+      nonce: twoincUtilHelper.proxyNonce()
     });
 
     const request = jQuery.ajax({
-      url: twoincUtilHelper.constructTwoincUrl("/companies/v2/company", searchParams),
+      url: twoincUtilHelper.proxyUrl("company_search_url"),
+      data: searchParams.toString(),
       dataType: "json",
       timeout: this.companySearchTimeoutMs
     });
@@ -4016,9 +4010,14 @@ let twoincSoleTrader = {
       cb(null);
       return;
     }
+    // The one call no server hop can make (its subject is the API-domain cookie the hosted signup set).
+    const headers = { "two-delegated-authority-token": twoincSoleTrader.tokens.autofill_token };
+    if (twoincSoleTrader.tokens.firewall_token) {
+      headers["X-WAF-TOKEN"] = twoincSoleTrader.tokens.firewall_token;
+    }
     fetch(window.twoinc.twoinc_checkout_host + "/autofill/v1/buyer/current", {
       credentials: "include",
-      headers: { "two-delegated-authority-token": twoincSoleTrader.tokens.autofill_token }
+      headers: headers
     })
       .then(function (response) {
         if (response.ok) return response.json();
@@ -4759,9 +4758,8 @@ class Twoinc {
       }
       let net_amount = gross_amount - tax_amount;
 
+      // Merchant identity is not sent: the proxy resolves it server-side.
       let jsonBody = JSON.stringify({
-        merchant_id: window.twoinc.merchant?.id,
-        merchant_short_name: window.twoinc.merchant?.short_name,
         gross_amount: gross_amount.toFixed(2),
         net_amount: net_amount.toFixed(2),
         tax_amount: tax_amount.toFixed(2),
@@ -4873,11 +4871,9 @@ class Twoinc {
 
       // Create an order intent
       const approvalResponse = jQuery.ajax({
-        url: twoincUtilHelper.constructTwoincUrl("/v1/order_intent"),
-        contentType: "application/json; charset=utf-8",
+        url: twoincUtilHelper.proxyUrl("order_intent_url"),
         dataType: "json",
         method: "POST",
-        xhrFields: { withCredentials: true },
         // Bounded, like the company-search transport already is. A request
         // that never settles calls neither handler, and both the loader
         // coming down and the verdict appearing hang off those handlers —
@@ -4885,7 +4881,7 @@ class Twoinc {
         // rest of the page. A timeout arrives as a `.fail` with status 0,
         // which paints the generic decline and is deliberately not cached.
         timeout: 30000,
-        data: jsonBody
+        data: { nonce: twoincUtilHelper.proxyNonce(), intent: jsonBody }
       });
       Twoinc.getInstance().orderIntentCheck.inFlightXhr = approvalResponse;
 
@@ -5079,7 +5075,8 @@ class Twoinc {
     const requestCountry = twoincSelectWooHelper.currentCountry();
     const addressResponse = jQuery.ajax({
       dataType: "json",
-      url: twoincUtilHelper.constructTwoincUrl(`/companies/v2/company/${selectedCompany.lookup_id}`)
+      url: twoincUtilHelper.proxyUrl("company_by_id_url"),
+      data: { nonce: twoincUtilHelper.proxyNonce(), lookup_id: selectedCompany.lookup_id }
     });
     addressResponse.done(function (response) {
       if (seq !== self.addressLookupSeq) return;
@@ -5264,16 +5261,17 @@ class Twoinc {
     )
       return;
 
+    // Merchant identity is not sent: the proxy resolves it server-side.
     let params = {
-      merchant_id: window.twoinc.merchant?.id,
-      merchant_short_name: window.twoinc.merchant?.short_name,
+      nonce: twoincUtilHelper.proxyNonce(),
       buyer_organization_number: Twoinc.getInstance().customerCompany.organization_number,
       country_prefix: Twoinc.getInstance().customerCompany.country_prefix
     };
 
     // Create a get due in days request
     const dueInDaysResponse = jQuery.ajax({
-      url: twoincUtilHelper.constructTwoincUrl("/v1/payment_terms", params),
+      url: twoincUtilHelper.proxyUrl("payment_terms_url"),
+      data: params,
       dataType: "json",
       method: "GET"
     });

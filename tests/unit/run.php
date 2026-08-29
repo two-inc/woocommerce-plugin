@@ -251,6 +251,25 @@ final class BrandConfigSpec
             'testTaxSubtotalsSettingIsOnByDefaultForNewInstalls',
             'testSeTaxSubtotalsBackfill',
             'testSeTaxSubtotalsBackfillDoesNotUndoAMerchantOptOut',
+            'testFirewallTokenFieldIsPlainTextNotMasked',
+            'testFirewallTokenBrowserToggleIsOffUntilTheMerchantOptsIn',
+            'testFirewallTokenHelpTextUsesOverlayProductNameNotTwo',
+            'testFirewallTokenCopyIsTranslatedInEveryLocale',
+            'testFirewallTokenHeaderSentOnlyWhenConfigured',
+            'testFirewallTokenHonouredOnTheSaveThatSetsIt',
+            'testFirewallTokenNewlinesNeverReachTheHeader',
+            'testFirewallTokenRedactedFromTheApiLog',
+            'testSoleTraderTokensNeverPublishTheFirewallToken',
+            'testSoleTraderTokensPublishTheFirewallTokenOnlyWhenOptedIn',
+            'testApiProxyRefusesEveryCallWithoutTheCheckoutNonce',
+            'testApiProxyRelaysUpstreamBodyAndStatusVerbatim',
+            'testApiProxyRelaysAnEmptyUpstreamBodyAsAnObject',
+            'testApiProxyCompanyLookupKeepsTheIdToOnePathSegment',
+            'testApiProxyEveryEndpointAuthenticatesWithTheApiKey',
+            'testApiProxyPaymentTermsResolvesTheMerchantServerSide',
+            'testApiProxyOrderIntentPostsTheDecodedBodyOrRefuses',
+            'testApiProxyOrderIntentResolvesTheMerchantServerSide',
+            'testCheckoutBootstrapProxiesEveryCallAndPublishesNoToken',
         ];
         foreach ($tests as $test) {
             self::reset();
@@ -290,6 +309,10 @@ final class BrandConfigSpec
         unset($GLOBALS['__twoinc_test_translations']);
         $GLOBALS['__twoinc_test_transients'] = [];
         $GLOBALS['__twoinc_test_logs'] = [];
+        $GLOBALS['__twoinc_test_http_calls'] = [];
+        $GLOBALS['__twoinc_test_admin_messages'] = [];
+        $GLOBALS['__twoinc_test_admin_errors'] = [];
+        unset($GLOBALS['__twoinc_test_http_response'], $GLOBALS['__twoinc_test_ajax_nonce_ok']);
         $GLOBALS['__twoinc_test_as_scheduled'] = [];
         $GLOBALS['__twoinc_test_as_schedule_calls'] = [];
         WC()->cart = null;
@@ -3544,6 +3567,16 @@ final class BrandConfigSpec
                 return $this->options[$key] ?? $empty_value ?? '';
             }
 
+            public function get_firewall_token()
+            {
+                return (string) ($this->options['firewall_token'] ?? '');
+            }
+
+            public function should_send_firewall_token_from_browser()
+            {
+                return 'yes' === ($this->options['firewall_token_browser'] ?? 'no');
+            }
+
             public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
             {
                 $this->requests[] = $endpoint;
@@ -3595,9 +3628,9 @@ final class BrandConfigSpec
     }
 
     /** Gateway that would happily mint if it were ever asked to. */
-    private static function tokenMintingGateway(array $types): WC_Payment_Gateway
+    private static function tokenMintingGateway(array $types, array $options = []): WC_Payment_Gateway
     {
-        return self::soleTraderGateway([], [
+        return self::soleTraderGateway($options, [
             '/registry/v1/supported-company-types/' => self::registryOk($types),
             '/registry/v1/delegation' => [
                 'response' => ['code' => 200],
@@ -3646,6 +3679,46 @@ final class BrandConfigSpec
             $response['data']['signup_url']
         );
         TinyAssert::same('GB', $response['data']['country']);
+    }
+
+    private static function testSoleTraderTokensNeverPublishTheFirewallToken(): void
+    {
+        // Default state: the firewall sits on the merchant's own egress, which a
+        // buyer's browser never crosses, so nothing it can read may carry the
+        // token — not even with one configured.
+        WC_Twoinc_Sole_Trader::reset_cache();
+        $gateway = self::tokenMintingGateway(['SOLE_TRADER'], ['firewall_token' => 'waf-token-1']);
+        $_REQUEST = ['country' => 'GB'];
+        $response = self::runTokensHandler($gateway);
+        $_REQUEST = [];
+
+        TinyAssert::true($response['success']);
+        TinyAssert::true(
+            strpos(json_encode($response), 'waf-token-1') === false,
+            'the minted-token response must not publish the firewall token'
+        );
+    }
+
+    private static function testSoleTraderTokensPublishTheFirewallTokenOnlyWhenOptedIn(): void
+    {
+        $cases = [
+            ['yes', 'waf-token-1', 'waf-token-1', 'the opted-in merchant gets the token with the minted pair'],
+            ['no', 'waf-token-1', null, 'the default keeps a configured token off the page'],
+            ['yes', '', null, 'opting in without a token puts nothing in the page'],
+        ];
+        foreach ($cases as [$optIn, $configured, $expected, $description]) {
+            WC_Twoinc_Sole_Trader::reset_cache();
+            $gateway = self::tokenMintingGateway(['SOLE_TRADER'], [
+                'firewall_token' => $configured,
+                'firewall_token_browser' => $optIn,
+            ]);
+            $_REQUEST = ['country' => 'GB'];
+            $response = self::runTokensHandler($gateway);
+            $_REQUEST = [];
+
+            TinyAssert::true($response['success']);
+            TinyAssert::same($expected, $response['data']['firewall_token'] ?? null, $description);
+        }
     }
 
     /** PDEV-4669: echoed country is normalised to the ISO code the hosted signup expects. */
@@ -8132,6 +8205,514 @@ final class BrandConfigSpec
             '',
             self::poTranslation("\nmsgid \"Checking\"\nmsgstr \"Sjekker\"\n", 'Checking availability'),
             'a shorter msgid must not match a longer one'
+        );
+    }
+
+    /**
+     * Gateway whose outbound calls reach the real make_request(), so the
+     * headers on the wire are what a test reads. `$options` seeds the
+     * settings the header assembly consults.
+     */
+    private static function firewallGateway(array $options)
+    {
+        return new class ($options) extends WC_Twoinc {
+            public $options;
+
+            public function __construct(array $options)
+            {
+                $this->options = $options;
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+
+            public function get_twoinc_checkout_host()
+            {
+                return 'https://api.example';
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                return $this->options[$key] ?? $empty_value ?? '';
+            }
+
+            public function get_merchant_id()
+            {
+                return 'merchant-from-settings';
+            }
+        };
+    }
+
+    /** The headers make_request() actually put on the wire. */
+    private static function sentHeaders(): array
+    {
+        $calls = $GLOBALS['__twoinc_test_http_calls'] ?? [];
+        TinyAssert::true($calls !== [], 'no outbound request was made at all');
+        return $calls[count($calls) - 1]['args']['headers'] ?? [];
+    }
+
+    private static function testFirewallTokenFieldIsPlainTextNotMasked(): void
+    {
+        $gateway = self::firewallGateway([]);
+        $gateway->init_form_fields();
+        $field = $gateway->form_fields['firewall_token'] ?? [];
+
+        // A password input would hide from the merchant a value their IT
+        // administrator hands them in plaintext and may need to re-read.
+        TinyAssert::same('text', $field['type'] ?? null);
+        TinyAssert::same('Firewall Token (optional)', $field['title'] ?? null);
+        TinyAssert::true(
+            strpos($field['description'] ?? '', 'X-WAF-TOKEN') !== false,
+            'the help text must name the header the token travels as'
+        );
+        TinyAssert::true(
+            strpos($field['description'] ?? '', 'not masked') !== false,
+            'the help text must say why the field is not masked'
+        );
+    }
+
+    private static function testFirewallTokenBrowserToggleIsOffUntilTheMerchantOptsIn(): void
+    {
+        $gateway = self::firewallGateway([]);
+        $gateway->init_form_fields();
+        $keys = array_keys($gateway->form_fields);
+        $field = $gateway->form_fields['firewall_token_browser'] ?? [];
+
+        TinyAssert::same('checkbox', $field['type'] ?? null);
+        TinyAssert::same('no', $field['default'] ?? null);
+        TinyAssert::same(false, $gateway->should_send_firewall_token_from_browser());
+        // WC_Settings_API renders form_fields in array order, so the toggle is
+        // only self-explanatory sitting under the field it qualifies.
+        TinyAssert::same(
+            array_search('firewall_token', $keys, true) + 1,
+            array_search('firewall_token_browser', $keys, true),
+            'the browser toggle must render directly beneath the token field'
+        );
+        TinyAssert::true(
+            strpos($field['description'] ?? '', "user's browser") !== false,
+            'the help text must say which traffic the toggle covers'
+        );
+    }
+
+    private static function testFirewallTokenHelpTextUsesOverlayProductNameNotTwo(): void
+    {
+        self::useTestbrand();
+
+        $gateway = self::firewallGateway([]);
+        $gateway->init_form_fields();
+        $description = $gateway->form_fields['firewall_token']['description'] ?? '';
+
+        TinyAssert::true(
+            strpos($description, WC_Twoinc_Brand::get('product_name')) !== false,
+            'the firewall-token help text must name the overlay brand'
+        );
+        TinyAssert::same(false, strpos($description, 'Two API') !== false);
+    }
+
+    private static function testFirewallTokenCopyIsTranslatedInEveryLocale(): void
+    {
+        $languages = dirname(__DIR__, 2) . '/languages/';
+        $gateway = self::firewallGateway([]);
+        $gateway->init_form_fields();
+        // Read off the live field: the regression this catches is the source
+        // copy being edited without the catalogues following, which a retyped
+        // literal here cannot see. __() is identity in this suite.
+        $cases = [
+            [
+                $gateway->form_fields['firewall_token']['title'] ?? '',
+                'Firewall Token (optional)',
+                [
+                    'nb_NO' => 'Brannmur-token (valgfritt)',
+                    'nl_NL' => 'Firewalltoken (optioneel)',
+                    'sv_SE' => 'Brandväggstoken (valfritt)',
+                ],
+                'firewall-token title',
+            ],
+            [
+                $gateway->form_fields['firewall_token_browser']['title'] ?? '',
+                'Add firewall token to browser-originated traffic',
+                [
+                    'nb_NO' => 'Legg til brannmur-token på trafikk som kommer fra nettleseren',
+                    'nl_NL' => 'Firewalltoken toevoegen aan verkeer vanuit de browser',
+                    'sv_SE' => 'Lägg till brandväggstoken på trafik från webbläsaren',
+                ],
+                'browser-toggle title',
+            ],
+        ];
+        foreach ($cases as [$msgid, $source, $expected, $description]) {
+            TinyAssert::same($source, $msgid);
+            TinyAssert::true(
+                strpos((string) file_get_contents($languages . 'twoinc-payment-gateway.pot'), $msgid) !== false,
+                "the .pot is missing the $description — regenerate it"
+            );
+
+            foreach ($expected as $locale => $translation) {
+                TinyAssert::same(
+                    $translation,
+                    self::poTranslation(
+                        (string) file_get_contents($languages . 'twoinc-payment-gateway-' . $locale . '.po'),
+                        $msgid
+                    ),
+                    "the $locale catalogue does not pair the $description with its translation"
+                );
+                // A .po edited without msgfmt renders English however good the
+                // msgstr is, and nothing else in the suite would report it.
+                TinyAssert::true(
+                    strpos(
+                        (string) file_get_contents($languages . 'twoinc-payment-gateway-' . $locale . '.mo'),
+                        $translation
+                    ) !== false,
+                    "the compiled $locale catalogue predates the $description — recompile with msgfmt"
+                );
+            }
+        }
+    }
+
+    private static function testFirewallTokenHeaderSentOnlyWhenConfigured(): void
+    {
+        $cases = [
+            ['waf-token-1', 'waf-token-1', 'a configured token travels on every call'],
+            ['', null, 'an unconfigured token adds no header'],
+        ];
+        foreach ($cases as [$configured, $expected, $description]) {
+            $GLOBALS['__twoinc_test_http_calls'] = [];
+            $gateway = self::firewallGateway(['api_key' => 'key', 'firewall_token' => $configured]);
+            $gateway->make_request('/v1/order_intent', ['a' => 1]);
+            $headers = self::sentHeaders();
+
+            TinyAssert::same($expected, $headers['X-WAF-TOKEN'] ?? null, $description);
+            TinyAssert::same('key', $headers['X-API-Key'] ?? null, $description);
+        }
+    }
+
+    /** The X-WAF-TOKEN on the request to $endpoint, of every one recorded. */
+    private static function firewallHeaderSentTo(string $endpoint)
+    {
+        foreach ($GLOBALS['__twoinc_test_http_calls'] ?? [] as $call) {
+            if (strpos((string) $call['url'], $endpoint) !== false) {
+                return $call['args']['headers']['X-WAF-TOKEN'] ?? null;
+            }
+        }
+        throw new RuntimeException("no request was made to $endpoint");
+    }
+
+    private static function testFirewallTokenHonouredOnTheSaveThatSetsIt(): void
+    {
+        // A merchant pastes key and token together on a first save. The
+        // verification call runs before the settings persist, so reading the
+        // stored token would send none, the WAF would block it, and the key
+        // would be reverted as unverifiable.
+        $gateway = self::gateway();
+        $gateway->init_form_fields();
+        $option_key = $gateway->get_option_key();
+        $GLOBALS['__twoinc_test_options'][$option_key] = [];
+        $GLOBALS['__twoinc_test_http_response'] = [
+            'response' => ['code' => 200],
+            'body' => json_encode(['id' => 'merchant-1', 'short_name' => 'shop']),
+        ];
+        $gateway->test_post_data = [
+            $gateway->get_field_key('api_key') => 'new-key',
+            $gateway->get_field_key('firewall_token') => 'waf-token-1',
+            $gateway->get_field_key('surcharge_tax_treatment') => 'standard',
+        ];
+        $gateway->process_admin_options();
+
+        TinyAssert::same('waf-token-1', self::firewallHeaderSentTo('/v1/merchant/verify_api_key'));
+        $saved = get_option($option_key, []);
+        TinyAssert::same('new-key', $saved['api_key'] ?? null, 'the verified key must persist, not revert');
+        TinyAssert::same('waf-token-1', $saved['firewall_token'] ?? null);
+    }
+
+    private static function testFirewallTokenNewlinesNeverReachTheHeader(): void
+    {
+        // WC's text field keeps interior newlines, and a header value carrying
+        // one is a split request.
+        $gateway = self::firewallGateway(['api_key' => 'key', 'firewall_token' => " waf\r\ntoken-1\n"]);
+        $gateway->make_request('/v1/order_intent', ['a' => 1]);
+
+        TinyAssert::same('waftoken-1', self::sentHeaders()['X-WAF-TOKEN'] ?? null);
+    }
+
+    private static function testFirewallTokenRedactedFromTheApiLog(): void
+    {
+        $gateway = self::firewallGateway([
+            'api_key' => 'key',
+            'firewall_token' => 'waf-token-1',
+            'enable_api_logging' => 'yes',
+        ]);
+        $gateway->make_request('/v1/order_intent', ['a' => 1]);
+
+        $logs = $GLOBALS['__twoinc_test_logs'];
+        TinyAssert::true($logs !== [], 'api logging was enabled but nothing was logged');
+        $logged = $logs[count($logs) - 1]['context']['request']['headers'] ?? [];
+
+        TinyAssert::same('[REDACTED]', $logged['X-WAF-TOKEN'] ?? null);
+        TinyAssert::same('[REDACTED]', $logged['X-API-Key'] ?? null);
+        // The redaction must not reach the wire copy of the headers.
+        TinyAssert::same('waf-token-1', self::sentHeaders()['X-WAF-TOKEN'] ?? null);
+    }
+
+    /**
+     * Run one proxy handler against a gateway double, as the wc_ajax hook
+     * would, and hand back what it sent to the browser.
+     */
+    private static function runProxyHandler($gateway, string $handler): array
+    {
+        $prop = new ReflectionProperty(WC_Twoinc::class, 'instance');
+        $prop->setAccessible(true);
+        $prop->setValue(null, $gateway);
+        $GLOBALS['__twoinc_test_ajax_json'] = null;
+        try {
+            WC_Twoinc_Api_Proxy::$handler();
+        } finally {
+            $prop->setValue(null, null);
+        }
+        return $GLOBALS['__twoinc_test_ajax_json'] ?? [];
+    }
+
+    /** The upstream call one proxy handler made, as make_request received it. */
+    private static function proxyGateway(?array $reply = null)
+    {
+        return new class ($reply) extends WC_Twoinc {
+            public $calls = [];
+            private $reply;
+
+            public function __construct($reply)
+            {
+                $this->reply = $reply ?? ['response' => ['code' => 200], 'body' => '{"items":[]}'];
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                $seeded = [
+                    'merchant_short_name' => 'shortname-from-settings',
+                    'firewall_token' => 'waf-token-1',
+                ];
+                return $seeded[$key] ?? $empty_value ?? '';
+            }
+
+            public function get_merchant_id()
+            {
+                return 'merchant-from-settings';
+            }
+
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            {
+                $this->calls[] = ['endpoint' => $endpoint, 'payload' => $payload, 'method' => $method, 'params' => $params];
+                return $this->reply;
+            }
+        };
+    }
+
+    private static function testApiProxyRefusesEveryCallWithoutTheCheckoutNonce(): void
+    {
+        // The proxies spend the merchant's API key, so an unauthenticated
+        // caller reaching them would be a free lookup oracle.
+        $GLOBALS['__twoinc_test_ajax_nonce_ok'] = false;
+        $handlers = ['ajax_company_search', 'ajax_company_by_id', 'ajax_order_intent', 'ajax_payment_terms'];
+        foreach ($handlers as $handler) {
+            $gateway = self::proxyGateway();
+            $response = self::runProxyHandler($gateway, $handler);
+
+            TinyAssert::same(false, $response['success'] ?? null, "$handler served a request with no valid nonce");
+            TinyAssert::same([], $gateway->calls, "$handler reached the API with no valid nonce");
+        }
+    }
+
+    private static function testApiProxyRelaysUpstreamBodyAndStatusVerbatim(): void
+    {
+        // The browser handlers parse the API's own response shape, so an
+        // envelope around it — or a flattened status — breaks them silently.
+        $gateway = self::proxyGateway(['response' => ['code' => 404], 'body' => '{"error":"not found"}']);
+        $_REQUEST = ['q' => 'exampleco', 'country' => 'GB', 'limit' => '50', 'offset' => '0'];
+        $response = self::runProxyHandler($gateway, 'ajax_company_search');
+        $_REQUEST = [];
+
+        TinyAssert::same(['error' => 'not found'], $response['relayed'] ?? null);
+        TinyAssert::same(404, $response['status'] ?? null);
+        TinyAssert::same('/companies/v2/company', $gateway->calls[0]['endpoint']);
+        TinyAssert::same('GET', $gateway->calls[0]['method']);
+        TinyAssert::same('exampleco', $gateway->calls[0]['params']['q']);
+        TinyAssert::same('GB', $gateway->calls[0]['params']['country']);
+    }
+
+    private static function testApiProxyCompanyLookupKeepsTheIdToOnePathSegment(): void
+    {
+        // The id lands in the request path, so a separator in it would
+        // retarget the call at another endpoint on the API host.
+        $cases = [
+            ['12345678', '/companies/v2/company/12345678', true, 'a plain id is looked up'],
+            ['GB/12345678', null, false, 'a slash is refused, not encoded away'],
+            ['', null, false, 'no id is refused'],
+        ];
+        foreach ($cases as [$lookupId, $endpoint, $served, $description]) {
+            $gateway = self::proxyGateway();
+            $_REQUEST = ['lookup_id' => $lookupId];
+            $response = self::runProxyHandler($gateway, 'ajax_company_by_id');
+            $_REQUEST = [];
+
+            if ($served) {
+                TinyAssert::same($endpoint, $gateway->calls[0]['endpoint'], $description);
+            } else {
+                TinyAssert::same(false, $response['success'] ?? null, $description);
+                TinyAssert::same([], $gateway->calls, $description);
+            }
+        }
+    }
+
+    /**
+     * Company search and the address lookup ran unauthenticated while they were
+     * browser-direct. Proxied, all four spend the merchant's key, so the API can
+     * start requiring auth on every endpoint.
+     */
+    private static function testApiProxyEveryEndpointAuthenticatesWithTheApiKey(): void
+    {
+        $cases = [
+            ['ajax_company_search', ['country' => 'GB', 'q' => 'ab'], [], '/companies/v2/company'],
+            ['ajax_company_by_id', ['lookup_id' => '12345678'], [], '/companies/v2/company/12345678'],
+            [
+                'ajax_payment_terms',
+                ['buyer_organization_number' => '12345678', 'country_prefix' => 'GB'],
+                [],
+                '/v1/payment_terms',
+            ],
+            ['ajax_order_intent', [], ['intent' => '{"gross_amount":"10.00"}'], '/v1/order_intent'],
+        ];
+        foreach ($cases as [$handler, $request, $post, $endpoint]) {
+            unset($GLOBALS['__twoinc_test_http_calls']);
+            $gateway = self::firewallGateway(['api_key' => 'merchant-api-key']);
+            $_REQUEST = $request;
+            $_POST = $post;
+            self::runProxyHandler($gateway, $handler);
+            $_REQUEST = [];
+            $_POST = [];
+
+            $calls = $GLOBALS['__twoinc_test_http_calls'] ?? [];
+            TinyAssert::true($calls !== [], "$handler made no upstream call at all");
+            TinyAssert::true(
+                strpos($calls[0]['url'], $endpoint) !== false,
+                "$handler must address $endpoint"
+            );
+            TinyAssert::same(
+                'merchant-api-key',
+                self::sentHeaders()['X-API-Key'] ?? null,
+                "$endpoint must be authenticated with the merchant's API key"
+            );
+        }
+    }
+
+    private static function testApiProxyPaymentTermsResolvesTheMerchantServerSide(): void
+    {
+        // Merchant identity used to come from the page. Taking it from the
+        // request would let a caller bill a lookup to another merchant.
+        $gateway = self::proxyGateway();
+        $_REQUEST = [
+            'merchant_id' => 'someone-elses-merchant',
+            'merchant_short_name' => 'someone-elses-shop',
+            'buyer_organization_number' => '12345678',
+            'country_prefix' => 'GB',
+        ];
+        self::runProxyHandler($gateway, 'ajax_payment_terms');
+        $_REQUEST = [];
+
+        $params = $gateway->calls[0]['params'];
+        TinyAssert::same('merchant-from-settings', $params['merchant_id']);
+        TinyAssert::same('shortname-from-settings', $params['merchant_short_name']);
+        TinyAssert::same('12345678', $params['buyer_organization_number']);
+        TinyAssert::same('GB', $params['country_prefix']);
+    }
+
+    private static function testApiProxyOrderIntentPostsTheDecodedBodyOrRefuses(): void
+    {
+        $gateway = self::proxyGateway();
+        $_POST = ['intent' => json_encode(['buyer' => ['company' => ['company_name' => 'ACME']]])];
+        self::runProxyHandler($gateway, 'ajax_order_intent');
+        $_POST = [];
+
+        TinyAssert::same('/v1/order_intent', $gateway->calls[0]['endpoint']);
+        TinyAssert::same('POST', $gateway->calls[0]['method']);
+        TinyAssert::same('ACME', $gateway->calls[0]['payload']['buyer']['company']['company_name']);
+
+        // A body that does not decode reaches the API as an empty payload
+        // otherwise, which the API answers as a decline.
+        $gateway = self::proxyGateway();
+        $_POST = ['intent' => 'not json'];
+        $response = self::runProxyHandler($gateway, 'ajax_order_intent');
+        $_POST = [];
+
+        TinyAssert::same(false, $response['success'] ?? null);
+        TinyAssert::same([], $gateway->calls);
+    }
+
+    private static function testApiProxyOrderIntentResolvesTheMerchantServerSide(): void
+    {
+        // The relay spends the merchant's own API key and is reachable by any
+        // visitor, so a browser-supplied identity would let one merchant's
+        // shop raise intents against another's account.
+        $gateway = self::proxyGateway();
+        $_POST = ['intent' => json_encode([
+            'merchant_id' => 'someone-elses-merchant',
+            'merchant_short_name' => 'someone-elses-shop',
+            'gross_amount' => '100.00',
+            'currency' => 'GBP',
+            'buyer' => ['company' => ['company_name' => 'ACME']],
+            'invoice_details' => ['due_in_days' => 999],
+        ])];
+        self::runProxyHandler($gateway, 'ajax_order_intent');
+        $_POST = [];
+
+        $payload = $gateway->calls[0]['payload'];
+        TinyAssert::same('merchant-from-settings', $payload['merchant_id']);
+        TinyAssert::same('shortname-from-settings', $payload['merchant_short_name']);
+        // Cart-derived fields still come from the form the buyer filled in.
+        TinyAssert::same('100.00', $payload['gross_amount']);
+        TinyAssert::same('ACME', $payload['buyer']['company']['company_name']);
+        // Anything outside the allowlist is dropped rather than relayed.
+        TinyAssert::same(false, array_key_exists('invoice_details', $payload));
+    }
+
+    private static function testApiProxyRelaysAnEmptyUpstreamBodyAsAnObject(): void
+    {
+        // `null` in the response would reach the browser handlers as a literal,
+        // and every one of them reads a property off it.
+        $gateway = self::proxyGateway(['response' => ['code' => 200], 'body' => '']);
+        $_REQUEST = ['lookup_id' => '12345678'];
+        $response = self::runProxyHandler($gateway, 'ajax_company_by_id');
+        $_REQUEST = [];
+
+        TinyAssert::same([], $response['relayed'] ?? null);
+        TinyAssert::same(200, $response['status'] ?? null);
+    }
+
+    private static function testCheckoutBootstrapProxiesEveryCallAndPublishesNoToken(): void
+    {
+        $gateway = self::proxyGateway();
+        $checkout = new WC_Twoinc_Checkout($gateway);
+        $method = new ReflectionMethod(WC_Twoinc_Checkout::class, 'prepare_twoinc_object');
+        $method->setAccessible(true);
+        $params = $method->invoke($checkout, []);
+
+        $expected = [
+            'company_search_url' => 'two_company_search',
+            'company_by_id_url' => 'two_company_by_id',
+            'order_intent_url' => 'two_order_intent',
+            'payment_terms_url' => 'two_payment_terms',
+        ];
+        foreach ($expected as $key => $action) {
+            TinyAssert::same(
+                'https://shop.example.test/?wc-ajax=' . $action,
+                $params['api_proxy'][$key] ?? null,
+                "$key must address the store's own proxy"
+            );
+        }
+        TinyAssert::true(
+            ($params['api_proxy']['nonce'] ?? '') !== '',
+            'the proxy bootstrap must carry a nonce for the handlers to check'
+        );
+        // The token gates the merchant's own network egress, so nothing the
+        // browser can read may carry it — key or value, at any depth.
+        TinyAssert::true(
+            strpos(json_encode($params), 'waf-token-1') === false,
+            'the checkout bootstrap must not publish the firewall token'
         );
     }
 

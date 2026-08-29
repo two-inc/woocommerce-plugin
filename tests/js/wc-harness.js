@@ -38,6 +38,20 @@ const PANEL_PATH = "assets/js/company-search-panel.js";
 const STYLESHEET_PATH = "assets/css/twoinc.css";
 
 /**
+ * The `api_proxy` bootstrap WC_Twoinc_Checkout localises, in the shape
+ * WC_AJAX::get_endpoint() produces. Company search, company lookup, order
+ * intent and payment terms are dispatched to these rather than to the API
+ * host, so make_request() can add the merchant's firewall token server-side.
+ */
+const API_PROXY = {
+  company_search_url: "https://shop.example.test/?wc-ajax=two_company_search",
+  company_by_id_url: "https://shop.example.test/?wc-ajax=two_company_by_id",
+  order_intent_url: "https://shop.example.test/?wc-ajax=two_order_intent",
+  payment_terms_url: "https://shop.example.test/?wc-ajax=two_payment_terms",
+  nonce: "test-checkout-nonce"
+};
+
+/**
  * Put the real jQuery on the jsdom window.
  *
  * @returns {Function} the jQuery instance bound to the current jsdom window
@@ -153,8 +167,7 @@ function loadTwoinc(twoinc) {
       enable_company_search: "yes",
       company_search_location: "address_area",
       twoinc_checkout_host: "https://api.example.test",
-      client_name: "woocommerce",
-      client_version: "0.0.0-test",
+      api_proxy: Object.assign({}, API_PROXY),
       text: {}
     },
     twoinc || {}
@@ -422,6 +435,21 @@ function stubAjax($) {
 }
 
 /**
+ * The query a recorded request carries, whichever way jQuery was handed it.
+ *
+ * Proxied calls put their parameters in `data` — a serialised string from the
+ * company search, a plain object elsewhere — so a test cannot read them off
+ * the URL the way it could when the browser addressed the API host itself.
+ *
+ * @param {Object} record one entry from `stubAjax().calls`
+ * @returns {URLSearchParams}
+ */
+function requestParams(record) {
+  const data = (record && record.settings && record.settings.data) || "";
+  return new URLSearchParams(typeof data === "string" ? data : data);
+}
+
+/**
  * Release the panel bound to the company field.
  *
  * The panel binds a document-level mousedown that wiping
@@ -540,6 +568,8 @@ function countGifFrames(bytes) {
 
 module.exports = {
   REPO_ROOT: REPO_ROOT,
+  API_PROXY: API_PROXY,
+  requestParams: requestParams,
   countGifFrames: countGifFrames,
   SOURCE_PATH: SOURCE_PATH,
   STYLESHEET_PATH: STYLESHEET_PATH,

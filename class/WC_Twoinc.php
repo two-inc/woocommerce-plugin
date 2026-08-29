@@ -16,6 +16,9 @@ if (!class_exists('WC_Twoinc')) {
     {
         private static $instance;
 
+        // Firewall token from the settings POST in flight; null outside a save.
+        private $firewall_token_override = null;
+
         // Per-request memo for GET /v1/merchant/{id} (TWO-25024): one wire
         // fetch per request shared by every consumer, failures included.
         private static $merchant_record = null;
@@ -4333,6 +4336,23 @@ if (!class_exists('WC_Twoinc')) {
                         esc_html(WC_Twoinc_Brand::get('production_key_contact_email'))
                     ) . '<div id="api-key-status" style="margin-top: 5px;"></div>',
                 ],
+                'firewall_token' => [
+                    'title'       => __('Firewall Token (optional)', 'twoinc-payment-gateway'),
+                    'type'        => 'text',
+                    'description' => sprintf(
+                        /* translators: %s is the brand product name (e.g. "Two") */
+                        __('If your IT administrator asks you to add a firewall token, place it in this field. It will then be transmitted as header X-WAF-TOKEN on all calls your store makes to the %s API.', 'twoinc-payment-gateway'),
+                        WC_Twoinc_Brand::get('product_name')
+                    ) . ' ' . __('This is a coarse network gate rather than a secret credential, so unlike the API key it is not masked here.', 'twoinc-payment-gateway'),
+                ],
+                'firewall_token_browser' => [
+                    'title'       => __('Add firewall token to browser-originated traffic', 'twoinc-payment-gateway'),
+                    'description' => __("Switch this on if your IT administrator requires the firewall token for calls from the user's browser as well as those from your server.", 'twoinc-payment-gateway'),
+                    'desc_tip'    => true,
+                    'label'       => ' ',
+                    'type'        => 'checkbox',
+                    'default'     => 'no',
+                ],
                 'vendor_name' => [
                     'title'       => __('Vendor name (optional)', 'twoinc-payment-gateway'),
                     'type'        => 'text',
@@ -5186,6 +5206,22 @@ if (!class_exists('WC_Twoinc')) {
             return 'yes' === $this->get_option('disable_ssl_verify');
         }
 
+        /** @return string the token as a header value: never newline-bearing. */
+        public function get_firewall_token()
+        {
+            $token = $this->firewall_token_override !== null
+                ? $this->firewall_token_override
+                : (string) $this->get_option('firewall_token');
+            // WC's text field keeps interior newlines, which would split the header.
+            return trim((string) preg_replace('/[\r\n\t]+/', '', $token));
+        }
+
+        // Off by default: publishing the token puts it on a device outside the merchant's network.
+        public function should_send_firewall_token_from_browser()
+        {
+            return 'yes' === $this->get_option('firewall_token_browser');
+        }
+
         /**
          * @param string $method
          *
@@ -5202,6 +5238,10 @@ if (!class_exists('WC_Twoinc')) {
                 'Content-Type' => 'application/json; charset=utf-8',
                 'X-API-Key' => $api_key
             ];
+            $firewall_token = $this->get_firewall_token();
+            if ($firewall_token !== '') {
+                $headers['X-WAF-TOKEN'] = $firewall_token;
+            }
             if (isset($_SERVER['HTTP_X_CLOUD_TRACE_CONTEXT'])) {
                 $headers['HTTP_X_CLOUD_TRACE_CONTEXT'] = $_SERVER['HTTP_X_CLOUD_TRACE_CONTEXT'];
             }
@@ -5216,14 +5256,17 @@ if (!class_exists('WC_Twoinc')) {
 
             if ('yes' === $this->get_option('enable_api_logging')) {
                 $logger = wc_get_logger();
-                // Redact X-API-Key from request headers for logging
+                // Redacted only when actually sent, so the log does not imply
+                // a firewall token is configured when none is.
+                $redacted_headers = array_merge($headers, ['X-API-Key' => '[REDACTED]']);
+                if (isset($redacted_headers['X-WAF-TOKEN'])) {
+                    $redacted_headers['X-WAF-TOKEN'] = '[REDACTED]';
+                }
                 $context = [
                     "source" => "twoinc-payment-gateway",
                     "request" => [
                         "body" => $payload,
-                        "headers" => array_merge($headers, [
-                            'X-API-Key' => '[REDACTED]'
-                        ]),
+                        "headers" => $redacted_headers,
                         "params" => $params
                     ],
                     "response" => [
@@ -5484,6 +5527,14 @@ if (!class_exists('WC_Twoinc')) {
         public function process_admin_options()
         {
             $post_data = $this->get_post_data();
+            $firewall_token_field = 'woocommerce_' . $this->id . '_firewall_token';
+            if (array_key_exists($firewall_token_field, $post_data)) {
+                // Honour a token pasted in the same save as the API key: the
+                // verification call below runs before the settings persist, so
+                // reading the stored value would send it without X-WAF-TOKEN
+                // and a merchant WAF would revert the key.
+                $this->firewall_token_override = (string) $post_data[$firewall_token_field];
+            }
             $api_key_field = 'woocommerce_' . $this->id . '_api_key';
             $api_key_in_post = array_key_exists($api_key_field, $post_data);
             $api_key = $api_key_in_post ? $post_data[$api_key_field] : '';

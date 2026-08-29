@@ -119,28 +119,34 @@ describe("company search transport", () => {
       expect(run.request.timeout).toBe(30000);
     });
 
-    test("targets the companies endpoint on the configured host", () => {
-      const url = new URL(search().request.url);
+    test("targets the store's own proxy endpoint, never the API host", () => {
+      // The merchant's firewall token is added by the proxy, so a request that
+      // still addressed the API host would be the one a WAF rejects.
+      const run = search();
+      const params = harness.requestParams(run.request);
 
-      expect(url.origin).toBe("https://api.example.test");
-      expect(url.pathname).toBe("/companies/v2/company");
-      expect(url.searchParams.get("q")).toBe("exampleco");
-      expect(url.searchParams.get("country")).toBe("GB");
+      expect(run.request.url).toBe(harness.API_PROXY.company_search_url);
+      expect(params.get("q")).toBe("exampleco");
+      expect(params.get("country")).toBe("GB");
+    });
+
+    test("carries the checkout nonce the proxy authorizes against", () => {
+      expect(harness.requestParams(search().request).get("nonce")).toBe(harness.API_PROXY.nonce);
     });
 
     test("bounds the result set, and takes the bound from the helper's constant", () => {
-      expect(new URL(search().request.url).searchParams.get("limit")).toBe("50");
-      expect(new URL(search().request.url).searchParams.get("offset")).toBe("0");
+      expect(harness.requestParams(search().request).get("limit")).toBe("50");
+      expect(harness.requestParams(search().request).get("offset")).toBe("0");
 
       ctx.helper.companySearchLimit = 7;
 
-      expect(new URL(search().request.url).searchParams.get("limit")).toBe("7");
+      expect(harness.requestParams(search().request).get("limit")).toBe("7");
     });
 
     test("sends the buyer's term verbatim, encoded exactly once", () => {
       // A term containing a percent sign is where a stray decode would show up.
-      expect(new URL(search({ term: "a%20b" }).request.url).searchParams.get("q")).toBe("a%20b");
-      expect(new URL(search({ term: "Example & Co" }).request.url).searchParams.get("q")).toBe(
+      expect(harness.requestParams(search({ term: "a%20b" }).request).get("q")).toBe("a%20b");
+      expect(harness.requestParams(search({ term: "Example & Co" }).request).get("q")).toBe(
         "Example & Co"
       );
     });
@@ -150,22 +156,20 @@ describe("company search transport", () => {
       // not rebuild it, and a captured value searched the previous country's
       // register while the form said otherwise. Two searches, so a value read
       // once and reused fails here rather than agreeing on the first.
-      expect(new URL(search().request.url).searchParams.get("country")).toBe("GB");
+      expect(harness.requestParams(search().request).get("country")).toBe("GB");
 
       ctx.$("#billing_country").append('<option value="SE">Sweden</option>').val("SE");
 
-      expect(new URL(search().request.url).searchParams.get("country")).toBe("SE");
+      expect(harness.requestParams(search().request).get("country")).toBe("SE");
     });
 
-    test("identifies the plugin and its version to the API", () => {
-      // The only attribution this endpoint can get: the search runs in the
-      // buyer's browser, so the user-agent is the shopper's. In the query
-      // string rather than a header on purpose — a custom header would make the
-      // request non-simple and cost a CORS preflight per keystroke.
-      const url = new URL(search().request.url);
+    test("leaves plugin attribution to the proxy", () => {
+      // `client`/`client_v` are stamped by make_request on the store, so the
+      // browser sending its own would be the pair that can disagree.
+      const params = harness.requestParams(search().request);
 
-      expect(url.searchParams.get("client")).toBe("woocommerce");
-      expect(url.searchParams.get("client_v")).toBe("0.0.0-test");
+      expect(params.get("client")).toBeNull();
+      expect(params.get("client_v")).toBeNull();
     });
   });
 
@@ -372,7 +376,7 @@ describe("company search transport", () => {
       typeQuery("kaffe");
 
       expect(ajax.calls).toHaveLength(1);
-      expect(new URL(ajax.last().url).searchParams.get("q")).toBe("kaffe");
+      expect(harness.requestParams(ajax.last()).get("q")).toBe("kaffe");
     });
 
     test("the spinner is up during the debounce, before any request goes out", () => {
