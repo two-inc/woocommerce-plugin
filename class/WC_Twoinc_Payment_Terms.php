@@ -824,8 +824,6 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                 wp_send_json_error('Invalid nonce');
                 return;
             }
-            // After the nonce, so unauthenticated noise never fills a bucket
-            // that a real buyer on the same address is metered by.
             if (!WC_Twoinc_Rate_Limiter::check('term_fees')) {
                 return;
             }
@@ -890,8 +888,6 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                 wp_send_json_error('Invalid nonce');
                 return;
             }
-            // After the nonce, so unauthenticated noise never fills a bucket
-            // that a real buyer on the same address is metered by.
             if (!WC_Twoinc_Rate_Limiter::check('select_term')) {
                 return;
             }

@@ -46,6 +46,9 @@ if (!class_exists('WC_Twoinc_Rate_Limiter')) {
         /**
          * Count this request against $route and refuse it if over the limit.
          *
+         * Call it after the nonce check, so unauthenticated noise never fills
+         * a bucket that a real buyer on the same address is metered by.
+         *
          * @return bool False when the caller must stop; the JSON refusal has
          *              already been sent.
          */

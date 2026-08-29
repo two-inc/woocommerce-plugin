@@ -211,8 +211,6 @@ if (!class_exists('WC_Twoinc_Sole_Trader')) {
                 wp_send_json_error('Invalid nonce');
                 return;
             }
-            // After the nonce, so unauthenticated noise never fills a bucket
-            // that a real buyer on the same address is metered by.
             if (!WC_Twoinc_Rate_Limiter::check('sole_trader_availability')) {
                 return;
             }
@@ -240,8 +238,6 @@ if (!class_exists('WC_Twoinc_Sole_Trader')) {
                 wp_send_json_error('Invalid nonce');
                 return;
             }
-            // After the nonce, so unauthenticated noise never fills a bucket
-            // that a real buyer on the same address is metered by.
             if (!WC_Twoinc_Rate_Limiter::check('sole_trader_tokens')) {
                 return;
             }
