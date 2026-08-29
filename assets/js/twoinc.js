@@ -81,6 +81,16 @@ let twoincUtilHelper = {
     return (window.twoinc.api_proxy || {}).nonce || "";
   },
 
+  /** Backoff after a 429: the server's Retry-After, clamped, 60s when absent. */
+  retryAfterMs: function (jqXHR) {
+    let seconds = 0;
+    if (jqXHR && typeof jqXHR.getResponseHeader === "function") {
+      seconds = parseInt(jqXHR.getResponseHeader("Retry-After"), 10);
+    }
+    if (!(seconds > 0)) seconds = 60;
+    return Math.min(seconds, 300) * 1000;
+  },
+
   getUnsecuredHash: function (inp, seed) {
     if (!seed) seed = 0;
     let h1 = 0xdeadbeef ^ seed;
@@ -2743,6 +2753,9 @@ let twoincSoleTrader = {
   mode: "business", // 'business' | 'sole_trader'
   availabilityByCountry: {},
   tokens: null,
+
+  /** Backoff after a 429: callers gate on `!tokens`, so a failed mint otherwise re-mints every render. */
+  tokenMintBackoffUntil: 0,
   // Snapshot of twoincCompanyCapture.mode, taken on the way into sole-trader
   // mode and restored on the way out. A buyer can reach sole-trader mode
   // while in manual entry, and without this they'd come back out into
@@ -2918,7 +2931,16 @@ let twoincSoleTrader = {
           twoincSoleTrader.apply(available);
         }
       })
-      .fail(function () {
+      .fail(function (jqXHR) {
+        // A 429 caches like an answer, or every `updated_checkout` re-requests
+        // into the limit. Other failures stay uncached: a cached "no" would
+        // hide sole trader all page over one dropped connection.
+        if (jqXHR && jqXHR.status === 429) {
+          twoincSoleTrader.availabilityByCountry[country] = false;
+          window.setTimeout(function () {
+            delete twoincSoleTrader.availabilityByCountry[country];
+          }, twoincUtilHelper.retryAfterMs(jqXHR));
+        }
         // Fail-soft: no sole trader option, checkout proceeds as business.
         if (twoincSoleTrader.currentCountry() === country) {
           twoincSoleTrader.apply(false);
@@ -3902,6 +3924,10 @@ let twoincSoleTrader = {
       if (cb) cb(false);
       return;
     }
+    if (Date.now() < twoincSoleTrader.tokenMintBackoffUntil) {
+      if (cb) cb(false);
+      return;
+    }
     const country = twoincSoleTrader.currentCountry();
     jQuery
       .post(cfg.tokens_url, { nonce: cfg.nonce, country: country })
@@ -3924,7 +3950,11 @@ let twoincSoleTrader = {
           if (cb) cb(false);
         }
       })
-      .fail(function () {
+      .fail(function (jqXHR) {
+        if (jqXHR && jqXHR.status === 429) {
+          twoincSoleTrader.tokenMintBackoffUntil =
+            Date.now() + twoincUtilHelper.retryAfterMs(jqXHR);
+        }
         if (cb) cb(false);
       });
   },
@@ -4269,7 +4299,10 @@ class Twoinc {
       // an orphan copy of it would paint a verdict onto a tile that had already
       // been reset — after Place Order, on a checkout mid-submit (review round
       // 2).
-      renderInterval: null
+      renderInterval: null,
+      // Backoff after a 429: `updated_checkout` re-arms a check per keystroke,
+      // so one refusal otherwise becomes a request per second all window.
+      rateLimitedUntil: 0
     };
     this.orderIntentLog = {};
     this.customerCompany = {
@@ -4829,6 +4862,12 @@ class Twoinc {
       Twoinc.getInstance().orderIntentCheck.interval = null;
       Twoinc.getInstance().orderIntentCheck.pendingCheck = false;
 
+      if (Date.now() < Twoinc.getInstance().orderIntentCheck.rateLimitedUntil) {
+        Twoinc.getInstance().supersedeInFlightOrderIntent();
+        twoincDomHelper.togglePaySubtitleDesc("errored", ".twoinc-busy-retry");
+        return;
+      }
+
       // Re-asserted rather than relied upon from getApproval(): a `pendingCheck`
       // re-arm comes straight back here, and the run of ticks spent waiting for
       // a cart total sits between the two.
@@ -4925,6 +4964,15 @@ class Twoinc {
 
       approvalResponse.fail(function (response) {
         if (!stillCurrent()) return;
+
+        // The shop's own limiter, not a credit decision — deselecting here
+        // would show a false decline to everyone behind one office address.
+        if (response && response.status === 429) {
+          Twoinc.getInstance().orderIntentCheck.rateLimitedUntil =
+            Date.now() + twoincUtilHelper.retryAfterMs(response);
+          twoincDomHelper.togglePaySubtitleDesc("errored", ".twoinc-busy-retry");
+          return;
+        }
 
         // Store the approved state
         Twoinc.getInstance().isTwoincApproved = false;
@@ -5101,6 +5149,11 @@ class Twoinc {
         // though a lookup DID run for them.
         self.registryAddressApplied = true;
       }
+    });
+    addressResponse.fail(function () {
+      if (seq !== self.addressLookupSeq) return;
+      // Otherwise the address boxes stay empty with nothing said.
+      twoincDomHelper.togglePaySubtitleDesc("errored", ".twoinc-busy-retry");
     });
   }
 

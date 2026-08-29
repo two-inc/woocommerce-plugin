@@ -888,9 +888,6 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                 wp_send_json_error('Invalid nonce');
                 return;
             }
-            if (!WC_Twoinc_Rate_Limiter::check('select_term')) {
-                return;
-            }
             $gateway = WC_Twoinc::get_instance();
             if (!$gateway || !self::is_enabled($gateway)) {
                 wp_send_json_error('Payment terms are not enabled');

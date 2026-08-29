@@ -275,6 +275,8 @@ final class BrandConfigSpec
             'testRateLimitBucketsAreSeparatePerRouteAndPerClient',
             'testRateLimitCountsRefusedRequestsSoAnAbuserCannotSitOnTheLimit',
             'testRateLimitNeverStoresTheClientAddressInTheKey',
+            'testRateLimitIgnoresSpoofableProxyHeaders',
+            'testRateLimitLeavesTheBucketEmptyWhenTheNonceFails',
             'testCompanySearchSurvivesARealisticTypingSession',
             'testRateLimitRefusesEveryWcAjaxHandlerBeforeItReachesTheApi',
             'testRateLimitRefusesTheNonProxyHandlersToo',
@@ -8750,15 +8752,22 @@ final class BrandConfigSpec
         // merchant's API key upstream, so the allowance is what stands
         // between a scraper and the merchant's bill.
         $routes = [
-            ['term_fees', 90, 60, 'rides every checkout update, so it is the loosest'],
+            ['term_fees', 300, 60, 'rides every checkout update at a 1s debounce, so several concurrent checkouts behind one office address must fit'],
             ['company_search', 60, 60, 'debounced per typed word'],
-            ['select_term', 60, 60, 'a chip click, and it fans out to term fees'],
+            ['sole_trader_tokens', 60, 60, 'one mint per page plus refreshes, and several colleagues may sign up at once'],
             ['order_intent', 30, 60, 'several per checkout from many call sites'],
             ['company_by_id', 30, 60, 'one per company the buyer picks'],
             ['payment_terms', 30, 60, 'one per captured company'],
             ['sole_trader_availability', 30, 60, 'cached per country by the browser'],
-            ['sole_trader_tokens', 10, 60, 'mints write-scoped delegation tokens'],
         ];
+        // select_term makes no upstream call, so metering it would only cost a
+        // buyer their term choice for nothing.
+        $const = new ReflectionClassConstant(WC_Twoinc_Rate_Limiter::class, 'LIMITS');
+        TinyAssert::same(
+            array_column($routes, 0),
+            array_keys($const->getValue()),
+            'the metered route list changed'
+        );
         foreach ($routes as list($route, $max, $window, $why)) {
             TinyAssert::same([$max, $window], self::rateLimit($route), "$route limit changed ($why)");
 
@@ -8798,7 +8807,6 @@ final class BrandConfigSpec
             [59, false, 'a bucket still inside the window keeps counting'],
         ];
         foreach ($cases as list($age, $allowed, $description)) {
-            list($max, $window) = self::rateLimit('company_search');
             $GLOBALS['__twoinc_test_transients'] = [];
             self::exhaustRateLimit('company_search');
             TinyAssert::same(false, WC_Twoinc_Rate_Limiter::check('company_search'), "setup: $description");
@@ -8808,8 +8816,6 @@ final class BrandConfigSpec
                 $GLOBALS['__twoinc_test_transients'][$key]['start'] = time() - $age;
             }
             TinyAssert::same($allowed, WC_Twoinc_Rate_Limiter::check('company_search'), $description);
-            TinyAssert::same($window, 60, 'the window this case is written against');
-            TinyAssert::true($max > 0, 'the route has an allowance');
         }
     }
 
@@ -8930,7 +8936,6 @@ final class BrandConfigSpec
         // term fees fans out one upstream POST per offered term.
         $handlers = [
             ['term_fees', ['WC_Twoinc_Payment_Terms', 'ajax_term_fees'], 'per-term fee quotes'],
-            ['select_term', ['WC_Twoinc_Payment_Terms', 'ajax_select_term'], 'the term selection write'],
             ['sole_trader_availability', ['WC_Twoinc_Sole_Trader', 'ajax_availability'], 'the availability check'],
             ['sole_trader_tokens', ['WC_Twoinc_Sole_Trader', 'ajax_tokens'], 'the token mint'],
         ];
@@ -8953,6 +8958,54 @@ final class BrandConfigSpec
                 "$description reached the network on a rate-limited request"
             );
         }
+    }
+
+    private static function testRateLimitIgnoresSpoofableProxyHeaders(): void
+    {
+        // The identity is the socket peer. Reading X-Real-IP or
+        // X-Forwarded-For instead would let one abuser mint a fresh bucket per
+        // request just by rotating a header, which is an unbounded allowance.
+        $spoofs = [
+            ['HTTP_X_REAL_IP', 'X-Real-IP'],
+            ['HTTP_X_FORWARDED_FOR', 'X-Forwarded-For'],
+            ['HTTP_CLIENT_IP', 'Client-IP'],
+        ];
+        foreach ($spoofs as list($server_key, $header)) {
+            $GLOBALS['__twoinc_test_transients'] = [];
+            $_SERVER['REMOTE_ADDR'] = '203.0.113.4';
+            self::exhaustRateLimit('order_intent');
+
+            for ($i = 0; $i < 5; $i++) {
+                $_SERVER[$server_key] = '198.51.100.' . $i;
+                TinyAssert::same(
+                    false,
+                    WC_Twoinc_Rate_Limiter::check('order_intent'),
+                    "a rotating $header header bought a fresh bucket"
+                );
+            }
+            TinyAssert::same(
+                1,
+                count($GLOBALS['__twoinc_test_transients']),
+                "a rotating $header header created a bucket per request"
+            );
+            unset($_SERVER[$server_key], $_SERVER['REMOTE_ADDR']);
+        }
+    }
+
+    private static function testRateLimitLeavesTheBucketEmptyWhenTheNonceFails(): void
+    {
+        // The nonce check runs first, so noise that never proves it came from a
+        // checkout page cannot fill the bucket a real buyer on the same address
+        // is metered by.
+        $GLOBALS['__twoinc_test_transients'] = [];
+        $GLOBALS['__twoinc_test_ajax_nonce_ok'] = false;
+        $GLOBALS['__twoinc_test_ajax_json'] = null;
+
+        self::runProxyHandler(self::proxyGateway(), 'ajax_order_intent');
+        WC_Twoinc_Sole_Trader::ajax_tokens();
+
+        unset($GLOBALS['__twoinc_test_ajax_nonce_ok']);
+        TinyAssert::same([], $GLOBALS['__twoinc_test_transients'], 'a nonce-failed request filled a rate-limit bucket');
     }
 
     private static function poTranslation(string $po, string $msgid): string

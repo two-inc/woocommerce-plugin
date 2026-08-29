@@ -1040,9 +1040,10 @@ if (!class_exists('WC_Twoinc')) {
             // "slot doesn't exist" vs "setting off".
             $company_search_tile_slot = '<div class="twoinc-company-search-tile-slot hidden"></div>';
 
-            // The two failure boxes carry role="alert"; the approved notice
-            // carries role="status". Assertive here since this payment
-            // method has just been deselected under the buyer.
+            // The two decline boxes carry role="alert" — assertive, since this
+            // payment method has just been deselected under the buyer. The
+            // approved notice and the retry notice carry role="status":
+            // neither deselects anything.
             return sprintf(
                 '<div>
                     %s
@@ -1054,6 +1055,7 @@ if (!class_exists('WC_Twoinc')) {
                     %s
                     <div class="twoinc-pay-box twoinc-err-payment-default hidden" role="alert" data-company-template="%s">%s</div>
                     <div class="twoinc-pay-box twoinc-err-phone-number hidden" role="alert">%s</div>
+                    <div class="twoinc-pay-box twoinc-busy-retry hidden" role="status">%s</div>
                 </div>',
                 $term_input,
                 $company_search_tile_slot,
@@ -1061,7 +1063,8 @@ if (!class_exists('WC_Twoinc')) {
                 $this->get_intent_approved_notice($notice_enabled),
                 esc_attr($this->get_intent_declined_notice_template()),
                 sprintf(__('Invoice purchase with %s is not available for this order.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')),
-                __('Phone number is invalid.', 'twoinc-payment-gateway')
+                __('Phone number is invalid.', 'twoinc-payment-gateway'),
+                __('We could not complete that just now. Please wait a moment and try again.', 'twoinc-payment-gateway')
             );
         }
 

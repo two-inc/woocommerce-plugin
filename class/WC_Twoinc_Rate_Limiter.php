@@ -16,28 +16,17 @@ if (!class_exists('WC_Twoinc_Rate_Limiter')) {
     class WC_Twoinc_Rate_Limiter
     {
         /**
-         * [max requests, window seconds] per wc-ajax route.
-         *
-         * Sized against each route's real checkout cadence, not its cheapest
-         * possible use, so a slow typist or a NAT'd office never sees a
-         * refusal.
-         *
-         * term_fees is the loosest: it rides every `updated_checkout`, so
-         * address typing, quantity edits, coupons and shipping changes all
-         * fire it. company_search is next, debounced at 300ms per typed word.
-         * sole_trader_tokens is the tightest — two upstream POSTs that return
-         * write-scoped delegated-authority tokens, gated only by a country
-         * check, and its legitimate use is one flow open plus a slow refresh.
+         * [max requests, window seconds] per wc-ajax route, sized so several
+         * concurrent checkouts behind one office NAT stay under the limit.
          */
         private const LIMITS = [
-            'term_fees' => [90, 60],
+            'term_fees' => [300, 60],
             'company_search' => [60, 60],
-            'select_term' => [60, 60],
+            'sole_trader_tokens' => [60, 60],
             'order_intent' => [30, 60],
             'company_by_id' => [30, 60],
             'payment_terms' => [30, 60],
             'sole_trader_availability' => [30, 60],
-            'sole_trader_tokens' => [10, 60],
         ];
 
         /** Kept off the wire: the key embeds a client address. */
@@ -74,6 +63,10 @@ if (!class_exists('WC_Twoinc_Rate_Limiter')) {
             // Written before the verdict so a refused request still counts:
             // otherwise an abuser parked on the limit would be metered only
             // by the requests that succeed.
+            //
+            // Row count is bounded by distinct peer addresses seen in one
+            // window (one row per address per route), reaped by WP's daily
+            // delete_expired_transients.
             $elapsed = $now - (int) $bucket['start'];
             set_transient($key, $bucket, max(1, $window - $elapsed));
 
@@ -113,14 +106,7 @@ if (!class_exists('WC_Twoinc_Rate_Limiter')) {
             }
         }
 
-        /**
-         * Bucket key for one client on one route.
-         *
-         * Anchored on the client address rather than the session or nonce:
-         * both of those are cookie- or page-scoped, so an abuser rotates them
-         * by re-fetching the checkout page, which costs nothing. An address
-         * is the cheapest identifier that is not free to change.
-         */
+        /** Bucket key for one client on one route, keyed on the socket peer rather than the rotatable session or nonce. */
         private static function transient_key(string $route): string
         {
             $hash = substr(hash(self::KEY_HASH_ALGO, self::client_id()), 0, 24);
@@ -130,14 +116,10 @@ if (!class_exists('WC_Twoinc_Rate_Limiter')) {
 
         private static function client_id(): string
         {
-            if (class_exists('WC_Geolocation')) {
-                $ip = (string) WC_Geolocation::get_ip_address();
-                if ($ip !== '') {
-                    return $ip;
-                }
-            }
-            // Not a trust decision — a spoofed or missing address only ever
-            // picks a different bucket, never a larger allowance.
+            // The socket peer only. WC_Geolocation::get_ip_address() prefers
+            // X-Real-IP / X-Forwarded-For with no trusted-proxy allowlist, so
+            // a rotating header would mint a fresh bucket per request and the
+            // allowance would be unbounded.
             return isset($_SERVER['REMOTE_ADDR'])
                 ? (string) $_SERVER['REMOTE_ADDR']
                 : 'unknown';
