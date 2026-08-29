@@ -270,6 +270,14 @@ final class BrandConfigSpec
             'testApiProxyOrderIntentPostsTheDecodedBodyOrRefuses',
             'testApiProxyOrderIntentResolvesTheMerchantServerSide',
             'testCheckoutBootstrapProxiesEveryCallAndPublishesNoToken',
+            'testRateLimitAllowsTheWholeAllowanceThenRefuses',
+            'testRateLimitAllowanceReturnsOnceTheWindowHasPassed',
+            'testRateLimitBucketsAreSeparatePerRouteAndPerClient',
+            'testRateLimitCountsRefusedRequestsSoAnAbuserCannotSitOnTheLimit',
+            'testRateLimitNeverStoresTheClientAddressInTheKey',
+            'testCompanySearchSurvivesARealisticTypingSession',
+            'testRateLimitRefusesEveryWcAjaxHandlerBeforeItReachesTheApi',
+            'testRateLimitRefusesTheNonProxyHandlersToo',
         ];
         foreach ($tests as $test) {
             self::reset();
@@ -8714,6 +8722,237 @@ final class BrandConfigSpec
             strpos(json_encode($params), 'waf-token-1') === false,
             'the checkout bootstrap must not publish the firewall token'
         );
+    }
+
+
+    /** The configured [max, window] for one route, read from the class itself. */
+    private static function rateLimit(string $route): array
+    {
+        $const = new ReflectionClassConstant(WC_Twoinc_Rate_Limiter::class, 'LIMITS');
+        return $const->getValue()[$route];
+    }
+
+    /** Spend a route's whole allowance, leaving the next call over the limit. */
+    private static function exhaustRateLimit(string $route): void
+    {
+        list($max) = self::rateLimit($route);
+        for ($i = 0; $i < $max; $i++) {
+            TinyAssert::true(
+                WC_Twoinc_Rate_Limiter::check($route),
+                "$route refused request " . ($i + 1) . " of its own allowance"
+            );
+        }
+    }
+
+    private static function testRateLimitAllowsTheWholeAllowanceThenRefuses(): void
+    {
+        // Every wc-ajax route is anonymous and six of the eight spend the
+        // merchant's API key upstream, so the allowance is what stands
+        // between a scraper and the merchant's bill.
+        $routes = [
+            ['term_fees', 90, 60, 'rides every checkout update, so it is the loosest'],
+            ['company_search', 60, 60, 'debounced per typed word'],
+            ['select_term', 60, 60, 'a chip click, and it fans out to term fees'],
+            ['order_intent', 30, 60, 'several per checkout from many call sites'],
+            ['company_by_id', 30, 60, 'one per company the buyer picks'],
+            ['payment_terms', 30, 60, 'one per captured company'],
+            ['sole_trader_availability', 30, 60, 'cached per country by the browser'],
+            ['sole_trader_tokens', 10, 60, 'mints write-scoped delegation tokens'],
+        ];
+        foreach ($routes as list($route, $max, $window, $why)) {
+            TinyAssert::same([$max, $window], self::rateLimit($route), "$route limit changed ($why)");
+
+            $GLOBALS['__twoinc_test_transients'] = [];
+            for ($i = 0; $i < $max; $i++) {
+                TinyAssert::true(
+                    WC_Twoinc_Rate_Limiter::check($route),
+                    "$route refused a request inside its own allowance ($why)"
+                );
+            }
+            $GLOBALS['__twoinc_test_ajax_json'] = null;
+            TinyAssert::same(
+                false,
+                WC_Twoinc_Rate_Limiter::check($route),
+                "$route served request " . ($max + 1) . ", one past its allowance ($why)"
+            );
+            TinyAssert::same(
+                429,
+                $GLOBALS['__twoinc_test_ajax_json']['status'] ?? null,
+                "$route must refuse with 429, not a silent drop ($why)"
+            );
+            TinyAssert::same(
+                false,
+                $GLOBALS['__twoinc_test_ajax_json']['success'] ?? null,
+                "$route refusal must be an error envelope ($why)"
+            );
+        }
+    }
+
+    private static function testRateLimitAllowanceReturnsOnceTheWindowHasPassed(): void
+    {
+        // A buyer who trips the limit must be able to finish their checkout,
+        // so the bucket is bound by the window it recorded, not by the
+        // transient's TTL — an object cache may keep or drop that at will.
+        $cases = [
+            [61, true, 'a bucket older than the window starts over'],
+            [59, false, 'a bucket still inside the window keeps counting'],
+        ];
+        foreach ($cases as list($age, $allowed, $description)) {
+            list($max, $window) = self::rateLimit('company_search');
+            $GLOBALS['__twoinc_test_transients'] = [];
+            self::exhaustRateLimit('company_search');
+            TinyAssert::same(false, WC_Twoinc_Rate_Limiter::check('company_search'), "setup: $description");
+
+            // Age the recorded window rather than the TTL the stub ignores.
+            foreach ($GLOBALS['__twoinc_test_transients'] as $key => $bucket) {
+                $GLOBALS['__twoinc_test_transients'][$key]['start'] = time() - $age;
+            }
+            TinyAssert::same($allowed, WC_Twoinc_Rate_Limiter::check('company_search'), $description);
+            TinyAssert::same($window, 60, 'the window this case is written against');
+            TinyAssert::true($max > 0, 'the route has an allowance');
+        }
+    }
+
+    private static function testRateLimitBucketsAreSeparatePerRouteAndPerClient(): void
+    {
+        // One buyer exhausting a route must not lock out either another route
+        // or another buyer; a shared bucket would take the whole shop down
+        // with one abuser.
+        $GLOBALS['__twoinc_test_transients'] = [];
+        $_SERVER['REMOTE_ADDR'] = '198.51.100.7';
+        self::exhaustRateLimit('sole_trader_tokens');
+        TinyAssert::same(false, WC_Twoinc_Rate_Limiter::check('sole_trader_tokens'), 'setup: the route is spent');
+
+        TinyAssert::true(
+            WC_Twoinc_Rate_Limiter::check('company_search'),
+            'exhausting one route must not refuse another'
+        );
+
+        $_SERVER['REMOTE_ADDR'] = '198.51.100.8';
+        TinyAssert::true(
+            WC_Twoinc_Rate_Limiter::check('sole_trader_tokens'),
+            'one client exhausting a route must not refuse a different client'
+        );
+
+        $_SERVER['REMOTE_ADDR'] = '198.51.100.7';
+        TinyAssert::same(
+            false,
+            WC_Twoinc_Rate_Limiter::check('sole_trader_tokens'),
+            'the exhausted client must still be refused after another client was served'
+        );
+        unset($_SERVER['REMOTE_ADDR']);
+    }
+
+    private static function testRateLimitCountsRefusedRequestsSoAnAbuserCannotSitOnTheLimit(): void
+    {
+        // Metering only the requests that succeed would let an abuser park on
+        // the limit and be served again the instant anything expired.
+        $GLOBALS['__twoinc_test_transients'] = [];
+        self::exhaustRateLimit('order_intent');
+        for ($i = 0; $i < 25; $i++) {
+            TinyAssert::same(false, WC_Twoinc_Rate_Limiter::check('order_intent'), 'a refused request must stay refused');
+        }
+        $bucket = reset($GLOBALS['__twoinc_test_transients']);
+        list($max) = self::rateLimit('order_intent');
+        TinyAssert::same(
+            $max + 25,
+            $bucket['count'] ?? null,
+            'refused requests must be counted, not dropped from the bucket'
+        );
+    }
+
+    private static function testRateLimitNeverStoresTheClientAddressInTheKey(): void
+    {
+        // The key reaches the object cache and any transient inspector, so the
+        // address is hashed rather than written through.
+        $GLOBALS['__twoinc_test_transients'] = [];
+        $_SERVER['REMOTE_ADDR'] = '198.51.100.9';
+        WC_Twoinc_Rate_Limiter::check('company_search');
+        $key = key($GLOBALS['__twoinc_test_transients']);
+        unset($_SERVER['REMOTE_ADDR']);
+
+        TinyAssert::true(strpos((string) $key, '198.51.100.9') === false, 'the key must not carry the raw address');
+        TinyAssert::true(strpos((string) $key, 'company_search') !== false, 'the key must name the route it meters');
+        TinyAssert::true(strlen((string) $key) <= 172, 'the key must fit the transient name limit');
+    }
+
+    private static function testCompanySearchSurvivesARealisticTypingSession(): void
+    {
+        // The panel debounces at 300ms and fires per typed word, so a buyer
+        // looking up several companies is the cadence the limit must not
+        // catch. Three lookups of an eight-request burst is a heavy but
+        // ordinary session.
+        $GLOBALS['__twoinc_test_transients'] = [];
+        $requests = 0;
+        for ($lookup = 0; $lookup < 3; $lookup++) {
+            for ($keystroke = 0; $keystroke < 8; $keystroke++) {
+                $requests++;
+                TinyAssert::true(
+                    WC_Twoinc_Rate_Limiter::check('company_search'),
+                    "a buyer's normal typing was refused at request $requests"
+                );
+            }
+        }
+        list($max) = self::rateLimit('company_search');
+        TinyAssert::true($requests < $max, 'the realistic session must sit below the limit, not at it');
+    }
+
+    private static function testRateLimitRefusesEveryWcAjaxHandlerBeforeItReachesTheApi(): void
+    {
+        // The point of the limit is that the refused request costs the
+        // merchant nothing, so each handler must be metered ahead of its
+        // upstream call, not after it.
+        $handlers = [
+            ['company_search', 'ajax_company_search', 'the company search proxy'],
+            ['company_by_id', 'ajax_company_by_id', 'the registry address lookup'],
+            ['order_intent', 'ajax_order_intent', 'the order intent check'],
+            ['payment_terms', 'ajax_payment_terms', 'the payment terms lookup'],
+        ];
+        foreach ($handlers as list($route, $handler, $description)) {
+            $GLOBALS['__twoinc_test_transients'] = [];
+            self::exhaustRateLimit($route);
+
+            $gateway = self::proxyGateway();
+            $_REQUEST = ['q' => 'exampleco', 'country' => 'GB', 'lookup_id' => '12345678'];
+            $_POST = ['intent' => '{"gross_amount":"100"}'];
+            $response = self::runProxyHandler($gateway, $handler);
+            $_REQUEST = [];
+            $_POST = [];
+
+            TinyAssert::same(429, $response['status'] ?? null, "$description must answer 429 over the limit");
+            TinyAssert::same([], $gateway->calls, "$description reached the API on a rate-limited request");
+        }
+    }
+
+    private static function testRateLimitRefusesTheNonProxyHandlersToo(): void
+    {
+        // The four endpoints that predate the proxy are just as anonymous, and
+        // term fees fans out one upstream POST per offered term.
+        $handlers = [
+            ['term_fees', ['WC_Twoinc_Payment_Terms', 'ajax_term_fees'], 'per-term fee quotes'],
+            ['select_term', ['WC_Twoinc_Payment_Terms', 'ajax_select_term'], 'the term selection write'],
+            ['sole_trader_availability', ['WC_Twoinc_Sole_Trader', 'ajax_availability'], 'the availability check'],
+            ['sole_trader_tokens', ['WC_Twoinc_Sole_Trader', 'ajax_tokens'], 'the token mint'],
+        ];
+        foreach ($handlers as list($route, $callable, $description)) {
+            $GLOBALS['__twoinc_test_transients'] = [];
+            self::exhaustRateLimit($route);
+
+            $GLOBALS['__twoinc_test_ajax_json'] = null;
+            $GLOBALS['__twoinc_test_http_calls'] = [];
+            call_user_func($callable);
+
+            TinyAssert::same(
+                429,
+                $GLOBALS['__twoinc_test_ajax_json']['status'] ?? null,
+                "$description must answer 429 over the limit"
+            );
+            TinyAssert::same(
+                [],
+                $GLOBALS['__twoinc_test_http_calls'],
+                "$description reached the network on a rate-limited request"
+            );
+        }
     }
 
     private static function poTranslation(string $po, string $msgid): string

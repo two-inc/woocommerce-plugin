@@ -211,6 +211,11 @@ if (!class_exists('WC_Twoinc_Sole_Trader')) {
                 wp_send_json_error('Invalid nonce');
                 return;
             }
+            // After the nonce, so unauthenticated noise never fills a bucket
+            // that a real buyer on the same address is metered by.
+            if (!WC_Twoinc_Rate_Limiter::check('sole_trader_availability')) {
+                return;
+            }
             $gateway = WC_Twoinc::get_instance();
             if (!$gateway) {
                 self::log_refusal('availability check', 'gateway instance unavailable');
@@ -233,6 +238,11 @@ if (!class_exists('WC_Twoinc_Sole_Trader')) {
             if (!check_ajax_referer('twoinc_checkout', 'nonce', false)) {
                 self::log_refusal('token mint', 'invalid or expired checkout nonce');
                 wp_send_json_error('Invalid nonce');
+                return;
+            }
+            // After the nonce, so unauthenticated noise never fills a bucket
+            // that a real buyer on the same address is metered by.
+            if (!WC_Twoinc_Rate_Limiter::check('sole_trader_tokens')) {
                 return;
             }
             $gateway = WC_Twoinc::get_instance();

@@ -824,6 +824,11 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                 wp_send_json_error('Invalid nonce');
                 return;
             }
+            // After the nonce, so unauthenticated noise never fills a bucket
+            // that a real buyer on the same address is metered by.
+            if (!WC_Twoinc_Rate_Limiter::check('term_fees')) {
+                return;
+            }
             $gateway = WC_Twoinc::get_instance();
             if (!$gateway || !self::is_enabled($gateway)) {
                 wp_send_json_error('Payment terms are not enabled');
@@ -883,6 +888,11 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         {
             if (!check_ajax_referer('twoinc_checkout', 'nonce', false)) {
                 wp_send_json_error('Invalid nonce');
+                return;
+            }
+            // After the nonce, so unauthenticated noise never fills a bucket
+            // that a real buyer on the same address is metered by.
+            if (!WC_Twoinc_Rate_Limiter::check('select_term')) {
                 return;
             }
             $gateway = WC_Twoinc::get_instance();
