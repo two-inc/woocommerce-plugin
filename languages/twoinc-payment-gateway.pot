@@ -438,6 +438,10 @@ msgstr ""
 msgid "Phone number is invalid."
 msgstr ""
 
+#: class/WC_Twoinc.php:1067
+msgid "We could not complete that just now. Please wait a moment and try again."
+msgstr ""
+
 #: class/WC_Twoinc.php:42
 msgid "Place order"
 msgstr ""

@@ -499,6 +499,10 @@ msgstr "Telefoonnummer"
 msgid "Phone number is invalid."
 msgstr "Telefoonnummer is ongeldig."
 
+#: class/WC_Twoinc.php:1067
+msgid "We could not complete that just now. Please wait a moment and try again."
+msgstr "Dit kon niet worden voltooid. Probeer het zo weer opnieuw."
+
 #: class/WC_Twoinc.php:42
 msgid "Place order"
 msgstr "Bestelling plaatsen"

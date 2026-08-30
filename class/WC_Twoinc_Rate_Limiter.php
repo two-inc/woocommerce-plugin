@@ -41,6 +41,9 @@ if (!class_exists('WC_Twoinc_Rate_Limiter')) {
         /** Trips needed before the log commits to a one-caller or many-callers reading. */
         private const LEDGER_MIN_SAMPLE = 5;
 
+        /** Percentage of trips one address must hold before the log reads it as one caller. */
+        private const LEDGER_DOMINANT_SHARE = 80;
+
         /** How often the log repeats that metering is switched off. */
         private const DISABLED_NOTICE_INTERVAL = 3600;
 
@@ -200,11 +203,17 @@ if (!class_exists('WC_Twoinc_Rate_Limiter')) {
                 return $summary;
             }
 
-            return $summary . ' ' . ($distinct === 1
-                ? 'One address accounts for all of it: either a single abusive caller, or every buyer'
-                    . ' arriving on one reverse proxy or CDN address - if the latter, list every proxy in'
-                    . ' the chain under Trusted proxy addresses in the plugin Diagnostics settings.'
-                : 'Spread across several addresses, so this looks like real traffic rather than one caller.');
+            // Gated on the share, not on a lone address: one legitimate buyer
+            // tripping once alongside a caller at 97% must not read as spread.
+            if ($share < self::LEDGER_DOMINANT_SHARE) {
+                return $summary . ' Spread across several addresses, so this looks like real traffic'
+                    . ' rather than one caller.';
+            }
+
+            return $summary . ' One address accounts for ' . ($distinct === 1 ? 'all' : 'most')
+                . ' of it: either a single abusive caller, or every buyer arriving on one reverse proxy'
+                . ' or CDN address - if the latter, list every proxy in the chain under Trusted proxy'
+                . ' addresses in the plugin Diagnostics settings.';
         }
 
         /** Bucket key for one client on one route, keyed on the client address rather than the rotatable session or nonce. */
@@ -300,9 +309,6 @@ if (!class_exists('WC_Twoinc_Rate_Limiter')) {
             $suffix = null;
             if (strpos($range, '/') !== false) {
                 list($range, $suffix) = explode('/', $range, 2);
-                // An (int) cast reads '' or 'abc' as /0, which matches every
-                // address of that family: one typo would turn the allowlist
-                // into "trust everyone".
                 if (preg_match('/^\d+$/', trim($suffix)) !== 1) {
                     return null;
                 }
@@ -313,7 +319,14 @@ if (!class_exists('WC_Twoinc_Rate_Limiter')) {
             }
             $width = strlen($net) * 8;
             $bits = $suffix === null ? $width : (int) trim($suffix);
-            return $bits <= $width ? [$net, $bits] : null;
+            // A /0 matches every address of its family, so it can only be a typo
+            // or an attempt to disable the check - which is what the
+            // rate_limiting_enabled toggle is for. Leading zeros are read as
+            // decimal, so /008 is the legitimate /8 and stays valid.
+            if ($bits < 1 || $bits > $width) {
+                return null;
+            }
+            return [$net, $bits];
         }
 
         /** @param string $packed inet_pton output for the address under test. */

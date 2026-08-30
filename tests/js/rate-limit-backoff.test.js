@@ -320,16 +320,20 @@ describe("address lookup failure", () => {
     document.body.innerHTML = "";
   });
 
+  // "Please wait a moment and try again" is only true of the limiter: it is the
+  // one failure a wait does fix. Every other failure keeps its prior silence.
   test.each([
-    { status: 429, description: "a lookup refused by the shop's limiter surfaces the busy box" },
-    { status: 500, description: "a lookup that cannot be reached surfaces the busy box" }
-  ])("$description", ({ status }) => {
+    { status: 429, shown: true, description: "a lookup refused by the shop's limiter surfaces the busy box" },
+    { status: 500, shown: false, description: "an unreachable lookup does not tell the buyer to wait" },
+    { status: 403, shown: false, description: "a refused lookup does not tell the buyer to wait" },
+    { status: 0, shown: false, description: "a dropped connection does not tell the buyer to wait" }
+  ])("$description", ({ status, shown }) => {
     instance.addressLookup({ lookup_id: "lookup-1" });
 
     ajax.last().failWith(status);
 
     const $box = $(".twoinc-pay-box.twoinc-busy-retry");
-    expect($box.hasClass("hidden")).toBe(false);
+    expect($box.hasClass("hidden")).toBe(!shown);
   });
 
   test("a superseded lookup's failure paints nothing", () => {
@@ -443,5 +447,82 @@ describe("sole-trader 429 backoff", () => {
 
       expect(ajax.calls.length).toBe(2);
     });
+  });
+});
+
+// Typing is the only route a buyer can trip legitimately - a 300ms debounce
+// against 60 requests a minute - so without a backoff every further keystroke
+// fires into the limit and holds the window open for the rest of the session.
+describe("company-search 429 backoff", () => {
+  let ctx;
+  let helper;
+  let ajax;
+
+  const search = (term) =>
+    helper.searchCompanies({
+      config: {},
+      token: term,
+      term: term,
+      getCountryCode: () => "GB"
+    });
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    ctx = harness.loadTwoinc({
+      gateway_id: GATEWAY_ID,
+      enable_order_intent: "no",
+      enable_address_lookup: "no",
+      text: {}
+    });
+    helper = ctx.helper;
+    harness.buildCheckoutForm();
+    ajax = stubAjax(ctx.$);
+  });
+
+  afterEach(() => {
+    ajax.restore();
+    harness.releasePanel(ctx.helper);
+    jest.clearAllTimers();
+    jest.useRealTimers();
+    document.body.innerHTML = "";
+  });
+
+  test("a 429 backs off, so the next keystroke issues no request", async () => {
+    const first = search("acme");
+    ajax.last().failWith(429, "30");
+    await expect(first).resolves.toEqual({ unavailable: true });
+
+    expect(helper.companySearchBackoffUntil).toBe(Date.now() + 30000);
+
+    // Still answered, and answered honestly - the panel says the search is
+    // down rather than painting "no companies found".
+    await expect(search("acme l")).resolves.toEqual({ unavailable: true });
+    expect(ajax.calls.length).toBe(1);
+  });
+
+  test("a search after the window issues a request again", async () => {
+    const first = search("acme");
+    ajax.last().failWith(429, "30");
+    await first;
+
+    jest.advanceTimersByTime(30000);
+    search("acme l");
+
+    expect(ajax.calls.length).toBe(2);
+  });
+
+  test.each([
+    { status: 500, description: "an unreachable search" },
+    { status: 0, description: "a dropped connection" }
+  ])("$description does not back off", async ({ status }) => {
+    const first = search("acme");
+    ajax.last().failWith(status);
+    await expect(first).resolves.toEqual({ unavailable: true });
+
+    expect(helper.companySearchBackoffUntil).toBe(0);
+
+    search("acme l");
+
+    expect(ajax.calls.length).toBe(2);
   });
 });

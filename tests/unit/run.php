@@ -213,6 +213,7 @@ final class BrandConfigSpec
             'testIntentVerdictBoxesHoldABareSentence',
             'testIntentVerdictBoxesAreAnnounced',
             'testIntentLoaderCopyIsTranslatedInEveryLocale',
+            'testBusyRetryCopyIsTranslatedInEveryLocale',
             'testCompanyRequiredCopyIsTranslatedInEveryLocale',
             'testPoTranslationParserRejectsWhatItMustReject',
             'testIntentLoaderSuppressedWithTheNoticeButErrorBoxesSurvive',
@@ -283,6 +284,8 @@ final class BrandConfigSpec
             'testRateLimitNormalisesTheSocketPeer',
             'testRateLimitCanBeTurnedOffFromDiagnostics',
             'testRateLimitRefusalLogSaysWhetherOneAddressDominates',
+            'testRateLimitRefusalLogNamesADominantAddressEvenWithIncidentalCompany',
+            'testRateLimitRefusalLedgerStopsCountingPastItsClientCap',
             'testRateLimitLogsOncePerWindowNotPerRefusedRequest',
             'testRateLimitLeavesTheBucketEmptyWhenTheNonceFails',
             'testCompanySearchSurvivesARealisticTypingSession',
@@ -8049,6 +8052,54 @@ final class BrandConfigSpec
         );
     }
 
+    private static function testBusyRetryCopyIsTranslatedInEveryLocale(): void
+    {
+        $languages = dirname(__DIR__, 2) . '/languages/';
+        $msgid = 'We could not complete that just now. Please wait a moment and try again.';
+
+        TinyAssert::true(
+            strpos(self::gateway()->build_payment_description(), '>' . $msgid . '<') !== false,
+            'the busy-retry sentence has been reworded — update this msgid and the catalogues with it'
+        );
+
+        TinyAssert::true(
+            strpos((string) file_get_contents($languages . 'twoinc-payment-gateway.pot'), $msgid) !== false,
+            'the .pot is missing the busy-retry sentence — regenerate it'
+        );
+
+        $expected = [
+            'nb_NO' => 'Dette kunne ikke fullføres akkurat nå. Vent litt og prøv igjen.',
+            'nl_NL' => 'Dit kon niet worden voltooid. Probeer het zo weer opnieuw.',
+            'sv_SE' => 'Det gick inte att slutföra detta just nu. Vänta en stund och försök igen.',
+        ];
+        $catalogues = glob($languages . 'twoinc-payment-gateway-*.po');
+        TinyAssert::true($catalogues !== false && $catalogues !== [], 'no .po catalogues found at all');
+        $visited = [];
+        foreach ($catalogues as $po) {
+            preg_match('/twoinc-payment-gateway-(.+)\.po$/', $po, $m);
+            $locale = $m[1];
+            $visited[] = $locale;
+            TinyAssert::true(
+                isset($expected[$locale]),
+                "locale $locale has no expected busy-retry translation in this test — add one"
+            );
+            TinyAssert::same(
+                $expected[$locale],
+                self::poTranslation((string) file_get_contents($po), $msgid),
+                "the $locale catalogue does not pair the busy-retry sentence with its translation"
+            );
+        }
+
+        sort($visited);
+        $wanted = array_keys($expected);
+        sort($wanted);
+        TinyAssert::same(
+            implode(',', $wanted),
+            implode(',', $visited),
+            'the catalogue discovery did not visit every locale this plugin ships'
+        );
+    }
+
     /**
      * The refusal a buyer meets when no company has been selected. Weaker than
      * the loader-copy check above, which reads its msgid off rendered markup:
@@ -9084,10 +9135,10 @@ final class BrandConfigSpec
 
     private static function testRateLimitTreatsAMalformedTrustedProxyEntryAsNoEntry(): void
     {
-        // A bad prefix length must not fall through to a permissive default.
-        // Casting the suffix to int reads '' or 'abc' as /0, which matches
-        // every address of that family: one typo and every caller is a
-        // trusted proxy, free to name themselves via X-Forwarded-For.
+        // A prefix length that is unparseable, out of range, or zero must not
+        // fall through to a permissive default. Any of them matching would make
+        // every caller of that family a trusted proxy, free to name themselves
+        // via X-Forwarded-For - a fresh bucket per request.
         $cases = [
             ['10.0.0.0/', '10.0.0.1', 'an empty prefix length must not match'],
             ['10.0.0.0/abc', '10.0.0.1', 'a non-numeric prefix length must not match'],
@@ -9101,6 +9152,13 @@ final class BrandConfigSpec
             ["10.0.0.0/8\n2001:db8::/x", '2001:dba::9', 'a typo in one family must not trust every address of that family'],
             // The stray space splits into two entries, both unusable.
             ['10.0.0.0/ 8', '10.0.0.1', 'a space before the prefix length must not match'],
+            // A genuine zero bit-width is the same "trust everyone" as a typo,
+            // whichever way it is spelled.
+            ['10.0.0.0/0', '10.0.0.1', 'a zero prefix length must not match'],
+            ['10.0.0.0/00', '10.0.0.1', 'a zero prefix length written with leading zeros must not match'],
+            ['0.0.0.0/0', '10.0.0.1', 'the IPv4 match-everything block must not match'],
+            ['::/0', '2001:db8::5', 'the IPv6 match-everything block must not match'],
+            ['2001:db8::/0', '2001:dba::9', 'a zero IPv6 prefix length must not match'],
         ];
         foreach ($cases as list($trusted, $peer, $description)) {
             $GLOBALS['__twoinc_test_transients'] = [];
@@ -9131,6 +9189,13 @@ final class BrandConfigSpec
             ['not-an-address', ['not-an-address'], 'a non-address must be reported'],
             ["10.0.0.0/8\nnope/4\n2001:db8::/999", ['nope/4', '2001:db8::/999'], 'every unusable entry must be reported, not just the first'],
             ['10.0.0.0/ 8', ['10.0.0.0/', '8'], 'a space before the prefix length must be reported as the two entries it becomes'],
+            // The dangerous input the merchant must not be left silent about.
+            ['10.0.0.0/0', ['10.0.0.0/0'], 'a zero prefix length must be reported'],
+            ['10.0.0.0/00', ['10.0.0.0/00'], 'a zero prefix length written with leading zeros must be reported'],
+            ['0.0.0.0/0', ['0.0.0.0/0'], 'the IPv4 match-everything block must be reported'],
+            ['::/0', ['::/0'], 'the IPv6 match-everything block must be reported'],
+            // Leading zeros on a real width are just decimal, and stay usable.
+            ['10.0.0.0/008', [], 'leading zeros on a legitimate prefix length must save without complaint'],
         ];
         $gateway = self::proxyGateway();
         foreach ($cases as list($value, $expected_reported, $description)) {
@@ -9248,6 +9313,69 @@ final class BrandConfigSpec
         TinyAssert::true(strpos($many, 'from 5 distinct client addresses') !== false, "many callers must be counted: $many");
         TinyAssert::true(strpos($many, 'Spread across several addresses') !== false, "many callers must not be reported as one address: $many");
         TinyAssert::true(strpos($many, 'One address accounts for all of it') === false, "many callers must not carry the single-address wording: $many");
+    }
+
+    private static function testRateLimitRefusalLogNamesADominantAddressEvenWithIncidentalCompany(): void
+    {
+        // The reading has to follow the share, not the count of addresses: one
+        // legitimate buyer tripping once beside an abuser at 90% must not flip
+        // the log to "real traffic", which is the opposite of the truth.
+        $GLOBALS['__twoinc_test_transients'] = [];
+        $GLOBALS['__twoinc_test_logs'] = [];
+
+        $_SERVER['REMOTE_ADDR'] = '198.51.100.60';
+        for ($n = 0; $n < 9; $n++) {
+            self::ageRateLimitWindows(120);
+            self::tripRateLimit('order_intent');
+        }
+        $_SERVER['REMOTE_ADDR'] = '198.51.100.61';
+        self::ageRateLimitWindows(120);
+        self::tripRateLimit('order_intent');
+        unset($_SERVER['REMOTE_ADDR']);
+
+        $mixed = end($GLOBALS['__twoinc_test_logs'])['message'] ?? '';
+        TinyAssert::true(strpos($mixed, 'from 2 distinct client addresses') !== false, "both addresses must be counted: $mixed");
+        TinyAssert::true(strpos($mixed, 'the busiest is 90%') !== false, "the dominant share must be reported: $mixed");
+        TinyAssert::true(strpos($mixed, 'One address accounts for most of it') !== false, "a dominant address must be read as one caller: $mixed");
+        TinyAssert::true(strpos($mixed, 'Trusted proxy addresses') !== false, "the dominant case must point at the setting that fixes it: $mixed");
+        TinyAssert::true(strpos($mixed, 'Spread across several addresses') === false, "a dominant address must not be read as spread: $mixed");
+    }
+
+    private static function testRateLimitRefusalLedgerStopsCountingPastItsClientCap(): void
+    {
+        // Past the cap the shape of the traffic is already decided, so the
+        // ledger must stop growing while still saying it has stopped.
+        $cap = self::rateLimiterConstant('LEDGER_MAX_CLIENTS');
+        $GLOBALS['__twoinc_test_transients'] = [];
+        $GLOBALS['__twoinc_test_logs'] = [];
+
+        for ($n = 0; $n < $cap; $n++) {
+            $_SERVER['REMOTE_ADDR'] = '198.51.' . intdiv($n, 250) . '.' . ($n % 250 + 1);
+            self::tripRateLimit('order_intent');
+        }
+        $at_cap = end($GLOBALS['__twoinc_test_logs'])['message'] ?? '';
+        TinyAssert::true(
+            strpos($at_cap, "from {$cap}+ distinct client addresses") !== false,
+            "a full ledger must mark the count as a floor, not an exact total: $at_cap"
+        );
+
+        $_SERVER['REMOTE_ADDR'] = '203.0.113.99';
+        self::tripRateLimit('order_intent');
+        unset($_SERVER['REMOTE_ADDR']);
+        $past_cap = end($GLOBALS['__twoinc_test_logs'])['message'] ?? '';
+        TinyAssert::true(
+            strpos($past_cap, "from {$cap}+ distinct client addresses") !== false,
+            "the ledger must not grow past the cap: $past_cap"
+        );
+        TinyAssert::true(
+            strpos($past_cap, 'this caller: 0') !== false,
+            "a caller the full ledger declined to record must report no trips of its own: $past_cap"
+        );
+    }
+
+    private static function rateLimiterConstant(string $name): int
+    {
+        return (int) (new ReflectionClass('WC_Twoinc_Rate_Limiter'))->getConstant($name);
     }
 
     /** Spend the route's allowance and take one refusal, i.e. one ledger trip. */

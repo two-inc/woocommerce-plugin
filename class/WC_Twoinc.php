@@ -3778,13 +3778,8 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * Name the trusted-proxy entries the limiter will skip.
-         *
-         * A skipped entry is not a smaller allowlist, it is a proxy the
-         * merchant believes is trusted and is not, so it has to be visible at
-         * save time rather than only in the shape of the refusal log. Entries
-         * are split exactly as the limiter splits them, so what is reported is
-         * what it will actually reject.
+         * Name the trusted-proxy entries the limiter will skip, so a proxy the
+         * merchant believes is trusted and is not surfaces at save time.
          *
          * @param string $key
          * @param string $value

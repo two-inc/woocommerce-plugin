@@ -737,6 +737,13 @@ class TwoCompanySearch {
   companySearchSeq = 0;
 
   /**
+   * Backoff after a 429. Typing is the one route that can trip the limit
+   * legitimately, and every further keystroke would otherwise fire into it and
+   * hold the window open for the rest of the buyer's session.
+   */
+  companySearchBackoffUntil = 0;
+
+  /**
    * The last billing country this page has acted on (TWO-24867/TWO-25326).
    * `null` until first seen; every setter goes through `countryDidChange`, so
    * none can leave this out of step with the field.
@@ -844,6 +851,9 @@ class TwoCompanySearch {
    */
   searchCompanies(params) {
     const seq = ++this.companySearchSeq;
+    if (Date.now() < this.companySearchBackoffUntil) {
+      return Promise.resolve({ unavailable: true });
+    }
     const searchParams = new URLSearchParams({
       // Read per request, never captured when the panel was built (TWO-24867):
       // the panel outlives a country change on every path that does not rebuild
@@ -889,6 +899,9 @@ class TwoCompanySearch {
         if (textStatus === "abort" || seq !== this.companySearchSeq) {
           resolve({ aborted: true });
           return;
+        }
+        if (jqXHR && jqXHR.status === 429) {
+          this.companySearchBackoffUntil = Date.now() + twoincUtilHelper.retryAfterMs(jqXHR);
         }
         resolve({ unavailable: true });
       });
@@ -5181,9 +5194,12 @@ class Twoinc {
         self.registryAddressApplied = true;
       }
     });
-    addressResponse.fail(function () {
+    addressResponse.fail(function (jqXHR) {
       if (seq !== self.addressLookupSeq) return;
-      // Otherwise the address boxes stay empty with nothing said.
+      // Only the shop's own limiter earns the "wait a moment" copy: it is the
+      // one failure that retrying does fix. Anything else keeps its silence,
+      // where the buyer types the address themselves.
+      if (!jqXHR || jqXHR.status !== 429) return;
       twoincDomHelper.togglePaySubtitleDesc("errored", ".twoinc-busy-retry");
     });
   }

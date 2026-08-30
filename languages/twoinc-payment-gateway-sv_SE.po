@@ -495,6 +495,10 @@ msgstr "Telefonnummer"
 msgid "Phone number is invalid."
 msgstr "Telefonnumret är ogiltigt"
 
+#: class/WC_Twoinc.php:1067
+msgid "We could not complete that just now. Please wait a moment and try again."
+msgstr "Det gick inte att slutföra detta just nu. Vänta en stund och försök igen."
+
 #: class/WC_Twoinc.php:42
 msgid "Place order"
 msgstr "Beställa"
