@@ -4719,6 +4719,7 @@ class Twoinc {
       this.orderIntentCheck.interval !== null ||
       this.orderIntentCheck.renderInterval !== null ||
       this.orderIntentCheck.inFlightSeq !== null ||
+      this.orderIntentCheck.rateLimitRetryTimer !== null ||
       this.orderIntentCheck.pendingCheck;
 
     clearInterval(this.orderIntentCheck.interval);

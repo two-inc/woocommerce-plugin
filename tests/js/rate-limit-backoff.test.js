@@ -371,7 +371,7 @@ describe("address lookup failure", () => {
     instance.addressLookup({ lookup_id: "lookup-1" });
     instance.addressLookup({ lookup_id: "lookup-2" });
 
-    ajax.calls[0].failWith(500);
+    ajax.calls[0].failWith(429, "30");
 
     expect($(".twoinc-pay-box.twoinc-busy-retry").hasClass("hidden")).toBe(true);
   });
