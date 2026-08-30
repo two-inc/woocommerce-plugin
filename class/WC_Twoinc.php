@@ -3778,6 +3778,38 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
+         * Name the trusted-proxy entries the limiter will skip.
+         *
+         * A skipped entry is not a smaller allowlist, it is a proxy the
+         * merchant believes is trusted and is not, so it has to be visible at
+         * save time rather than only in the shape of the refusal log. Entries
+         * are split exactly as the limiter splits them, so what is reported is
+         * what it will actually reject.
+         *
+         * @param string $key
+         * @param string $value
+         *
+         * @return string
+         */
+        public function validate_trusted_proxies_field($key, $value)
+        {
+            $invalid = [];
+            foreach (preg_split('/[\s,]+/', (string) $value) ?: [] as $entry) {
+                if ($entry !== '' && !WC_Twoinc_Rate_Limiter::is_valid_proxy_entry($entry)) {
+                    $invalid[] = $entry;
+                }
+            }
+            if ($invalid) {
+                WC_Admin_Settings::add_error(sprintf(
+                    /* translators: %s is a comma-separated list of the rejected entries */
+                    __('Trusted proxy addresses: %s is not a valid IP address or CIDR block, and is ignored. Requests from it are not treated as coming from a trusted proxy.', 'twoinc-payment-gateway'),
+                    implode(', ', $invalid)
+                ));
+            }
+            return (string) $value;
+        }
+
+        /**
          * Brand veto on payment processing, resolved via the
          * twoinc_payment_validation_error filter (e.g. a brand overlay's
          * required terms-acceptance checkbox). Returns the buyer-facing
@@ -4675,7 +4707,7 @@ if (!class_exists('WC_Twoinc')) {
                 'trusted_proxies' => [
                     'title'       => __('Trusted proxy addresses', 'twoinc-payment-gateway'),
                     'type'        => 'textarea',
-                    'description' => __('IP addresses or CIDR blocks of your own reverse proxy, load balancer or CDN, one per line. Only when a request arrives from one of these is the X-Forwarded-For header believed, and the buyer metered by their own address instead of the proxy\'s. Leave empty unless you run such a proxy: any address listed here can set its own identity for rate limiting.', 'twoinc-payment-gateway'),
+                    'description' => __('IP addresses or CIDR blocks, one per line. List every proxy in the chain between the buyer and your server, not just the outermost one — with a CDN in front of a load balancer, both must be listed, or the buyer is metered as whichever hop is missing. Only when a request arrives from a listed address is the X-Forwarded-For header believed, and the buyer metered by their own address instead of the proxy\'s. Leave empty unless you run such a proxy: any address listed here can set its own identity for rate limiting.', 'twoinc-payment-gateway'),
                     'placeholder' => "10.0.0.0/8\n2001:db8::/32",
                     'default'     => ''
                 ],

@@ -246,6 +246,48 @@ describe("order-intent 429 backoff", () => {
 
     expect(ajax.calls.length).toBe(2);
   });
+
+  test("the window elapsing re-checks on its own, with no further buyer input", () => {
+    // `updated_checkout` is the only other thing that re-arms, and a buyer
+    // who has finished typing fires no more of them.
+    issueACheck();
+    ajax.last().failWith(429, "30");
+    expect(shown(".twoinc-busy-retry")).toBe(true);
+
+    jest.advanceTimersByTime(29000);
+    expect(ajax.calls.length).toBe(1);
+
+    jest.advanceTimersByTime(3000);
+    expect(ajax.calls.length).toBe(2);
+  });
+
+  test("a second refusal pushes the deadline out rather than firing on the first one", () => {
+    issueACheck();
+    ajax.last().failWith(429, "10");
+
+    jest.advanceTimersByTime(12000);
+    expect(ajax.calls.length).toBe(2);
+
+    // The retry is refused again, for longer: the first timer must not fire a
+    // third request at the original deadline.
+    ajax.last().failWith(429, "60");
+    jest.advanceTimersByTime(30000);
+    expect(ajax.calls.length).toBe(2);
+
+    jest.advanceTimersByTime(32000);
+    expect(ajax.calls.length).toBe(3);
+  });
+
+  test("abandoning the check cancels the pending retry", () => {
+    issueACheck();
+    ajax.last().failWith(429, "30");
+
+    instance.abandonOrderIntentCheck();
+    jest.advanceTimersByTime(60000);
+
+    expect(instance.orderIntentCheck.rateLimitRetryTimer).toBe(null);
+    expect(ajax.calls.length).toBe(1);
+  });
 });
 
 describe("address lookup failure", () => {

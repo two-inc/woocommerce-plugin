@@ -38,6 +38,12 @@ if (!class_exists('WC_Twoinc_Rate_Limiter')) {
         /** Distinct callers the ledger tracks; past this the shape of the traffic is already decided. */
         private const LEDGER_MAX_CLIENTS = 50;
 
+        /** Trips needed before the log commits to a one-caller or many-callers reading. */
+        private const LEDGER_MIN_SAMPLE = 5;
+
+        /** How often the log repeats that metering is switched off. */
+        private const DISABLED_NOTICE_INTERVAL = 3600;
+
         /**
          * Count this request against $route and refuse it if over the limit.
          *
@@ -67,18 +73,17 @@ if (!class_exists('WC_Twoinc_Rate_Limiter')) {
             }
             $bucket['count'] = (int) $bucket['count'] + 1;
 
-            // Written before the verdict so a refused request still counts:
-            // otherwise an abuser parked on the limit would be metered only
-            // by the requests that succeed.
-            //
-            // Row count is bounded by distinct peer addresses seen in one
-            // window (one row per address per route), reaped by WP's daily
-            // delete_expired_transients.
+            // Written before the verdict so a refused request still counts,
+            // or an abuser parked on the limit is metered only by what succeeds.
             $elapsed = $now - (int) $bucket['start'];
             set_transient($key, $bucket, max(1, $window - $elapsed));
 
             if ($bucket['count'] > $max) {
-                self::log_refusal($route, $max, $window, self::record_refusal($client, $now));
+                // First refusal of the window only: a caller parked on the limit
+                // would otherwise cost a log line and two option writes each time.
+                if ($bucket['count'] === $max + 1) {
+                    self::log_refusal($route, $max, $window, self::record_refusal($client, $now));
+                }
                 self::send_refusal($window - $elapsed);
                 return false;
             }
@@ -88,7 +93,31 @@ if (!class_exists('WC_Twoinc_Rate_Limiter')) {
         /** Diagnostics escape hatch for a merchant whose topology collapses every buyer into one bucket. */
         private static function is_enabled(): bool
         {
-            return self::setting('rate_limiting_enabled', 'yes') !== 'no';
+            if (self::setting('rate_limiting_enabled', 'yes') !== 'no') {
+                return true;
+            }
+            self::log_disabled();
+            return false;
+        }
+
+        /**
+         * Say so in the log while metering is off, throttled to once an hour.
+         *
+         * Otherwise the endpoints that spend the merchant's API key run
+         * unmetered with nothing anywhere recording that they do.
+         */
+        private static function log_disabled(): void
+        {
+            $key = WC_Twoinc_Brand::prefixed_name('rl_off_logged');
+            if (get_transient($key) || !function_exists('wc_get_logger')) {
+                return;
+            }
+            set_transient($key, 1, self::DISABLED_NOTICE_INTERVAL);
+            wc_get_logger()->warning(
+                'Rate limiting is switched off in the plugin Diagnostics settings: the checkout AJAX'
+                    . ' endpoints are serving every caller unmetered.',
+                ['source' => 'twoinc-payment-gateway']
+            );
         }
 
         /**
@@ -154,19 +183,28 @@ if (!class_exists('WC_Twoinc_Rate_Limiter')) {
             $share = $total > 0 ? (int) round(100 * $top / $total) : 0;
             $capped = $distinct >= self::LEDGER_MAX_CLIENTS ? '+' : '';
 
-            return sprintf(
-                '%d refusals in the last %ds from %s; the busiest is %d%% of them (this caller: %d). %s',
-                $total,
+            $summary = sprintf(
+                // "Trips", not "refusals": only the first refusal of a client's
+                // window reaches the ledger, so this counts limits tripped.
+                '%s in the last %ds from %s; the busiest is %d%% of them (this caller: %d).',
+                $total === 1 ? '1 rate-limit trip' : $total . ' rate-limit trips',
                 self::LEDGER_WINDOW,
                 $distinct === 1 ? '1 client address' : $distinct . $capped . ' distinct client addresses',
                 $share,
-                (int) ($counts[$hash] ?? 0),
-                $distinct === 1
-                    ? 'One address accounts for all of it: either a single abusive caller, or every buyer'
-                        . ' arriving on one reverse proxy or CDN address - if the latter, list that proxy under'
-                        . ' Trusted proxy addresses in the plugin Diagnostics settings.'
-                    : 'Spread across several addresses, so this looks like real traffic rather than one caller.'
+                (int) ($counts[$hash] ?? 0)
             );
+
+            // Below the minimum sample a 100% share is just the first buyer to
+            // trip the limit, so the counts are reported with no reading of them.
+            if ($total < self::LEDGER_MIN_SAMPLE) {
+                return $summary;
+            }
+
+            return $summary . ' ' . ($distinct === 1
+                ? 'One address accounts for all of it: either a single abusive caller, or every buyer'
+                    . ' arriving on one reverse proxy or CDN address - if the latter, list every proxy in'
+                    . ' the chain under Trusted proxy addresses in the plugin Diagnostics settings.'
+                : 'Spread across several addresses, so this looks like real traffic rather than one caller.');
         }
 
         /** Bucket key for one client on one route, keyed on the client address rather than the rotatable session or nonce. */
@@ -182,18 +220,19 @@ if (!class_exists('WC_Twoinc_Rate_Limiter')) {
         }
 
         /**
-         * The address the limit is metered against.
+         * The socket peer, unless it is one the merchant listed as a trusted proxy.
          *
-         * The socket peer by default: WC_Geolocation::get_ip_address() prefers
-         * X-Real-IP / X-Forwarded-For with no trusted-proxy allowlist, so a
-         * rotating header would mint a fresh bucket per request and the
-         * allowance would be unbounded. A forwarded address is believed only
-         * when the peer we are actually talking to is one the merchant listed
-         * as a trusted proxy.
+         * WC_Geolocation::get_ip_address() was rejected: it prefers X-Real-IP /
+         * X-Forwarded-For with no trusted-proxy allowlist, so a rotating header
+         * would mint a fresh bucket per request.
          */
         private static function client_id(): string
         {
-            $peer = isset($_SERVER['REMOTE_ADDR']) ? trim((string) $_SERVER['REMOTE_ADDR']) : '';
+            // Normalised like the hops are: a dual-stack listener reports an
+            // IPv4 peer as ::ffff:10.0.0.2, which no IPv4 list entry matches.
+            $peer = isset($_SERVER['REMOTE_ADDR'])
+                ? self::normalise_address(trim((string) $_SERVER['REMOTE_ADDR']))
+                : '';
             if ($peer === '') {
                 return 'unknown';
             }
@@ -247,23 +286,45 @@ if (!class_exists('WC_Twoinc_Rate_Limiter')) {
             return false;
         }
 
+        /** True when the entry is a usable address or CIDR block; the admin save check and the runtime match share this. */
+        public static function is_valid_proxy_entry(string $entry): bool
+        {
+            return self::parse_range($entry) !== null;
+        }
+
+        /**
+         * @return array|null [packed network, prefix bits], or null when the entry is unusable.
+         */
+        private static function parse_range(string $range): ?array
+        {
+            $suffix = null;
+            if (strpos($range, '/') !== false) {
+                list($range, $suffix) = explode('/', $range, 2);
+                // An (int) cast reads '' or 'abc' as /0, which matches every
+                // address of that family: one typo would turn the allowlist
+                // into "trust everyone".
+                if (preg_match('/^\d+$/', trim($suffix)) !== 1) {
+                    return null;
+                }
+            }
+            $net = @inet_pton(trim($range));
+            if ($net === false) {
+                return null;
+            }
+            $width = strlen($net) * 8;
+            $bits = $suffix === null ? $width : (int) trim($suffix);
+            return $bits <= $width ? [$net, $bits] : null;
+        }
+
         /** @param string $packed inet_pton output for the address under test. */
         private static function in_range(string $packed, string $range): bool
         {
-            $bits = null;
-            if (strpos($range, '/') !== false) {
-                list($range, $bits) = explode('/', $range, 2);
-                $bits = (int) $bits;
-            }
-            $net = @inet_pton(trim($range));
-            if ($net === false || strlen($net) !== strlen($packed)) {
+            $parsed = self::parse_range($range);
+            if ($parsed === null) {
                 return false;
             }
-            $width = strlen($net) * 8;
-            if ($bits === null) {
-                $bits = $width;
-            }
-            if ($bits < 0 || $bits > $width) {
+            list($net, $bits) = $parsed;
+            if (strlen($net) !== strlen($packed)) {
                 return false;
             }
 

@@ -4302,7 +4302,9 @@ class Twoinc {
       renderInterval: null,
       // Backoff after a 429: `updated_checkout` re-arms a check per keystroke,
       // so one refusal otherwise becomes a request per second all window.
-      rateLimitedUntil: 0
+      rateLimitedUntil: 0,
+      /** Timer from `scheduleRateLimitRetry`, so it can be cancelled and cleared. */
+      rateLimitRetryTimer: null
     };
     this.orderIntentLog = {};
     this.customerCompany = {
@@ -4698,6 +4700,8 @@ class Twoinc {
     this.orderIntentCheck.interval = null;
     clearInterval(this.orderIntentCheck.renderInterval);
     this.orderIntentCheck.renderInterval = null;
+    window.clearTimeout(this.orderIntentCheck.rateLimitRetryTimer);
+    this.orderIntentCheck.rateLimitRetryTimer = null;
     this.orderIntentCheck.pendingCheck = false;
 
     this.supersedeInFlightOrderIntent();
@@ -4709,6 +4713,31 @@ class Twoinc {
     // Returned so callers can tell "I stopped something" from "there was
     // nothing to stop" — `checkout_error` re-arms only in the first case.
     return wasRunning;
+  }
+
+  /**
+   * Re-arm the check once the backoff window has elapsed.
+   *
+   * Only `updated_checkout` re-arms otherwise, and a buyer who has finished
+   * typing fires no more of them — they would sit on the busy box until they
+   * touched the form again, long after the shop would have served them.
+   */
+  scheduleRateLimitRetry() {
+    const state = this.orderIntentCheck;
+    window.clearTimeout(state.rateLimitRetryTimer);
+    state.rateLimitRetryTimer = null;
+
+    // A few ms past the deadline, so the re-armed check does not race the
+    // `Date.now() < rateLimitedUntil` guard it has to clear.
+    const wait = state.rateLimitedUntil - Date.now() + 50;
+    if (!(wait > 0)) return;
+    state.rateLimitRetryTimer = window.setTimeout(function () {
+      const check = Twoinc.getInstance().orderIntentCheck;
+      check.rateLimitRetryTimer = null;
+      // A later refusal may have pushed the deadline out from under this one.
+      if (Date.now() < check.rateLimitedUntil) return;
+      Twoinc.getInstance().getApproval();
+    }, wait);
   }
 
   /**
@@ -4864,6 +4893,7 @@ class Twoinc {
 
       if (Date.now() < Twoinc.getInstance().orderIntentCheck.rateLimitedUntil) {
         Twoinc.getInstance().supersedeInFlightOrderIntent();
+        Twoinc.getInstance().scheduleRateLimitRetry();
         twoincDomHelper.togglePaySubtitleDesc("errored", ".twoinc-busy-retry");
         return;
       }
@@ -4970,6 +5000,7 @@ class Twoinc {
         if (response && response.status === 429) {
           Twoinc.getInstance().orderIntentCheck.rateLimitedUntil =
             Date.now() + twoincUtilHelper.retryAfterMs(response);
+          Twoinc.getInstance().scheduleRateLimitRetry();
           twoincDomHelper.togglePaySubtitleDesc("errored", ".twoinc-busy-retry");
           return;
         }
