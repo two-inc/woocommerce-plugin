@@ -3788,8 +3788,12 @@ if (!class_exists('WC_Twoinc')) {
          */
         public function validate_trusted_proxies_field($key, $value)
         {
+            // The sanitisation WC's own textarea validator applies, which this
+            // one replaces.
+            $value = wp_kses_post(trim(stripslashes((string) $value)));
+
             $invalid = [];
-            foreach (preg_split('/[\s,]+/', (string) $value) ?: [] as $entry) {
+            foreach (preg_split('/[\s,]+/', $value) ?: [] as $entry) {
                 if ($entry !== '' && !WC_Twoinc_Rate_Limiter::is_valid_proxy_entry($entry)) {
                     $invalid[] = $entry;
                 }
@@ -3801,7 +3805,7 @@ if (!class_exists('WC_Twoinc')) {
                     implode(', ', $invalid)
                 ));
             }
-            return (string) $value;
+            return $value;
         }
 
         /**
@@ -4702,7 +4706,7 @@ if (!class_exists('WC_Twoinc')) {
                 'trusted_proxies' => [
                     'title'       => __('Trusted proxy addresses', 'twoinc-payment-gateway'),
                     'type'        => 'textarea',
-                    'description' => __('IP addresses or CIDR blocks, one per line. List every proxy in the chain between the buyer and your server, not just the outermost one — with a CDN in front of a load balancer, both must be listed, or the buyer is metered as whichever hop is missing. Only when a request arrives from a listed address are the X-Forwarded-For and X-Real-IP headers believed, and the buyer metered by their own address instead of the proxy\'s. X-Forwarded-For is preferred where both arrive, since it carries the whole chain. Leave empty unless you run such a proxy: any address listed here can set its own identity for rate limiting.', 'twoinc-payment-gateway'),
+                    'description' => __('IP addresses or CIDR blocks, one per line. List every proxy in the chain between the buyer and your server, not just the outermost one — with a CDN in front of a load balancer, both must be listed, or the buyer is metered as whichever hop is missing. Only when a request arrives from a listed address are the X-Forwarded-For and X-Real-IP headers believed, and the buyer metered by their own address instead of the proxy\'s; X-Forwarded-For wins where both arrive. Your proxy must overwrite or strip any X-Forwarded-For and X-Real-IP it does not set itself — if it passes a buyer-supplied header through, a buyer can pick the address they are metered as and the limit can be evaded whichever header wins. Leave empty unless you run such a proxy: any address listed here can set its own identity for rate limiting.', 'twoinc-payment-gateway'),
                     'placeholder' => "10.0.0.0/8\n2001:db8::/32",
                     'default'     => ''
                 ],

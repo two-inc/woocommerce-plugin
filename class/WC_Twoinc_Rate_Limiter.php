@@ -403,10 +403,6 @@ if (!class_exists('WC_Twoinc_Rate_Limiter')) {
          * Raise the Diagnostics notice once, on the first admin request after
          * install or upgrade.
          *
-         * Behind a CDN or load balancer metering degrades with nothing naming
-         * a cause: company search reports itself unavailable, address autofill
-         * is skipped, order intent shows the busy-retry box.
-         *
          * Self-limiting like drop_renamed_option_rows(), so no versioned
          * migration runner is needed and a later upgrade never re-raises it.
          */

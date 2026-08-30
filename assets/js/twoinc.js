@@ -2159,7 +2159,15 @@ let twoincDomHelper = {
     // verdict box is still covered.
     jQuery(".twoinc-pay-box").not(".twoinc-loader").addClass("hidden");
   },
+  /**
+   * Bumped by every pay-box paint. A deferred retire captures it at paint time
+   * and compares before hiding, so it retires only its own notice — the box
+   * being visible is not proof it is still the one that was painted, since a
+   * later path can repaint the SAME box with a longer-lived message.
+   */
+  payBoxPaintSeq: 0,
   togglePaySubtitleDesc: function (action, errSelector, companyLabel) {
+    twoincDomHelper.payBoxPaintSeq += 1;
     jQuery(".twoinc-pay-box").addClass("hidden");
     if (["checking-intent", "intent-approved", "errored"].includes(action)) {
       if (action === "checking-intent") {
@@ -5205,6 +5213,7 @@ class Twoinc {
       // where the buyer types the address themselves.
       if (!jqXHR || jqXHR.status !== 429) return;
       twoincDomHelper.togglePaySubtitleDesc("errored", ".twoinc-busy-retry");
+      const paintSeq = twoincDomHelper.payBoxPaintSeq;
 
       // Nothing retries a lookup on the buyer's behalf, and with order intent
       // switched off no getApproval() comes along to repaint the box either.
@@ -5212,8 +5221,11 @@ class Twoinc {
       self.addressLookupNoticeTimer = window.setTimeout(function () {
         self.addressLookupNoticeTimer = null;
         if (seq !== self.addressLookupSeq) return;
-        // Anything else that has since painted the pay box owns it now.
-        if (jQuery(".twoinc-pay-box.twoinc-busy-retry").hasClass("hidden")) return;
+        // Anything that has since painted the pay box owns it now — including
+        // a repaint of this same box, on a window of its own that outlives this
+        // one. `togglePaySubtitleDesc()` hides every box, so retiring a notice
+        // this timer no longer owns would leave the buyer with no explanation.
+        if (twoincDomHelper.payBoxPaintSeq !== paintSeq) return;
         twoincDomHelper.togglePaySubtitleDesc();
       }, twoincUtilHelper.retryAfterMs(jqXHR));
     });

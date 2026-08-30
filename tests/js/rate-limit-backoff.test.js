@@ -278,6 +278,26 @@ describe("order-intent 429 backoff", () => {
     expect(ajax.calls.length).toBe(3);
   });
 
+  // Two paths share one busy box. The address lookup's retire timer fires
+  // inside order intent's longer window, and hiding on "the box is visible"
+  // would take order intent's notice down with it - leaving the buyer nothing
+  // on screen for the rest of a window they cannot retry out of.
+  test("a retire timer does not take down the same box a later path repainted", () => {
+    instance.addressLookup({ lookup_id: "lookup-1" });
+    ajax.last().failWith(429, "30");
+    expect(shown(".twoinc-busy-retry")).toBe(true);
+
+    jest.advanceTimersByTime(20000);
+    issueACheck();
+    ajax.last().failWith(429, "180");
+    expect(shown(".twoinc-busy-retry")).toBe(true);
+
+    // Past the address lookup's deadline, well inside order intent's.
+    jest.advanceTimersByTime(10000);
+
+    expect(shown(".twoinc-busy-retry")).toBe(true);
+  });
+
   test("abandoning the check cancels the pending retry", () => {
     issueACheck();
     ajax.last().failWith(429, "30");
