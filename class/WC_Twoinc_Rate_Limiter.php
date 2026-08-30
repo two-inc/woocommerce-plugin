@@ -2,11 +2,8 @@
 
 if (!class_exists('WC_Twoinc_Rate_Limiter')) {
     /**
-     * Fixed-window request counter for the anonymous wc-ajax endpoints.
-     *
-     * Every wc_ajax_two_* route is reachable by any checkout visitor holding a
-     * page nonce, and each one now spends the merchant's own API key
-     * server-side, so unbounded calls are billable against the merchant.
+     * Fixed-window request counter for the anonymous wc-ajax endpoints, each
+     * of which spends the merchant's own API key server-side.
      *
      * The window start is stored alongside the count rather than left to the
      * transient's TTL: object-cache backends may evict or extend a transient
@@ -15,10 +12,7 @@ if (!class_exists('WC_Twoinc_Rate_Limiter')) {
      */
     class WC_Twoinc_Rate_Limiter
     {
-        /**
-         * [max requests, window seconds] per wc-ajax route, sized so several
-         * concurrent checkouts behind one office NAT stay under the limit.
-         */
+        /** [max requests, window seconds] per route, sized so several concurrent checkouts behind one office NAT fit. */
         private const LIMITS = [
             'term_fees' => [300, 60],
             'company_search' => [60, 60],
@@ -51,13 +45,10 @@ if (!class_exists('WC_Twoinc_Rate_Limiter')) {
         private const DISABLED_NOTICE_INTERVAL = 3600;
 
         /**
-         * Count this request against $route and refuse it if over the limit.
+         * Call after the nonce check, so unauthenticated noise never fills a
+         * bucket a real buyer on the same address is metered by.
          *
-         * Call it after the nonce check, so unauthenticated noise never fills
-         * a bucket that a real buyer on the same address is metered by.
-         *
-         * @return bool False when the caller must stop; the JSON refusal has
-         *              already been sent.
+         * @return bool False when the caller must stop; the JSON refusal is already sent.
          */
         public static function check(string $route): bool
         {
@@ -79,8 +70,8 @@ if (!class_exists('WC_Twoinc_Rate_Limiter')) {
             }
             $bucket['count'] = (int) $bucket['count'] + 1;
 
-            // Written before the verdict so a refused request still counts,
-            // or an abuser parked on the limit is metered only by what succeeds.
+            // Written before the verdict so a refused request still counts;
+            // otherwise an abuser parked on the limit is metered only by what succeeds.
             $elapsed = $now - (int) $bucket['start'];
             set_transient($key, $bucket, max(1, $window - $elapsed));
 
@@ -106,12 +97,7 @@ if (!class_exists('WC_Twoinc_Rate_Limiter')) {
             return false;
         }
 
-        /**
-         * Say so in the log while metering is off, throttled to once an hour.
-         *
-         * Otherwise the endpoints that spend the merchant's API key run
-         * unmetered with nothing anywhere recording that they do.
-         */
+        /** Hourly reminder, so the endpoints never run unmetered with nothing recording that they do. */
         private static function log_disabled(): void
         {
             $key = WC_Twoinc_Brand::prefixed_name('rl_off_logged');
@@ -126,10 +112,7 @@ if (!class_exists('WC_Twoinc_Rate_Limiter')) {
             );
         }
 
-        /**
-         * 429 with Retry-After, so a legitimate client that trips the limit
-         * backs off instead of retrying into it.
-         */
+        /** Retry-After, so a legitimate client that trips the limit backs off instead of retrying into it. */
         private static function send_refusal(int $retry_after): void
         {
             $retry_after = max(1, $retry_after);
@@ -156,9 +139,7 @@ if (!class_exists('WC_Twoinc_Rate_Limiter')) {
         }
 
         /**
-         * Count this refusal against the caller and describe how recent
-         * refusals are spread, so the log tells one abusive address apart from
-         * a shop whose buyers all arrive on one proxy address.
+         * Tells one abusive address apart from a shop whose buyers all arrive on one proxy address.
          *
          * @return string Human-readable spread, for the log line.
          */
@@ -237,7 +218,21 @@ if (!class_exists('WC_Twoinc_Rate_Limiter')) {
 
         private static function client_hash(string $client): string
         {
-            return substr(hash(self::KEY_HASH_ALGO, $client), 0, 24);
+            return substr(hash(self::KEY_HASH_ALGO, self::bucket_identity($client)), 0, 24);
+        }
+
+        /**
+         * IPv6 callers are metered by their /64, not their address: a routed
+         * /64 is the smallest allocation a VPS or mobile subscriber gets, so
+         * keying on the full address hands one of them 2^64 free buckets.
+         */
+        private static function bucket_identity(string $client): string
+        {
+            $packed = @inet_pton($client);
+            if ($packed === false || strlen($packed) !== 16) {
+                return $client;
+            }
+            return inet_ntop(substr($packed, 0, 8) . str_repeat("\0", 8)) . '/64';
         }
 
         /**
@@ -341,10 +336,9 @@ if (!class_exists('WC_Twoinc_Rate_Limiter')) {
             }
             $width = strlen($net) * 8;
             $bits = $suffix === null ? $width : (int) trim($suffix);
-            // A /0 matches every address of its family, so it can only be a typo
-            // or an attempt to disable the check - which is what the
-            // rate_limiting_enabled toggle is for. Leading zeros are read as
-            // decimal, so /008 is the legitimate /8 and stays valid.
+            // A /0 matches its whole family, so it is a typo or a way to disable
+            // the check, which the rate_limiting_enabled toggle already does.
+            // Leading zeros read as decimal, so /008 is the legitimate /8.
             if ($bits < 1 || $bits > $width) {
                 return null;
             }
@@ -399,13 +393,7 @@ if (!class_exists('WC_Twoinc_Rate_Limiter')) {
             return trim((string) $settings[$key]);
         }
 
-        /**
-         * Raise the Diagnostics notice once, on the first admin request after
-         * install or upgrade.
-         *
-         * Self-limiting like drop_renamed_option_rows(), so no versioned
-         * migration runner is needed and a later upgrade never re-raises it.
-         */
+        /** Self-limiting like drop_renamed_option_rows(), so no versioned migration runner is needed. */
         public static function maybe_raise_upgrade_notice(): void
         {
             if (get_option(self::notice_option(), '') !== '') {

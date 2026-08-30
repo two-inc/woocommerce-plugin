@@ -277,6 +277,7 @@ final class BrandConfigSpec
             'testRateLimitCountsRefusedRequestsSoAnAbuserCannotSitOnTheLimit',
             'testRateLimitNeverStoresTheClientAddressInTheKey',
             'testRateLimitIgnoresSpoofableProxyHeaders',
+            'testRateLimitBucketsIpv6CallersByTheirPrefix',
             'testRateLimitBelievesForwardedAddressOnlyBehindAConfiguredProxy',
             'testRateLimitTakesTheRightmostNonTrustedForwardedHop',
             'testRateLimitReadsXRealIpWhenForwardedForNamesNobody',
@@ -9052,6 +9053,42 @@ final class BrandConfigSpec
                 "a rotating $header header created a bucket per request"
             );
             unset($_SERVER[$server_key], $_SERVER['REMOTE_ADDR']);
+        }
+    }
+
+    private static function testRateLimitBucketsIpv6CallersByTheirPrefix(): void
+    {
+        // Given a caller free to rotate inside its own /64 - which every VPS
+        // and mobile subscriber is - when it does, then the allowance must not
+        // follow it, while separate /64s stay metered apart.
+        $cases = [
+            [
+                ['2001:db8:1:2::1', '2001:db8:1:2::dead:beef', '2001:db8:1:2:ffff:ffff:ffff:ffff'],
+                1,
+                'addresses inside one /64 must share a bucket',
+            ],
+            [
+                ['2001:db8:1:2::1', '2001:db8:1:3::1', '2001:db8:9:9::1'],
+                3,
+                'addresses in different /64s must be metered apart',
+            ],
+            [
+                ['203.0.113.1', '203.0.113.2'],
+                2,
+                'IPv4 addresses must stay metered individually',
+            ],
+        ];
+        foreach ($cases as list($peers, $expected_buckets, $description)) {
+            $GLOBALS['__twoinc_test_transients'] = [];
+            self::setGatewaySettings([]);
+
+            foreach ($peers as $peer) {
+                $_SERVER['REMOTE_ADDR'] = $peer;
+                TinyAssert::true(WC_Twoinc_Rate_Limiter::check('company_search'), "setup: $description");
+            }
+            unset($_SERVER['REMOTE_ADDR']);
+
+            TinyAssert::same($expected_buckets, count(self::rateLimitBucketKeys()), $description);
         }
     }
 
