@@ -1040,9 +1040,10 @@ if (!class_exists('WC_Twoinc')) {
             // "slot doesn't exist" vs "setting off".
             $company_search_tile_slot = '<div class="twoinc-company-search-tile-slot hidden"></div>';
 
-            // The two failure boxes carry role="alert"; the approved notice
-            // carries role="status". Assertive here since this payment
-            // method has just been deselected under the buyer.
+            // The two decline boxes carry role="alert" — assertive, since this
+            // payment method has just been deselected under the buyer. The
+            // approved notice and the retry notice carry role="status":
+            // neither deselects anything.
             return sprintf(
                 '<div>
                     %s
@@ -1054,6 +1055,7 @@ if (!class_exists('WC_Twoinc')) {
                     %s
                     <div class="twoinc-pay-box twoinc-err-payment-default hidden" role="alert" data-company-template="%s">%s</div>
                     <div class="twoinc-pay-box twoinc-err-phone-number hidden" role="alert">%s</div>
+                    <div class="twoinc-pay-box twoinc-busy-retry hidden" role="status">%s</div>
                 </div>',
                 $term_input,
                 $company_search_tile_slot,
@@ -1061,7 +1063,8 @@ if (!class_exists('WC_Twoinc')) {
                 $this->get_intent_approved_notice($notice_enabled),
                 esc_attr($this->get_intent_declined_notice_template()),
                 sprintf(__('Invoice purchase with %s is not available for this order.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')),
-                __('Phone number is invalid.', 'twoinc-payment-gateway')
+                __('Phone number is invalid.', 'twoinc-payment-gateway'),
+                __('We could not complete that just now. Please wait a moment and try again.', 'twoinc-payment-gateway')
             );
         }
 
@@ -3775,6 +3778,37 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
+         * Name the trusted-proxy entries the limiter will skip, so a proxy the
+         * merchant believes is trusted and is not surfaces at save time.
+         *
+         * @param string $key
+         * @param string $value
+         *
+         * @return string
+         */
+        public function validate_trusted_proxies_field($key, $value)
+        {
+            // The sanitisation WC's own textarea validator applies, which this
+            // one replaces.
+            $value = wp_kses_post(trim(stripslashes((string) $value)));
+
+            $invalid = [];
+            foreach (preg_split('/[\s,]+/', $value) ?: [] as $entry) {
+                if ($entry !== '' && !WC_Twoinc_Rate_Limiter::is_valid_proxy_entry($entry)) {
+                    $invalid[] = $entry;
+                }
+            }
+            if ($invalid) {
+                WC_Admin_Settings::add_error(sprintf(
+                    /* translators: %s is a comma-separated list of the rejected entries */
+                    __('Trusted proxy addresses: %s is not a valid IP address or CIDR block, and is ignored. Requests from it are not treated as coming from a trusted proxy.', 'twoinc-payment-gateway'),
+                    implode(', ', $invalid)
+                ));
+            }
+            return $value;
+        }
+
+        /**
          * Brand veto on payment processing, resolved via the
          * twoinc_payment_validation_error filter (e.g. a brand overlay's
          * required terms-acceptance checkbox). Returns the buyer-facing
@@ -4661,6 +4695,20 @@ if (!class_exists('WC_Twoinc')) {
                 'section_diagnostics' => [
                     'type'  => 'title',
                     'title' => __('Diagnostics', 'twoinc-payment-gateway'),
+                ],
+                'rate_limiting_enabled' => [
+                    'title'       => __('Rate limit checkout API requests', 'twoinc-payment-gateway'),
+                    'label'       => __('Meter the checkout AJAX endpoints per client address', 'twoinc-payment-gateway'),
+                    'type'        => 'checkbox',
+                    'description' => __('The checkout AJAX endpoints spend your API key, so each client address is allowed a fixed number of requests per minute. Turn this off only if legitimate buyers are being refused — that happens when the store sits behind a reverse proxy or CDN and every buyer reaches PHP as the same address, which collapses the per-buyer allowance into a store-wide one. The lasting fix is to list the proxy below.', 'twoinc-payment-gateway'),
+                    'default'     => 'yes'
+                ],
+                'trusted_proxies' => [
+                    'title'       => __('Trusted proxy addresses', 'twoinc-payment-gateway'),
+                    'type'        => 'textarea',
+                    'description' => __('IP addresses or CIDR blocks, one per line. List every proxy in the chain between the buyer and your server, not just the outermost one — with a CDN in front of a load balancer, both must be listed, or the buyer is metered as whichever hop is missing. Only when a request arrives from a listed address are the X-Forwarded-For and X-Real-IP headers believed, and the buyer metered by their own address instead of the proxy\'s. X-Forwarded-For is read first, but only wins where it names a hop that is not itself listed here; X-Real-IP is read when it names nobody else. Your proxy must overwrite or strip any X-Forwarded-For and X-Real-IP it does not set itself — if it passes a buyer-supplied header through, a buyer can pick the address they are metered as, both evading their own limit and spending another named buyer\'s allowance until that buyer is refused. Leave empty unless you run such a proxy: any address listed here can set its own identity for rate limiting.', 'twoinc-payment-gateway'),
+                    'placeholder' => "10.0.0.0/8\n2001:db8::/32",
+                    'default'     => ''
                 ],
                 'disable_ssl_verify' => [
                     'title'       => __('Disable SSL verification', 'twoinc-payment-gateway'),

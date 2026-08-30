@@ -72,6 +72,7 @@ function load_twoinc_classes()
     require_once __DIR__ . '/class/WC_Twoinc_Brand.php';
     require_once __DIR__ . '/class/WC_Twoinc_Helper.php';
     require_once __DIR__ . '/class/WC_Twoinc_FX.php';
+    require_once __DIR__ . '/class/WC_Twoinc_Rate_Limiter.php';
     require_once __DIR__ . '/class/WC_Twoinc_Payment_Terms.php';
     require_once __DIR__ . '/class/WC_Twoinc_Sole_Trader.php';
     require_once __DIR__ . '/class/WC_Twoinc_Api_Proxy.php';
@@ -140,6 +141,14 @@ function load_twoinc_classes()
     // silently too late and the "invoice not ready yet" notice never
     // renders, so the button click looks like a no-op (TWO-25041 follow-up).
     add_action('admin_notices', ['WC_Twoinc', 'render_invoice_download_notice']);
+
+    // One-time pointer at the Diagnostics rate-limiting settings. Deferred to
+    // admin_init: these read the brand prefix, which permanently caches
+    // WC_Twoinc_Brand's config, and an overlay may still be registering its
+    // twoinc_brand_file filter at this plugins_loaded priority.
+    add_action('admin_init', ['WC_Twoinc_Rate_Limiter', 'handle_upgrade_notice_click']);
+    add_action('admin_init', ['WC_Twoinc_Rate_Limiter', 'maybe_raise_upgrade_notice']);
+    add_action('admin_notices', ['WC_Twoinc_Rate_Limiter', 'render_upgrade_notice']);
 
     // Confirm order after returning from twoinc checkout-page, DO NOT CHANGE HOOKS
     add_action('template_redirect', 'WC_Twoinc::process_confirmation_header_redirect');

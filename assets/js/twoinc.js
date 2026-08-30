@@ -81,6 +81,16 @@ let twoincUtilHelper = {
     return (window.twoinc.api_proxy || {}).nonce || "";
   },
 
+  /** Backoff after a 429: the server's Retry-After, clamped, 60s when absent. */
+  retryAfterMs: function (jqXHR) {
+    let seconds = 0;
+    if (jqXHR && typeof jqXHR.getResponseHeader === "function") {
+      seconds = parseInt(jqXHR.getResponseHeader("Retry-After"), 10);
+    }
+    if (!(seconds > 0)) seconds = 60;
+    return Math.min(seconds, 300) * 1000;
+  },
+
   getUnsecuredHash: function (inp, seed) {
     if (!seed) seed = 0;
     let h1 = 0xdeadbeef ^ seed;
@@ -727,6 +737,13 @@ class TwoCompanySearch {
   companySearchSeq = 0;
 
   /**
+   * Backoff after a 429. Typing is the one route that can trip the limit
+   * legitimately, and every further keystroke would otherwise fire into it and
+   * hold the window open for the rest of the buyer's session.
+   */
+  companySearchBackoffUntil = 0;
+
+  /**
    * The last billing country this page has acted on (TWO-24867/TWO-25326).
    * `null` until first seen; every setter goes through `countryDidChange`, so
    * none can leave this out of step with the field.
@@ -833,6 +850,11 @@ class TwoCompanySearch {
    * @returns {Promise<Object>}
    */
   searchCompanies(params) {
+    // Before the sequence bump: a search dropped during backoff must not
+    // invalidate an in-flight one whose results are already on the wire.
+    if (Date.now() < this.companySearchBackoffUntil) {
+      return Promise.resolve({ unavailable: true });
+    }
     const seq = ++this.companySearchSeq;
     const searchParams = new URLSearchParams({
       // Read per request, never captured when the panel was built (TWO-24867):
@@ -879,6 +901,9 @@ class TwoCompanySearch {
         if (textStatus === "abort" || seq !== this.companySearchSeq) {
           resolve({ aborted: true });
           return;
+        }
+        if (jqXHR && jqXHR.status === 429) {
+          this.companySearchBackoffUntil = Date.now() + twoincUtilHelper.retryAfterMs(jqXHR);
         }
         resolve({ unavailable: true });
       });
@@ -2134,7 +2159,15 @@ let twoincDomHelper = {
     // verdict box is still covered.
     jQuery(".twoinc-pay-box").not(".twoinc-loader").addClass("hidden");
   },
+  /**
+   * Bumped by every pay-box paint. A deferred retire captures it at paint time
+   * and compares before hiding, so it retires only its own notice — the box
+   * being visible is not proof it is still the one that was painted, since a
+   * later path can repaint the SAME box with a longer-lived message.
+   */
+  payBoxPaintSeq: 0,
   togglePaySubtitleDesc: function (action, errSelector, companyLabel) {
+    twoincDomHelper.payBoxPaintSeq += 1;
     jQuery(".twoinc-pay-box").addClass("hidden");
     if (["checking-intent", "intent-approved", "errored"].includes(action)) {
       if (action === "checking-intent") {
@@ -2743,6 +2776,9 @@ let twoincSoleTrader = {
   mode: "business", // 'business' | 'sole_trader'
   availabilityByCountry: {},
   tokens: null,
+
+  /** Backoff after a 429: callers gate on `!tokens`, so a failed mint otherwise re-mints every render. */
+  tokenMintBackoffUntil: 0,
   // Snapshot of twoincCompanyCapture.mode, taken on the way into sole-trader
   // mode and restored on the way out. A buyer can reach sole-trader mode
   // while in manual entry, and without this they'd come back out into
@@ -2918,7 +2954,16 @@ let twoincSoleTrader = {
           twoincSoleTrader.apply(available);
         }
       })
-      .fail(function () {
+      .fail(function (jqXHR) {
+        // A 429 caches like an answer, or every `updated_checkout` re-requests
+        // into the limit. Other failures stay uncached: a cached "no" would
+        // hide sole trader all page over one dropped connection.
+        if (jqXHR && jqXHR.status === 429) {
+          twoincSoleTrader.availabilityByCountry[country] = false;
+          window.setTimeout(function () {
+            delete twoincSoleTrader.availabilityByCountry[country];
+          }, twoincUtilHelper.retryAfterMs(jqXHR));
+        }
         // Fail-soft: no sole trader option, checkout proceeds as business.
         if (twoincSoleTrader.currentCountry() === country) {
           twoincSoleTrader.apply(false);
@@ -3902,6 +3947,10 @@ let twoincSoleTrader = {
       if (cb) cb(false);
       return;
     }
+    if (Date.now() < twoincSoleTrader.tokenMintBackoffUntil) {
+      if (cb) cb(false);
+      return;
+    }
     const country = twoincSoleTrader.currentCountry();
     jQuery
       .post(cfg.tokens_url, { nonce: cfg.nonce, country: country })
@@ -3924,7 +3973,11 @@ let twoincSoleTrader = {
           if (cb) cb(false);
         }
       })
-      .fail(function () {
+      .fail(function (jqXHR) {
+        if (jqXHR && jqXHR.status === 429) {
+          twoincSoleTrader.tokenMintBackoffUntil =
+            Date.now() + twoincUtilHelper.retryAfterMs(jqXHR);
+        }
         if (cb) cb(false);
       });
   },
@@ -4235,6 +4288,8 @@ class Twoinc {
     // so only the newest lookup — and only one issued under the country still
     // selected — is allowed to write the address fields.
     this.addressLookupSeq = 0;
+    /** Timer that retires the busy-retry box a refused lookup painted. */
+    this.addressLookupNoticeTimer = null;
     this.orderIntentCheck = {
       interval: null,
       pendingCheck: false,
@@ -4269,7 +4324,12 @@ class Twoinc {
       // an orphan copy of it would paint a verdict onto a tile that had already
       // been reset — after Place Order, on a checkout mid-submit (review round
       // 2).
-      renderInterval: null
+      renderInterval: null,
+      // Backoff after a 429: `updated_checkout` re-arms a check per keystroke,
+      // so one refusal otherwise becomes a request per second all window.
+      rateLimitedUntil: 0,
+      /** Timer from `scheduleRateLimitRetry`, so it can be cancelled and cleared. */
+      rateLimitRetryTimer: null
     };
     this.orderIntentLog = {};
     this.customerCompany = {
@@ -4659,12 +4719,15 @@ class Twoinc {
       this.orderIntentCheck.interval !== null ||
       this.orderIntentCheck.renderInterval !== null ||
       this.orderIntentCheck.inFlightSeq !== null ||
+      this.orderIntentCheck.rateLimitRetryTimer !== null ||
       this.orderIntentCheck.pendingCheck;
 
     clearInterval(this.orderIntentCheck.interval);
     this.orderIntentCheck.interval = null;
     clearInterval(this.orderIntentCheck.renderInterval);
     this.orderIntentCheck.renderInterval = null;
+    window.clearTimeout(this.orderIntentCheck.rateLimitRetryTimer);
+    this.orderIntentCheck.rateLimitRetryTimer = null;
     this.orderIntentCheck.pendingCheck = false;
 
     this.supersedeInFlightOrderIntent();
@@ -4676,6 +4739,31 @@ class Twoinc {
     // Returned so callers can tell "I stopped something" from "there was
     // nothing to stop" — `checkout_error` re-arms only in the first case.
     return wasRunning;
+  }
+
+  /**
+   * Re-arm the check once the backoff window has elapsed.
+   *
+   * Only `updated_checkout` re-arms otherwise, and a buyer who has finished
+   * typing fires no more of them — they would sit on the busy box until they
+   * touched the form again, long after the shop would have served them.
+   */
+  scheduleRateLimitRetry() {
+    const state = this.orderIntentCheck;
+    window.clearTimeout(state.rateLimitRetryTimer);
+    state.rateLimitRetryTimer = null;
+
+    // A few ms past the deadline, so the re-armed check does not race the
+    // `Date.now() < rateLimitedUntil` guard it has to clear.
+    const wait = state.rateLimitedUntil - Date.now() + 50;
+    if (!(wait > 0)) return;
+    state.rateLimitRetryTimer = window.setTimeout(function () {
+      const check = Twoinc.getInstance().orderIntentCheck;
+      check.rateLimitRetryTimer = null;
+      // A later refusal may have pushed the deadline out from under this one.
+      if (Date.now() < check.rateLimitedUntil) return;
+      Twoinc.getInstance().getApproval();
+    }, wait);
   }
 
   /**
@@ -4829,6 +4917,13 @@ class Twoinc {
       Twoinc.getInstance().orderIntentCheck.interval = null;
       Twoinc.getInstance().orderIntentCheck.pendingCheck = false;
 
+      if (Date.now() < Twoinc.getInstance().orderIntentCheck.rateLimitedUntil) {
+        Twoinc.getInstance().supersedeInFlightOrderIntent();
+        Twoinc.getInstance().scheduleRateLimitRetry();
+        twoincDomHelper.togglePaySubtitleDesc("errored", ".twoinc-busy-retry");
+        return;
+      }
+
       // Re-asserted rather than relied upon from getApproval(): a `pendingCheck`
       // re-arm comes straight back here, and the run of ticks spent waiting for
       // a cart total sits between the two.
@@ -4925,6 +5020,16 @@ class Twoinc {
 
       approvalResponse.fail(function (response) {
         if (!stillCurrent()) return;
+
+        // The shop's own limiter, not a credit decision — deselecting here
+        // would show a false decline to everyone behind one office address.
+        if (response && response.status === 429) {
+          Twoinc.getInstance().orderIntentCheck.rateLimitedUntil =
+            Date.now() + twoincUtilHelper.retryAfterMs(response);
+          Twoinc.getInstance().scheduleRateLimitRetry();
+          twoincDomHelper.togglePaySubtitleDesc("errored", ".twoinc-busy-retry");
+          return;
+        }
 
         // Store the approved state
         Twoinc.getInstance().isTwoincApproved = false;
@@ -5101,6 +5206,29 @@ class Twoinc {
         // though a lookup DID run for them.
         self.registryAddressApplied = true;
       }
+    });
+    addressResponse.fail(function (jqXHR) {
+      if (seq !== self.addressLookupSeq) return;
+      // Only the shop's own limiter earns the "wait a moment" copy: it is the
+      // one failure that retrying does fix. Anything else keeps its silence,
+      // where the buyer types the address themselves.
+      if (!jqXHR || jqXHR.status !== 429) return;
+      twoincDomHelper.togglePaySubtitleDesc("errored", ".twoinc-busy-retry");
+      const paintSeq = twoincDomHelper.payBoxPaintSeq;
+
+      // Nothing retries a lookup on the buyer's behalf, and with order intent
+      // switched off no getApproval() comes along to repaint the box either.
+      window.clearTimeout(self.addressLookupNoticeTimer);
+      self.addressLookupNoticeTimer = window.setTimeout(function () {
+        self.addressLookupNoticeTimer = null;
+        if (seq !== self.addressLookupSeq) return;
+        // Anything that has since painted the pay box owns it now — including
+        // a repaint of this same box, on a window of its own that outlives this
+        // one. `togglePaySubtitleDesc()` hides every box, so retiring a notice
+        // this timer no longer owns would leave the buyer with no explanation.
+        if (twoincDomHelper.payBoxPaintSeq !== paintSeq) return;
+        twoincDomHelper.togglePaySubtitleDesc();
+      }, twoincUtilHelper.retryAfterMs(jqXHR));
     });
   }
 

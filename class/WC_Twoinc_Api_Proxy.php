@@ -23,11 +23,14 @@ if (!class_exists('WC_Twoinc_Api_Proxy')) {
         ];
 
         /** @return WC_Twoinc|null Null when the request was already refused. */
-        private static function authorize(string $handler)
+        private static function authorize(string $handler, string $route)
         {
             if (!check_ajax_referer('twoinc_checkout', 'nonce', false)) {
                 self::log_refusal($handler, 'invalid or expired checkout nonce');
                 wp_send_json_error('Invalid nonce');
+                return null;
+            }
+            if (!WC_Twoinc_Rate_Limiter::check($route)) {
                 return null;
             }
             $gateway = WC_Twoinc::get_instance();
@@ -71,7 +74,7 @@ if (!class_exists('WC_Twoinc_Api_Proxy')) {
         /** wc-ajax handler: company search for the checkout capture panel. */
         public static function ajax_company_search(): void
         {
-            $gateway = self::authorize('company search');
+            $gateway = self::authorize('company search', 'company_search');
             if (!$gateway) {
                 return;
             }
@@ -87,7 +90,7 @@ if (!class_exists('WC_Twoinc_Api_Proxy')) {
         /** wc-ajax handler: registry address lookup for one company. */
         public static function ajax_company_by_id(): void
         {
-            $gateway = self::authorize('company lookup');
+            $gateway = self::authorize('company lookup', 'company_by_id');
             if (!$gateway) {
                 return;
             }
@@ -104,7 +107,7 @@ if (!class_exists('WC_Twoinc_Api_Proxy')) {
         /** wc-ajax handler: the buyer's payment terms for the due-in-days copy. */
         public static function ajax_payment_terms(): void
         {
-            $gateway = self::authorize('payment terms lookup');
+            $gateway = self::authorize('payment terms lookup', 'payment_terms');
             if (!$gateway) {
                 return;
             }
@@ -121,7 +124,7 @@ if (!class_exists('WC_Twoinc_Api_Proxy')) {
         /** wc-ajax handler: the order intent availability check. */
         public static function ajax_order_intent(): void
         {
-            $gateway = self::authorize('order intent');
+            $gateway = self::authorize('order intent', 'order_intent');
             if (!$gateway) {
                 return;
             }
