@@ -1051,9 +1051,26 @@ function admin_url($path = '')
     return 'https://shop.example/wp-admin/' . ltrim($path, '/');
 }
 
-function add_query_arg($args, $url)
+// One argument means "the current request", as in WordPress.
+function add_query_arg($args, $url = null)
 {
+    if ($url === null) {
+        $url = $_SERVER['REQUEST_URI'] ?? '';
+    }
     return $url . (strpos($url, '?') === false ? '?' : '&') . http_build_query($args);
+}
+
+function remove_query_arg($keys, $url = null)
+{
+    if ($url === null) {
+        $url = $_SERVER['REQUEST_URI'] ?? '';
+    }
+    list($path, $query) = array_pad(explode('?', $url, 2), 2, '');
+    parse_str($query, $params);
+    foreach ((array) $keys as $key) {
+        unset($params[$key]);
+    }
+    return $params ? $path . '?' . http_build_query($params) : $path;
 }
 
 function wp_nonce_url($actionurl, $action = -1, $name = '_wpnonce')

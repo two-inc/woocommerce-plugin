@@ -297,6 +297,7 @@ describe("address lookup failure", () => {
   let ajax;
 
   beforeEach(() => {
+    jest.useFakeTimers();
     ctx = harness.loadTwoinc({
       gateway_id: GATEWAY_ID,
       enable_order_intent: "no",
@@ -317,14 +318,24 @@ describe("address lookup failure", () => {
   afterEach(() => {
     ajax.restore();
     harness.releasePanel(ctx.helper);
+    jest.clearAllTimers();
+    jest.useRealTimers();
     document.body.innerHTML = "";
   });
 
   // "Please wait a moment and try again" is only true of the limiter: it is the
   // one failure a wait does fix. Every other failure keeps its prior silence.
   test.each([
-    { status: 429, shown: true, description: "a lookup refused by the shop's limiter surfaces the busy box" },
-    { status: 500, shown: false, description: "an unreachable lookup does not tell the buyer to wait" },
+    {
+      status: 429,
+      shown: true,
+      description: "a lookup refused by the shop's limiter surfaces the busy box"
+    },
+    {
+      status: 500,
+      shown: false,
+      description: "an unreachable lookup does not tell the buyer to wait"
+    },
     { status: 403, shown: false, description: "a refused lookup does not tell the buyer to wait" },
     { status: 0, shown: false, description: "a dropped connection does not tell the buyer to wait" }
   ])("$description", ({ status, shown }) => {
@@ -343,6 +354,33 @@ describe("address lookup failure", () => {
     ajax.calls[0].failWith(500);
 
     expect($(".twoinc-pay-box.twoinc-busy-retry").hasClass("hidden")).toBe(true);
+  });
+
+  // Nothing retries a lookup on the buyer's behalf, and this checkout has order
+  // intent switched off - so no later getApproval() comes along to repaint the
+  // box either. Without a timer of its own it would stand for the rest of the
+  // session, telling a buyer to wait for something that is never coming.
+  test("the busy box a refused lookup painted retires itself", () => {
+    instance.addressLookup({ lookup_id: "lookup-1" });
+    ajax.last().failWith(429, "30");
+    expect($(".twoinc-pay-box.twoinc-busy-retry").hasClass("hidden")).toBe(false);
+
+    jest.advanceTimersByTime(29000);
+    expect($(".twoinc-pay-box.twoinc-busy-retry").hasClass("hidden")).toBe(false);
+
+    jest.advanceTimersByTime(1000);
+    expect($(".twoinc-pay-box.twoinc-busy-retry").hasClass("hidden")).toBe(true);
+  });
+
+  test("a box another path has since painted is left alone", () => {
+    $(".payment_box").append('<div class="twoinc-pay-box twoinc-loader hidden">LOADING</div>');
+    instance.addressLookup({ lookup_id: "lookup-1" });
+    ajax.last().failWith(429, "30");
+
+    ctx.dom.togglePaySubtitleDesc("checking-intent");
+    jest.advanceTimersByTime(30000);
+
+    expect($(".twoinc-pay-box.twoinc-loader").hasClass("hidden")).toBe(false);
   });
 });
 
@@ -509,6 +547,21 @@ describe("company-search 429 backoff", () => {
     search("acme l");
 
     expect(ajax.calls.length).toBe(2);
+  });
+
+  // The sequence number is what tells a search's own response apart from a
+  // stale one. A search the backoff never issues has no response coming, so
+  // bumping it would invalidate whatever is on the wire and nothing else.
+  test("a search dropped during backoff leaves the sequence alone", async () => {
+    const first = search("acme");
+    ajax.last().failWith(429, "30");
+    await first;
+
+    const seq = helper.companySearchSeq;
+    await search("acme l");
+    await search("acme lt");
+
+    expect(helper.companySearchSeq).toBe(seq);
   });
 
   test.each([

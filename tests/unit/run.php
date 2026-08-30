@@ -279,6 +279,8 @@ final class BrandConfigSpec
             'testRateLimitIgnoresSpoofableProxyHeaders',
             'testRateLimitBelievesForwardedAddressOnlyBehindAConfiguredProxy',
             'testRateLimitTakesTheRightmostNonTrustedForwardedHop',
+            'testRateLimitReadsXRealIpWhenForwardedForNamesNobody',
+            'testRateLimitUpgradeNoticeIsRaisedOnceAndNeverAgain',
             'testRateLimitTreatsAMalformedTrustedProxyEntryAsNoEntry',
             'testTrustedProxiesFieldRejectsUnusableEntriesAtSaveTime',
             'testRateLimitNormalisesTheSocketPeer',
@@ -9021,9 +9023,10 @@ final class BrandConfigSpec
 
     private static function testRateLimitIgnoresSpoofableProxyHeaders(): void
     {
-        // The identity is the socket peer. Reading X-Real-IP or
-        // X-Forwarded-For instead would let one abuser mint a fresh bucket per
-        // request just by rotating a header, which is an unbounded allowance.
+        // With no proxy configured the identity is the socket peer. Believing
+        // any of these headers from an ordinary visitor would let one abuser
+        // mint a fresh bucket per request just by rotating it, which is an
+        // unbounded allowance.
         $spoofs = [
             ['HTTP_X_REAL_IP', 'X-Real-IP'],
             ['HTTP_X_FORWARDED_FOR', 'X-Forwarded-For'],
@@ -9031,6 +9034,7 @@ final class BrandConfigSpec
         ];
         foreach ($spoofs as list($server_key, $header)) {
             $GLOBALS['__twoinc_test_transients'] = [];
+            self::setGatewaySettings([]);
             $_SERVER['REMOTE_ADDR'] = '203.0.113.4';
             self::exhaustRateLimit('order_intent');
 
@@ -9131,6 +9135,113 @@ final class BrandConfigSpec
 
             TinyAssert::same($expected_key, self::rateLimitBucketKeys()[0] ?? null, $description);
         }
+    }
+
+    private static function testRateLimitReadsXRealIpWhenForwardedForNamesNobody(): void
+    {
+        // nginx and HAProxy commonly set only X-Real-IP. A merchant who has
+        // correctly listed their proxy would otherwise still see every buyer
+        // collapse into the proxy's own bucket, with a refusal log telling them
+        // to do the thing they have already done.
+        $cases = [
+            ['198.51.100.7', '', '198.51.100.7', 'a proxy that sets only X-Real-IP must meter the buyer behind it'],
+            ['', '198.51.100.7', '198.51.100.7', 'a proxy that sets only X-Forwarded-For must keep working'],
+            ['198.51.100.8', '198.51.100.7', '198.51.100.7', 'X-Forwarded-For carries the chain, so it wins over X-Real-IP'],
+            ['::ffff:198.51.100.7', '', '198.51.100.7', 'an IPv4-mapped X-Real-IP must meter as that IPv4 address'],
+            ['198.51.100.7:41234', '', '198.51.100.7', 'a port on X-Real-IP must be stripped'],
+            // Everything the proxy names is still only believed because the
+            // peer is trusted; a trusted value names nobody new.
+            ['10.0.0.9', '', '10.0.0.1', 'an X-Real-IP that is itself a trusted proxy must fall back to the peer'],
+        ];
+        foreach ($cases as list($real_ip, $forwarded, $expected_identity, $description)) {
+            // The key the limiter writes for the expected identity, established
+            // by connecting as that address with no proxy in play.
+            $GLOBALS['__twoinc_test_transients'] = [];
+            self::setGatewaySettings([]);
+            $_SERVER['REMOTE_ADDR'] = $expected_identity;
+            WC_Twoinc_Rate_Limiter::check('company_search');
+            $expected_key = self::rateLimitBucketKeys()[0] ?? null;
+
+            $GLOBALS['__twoinc_test_transients'] = [];
+            self::setGatewaySettings(['trusted_proxies' => '10.0.0.0/8']);
+            $_SERVER['REMOTE_ADDR'] = '10.0.0.1';
+            if ($real_ip !== '') {
+                $_SERVER['HTTP_X_REAL_IP'] = $real_ip;
+            }
+            if ($forwarded !== '') {
+                $_SERVER['HTTP_X_FORWARDED_FOR'] = $forwarded;
+            }
+            WC_Twoinc_Rate_Limiter::check('company_search');
+            unset($_SERVER['HTTP_X_REAL_IP'], $_SERVER['HTTP_X_FORWARDED_FOR'], $_SERVER['REMOTE_ADDR']);
+
+            TinyAssert::same($expected_key, self::rateLimitBucketKeys()[0] ?? null, $description);
+        }
+    }
+
+    private static function testRateLimitUpgradeNoticeIsRaisedOnceAndNeverAgain(): void
+    {
+        // Metering degrades checkout quietly behind a CDN, so the merchant is
+        // pointed at Diagnostics once - and, having answered it, never again on
+        // any later upgrade.
+        $option = WC_Twoinc_Brand::prefixed_name('rate_limit_notice');
+        unset($GLOBALS['__twoinc_test_options'][$option]);
+        $GLOBALS['__twoinc_test_caps'] = ['manage_woocommerce'];
+
+        WC_Twoinc_Rate_Limiter::maybe_raise_upgrade_notice();
+        TinyAssert::same('pending', get_option($option, ''), 'the first admin request after an upgrade must raise the notice');
+        TinyAssert::true(self::renderedUpgradeNotice() !== '', 'a raised notice must render');
+
+        WC_Twoinc_Rate_Limiter::dismiss_upgrade_notice();
+        TinyAssert::same('', self::renderedUpgradeNotice(), 'a dismissed notice must stop rendering');
+
+        // The upgrade routine running again is what a later plugin update, and
+        // every admin page load in between, looks like.
+        for ($n = 0; $n < 3; $n++) {
+            WC_Twoinc_Rate_Limiter::maybe_raise_upgrade_notice();
+        }
+        TinyAssert::same('dismissed', get_option($option, ''), 'a later upgrade must not re-raise a dismissed notice');
+        TinyAssert::same('', self::renderedUpgradeNotice(), 'a later upgrade must not bring the notice back');
+
+        // A shop manager without the capability is not the audience, and a
+        // reader must never silently consume the pending flag.
+        unset($GLOBALS['__twoinc_test_options'][$option]);
+        WC_Twoinc_Rate_Limiter::maybe_raise_upgrade_notice();
+        $GLOBALS['__twoinc_test_caps'] = [];
+        TinyAssert::same('', self::renderedUpgradeNotice(), 'a user who cannot manage WooCommerce must not see the notice');
+        $GLOBALS['__twoinc_test_caps'] = ['manage_woocommerce'];
+        TinyAssert::true(self::renderedUpgradeNotice() !== '', 'the notice must survive being skipped for an unprivileged user');
+
+        // Both links dismiss it, and both carry a nonce scoped to the action.
+        foreach (['settings', 'hide'] as $action) {
+            unset($GLOBALS['__twoinc_test_options'][$option]);
+            $GLOBALS['__twoinc_test_referer_actions'] = [];
+            WC_Twoinc_Rate_Limiter::maybe_raise_upgrade_notice();
+            $_GET['twoinc_rate_limit_notice'] = $action;
+            $redirect = '';
+            try {
+                WC_Twoinc_Rate_Limiter::handle_upgrade_notice_click();
+            } catch (RuntimeException $e) {
+                $redirect = $e->getMessage();
+            }
+            unset($_GET['twoinc_rate_limit_notice']);
+
+            TinyAssert::same('dismissed', get_option($option, ''), "the $action link must retire the notice");
+            TinyAssert::true(strpos($redirect, 'redirect:') === 0, "the $action link must bounce so a reload cannot replay it");
+            TinyAssert::same(
+                ['twoinc_rate_limit_notice_' . $action],
+                $GLOBALS['__twoinc_test_referer_actions'],
+                "the $action link's nonce must be scoped to that action"
+            );
+        }
+        $GLOBALS['__twoinc_test_caps'] = [];
+    }
+
+    /** The notice's admin_notices output, or '' when it renders nothing. */
+    private static function renderedUpgradeNotice(): string
+    {
+        ob_start();
+        WC_Twoinc_Rate_Limiter::render_upgrade_notice();
+        return (string) ob_get_clean();
     }
 
     private static function testRateLimitTreatsAMalformedTrustedProxyEntryAsNoEntry(): void
@@ -9367,9 +9478,25 @@ final class BrandConfigSpec
             strpos($past_cap, "from {$cap}+ distinct client addresses") !== false,
             "the ledger must not grow past the cap: $past_cap"
         );
+        // "this caller: 0" would read as a bug. The honest report is that the
+        // ledger never saw it, and that the split therefore cannot speak for it
+        // - a new abusive address arriving past the cap is exactly the case
+        // where a frozen split under-reports one caller.
         TinyAssert::true(
-            strpos($past_cap, 'this caller: 0') !== false,
-            "a caller the full ledger declined to record must report no trips of its own: $past_cap"
+            strpos($past_cap, 'this caller is not among them') !== false,
+            "a caller the full ledger declined to record must say so, not report zero trips: $past_cap"
+        );
+        TinyAssert::true(
+            strpos($past_cap, 'this caller: 0') === false,
+            "a caller the full ledger declined to record must not report a count of its own: $past_cap"
+        );
+        TinyAssert::true(
+            strpos($past_cap, "arrived after the ledger filled at {$cap} addresses") !== false,
+            "an uncounted caller must be told the split above excludes it: $past_cap"
+        );
+        TinyAssert::true(
+            strpos($past_cap, 'Spread across several addresses') === false,
+            "the split must claim no shape for a caller it never counted: $past_cap"
         );
     }
 

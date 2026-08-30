@@ -850,10 +850,12 @@ class TwoCompanySearch {
    * @returns {Promise<Object>}
    */
   searchCompanies(params) {
-    const seq = ++this.companySearchSeq;
+    // Before the sequence bump: a search dropped during backoff must not
+    // invalidate an in-flight one whose results are already on the wire.
     if (Date.now() < this.companySearchBackoffUntil) {
       return Promise.resolve({ unavailable: true });
     }
+    const seq = ++this.companySearchSeq;
     const searchParams = new URLSearchParams({
       // Read per request, never captured when the panel was built (TWO-24867):
       // the panel outlives a country change on every path that does not rebuild
@@ -4278,6 +4280,8 @@ class Twoinc {
     // so only the newest lookup — and only one issued under the country still
     // selected — is allowed to write the address fields.
     this.addressLookupSeq = 0;
+    /** Timer that retires the busy-retry box a refused lookup painted. */
+    this.addressLookupNoticeTimer = null;
     this.orderIntentCheck = {
       interval: null,
       pendingCheck: false,
@@ -5201,6 +5205,17 @@ class Twoinc {
       // where the buyer types the address themselves.
       if (!jqXHR || jqXHR.status !== 429) return;
       twoincDomHelper.togglePaySubtitleDesc("errored", ".twoinc-busy-retry");
+
+      // Nothing retries a lookup on the buyer's behalf, and with order intent
+      // switched off no getApproval() comes along to repaint the box either.
+      window.clearTimeout(self.addressLookupNoticeTimer);
+      self.addressLookupNoticeTimer = window.setTimeout(function () {
+        self.addressLookupNoticeTimer = null;
+        if (seq !== self.addressLookupSeq) return;
+        // Anything else that has since painted the pay box owns it now.
+        if (jQuery(".twoinc-pay-box.twoinc-busy-retry").hasClass("hidden")) return;
+        twoincDomHelper.togglePaySubtitleDesc();
+      }, twoincUtilHelper.retryAfterMs(jqXHR));
     });
   }
 

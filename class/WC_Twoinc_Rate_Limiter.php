@@ -44,6 +44,9 @@ if (!class_exists('WC_Twoinc_Rate_Limiter')) {
         /** Percentage of trips one address must hold before the log reads it as one caller. */
         private const LEDGER_DOMINANT_SHARE = 80;
 
+        /** Query arg the one-time Diagnostics notice's links carry back; its value picks where the merchant lands. */
+        private const NOTICE_ARG = 'twoinc_rate_limit_notice';
+
         /** How often the log repeats that metering is switched off. */
         private const DISABLED_NOTICE_INTERVAL = 3600;
 
@@ -189,13 +192,22 @@ if (!class_exists('WC_Twoinc_Rate_Limiter')) {
             $summary = sprintf(
                 // "Trips", not "refusals": only the first refusal of a client's
                 // window reaches the ledger, so this counts limits tripped.
-                '%s in the last %ds from %s; the busiest is %d%% of them (this caller: %d).',
+                '%s in the last %ds from %s; the busiest is %d%% of them (%s).',
                 $total === 1 ? '1 rate-limit trip' : $total . ' rate-limit trips',
                 self::LEDGER_WINDOW,
                 $distinct === 1 ? '1 client address' : $distinct . $capped . ' distinct client addresses',
                 $share,
-                (int) ($counts[$hash] ?? 0)
+                isset($counts[$hash])
+                    ? 'this caller: ' . (int) $counts[$hash]
+                    : 'this caller is not among them'
             );
+
+            // The counts froze when the ledger filled, so a shape read off them
+            // would be a reading of whoever happened to arrive first.
+            if (!isset($counts[$hash])) {
+                return $summary . ' It arrived after the ledger filled at ' . self::LEDGER_MAX_CLIENTS
+                    . ' addresses, so the split above does not account for it.';
+            }
 
             // Below the minimum sample a 100% share is just the first buyer to
             // trip the limit, so the counts are reported with no reading of them.
@@ -262,6 +274,16 @@ if (!class_exists('WC_Twoinc_Rate_Limiter')) {
                 if ($hop !== '' && !self::matches_any($hop, $trusted)) {
                     return $hop;
                 }
+            }
+
+            // nginx and HAProxy commonly set only X-Real-IP. It carries a single
+            // hop, not the chain, so it is read only once X-Forwarded-For has
+            // named nobody.
+            $real = isset($_SERVER['HTTP_X_REAL_IP'])
+                ? self::normalise_address(trim((string) $_SERVER['HTTP_X_REAL_IP']))
+                : '';
+            if ($real !== '' && !self::matches_any($real, $trusted)) {
+                return $real;
             }
             return $peer;
         }
@@ -375,6 +397,88 @@ if (!class_exists('WC_Twoinc_Rate_Limiter')) {
                 return $default;
             }
             return trim((string) $settings[$key]);
+        }
+
+        /**
+         * Raise the Diagnostics notice once, on the first admin request after
+         * install or upgrade.
+         *
+         * Behind a CDN or load balancer metering degrades with nothing naming
+         * a cause: company search reports itself unavailable, address autofill
+         * is skipped, order intent shows the busy-retry box.
+         *
+         * Self-limiting like drop_renamed_option_rows(), so no versioned
+         * migration runner is needed and a later upgrade never re-raises it.
+         */
+        public static function maybe_raise_upgrade_notice(): void
+        {
+            if (get_option(self::notice_option(), '') !== '') {
+                return;
+            }
+            update_option(self::notice_option(), 'pending', true);
+        }
+
+        /** Retire the notice permanently. */
+        public static function dismiss_upgrade_notice(): void
+        {
+            update_option(self::notice_option(), 'dismissed', true);
+        }
+
+        public static function render_upgrade_notice(): void
+        {
+            if (get_option(self::notice_option(), '') !== 'pending' || !current_user_can('manage_woocommerce')) {
+                return;
+            }
+            printf(
+                '<div class="notice notice-info"><p>%s</p><p><a href="%s">%s</a> &nbsp; <a href="%s">%s</a></p></div>',
+                esc_html(sprintf(
+                    /* translators: %s is the brand product name (e.g. "Two") */
+                    __(
+                        'The %s checkout now meters its AJAX endpoints per client address. Checkout still completes,'
+                            . ' but if your store sits behind a CDN or load balancer every buyer arrives as the same'
+                            . ' address, and company search, address autofill and the approval check can be refused.'
+                            . ' List your proxy under Diagnostics to meter buyers individually.',
+                        'twoinc-payment-gateway'
+                    ),
+                    WC_Twoinc_Brand::get('product_name')
+                )),
+                esc_url(self::notice_link('settings')),
+                esc_html(__('Open Diagnostics settings', 'twoinc-payment-gateway')),
+                esc_url(self::notice_link('hide')),
+                esc_html(__('Dismiss', 'twoinc-payment-gateway'))
+            );
+        }
+
+        /** Act on a click of either notice link, then bounce so a reload cannot replay it. */
+        public static function handle_upgrade_notice_click(): void
+        {
+            if (!isset($_GET[self::NOTICE_ARG]) || !current_user_can('manage_woocommerce')) {
+                return;
+            }
+            $action = sanitize_key(wp_unslash($_GET[self::NOTICE_ARG]));
+            check_admin_referer(self::NOTICE_ARG . '_' . $action);
+            self::dismiss_upgrade_notice();
+            wp_safe_redirect($action === 'settings'
+                ? self::settings_url()
+                : remove_query_arg([self::NOTICE_ARG, '_wpnonce']));
+            exit;
+        }
+
+        /** 'settings' lands on the gateway settings; 'hide' returns to whichever admin page is showing the notice. */
+        private static function notice_link(string $action): string
+        {
+            $args = [self::NOTICE_ARG => $action, '_wpnonce' => wp_create_nonce(self::NOTICE_ARG . '_' . $action)];
+            return $action === 'settings' ? add_query_arg($args, self::settings_url()) : add_query_arg($args);
+        }
+
+        private static function settings_url(): string
+        {
+            return admin_url('admin.php?page=wc-settings&tab=checkout&section=' . WC_Twoinc_Brand::get('gateway_id'));
+        }
+
+        private static function notice_option(): string
+        {
+            return WC_Twoinc_Brand::prefixed_name('rate_limit_notice');
         }
     }
 }
