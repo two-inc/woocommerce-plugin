@@ -4665,6 +4665,20 @@ if (!class_exists('WC_Twoinc')) {
                     'type'  => 'title',
                     'title' => __('Diagnostics', 'twoinc-payment-gateway'),
                 ],
+                'rate_limiting_enabled' => [
+                    'title'       => __('Rate limit checkout API requests', 'twoinc-payment-gateway'),
+                    'label'       => __('Meter the checkout AJAX endpoints per client address', 'twoinc-payment-gateway'),
+                    'type'        => 'checkbox',
+                    'description' => __('The checkout AJAX endpoints spend your API key, so each client address is allowed a fixed number of requests per minute. Turn this off only if legitimate buyers are being refused — that happens when the store sits behind a reverse proxy or CDN and every buyer reaches PHP as the same address, which collapses the per-buyer allowance into a store-wide one. The lasting fix is to list the proxy below.', 'twoinc-payment-gateway'),
+                    'default'     => 'yes'
+                ],
+                'trusted_proxies' => [
+                    'title'       => __('Trusted proxy addresses', 'twoinc-payment-gateway'),
+                    'type'        => 'textarea',
+                    'description' => __('IP addresses or CIDR blocks of your own reverse proxy, load balancer or CDN, one per line. Only when a request arrives from one of these is the X-Forwarded-For header believed, and the buyer metered by their own address instead of the proxy\'s. Leave empty unless you run such a proxy: any address listed here can set its own identity for rate limiting.', 'twoinc-payment-gateway'),
+                    'placeholder' => "10.0.0.0/8\n2001:db8::/32",
+                    'default'     => ''
+                ],
                 'disable_ssl_verify' => [
                     'title'       => __('Disable SSL verification', 'twoinc-payment-gateway'),
                     'label'       => __('Skip SSL certificate verification on outbound API requests', 'twoinc-payment-gateway'),

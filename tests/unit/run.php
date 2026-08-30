@@ -276,6 +276,10 @@ final class BrandConfigSpec
             'testRateLimitCountsRefusedRequestsSoAnAbuserCannotSitOnTheLimit',
             'testRateLimitNeverStoresTheClientAddressInTheKey',
             'testRateLimitIgnoresSpoofableProxyHeaders',
+            'testRateLimitBelievesForwardedAddressOnlyBehindAConfiguredProxy',
+            'testRateLimitTakesTheRightmostNonTrustedForwardedHop',
+            'testRateLimitCanBeTurnedOffFromDiagnostics',
+            'testRateLimitRefusalLogSaysWhetherOneAddressDominates',
             'testRateLimitLeavesTheBucketEmptyWhenTheNonceFails',
             'testCompanySearchSurvivesARealisticTypingSession',
             'testRateLimitRefusesEveryWcAjaxHandlerBeforeItReachesTheApi',
@@ -8985,11 +8989,153 @@ final class BrandConfigSpec
             }
             TinyAssert::same(
                 1,
-                count($GLOBALS['__twoinc_test_transients']),
+                count(self::rateLimitBucketKeys()),
                 "a rotating $header header created a bucket per request"
             );
             unset($_SERVER[$server_key], $_SERVER['REMOTE_ADDR']);
         }
+    }
+
+    /** Store the gateway settings row the limiter reads its Diagnostics options from. */
+    private static function setGatewaySettings(array $settings): void
+    {
+        $GLOBALS['__twoinc_test_options']['woocommerce_' . WC_Twoinc_Brand::get('gateway_id') . '_settings'] = $settings;
+    }
+
+    /** The rate-limit bucket keys written so far, excluding the shared refusal ledger. */
+    private static function rateLimitBucketKeys(): array
+    {
+        $ledger = WC_Twoinc_Brand::prefixed_name('rl_refusals');
+        return array_values(array_filter(
+            array_keys($GLOBALS['__twoinc_test_transients']),
+            static function ($key) use ($ledger) {
+                return $key !== $ledger;
+            }
+        ));
+    }
+
+    private static function testRateLimitBelievesForwardedAddressOnlyBehindAConfiguredProxy(): void
+    {
+        // Keying on the socket peer collapses every buyer behind a reverse
+        // proxy or CDN into one store-wide bucket, which takes checkout down.
+        // A forwarded address is believed only when the peer we are actually
+        // talking to is one the merchant listed, so an ordinary visitor still
+        // cannot mint a bucket per request by rotating a header.
+        $cases = [
+            ['', '10.0.0.1', 1, 'with no trusted proxy configured the forwarded address must be ignored'],
+            ['10.0.0.1', '10.0.0.1', 3, 'a bare trusted proxy address must meter the forwarded buyer'],
+            ["10.0.0.0/8\n192.0.2.0/24", '10.0.0.1', 3, 'a trusted CIDR block must meter the forwarded buyer'],
+            ['10.0.0.0/8', '203.0.113.9', 1, 'a peer outside the trusted list must not be able to forge an identity'],
+            ['2001:db8::/32', '2001:db8::5', 3, 'an IPv6 trusted block must meter the forwarded buyer'],
+            ['2001:db8::/32', '2001:dba::5', 1, 'an IPv6 peer outside the trusted block must not be believed'],
+        ];
+        foreach ($cases as list($trusted, $peer, $expected_buckets, $description)) {
+            $GLOBALS['__twoinc_test_transients'] = [];
+            self::setGatewaySettings(['trusted_proxies' => $trusted]);
+            $_SERVER['REMOTE_ADDR'] = $peer;
+
+            foreach (['198.51.100.1', '198.51.100.2', '198.51.100.3'] as $buyer) {
+                $_SERVER['HTTP_X_FORWARDED_FOR'] = $buyer;
+                TinyAssert::true(WC_Twoinc_Rate_Limiter::check('company_search'), "setup: $description");
+            }
+            unset($_SERVER['HTTP_X_FORWARDED_FOR'], $_SERVER['REMOTE_ADDR']);
+
+            TinyAssert::same($expected_buckets, count(self::rateLimitBucketKeys()), $description);
+        }
+    }
+
+    private static function testRateLimitTakesTheRightmostNonTrustedForwardedHop(): void
+    {
+        // Everything left of the last trusted hop was written by a proxy we do
+        // not trust, so the buyer could have chosen it.
+        $cases = [
+            ['1.2.3.4, 9.9.9.9, 10.0.0.2', '9.9.9.9', 'the rightmost hop outside the trusted list is the identity'],
+            ['9.9.9.9', '9.9.9.9', 'a single forwarded hop is the identity'],
+            ['9.9.9.9:41234', '9.9.9.9', 'a port on the forwarded hop must be stripped'],
+            ['::ffff:9.9.9.9', '9.9.9.9', 'an IPv4-mapped hop must meter as that IPv4 address'],
+            ['[2001:dba::7]:41234', '2001:dba::7', 'a bracketed IPv6 hop with a port must be unwrapped'],
+        ];
+        foreach ($cases as list($forwarded, $expected_identity, $description)) {
+            // The key the limiter writes for the claimed identity, established
+            // by connecting as that address with no proxy in play.
+            $GLOBALS['__twoinc_test_transients'] = [];
+            self::setGatewaySettings([]);
+            $_SERVER['REMOTE_ADDR'] = $expected_identity;
+            WC_Twoinc_Rate_Limiter::check('company_search');
+            $expected_key = self::rateLimitBucketKeys()[0] ?? null;
+
+            $GLOBALS['__twoinc_test_transients'] = [];
+            self::setGatewaySettings(['trusted_proxies' => "10.0.0.0/8\n2001:db8::/32"]);
+            $_SERVER['REMOTE_ADDR'] = '10.0.0.1';
+            $_SERVER['HTTP_X_FORWARDED_FOR'] = $forwarded;
+            WC_Twoinc_Rate_Limiter::check('company_search');
+            unset($_SERVER['HTTP_X_FORWARDED_FOR'], $_SERVER['REMOTE_ADDR']);
+
+            TinyAssert::same($expected_key, self::rateLimitBucketKeys()[0] ?? null, $description);
+        }
+    }
+
+    private static function testRateLimitCanBeTurnedOffFromDiagnostics(): void
+    {
+        // The escape hatch for a merchant whose topology meters every buyer as
+        // one address: off must be genuinely off, not a wider allowance, and
+        // the default must stay on.
+        $cases = [
+            [['rate_limiting_enabled' => 'no'], true, 'the Diagnostics toggle set to no must stop metering entirely'],
+            [['rate_limiting_enabled' => 'yes'], false, 'the Diagnostics toggle set to yes must keep metering'],
+            [[], false, 'an unsaved setting must default to metering on'],
+        ];
+        list($max) = self::rateLimit('company_search');
+        foreach ($cases as list($settings, $allowed, $description)) {
+            $GLOBALS['__twoinc_test_transients'] = [];
+            self::setGatewaySettings($settings);
+            $_SERVER['REMOTE_ADDR'] = '198.51.100.20';
+
+            $served = true;
+            for ($i = 0; $i < $max + 5; $i++) {
+                $served = WC_Twoinc_Rate_Limiter::check('company_search') && $served;
+            }
+            unset($_SERVER['REMOTE_ADDR']);
+
+            TinyAssert::same($allowed, $served, $description);
+            if ($allowed) {
+                TinyAssert::same([], $GLOBALS['__twoinc_test_transients'], "$description without writing a bucket");
+            }
+        }
+    }
+
+    private static function testRateLimitRefusalLogSaysWhetherOneAddressDominates(): void
+    {
+        // An admin reading the log has to tell one abusive caller apart from a
+        // shop whose buyers all arrive on one proxy address — the second is
+        // fixed by configuring the proxy, not by blocking anyone.
+        list($max) = self::rateLimit('order_intent');
+
+        $GLOBALS['__twoinc_test_transients'] = [];
+        $GLOBALS['__twoinc_test_logs'] = [];
+        $_SERVER['REMOTE_ADDR'] = '198.51.100.30';
+        for ($i = 0; $i < $max + 3; $i++) {
+            WC_Twoinc_Rate_Limiter::check('order_intent');
+        }
+        $single = end($GLOBALS['__twoinc_test_logs'])['message'] ?? '';
+        TinyAssert::true(strpos($single, 'from 1 client address') !== false, "one caller must be reported as one address: $single");
+        TinyAssert::true(strpos($single, 'the busiest is 100%') !== false, "one caller must be reported as all of the refusals: $single");
+        TinyAssert::true(strpos($single, 'One address accounts for all of it') !== false, "the single-address case must name the proxy explanation: $single");
+        TinyAssert::true(strpos($single, 'Trusted proxy addresses') !== false, "the single-address case must point at the setting that fixes it: $single");
+
+        $GLOBALS['__twoinc_test_transients'] = [];
+        $GLOBALS['__twoinc_test_logs'] = [];
+        foreach (range(1, 5) as $n) {
+            $_SERVER['REMOTE_ADDR'] = '198.51.100.4' . $n;
+            for ($i = 0; $i < $max + 3; $i++) {
+                WC_Twoinc_Rate_Limiter::check('order_intent');
+            }
+        }
+        unset($_SERVER['REMOTE_ADDR']);
+        $many = end($GLOBALS['__twoinc_test_logs'])['message'] ?? '';
+        TinyAssert::true(strpos($many, 'from 5 distinct client addresses') !== false, "many callers must be counted: $many");
+        TinyAssert::true(strpos($many, 'Spread across several addresses') !== false, "many callers must not be reported as one address: $many");
+        TinyAssert::true(strpos($many, 'One address accounts for all of it') === false, "many callers must not carry the single-address wording: $many");
     }
 
     private static function testRateLimitLeavesTheBucketEmptyWhenTheNonceFails(): void
