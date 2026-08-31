@@ -150,7 +150,9 @@ describe("TWO-40 §2 — the shipping instance is a genuine second TwoCompanySea
     expect(ctx.shippingHelper.soleTrader.mode).toBe("business");
 
     // Own DOM ids, so a second mounted panel cannot collide with the first's.
-    expect(ctx.shippingHelper.differentSoleTraderBtnId).not.toBe(ctx.helper.differentSoleTraderBtnId);
+    expect(ctx.shippingHelper.differentSoleTraderBtnId).not.toBe(
+      ctx.helper.differentSoleTraderBtnId
+    );
     expect(ctx.shippingHelper.soleTraderNoteSlotClass).not.toBe(ctx.helper.soleTraderNoteSlotClass);
     expect(ctx.shippingHelper.companySummaryId).not.toBe(ctx.helper.companySummaryId);
   });
