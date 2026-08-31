@@ -181,6 +181,12 @@ final class BrandConfigSpec
             'testBuyerFeeShareRelaysAConfiguredZeroCapVerbatim',
             'testBuyerFeeShareRoundsMonetaryValuesToTwoDecimalPlaces',
             'testFeeRequestGrossAmountIsRoundedToTwoDecimalPlaces',
+            'testTermFeeServedFromCacheAcrossRequestsOnUnchangedCartState',
+            'testTermFeeCacheMissesOnCartTotalChange',
+            'testTermFeeCacheMissesOnCurrencyChange',
+            'testTermFeeCacheMissesOnBuyerCountryChange',
+            'testTermFeeCacheMissesOnDifferentTerm',
+            'testTermFeeTransportFailureNotCachedAcrossRequests',
             'testBuyerFeeShareCapRoundingToZeroRelaysZeroCap',
             'testBuyerFeeShareFixedRoundingToZeroChargesZero',
             'testBuyerFeeShareAbsentCapChargesUncappedPercentage',
@@ -6108,6 +6114,158 @@ final class BrandConfigSpec
         } finally {
             unset($GLOBALS['__twoinc_test_price_decimals']);
         }
+    }
+
+    /**
+     * Gateway fake for the term-fee cross-request cache tests: counts
+     * make_request calls and serves canned pricing responses off a queue,
+     * so a test can call fetch_term_fee() twice, reset_fee_cache() between
+     * (simulating a fresh PHP request while leaving the transient store
+     * intact), and assert whether a second HTTP call happened.
+     */
+    private static function termFeeGateway(array $options, array $responses): WC_Payment_Gateway
+    {
+        return new class ($options, $responses) extends WC_Payment_Gateway {
+            private $options;
+            private $responses;
+            public $make_request_calls = 0;
+
+            public function __construct($options, $responses)
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+                $this->options = $options;
+                $this->responses = $responses;
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                return $this->options[$key] ?? $empty_value ?? '';
+            }
+
+            public function get_merchant_available_terms(bool $refresh = false): array
+            {
+                return [30];
+            }
+
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            {
+                $this->make_request_calls++;
+                return array_shift($this->responses);
+            }
+        };
+    }
+
+    private static function termFeeOk(string $buyer_fee_share): array
+    {
+        return [
+            'response' => ['code' => 200],
+            'body' => json_encode(['buyer_fee_share' => $buyer_fee_share, 'currency' => 'EUR']),
+        ];
+    }
+
+    private static function termFeeSettings(): array
+    {
+        return [
+            'payment_terms_days' => [30],
+            'surcharge_type' => 'percentage',
+            'surcharge_grid' => [30 => ['percentage' => 1.5]],
+        ];
+    }
+
+    /**
+     * Repeated interactions within the same cart state (opening/closing the
+     * chip UI, a re-render) must reuse the cached quote rather than
+     * re-calling checkout-api — the core requirement this cache exists for.
+     */
+    private static function testTermFeeServedFromCacheAcrossRequestsOnUnchangedCartState(): void
+    {
+        $gateway = self::termFeeGateway(self::termFeeSettings(), [self::termFeeOk('1.50')]);
+        $first = WC_Twoinc_Payment_Terms::fetch_term_fee($gateway, 30, 100.0, 'NO');
+        TinyAssert::same('1.50', $first['buyer_fee_share']);
+        TinyAssert::same(1, $gateway->make_request_calls);
+
+        // Simulate a fresh PHP request: the per-request memo is gone, only
+        // the persistent (transient) cache remains.
+        WC_Twoinc_Payment_Terms::reset_fee_cache();
+        $second = WC_Twoinc_Payment_Terms::fetch_term_fee($gateway, 30, 100.0, 'NO');
+        TinyAssert::same('1.50', $second['buyer_fee_share']);
+        TinyAssert::same(1, $gateway->make_request_calls, 'unchanged cart state must be served from cache, no second HTTP call');
+    }
+
+    /**
+     * A cart total change is exactly the kind of state change the cache
+     * must NOT survive — a stale quote for the old total would misprice
+     * the fee. Mutation-provable: a cache key that omitted gross_amount
+     * would wrongly hit here and this assertion would fail.
+     */
+    private static function testTermFeeCacheMissesOnCartTotalChange(): void
+    {
+        $gateway = self::termFeeGateway(self::termFeeSettings(), [self::termFeeOk('1.50'), self::termFeeOk('3.00')]);
+        WC_Twoinc_Payment_Terms::fetch_term_fee($gateway, 30, 100.0, 'NO');
+        WC_Twoinc_Payment_Terms::reset_fee_cache();
+
+        $changed = WC_Twoinc_Payment_Terms::fetch_term_fee($gateway, 30, 200.0, 'NO');
+        TinyAssert::same('3.00', $changed['buyer_fee_share']);
+        TinyAssert::same(2, $gateway->make_request_calls, 'a changed cart total must miss the cache');
+    }
+
+    /** Same cart total, different checkout currency: must not share a quote priced in the other currency. */
+    private static function testTermFeeCacheMissesOnCurrencyChange(): void
+    {
+        $gateway = self::termFeeGateway(self::termFeeSettings(), [self::termFeeOk('1.50'), self::termFeeOk('1.65')]);
+        WC_Twoinc_Payment_Terms::fetch_term_fee($gateway, 30, 100.0, 'NO');
+        WC_Twoinc_Payment_Terms::reset_fee_cache();
+
+        $GLOBALS['__twoinc_test_currency'] = 'SEK';
+        $changed = WC_Twoinc_Payment_Terms::fetch_term_fee($gateway, 30, 100.0, 'NO');
+        unset($GLOBALS['__twoinc_test_currency']);
+        TinyAssert::same('1.65', $changed['buyer_fee_share']);
+        TinyAssert::same(2, $gateway->make_request_calls, 'a changed checkout currency must miss the cache');
+    }
+
+    /** The buyer's shipping/billing country is part of the fee calc (buyer_country_code) and must key the cache too. */
+    private static function testTermFeeCacheMissesOnBuyerCountryChange(): void
+    {
+        $gateway = self::termFeeGateway(self::termFeeSettings(), [self::termFeeOk('1.50'), self::termFeeOk('1.55')]);
+        WC_Twoinc_Payment_Terms::fetch_term_fee($gateway, 30, 100.0, 'NO');
+        WC_Twoinc_Payment_Terms::reset_fee_cache();
+
+        $changed = WC_Twoinc_Payment_Terms::fetch_term_fee($gateway, 30, 100.0, 'SE');
+        TinyAssert::same('1.55', $changed['buyer_fee_share']);
+        TinyAssert::same(2, $gateway->make_request_calls, 'a changed buyer country must miss the cache');
+    }
+
+    /** Distinct terms are distinct quotes (chip labels for every offered term) and must never share a cache slot. */
+    private static function testTermFeeCacheMissesOnDifferentTerm(): void
+    {
+        $gateway = self::termFeeGateway(
+            array_merge(self::termFeeSettings(), ['surcharge_grid' => [30 => ['percentage' => 1.5], 60 => ['percentage' => 2.5]]]),
+            [self::termFeeOk('1.50'), self::termFeeOk('2.50')]
+        );
+        WC_Twoinc_Payment_Terms::fetch_term_fee($gateway, 30, 100.0, 'NO');
+        WC_Twoinc_Payment_Terms::reset_fee_cache();
+
+        $other_term = WC_Twoinc_Payment_Terms::fetch_term_fee($gateway, 60, 100.0, 'NO');
+        TinyAssert::same('2.50', $other_term['buyer_fee_share']);
+        TinyAssert::same(2, $gateway->make_request_calls, 'a different term must miss the cache');
+    }
+
+    /**
+     * A transport failure must stay request-scoped: persisting a null quote
+     * across requests would mask a recoverable API blip as "no fee" for
+     * the whole TTL window.
+     */
+    private static function testTermFeeTransportFailureNotCachedAcrossRequests(): void
+    {
+        $gateway = self::termFeeGateway(self::termFeeSettings(), [new WP_Error('http_request_failed', 'timed out'), self::termFeeOk('1.50')]);
+        $first = WC_Twoinc_Payment_Terms::fetch_term_fee($gateway, 30, 100.0, 'NO');
+        TinyAssert::same(null, $first, 'a transport failure fails soft to null');
+        TinyAssert::same(1, $gateway->make_request_calls);
+
+        WC_Twoinc_Payment_Terms::reset_fee_cache();
+        $retry = WC_Twoinc_Payment_Terms::fetch_term_fee($gateway, 30, 100.0, 'NO');
+        TinyAssert::same('1.50', $retry['buyer_fee_share']);
+        TinyAssert::same(2, $gateway->make_request_calls, 'a prior failure must not be served from cache; the next request must retry');
     }
 
     private static function testBuyerFeeShareCapRoundingToZeroRelaysZeroCap(): void

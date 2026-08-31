@@ -73,6 +73,12 @@ parameters:
 			path: tests/unit/bootstrap.php
 
 		-
+			message: '#^Access to an undefined property WC_Payment_Gateway\:\:\$make_request_calls\.$#'
+			identifier: property.notFound
+			count: 8
+			path: tests/unit/run.php
+
+		-
 			message: '#^Access to an undefined property WC_Payment_Gateway\:\:\$requests\.$#'
 			identifier: property.notFound
 			count: 5
