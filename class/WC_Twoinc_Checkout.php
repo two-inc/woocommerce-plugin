@@ -371,7 +371,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     'company_by_id_url' => class_exists('WC_AJAX') ? WC_AJAX::get_endpoint('two_company_by_id') : '',
                     'order_intent_url' => class_exists('WC_AJAX') ? WC_AJAX::get_endpoint('two_order_intent') : '',
                     'payment_terms_url' => class_exists('WC_AJAX') ? WC_AJAX::get_endpoint('two_payment_terms') : '',
-                    'nonce' => wp_create_nonce('twoinc_checkout'),
+                    'csrf_token' => wp_create_nonce('twoinc_checkout'),
                 ],
                 // Chip selector bootstrap (TWO-24751). JS renders only; the
                 // live data (fees, selection) comes from the wc-ajax
@@ -399,7 +399,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     'offset_pricing_enabled' => WC_Twoinc_Payment_Terms::get_surcharge_settings($this->wc_twoinc)['enabled'],
                     'fees_url' => class_exists('WC_AJAX') ? WC_AJAX::get_endpoint('two_term_fees') : '',
                     'select_url' => class_exists('WC_AJAX') ? WC_AJAX::get_endpoint('two_select_term') : '',
-                    'nonce' => wp_create_nonce('twoinc_checkout'),
+                    'csrf_token' => wp_create_nonce('twoinc_checkout'),
                 ],
                 // Sole trader bootstrap (TWO-24754). JS renders only; country
                 // availability and token minting come from the wc-ajax
@@ -407,7 +407,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 'sole_trader' => [
                     'availability_url' => class_exists('WC_AJAX') ? WC_AJAX::get_endpoint('two_sole_trader_availability') : '',
                     'tokens_url' => class_exists('WC_AJAX') ? WC_AJAX::get_endpoint('two_sole_trader_tokens') : '',
-                    'nonce' => wp_create_nonce('twoinc_checkout'),
+                    'csrf_token' => wp_create_nonce('twoinc_checkout'),
                     'text' => [
                         'registered_business' => __('Registered company', 'twoinc-payment-gateway'),
                         'sole_trader' => __('Sole trader', 'twoinc-payment-gateway'),

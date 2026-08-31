@@ -18,7 +18,7 @@ const GATEWAY_ID = "woocommerce-gateway-tillit";
 const SOLE_TRADER_CONFIG = {
   availability_url: "/?wc-ajax=two_sole_trader_availability",
   tokens_url: "/?wc-ajax=two_sole_trader_tokens",
-  nonce: "nonce",
+  csrf_token: "csrf-token",
   text: {}
 };
 

@@ -206,9 +206,9 @@ if (!class_exists('WC_Twoinc_Sole_Trader')) {
          */
         public static function ajax_availability(): void
         {
-            if (!check_ajax_referer('twoinc_checkout', 'nonce', false)) {
-                self::log_refusal('availability check', 'invalid or expired checkout nonce');
-                wp_send_json_error('Invalid nonce');
+            if (!check_ajax_referer('twoinc_checkout', 'csrf_token', false)) {
+                self::log_refusal('availability check', 'invalid or expired checkout security token');
+                wp_send_json_error('Invalid security token');
                 return;
             }
             if (!WC_Twoinc_Rate_Limiter::check('sole_trader_availability')) {
@@ -233,9 +233,9 @@ if (!class_exists('WC_Twoinc_Sole_Trader')) {
          */
         public static function ajax_tokens(): void
         {
-            if (!check_ajax_referer('twoinc_checkout', 'nonce', false)) {
-                self::log_refusal('token mint', 'invalid or expired checkout nonce');
-                wp_send_json_error('Invalid nonce');
+            if (!check_ajax_referer('twoinc_checkout', 'csrf_token', false)) {
+                self::log_refusal('token mint', 'invalid or expired checkout security token');
+                wp_send_json_error('Invalid security token');
                 return;
             }
             if (!WC_Twoinc_Rate_Limiter::check('sole_trader_tokens')) {
@@ -282,7 +282,7 @@ if (!class_exists('WC_Twoinc_Sole_Trader')) {
                 // PDEV-4669: registry-vetted country, echoed back — never re-derived from a DOM read.
                 'country' => $country,
             ];
-            // Sent here (nonce-checked, registry-gated) rather than the page bootstrap, so it never reaches an unvetted render.
+            // Sent here (token-checked, registry-gated) rather than the page bootstrap, so it never reaches an unvetted render.
             if ($gateway->should_send_firewall_token_from_browser()) {
                 $firewall_token = $gateway->get_firewall_token();
                 if ($firewall_token !== '') {

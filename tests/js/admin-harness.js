@@ -294,7 +294,7 @@ async function loadAdmin(options) {
   const adminSettings = {
     gateway_id: GATEWAY_ID,
     ajax_url: "https://example.test/wp-admin/admin-ajax.php",
-    nonce: "test-nonce",
+    csrf_token: "test-csrf-token",
     days_label: "%s days",
     decimal_separator: ".",
     merchant_available_terms: opts.merchantTerms || [14, 30, 60, 90],

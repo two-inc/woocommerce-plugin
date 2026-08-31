@@ -820,8 +820,8 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          */
         public static function ajax_term_fees(): void
         {
-            if (!check_ajax_referer('twoinc_checkout', 'nonce', false)) {
-                wp_send_json_error('Invalid nonce');
+            if (!check_ajax_referer('twoinc_checkout', 'csrf_token', false)) {
+                wp_send_json_error('Invalid security token');
                 return;
             }
             if (!WC_Twoinc_Rate_Limiter::check('term_fees')) {
@@ -884,8 +884,8 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          */
         public static function ajax_select_term(): void
         {
-            if (!check_ajax_referer('twoinc_checkout', 'nonce', false)) {
-                wp_send_json_error('Invalid nonce');
+            if (!check_ajax_referer('twoinc_checkout', 'csrf_token', false)) {
+                wp_send_json_error('Invalid security token');
                 return;
             }
             $gateway = WC_Twoinc::get_instance();

@@ -26,7 +26,7 @@ return [
     'logo_url' => WC_TWOINC_PLUGIN_URL . 'assets/images/two-logo.svg',
     'about_url' => 'https://www.two.inc/what-is-two',
     // Meta key prefix (e.g. _twoinc_order_reference, twoinc_company_id)
-    // and the confirmation request param/nonce prefix. An overlay MUST
+    // and the confirmation request param prefix. An overlay MUST
     // set the prefix its installed base already uses — live stores hold
     // data under it.
     'meta_prefix' => 'twoinc',

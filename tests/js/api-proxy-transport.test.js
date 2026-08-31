@@ -40,7 +40,7 @@ describe("checkout API calls and the firewall-token proxy", () => {
 
       expect(request.url).toBe(harness.API_PROXY.company_by_id_url);
       expect(params.get("lookup_id")).toBe("GB/12345678");
-      expect(params.get("nonce")).toBe(harness.API_PROXY.nonce);
+      expect(params.get("csrf_token")).toBe(harness.API_PROXY.csrf_token);
     });
   });
 
@@ -63,7 +63,7 @@ describe("checkout API calls and the firewall-token proxy", () => {
       expect(request.url).toBe(harness.API_PROXY.payment_terms_url);
       expect(params.get("buyer_organization_number")).toBe("12345678");
       expect(params.get("country_prefix")).toBe("GB");
-      expect(params.get("nonce")).toBe(harness.API_PROXY.nonce);
+      expect(params.get("csrf_token")).toBe(harness.API_PROXY.csrf_token);
       expect(params.get("merchant_id")).toBeNull();
       expect(params.get("merchant_short_name")).toBeNull();
     });

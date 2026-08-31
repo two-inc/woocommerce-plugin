@@ -146,7 +146,7 @@ final class BrandConfigSpec
             'testInvoiceDownload200NonPdfIsError',
             'testInvoiceDownloadCreditNoteOmitsVOriginal',
             'testInvoiceDownloadCapabilityGate',
-            'testInvoiceDownloadNonceScopedToOrderAndVariant',
+            'testInvoiceDownloadTokenScopedToOrderAndVariant',
             'testInvoiceDownloadNoticeIsolatedPerOrder',
             'testInvoiceStreamFilenameSanitizesOrderId',
             'testNegativeDiscountGuardPassesLegitimateDiscount',
@@ -262,7 +262,7 @@ final class BrandConfigSpec
             'testFirewallTokenRedactedFromTheApiLog',
             'testSoleTraderTokensNeverPublishTheFirewallToken',
             'testSoleTraderTokensPublishTheFirewallTokenOnlyWhenOptedIn',
-            'testApiProxyRefusesEveryCallWithoutTheCheckoutNonce',
+            'testApiProxyRefusesEveryCallWithoutTheCheckoutToken',
             'testApiProxyRelaysUpstreamBodyAndStatusVerbatim',
             'testApiProxyRelaysAnEmptyUpstreamBodyAsAnObject',
             'testApiProxyCompanyLookupKeepsTheIdToOnePathSegment',
@@ -290,7 +290,7 @@ final class BrandConfigSpec
             'testRateLimitRefusalLogNamesADominantAddressEvenWithIncidentalCompany',
             'testRateLimitRefusalLedgerStopsCountingPastItsClientCap',
             'testRateLimitLogsOncePerWindowNotPerRefusedRequest',
-            'testRateLimitLeavesTheBucketEmptyWhenTheNonceFails',
+            'testRateLimitLeavesTheBucketEmptyWhenTheTokenFails',
             'testCompanySearchSurvivesARealisticTypingSession',
             'testRateLimitRefusesEveryWcAjaxHandlerBeforeItReachesTheApi',
             'testRateLimitRefusesTheNonProxyHandlersToo',
@@ -336,7 +336,7 @@ final class BrandConfigSpec
         $GLOBALS['__twoinc_test_http_calls'] = [];
         $GLOBALS['__twoinc_test_admin_messages'] = [];
         $GLOBALS['__twoinc_test_admin_errors'] = [];
-        unset($GLOBALS['__twoinc_test_http_response'], $GLOBALS['__twoinc_test_ajax_nonce_ok']);
+        unset($GLOBALS['__twoinc_test_http_response'], $GLOBALS['__twoinc_test_ajax_referer_ok']);
         $GLOBALS['__twoinc_test_as_scheduled'] = [];
         $GLOBALS['__twoinc_test_as_schedule_calls'] = [];
         WC()->cart = null;
@@ -1225,7 +1225,7 @@ final class BrandConfigSpec
         $url = $body['merchant_urls']['merchant_confirmation_url'];
 
         TinyAssert::true(strpos($url, 'testbrand_order_reference=test-order-reference') !== false, $url);
-        TinyAssert::true(strpos($url, 'testbrand_nonce=') !== false, $url);
+        TinyAssert::true(strpos($url, 'testbrand_csrf_token=') !== false, $url);
     }
 
     private static function testAvailabilityGateAbsentForTwoBrand(): void
@@ -1544,7 +1544,7 @@ final class BrandConfigSpec
         $_REQUEST = [
             'order_id' => '42',
             'testbrand_order_reference' => 'ref',
-            'testbrand_nonce' => 'nonce',
+            'testbrand_csrf_token' => 'token',
         ];
         TinyAssert::true($is_confirmation_page->invoke($gateway));
 
@@ -1552,7 +1552,7 @@ final class BrandConfigSpec
         $_REQUEST = [
             'order_id' => '42',
             'twoinc_order_reference' => 'ref',
-            'twoinc_nonce' => 'nonce',
+            'twoinc_csrf_token' => 'token',
         ];
         TinyAssert::same(false, $is_confirmation_page->invoke($gateway));
         $_REQUEST = [];
@@ -4010,9 +4010,9 @@ final class BrandConfigSpec
         // below is what pins the lookup, and a fragment survives any later
         // rewording of the rest of the sentence.
         $fragments = [
-            'nl_NL' => ['zonder geldige WordPress-nonce', 'de aanvullende WordPress-nonce'],
-            'nb_NO' => ['uten gyldig WordPress-nonce', 'bare over den ekstra WordPress-noncen'],
-            'sv_SE' => ['utan giltig WordPress-nonce', 'bara över den extra WordPress-noncen'],
+            'nl_NL' => ['zonder geldig WordPress-beveiligingstoken', 'het aanvullende WordPress-beveiligingstoken'],
+            'nb_NO' => ['uten gyldig WordPress-sikkerhetstoken', 'bare over det ekstra sikkerhetstokenet fra WordPress'],
+            'sv_SE' => ['utan giltig WordPress-säkerhetstoken', 'bara över den extra säkerhetstoken från WordPress'],
         ];
 
         foreach ($fragments as $locale => $expected) {
@@ -5097,18 +5097,18 @@ final class BrandConfigSpec
         unset($GLOBALS['__twoinc_test_caps'], $GLOBALS['__twoinc_test_object_caps'], $GLOBALS['__twoinc_test_wc_orders'], $GLOBALS['__twoinc_test_transients']);
     }
 
-    private static function testInvoiceDownloadNonceScopedToOrderAndVariant(): void
+    private static function testInvoiceDownloadTokenScopedToOrderAndVariant(): void
     {
         // Mint side: the order-screen download button.
         $order = self::registerTwoOrder();
-        $GLOBALS['__twoinc_test_nonce_url_actions'] = [];
+        $GLOBALS['__twoinc_test_token_url_actions'] = [];
         ob_start();
         self::invoiceGateway([])->add_invoice_credit_note_urls($order);
         ob_end_clean();
-        TinyAssert::same(['twoinc_download_invoice_42_original'], $GLOBALS['__twoinc_test_nonce_url_actions']);
+        TinyAssert::same(['twoinc_download_invoice_42_original'], $GLOBALS['__twoinc_test_token_url_actions']);
 
         // Verify side: the ajax handler checks the SAME order+variant-scoped
-        // action — not the shared twoinc_admin_nonce the XHR handlers use.
+        // action — not the shared twoinc_admin_csrf_token the XHR handlers use.
         $_GET['_wpnonce'] = 'test';
         $_GET['order_id'] = '42';
         $_GET['variant'] = 'original';
@@ -5120,7 +5120,7 @@ final class BrandConfigSpec
 
         unset($_GET['_wpnonce'], $_GET['order_id'], $_GET['variant']);
         unset($GLOBALS['__twoinc_test_caps'], $GLOBALS['__twoinc_test_object_caps'], $GLOBALS['__twoinc_test_wc_orders']);
-        unset($GLOBALS['__twoinc_test_nonce_url_actions'], $GLOBALS['__twoinc_test_referer_actions']);
+        unset($GLOBALS['__twoinc_test_token_url_actions'], $GLOBALS['__twoinc_test_referer_actions']);
     }
 
     private static function testInvoiceDownloadNoticeIsolatedPerOrder(): void
@@ -8575,18 +8575,18 @@ final class BrandConfigSpec
         };
     }
 
-    private static function testApiProxyRefusesEveryCallWithoutTheCheckoutNonce(): void
+    private static function testApiProxyRefusesEveryCallWithoutTheCheckoutToken(): void
     {
         // The proxies spend the merchant's API key, so an unauthenticated
         // caller reaching them would be a free lookup oracle.
-        $GLOBALS['__twoinc_test_ajax_nonce_ok'] = false;
+        $GLOBALS['__twoinc_test_ajax_referer_ok'] = false;
         $handlers = ['ajax_company_search', 'ajax_company_by_id', 'ajax_order_intent', 'ajax_payment_terms'];
         foreach ($handlers as $handler) {
             $gateway = self::proxyGateway();
             $response = self::runProxyHandler($gateway, $handler);
 
-            TinyAssert::same(false, $response['success'] ?? null, "$handler served a request with no valid nonce");
-            TinyAssert::same([], $gateway->calls, "$handler reached the API with no valid nonce");
+            TinyAssert::same(false, $response['success'] ?? null, "$handler served a request with no valid security token");
+            TinyAssert::same([], $gateway->calls, "$handler reached the API with no valid security token");
         }
     }
 
@@ -8777,8 +8777,8 @@ final class BrandConfigSpec
             );
         }
         TinyAssert::true(
-            ($params['api_proxy']['nonce'] ?? '') !== '',
-            'the proxy bootstrap must carry a nonce for the handlers to check'
+            ($params['api_proxy']['csrf_token'] ?? '') !== '',
+            'the proxy bootstrap must carry a security token for the handlers to check'
         );
         // The token gates the merchant's own network egress, so nothing the
         // browser can read may carry it — key or value, at any depth.
@@ -9248,7 +9248,7 @@ final class BrandConfigSpec
         $GLOBALS['__twoinc_test_caps'] = ['manage_woocommerce'];
         TinyAssert::true(self::renderedUpgradeNotice() !== '', 'the notice must survive being skipped for an unprivileged user');
 
-        // Both links dismiss it, and both carry a nonce scoped to the action.
+        // Both links dismiss it, and both carry a token scoped to the action.
         foreach (['settings', 'hide'] as $action) {
             unset($GLOBALS['__twoinc_test_options'][$option]);
             $GLOBALS['__twoinc_test_referer_actions'] = [];
@@ -9267,7 +9267,7 @@ final class BrandConfigSpec
             TinyAssert::same(
                 ['twoinc_rate_limit_notice_' . $action],
                 $GLOBALS['__twoinc_test_referer_actions'],
-                "the $action link's nonce must be scoped to that action"
+                "the $action link's token must be scoped to that action"
             );
         }
         $GLOBALS['__twoinc_test_caps'] = [];
@@ -9584,20 +9584,20 @@ final class BrandConfigSpec
         TinyAssert::same(2, count($GLOBALS['__twoinc_test_logs']), 'a fresh window must log again');
     }
 
-    private static function testRateLimitLeavesTheBucketEmptyWhenTheNonceFails(): void
+    private static function testRateLimitLeavesTheBucketEmptyWhenTheTokenFails(): void
     {
-        // The nonce check runs first, so noise that never proves it came from a
+        // The token check runs first, so noise that never proves it came from a
         // checkout page cannot fill the bucket a real buyer on the same address
         // is metered by.
         $GLOBALS['__twoinc_test_transients'] = [];
-        $GLOBALS['__twoinc_test_ajax_nonce_ok'] = false;
+        $GLOBALS['__twoinc_test_ajax_referer_ok'] = false;
         $GLOBALS['__twoinc_test_ajax_json'] = null;
 
         self::runProxyHandler(self::proxyGateway(), 'ajax_order_intent');
         WC_Twoinc_Sole_Trader::ajax_tokens();
 
-        unset($GLOBALS['__twoinc_test_ajax_nonce_ok']);
-        TinyAssert::same([], $GLOBALS['__twoinc_test_transients'], 'a nonce-failed request filled a rate-limit bucket');
+        unset($GLOBALS['__twoinc_test_ajax_referer_ok']);
+        TinyAssert::same([], $GLOBALS['__twoinc_test_transients'], 'a token-failed request filled a rate-limit bucket');
     }
 
     private static function poTranslation(string $po, string $msgid): string

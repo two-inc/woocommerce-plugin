@@ -143,7 +143,7 @@ jQuery(function ($) {
         // The AJAX request to this site's admin-ajax.php failed before Two
         // was ever contacted (jQuery's error callback fires on any
         // transport-level failure — a WordPress-side 500, an expired
-        // nonce, a proxy/WAF block — not specifically "Two is
+        // security token, a proxy/WAF block — not specifically "Two is
         // unreachable"), so the "unreachable" wording would wrongly point
         // an admin at Two for a WP-side problem.
         return notices.request_failed || "Could not complete verification — try again shortly.";
@@ -180,7 +180,7 @@ jQuery(function ($) {
       data: {
         action: "twoinc_verify_api_key",
         api_key: apiKey,
-        nonce: twoinc_admin.nonce
+        csrf_token: twoinc_admin.csrf_token
       },
       success: function (response) {
         if (response.success) {
@@ -311,7 +311,7 @@ jQuery(function ($) {
         dataType: "json",
         data: {
           action: "twoinc_term_fees",
-          nonce: twoinc_admin.nonce,
+          csrf_token: twoinc_admin.csrf_token,
           terms: JSON.stringify(terms)
         }
       })

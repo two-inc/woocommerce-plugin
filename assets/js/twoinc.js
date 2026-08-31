@@ -77,8 +77,8 @@ let twoincUtilHelper = {
     return (window.twoinc.api_proxy || {})[key] || "";
   },
 
-  proxyNonce: function () {
-    return (window.twoinc.api_proxy || {}).nonce || "";
+  proxyCsrfToken: function () {
+    return (window.twoinc.api_proxy || {}).csrf_token || "";
   },
 
   /** Backoff after a 429: the server's Retry-After, clamped, 60s when absent. */
@@ -865,7 +865,7 @@ class TwoCompanySearch {
       limit: this.companySearchLimit,
       offset: 0,
       q: params.term,
-      nonce: twoincUtilHelper.proxyNonce()
+      csrf_token: twoincUtilHelper.proxyCsrfToken()
     });
 
     const request = jQuery.ajax({
@@ -2625,7 +2625,7 @@ let twoincTermChips = {
 
     if (willFetchFees) {
       jQuery
-        .post(cfg.fees_url, { nonce: cfg.nonce })
+        .post(cfg.fees_url, { csrf_token: cfg.csrf_token })
         .done(function (response) {
           twoincTermChips.feesLoaded = true;
           if (response && response.success && response.data) {
@@ -2748,7 +2748,7 @@ let twoincTermChips = {
     const cfg = twoincTermChips.config();
     if (!cfg.select_url) return;
     jQuery
-      .post(cfg.select_url, { days: days, nonce: cfg.nonce })
+      .post(cfg.select_url, { days: days, csrf_token: cfg.csrf_token })
       .done(function (response) {
         if (response && response.success && response.data) {
           cfg.selected = response.data.selected;
@@ -2939,7 +2939,7 @@ let twoincSoleTrader = {
       return;
     }
     jQuery
-      .get(cfg.availability_url, { country: country, nonce: cfg.nonce })
+      .get(cfg.availability_url, { country: country, csrf_token: cfg.csrf_token })
       .done(function (response) {
         const available = !!(
           response &&
@@ -3953,7 +3953,7 @@ let twoincSoleTrader = {
     }
     const country = twoincSoleTrader.currentCountry();
     jQuery
-      .post(cfg.tokens_url, { nonce: cfg.nonce, country: country })
+      .post(cfg.tokens_url, { csrf_token: cfg.csrf_token, country: country })
       .done(function (response) {
         // The buyer may have changed country while the request was in
         // flight — same guard `refresh()` uses for availability. Without
@@ -4976,7 +4976,7 @@ class Twoinc {
         // rest of the page. A timeout arrives as a `.fail` with status 0,
         // which paints the generic decline and is deliberately not cached.
         timeout: 30000,
-        data: { nonce: twoincUtilHelper.proxyNonce(), intent: jsonBody }
+        data: { csrf_token: twoincUtilHelper.proxyCsrfToken(), intent: jsonBody }
       });
       Twoinc.getInstance().orderIntentCheck.inFlightXhr = approvalResponse;
 
@@ -5181,7 +5181,7 @@ class Twoinc {
     const addressResponse = jQuery.ajax({
       dataType: "json",
       url: twoincUtilHelper.proxyUrl("company_by_id_url"),
-      data: { nonce: twoincUtilHelper.proxyNonce(), lookup_id: selectedCompany.lookup_id }
+      data: { csrf_token: twoincUtilHelper.proxyCsrfToken(), lookup_id: selectedCompany.lookup_id }
     });
     addressResponse.done(function (response) {
       if (seq !== self.addressLookupSeq) return;
@@ -5391,7 +5391,7 @@ class Twoinc {
 
     // Merchant identity is not sent: the proxy resolves it server-side.
     let params = {
-      nonce: twoincUtilHelper.proxyNonce(),
+      csrf_token: twoincUtilHelper.proxyCsrfToken(),
       buyer_organization_number: Twoinc.getInstance().customerCompany.organization_number,
       country_prefix: Twoinc.getInstance().customerCompany.country_prefix
     };
