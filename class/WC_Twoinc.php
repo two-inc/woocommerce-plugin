@@ -3889,6 +3889,31 @@ if (!class_exists('WC_Twoinc')) {
             // the buyer's address line.
             $posted_company_name = array_key_exists('company_name', $_POST) ? sanitize_text_field($_POST['company_name']) : '';
             $company_name = $posted_company_name !== '' ? $posted_company_name : $billing_company;
+
+            // Billing (invoice) first, shipping (delivery) only as a fallback
+            // when billing captured no company number at all (Doug 2026-08-31
+            // §2) — same rule the client-side resolver
+            // (`twoincCompanyCapture.write()`/`syncOrderCompany()`) already
+            // applies to the order-INTENT check; this is its order-CREATION
+            // counterpart. Untrusted the same way `$company_id` above already
+            // is — the order-creation endpoint validates the organisation
+            // number itself, so a tampered field carries no more risk than
+            // searching a different real company.
+            if ($company_id === '') {
+                $shipping_company_id = array_key_exists('shipping_company_id', $_POST)
+                    ? sanitize_text_field($_POST['shipping_company_id'])
+                    : '';
+                if ($shipping_company_id !== '') {
+                    $company_id = $shipping_company_id;
+                    $shipping_company = array_key_exists('shipping_company', $_POST)
+                        ? sanitize_text_field($_POST['shipping_company'])
+                        : '';
+                    $shipping_company_display = array_key_exists('shipping_company_display', $_POST)
+                        ? sanitize_text_field($_POST['shipping_company_display'])
+                        : '';
+                    $company_name = $shipping_company !== '' ? $shipping_company : $shipping_company_display;
+                }
+            }
             $invoice_email = array_key_exists('invoice_email', $_POST) ? sanitize_text_field($_POST['invoice_email']) : '';
             $invoice_emails = $invoice_email ? array_map('sanitize_text_field', explode(',', $invoice_email)) : [];
 

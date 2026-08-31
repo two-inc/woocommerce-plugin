@@ -131,7 +131,7 @@ function loadPluginSource() {
     src +
       "\n;({ twoincUtilHelper, twoincAddressRoles, twoincAddressMirror," +
       " twoincCompanyCapture," +
-      " twoincSelectWooHelper, twoincDomHelper," +
+      " twoincSelectWooHelper, twoincSelectWooHelperShipping, twoincDomHelper," +
       " twoincTermChips, twoincSoleTrader, Twoinc, TwoCompanySearch });"
   );
   if (!exported || typeof exported.twoincSelectWooHelper !== "object") {
@@ -180,8 +180,10 @@ function loadTwoinc(twoinc) {
   // asserts. This line is here so that memoising the eval later (2300 lines,
   // once per test) cannot silently turn that counter into shared state.
   exported.twoincSelectWooHelper.companySearchSeq = 0;
+  exported.twoincSelectWooHelperShipping.companySearchSeq = 0;
   return {
     helper: exported.twoincSelectWooHelper,
+    shippingHelper: exported.twoincSelectWooHelperShipping,
     util: exported.twoincUtilHelper,
     roles: exported.twoincAddressRoles,
     mirror: exported.twoincAddressMirror,

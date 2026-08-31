@@ -40,6 +40,23 @@ if (!class_exists('WC_Twoinc_Checkout')) {
             add_action('woocommerce_pay_order_before_submit', [$this, 'inject_cart_details'], 22);
 
             add_action('woocommerce_pay_order_before_submit', [$this, 'order_pay_page_customize'], 24);
+
+            // The shipping instance's own sole-trader signup note (Doug
+            // 2026-08-31 §2) — the one piece of its markup WC's own field-loop
+            // doesn't render for free the way it does the registered fields
+            // above: the billing equivalent lives inside the payment-tile
+            // description (WC_Twoinc::get_gateway_description()), which has no
+            // shipping-scoped counterpart, so this instance needs its own
+            // slot next to its own address panel instead.
+            add_action('woocommerce_after_checkout_shipping_form', [$this, 'render_shipping_sole_trader_note_slot']);
+        }
+
+        /**
+         * @return void
+         */
+        public function render_shipping_sole_trader_note_slot()
+        {
+            echo '<div class="twoinc-sole-trader-note-slot-shipping hidden"></div>';
         }
 
         /**
@@ -184,6 +201,46 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 'class' => array('hidden'),
                 'required' => false,
                 'priority' => $company_name_priority + 2
+            ];
+
+            // The shipping/delivery role's own COMPLETE company-search
+            // instance (Doug 2026-08-31 §2) — same three-field shape as
+            // billing's above (search-anchor, name carrier, number carrier),
+            // registered unconditionally: `TwoCompanySearch`'s shipping
+            // instance mounts against `#shipping_company_display` regardless
+            // of whether the "ship to a different address?" form is
+            // currently shown, the same way the billing control is always
+            // registered regardless of the admin's company-search-location
+            // setting.
+            if (!isset($fields['shipping']['shipping_company'])) {
+                $fields['shipping']['shipping_company'] = [
+                    'label' => __('Company name', 'twoinc-payment-gateway'),
+                    'autocomplete' => 'organization',
+                    'class' => array('form-row-wide'),
+                    'required' => false,
+                    'priority' => $company_name_priority
+                ];
+            }
+
+            $fields['shipping']['shipping_company_display'] = [
+                'label' => __('Company name', 'twoinc-payment-gateway'),
+                'autocomplete' => 'off',
+                'type' => 'text',
+                'class' => array('shipping_company_search', 'form-row-wide', 'hidden'),
+                'required' => false,
+                'priority' => $company_name_priority
+            ];
+
+            // No `shipping_company_name` carrier: unlike billing, the shipping
+            // instance has no payment-tile relocation to decouple from — its
+            // name carrier is always the plain native `shipping_company`
+            // field above (`TwoCompanySearch`'s `nameFieldSelector()` only
+            // special-cases a carrier for the primary role's TILE placement).
+            $fields['shipping']['shipping_company_id'] = [
+                'label' => __('Company ID', 'twoinc-payment-gateway'),
+                'class' => array('hidden'),
+                'required' => false,
+                'priority' => $company_name_priority + 1
             ];
 
             // ORDER IS LOAD-BEARING: WooCommerce sorts billing fields by

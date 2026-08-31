@@ -470,22 +470,133 @@ let twoincCompanyCapture = {
       twoincCompanyCapture.forgetPairing(role);
     }
 
-    // `buyer.company` on the order intent is invoice-bound, so only that role's
-    // capture reaches the record.
-    if (role !== twoincAddressRoles.invoice()) return;
-
-    const instance = Twoinc.getInstance();
-    // RAW onto the record, normalised onto the DOM: the record goes verbatim
-    // into `buyer.company` on the order intent, so normalising it here would
-    // change the org number this plugin POSTS. Comparisons against the
-    // record normalise at read time instead.
-    instance.customerCompany.company_name = companyName;
-    instance.customerCompany.organization_number = companyId;
     // Pin the country alongside the number so the pair can never be assembled
-    // from two different moments (TWO-25333); only on a capturing write.
+    // from two different moments (TWO-25333); only on a capturing write, and
+    // on EVERY role's own record — `deliveryIsOrderCompanySource()` below
+    // reads the delivery role's own pin when it becomes the fallback source.
     if (number) {
-      instance.customerCompany.country_prefix = opts.country || twoincAddressRoles.country(role);
+      twoincCompanyCapture.record(role).countryPrefix = opts.country || twoincAddressRoles.country(role);
     }
+
+    // `buyer.company` on the order intent is billing (invoice) first,
+    // shipping (delivery) only as a fallback when billing has captured no
+    // company number at all (Doug 2026-08-31 §2).
+    const instance = Twoinc.getInstance();
+    if (role === twoincAddressRoles.invoice()) {
+      // RAW `companyName`/`companyId` onto the record, exactly as before this
+      // rule existed — this branch is unconditional, invoice always wins.
+      instance.customerCompany.company_name = companyName;
+      instance.customerCompany.organization_number = companyId;
+      if (number) {
+        instance.customerCompany.country_prefix = opts.country || twoincAddressRoles.country(role);
+      } else {
+        // Billing just lost its capture — shipping may now qualify as the
+        // fallback. A qualifying shipping capture overrides the blanks just
+        // written above; nothing qualifying leaves them blank with
+        // `country_prefix` untouched, same invariant as before this rule.
+        twoincCompanyCapture.syncOrderCompany();
+      }
+    } else if (
+      !twoincCompanyCapture.hasCapture(twoincAddressRoles.invoice()) &&
+      twoincCompanyCapture.deliveryFormExistsAndInPlay()
+    ) {
+      // The fallback role's own write reaches the order intent only while
+      // billing has nothing AND the shipping form is genuinely part of this
+      // order (§2) — same RAW-onto-record, country-pinned-only-on-capture
+      // shape as the invoice branch above. Not gated on `hasCapture(delivery)`
+      // itself: a CLEARING write (no number) must still blank
+      // `customerCompany` when shipping was the source a moment ago.
+      instance.customerCompany.company_name = companyName;
+      instance.customerCompany.organization_number = companyId;
+      if (number) {
+        instance.customerCompany.country_prefix = opts.country || twoincAddressRoles.country(role);
+      }
+    }
+  },
+
+  /**
+   * Is the delivery/shipping role currently the source `customerCompany`
+   * should read from — billing has captured nothing, AND the shipping form
+   * is genuinely part of this order (Doug 2026-08-31 §2)?
+   *
+   * Not merely present in the DOM (WooCommerce keeps shipping fields there
+   * permanently) but in play (the "ship to a different address?" checkbox,
+   * where present, is checked) and existing at all (a virtual/no-shipping
+   * cart has no shipping country field for a capture to even attach a
+   * country to).
+   *
+   * @returns {boolean}
+   */
+  deliveryIsOrderCompanySource: function () {
+    if (twoincCompanyCapture.hasCapture(twoincAddressRoles.invoice())) return false;
+    return (
+      twoincCompanyCapture.deliveryFormExistsAndInPlay() &&
+      twoincCompanyCapture.hasCapture(twoincAddressRoles.delivery())
+    );
+  },
+
+  /**
+   * Structural half of `deliveryIsOrderCompanySource()` — the shipping form
+   * genuinely exists and is part of this order — WITHOUT asking whether it
+   * currently holds a capture. `write()`'s own delivery-role branch needs
+   * this half alone: a CLEARING write (no number) must still be allowed to
+   * blank `customerCompany` when shipping was the source a moment ago, which
+   * a `hasCapture(delivery)` gate would refuse the instant the clear itself
+   * makes that false.
+   *
+   * @returns {boolean}
+   */
+  deliveryFormExistsAndInPlay: function () {
+    const delivery = twoincAddressRoles.delivery();
+    return (
+      jQuery(twoincAddressRoles.field(delivery, "country")).length > 0 &&
+      twoincAddressMirror.deliveryFormIsInPlay()
+    );
+  },
+
+  /**
+   * Re-derive `customerCompany` from whichever role currently qualifies as
+   * the order-intent source, for every caller that mutates a role's capture
+   * WITHOUT going through `write()` (manual-entry toggles, a country change,
+   * the "ship to a different address?" checkbox) — `write()`'s own callers
+   * get this inline, above, with the RAW value it was actually passed;
+   * everyone else reads it back off the DOM.
+   */
+  syncOrderCompany: function () {
+    const instance = Twoinc.getInstance();
+    const invoice = twoincAddressRoles.invoice();
+    // Read the DOM, not the cached `hasCapture()` truth from before this call:
+    // a caller reaching this (a deferred re-read, a country change, a
+    // checkbox toggle) may run after something wrote straight to the DOM
+    // without going through `write()`, so `customerCompany` itself cannot be
+    // trusted as the read source here.
+    // Live, same as the invoice-only `getCompanyData()` this generalises:
+    // country is read off the field, not the pin `write()` records, so a
+    // country the buyer changed after capturing without re-searching is
+    // reflected here rather than replayed from an earlier moment.
+    if (twoincCompanyCapture.hasCapture(invoice)) {
+      instance.customerCompany.company_name = twoincUtilHelper.blankToEmpty(
+        twoincCompanyCapture.nameField(invoice).val()
+      );
+      instance.customerCompany.organization_number = twoincUtilHelper.blankToEmpty(
+        twoincCompanyCapture.numberField(invoice).val()
+      );
+      instance.customerCompany.country_prefix = twoincAddressRoles.country(invoice);
+      return;
+    }
+    if (!twoincCompanyCapture.deliveryIsOrderCompanySource()) {
+      instance.customerCompany.company_name = "";
+      instance.customerCompany.organization_number = "";
+      return;
+    }
+    const delivery = twoincAddressRoles.delivery();
+    instance.customerCompany.company_name = twoincUtilHelper.blankToEmpty(
+      twoincCompanyCapture.nameField(delivery).val()
+    );
+    instance.customerCompany.organization_number = twoincUtilHelper.blankToEmpty(
+      twoincCompanyCapture.numberField(delivery).val()
+    );
+    instance.customerCompany.country_prefix = twoincAddressRoles.country(delivery);
   },
 
   /**
@@ -524,9 +635,24 @@ let twoincCompanyCapture = {
    */
   capturedMode: function (role) {
     const mode = twoincCompanyCapture.modeFor(role);
-    if (twoincSoleTrader.mode !== "sole_trader") return mode;
-    if (twoincSoleTrader.soleTraderAdopted) return "sole_trader";
-    return twoincSoleTrader.savedCaptureMode === null ? mode : twoincSoleTrader.savedCaptureMode;
+    const soleTrader = twoincCompanyCapture.soleTraderFor(role);
+    if (!soleTrader || soleTrader.mode !== "sole_trader") return mode;
+    if (soleTrader.soleTraderAdopted) return "sole_trader";
+    return soleTrader.savedCaptureMode === null ? mode : soleTrader.savedCaptureMode;
+  },
+
+  /**
+   * Every role's own sole-trader controller (TWO-40), registered by
+   * `TwoCompanySearch`'s constructor. Each `TwoCompanySearch` instance owns an
+   * independent controller (own mode, flight, adoption state) — this is the
+   * lookup that lets role-keyed helpers like `capturedMode` reach the right
+   * one without every caller threading a `TwoCompanySearch` instance through.
+   */
+  soleTraderRegistry: {},
+
+  soleTraderFor: function (role) {
+    const key = role || twoincAddressRoles.primary();
+    return twoincCompanyCapture.soleTraderRegistry[key] || null;
   },
 
   /**
@@ -620,15 +746,16 @@ let twoincCompanyCapture = {
 
     twoincCompanyCapture.write($name.val(), "", { role: role });
 
-    // Everything below is invoice-bound: the order intent, and the surfaces the
-    // primary control owns.
+    // `write()` above already recomputed `customerCompany` (billing-first,
+    // shipping-fallback), so a retype on EITHER role can change what the
+    // order intent sees — re-check it regardless of which role this is.
+    Twoinc.getInstance().getApproval();
+
+    // Everything below is invoice-bound: the address-lookup/summary/required-
+    // cue surfaces only the primary (billing) control owns.
     if ((role || twoincAddressRoles.primary()) !== twoincAddressRoles.invoice()) return true;
 
-    const instance = Twoinc.getInstance();
-    instance.customerCompany.country_prefix = twoincAddressRoles.country(
-      twoincAddressRoles.invoice()
-    );
-    instance.registryAddressApplied = false;
+    Twoinc.getInstance().registryAddressApplied = false;
 
     // `#company_id` visibility depends on the value just cleared (TWO-25326
     // §12); the verdict on screen was about the company just uncaptured.
@@ -672,6 +799,10 @@ class TwoCompanySearch {
    *   spinner — a class, not an id, so a fragment swap that orphans a duplicate
    *   host cannot leave one animating forever (TWO-40).
    * @param {string} [options.soleTraderSpinnerHostClass] class marking its host.
+   * @param {string} [options.differentSoleTraderBtnId] id of the "select a
+   *   different sole trader" link this instance's sole-trader controller owns.
+   * @param {string} [options.soleTraderNoteSlotClass] class of the DOM node the
+   *   signup-prompt note (and its in-flight/error state) renders into.
    */
   constructor(options) {
     options = options || {};
@@ -683,8 +814,36 @@ class TwoCompanySearch {
     this.companySummaryId = options.companySummaryId || "twoinc_company_summary";
     this.companySearchTileSlotClass =
       options.companySearchTileSlotClass || "twoinc-company-search-tile-slot";
+    this.differentSoleTraderBtnId =
+      options.differentSoleTraderBtnId || "select_different_sole_trader_btn";
+    this.soleTraderNoteSlotClass =
+      options.soleTraderNoteSlotClass || "twoinc-sole-trader-note-slot";
     this.soleTraderSpinnerClass = options.soleTraderSpinnerClass || "twoinc-sole-trader-spinner";
     this.soleTraderSpinnerHostClass = options.soleTraderSpinnerHostClass || "twoinc-name-searching";
+
+    // One sole-trader controller per instance, never a shared global (TWO-40):
+    // `createSoleTraderController` closes over `this` for country/DOM reads
+    // and owns this instance's own mode/flight/adoption state.
+    this.soleTrader = createSoleTraderController(this);
+    twoincCompanyCapture.soleTraderRegistry[this.role] = this.soleTrader;
+  }
+
+  /**
+   * The mode-chips container INSIDE this instance's own panel.
+   *
+   * `company-search-panel.js` builds every panel's chip row under the same
+   * literal class (`CompanySearchPanel.CLASSES.CHIPS`) regardless of which
+   * `TwoCompanySearch` owns it, so a bare `jQuery('.' + CHIPS_CLASS)` matches
+   * every mounted instance's row at once once a second instance exists. Scoped
+   * through this instance's own field wrapper instead of the panel's private
+   * DOM handle, which is not part of `CompanySearchPanel`'s public surface.
+   *
+   * @returns {jQuery}
+   */
+  modeChipsNode() {
+    return jQuery(this.companyFieldSelector())
+      .closest("." + this.fieldWrapClass)
+      .find(".two-company-mode-chips");
   }
 
   /** This control's panel, built on first `attach()`. */
@@ -1093,7 +1252,7 @@ class TwoCompanySearch {
    * every sync rather than mutated, so a chip cannot outlive the mode it means.
    */
   chips() {
-    const cfg = twoincSoleTrader.config();
+    const cfg = this.soleTrader.config();
 
     return [
       {
@@ -1107,7 +1266,7 @@ class TwoCompanySearch {
         mode: "sole_trader",
         text: (cfg.text && cfg.text.sole_trader) || "Sole trader",
         onActivate: () => {
-          twoincSoleTrader.onModeChipClick("sole_trader");
+          this.soleTrader.onModeChipClick("sole_trader");
         }
       },
       {
@@ -1128,7 +1287,7 @@ class TwoCompanySearch {
    * @returns {boolean}
    */
   isChipVisible(mode) {
-    if (mode === "sole_trader") return twoincSoleTrader.isAvailable();
+    if (mode === "sole_trader") return this.soleTrader.isAvailable();
     if (mode === "manual") return this.manualEntryIsAvailable();
     return true;
   }
@@ -1142,7 +1301,7 @@ class TwoCompanySearch {
    */
   selectedMode() {
     if (twoincCompanyCapture.modeFor(this.role) === "manual") return "manual";
-    if (twoincSoleTrader.mode === "sole_trader") return "sole_trader";
+    if (this.soleTrader.mode === "sole_trader") return "sole_trader";
     return "registered";
   }
 
@@ -1155,9 +1314,9 @@ class TwoCompanySearch {
     // On the CLICK, which is the only event Enter and Space produce: behind the
     // guard below this chip did nothing at all for a keyboard buyer, leaving
     // the signup up with no way to dismiss it.
-    twoincSoleTrader.abandonPopupsForChipClick();
-    if (twoincSoleTrader.mode === "business" || twoincSoleTrader.isDeciding()) return;
-    twoincSoleTrader.setMode("business");
+    this.soleTrader.abandonPopupsForChipClick();
+    if (this.soleTrader.mode === "business" || this.soleTrader.isDeciding()) return;
+    this.soleTrader.setMode("business");
     this.openCompanySearchDropdown();
   }
 
@@ -1170,21 +1329,21 @@ class TwoCompanySearch {
   activateManualEntry() {
     // On the CLICK path, so Enter/Space take the popup down too (TWO-25503),
     // and before the guard below, which an outstanding signup makes refuse.
-    twoincSoleTrader.abandonPopupsForChipClick();
+    this.soleTrader.abandonPopupsForChipClick();
 
-    if (twoincSoleTrader.isDeciding()) return;
+    if (this.soleTrader.isDeciding()) return;
 
     // Captured synchronously: the deferred callback can't otherwise tell "was
     // already in sole-trader mode" from "switched into it during the defer".
-    const leavingSoleTrader = twoincSoleTrader.mode === "sole_trader";
+    const leavingSoleTrader = this.soleTrader.mode === "sole_trader";
 
     setTimeout(() => {
       if (
         leavingSoleTrader &&
-        twoincSoleTrader.mode === "sole_trader" &&
-        !twoincSoleTrader.isDeciding()
+        this.soleTrader.mode === "sole_trader" &&
+        !this.soleTrader.isDeciding()
       ) {
-        twoincSoleTrader.setMode("business");
+        this.soleTrader.setMode("business");
       }
       this.enterManualCompanyEntry();
     }, 0);
@@ -1248,15 +1407,15 @@ class TwoCompanySearch {
     // while still genuinely deciding, the same guard every other sole-trader
     // exit uses; once adopted, a pick is the buyer choosing a different
     // company.
-    if (twoincSoleTrader.mode === "sole_trader") {
-      if (twoincSoleTrader.isDeciding()) return;
-      twoincSoleTrader.mode = "business";
-      twoincSoleTrader.soleTraderAdopted = false;
-      twoincSoleTrader.soleTraderReconfirmingCount = 0;
-      twoincSoleTrader.updateChips();
-      twoincSoleTrader.syncDifferentSoleTraderLink();
+    if (this.soleTrader.mode === "sole_trader") {
+      if (this.soleTrader.isDeciding()) return;
+      this.soleTrader.mode = "business";
+      this.soleTrader.soleTraderAdopted = false;
+      this.soleTrader.soleTraderReconfirmingCount = 0;
+      this.soleTrader.updateChips();
+      this.soleTrader.syncDifferentSoleTraderLink();
       this.syncSoleTraderSurfaces();
-      twoincSoleTrader.leaveSoleTraderMode();
+      this.soleTrader.leaveSoleTraderMode();
     }
 
     // The single write path (TWO-40 §5): posted fields, instance record,
@@ -1321,7 +1480,7 @@ class TwoCompanySearch {
     jQuery("." + this.soleTraderSpinnerClass).remove();
     jQuery("." + this.soleTraderSpinnerHostClass).removeClass(this.soleTraderSpinnerHostClass);
 
-    if (twoincSoleTrader.mode !== "sole_trader" || twoincSoleTrader.flightDepth === 0) return;
+    if (this.soleTrader.mode !== "sole_trader" || this.soleTrader.flightDepth === 0) return;
 
     const $host = this.soleTraderSpinnerHost();
     if ($host.length === 0) return;
@@ -1590,7 +1749,11 @@ class TwoCompanySearch {
         Twoinc.getInstance().clearAddress();
       }
       Twoinc.getInstance().registryAddressApplied = false;
-      Twoinc.getInstance().customerCompany = {};
+      // Not a blind `{}` (Doug 2026-08-31 §2): `write()` above already
+      // recomputed this, but a shipping fallback may be the reason it isn't
+      // empty — clearing billing's own capture doesn't mean nothing is
+      // captured any more.
+      twoincCompanyCapture.syncOrderCompany();
     }
 
     // Clearing a capture changes the visible company-name surface exactly as
@@ -1607,7 +1770,7 @@ class TwoCompanySearch {
     setTimeout(() => {
       if (seq !== this.companySearchSeq) return;
       if (this.ownsOrderIntent()) {
-        Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData();
+        twoincCompanyCapture.syncOrderCompany();
       }
       this.renderCompanySummary();
     }, 3000);
@@ -1744,7 +1907,7 @@ class TwoCompanySearch {
     // Guards the deferred activation landing AFTER an async sole-trader switch
     // raced in during the same tick: without it this would force the capture
     // mode back to `manual` and wipe the synthetic id that switch just wrote.
-    if (twoincSoleTrader.mode === "sole_trader" || twoincSoleTrader.isDeciding()) return;
+    if (this.soleTrader.mode === "sole_trader" || this.soleTrader.isDeciding()) return;
     // The chip stays on screen through the switch, so a fast second press
     // queues a second deferred call that would re-clear the field the buyer
     // has by then started typing into.
@@ -1765,8 +1928,11 @@ class TwoCompanySearch {
         Twoinc.getInstance().clearAddress();
         Twoinc.getInstance().registryAddressApplied = false;
       }
-      Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData();
     }
+    // Billing-first, shipping-fallback (Doug 2026-08-31 §2): manual entry on
+    // EITHER role drops that role's own number, which can change what the
+    // order intent resolves to regardless of which role owns it.
+    twoincCompanyCapture.syncOrderCompany();
 
     if (this.panel) {
       this.panel.releaseField();
@@ -1783,6 +1949,8 @@ class TwoCompanySearch {
     // Releasing the field leaves focus on nothing, so a keyboard or AT user
     // loses their place mid-checkout.
     this.focusVisibleCompanyField(twoincAddressRoles.field(this.role, "company"));
+
+    Twoinc.getInstance().getApproval();
   }
 
   /**
@@ -1793,9 +1961,9 @@ class TwoCompanySearch {
 
     twoincCompanyCapture.nameField(this.role).val("");
     twoincCompanyCapture.numberField(this.role).val("");
-    if (this.ownsOrderIntent()) {
-      Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData();
-    }
+    // Billing-first, shipping-fallback (Doug 2026-08-31 §2) — see
+    // `enterManualCompanyEntry`'s own comment.
+    twoincCompanyCapture.syncOrderCompany();
 
     this.getSearchCompanyBtnNode().hide();
     twoincDomHelper.toggleBusinessFields();
@@ -1807,6 +1975,8 @@ class TwoCompanySearch {
     if (!this.openCompanySearchDropdown()) {
       this.focusVisibleCompanyField(this.companyFieldSelector());
     }
+
+    Twoinc.getInstance().getApproval();
   }
 
   /**
@@ -1824,15 +1994,41 @@ class TwoCompanySearch {
 }
 
 /**
- * The PRIMARY TwoCompanySearch instance, on the primary address role. Every
- * company-search behaviour this checkout ships — search, dropdown, manual
- * entry, tile relocation — goes through it, and it is the only one this file
- * constructs.
+ * The PRIMARY (billing/invoice) `TwoCompanySearch` instance. Owns the payment
+ * tile relocation and every invoice-scoped extra (address lookup, sole-trader
+ * user-meta restore, required-field cues) — see `twoincSelectWooHelperShipping`
+ * below for the delivery/shipping role's own instance.
  */
 let twoincSelectWooHelper = new TwoCompanySearch({
   addressFieldSelector: "#billing_company_display",
   tileFieldSelector: "#twoinc_tile_company_name"
 });
+
+/**
+ * The SECOND `TwoCompanySearch` instance, on the delivery/shipping role
+ * (TWO-40, Doug 2026-08-31): billing's own second-address-panel counterpart,
+ * same class, own DOM ids/classes so it owns its own nodes rather than
+ * reusing the billing instance's. No `tileFieldSelector` — shipping company
+ * capture has no payment-tile relocation concept, the search control's only
+ * mount is the shipping address panel itself.
+ */
+let twoincSelectWooHelperShipping = new TwoCompanySearch({
+  role: twoincAddressRoles.delivery(),
+  addressFieldSelector: "#shipping_company_display",
+  searchCompanyBtnId: "search_shipping_company_btn",
+  companySummaryId: "twoinc_shipping_company_summary",
+  differentSoleTraderBtnId: "select_different_sole_trader_btn_shipping",
+  soleTraderNoteSlotClass: "twoinc-sole-trader-note-slot-shipping",
+  soleTraderSpinnerClass: "twoinc-sole-trader-spinner-shipping",
+  soleTraderSpinnerHostClass: "twoinc-name-searching-shipping"
+});
+
+// Back-compat alias: every flow that predates the shipping instance and is
+// genuinely invoice-scoped by design (order-intent, order restore from user
+// meta, the billing-country change handler) keeps addressing the billing
+// controller under this name rather than threading `twoincSelectWooHelper`
+// through every one of those call sites.
+let twoincSoleTrader = twoincSelectWooHelper.soleTrader;
 
 let twoincDomHelper = {
   /** Add a placeholder after an input, used for moving fields in the DOM. */
@@ -1996,6 +2192,27 @@ let twoincDomHelper = {
       visibleTargets.push("#billing_company_field");
     }
 
+    // The shipping company row, same shown-for-every-country rule as
+    // billing's above, minus the tile relocation (shipping has no tile mount
+    // — TWO-40) and minus the required-cue logic below (shipping's company
+    // was never a required checkout field). Independent capture mode: the
+    // buyer can be in manual entry on one address and search on the other.
+    // Gated on the shipping form actually existing at all (no country field
+    // means a virtual/no-shipping cart) — matches
+    // `twoincAddressMirror.sync()`'s own guard, and keeps this a no-op on a
+    // checkout that never renders a shipping address in the first place.
+    const hasShippingAddress = jQuery(
+      twoincAddressRoles.field(twoincAddressRoles.delivery(), "country")
+    ).length > 0;
+    if (hasShippingAddress) {
+      allTargets.push("#shipping_company_display_field", "#shipping_company_field");
+      if (twoincCompanyCapture.modeFor(twoincAddressRoles.delivery()) !== "manual") {
+        visibleTargets.push("#shipping_company_display_field");
+      } else {
+        visibleTargets.push("#shipping_company_field");
+      }
+    }
+
     if (isTwoincSelected) {
       visibleTargets.push(
         "#invoice_email_field",
@@ -2035,7 +2252,12 @@ let twoincDomHelper = {
 
     // After it: the "select a different sole trader" link anchors against
     // whichever company-NAME field this function just decided to show.
-    twoincSoleTrader.syncDifferentSoleTraderLink();
+    twoincSelectWooHelper.soleTrader.syncDifferentSoleTraderLink();
+
+    if (hasShippingAddress) {
+      twoincSelectWooHelperShipping.renderCompanySummary();
+      twoincSelectWooHelperShipping.soleTrader.syncDifferentSoleTraderLink();
+    }
   },
   /**
    * Mirror each company field's visibility onto its enclosing wrapper
@@ -2772,7 +2994,8 @@ let twoincTermChips = {
  * hosted signup popup, and autofills the company fields from
  * GET /autofill/v1/buyer/current. Mirrors the Magento reference flow.
  */
-let twoincSoleTrader = {
+function createSoleTraderController(companySearch) {
+  const controller = {
   mode: "business", // 'business' | 'sole_trader'
   availabilityByCountry: {},
   tokens: null,
@@ -2897,7 +3120,6 @@ let twoincSoleTrader = {
   closeDropdownOnSettle: false,
 
   /** DOM id of the "select a different sole trader" link (TWO-40 §7). */
-  differentSoleTraderBtnId: "select_different_sole_trader_btn",
 
   config: function () {
     return (window.twoinc && window.twoinc.sole_trader) || {};
@@ -2908,12 +3130,12 @@ let twoincSoleTrader = {
   // so it disagreeing with the country the search and the change guard use
   // would be a cache keyed on one answer and read with another.
   currentCountry: function () {
-    return twoincSelectWooHelper.currentCountry();
+    return companySearch.currentCountry();
   },
 
   isAvailable: function () {
-    const country = twoincSoleTrader.currentCountry();
-    return twoincSoleTrader.availabilityByCountry[country] === true;
+    const country = controller.currentCountry();
+    return controller.availabilityByCountry[country] === true;
   },
 
   /**
@@ -2923,19 +3145,19 @@ let twoincSoleTrader = {
    * are cached per country for the page's lifetime.
    */
   refresh: function () {
-    const cfg = twoincSoleTrader.config();
-    const $noteSlot = jQuery(".twoinc-sole-trader-note-slot");
+    const cfg = controller.config();
+    const $noteSlot = jQuery("." + companySearch.soleTraderNoteSlotClass);
     if (!cfg.availability_url || $noteSlot.length === 0) {
-      twoincSoleTrader.hide();
+      controller.hide();
       return;
     }
-    const country = twoincSoleTrader.currentCountry();
+    const country = controller.currentCountry();
     if (!country) {
-      twoincSoleTrader.hide();
+      controller.hide();
       return;
     }
-    if (country in twoincSoleTrader.availabilityByCountry) {
-      twoincSoleTrader.apply(twoincSoleTrader.availabilityByCountry[country]);
+    if (country in controller.availabilityByCountry) {
+      controller.apply(controller.availabilityByCountry[country]);
       return;
     }
     jQuery
@@ -2947,11 +3169,11 @@ let twoincSoleTrader = {
           response.data &&
           response.data.available
         );
-        twoincSoleTrader.availabilityByCountry[country] = available;
+        controller.availabilityByCountry[country] = available;
         // The buyer may have changed country while the request was in
         // flight; only apply if the answer is still for the current one.
-        if (twoincSoleTrader.currentCountry() === country) {
-          twoincSoleTrader.apply(available);
+        if (controller.currentCountry() === country) {
+          controller.apply(available);
         }
       })
       .fail(function (jqXHR) {
@@ -2959,45 +3181,45 @@ let twoincSoleTrader = {
         // into the limit. Other failures stay uncached: a cached "no" would
         // hide sole trader all page over one dropped connection.
         if (jqXHR && jqXHR.status === 429) {
-          twoincSoleTrader.availabilityByCountry[country] = false;
+          controller.availabilityByCountry[country] = false;
           window.setTimeout(function () {
-            delete twoincSoleTrader.availabilityByCountry[country];
+            delete controller.availabilityByCountry[country];
           }, twoincUtilHelper.retryAfterMs(jqXHR));
         }
         // Fail-soft: no sole trader option, checkout proceeds as business.
-        if (twoincSoleTrader.currentCountry() === country) {
-          twoincSoleTrader.apply(false);
+        if (controller.currentCountry() === country) {
+          controller.apply(false);
         }
       });
   },
 
   apply: function (available) {
     if (available) {
-      twoincSoleTrader.render();
+      controller.render();
     } else {
-      twoincSoleTrader.hide();
+      controller.hide();
     }
     // The mode chip lives inside the company-search panel, not here —
     // re-sync so an availability change while it's open adds/removes live.
-    twoincSelectWooHelper.syncModeChips();
+    companySearch.syncModeChips();
   },
 
   hide: function () {
-    jQuery(".twoinc-sole-trader-note-slot").addClass("hidden").empty();
-    jQuery("#" + twoincSoleTrader.differentSoleTraderBtnId).hide();
+    jQuery("." + companySearch.soleTraderNoteSlotClass).addClass("hidden").empty();
+    jQuery("#" + companySearch.differentSoleTraderBtnId).hide();
     // Refused while `isBusy()`, same as the Business chip: this runs from
     // `refresh()` on every `updated_checkout` (coupon, shipping, quantity —
     // not only country), so an unconditional revert would drop a signup
     // still completing in the popup. `watchPopupClose` re-checks adoption
     // once it settles, so deferring here loses nothing.
-    if (twoincSoleTrader.mode === "sole_trader" && !twoincSoleTrader.isBusy()) {
-      twoincSoleTrader.setMode("business");
+    if (controller.mode === "sole_trader" && !controller.isBusy()) {
+      controller.setMode("business");
     }
   },
 
   render: function () {
-    const cfg = twoincSoleTrader.config();
-    const $container = jQuery(".twoinc-sole-trader-note-slot");
+    const cfg = controller.config();
+    const $container = jQuery("." + companySearch.soleTraderNoteSlotClass);
     $container.empty().removeClass("hidden");
 
     // Bell-icon note + signup link — shown only when sole-trader mode is
@@ -3018,7 +3240,7 @@ let twoincSoleTrader = {
     })
       .on("click", function (event) {
         event.preventDefault();
-        twoincSoleTrader.launchSignup();
+        controller.launchSignup();
       })
       .appendTo($note);
     $container.append($note);
@@ -3030,9 +3252,9 @@ let twoincSoleTrader = {
     // The callback re-decides the "select a different sole trader" link: a
     // sole trader restored from a previous order is already adopted before
     // any mint has happened, and that link only shows once `tokens` is real.
-    if (!twoincSoleTrader.tokens) {
-      twoincSoleTrader.fetchTokens(function () {
-        twoincSoleTrader.syncDifferentSoleTraderLink();
+    if (!controller.tokens) {
+      controller.fetchTokens(function () {
+        controller.syncDifferentSoleTraderLink();
       });
     }
   },
@@ -3042,11 +3264,13 @@ let twoincSoleTrader = {
    * inside the company-search panel, not here.
    */
   updateChips: function () {
-    twoincSelectWooHelper.syncModeChips();
+    companySearch.syncModeChips();
   },
 
   showNote: function (show) {
-    jQuery(".twoinc-sole-trader-note").toggleClass("hidden", !show);
+    jQuery("." + companySearch.soleTraderNoteSlotClass)
+      .find(".twoinc-sole-trader-note")
+      .toggleClass("hidden", !show);
   },
 
   /**
@@ -3057,15 +3281,18 @@ let twoincSoleTrader = {
    * dropdown open to paint in.
    */
   beginFlight: function () {
-    twoincSoleTrader.flightDepth += 1;
-    if (twoincSoleTrader.flightDepth === 1) {
+    controller.flightDepth += 1;
+    if (controller.flightDepth === 1) {
       // The note slot and the chip group — the two places busy state is
-      // ever visible.
-      jQuery(".twoinc-sole-trader-note-slot, .two-company-mode-chips").addClass(
-        "twoinc-sole-trader-toggle--busy"
-      );
+      // ever visible. Both scoped to THIS instance: the note-slot class is
+      // per-instance, and the chip row is found within this instance's own
+      // field wrap, since every instance's panel shares the same chip-row
+      // class (TWO-40).
+      jQuery("." + companySearch.soleTraderNoteSlotClass)
+        .add(companySearch.modeChipsNode())
+        .addClass("twoinc-sole-trader-toggle--busy");
     }
-    twoincSelectWooHelper.syncSoleTraderSurfaces();
+    companySearch.syncSoleTraderSurfaces();
   },
 
   /**
@@ -3086,17 +3313,17 @@ let twoincSoleTrader = {
    * @returns {void}
    */
   settleFlight: function () {
-    twoincSoleTrader.flightDepth = Math.max(0, twoincSoleTrader.flightDepth - 1);
-    if (twoincSoleTrader.flightDepth === 0) {
-      jQuery(".twoinc-sole-trader-note-slot, .two-company-mode-chips").removeClass(
-        "twoinc-sole-trader-toggle--busy"
-      );
-      if (twoincSoleTrader.closeDropdownOnSettle) {
-        twoincSoleTrader.closeDropdownOnSettle = false;
-        twoincSelectWooHelper.closeCompanySearchDropdown();
+    controller.flightDepth = Math.max(0, controller.flightDepth - 1);
+    if (controller.flightDepth === 0) {
+      jQuery("." + companySearch.soleTraderNoteSlotClass)
+        .add(companySearch.modeChipsNode())
+        .removeClass("twoinc-sole-trader-toggle--busy");
+      if (controller.closeDropdownOnSettle) {
+        controller.closeDropdownOnSettle = false;
+        companySearch.closeCompanySearchDropdown();
       }
     }
-    twoincSelectWooHelper.syncSoleTraderSurfaces();
+    companySearch.syncSoleTraderSurfaces();
   },
 
   /**
@@ -3107,17 +3334,17 @@ let twoincSoleTrader = {
    * choice happens inside the hosted signup's own UI.
    */
   getDifferentSoleTraderBtnNode: function () {
-    const id = twoincSoleTrader.differentSoleTraderBtnId;
+    const id = companySearch.differentSoleTraderBtnId;
     let $btn = jQuery("#" + id);
     if ($btn.length) {
-      twoincSoleTrader.placeDifferentSoleTraderBtn($btn);
+      controller.placeDifferentSoleTraderBtn($btn);
       return $btn;
     }
 
     $btn = jQuery("<button></button>")
       .attr({ id: id, type: "button" })
       .text(
-        (twoincSoleTrader.config().text && twoincSoleTrader.config().text.select_different) ||
+        (controller.config().text && controller.config().text.select_different) ||
           "Select a different sole trader"
       )
       .hide()
@@ -3126,16 +3353,16 @@ let twoincSoleTrader = {
       // document.body was proven not to reach that button live.
       .on("click", function (event) {
         event.preventDefault();
-        twoincSoleTrader.launchSignup({ autoselect: false });
+        controller.launchSignup({ autoselect: false });
       })
       .on("keydown", function (event) {
         if (event.which !== 13 && event.which !== 32) return;
         event.preventDefault();
         event.stopPropagation();
-        twoincSoleTrader.launchSignup({ autoselect: false });
+        controller.launchSignup({ autoselect: false });
       });
 
-    twoincSoleTrader.placeDifferentSoleTraderBtn($btn);
+    controller.placeDifferentSoleTraderBtn($btn);
     return $btn;
   },
 
@@ -3174,7 +3401,7 @@ let twoincSoleTrader = {
    * company-name surface can have changed since the last one.
    */
   placeDifferentSoleTraderBtn: function ($btn) {
-    const $slot = twoincSoleTrader.differentSoleTraderBtnSlot();
+    const $slot = controller.differentSoleTraderBtnSlot();
     // Position as well as parenthood: the link belongs last in the slot, after
     // the input, and anything appended to that slot after it — the company
     // summary on a re-render — leaves it stranded mid-slot otherwise.
@@ -3189,12 +3416,12 @@ let twoincSoleTrader = {
    * every mode, so there's no reason to lean on its DOM value here.
    */
   syncDifferentSoleTraderLink: function () {
-    const show = twoincSoleTrader.mode === "sole_trader" && !!twoincSoleTrader.tokens;
+    const show = controller.mode === "sole_trader" && !!controller.tokens;
     // Built lazily, only when about to be shown: this runs on every mode
     // switch, and building it eagerly would insert a hidden button into
     // the address form of every merchant who never sees this feature.
-    if (!show && !jQuery("#" + twoincSoleTrader.differentSoleTraderBtnId).length) return;
-    twoincSoleTrader.getDifferentSoleTraderBtnNode().toggle(show);
+    if (!show && !jQuery("#" + companySearch.differentSoleTraderBtnId).length) return;
+    controller.getDifferentSoleTraderBtnNode().toggle(show);
   },
 
   /**
@@ -3207,38 +3434,38 @@ let twoincSoleTrader = {
       // its own click handler, and that is where this mode's abandon and
       // guard live. Kept as the shared entry point's business arm, matching
       // that handler's guard so calling it cannot diverge from the chip.
-      if (!twoincSoleTrader.isDeciding()) twoincSoleTrader.setMode("business");
+      if (!controller.isDeciding()) controller.setMode("business");
       return;
     }
     // Cancel any abandon the buyer's return armed, here rather than only in
     // the capture-phase mousedown (TWO-25503): Enter and Space produce no
     // mousedown, so keyboard-activating this chip raised the popup and then
     // let the still-armed timer close it 150ms later.
-    clearTimeout(twoincSoleTrader.refocusAbandonTimer);
-    twoincSoleTrader.refocusAbandonTimer = null;
+    clearTimeout(controller.refocusAbandonTimer);
+    controller.refocusAbandonTimer = null;
     // A signup the buyer hasn't finished is still on screen, so this click
     // is asking for it back, not for anything new: raise it and stop.
     // Checked on the chip itself, not the refocus that usually precedes it
     // — a chip activated from the keyboard fires `click` with no
     // `mousedown`, so a raise hung off the refocus would leave Enter/Space
     // as the one route that can't get the buyer back to their popup.
-    if (twoincSoleTrader.refocusOpenPopups()) return;
+    if (controller.refocusOpenPopups()) return;
     // Re-clicking once already adopted is the same re-signup the "select a
     // different sole trader" link launches, not a no-op — the chip is a
     // second, equally deliberate way to ask for it. `autoselect: false` so
     // the hosted flow offers a choice rather than handing back the
     // registration already adopted.
-    if (twoincSoleTrader.mode === "sole_trader" && twoincSoleTrader.soleTraderAdopted) {
-      twoincSoleTrader.launchSignup({ autoselect: false });
+    if (controller.mode === "sole_trader" && controller.soleTraderAdopted) {
+      controller.launchSignup({ autoselect: false });
       return;
     }
-    twoincSoleTrader.setMode("sole_trader");
+    controller.setMode("sole_trader");
     // Always the hosted signup, no conditional fast path: a company may
     // only ever be filled in by the buyer's own trip through that flow. The
     // passive email-driven autofill probe this used to consult could
     // populate fields off a Two session cookie the buyer never
     // authenticated against.
-    twoincSoleTrader.launchSignup();
+    controller.launchSignup();
   },
 
   /**
@@ -3251,7 +3478,7 @@ let twoincSoleTrader = {
    * own resolution.
    */
   isBusy: function () {
-    return twoincSoleTrader.flightDepth > 0 || twoincSoleTrader.activePopupWatchers.length > 0;
+    return controller.flightDepth > 0 || controller.activePopupWatchers.length > 0;
   },
 
   /**
@@ -3265,8 +3492,8 @@ let twoincSoleTrader = {
    */
   isDeciding: function () {
     return (
-      twoincSoleTrader.isBusy() &&
-      (!twoincSoleTrader.soleTraderAdopted || twoincSoleTrader.soleTraderReconfirmingCount > 0)
+      controller.isBusy() &&
+      (!controller.soleTraderAdopted || controller.soleTraderReconfirmingCount > 0)
     );
   },
 
@@ -3278,11 +3505,11 @@ let twoincSoleTrader = {
     // Only an actual transition resets adoption/reconfirmation state: a
     // redundant same-mode `setMode("sole_trader")` must not zero a live
     // re-signup's own `soleTraderReconfirmingCount` mid-flight.
-    const isTransition = mode !== twoincSoleTrader.mode;
-    twoincSoleTrader.mode = mode;
+    const isTransition = mode !== controller.mode;
+    controller.mode = mode;
     if (isTransition) {
-      twoincSoleTrader.soleTraderAdopted = false;
-      twoincSoleTrader.soleTraderReconfirmingCount = 0;
+      controller.soleTraderAdopted = false;
+      controller.soleTraderReconfirmingCount = 0;
     }
     if (mode === "sole_trader") {
       // Sole trader is its own company-capture mode: it renders through the
@@ -3290,24 +3517,24 @@ let twoincSoleTrader = {
       // ordinary registry pick's surfaces are right for it. Snapshotted first
       // so it can be restored on the way out, and written BEFORE the chip sync
       // below — `selectedMode()` reads both axes, and manual entry wins the tie.
-      if (twoincSoleTrader.savedCaptureMode === null) {
-        twoincSoleTrader.savedCaptureMode = twoincCompanyCapture.mode;
+      if (controller.savedCaptureMode === null) {
+        controller.savedCaptureMode = twoincCompanyCapture.mode;
       }
       twoincCompanyCapture.mode = "sole_trader";
     }
 
-    twoincSoleTrader.updateChips();
-    twoincSoleTrader.syncDifferentSoleTraderLink();
+    controller.updateChips();
+    controller.syncDifferentSoleTraderLink();
     // Before the branch below, so a chip click made while the panel is already
     // open hides the query row in the click's own gesture.
-    twoincSelectWooHelper.syncSoleTraderSurfaces();
+    companySearch.syncSoleTraderSurfaces();
 
     // Nothing is torn down on the way IN: the panel and its spinner have to
     // survive the autofill round trip and the signup popup it can lead to.
     // `lockCapturedFields()` closes the panel once there is a company to show.
     if (mode !== "sole_trader") {
-      twoincSoleTrader.leaveSoleTraderMode();
-      twoincSoleTrader.setCompany("", "");
+      controller.leaveSoleTraderMode();
+      controller.setCompany("", "");
       twoincDomHelper.toggleBusinessFields();
       Twoinc.getInstance().enableCompanySearch();
       // The buyer may have been in manual entry when they switched to sole
@@ -3315,7 +3542,7 @@ let twoincSoleTrader = {
       // enableCompanySearch just early-returned — without this the link back
       // to search stays hidden with no other route back to the picker.
       if (twoincCompanyCapture.mode === "manual") {
-        twoincSelectWooHelper.getSearchCompanyBtnNode().show();
+        companySearch.getSearchCompanyBtnNode().show();
       }
     }
   },
@@ -3329,14 +3556,14 @@ let twoincSoleTrader = {
    * ever runs. Split out so both paths share identical "leaving" semantics.
    */
   leaveSoleTraderMode: function () {
-    twoincSoleTrader.showNote(false);
+    controller.showNote(false);
     twoincCompanyCapture
       .nameField()
       .add(twoincCompanyCapture.numberFieldSelector())
       .prop("readonly", false);
-    if (twoincSoleTrader.savedCaptureMode !== null) {
-      twoincCompanyCapture.mode = twoincSoleTrader.savedCaptureMode;
-      twoincSoleTrader.savedCaptureMode = null;
+    if (controller.savedCaptureMode !== null) {
+      twoincCompanyCapture.mode = controller.savedCaptureMode;
+      controller.savedCaptureMode = null;
     }
     // A popup-close poll left over from a resolved adoption/re-signup keeps
     // `isBusy()`/`isDeciding()` true purely on its own 300ms cadence. This
@@ -3344,7 +3571,7 @@ let twoincSoleTrader = {
     // sole-trader mode, so whatever that poll was still going to decide is
     // moot — left running it would race a deferred manual-entry switch,
     // wrongly refusing it while the stale busy state persists.
-    twoincSoleTrader.abandonSoleTraderFlow();
+    controller.abandonSoleTraderFlow();
   },
 
   /**
@@ -3360,11 +3587,11 @@ let twoincSoleTrader = {
    * left `sole_trader` by the time this runs.
    */
   abandonSoleTraderFlow: function () {
-    twoincSoleTrader.activePopupWatchers.forEach(function (watcher) {
+    controller.activePopupWatchers.forEach(function (watcher) {
       if (watcher.win.closed || typeof watcher.win.close !== "function") return;
       watcher.win.close();
     });
-    twoincSoleTrader.stopAllPopupWatchers();
+    controller.stopAllPopupWatchers();
   },
 
   /**
@@ -3380,11 +3607,11 @@ let twoincSoleTrader = {
   lockCapturedFields: function (companyId, companyName) {
     // An adoption can land with no panel bound — manual entry releases the
     // field and the Sole trader chip is not hidden there.
-    twoincSelectWooHelper.attach(Twoinc.getInstance());
-    twoincSelectWooHelper.closeCompanySearchDropdown();
-    twoincSelectWooHelper.setDisplayName(companyName);
+    companySearch.attach(Twoinc.getInstance());
+    companySearch.closeCompanySearchDropdown();
+    companySearch.setDisplayName(companyName);
 
-    jQuery("#" + twoincSelectWooHelper.searchCompanyBtnId).hide();
+    jQuery("#" + companySearch.searchCompanyBtnId).hide();
     twoincCompanyCapture
       .nameField()
       .add(twoincCompanyCapture.numberFieldSelector())
@@ -3410,8 +3637,8 @@ let twoincSoleTrader = {
    * reintroduce that bug for the length of the poll.
    */
   reopenSearch: function () {
-    if (twoincSoleTrader.mode !== "sole_trader" || twoincSoleTrader.isDeciding()) return;
-    twoincSoleTrader.setMode("business");
+    if (controller.mode !== "sole_trader" || controller.isDeciding()) return;
+    controller.setMode("business");
     const helper = twoincSelectWooHelper;
     // Reached from the captured fields in the ADDRESS area, which stay on
     // screen while the panel's own host — the payment tile — is collapsed.
@@ -3435,7 +3662,7 @@ let twoincSoleTrader = {
    * `soleTraderReconfirmingCount` a count rather than a boolean.
    */
   launchSignup: function (options) {
-    if (twoincSoleTrader.openingSignup) return;
+    if (controller.openingSignup) return;
     // One live undecided popup at a time. "Live" is load-bearing: a
     // hand-closed record stays undecided until its own poll notices, and a
     // relaunch is deliberately allowed to open alongside it — reading
@@ -3443,27 +3670,27 @@ let twoincSoleTrader = {
     // `findPopupWatcher`). Scoped to each popup's own outcome rather than
     // `isDeciding()`, which would strand a chip click when no popup exists
     // and only a stale flight is outstanding.
-    if (twoincSoleTrader.signupConfirming) return;
+    if (controller.signupConfirming) return;
     // The abandon a return to the checkout armed goes, whatever this
     // activation then does: left running it closes the popup 150ms later,
     // raised or freshly opened. Only the mode chips cancel it on their own.
-    clearTimeout(twoincSoleTrader.refocusAbandonTimer);
-    twoincSoleTrader.refocusAbandonTimer = null;
+    clearTimeout(controller.refocusAbandonTimer);
+    controller.refocusAbandonTimer = null;
     // Raised, not silently dropped: the popup that would answer this
     // activation is already on screen, and a refusal that does nothing at all
     // reads as a dead control to a buyer who cannot see it.
-    if (twoincSoleTrader.refocusOpenPopups()) return;
+    if (controller.refocusOpenPopups()) return;
     if (
       options &&
       options.autoselect === false &&
-      twoincSoleTrader.soleTraderReconfirmingCount > 0
+      controller.soleTraderReconfirmingCount > 0
     ) {
       return;
     }
-    twoincSoleTrader.openingSignup = true;
+    controller.openingSignup = true;
     try {
-      const win = twoincSoleTrader.openPopup(options);
-      twoincSoleTrader.showNote(!win);
+      const win = controller.openPopup(options);
+      controller.showNote(!win);
       if (win) {
         // Both callers passing `autoselect: false` — the "select a
         // different sole trader" link, and a re-click of the chip once
@@ -3476,16 +3703,16 @@ let twoincSoleTrader = {
         // above zero until an unrelated `setMode()` reset it.
         const isReconfirming = !!(options && options.autoselect === false);
         if (isReconfirming) {
-          twoincSoleTrader.soleTraderReconfirmingCount += 1;
+          controller.soleTraderReconfirmingCount += 1;
         }
-        twoincSoleTrader.closeDropdownOnSettle = true;
-        twoincSoleTrader.watchPopupClose(win, isReconfirming);
+        controller.closeDropdownOnSettle = true;
+        controller.watchPopupClose(win, isReconfirming);
       }
     } finally {
       // Released once the synchronous open has returned, blocked or not —
       // held any longer and a blocked popup would lock the buyer out of
       // retrying via the fallback link.
-      twoincSoleTrader.openingSignup = false;
+      controller.openingSignup = false;
     }
   },
 
@@ -3511,14 +3738,14 @@ let twoincSoleTrader = {
    *   decrement meant for a different, still-open re-signup.
    */
   watchPopupClose: function (win, isReconfirming) {
-    twoincSoleTrader.bindWindowRefocusListener();
-    twoincSoleTrader.beginFlight();
+    controller.bindWindowRefocusListener();
+    controller.beginFlight();
     const watcher = { id: null, win: win, isReconfirming: !!isReconfirming, decided: false };
     watcher.id = setInterval(function () {
       if (!win.closed) return;
-      twoincSoleTrader.settleClosedPopup(watcher, false);
+      controller.settleClosedPopup(watcher, false);
     }, 300);
-    twoincSoleTrader.activePopupWatchers.push(watcher);
+    controller.activePopupWatchers.push(watcher);
   },
 
   /**
@@ -3533,20 +3760,20 @@ let twoincSoleTrader = {
    *   owns the mode and dropdown from here
    */
   settleClosedPopup: function (watcher, chipOwnsOutcome) {
-    twoincSoleTrader.stopWatchingPopup(watcher.id);
+    controller.stopWatchingPopup(watcher.id);
     if (chipOwnsOutcome) {
       // Consumed, not honoured: the chip decides what happens to the
       // dropdown, and closing it here would destroy the button whose
       // `click` hasn't been dispatched yet.
-      twoincSoleTrader.closeDropdownOnSettle = false;
+      controller.closeDropdownOnSettle = false;
     }
-    twoincSoleTrader.settleFlight();
+    controller.settleFlight();
     if (watcher.isReconfirming && !watcher.decided) {
       // Abandoned without a decision — this settle owns the decrement. A
       // decided popup's decrement belongs to the ACCEPTED handler instead.
-      twoincSoleTrader.soleTraderReconfirmingCount = Math.max(
+      controller.soleTraderReconfirmingCount = Math.max(
         0,
-        twoincSoleTrader.soleTraderReconfirmingCount - 1
+        controller.soleTraderReconfirmingCount - 1
       );
     }
     if (
@@ -3555,9 +3782,9 @@ let twoincSoleTrader = {
       // Registered company chip's own "already in business mode" no-op
       // swallow the click.
       !chipOwnsOutcome &&
-      twoincSoleTrader.mode === "sole_trader" &&
-      !twoincSoleTrader.soleTraderAdopted &&
-      !twoincSoleTrader.signupConfirming &&
+      controller.mode === "sole_trader" &&
+      !controller.soleTraderAdopted &&
+      !controller.signupConfirming &&
       // A popup relaunched inside this poll's stale window owns the mode
       // now — reverting under it would drop its eventual ACCEPTED on the
       // `mode !== "sole_trader"` gate.
@@ -3566,11 +3793,11 @@ let twoincSoleTrader = {
       // whose ACCEPTED resolved to no buyer is decided yet still open, and
       // a retry inside it posts a second ACCEPTED a revert would drop on
       // that same gate.
-      !twoincSoleTrader.activePopupWatchers.some(function (other) {
+      !controller.activePopupWatchers.some(function (other) {
         return !other.win.closed;
       })
     ) {
-      twoincSoleTrader.setMode("business");
+      controller.setMode("business");
     }
   },
 
@@ -3615,12 +3842,12 @@ let twoincSoleTrader = {
    * @returns {void}
    */
   bindWindowRefocusListener: function () {
-    if (twoincSoleTrader.refocusHandler) return;
-    twoincSoleTrader.refocusHandler = function (event) {
+    if (controller.refocusHandler) return;
+    controller.refocusHandler = function (event) {
       if (event && event.target && event.target !== window && event.target !== document) return;
-      twoincSoleTrader.scheduleRefocusAbandon();
+      controller.scheduleRefocusAbandon();
     };
-    window.addEventListener("focus", twoincSoleTrader.refocusHandler);
+    window.addEventListener("focus", controller.refocusHandler);
 
     // Paired with `focus` because neither signal covers the case alone. A
     // return from another TAB of the same window is a visibility change;
@@ -3628,31 +3855,31 @@ let twoincSoleTrader = {
     // Chrome also emits a window `focus` for the first is not something
     // this plugin should depend on, so both are bound and the arming
     // guard below makes a duplicate harmless.
-    twoincSoleTrader.visibilityHandler = function () {
+    controller.visibilityHandler = function () {
       // Fires on HIDE as well as show, and arming is coalesced onto the first
       // caller — so arming here would spend the grace the buyer's actual
       // return needs, leaving them a fraction of it or none.
       if (document.visibilityState === "hidden") return;
-      twoincSoleTrader.scheduleRefocusAbandon();
+      controller.scheduleRefocusAbandon();
     };
-    document.addEventListener("visibilitychange", twoincSoleTrader.visibilityHandler);
+    document.addEventListener("visibilitychange", controller.visibilityHandler);
 
-    twoincSoleTrader.chipMousedownHandler = function (event) {
+    controller.chipMousedownHandler = function (event) {
       const target = event && event.target;
       const chip =
         target && typeof target.closest === "function"
-          ? target.closest("." + twoincSelectWooHelper.modeChipClass)
+          ? target.closest("." + companySearch.modeChipClass)
           : null;
       if (!chip) return;
       // Whatever the deferred path is or is not waiting on: a chip click is
       // the buyer saying which mode they want, and only Sole trader means
       // "give me that popup back".
-      clearTimeout(twoincSoleTrader.refocusAbandonTimer);
-      twoincSoleTrader.refocusAbandonTimer = null;
+      clearTimeout(controller.refocusAbandonTimer);
+      controller.refocusAbandonTimer = null;
       if (chip.getAttribute("data-two-chip") === "sole_trader") return;
-      twoincSoleTrader.abandonPopupsForChipClick();
+      controller.abandonPopupsForChipClick();
     };
-    document.addEventListener("mousedown", twoincSoleTrader.chipMousedownHandler, true);
+    document.addEventListener("mousedown", controller.chipMousedownHandler, true);
   },
 
   /**
@@ -3675,12 +3902,12 @@ let twoincSoleTrader = {
     // arrives in bursts (a blur fires one, so the panel closing its own
     // dropdown produces a stream), and a single return can legitimately reach
     // both this and the visibility listener.
-    if (twoincSoleTrader.refocusAbandonTimer !== null) return;
-    twoincSoleTrader.refocusAbandonTimer = setTimeout(function () {
-      twoincSoleTrader.refocusAbandonTimer = null;
-      if (!twoincSoleTrader.checkoutIsInFront()) return;
-      twoincSoleTrader.closeAbandonedPopups();
-    }, twoincSoleTrader.refocusChipGraceMs);
+    if (controller.refocusAbandonTimer !== null) return;
+    controller.refocusAbandonTimer = setTimeout(function () {
+      controller.refocusAbandonTimer = null;
+      if (!controller.checkoutIsInFront()) return;
+      controller.closeAbandonedPopups();
+    }, controller.refocusChipGraceMs);
   },
 
   /** Test seam / teardown: drop the window `focus` listener, the mousedown
@@ -3688,19 +3915,19 @@ let twoincSoleTrader = {
    * @returns {void}
    */
   unbindWindowRefocusListener: function () {
-    clearTimeout(twoincSoleTrader.refocusAbandonTimer);
-    twoincSoleTrader.refocusAbandonTimer = null;
-    if (twoincSoleTrader.chipMousedownHandler) {
-      document.removeEventListener("mousedown", twoincSoleTrader.chipMousedownHandler, true);
-      twoincSoleTrader.chipMousedownHandler = null;
+    clearTimeout(controller.refocusAbandonTimer);
+    controller.refocusAbandonTimer = null;
+    if (controller.chipMousedownHandler) {
+      document.removeEventListener("mousedown", controller.chipMousedownHandler, true);
+      controller.chipMousedownHandler = null;
     }
-    if (twoincSoleTrader.visibilityHandler) {
-      document.removeEventListener("visibilitychange", twoincSoleTrader.visibilityHandler);
-      twoincSoleTrader.visibilityHandler = null;
+    if (controller.visibilityHandler) {
+      document.removeEventListener("visibilitychange", controller.visibilityHandler);
+      controller.visibilityHandler = null;
     }
-    if (!twoincSoleTrader.refocusHandler) return;
-    window.removeEventListener("focus", twoincSoleTrader.refocusHandler);
-    twoincSoleTrader.refocusHandler = null;
+    if (!controller.refocusHandler) return;
+    window.removeEventListener("focus", controller.refocusHandler);
+    controller.refocusHandler = null;
   },
 
   /**
@@ -3724,7 +3951,7 @@ let twoincSoleTrader = {
    * fired. See `bindWindowRefocusListener` and `abandonPopupsForChipClick`.
    */
   closeAbandonedPopups: function () {
-    twoincSoleTrader.abandonablePopups().forEach(function (watcher) {
+    controller.abandonablePopups().forEach(function (watcher) {
       if (typeof watcher.win.close !== "function") return;
       watcher.win.close();
     });
@@ -3762,9 +3989,9 @@ let twoincSoleTrader = {
    * `click` regardless, which is the only one Enter and Space produce.
    */
   abandonPopupsForChipClick: function () {
-    twoincSoleTrader.abandonablePopups().forEach(function (watcher) {
+    controller.abandonablePopups().forEach(function (watcher) {
       if (typeof watcher.win.close === "function") watcher.win.close();
-      twoincSoleTrader.settleClosedPopup(watcher, true);
+      controller.settleClosedPopup(watcher, true);
     });
   },
 
@@ -3776,7 +4003,7 @@ let twoincSoleTrader = {
    * @returns {boolean} whether there was a popup to raise
    */
   refocusOpenPopups: function () {
-    const abandonable = twoincSoleTrader.abandonablePopups();
+    const abandonable = controller.abandonablePopups();
     abandonable.forEach(function (watcher) {
       if (typeof watcher.win.focus === "function") watcher.win.focus();
     });
@@ -3794,7 +4021,7 @@ let twoincSoleTrader = {
    * @returns {Array} a snapshot, safe to iterate while records are removed
    */
   abandonablePopups: function () {
-    return twoincSoleTrader.activePopupWatchers.filter(function (watcher) {
+    return controller.activePopupWatchers.filter(function (watcher) {
       return !watcher.decided && !watcher.win.closed;
     });
   },
@@ -3806,7 +4033,7 @@ let twoincSoleTrader = {
    */
   stopWatchingPopup: function (id) {
     clearInterval(id);
-    twoincSoleTrader.activePopupWatchers = twoincSoleTrader.activePopupWatchers.filter(
+    controller.activePopupWatchers = controller.activePopupWatchers.filter(
       function (existing) {
         return existing.id !== id;
       }
@@ -3837,7 +4064,7 @@ let twoincSoleTrader = {
    * @returns {Object|undefined} the record, if the message can be attributed
    */
   findPopupWatcher: function (source) {
-    const watchers = twoincSoleTrader.activePopupWatchers;
+    const watchers = controller.activePopupWatchers;
     if (source) {
       const exact = watchers.find(function (candidate) {
         return candidate.win === source;
@@ -3864,11 +4091,11 @@ let twoincSoleTrader = {
    * @returns {void}
    */
   stopAllPopupWatchers: function () {
-    twoincSoleTrader.activePopupWatchers.forEach(function (watcher) {
+    controller.activePopupWatchers.forEach(function (watcher) {
       clearInterval(watcher.id);
-      twoincSoleTrader.settleFlight();
+      controller.settleFlight();
     });
-    twoincSoleTrader.activePopupWatchers = [];
+    controller.activePopupWatchers = [];
   },
 
   /**
@@ -3887,22 +4114,22 @@ let twoincSoleTrader = {
    * @returns {void}
    */
   setCompany: function (companyId, companyName, buyer) {
-    if (companyId && twoincSoleTrader.mode === "sole_trader") {
+    if (companyId && controller.mode === "sole_trader") {
       // The moment there is actually a sole trader captured — not just a
       // mode switch (TWO-40 §7) — is the moment there is nothing left to
       // search for. Locking here, not on every switch into sole-trader
       // mode, is what lets the dropdown+spinner survive the autofill/popup
       // round trip.
-      twoincSoleTrader.lockCapturedFields(companyId, companyName);
+      controller.lockCapturedFields(companyId, companyName);
       // Read by `watchPopupClose()` in place of `#company_id`'s raw value.
-      twoincSoleTrader.soleTraderAdopted = true;
+      controller.soleTraderAdopted = true;
     }
     twoincCompanyCapture.write(companyName, companyId);
     // The visible field too, when this is the clearing call setMode("business")
     // makes: without it a company picked before the sole-trader detour stays
     // painted after being cleared from both posted fields (TWO-25288).
     if (!companyName) {
-      twoincSelectWooHelper.setDisplayName("");
+      companySearch.setDisplayName("");
     }
     const instance = Twoinc.getInstance();
     // The buyer's address, written regardless of the merchant's
@@ -3929,8 +4156,8 @@ let twoincSoleTrader = {
     // Explicit rather than DOM-read: this function is the authority on what
     // was just captured, so the summary should not depend on write order
     // (TWO-25288).
-    twoincSelectWooHelper.renderCompanySummary(companyName, companyId);
-    twoincSoleTrader.syncDifferentSoleTraderLink();
+    companySearch.renderCompanySummary(companyName, companyId);
+    controller.syncDifferentSoleTraderLink();
     if (companyId) {
       instance.getApproval();
     }
@@ -3942,16 +4169,16 @@ let twoincSoleTrader = {
    * any failure. Tokens are short-lived, so `scheduleTokenRefresh()` re-mints.
    */
   fetchTokens: function (cb) {
-    const cfg = twoincSoleTrader.config();
+    const cfg = controller.config();
     if (!cfg.tokens_url) {
       if (cb) cb(false);
       return;
     }
-    if (Date.now() < twoincSoleTrader.tokenMintBackoffUntil) {
+    if (Date.now() < controller.tokenMintBackoffUntil) {
       if (cb) cb(false);
       return;
     }
-    const country = twoincSoleTrader.currentCountry();
+    const country = controller.currentCountry();
     jQuery
       .post(cfg.tokens_url, { csrf_token: cfg.csrf_token, country: country })
       .done(function (response) {
@@ -3960,14 +4187,14 @@ let twoincSoleTrader = {
         // it, a slower request for the country the buyer just left can
         // land after a newer one and overwrite `tokens` with delegated
         // authority for the wrong jurisdiction.
-        if (twoincSoleTrader.currentCountry() !== country) {
+        if (controller.currentCountry() !== country) {
           if (cb) cb(false);
           return;
         }
         if (response && response.success && response.data && response.data.autofill_token) {
-          twoincSoleTrader.tokens = response.data;
-          twoincSoleTrader.bindPopupMessageListener();
-          twoincSoleTrader.scheduleTokenRefresh();
+          controller.tokens = response.data;
+          controller.bindPopupMessageListener();
+          controller.scheduleTokenRefresh();
           if (cb) cb(true);
         } else {
           if (cb) cb(false);
@@ -3975,7 +4202,7 @@ let twoincSoleTrader = {
       })
       .fail(function (jqXHR) {
         if (jqXHR && jqXHR.status === 429) {
-          twoincSoleTrader.tokenMintBackoffUntil =
+          controller.tokenMintBackoffUntil =
             Date.now() + twoincUtilHelper.retryAfterMs(jqXHR);
         }
         if (cb) cb(false);
@@ -3999,12 +4226,12 @@ let twoincSoleTrader = {
    * @returns {void}
    */
   scheduleTokenRefresh: function () {
-    if (twoincSoleTrader.tokenRefreshIntervalId) return;
-    twoincSoleTrader.tokenRefreshIntervalId = setInterval(
-      twoincSoleTrader.refreshTokens,
+    if (controller.tokenRefreshIntervalId) return;
+    controller.tokenRefreshIntervalId = setInterval(
+      controller.refreshTokens,
       30 * 60 * 1000
     );
-    window.addEventListener("pagehide", twoincSoleTrader.handlePageHide);
+    window.addEventListener("pagehide", controller.handlePageHide);
   },
 
   /**
@@ -4024,8 +4251,8 @@ let twoincSoleTrader = {
    * @returns {void}
    */
   refreshTokens: function () {
-    if (twoincSoleTrader.isBusy()) return;
-    twoincSoleTrader.fetchTokens(function () {});
+    if (controller.isBusy()) return;
+    controller.fetchTokens(function () {});
   },
 
   /**
@@ -4041,16 +4268,16 @@ let twoincSoleTrader = {
    */
   handlePageHide: function (event) {
     if (event && event.persisted) return;
-    twoincSoleTrader.stopTokenRefresh();
+    controller.stopTokenRefresh();
   },
 
   /**
    * @returns {void}
    */
   stopTokenRefresh: function () {
-    clearInterval(twoincSoleTrader.tokenRefreshIntervalId);
-    twoincSoleTrader.tokenRefreshIntervalId = null;
-    window.removeEventListener("pagehide", twoincSoleTrader.handlePageHide);
+    clearInterval(controller.tokenRefreshIntervalId);
+    controller.tokenRefreshIntervalId = null;
+    window.removeEventListener("pagehide", controller.handlePageHide);
   },
 
   /**
@@ -4059,14 +4286,14 @@ let twoincSoleTrader = {
    * effects — the caller decides what to do with the result.
    */
   fetchCurrentBuyer: function (cb) {
-    if (!twoincSoleTrader.tokens) {
+    if (!controller.tokens) {
       cb(null);
       return;
     }
     // The one call no server hop can make (its subject is the API-domain cookie the hosted signup set).
-    const headers = { "two-delegated-authority-token": twoincSoleTrader.tokens.autofill_token };
-    if (twoincSoleTrader.tokens.firewall_token) {
-      headers["X-WAF-TOKEN"] = twoincSoleTrader.tokens.firewall_token;
+    const headers = { "two-delegated-authority-token": controller.tokens.autofill_token };
+    if (controller.tokens.firewall_token) {
+      headers["X-WAF-TOKEN"] = controller.tokens.firewall_token;
     }
     fetch(window.twoinc.twoinc_checkout_host + "/autofill/v1/buyer/current", {
       credentials: "include",
@@ -4116,7 +4343,7 @@ let twoincSoleTrader = {
    * @returns {Window|null}
    */
   openPopup: function (options) {
-    if (!twoincSoleTrader.tokens) {
+    if (!controller.tokens) {
       return null;
     }
     const opts = options || {};
@@ -4128,27 +4355,27 @@ let twoincSoleTrader = {
       email: read("email"),
       first_name: read("first_name"),
       last_name: read("last_name"),
-      company_name: twoincSelectWooHelper.getCompanyName(),
+      company_name: companySearch.getCompanyName(),
       phone_number: read("phone"),
       billing_address: {
         street: read("address_1"),
         postal_code: read("postcode"),
         city: read("city"),
         region: read("state"),
-        country_code: twoincSoleTrader.currentCountry()
+        country_code: controller.currentCountry()
       }
     };
     let url =
-      twoincSoleTrader.tokens.signup_url +
+      controller.tokens.signup_url +
       "?businessToken=" +
-      encodeURIComponent(twoincSoleTrader.tokens.delegation_token) +
+      encodeURIComponent(controller.tokens.delegation_token) +
       "&autofillToken=" +
-      encodeURIComponent(twoincSoleTrader.tokens.autofill_token) +
+      encodeURIComponent(controller.tokens.autofill_token) +
       "&autofillData=" +
       encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(prefill)))));
     // PDEV-4669: server-vetted country only — a DOM read would let the buyer
     // pick their own verification flow.
-    const country = (twoincSoleTrader.tokens.country || "").toUpperCase();
+    const country = (controller.tokens.country || "").toUpperCase();
     if (country) url += "&country=" + encodeURIComponent(country);
     // Wired through unconditionally when asked for, with no branching on what
     // the hosted flow does with it — that is the flow's business, not this
@@ -4168,19 +4395,19 @@ let twoincSoleTrader = {
    * email) and apply the result — autofilling and keeping Sole trader.
    */
   bindPopupMessageListener: function () {
-    if (twoincSoleTrader.messageListenerBound) {
+    if (controller.messageListenerBound) {
       return;
     }
-    twoincSoleTrader.messageListenerBound = true;
+    controller.messageListenerBound = true;
     // Kept on the module so it can be unbound again. A `window` listener
     // outlives everything else this module owns, so without a handle on it
     // there is no way to take one down — which matters to any harness that
     // re-evaluates this file against the same window.
-    twoincSoleTrader.messageHandler = function (event) {
-      if (twoincSoleTrader.mode !== "sole_trader" || !twoincSoleTrader.tokens) {
+    controller.messageHandler = function (event) {
+      if (controller.mode !== "sole_trader" || !controller.tokens) {
         return;
       }
-      const signupOrigin = new URL(twoincSoleTrader.tokens.signup_url).origin;
+      const signupOrigin = new URL(controller.tokens.signup_url).origin;
       if (event.origin !== signupOrigin) {
         return;
       }
@@ -4189,7 +4416,7 @@ let twoincSoleTrader = {
         // `findPopupWatcher`. Marked decided at receipt so its close poll
         // must not treat it as abandoned or spend its reconfirming
         // decrement (that belongs to this handler's callback below).
-        const watcher = twoincSoleTrader.findPopupWatcher(event.source);
+        const watcher = controller.findPopupWatcher(event.source);
         // A replayed ACCEPTED resolves to its own, already-decided popup;
         // only the receipt that actually settles a popup may spend its
         // decrement below.
@@ -4197,14 +4424,14 @@ let twoincSoleTrader = {
         if (watcher) {
           watcher.decided = true;
         }
-        twoincSoleTrader.beginFlight();
+        controller.beginFlight();
         // Held for the duration of this fetch: the popup can close the
         // instant "ACCEPTED" is posted, well before this resolves and
         // writes `#company_id` — `watchPopupClose()`'s own poll checks
         // this before deciding the buyer abandoned signup with nothing
         // captured.
-        twoincSoleTrader.signupConfirming = true;
-        twoincSoleTrader.fetchCurrentBuyer(function (buyer) {
+        controller.signupConfirming = true;
+        controller.fetchCurrentBuyer(function (buyer) {
           // Authenticated path (TWO-40 §8): the server has just told this
           // browser who the buyer is, so the email they authenticated with
           // is the answer, full stop. Re-checking it against the
@@ -4213,49 +4440,49 @@ let twoincSoleTrader = {
           // email match disagrees with the server, and the same popup
           // reopens forever.
           const resolved = !!buyer;
-          twoincSoleTrader.signupConfirming = false;
+          controller.signupConfirming = false;
           // Decremented here rather than only on popup close so a resolved
           // re-signup un-blocks the Business chip/`reopenSearch()`
           // immediately, not after another 300ms poll cycle. `newlyDecided`
           // covers a late or replayed ACCEPTED, which must not spend a
           // second decrement against one increment.
           if (newlyDecided && watcher.isReconfirming) {
-            twoincSoleTrader.soleTraderReconfirmingCount = Math.max(
+            controller.soleTraderReconfirmingCount = Math.max(
               0,
-              twoincSoleTrader.soleTraderReconfirmingCount - 1
+              controller.soleTraderReconfirmingCount - 1
             );
           }
           if (resolved) {
-            twoincSoleTrader.setCompany(buyer.organization_number, buyer.company_name, buyer);
-            twoincSoleTrader.showNote(false);
+            controller.setCompany(buyer.organization_number, buyer.company_name, buyer);
+            controller.showNote(false);
           } else {
-            twoincSoleTrader.showError();
+            controller.showError();
           }
           // Last, after the capture above has actually landed: this used
           // to settle before the write, so on the ordinary path the
           // spinner came down and the dropdown closed while the company
           // name and number were still unwritten. "Flow complete" is the
           // write, not the response.
-          twoincSoleTrader.settleFlight();
+          controller.settleFlight();
         });
       } else {
-        twoincSoleTrader.showError();
+        controller.showError();
       }
     };
-    window.addEventListener("message", twoincSoleTrader.messageHandler);
+    window.addEventListener("message", controller.messageHandler);
   },
 
   /** Test seam: take the hosted-signup listener back off the window. */
   unbindPopupMessageListener: function () {
-    if (!twoincSoleTrader.messageHandler) return;
-    window.removeEventListener("message", twoincSoleTrader.messageHandler);
-    twoincSoleTrader.messageHandler = null;
-    twoincSoleTrader.messageListenerBound = false;
+    if (!controller.messageHandler) return;
+    window.removeEventListener("message", controller.messageHandler);
+    controller.messageHandler = null;
+    controller.messageListenerBound = false;
   },
 
   showError: function () {
-    const cfg = twoincSoleTrader.config();
-    const $container = jQuery(".twoinc-sole-trader-note-slot");
+    const cfg = controller.config();
+    const $container = jQuery("." + companySearch.soleTraderNoteSlotClass);
     if (!cfg.text || !cfg.text.error || $container.length === 0) {
       return;
     }
@@ -4266,7 +4493,9 @@ let twoincSoleTrader = {
     }
     $error.text(cfg.text.error);
   }
-};
+  };
+  return controller;
+}
 
 class Twoinc {
   constructor() {
@@ -4511,6 +4740,28 @@ class Twoinc {
     // Handle the country inputs change event. The tracker behind it is seeded
     // at the END of this function, not here — see the comment there.
     $body.on("change", "#billing_country", self.onCountryInputChange);
+
+    // Shipping's own retype guard / country-change / click-to-reopen (Doug
+    // 2026-08-31 §2, complete instance parity) — same three bindings as
+    // billing's above, scoped to the delivery role and its own controller.
+    $body
+      .off("input.twoincShippingCompanyPairing change.twoincShippingCompanyPairing", "#shipping_company")
+      .on(
+        "input.twoincShippingCompanyPairing change.twoincShippingCompanyPairing",
+        "#shipping_company",
+        function () {
+          if (!twoincCompanyCapture.isNameField(this, twoincAddressRoles.delivery())) return;
+          twoincCompanyCapture.guardCompanyRetype(twoincAddressRoles.delivery());
+        }
+      );
+
+    $body.on("change", "#shipping_country", self.onShippingCountryInputChange);
+
+    $body.on("click", "#shipping_company, #shipping_company_id", function () {
+      const soleTrader = twoincSelectWooHelperShipping.soleTrader;
+      if (!soleTrader.soleTraderAdopted || !jQuery(this).prop("readonly")) return;
+      soleTrader.reopenSearch();
+    });
 
     // Click-to-reopen out of an adopted sole trader (TWO-40 §7 correction,
     // live-reported by Doug) — see `reopenSearch()`'s own comment. A plain
@@ -5493,6 +5744,19 @@ class Twoinc {
     // mirror re-asserted against it (TWO-40 §2). A no-op once the buyer has
     // taken that address over.
     twoincAddressMirror.sync();
+
+    twoincSelectWooHelperShipping.soleTrader.refresh();
+
+    // Re-resolve on EVERY `updated_checkout`, not only a real country change
+    // (Doug 2026-08-31 §2, corner case (d)): this is also what fires when
+    // "ship to a different address?" is toggled in either direction, and
+    // `syncOrderCompany()`'s own `deliveryIsOrderCompanySource()` check is what
+    // drops a shipping-sourced fallback the moment that box is unchecked
+    // (the DOM capture itself is left alone, the same way the address mirror
+    // leaves shipping field values in place — only which pair the order
+    // intent SEES changes).
+    twoincCompanyCapture.syncOrderCompany();
+    Twoinc.getInstance().getApproval();
   }
 
   /**
@@ -5649,6 +5913,44 @@ class Twoinc {
   }
 
   /**
+   * Handle the shipping country input change (Doug 2026-08-31 §2) — the
+   * delivery-role counterpart of `onCountryInputChange`/`syncBillingCountry`.
+   *
+   * Never writes `customerCompany` directly: unlike billing, shipping's
+   * capture only reaches the order intent through `resolveOrderCompany()`'s
+   * fallback, so every effect here is "drop/re-evaluate shipping's own state,
+   * then let the resolver decide what (if anything) that changes."
+   */
+  onShippingCountryInputChange() {
+    Twoinc.getInstance().syncShippingCountry();
+  }
+
+  syncShippingCountry() {
+    const helper = twoincSelectWooHelperShipping;
+    const country = helper.currentCountry();
+    const changed = helper.countryDidChange(country);
+
+    twoincDomHelper.toggleBusinessFields();
+    if (!changed) return;
+
+    // Same invalidation as billing's own (TWO-24867): a search or sole-trader
+    // availability answer for the OUTGOING shipping country must not land.
+    helper.companySearchSeq += 1;
+    helper.closeCompanySearchDropdown();
+
+    if (helper.soleTrader.mode !== "sole_trader") {
+      // Recomputes `customerCompany` itself via `write()`'s own resolver call
+      // — a shipping capture leaving means the resolver may fall back to
+      // nothing, or (if billing already had none) that the order intent now
+      // has nothing at all.
+      helper.clearSelectedCompany();
+    }
+
+    helper.soleTrader.refresh();
+    Twoinc.getInstance().getApproval();
+  }
+
+  /**
    * Drop a captured company that belongs to a country the checkout has
    * since moved away from (TWO-25333).
    *
@@ -5702,6 +6004,13 @@ class Twoinc {
   clearCompanyIfCountryStale(country) {
     const company = this.customerCompany || {};
     if (!company.organization_number) return;
+    // `customerCompany` can now be a SHIPPING fallback (Doug 2026-08-31 §2,
+    // `syncOrderCompany()`) — this guard's whole comparison is against
+    // billing's own DOM (`#company_id`, the primary-role name field), which
+    // says nothing about a shipping-sourced pair. Only act when billing is
+    // actually the source; a billing country move with billing uncaptured
+    // must not clear a valid shipping fallback out from under the buyer.
+    if (!twoincCompanyCapture.hasCapture(twoincAddressRoles.invoice())) return;
 
     const capturedCountry = twoincUtilHelper.blankToEmpty(company.country_prefix).toUpperCase();
     // `!country` is unreachable from the only caller today: `countryDidChange`
