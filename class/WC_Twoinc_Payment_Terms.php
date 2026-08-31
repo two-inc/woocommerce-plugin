@@ -35,6 +35,16 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
         public const MONEY_DECIMALS = 2;
 
         /**
+         * Safety-net TTL for the cross-request term-fee cache (see
+         * fetch_term_fee): the cache key already changes whenever the
+         * cart/currency/country/term or the merchant's surcharge config
+         * changes, so this bounds only the case none of those moved but the
+         * backend's own quote would (e.g. an FX rate shift), matching
+         * API_KEY_VERIFICATION_TTL's role in WC_Twoinc.
+         */
+        public const TERM_FEE_CACHE_TTL = 300;
+
+        /**
          * Stored surcharge-rounding basis → pricing-API basis. "none" (and
          * any unmapped value) omits the rounding block.
          */
@@ -572,6 +582,18 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          * fail-CLOSED condition handled upstream by the availability gate
          * (TWO-25269), which withholds the payment method outright.
          *
+         * Cached across requests (not just within one), keyed by the exact
+         * request body: cart total, currency, buyer country, the term, and
+         * the merchant's surcharge config (embedded in buyer_fee_share/
+         * order_terms) all fall out of the key naturally — any of them
+         * changing is a cache miss, so re-selecting a chip the buyer already
+         * priced this cart at reuses the quote instead of re-calling
+         * checkout-api. TERM_FEE_CACHE_TTL is a backstop only, for a quote
+         * that would change with none of those inputs moving (e.g. the
+         * backend's own FX rate shifting). Only a SUCCESSFUL quote is
+         * persisted; a transport failure stays request-scoped so a flapping
+         * API isn't remembered as "no fee" for the TTL.
+         *
          * @return array{buyer_fee_share: string, total_fee_tax_rate: string|null, currency: string}|null
          */
         public static function fetch_term_fee($gateway, int $days, float $gross_amount, string $buyer_country): ?array
@@ -585,10 +607,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                 return self::$fee_cache[$days] = null;
             }
 
-            // This quote sits on the checkout render path and is fail-soft on
-            // transport errors, so cap it well under make_request's 30s
-            // default to avoid stalling checkout on a slow pricing call.
-            $response = $gateway->make_request('/v1/pricing/order/fee', [
+            $request = [
                 'currency' => get_woocommerce_currency(),
                 // MONEY_DECIMALS, not round_amt(): round_amt() uses
                 // wc_get_price_decimals(), so a store configured for 3 or 4
@@ -601,7 +620,18 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                 'approved_on_recourse' => false,
                 'order_terms' => self::build_terms_block($gateway, $days),
                 'buyer_fee_share' => $buyer_fee_share,
-            ], 'POST', array(), null, 10);
+            ];
+
+            $cache_key = self::term_fee_cache_key($request);
+            $cached = get_transient($cache_key);
+            if (is_array($cached)) {
+                return self::$fee_cache[$days] = $cached;
+            }
+
+            // This quote sits on the checkout render path and is fail-soft on
+            // transport errors, so cap it well under make_request's 30s
+            // default to avoid stalling checkout on a slow pricing call.
+            $response = $gateway->make_request('/v1/pricing/order/fee', $request, 'POST', array(), null, 10);
 
             if (is_wp_error($response) || (int) wp_remote_retrieve_response_code($response) < 200 || (int) wp_remote_retrieve_response_code($response) >= 300) {
                 return self::$fee_cache[$days] = null;
@@ -611,11 +641,24 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                 return self::$fee_cache[$days] = null;
             }
 
-            return self::$fee_cache[$days] = [
+            $fee = [
                 'buyer_fee_share' => strval($body['buyer_fee_share']),
                 'total_fee_tax_rate' => isset($body['total_fee_tax_rate']) ? strval($body['total_fee_tax_rate']) : null,
                 'currency' => strval($body['currency'] ?? get_woocommerce_currency()),
             ];
+            set_transient($cache_key, $fee, self::TERM_FEE_CACHE_TTL);
+            return self::$fee_cache[$days] = $fee;
+        }
+
+        /**
+         * Brand-scoped transient key for one pricing request, hashed over
+         * its exact body — see fetch_term_fee's cache-model note.
+         *
+         * @param array<string,mixed> $request
+         */
+        private static function term_fee_cache_key(array $request): string
+        {
+            return WC_Twoinc_Brand::prefixed_name('term_fee_' . md5(wp_json_encode($request)));
         }
 
         /**
