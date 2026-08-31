@@ -363,10 +363,6 @@ msgstr "Brandväggstoken (valfritt)"
 msgid "If your IT administrator asks you to add a firewall token, place it in this field. It will then be transmitted as header X-WAF-TOKEN on all calls your store makes to the %s API."
 msgstr "Om din IT-administratör ber dig lägga till en brandväggstoken, placera den i det här fältet. Den skickas sedan som header X-WAF-TOKEN vid alla anrop som din butik gör till %s API."
 
-#: class/WC_Twoinc.php:4350
-msgid "Switch this on if your IT administrator requires the firewall token for calls from the user's browser as well as those from your server."
-msgstr "Slå på detta om din IT-administratör kräver brandväggstoken även för anrop från användarens webbläsare, inte bara från din server."
-
 #: class/WC_Twoinc.php:4346
 msgid "This is a coarse network gate rather than a secret credential, so unlike the API key it is not masked here."
 msgstr "Detta är en grov nätverksspärr snarare än en hemlig uppgift, så till skillnad från API-nyckeln är den inte maskerad här."

@@ -363,10 +363,6 @@ msgstr "Brannmur-token (valgfritt)"
 msgid "If your IT administrator asks you to add a firewall token, place it in this field. It will then be transmitted as header X-WAF-TOKEN on all calls your store makes to the %s API."
 msgstr "Hvis IT-administratoren din ber deg legge til en brannmur-token, plasser den i dette feltet. Den blir da sendt som header X-WAF-TOKEN på alle kall butikken din gjør til %s API."
 
-#: class/WC_Twoinc.php:4350
-msgid "Switch this on if your IT administrator requires the firewall token for calls from the user's browser as well as those from your server."
-msgstr "Slå på dette hvis IT-administratoren din krever brannmur-token også for kall fra brukerens nettleser, ikke bare fra serveren din."
-
 #: class/WC_Twoinc.php:4346
 msgid "This is a coarse network gate rather than a secret credential, so unlike the API key it is not masked here."
 msgstr "Dette er en grov nettverksport snarere enn et hemmelig legitimasjonsbevis, så i motsetning til API-nøkkelen er den ikke maskert her."

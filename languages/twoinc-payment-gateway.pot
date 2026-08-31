@@ -1074,10 +1074,6 @@ msgstr ""
 msgid "Add firewall token to browser-originated traffic"
 msgstr ""
 
-#: class/WC_Twoinc.php:4350
-msgid "Switch this on if your IT administrator requires the firewall token for calls from the user's browser as well as those from your server."
-msgstr ""
-
 #: class/WC_Twoinc.php:4408
 msgid "Vendor name (optional)"
 msgstr ""

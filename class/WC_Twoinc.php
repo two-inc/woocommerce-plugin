@@ -4379,14 +4379,6 @@ if (!class_exists('WC_Twoinc')) {
                         WC_Twoinc_Brand::get('product_name')
                     ) . ' ' . __('This is a coarse network gate rather than a secret credential, so unlike the API key it is not masked here.', 'twoinc-payment-gateway'),
                 ],
-                'firewall_token_browser' => [
-                    'title'       => __('Add firewall token to browser-originated traffic', 'twoinc-payment-gateway'),
-                    'description' => __("Switch this on if your IT administrator requires the firewall token for calls from the user's browser as well as those from your server.", 'twoinc-payment-gateway'),
-                    'desc_tip'    => true,
-                    'label'       => ' ',
-                    'type'        => 'checkbox',
-                    'default'     => 'no',
-                ],
                 'vendor_name' => [
                     'title'       => __('Vendor name (optional)', 'twoinc-payment-gateway'),
                     'type'        => 'text',
@@ -4706,9 +4698,17 @@ if (!class_exists('WC_Twoinc')) {
                 'trusted_proxies' => [
                     'title'       => __('Trusted proxy addresses', 'twoinc-payment-gateway'),
                     'type'        => 'textarea',
-                    'description' => __('IP addresses or CIDR blocks, one per line. List every proxy in the chain between the buyer and your server, not just the outermost one — with a CDN in front of a load balancer, both must be listed, or the buyer is metered as whichever hop is missing. Only when a request arrives from a listed address are the X-Forwarded-For and X-Real-IP headers believed, and the buyer metered by their own address instead of the proxy\'s. X-Forwarded-For is read first, but only wins where it names a hop that is not itself listed here; X-Real-IP is read when it names nobody else. Your proxy must overwrite or strip any X-Forwarded-For and X-Real-IP it does not set itself — if it passes a buyer-supplied header through, a buyer can pick the address they are metered as, both evading their own limit and spending another named buyer\'s allowance until that buyer is refused. Leave empty unless you run such a proxy: any address listed here can set its own identity for rate limiting.', 'twoinc-payment-gateway'),
+                    'description' => __('Addresses of your own reverse proxies, load balancers or CDN egress, as IPs or CIDR ranges, separated by commas or new lines. These IP addresses will be exempt from rate limiting.', 'twoinc-payment-gateway'),
                     'placeholder' => "10.0.0.0/8\n2001:db8::/32",
                     'default'     => ''
+                ],
+                'firewall_token_browser' => [
+                    'title'       => __('Add firewall token to browser-originated traffic', 'twoinc-payment-gateway'),
+                    'description' => __("Only switch this on if your IT administrator requires the firewall token for calls from the user's browser as well as those from your server. Your firewall token will be published to the buyer's brower and may be read by anyone.", 'twoinc-payment-gateway'),
+                    'desc_tip'    => true,
+                    'label'       => ' ',
+                    'type'        => 'checkbox',
+                    'default'     => 'no',
                 ],
                 'disable_ssl_verify' => [
                     'title'       => __('Disable SSL verification', 'twoinc-payment-gateway'),
