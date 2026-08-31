@@ -112,6 +112,28 @@ if (!class_exists('WC_Twoinc_Brand')) {
             return '_' . self::prefixed_name($name);
         }
 
+        /**
+         * Confirmation-callback token from the request: new `<prefix>_csrf_token`
+         * param first, falling back to the pre-rename `<prefix>_nonce` param so a
+         * callback URL minted before that rename deployed (already stored
+         * upstream on an in-flight order) still resolves. The nonce action
+         * itself (`confirm_<order_id>`) didn't change, only this param name —
+         * drop the fallback once no order confirmed before that deploy is still
+         * in flight (PR #519).
+         *
+         * @return string|null
+         */
+        public static function read_confirmation_csrf_token_param()
+        {
+            if (isset($_REQUEST[self::prefixed_name('csrf_token')])) {
+                return $_REQUEST[self::prefixed_name('csrf_token')];
+            }
+            if (isset($_REQUEST[self::prefixed_name('nonce')])) {
+                return $_REQUEST[self::prefixed_name('nonce')];
+            }
+            return null;
+        }
+
         /** @internal Test-only — clearing mid-request would re-run brand resolution. */
         public static function reset()
         {

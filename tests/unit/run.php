@@ -70,6 +70,7 @@ final class BrandConfigSpec
             'testMerchantMinimumValidationSkipsFloorCheckAcrossCurrencies',
             'testPaymentValidationErrorFilterVetoes',
             'testConfirmationPageDetectionFollowsBrandPrefix',
+            'testConfirmationCsrfTokenAcceptsOldAndNewParamName',
             'testPaymentTermsResolveBackendIntersectAdminSubset',
             'testMerchantAvailableTermsFetchNormalisesCachesAndServesStale',
             'testMerchantAvailableTermsInvalidatedOnMerchantIdChange',
@@ -1556,6 +1557,64 @@ final class BrandConfigSpec
         ];
         TinyAssert::same(false, $is_confirmation_page->invoke($gateway));
         $_REQUEST = [];
+    }
+
+    /**
+     * PR #519 deploy-timing compat: an order confirmed before the
+     * nonce->csrf_token rename has its callback URL already stored upstream
+     * carrying the OLD `<prefix>_nonce` param. The verify action itself
+     * (`confirm_<order_id>`) never changed, so a callback bearing either
+     * param name — with a token minted for that action — must still confirm;
+     * one bearing neither param must not.
+     */
+    private static function testConfirmationCsrfTokenAcceptsOldAndNewParamName(): void
+    {
+        self::useTestbrand();
+
+        $order = new StubOrder();
+        $order->payment_method = WC_Twoinc_Brand::get('gateway_id');
+        $order->meta[WC_Twoinc_Brand::meta_key('order_reference')] = 'ref123';
+        $GLOBALS['__twoinc_test_wc_orders'] = [42 => $order];
+
+        $process_confirmation = new ReflectionMethod(WC_Twoinc::class, 'process_confirmation');
+        $process_confirmation->setAccessible(true);
+
+        $valid_token = wp_create_nonce(WC_Twoinc_Brand::prefixed_name('confirm_42'));
+        $base_request = ['order_id' => '42', 'testbrand_order_reference' => 'ref123'];
+
+        // A fresh gateway per call: process_confirmation latches
+        // twoinc_process_confirmation_called after its first run and no-ops
+        // on any subsequent call against the same instance.
+        $run = function () use ($process_confirmation) {
+            try {
+                $process_confirmation->invoke(self::gateway());
+                return null;
+            } catch (RuntimeException $e) {
+                return $e->getMessage();
+            }
+        };
+
+        // New param + a token minted for the (unchanged) confirm_<id> action:
+        // passes the auth check and reaches the next failure (no Two order id
+        // on the stub order) — proof the token itself verified.
+        $_REQUEST = $base_request + ['testbrand_csrf_token' => $valid_token];
+        TinyAssert::true(strpos($run(), 'Unable to retrieve') !== false, 'new param must authenticate');
+
+        // Old param name, same token: an order confirmed before the rename
+        // deployed carries this shape and must keep working.
+        $_REQUEST = $base_request + ['testbrand_nonce' => $valid_token];
+        TinyAssert::true(strpos($run(), 'Unable to retrieve') !== false, 'old param must still authenticate');
+
+        // Old param present but the token doesn't match the action: rejected.
+        $_REQUEST = $base_request + ['testbrand_nonce' => 'bogus'];
+        TinyAssert::true(strpos($run(), 'security code is not valid') !== false, 'a wrong token must still fail');
+
+        // Neither param present: not recognised as a confirmation request at all.
+        $_REQUEST = $base_request;
+        TinyAssert::same(null, $run(), 'no token param at all must not be treated as a confirmation callback');
+
+        $_REQUEST = [];
+        unset($GLOBALS['__twoinc_test_wc_orders']);
     }
 
     private static function testBrandFileReturningNonArrayFallsBackToDefaults(): void

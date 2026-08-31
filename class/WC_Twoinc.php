@@ -4248,7 +4248,7 @@ if (!class_exists('WC_Twoinc')) {
             if (
                 isset($_REQUEST['order_id'])
                 && isset($_REQUEST[WC_Twoinc_Brand::prefixed_name('order_reference')])
-                && isset($_REQUEST[WC_Twoinc_Brand::prefixed_name('csrf_token')])
+                && WC_Twoinc_Brand::read_confirmation_csrf_token_param() !== null
             ) {
                 return true;
                 // Temporarily commented out until we find a solution for redirect plugins
@@ -4294,7 +4294,7 @@ if (!class_exists('WC_Twoinc')) {
             }
 
             if ($this->get_option('skip_confirm_auth') !== 'yes') {
-                $csrf_token = sanitize_text_field($_REQUEST[WC_Twoinc_Brand::prefixed_name('csrf_token')]);
+                $csrf_token = sanitize_text_field(WC_Twoinc_Brand::read_confirmation_csrf_token_param() ?? '');
 
                 if (!wp_verify_nonce($csrf_token, WC_Twoinc_Brand::prefixed_name('confirm_' . $order_id))) {
                     wp_die(__('The security code is not valid.', 'twoinc-payment-gateway'));

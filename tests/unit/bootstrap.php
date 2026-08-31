@@ -141,7 +141,18 @@ function get_home_url()
 
 function wp_create_nonce($action = -1)
 {
-    return 'testtoken';
+    return 'testtoken:' . $action;
+}
+
+// Tied to wp_create_nonce like the real thing: a token only verifies against
+// the exact action it was minted for. $GLOBALS['__twoinc_test_nonce_verify_result']
+// overrides this for tests that need to force pass/fail regardless of the token.
+function wp_verify_nonce($nonce, $action = -1)
+{
+    if (array_key_exists('__twoinc_test_nonce_verify_result', $GLOBALS)) {
+        return $GLOBALS['__twoinc_test_nonce_verify_result'];
+    }
+    return $nonce === wp_create_nonce($action) ? 1 : false;
 }
 
 function wp_specialchars_decode($string, $quote_style = ENT_NOQUOTES)
@@ -866,6 +877,13 @@ class StubOrder
         return 'https://shop.example/cancel';
     }
 
+    public $notes = [];
+
+    public function add_order_note($note)
+    {
+        $this->notes[] = $note;
+    }
+
     public function get_edit_order_url()
     {
         return 'https://shop.example/edit';
@@ -1082,6 +1100,10 @@ function wp_nonce_url($actionurl, $action = -1, $name = '_wpnonce')
 }
 
 // wp_die must halt the handler: surface it as an exception the test catches.
+function status_header($code)
+{
+}
+
 function wp_die($message = '', $title = '', $args = [])
 {
     throw new RuntimeException(is_string($message) ? $message : 'wp_die');
