@@ -208,6 +208,14 @@ jQuery(function ($) {
     }, 1000);
   });
 
+  // Blur fires the check immediately rather than waiting out the debounce —
+  // a paste-then-tab-away must not leave the field unverified for up to a
+  // second while the merchant is already looking at Save.
+  $apiKeyField.on("blur", function () {
+    clearTimeout(verificationTimeout);
+    verifyApiKey($(this).val());
+  });
+
   if ($apiKeyField.val()) {
     verifyApiKey($apiKeyField.val());
   }

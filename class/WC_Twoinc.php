@@ -645,7 +645,7 @@ if (!class_exists('WC_Twoinc')) {
          * When adding a merchant-record consumer, register its option name
          * pair (value + checked_on) here.
          */
-        private function invalidate_merchant_record_caches(): void
+        private static function invalidate_merchant_record_caches(): void
         {
             self::reset_merchant_record_memo();
             $names = [
@@ -1525,6 +1525,19 @@ if (!class_exists('WC_Twoinc')) {
             }
             if (!array_key_exists($value, $this->get_surcharge_tax_class_options())) {
                 throw new Exception(__('Surcharge tax class must be one of the store\'s existing tax classes.', 'twoinc-payment-gateway'));
+            }
+            return $value;
+        }
+
+        /** Same guard as validate_surcharge_tax_class_field, for the shipping-fallback field's own tax-class select. */
+        public function validate_default_shipping_tax_class_field($key, $value)
+        {
+            $value = trim((string) $value);
+            if ($value === '') {
+                return '';
+            }
+            if (!array_key_exists($value, $this->get_surcharge_tax_class_options())) {
+                throw new Exception(__('Default shipping tax class must be one of the store\'s existing tax classes.', 'twoinc-payment-gateway'));
             }
             return $value;
         }
@@ -4357,8 +4370,8 @@ if (!class_exists('WC_Twoinc')) {
                 ],
                 'checkout_env' => [
                     'type'        => 'select',
-                    'title'       => __('Choose your settings', 'twoinc-payment-gateway'),
-                    'default'     => 'PROD',
+                    'title'       => __('Environment', 'twoinc-payment-gateway'),
+                    'default'     => 'SANDBOX',
                     'options'     => $this->get_checkout_env_options(),
                 ],
                 'api_key' => [
@@ -4371,7 +4384,7 @@ if (!class_exists('WC_Twoinc')) {
                     ) . '<div id="api-key-status" style="margin-top: 5px;"></div>',
                 ],
                 'firewall_token' => [
-                    'title'       => __('Firewall Token (optional)', 'twoinc-payment-gateway'),
+                    'title'       => __('Firewall token (optional)', 'twoinc-payment-gateway'),
                     'type'        => 'text',
                     'description' => sprintf(
                         /* translators: %s is the brand product name (e.g. "Two") */
@@ -4412,7 +4425,7 @@ if (!class_exists('WC_Twoinc')) {
                     // The value is interpreted in the store currency, so
                     // the label says which one applies.
                     'title'       => sprintf(
-                        __('Minimum Order Value, %s', 'twoinc-payment-gateway'),
+                        __('Minimum order value, %s', 'twoinc-payment-gateway'),
                         get_option('woocommerce_currency')
                     ),
                     'type'        => 'text',
@@ -4420,7 +4433,7 @@ if (!class_exists('WC_Twoinc')) {
                     'description' => $this->get_merchant_minimum_order_description(),
                 ],
                 'merchant_minimum_order_basis' => [
-                    'title'       => __('Minimum Order Value Tax Basis', 'twoinc-payment-gateway'),
+                    'title'       => __('Minimum order value tax basis', 'twoinc-payment-gateway'),
                     'type'        => 'select',
                     'default'     => 'gross',
                     'options'     => [
@@ -4447,7 +4460,7 @@ if (!class_exists('WC_Twoinc')) {
                     'title'       => __('Display input tooltips', 'twoinc-payment-gateway'),
                     'label'       => ' ',
                     'type'        => 'checkbox',
-                    'default'     => 'no'
+                    'default'     => 'yes'
                 ],
                 // Optional checkout fields. ORDER IS LOAD-BEARING: WooCommerce's
                 // WC_Settings_API renders form_fields in array order, so this
@@ -4458,7 +4471,7 @@ if (!class_exists('WC_Twoinc')) {
                 // not listed here — WooCommerce core owns it (`order_comments`),
                 // so the plugin has no toggle and no field of its own. TWO-25263.
                 'add_field_invoice_email' => [
-                    'title'       => __('Show Invoice email field', 'twoinc-payment-gateway'),
+                    'title'       => __('Show invoice email field', 'twoinc-payment-gateway'),
                     'description' => __('Adds an input field where buyers can input optional additional email address to receive invoice.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'label'       => ' ',
@@ -4466,7 +4479,7 @@ if (!class_exists('WC_Twoinc')) {
                     'default'     => 'yes'
                 ],
                 'add_field_purchase_order_number' => [
-                    'title'       => __('Show PO Number field', 'twoinc-payment-gateway'),
+                    'title'       => __('Show PO number field', 'twoinc-payment-gateway'),
                     'description' => __('Adds an input field where buyers can input their purchase order number to display on the invoice.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'label'       => ' ',
@@ -4474,7 +4487,7 @@ if (!class_exists('WC_Twoinc')) {
                     'default'     => 'yes'
                 ],
                 'add_field_project' => [
-                    'title'       => __('Show Project field', 'twoinc-payment-gateway'),
+                    'title'       => __('Show project field', 'twoinc-payment-gateway'),
                     'description' => __('Adds an input field where buyers can input their project in the company to display on the invoice.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'label'       => ' ',
@@ -4482,18 +4495,16 @@ if (!class_exists('WC_Twoinc')) {
                     'default'     => 'yes'
                 ],
                 'add_field_department' => [
-                    'title'       => __('Show Department field', 'twoinc-payment-gateway'),
+                    'title'       => __('Show department field', 'twoinc-payment-gateway'),
                     'description' => __('Adds an input field where buyers can input their department to display on the invoice.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'label'       => ' ',
                     'type'        => 'checkbox',
                     'default'     => 'yes'
                 ],
-                // ── C. Company Lookup ───────────────────────────────────
-                'section_company_lookup' => [
-                    'type'        => 'title',
-                    'title'       => __('Company Lookup', 'twoinc-payment-gateway')
-                ],
+                // Company lookup — folded into Checkout Fields (no longer its
+                // own section): both toggles govern how the checkout's company
+                // fields behave, same as the rest of this section.
                 'enable_company_search' => [
                     'title'       => __('Enable company search in address entry', 'twoinc-payment-gateway'),
                     'description' => __('When enabled, the buyer may search for their company within the address entry section of the checkout. Otherwise, company search will be visible within the payment method.', 'twoinc-payment-gateway'),
@@ -4519,7 +4530,7 @@ if (!class_exists('WC_Twoinc')) {
                     'title' => __('Payment Terms', 'twoinc-payment-gateway'),
                 ],
                 'payment_terms_type' => [
-                    'title'       => __('Payment Terms Type', 'twoinc-payment-gateway'),
+                    'title'       => __('Payment terms type', 'twoinc-payment-gateway'),
                     'description' => __('Standard counts the term days from the invoice date. End of month counts them from the end of the invoice month.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'type'        => 'select',
@@ -4536,7 +4547,7 @@ if (!class_exists('WC_Twoinc')) {
                     'type'        => 'two_payment_terms',
                 ],
                 'payment_terms_custom_days' => [
-                    'title'             => __('Custom Payment Terms (days)', 'twoinc-payment-gateway'),
+                    'title'             => __('Custom payment terms (days)', 'twoinc-payment-gateway'),
                     'description'       => __('Optional. Enter a custom number of days to offer alongside the selected terms above.', 'twoinc-payment-gateway'),
                     'desc_tip'          => true,
                     // Custom render (not the default 'number' generator):
@@ -4548,7 +4559,7 @@ if (!class_exists('WC_Twoinc')) {
                     'default'           => ''
                 ],
                 'default_payment_term' => [
-                    'title'       => __('Default Payment Terms', 'twoinc-payment-gateway'),
+                    'title'       => __('Default payment terms', 'twoinc-payment-gateway'),
                     'description' => __('Select the payment term that will be automatically selected for your customer.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'type'        => 'select',
@@ -4683,17 +4694,25 @@ if (!class_exists('WC_Twoinc')) {
                     'desc_tip'    => true,
                     'default'     => 'yes'
                 ],
+                'default_shipping_tax_class' => [
+                    'title'       => __('Default shipping tax class', 'twoinc-payment-gateway'),
+                    'type'        => 'select',
+                    'options'     => $this->get_surcharge_tax_class_options(),
+                    'default'     => '',
+                    'description' => __('Used only when a shipping method\'s tax rate cannot be resolved from the order itself (e.g. a third-party carrier or click-and-collect module that registers no tax class) but the shipping line was charged tax. Leave unselected to keep reporting an unresolvable rate as untaxed, matching today\'s behaviour.', 'twoinc-payment-gateway'),
+                    'desc_tip'    => true,
+                ],
                 // ── F. Diagnostics ──────────────────────────────────────
                 'section_diagnostics' => [
                     'type'  => 'title',
                     'title' => __('Diagnostics', 'twoinc-payment-gateway'),
                 ],
-                'rate_limiting_enabled' => [
-                    'title'       => __('Rate limit checkout API requests', 'twoinc-payment-gateway'),
-                    'label'       => __('Meter the checkout AJAX endpoints per client address', 'twoinc-payment-gateway'),
+                'disable_rate_limiting' => [
+                    'title'       => __('Disable checkout rate limiting', 'twoinc-payment-gateway'),
+                    'label'       => __('Serve the checkout AJAX endpoints unmetered', 'twoinc-payment-gateway'),
                     'type'        => 'checkbox',
-                    'description' => __('The checkout AJAX endpoints spend your API key, so each client address is allowed a fixed number of requests per minute. Turn this off only if legitimate buyers are being refused — that happens when the store sits behind a reverse proxy or CDN and every buyer reaches PHP as the same address, which collapses the per-buyer allowance into a store-wide one. The lasting fix is to list the proxy below.', 'twoinc-payment-gateway'),
-                    'default'     => 'yes'
+                    'description' => __('The checkout AJAX endpoints spend your API key, so each client address is allowed a fixed number of requests per minute. Turn this on only if legitimate buyers are being refused — that happens when the store sits behind a reverse proxy or CDN and every buyer reaches PHP as the same address, which collapses the per-buyer allowance into a store-wide one. The lasting fix is to list the proxy below.', 'twoinc-payment-gateway'),
+                    'default'     => 'no'
                 ],
                 'trusted_proxies' => [
                     'title'       => __('Trusted proxy addresses', 'twoinc-payment-gateway'),
@@ -4718,11 +4737,11 @@ if (!class_exists('WC_Twoinc')) {
                     'default'     => 'no'
                 ],
                 'enable_api_logging' => [
-                    'title'       => __('Enable API Logging', 'twoinc-payment-gateway'),
-                    'label'       => __('Log API requests and responses', 'twoinc-payment-gateway'),
+                    'title'       => __('Enable debug logging', 'twoinc-payment-gateway'),
+                    'label'       => __('Log API requests/responses and other diagnostic detail', 'twoinc-payment-gateway'),
                     'type'        => 'checkbox',
                     'description' => sprintf(
-                        __('If enabled, all API interactions will be logged. This can be useful for debugging. You can view the logs <a href="%s">here</a>.', 'twoinc-payment-gateway'),
+                        __('If enabled, API interactions and other diagnostic detail (e.g. surcharge/FX rounding) are logged. This can be useful for debugging. You can view the logs <a href="%s">here</a>.', 'twoinc-payment-gateway'),
                         admin_url('admin.php?page=wc-status&tab=logs&source=twoinc-payment-gateway')
                     ),
                     'default'     => 'yes',
@@ -4738,8 +4757,8 @@ if (!class_exists('WC_Twoinc')) {
                     'description' => __('The confirmation callback always checks the order\'s unique 64-character order reference; this option skips only the additional WordPress security token, which typically expires 12 to 24 hours after the order was placed — and, for a signed-in customer, when their session changes — so a buyer who comes back to a legitimately authorised order can be rejected. The order reference must still match, so the callback is not left open, but the security token\'s protection against a cross-site request is gone; leave this off unless you are seeing those false rejections.', 'twoinc-payment-gateway'),
                     'default'     => 'no'
                 ],
-                'clear_options_on_deactivation' => [
-                    'title'       => __('Clear settings on deactivation of plug-in', 'twoinc-payment-gateway'),
+                'clear_options_on_uninstall' => [
+                    'title'       => __('Clear settings on uninstall of plug-in', 'twoinc-payment-gateway'),
                     'label'       => ' ',
                     'type'        => 'checkbox',
                     'default'     => 'no'
@@ -4906,7 +4925,7 @@ if (!class_exists('WC_Twoinc')) {
          * Read-only link to WooCommerce's own log viewer, filtered to this
          * plugin's log source (TWO-25386, ported from Magento's "View error
          * log" admin action). Errors are logged unconditionally at several
-         * call sites regardless of the "Enable API Logging" setting above,
+         * call sites regardless of the "Enable debug logging" setting above,
          * so this link is useful even when that setting is off.
          */
         public function generate_two_view_log_link_html($key, $data)
@@ -5254,6 +5273,20 @@ if (!class_exists('WC_Twoinc')) {
             return 'yes' === $this->get_option('disable_ssl_verify');
         }
 
+        /**
+         * The "Enable debug logging" toggle: gates API request/response
+         * logging (make_request()) and other diagnostic-only log lines
+         * (e.g. WC_Twoinc_Payment_Terms's surcharge/FX rounding notices).
+         * Does not gate error-level logging, which stays unconditional
+         * (see view_error_log's field comment).
+         *
+         * @return bool
+         */
+        public function is_debug_logging_enabled()
+        {
+            return 'yes' === $this->get_option('enable_api_logging');
+        }
+
         /** @return string the token as a header value: never newline-bearing. */
         public function get_firewall_token()
         {
@@ -5302,7 +5335,7 @@ if (!class_exists('WC_Twoinc')) {
                 'sslverify' => !$this->should_disable_ssl_verify()
             ]);
 
-            if ('yes' === $this->get_option('enable_api_logging')) {
+            if ($this->is_debug_logging_enabled()) {
                 $logger = wc_get_logger();
                 // Redacted only when actually sent, so the log does not imply
                 // a firewall token is configured when none is.
@@ -5405,19 +5438,42 @@ if (!class_exists('WC_Twoinc')) {
             // The recurring FX refresh must not keep firing (listener-less)
             // while the plugin is deactivated; it is re-registered on init
             // when the plugin comes back (WC_Twoinc_FX::maybe_schedule_refresh).
+            // Settings are NOT touched here — "Clear settings on uninstall of
+            // plug-in" fires on uninstall (see maybe_clear_settings_on_uninstall(),
+            // called from uninstall.php), matching magento-plugin/prestashop-plugin;
+            // a merchant who deactivates to troubleshoot must not lose their config.
             if (class_exists('WC_Twoinc_FX') && function_exists('as_unschedule_all_actions')) {
                 as_unschedule_all_actions(WC_Twoinc_FX::refresh_hook());
             }
-            if ($this->get_option('clear_options_on_deactivation') === 'yes') {
-                delete_option('woocommerce_' . $this->id . '_settings');
-                // The merchant-record caches (terms, days-on-invoice,
-                // platform minimum) live outside the settings blob in
-                // dedicated wp_options — clear them too, or "clear options
-                // on deactivation" leaves orphaned rows behind.
-                $this->invalidate_merchant_record_caches();
-                if (class_exists('WC_Twoinc_FX')) {
-                    WC_Twoinc_FX::purge();
-                }
+        }
+
+        /**
+         * Uninstall-time settings wipe, gated on "Clear settings on uninstall
+         * of plug-in". Called from uninstall.php, which WordPress includes
+         * directly — the plugin's own plugins_loaded hook (load_twoinc_classes)
+         * never fires for an uninstall, since uninstalling requires the plugin
+         * to already be deactivated. Static and option-only (no gateway
+         * instantiation) for that reason.
+         *
+         * @return void
+         */
+        public static function maybe_clear_settings_on_uninstall(): void
+        {
+            $gateway_id = WC_Twoinc_Brand::get('gateway_id');
+            $settings_option = 'woocommerce_' . $gateway_id . '_settings';
+            $settings = get_option($settings_option, []);
+            $clear = is_array($settings) && ($settings['clear_options_on_uninstall'] ?? 'no') === 'yes';
+            if (!$clear) {
+                return;
+            }
+            delete_option($settings_option);
+            // The merchant-record caches (terms, days-on-invoice, platform
+            // minimum) live outside the settings blob in dedicated
+            // wp_options — clear them too, or "clear settings on uninstall"
+            // leaves orphaned rows behind.
+            self::invalidate_merchant_record_caches();
+            if (class_exists('WC_Twoinc_FX')) {
+                WC_Twoinc_FX::purge();
             }
         }
 

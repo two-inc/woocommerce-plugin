@@ -190,7 +190,7 @@ msgid "Checkout options"
 msgstr "Betalningsinställningar"
 
 #: class/WC_Twoinc.php:1633
-msgid "Choose your settings"
+msgid "Environment"
 msgstr "Välj dina inställningar"
 
 #: class/WC_Twoinc_Helper.php:148
@@ -198,7 +198,7 @@ msgid "City"
 msgstr "Stad"
 
 #: class/WC_Twoinc.php:1641
-msgid "Clear settings on deactivation of plug-in"
+msgid "Clear settings on uninstall of plug-in"
 msgstr "Rensa inställningar vid inaktivering av plugin"
 
 #: class/WC_Twoinc_Checkout.php:92
@@ -298,7 +298,7 @@ msgid "Enable %s Payments"
 msgstr "Aktivera %s betalningar"
 
 #: class/WC_Twoinc.php:1754
-msgid "Enable API Logging"
+msgid "Enable debug logging"
 msgstr "Aktivera API-loggning"
 
 #: class/WC_Twoinc.php:1726
@@ -354,7 +354,7 @@ msgid "Failed to verify API key."
 msgstr "Det gick inte att verifiera API-nyckeln."
 
 #: class/WC_Twoinc.php:4340
-msgid "Firewall Token (optional)"
+msgid "Firewall token (optional)"
 msgstr "Brandväggstoken (valfritt)"
 
 #. translators: %s is the brand product name (e.g. "Two")
@@ -571,19 +571,19 @@ msgid "Show \"What is %s\" link in checkout"
 msgstr "Visa länken \"Vad är %s \" i kassan"
 
 #: class/WC_Twoinc.php:3446
-msgid "Show Department field"
+msgid "Show department field"
 msgstr "Visa fältet för avdelning"
 
 #: class/WC_Twoinc.php:3422
-msgid "Show Invoice email field"
+msgid "Show invoice email field"
 msgstr "Visa e-postfältet för faktura"
 
 #: class/WC_Twoinc.php:3438
-msgid "Show Project field"
+msgid "Show project field"
 msgstr "Visa fältet för projekt"
 
 #: class/WC_Twoinc.php:3430
-msgid "Show PO Number field"
+msgid "Show PO number field"
 msgstr "Visa fältet för PO-nummer"
 
 #: class/WC_Twoinc.php:1716
@@ -696,7 +696,7 @@ msgid "The limit applies to the whole fee: the percentage and the fixed fee toge
 msgstr "Gränsen gäller hela avgiften: procenten och den fasta avgiften tillsammans, inte bara procenten."
 
 #: class/WC_Twoinc.php
-msgid "Custom Payment Terms (days)"
+msgid "Custom payment terms (days)"
 msgstr "Anpassade betalningsvillkor (dagar)"
 
 #: class/WC_Twoinc.php
@@ -704,7 +704,7 @@ msgid "Custom Payment Terms (days) must be a whole number of days."
 msgstr "Anpassade betalningsvillkor (dagar) måste vara ett helt antal dagar."
 
 #: class/WC_Twoinc.php
-msgid "Default Payment Terms"
+msgid "Default payment terms"
 msgstr "Standardbetalningsvillkor"
 
 #: class/WC_Twoinc.php

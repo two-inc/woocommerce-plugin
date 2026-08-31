@@ -167,7 +167,7 @@ msgid "Checkout options"
 msgstr ""
 
 #: class/WC_Twoinc.php:1633
-msgid "Choose your settings"
+msgid "Environment"
 msgstr ""
 
 #: class/WC_Twoinc_Helper.php:148
@@ -175,7 +175,7 @@ msgid "City"
 msgstr ""
 
 #: class/WC_Twoinc.php:1641
-msgid "Clear settings on deactivation of plug-in"
+msgid "Clear settings on uninstall of plug-in"
 msgstr ""
 
 #: class/WC_Twoinc_Checkout.php:92
@@ -273,7 +273,7 @@ msgid "Enable %s Payments"
 msgstr ""
 
 #: class/WC_Twoinc.php:1754
-msgid "Enable API Logging"
+msgid "Enable debug logging"
 msgstr ""
 
 #: class/WC_Twoinc.php:1726
@@ -517,19 +517,19 @@ msgid "Show \"What is %s\" link in checkout"
 msgstr ""
 
 #: class/WC_Twoinc.php:3446
-msgid "Show Department field"
+msgid "Show department field"
 msgstr ""
 
 #: class/WC_Twoinc.php:3422
-msgid "Show Invoice email field"
+msgid "Show invoice email field"
 msgstr ""
 
 #: class/WC_Twoinc.php:3438
-msgid "Show Project field"
+msgid "Show project field"
 msgstr ""
 
 #: class/WC_Twoinc.php:3430
-msgid "Show PO Number field"
+msgid "Show PO number field"
 msgstr ""
 
 #: class/WC_Twoinc.php:1716
@@ -640,7 +640,7 @@ msgid "Click here to login or sign up as a sole trader."
 msgstr ""
 
 #: class/WC_Twoinc.php
-msgid "Custom Payment Terms (days)"
+msgid "Custom payment terms (days)"
 msgstr ""
 
 #: class/WC_Twoinc.php
@@ -648,7 +648,7 @@ msgid "Custom Payment Terms (days) must be a whole number of days."
 msgstr ""
 
 #: class/WC_Twoinc.php
-msgid "Default Payment Terms"
+msgid "Default payment terms"
 msgstr ""
 
 #: class/WC_Twoinc.php
@@ -735,7 +735,7 @@ msgid "Lets buyers check out as a sole trader by registering or logging in with 
 msgstr ""
 
 #: class/WC_Twoinc.php
-msgid "Minimum Order Value Tax Basis"
+msgid "Minimum order value tax basis"
 msgstr ""
 
 #: class/WC_Twoinc.php
@@ -747,7 +747,7 @@ msgid "Minimum Order Value must exceed the platform minimum of %1$s, %2$s tax."
 msgstr ""
 
 #: class/WC_Twoinc.php
-msgid "Minimum Order Value, %s"
+msgid "Minimum order value, %s"
 msgstr ""
 
 #: class/WC_Twoinc.php
@@ -783,7 +783,7 @@ msgid "Payment Terms"
 msgstr ""
 
 #: class/WC_Twoinc.php
-msgid "Payment Terms Type"
+msgid "Payment terms type"
 msgstr ""
 
 #: class/WC_Twoinc.php
@@ -1057,7 +1057,7 @@ msgid "Checking availability"
 msgstr ""
 
 #: class/WC_Twoinc.php:4340
-msgid "Firewall Token (optional)"
+msgid "Firewall token (optional)"
 msgstr ""
 
 #. translators: %s is the brand product name (e.g. "Two")

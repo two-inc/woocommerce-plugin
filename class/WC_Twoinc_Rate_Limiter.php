@@ -90,7 +90,7 @@ if (!class_exists('WC_Twoinc_Rate_Limiter')) {
         /** Diagnostics escape hatch for a merchant whose topology collapses every buyer into one bucket. */
         private static function is_enabled(): bool
         {
-            if (self::setting('rate_limiting_enabled', 'yes') !== 'no') {
+            if (self::setting('disable_rate_limiting', 'no') !== 'yes') {
                 return true;
             }
             self::log_disabled();
@@ -337,7 +337,7 @@ if (!class_exists('WC_Twoinc_Rate_Limiter')) {
             $width = strlen($net) * 8;
             $bits = $suffix === null ? $width : (int) trim($suffix);
             // A /0 matches its whole family, so it is a typo or a way to disable
-            // the check, which the rate_limiting_enabled toggle already does.
+            // the check, which the disable_rate_limiting toggle already does.
             // Leading zeros read as decimal, so /008 is the legitimate /8.
             if ($bits < 1 || $bits > $width) {
                 return null;

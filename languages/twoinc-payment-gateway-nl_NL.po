@@ -193,7 +193,7 @@ msgid "Checkout options"
 msgstr "Afrekenopties"
 
 #: class/WC_Twoinc.php:1633
-msgid "Choose your settings"
+msgid "Environment"
 msgstr "Kies uw instellingen"
 
 #: class/WC_Twoinc_Helper.php:148
@@ -201,7 +201,7 @@ msgid "City"
 msgstr "Stad"
 
 #: class/WC_Twoinc.php:1641
-msgid "Clear settings on deactivation of plug-in"
+msgid "Clear settings on uninstall of plug-in"
 msgstr "Instellingen wissen bij het deactiveren van de plug-in"
 
 #: class/WC_Twoinc_Checkout.php:92
@@ -301,7 +301,7 @@ msgid "Enable %s Payments"
 msgstr "%s Betalingen inschakelen"
 
 #: class/WC_Twoinc.php:1754
-msgid "Enable API Logging"
+msgid "Enable debug logging"
 msgstr "API-logging inschakelen"
 
 #: class/WC_Twoinc.php:1726
@@ -358,7 +358,7 @@ msgid "Failed to verify API key."
 msgstr "Het verifiëren van de API-sleutel is mislukt."
 
 #: class/WC_Twoinc.php:4340
-msgid "Firewall Token (optional)"
+msgid "Firewall token (optional)"
 msgstr "Firewalltoken (optioneel)"
 
 #. translators: %s is the brand product name (e.g. "Two")
@@ -575,19 +575,19 @@ msgid "Show \"What is %s\" link in checkout"
 msgstr "Toon de link \"Wat is %s \" bij het afrekenen"
 
 #: class/WC_Twoinc.php:3446
-msgid "Show Department field"
+msgid "Show department field"
 msgstr "Veld voor afdeling weergeven"
 
 #: class/WC_Twoinc.php:3422
-msgid "Show Invoice email field"
+msgid "Show invoice email field"
 msgstr "Veld voor factuur e-mailadres weergeven"
 
 #: class/WC_Twoinc.php:3438
-msgid "Show Project field"
+msgid "Show project field"
 msgstr "Veld voor project weergeven"
 
 #: class/WC_Twoinc.php:3430
-msgid "Show PO Number field"
+msgid "Show PO number field"
 msgstr "Veld voor PO-nummer weergeven"
 
 #: class/WC_Twoinc.php:1716
@@ -703,7 +703,7 @@ msgid "Click here to login or sign up as a sole trader."
 msgstr "Klik hier om in te loggen of u te registreren als eenmanszaak."
 
 #: class/WC_Twoinc.php
-msgid "Custom Payment Terms (days)"
+msgid "Custom payment terms (days)"
 msgstr "Aangepaste betalingstermijnen (dagen)"
 
 #: class/WC_Twoinc.php
@@ -711,7 +711,7 @@ msgid "Custom Payment Terms (days) must be a whole number of days."
 msgstr "Aangepaste betalingstermijnen (dagen) moet een geheel aantal dagen zijn."
 
 #: class/WC_Twoinc.php
-msgid "Default Payment Terms"
+msgid "Default payment terms"
 msgstr "Standaard betalingstermijnen"
 
 #: class/WC_Twoinc.php
@@ -798,7 +798,7 @@ msgid "Lets buyers check out as a sole trader by registering or logging in with 
 msgstr "Laat kopers afrekenen als eenmanszaak door zich te registreren of in te loggen bij Two. De optie verschijnt alleen voor factuurlanden waar eenmanszaken worden ondersteund; dit wordt automatisch bepaald."
 
 #: class/WC_Twoinc.php
-msgid "Minimum Order Value Tax Basis"
+msgid "Minimum order value tax basis"
 msgstr "Btw-grondslag minimale orderwaarde"
 
 #: class/WC_Twoinc.php
@@ -810,7 +810,7 @@ msgid "Minimum Order Value must exceed the platform minimum of %1$s, %2$s tax."
 msgstr "Minimale orderwaarde moet hoger zijn dan het platformminimum van %1$s, %2$s btw."
 
 #: class/WC_Twoinc.php
-msgid "Minimum Order Value, %s"
+msgid "Minimum order value, %s"
 msgstr "Minimale orderwaarde, %s"
 
 #: class/WC_Twoinc.php
@@ -846,7 +846,7 @@ msgid "Payment Terms"
 msgstr "Betalingstermijnen"
 
 #: class/WC_Twoinc.php
-msgid "Payment Terms Type"
+msgid "Payment terms type"
 msgstr "Type betalingstermijn"
 
 #: class/WC_Twoinc.php
