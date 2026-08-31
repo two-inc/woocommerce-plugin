@@ -255,6 +255,8 @@ final class BrandConfigSpec
             'testSeTaxSubtotalsBackfillDoesNotUndoAMerchantOptOut',
             'testFirewallTokenFieldIsPlainTextNotMasked',
             'testFirewallTokenBrowserToggleIsOffUntilTheMerchantOptsIn',
+            'testFirewallTokenBrowserRendersUnderDiagnostics',
+            'testFirewallTokenBrowserAndTrustedProxiesHelpTextIsExact',
             'testFirewallTokenHelpTextUsesOverlayProductNameNotTwo',
             'testFirewallTokenCopyIsTranslatedInEveryLocale',
             'testFirewallTokenHeaderSentOnlyWhenConfigured',
@@ -3898,6 +3900,45 @@ final class BrandConfigSpec
             'section_general',
             $sections['api_key'] ?? null,
             'walker sanity check: api_key is expected in the General group'
+        );
+    }
+
+    /**
+     * firewall_token_browser moved out of General into Diagnostics, next to
+     * trusted_proxies — an advanced/support-facing toggle, not a
+     * first-run setup field.
+     */
+    private static function testFirewallTokenBrowserRendersUnderDiagnostics(): void
+    {
+        $gateway = new class () extends WC_Twoinc {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+        };
+        $gateway->init_form_fields();
+
+        $section = null;
+        $sections = [];
+        foreach ($gateway->form_fields as $name => $field) {
+            if (isset($field['type']) && $field['type'] === 'title') {
+                $section = $name;
+                continue;
+            }
+            $sections[$name] = $section;
+        }
+
+        TinyAssert::same(
+            'section_diagnostics',
+            $sections['firewall_token_browser'] ?? null,
+            'firewall_token_browser must render under the Diagnostics heading'
+        );
+        // Sanity on the walker itself: firewall_token (the field it once sat
+        // directly beneath) stays in General.
+        TinyAssert::same(
+            'section_general',
+            $sections['firewall_token'] ?? null,
+            'walker sanity check: firewall_token is expected to stay in the General group'
         );
     }
 
@@ -8410,16 +8451,31 @@ final class BrandConfigSpec
         TinyAssert::same('checkbox', $field['type'] ?? null);
         TinyAssert::same('no', $field['default'] ?? null);
         TinyAssert::same(false, $gateway->should_send_firewall_token_from_browser());
-        // WC_Settings_API renders form_fields in array order, so the toggle is
-        // only self-explanatory sitting under the field it qualifies.
+        // WC_Settings_API renders form_fields in array order, so this pins
+        // the toggle's position in the Diagnostics group, next to trusted_proxies.
         TinyAssert::same(
-            array_search('firewall_token', $keys, true) + 1,
+            array_search('trusted_proxies', $keys, true) + 1,
             array_search('firewall_token_browser', $keys, true),
-            'the browser toggle must render directly beneath the token field'
+            'the browser toggle must render directly beneath trusted proxies, in Diagnostics'
         );
         TinyAssert::true(
             strpos($field['description'] ?? '', "user's browser") !== false,
             'the help text must say which traffic the toggle covers'
+        );
+    }
+
+    private static function testFirewallTokenBrowserAndTrustedProxiesHelpTextIsExact(): void
+    {
+        $gateway = self::firewallGateway([]);
+        $gateway->init_form_fields();
+
+        TinyAssert::same(
+            "Only switch this on if your IT administrator requires the firewall token for calls from the user's browser as well as those from your server. Your firewall token will be published to the buyer's brower and may be read by anyone.",
+            $gateway->form_fields['firewall_token_browser']['description'] ?? null
+        );
+        TinyAssert::same(
+            'Addresses of your own reverse proxies, load balancers or CDN egress, as IPs or CIDR ranges, separated by commas or new lines. These IP addresses will be exempt from rate limiting.',
+            $gateway->form_fields['trusted_proxies']['description'] ?? null
         );
     }
 

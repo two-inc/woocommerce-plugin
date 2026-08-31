@@ -367,10 +367,6 @@ msgstr "Firewalltoken (optioneel)"
 msgid "If your IT administrator asks you to add a firewall token, place it in this field. It will then be transmitted as header X-WAF-TOKEN on all calls your store makes to the %s API."
 msgstr "Als uw IT-beheerder u vraagt een firewalltoken toe te voegen, plaatst u deze in dit veld. Deze wordt vervolgens verzonden als header X-WAF-TOKEN bij alle aanroepen die uw winkel naar de %s API doet."
 
-#: class/WC_Twoinc.php:4350
-msgid "Switch this on if your IT administrator requires the firewall token for calls from the user's browser as well as those from your server."
-msgstr "Schakel dit in als uw IT-beheerder het firewalltoken ook vereist voor aanroepen vanuit de browser van de gebruiker, niet alleen vanaf uw server."
-
 #: class/WC_Twoinc.php:4346
 msgid "This is a coarse network gate rather than a secret credential, so unlike the API key it is not masked here."
 msgstr "Dit is een grove netwerkpoort in plaats van een geheime referentie, dus in tegenstelling tot de API-sleutel wordt deze hier niet gemaskeerd."
