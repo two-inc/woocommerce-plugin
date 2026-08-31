@@ -15,7 +15,7 @@
 
 "use strict";
 
-const { loadAdmin } = require("./admin-harness");
+const { loadAdmin, GATEWAY_ID } = require("./admin-harness");
 
 function stubAjaxError(status, code) {
   return function (jq) {
@@ -164,6 +164,60 @@ describe("API key verification — categorized failure display", () => {
     expect(text).toMatch(/service error/i);
     expect(text).toContain("503");
     expect(text).not.toMatch(/\bTwo\b/);
+  });
+
+  // TWO-25498 punch-list #3: verification must not wait out the full 1s
+  // debounce when the merchant tabs away — only page load and the debounced
+  // keystroke were wired up before this; blur is the third trigger.
+  describe("blur fires verification immediately, without waiting for the debounce", () => {
+    test("blur calls verify synchronously; typing alone does not", async () => {
+      const ajax = jest.fn(function (settings) {
+        settings.success({ success: true, data: { merchant_id: "1" } });
+        return { done: function () {}, fail: function () {} };
+      });
+      const { $ } = await loadAdmin({
+        apiKey: "an-old-stored-key",
+        checked: [30],
+        stubAjax: function (jq) {
+          jq.ajax = ajax;
+        }
+      });
+      ajax.mockClear(); // drop the page-load verification call
+
+      const $field = $("#woocommerce_" + GATEWAY_ID + "_api_key");
+      $field.val("a-freshly-typed-key").trigger("input");
+      expect(ajax).not.toHaveBeenCalled(); // debounced — must not fire synchronously
+
+      $field.trigger("blur");
+      expect(ajax).toHaveBeenCalledTimes(1); // blur fires immediately
+      expect(ajax.mock.calls[0][0].data.api_key).toBe("a-freshly-typed-key");
+    });
+
+    test("blur cancels the pending debounced call — no duplicate verification when it would have fired", async () => {
+      const ajax = jest.fn(function (settings) {
+        settings.success({ success: true, data: { merchant_id: "1" } });
+        return { done: function () {}, fail: function () {} };
+      });
+      const { $ } = await loadAdmin({
+        apiKey: "an-old-stored-key",
+        checked: [30],
+        stubAjax: function (jq) {
+          jq.ajax = ajax;
+        }
+      });
+      ajax.mockClear();
+
+      const $field = $("#woocommerce_" + GATEWAY_ID + "_api_key");
+      $field.val("a-freshly-typed-key").trigger("input");
+      $field.trigger("blur");
+      expect(ajax).toHaveBeenCalledTimes(1);
+
+      jest.useFakeTimers();
+      jest.advanceTimersByTime(1000); // where the cancelled debounce would have fired
+      jest.useRealTimers();
+
+      expect(ajax).toHaveBeenCalledTimes(1); // still just the blur call, not a second one
+    });
   });
 
   test("stored key that verifies successfully shows merchant info, not the invalid notice", async () => {

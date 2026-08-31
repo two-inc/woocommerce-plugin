@@ -51,6 +51,8 @@ final class BrandConfigSpec
             'testShippingDetailsCarriedByCreateAndEditBodies',
             'testShippingDetailsFilterOverrides',
             'testShippingDetailsFilterGarbageDiscarded',
+            'testDefaultShippingTaxClassFallbackOnlyAppliesWhenNoRateIsDeclared',
+            'testDefaultShippingTaxClassFieldValidatesAgainstLiveTaxClasses',
             'testLegacyOrderCreateFilterRunsBeforeOrderPayload',
             'testBrandFileReturningNonArrayFallsBackToDefaults',
             'testMetaKeysDeriveFromBrandPrefix',
@@ -74,7 +76,8 @@ final class BrandConfigSpec
             'testPaymentTermsResolveBackendIntersectAdminSubset',
             'testMerchantAvailableTermsFetchNormalisesCachesAndServesStale',
             'testMerchantAvailableTermsInvalidatedOnMerchantIdChange',
-            'testDeactivationCleanupClearsSettingsAndTermCache',
+            'testDeactivationNeverClearsSettings',
+            'testUninstallCleanupClearsSettingsAndTermCache',
             'testMerchantRecordFetchSharedAcrossConsumersAndOffTheBlob',
             'testLegacyDaysOnInvoiceOptionRowsDropped',
             'testPaymentTermsValidationNonDestructiveOnUnresolvedOrNarrowedList',
@@ -189,6 +192,7 @@ final class BrandConfigSpec
             'testTermFeeTransportFailureNotCachedAcrossRequests',
             'testBuyerFeeShareCapRoundingToZeroRelaysZeroCap',
             'testBuyerFeeShareFixedRoundingToZeroChargesZero',
+            'testSurchargeFxDiagnosticLogsGatedByDebugLogging',
             'testBuyerFeeShareAbsentCapChargesUncappedPercentage',
             'testStoredCommaDecimalCapIsNormalisedNotDropped',
             'testCartFeeSkippedOnQuoteCurrencyMismatch',
@@ -351,7 +355,7 @@ final class BrandConfigSpec
         WC()->cart = null;
         WC()->customer = null;
         WC()->session = null;
-        unset($GLOBALS['__twoinc_test_tax_classes'], $GLOBALS['__twoinc_test_tax_rates']);
+        unset($GLOBALS['__twoinc_test_tax_classes'], $GLOBALS['__twoinc_test_tax_rates'], $GLOBALS['__twoinc_test_find_rates']);
         foreach (['twoinc_brand_file', 'twoinc_checkout_fields', 'twoinc_confirmation_url', 'twoinc_order_payload', 'twoinc_payment_terms_line', 'two_order_create', 'twoinc_payment_validation_error', 'twoinc_sole_trader_signup_url', 'twoinc_shipping_details'] as $tag) {
             remove_all_filters($tag);
         }
@@ -1192,6 +1196,153 @@ final class BrandConfigSpec
         TinyAssert::true(isset($body['shipping_details']['expected_delivery_date']));
     }
 
+    /**
+     * TWO-25498: "Default shipping tax class" fills the gap
+     * magento-plugin's configured shipping-tax-rate fallback and
+     * prestashop-plugin's PS_TWO_DEFAULT_SHIPPING_TAX_RULES_GROUP already
+     * close — a shipping method WooCommerce declares no tax rate for (e.g. a
+     * carrier/click-and-collect module with no tax class of its own) but
+     * which was genuinely charged tax. A declared rate always wins; a
+     * genuinely untaxed line stays untaxed; the fallback is consulted only
+     * in the gap between those two, and only a rate-table row flagged for
+     * shipping counts.
+     */
+    private static function testDefaultShippingTaxClassFallbackOnlyAppliesWhenNoRateIsDeclared(): void
+    {
+        $method = new ReflectionMethod(WC_Twoinc_Helper::class, 'get_shipping_tax_rate');
+        $method->setAccessible(true);
+        $prop = new ReflectionProperty(WC_Twoinc::class, 'instance');
+        $prop->setAccessible(true);
+
+        $declaredTaxRow = new class () implements ArrayAccess {
+            public function get_rate_id()
+            {
+                return 7;
+            }
+            public function get_rate_percent()
+            {
+                return 20.0;
+            }
+            #[\ReturnTypeWillChange]
+            public function offsetExists($offset)
+            {
+                return false;
+            }
+            #[\ReturnTypeWillChange]
+            public function offsetGet($offset)
+            {
+                return null;
+            }
+            #[\ReturnTypeWillChange]
+            public function offsetSet($offset, $value)
+            {
+            }
+            #[\ReturnTypeWillChange]
+            public function offsetUnset($offset)
+            {
+            }
+        };
+
+        $shippingItem = static function (array $declaredTaxes, float $totalTax) {
+            return new class ($declaredTaxes, $totalTax) {
+                private $declaredTaxes;
+                private $totalTax;
+                public function __construct($declaredTaxes, $totalTax)
+                {
+                    $this->declaredTaxes = $declaredTaxes;
+                    $this->totalTax = $totalTax;
+                }
+                public function get_taxes()
+                {
+                    return ['total' => $this->declaredTaxes];
+                }
+                public function get_total_tax()
+                {
+                    return $this->totalTax;
+                }
+            };
+        };
+
+        $order = static function (array $orderTaxes) {
+            return new class ($orderTaxes) {
+                private $orderTaxes;
+                public function __construct($orderTaxes)
+                {
+                    $this->orderTaxes = $orderTaxes;
+                }
+                public function get_taxes()
+                {
+                    return $this->orderTaxes;
+                }
+                public function get_shipping_country()
+                {
+                    return 'NO';
+                }
+                public function get_shipping_state()
+                {
+                    return '';
+                }
+                public function get_shipping_postcode()
+                {
+                    return '0150';
+                }
+                public function get_shipping_city()
+                {
+                    return 'Oslo';
+                }
+                public function get_id()
+                {
+                    return 1;
+                }
+            };
+        };
+
+        $cases = [
+            [[], [], 0.0, '', [], 0.0, 'NA', 'genuinely untaxed shipping stays untaxed, no fallback configured'],
+            [[7 => 5.0], [$declaredTaxRow], 5.0, 'reduced-rate', ['reduced-rate' => [['rate' => 12.0, 'shipping' => 'yes']]], 0.2, '', 'a declared rate always wins over the fallback'],
+            [[], [], 3.0, '', [], 0.0, 'NA', "taxed but unresolved, no fallback configured — stays untaxed (today's behaviour)"],
+            [[], [], 3.0, 'reduced-rate', [], 0.0, 'NA', 'taxed but unresolved, fallback class configured but no matching rate — stays untaxed'],
+            [[], [], 3.0, 'reduced-rate', ['reduced-rate' => [['rate' => 12.0, 'shipping' => 'no']]], 0.0, 'NA', 'a matching rate that excludes shipping is not used'],
+            [[], [], 3.0, 'reduced-rate', ['reduced-rate' => [['rate' => 12.0, 'shipping' => 'yes']]], 0.12, 'Default shipping tax class', 'taxed and unresolved, fallback class has a matching shipping rate'],
+            [[], [], 3.0, 'reduced-rate', ['reduced-rate' => [['rate' => 8.0, 'shipping' => 'yes'], ['rate' => 4.0, 'shipping' => 'yes']]], 0.12, 'Default shipping tax class', 'multiple matching shipping rates sum additively'],
+        ];
+
+        foreach ($cases as [$declaredTaxes, $orderTaxes, $totalTax, $taxClass, $findRates, $expectedRate, $expectedName, $description]) {
+            $GLOBALS['__twoinc_test_find_rates'] = $findRates;
+            $prop->setValue(null, self::fulfilmentTriggerGateway(['default_shipping_tax_class' => $taxClass]));
+
+            $result = $method->invoke(null, $shippingItem($declaredTaxes, $totalTax), $order($orderTaxes));
+
+            self::assertClose($expectedRate, (float) $result['rate'], $description);
+            TinyAssert::same($expectedName, $result['name'], $description);
+        }
+
+        $prop->setValue(null, null);
+    }
+
+    /** Same guard the surcharge tax class field already has: a stale/tampered selection must not silently save. */
+    private static function testDefaultShippingTaxClassFieldValidatesAgainstLiveTaxClasses(): void
+    {
+        $GLOBALS['__twoinc_test_tax_classes'] = ['Reduced rate'];
+        $gateway = new class () extends WC_Twoinc {
+            public function __construct()
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+            }
+        };
+
+        TinyAssert::same('', $gateway->validate_default_shipping_tax_class_field('default_shipping_tax_class', ''), 'no selection is always valid');
+        TinyAssert::same('reduced-rate', $gateway->validate_default_shipping_tax_class_field('default_shipping_tax_class', 'reduced-rate'), 'a live tax class saves');
+
+        $threw = false;
+        try {
+            $gateway->validate_default_shipping_tax_class_field('default_shipping_tax_class', 'deleted-class');
+        } catch (Exception $e) {
+            $threw = true;
+        }
+        TinyAssert::true($threw, 'a tax class that no longer exists must be refused, not silently saved');
+    }
+
     private static function testLegacyOrderCreateFilterRunsBeforeOrderPayload(): void
     {
         $payload_saw_legacy = null;
@@ -1852,50 +2003,60 @@ final class BrandConfigSpec
         TinyAssert::same('[30,60]', $GLOBALS['__twoinc_test_options'][$terms_option]);
     }
 
-    private static function testDeactivationCleanupClearsSettingsAndTermCache(): void
+    /**
+     * TWO-25498 punch-list: settings must survive deactivation regardless of
+     * the "Clear settings on uninstall" toggle — only uninstall (a separate,
+     * static entry point; see the next test) may wipe them, matching
+     * magento-plugin/prestashop-plugin. Deactivation only stops the
+     * recurring FX refresh, which as_unschedule_all_actions() has no
+     * observable state to assert on here beyond "no fatal, no exception".
+     */
+    private static function testDeactivationNeverClearsSettings(): void
+    {
+        $settings_option = 'woocommerce_woocommerce-gateway-tillit_settings';
+        $GLOBALS['__twoinc_test_options'][$settings_option] = ['api_key' => 'key', 'clear_options_on_uninstall' => 'yes'];
+
+        $gateway = new class () extends WC_Twoinc {
+            public function __construct()
+            {
+                $this->id = 'woocommerce-gateway-tillit';
+            }
+        };
+        $gateway->on_deactivate_plugin();
+
+        TinyAssert::true(array_key_exists($settings_option, $GLOBALS['__twoinc_test_options']), 'deactivation must never clear settings, even with the toggle on');
+    }
+
+    private static function testUninstallCleanupClearsSettingsAndTermCache(): void
     {
         $settings_option = 'woocommerce_woocommerce-gateway-tillit_settings';
         $terms_option = WC_Twoinc_Brand::prefixed_name('merchant_available_terms');
         $checked_option = WC_Twoinc_Brand::prefixed_name('merchant_available_terms_checked_on');
 
-        $make_gateway = static function (string $clear) {
-            $gateway = new class () extends WC_Twoinc {
-                public $options = [];
-
-                public function __construct()
-                {
-                    $this->id = 'woocommerce-gateway-tillit';
-                }
-
-                public function get_option($key, $empty_value = null)
-                {
-                    return $this->options[$key] ?? $empty_value ?? '';
-                }
-            };
-            $gateway->options['clear_options_on_deactivation'] = $clear;
-            return $gateway;
-        };
-        $seed = static function () use ($settings_option, $terms_option, $checked_option) {
-            $GLOBALS['__twoinc_test_options'][$settings_option] = ['api_key' => 'key'];
-            $GLOBALS['__twoinc_test_options'][$terms_option] = '[30,60]';
-            $GLOBALS['__twoinc_test_options'][$checked_option] = 999;
+        $seed = static function (?string $clear) use ($settings_option, $terms_option, $checked_option) {
+            $settings = ['api_key' => 'key'];
+            if ($clear !== null) {
+                $settings['clear_options_on_uninstall'] = $clear;
+            }
+            $GLOBALS['__twoinc_test_options'] = [
+                $settings_option => $settings,
+                $terms_option => '[30,60]',
+                $checked_option => 999,
+            ];
         };
 
         // Toggle key absent from the settings blob: the state every merchant
         // who never opened the toggle is in. Default is no-wipe, so nothing
         // is deleted — same contract as an explicit 'no'.
-        $seed();
-        $absent_gateway = $make_gateway('no');
-        unset($absent_gateway->options['clear_options_on_deactivation']);
-        TinyAssert::same(false, array_key_exists('clear_options_on_deactivation', $absent_gateway->options));
-        $absent_gateway->on_deactivate_plugin();
+        $seed(null);
+        WC_Twoinc::maybe_clear_settings_on_uninstall();
         TinyAssert::true(array_key_exists($settings_option, $GLOBALS['__twoinc_test_options']));
         TinyAssert::true(array_key_exists($terms_option, $GLOBALS['__twoinc_test_options']));
         TinyAssert::true(array_key_exists($checked_option, $GLOBALS['__twoinc_test_options']));
 
-        // Toggle off: deactivation leaves everything in place
-        $seed();
-        $make_gateway('no')->on_deactivate_plugin();
+        // Toggle off: uninstall leaves everything in place.
+        $seed('no');
+        WC_Twoinc::maybe_clear_settings_on_uninstall();
         TinyAssert::true(array_key_exists($settings_option, $GLOBALS['__twoinc_test_options']));
         TinyAssert::true(array_key_exists($terms_option, $GLOBALS['__twoinc_test_options']));
         TinyAssert::true(array_key_exists($checked_option, $GLOBALS['__twoinc_test_options']));
@@ -1903,8 +2064,8 @@ final class BrandConfigSpec
         // Toggle on: settings blob AND the dedicated term-cache options go —
         // the cache lives outside the settings blob (TWO-24812), so clearing
         // only the blob would leave orphaned rows.
-        $seed();
-        $make_gateway('yes')->on_deactivate_plugin();
+        $seed('yes');
+        WC_Twoinc::maybe_clear_settings_on_uninstall();
         TinyAssert::same(false, array_key_exists($settings_option, $GLOBALS['__twoinc_test_options']));
         TinyAssert::same(false, array_key_exists($terms_option, $GLOBALS['__twoinc_test_options']));
         TinyAssert::same(false, array_key_exists($checked_option, $GLOBALS['__twoinc_test_options']));
@@ -3434,7 +3595,7 @@ final class BrandConfigSpec
     }
 
     /**
-     * TWO-25498. The "Custom Payment Terms (days)" row is hidden server-side
+     * TWO-25498. The "Custom payment terms (days)" row is hidden server-side
      * (no JS flash) unless the stored custom value is genuinely custom — not
      * a duplicate of a backend-offered preset row, ticked or not.
      */
@@ -6288,6 +6449,7 @@ final class BrandConfigSpec
             'payment_terms_days' => [30],
             'surcharge_type' => 'fixed_and_percentage',
             'surcharge_grid' => [30 => ['percentage' => 1.5, 'limit' => 0.001]],
+            'enable_api_logging' => 'yes',
         ]);
         $share = WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway, 30);
         TinyAssert::true(is_array($share), 'a cap rounding to zero must still produce a fee block');
@@ -6321,6 +6483,7 @@ final class BrandConfigSpec
             'payment_terms_days' => [30],
             'surcharge_type' => 'fixed',
             'surcharge_grid' => [30 => ['fixed' => 0.001]],
+            'enable_api_logging' => 'yes',
         ]);
         $share = WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway, 30);
         TinyAssert::true(is_array($share), 'a fixed amount rounding to zero must still produce a fee block');
@@ -6329,6 +6492,46 @@ final class BrandConfigSpec
 
         $result = $gateway->apply_brand_availability_gate(['woocommerce-gateway-tillit' => 'gw']);
         TinyAssert::same('gw', $result['woocommerce-gateway-tillit'], 'a zero-rounding fixed fee keeps the method');
+    }
+
+    /**
+     * The surcharge/FX rounding notices above are diagnostic detail, not
+     * failures, so — unlike the error/warning channel — they are gated by
+     * "Enable debug logging" (TWO-25498 punch-list #11: the toggle's scope
+     * broadens beyond API request/response bodies to this diagnostic path).
+     */
+    private static function testSurchargeFxDiagnosticLogsGatedByDebugLogging(): void
+    {
+        $cases = [
+            ['fixed_and_percentage', ['percentage' => 1.5, 'limit' => 0.001], 'yes', true, 'cap rounding notice fires when debug logging is on'],
+            ['fixed_and_percentage', ['percentage' => 1.5, 'limit' => 0.001], 'no', false, 'cap rounding notice is suppressed when debug logging is off'],
+            ['fixed_and_percentage', ['percentage' => 1.5, 'limit' => 0.001], null, false, 'cap rounding notice is suppressed when debug logging is unset'],
+            ['fixed', ['fixed' => 0.001], 'yes', true, 'fixed rounding notice fires when debug logging is on'],
+            ['fixed', ['fixed' => 0.001], 'no', false, 'fixed rounding notice is suppressed when debug logging is off'],
+        ];
+        foreach ($cases as [$surcharge_type, $grid_row, $debug_logging, $expect_logged, $description]) {
+            $GLOBALS['__twoinc_test_currency'] = 'JPY';
+            $GLOBALS['__twoinc_test_logs'] = [];
+            $options = [
+                'payment_terms_days' => [30],
+                'surcharge_type' => $surcharge_type,
+                'surcharge_grid' => [30 => $grid_row],
+            ];
+            if ($debug_logging !== null) {
+                $options['enable_api_logging'] = $debug_logging;
+            }
+            $gateway = self::fxGateway(null, [self::fxOk(['JPY' => 1000000.0])], $options);
+            $share = WC_Twoinc_Payment_Terms::build_buyer_fee_share($gateway, 30);
+            TinyAssert::true(is_array($share), "$description — the fee block must still be produced regardless");
+
+            $found = false;
+            foreach ($GLOBALS['__twoinc_test_logs'] as $entry) {
+                if (($entry['level'] ?? '') === 'info' && strpos($entry['message'] ?? '', 'rounds to 0.00') !== false) {
+                    $found = true;
+                }
+            }
+            TinyAssert::same($expect_logged, $found, $description);
+        }
     }
 
     private static function testBuyerFeeShareAbsentCapChargesUncappedPercentage(): void
@@ -8588,7 +8791,7 @@ final class BrandConfigSpec
         // A password input would hide from the merchant a value their IT
         // administrator hands them in plaintext and may need to re-read.
         TinyAssert::same('text', $field['type'] ?? null);
-        TinyAssert::same('Firewall Token (optional)', $field['title'] ?? null);
+        TinyAssert::same('Firewall token (optional)', $field['title'] ?? null);
         TinyAssert::true(
             strpos($field['description'] ?? '', 'X-WAF-TOKEN') !== false,
             'the help text must name the header the token travels as'
@@ -8663,7 +8866,7 @@ final class BrandConfigSpec
         $cases = [
             [
                 $gateway->form_fields['firewall_token']['title'] ?? '',
-                'Firewall Token (optional)',
+                'Firewall token (optional)',
                 [
                     'nb_NO' => 'Brannmur-token (valgfritt)',
                     'nl_NL' => 'Firewalltoken (optioneel)',
@@ -9660,8 +9863,8 @@ final class BrandConfigSpec
         // one address: off must be genuinely off, not a wider allowance, and
         // the default must stay on.
         $cases = [
-            [['rate_limiting_enabled' => 'no'], true, 'the Diagnostics toggle set to no must stop metering entirely'],
-            [['rate_limiting_enabled' => 'yes'], false, 'the Diagnostics toggle set to yes must keep metering'],
+            [['disable_rate_limiting' => 'yes'], true, 'the Diagnostics toggle set to yes must stop metering entirely'],
+            [['disable_rate_limiting' => 'no'], false, 'the Diagnostics toggle set to no must keep metering'],
             [[], false, 'an unsaved setting must default to metering on'],
         ];
         list($max) = self::rateLimit('company_search');

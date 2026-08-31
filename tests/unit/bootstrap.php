@@ -345,6 +345,21 @@ class WC_Tax
     {
         return $GLOBALS['__twoinc_test_tax_rates'][$slug] ?? [];
     }
+
+    /**
+     * Address-aware rate lookup (the shipping-tax-fallback seam), unlike
+     * get_rates_for_class() above which resolves against the current
+     * customer rather than an arbitrary address. Row shape mirrors core:
+     * ['rate' => percent float, 'shipping' => 'yes'|'no', ...]. Controlled
+     * by $GLOBALS['__twoinc_test_find_rates'], keyed by tax_class ('' =
+     * Standard); absent/unset means no matching rate, same as core with no
+     * rate table row for that destination.
+     */
+    public static function find_rates($args = [])
+    {
+        $class = (string) ($args['tax_class'] ?? '');
+        return $GLOBALS['__twoinc_test_find_rates'][$class] ?? [];
+    }
 }
 
 function sanitize_title($title)

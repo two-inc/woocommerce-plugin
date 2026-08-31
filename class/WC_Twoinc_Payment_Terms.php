@@ -318,7 +318,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                     // withheld the fee block for the same eventual zero fee).
                     // (float) $cap !== 0.0: a cap already zero can't reach
                     // this conversion branch (zero is FX-exempt).
-                    if ($cap !== null && (float) $cap !== 0.0 && $converted_cap <= 0 && function_exists('wc_get_logger')) {
+                    if ($cap !== null && (float) $cap !== 0.0 && $converted_cap <= 0 && $gateway->is_debug_logging_enabled() && function_exists('wc_get_logger')) {
                         wc_get_logger()->info(
                             sprintf(
                                 'Surcharge cap of %s %s rounds to 0.00 in'
@@ -338,7 +338,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                     // arithmetically correct answer. Proceed, but log it —
                     // a surcharge line quietly reading 0.00 otherwise looks
                     // like a bug.
-                    if ($fixed !== null && $converted_fixed <= 0 && function_exists('wc_get_logger')) {
+                    if ($fixed !== null && $converted_fixed <= 0 && $gateway->is_debug_logging_enabled() && function_exists('wc_get_logger')) {
                         wc_get_logger()->info(
                             sprintf(
                                 'Fixed surcharge of %s %s rounds to 0.00 in'

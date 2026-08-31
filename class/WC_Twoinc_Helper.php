@@ -344,7 +344,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 if ($shipping->get_total() == 0) {
                     continue;
                 }
-                $tax_rate = WC_Twoinc_Helper::get_item_tax_rate($shipping, $order);
+                $tax_rate = WC_Twoinc_Helper::get_shipping_tax_rate($shipping, $order);
                 $shipping_line = [
                     'name' => 'Shipping - ' . $shipping->get_name(),
                     'description' => '',
@@ -432,7 +432,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 if ($shipping->get_total() == 0) {
                     continue;
                 }
-                $tax_rate = WC_Twoinc_Helper::get_item_tax_rate($shipping, $order);
+                $tax_rate = WC_Twoinc_Helper::get_shipping_tax_rate($shipping, $order);
                 $tax_single_line = [
                     'tax_amount' => $shipping->get_total_tax(),
                     'tax_rate' => $tax_rate['rate'],
@@ -1231,6 +1231,78 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 }
             }
             return WC_Twoinc_Helper::get_tax_rate_from_tax_list($item_tax_rate_list);
+        }
+
+        /**
+         * Shipping-only wrapper around get_item_tax_rate(): a shipping line
+         * that carries tax but declares no order-tax row for it (e.g. a
+         * carrier/click-and-collect module that registers no tax class)
+         * falls back to the "Default shipping tax class" setting instead of
+         * silently reporting the line as untaxed. A genuinely untaxed
+         * shipping line, and one with a declared rate, are unaffected.
+         *
+         * @return array
+         */
+        private static function get_shipping_tax_rate($shipping, $order)
+        {
+            $resolved = self::get_item_tax_rate($shipping, $order);
+            if ($resolved['rate'] || round((float) $shipping->get_total_tax(), 2) === 0.0) {
+                return $resolved;
+            }
+            $fallback = self::get_default_shipping_tax_rate_fallback($order);
+            return $fallback ?? $resolved;
+        }
+
+        /**
+         * "Default shipping tax class" resolved against the order's shipping
+         * address, summing every matching tax-rate-table row flagged for
+         * shipping — applied here to an already-placed order rather than a
+         * live cart. Null when no class is configured or nothing matches, so
+         * the caller keeps today's untaxed-line behaviour.
+         *
+         * @return array{rate: float, name: string}|null
+         */
+        private static function get_default_shipping_tax_rate_fallback($order)
+        {
+            if (!class_exists('WC_Tax') || !class_exists('WC_Twoinc')) {
+                return null;
+            }
+            $gateway = WC_Twoinc::get_instance();
+            $tax_class = $gateway ? trim((string) $gateway->get_option('default_shipping_tax_class')) : '';
+            if ($tax_class === '') {
+                return null;
+            }
+            $rates = WC_Tax::find_rates([
+                'country' => (string) $order->get_shipping_country(),
+                'state' => (string) $order->get_shipping_state(),
+                'postcode' => (string) $order->get_shipping_postcode(),
+                'city' => (string) $order->get_shipping_city(),
+                'tax_class' => $tax_class,
+            ]);
+            $percent = 0.0;
+            $found = false;
+            foreach ((array) $rates as $rate) {
+                if (($rate['shipping'] ?? 'yes') !== 'yes') {
+                    continue; // rate-table row explicitly excludes shipping
+                }
+                $percent += (float) ($rate['rate'] ?? 0);
+                $found = true;
+            }
+            if (!$found) {
+                return null;
+            }
+            if ($gateway->is_debug_logging_enabled() && function_exists('wc_get_logger')) {
+                wc_get_logger()->info(
+                    sprintf(
+                        'Using the configured default shipping tax class fallback (%.4F%%) for'
+                            . ' order %s: no tax rate was declared for a taxed shipping line.',
+                        $percent,
+                        $order->get_id()
+                    ),
+                    ['source' => 'twoinc-payment-gateway']
+                );
+            }
+            return ['rate' => $percent / 100, 'name' => 'Default shipping tax class'];
         }
 
         /**
