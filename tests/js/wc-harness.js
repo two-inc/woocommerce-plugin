@@ -48,7 +48,7 @@ const API_PROXY = {
   company_by_id_url: "https://shop.example.test/?wc-ajax=two_company_by_id",
   order_intent_url: "https://shop.example.test/?wc-ajax=two_order_intent",
   payment_terms_url: "https://shop.example.test/?wc-ajax=two_payment_terms",
-  nonce: "test-checkout-nonce"
+  csrf_token: "test-checkout-csrf-token"
 };
 
 /**

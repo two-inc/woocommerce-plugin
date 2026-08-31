@@ -597,7 +597,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
             $payment_reference_type = '',
             $vendor_name = '',
             $tracking_id = '',
-            $skip_nonce = false,
+            $skip_csrf_token = false,
             $payment_terms = null
         ) {
 
@@ -694,8 +694,8 @@ if (!class_exists('WC_Twoinc_Helper')) {
                 $req_body['available_terms'] = $payment_terms['available_terms'];
             }
 
-            if (!$skip_nonce) {
-                // Param names and nonce action derive from the brand's
+            if (!$skip_csrf_token) {
+                // Param names and token action derive from the brand's
                 // meta_prefix so process_confirmation matches what live
                 // branded stores expect. Path segment is cosmetic —
                 // confirmation detection is by param presence, not path.
@@ -705,7 +705,7 @@ if (!class_exists('WC_Twoinc_Helper')) {
                     $order->get_id(),
                     WC_Twoinc_Brand::prefixed_name('order_reference'),
                     $order_reference,
-                    WC_Twoinc_Brand::prefixed_name('nonce'),
+                    WC_Twoinc_Brand::prefixed_name('csrf_token'),
                     wp_create_nonce(WC_Twoinc_Brand::prefixed_name('confirm_' . $order->get_id()))
                 );
                 // Brand overlays use their own confirmation route; without

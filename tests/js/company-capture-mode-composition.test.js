@@ -28,7 +28,7 @@ const harness = require("./wc-harness");
 const SOLE_TRADER_CONFIG = {
   availability_url: "/?wc-ajax=two_sole_trader_availability",
   tokens_url: "/?wc-ajax=two_sole_trader_tokens",
-  nonce: "nonce",
+  csrf_token: "csrf-token",
   text: {
     registered_business: "Registered company",
     sole_trader: "Sole trader",

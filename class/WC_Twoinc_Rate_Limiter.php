@@ -45,7 +45,7 @@ if (!class_exists('WC_Twoinc_Rate_Limiter')) {
         private const DISABLED_NOTICE_INTERVAL = 3600;
 
         /**
-         * Call after the nonce check, so unauthenticated noise never fills a
+         * Call after the security-token check, so unauthenticated noise never fills a
          * bucket a real buyer on the same address is metered by.
          *
          * @return bool False when the caller must stop; the JSON refusal is already sent.
@@ -209,7 +209,7 @@ if (!class_exists('WC_Twoinc_Rate_Limiter')) {
                 . ' addresses in the plugin Diagnostics settings.';
         }
 
-        /** Bucket key for one client on one route, keyed on the client address rather than the rotatable session or nonce. */
+        /** Bucket key for one client on one route, keyed on the client address rather than the rotatable session or security token. */
         private static function transient_key(string $route, string $client): string
         {
             // Transient keys cap at 172 chars; route + 24-char hash stays well inside.

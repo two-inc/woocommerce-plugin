@@ -2483,8 +2483,8 @@ if (!class_exists('WC_Twoinc')) {
                             ],
                             admin_url('admin-ajax.php')
                         ),
-                        // Scope the nonce to the exact order + variant this
-                        // link authorizes — not the shared twoinc_admin_nonce
+                        // Scope the token to the exact order + variant this
+                        // link authorizes — not the shared twoinc_admin_csrf_token
                         // action the unrelated XHR handlers use.
                         "twoinc_download_invoice_{$order->get_id()}_{$variant}"
                     );
@@ -2691,8 +2691,8 @@ if (!class_exists('WC_Twoinc')) {
          *
          * This is a browser navigation (link click), not an XHR POST like
          * twoinc_ajax_verify_api_key / twoinc_ajax_term_fees, so — unlike
-         * those handlers' wp_verify_nonce($_POST['nonce']) pattern — the
-         * nonce travels as the _wpnonce query arg and is verified with
+         * those handlers' wp_verify_nonce($_POST['csrf_token']) pattern — the
+         * token travels as the _wpnonce query arg and is verified with
          * check_admin_referer(). Registered in load_twoinc_classes().
          */
         public static function ajax_download_invoice()
@@ -2700,9 +2700,9 @@ if (!class_exists('WC_Twoinc')) {
             $order_id = isset($_GET['order_id']) ? absint($_GET['order_id']) : 0;
             $variant = isset($_GET['variant']) ? sanitize_key(wp_unslash($_GET['variant'])) : '';
 
-            // The nonce action is scoped to the exact order + variant the
+            // The token action is scoped to the exact order + variant the
             // link was minted for (add_invoice_credit_note_urls), so the
-            // request params must be read before the nonce can be checked.
+            // request params must be read before the token can be checked.
             check_admin_referer("twoinc_download_invoice_{$order_id}_{$variant}");
 
             if (!in_array($variant, ['original', 'credit_note'], true)) {
@@ -2820,7 +2820,7 @@ if (!class_exists('WC_Twoinc')) {
 
             wp_localize_script('twoinc.admin', 'twoinc_admin', [
                 'gateway_id' => $this->id,
-                'nonce' => wp_create_nonce('twoinc_admin_nonce'),
+                'csrf_token' => wp_create_nonce('twoinc_admin_csrf_token'),
                 'ajax_url' => admin_url('admin-ajax.php'),
                 // %s days label for the live Default Payment Term rebuild.
                 'days_label' => __('%s days', 'twoinc-payment-gateway'),
@@ -4248,7 +4248,7 @@ if (!class_exists('WC_Twoinc')) {
             if (
                 isset($_REQUEST['order_id'])
                 && isset($_REQUEST[WC_Twoinc_Brand::prefixed_name('order_reference')])
-                && isset($_REQUEST[WC_Twoinc_Brand::prefixed_name('nonce')])
+                && WC_Twoinc_Brand::read_confirmation_csrf_token_param() !== null
             ) {
                 return true;
                 // Temporarily commented out until we find a solution for redirect plugins
@@ -4294,9 +4294,9 @@ if (!class_exists('WC_Twoinc')) {
             }
 
             if ($this->get_option('skip_confirm_auth') !== 'yes') {
-                $nonce = sanitize_text_field($_REQUEST[WC_Twoinc_Brand::prefixed_name('nonce')]);
+                $csrf_token = sanitize_text_field(WC_Twoinc_Brand::read_confirmation_csrf_token_param() ?? '');
 
-                if (!wp_verify_nonce($nonce, WC_Twoinc_Brand::prefixed_name('confirm_' . $order_id))) {
+                if (!wp_verify_nonce($csrf_token, WC_Twoinc_Brand::prefixed_name('confirm_' . $order_id))) {
                     wp_die(__('The security code is not valid.', 'twoinc-payment-gateway'));
                 }
             }
@@ -4733,9 +4733,9 @@ if (!class_exists('WC_Twoinc')) {
                 ],
                 'skip_confirm_auth' => [
                     'title'       => __('Skip user validation at order confirmation', 'twoinc-payment-gateway'),
-                    'label'       => __('Accept the confirmation callback without a valid WordPress nonce', 'twoinc-payment-gateway'),
+                    'label'       => __('Accept the confirmation callback without a valid WordPress security token', 'twoinc-payment-gateway'),
                     'type'        => 'checkbox',
-                    'description' => __('The confirmation callback always checks the order\'s unique 64-character order reference; this option skips only the additional WordPress nonce, which typically expires 12 to 24 hours after the order was placed — and, for a signed-in customer, when their session changes — so a buyer who comes back to a legitimately authorised order can be rejected. The order reference must still match, so the callback is not left open, but the nonce\'s protection against a cross-site request is gone; leave this off unless you are seeing those false rejections.', 'twoinc-payment-gateway'),
+                    'description' => __('The confirmation callback always checks the order\'s unique 64-character order reference; this option skips only the additional WordPress security token, which typically expires 12 to 24 hours after the order was placed — and, for a signed-in customer, when their session changes — so a buyer who comes back to a legitimately authorised order can be rejected. The order reference must still match, so the callback is not left open, but the security token\'s protection against a cross-site request is gone; leave this off unless you are seeing those false rejections.', 'twoinc-payment-gateway'),
                     'default'     => 'no'
                 ],
                 'clear_options_on_deactivation' => [

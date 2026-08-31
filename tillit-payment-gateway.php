@@ -312,12 +312,12 @@ function twoinc_ajax_verify_api_key()
         return;
     }
 
-    if (!isset($_POST['nonce']) || !isset($_POST['api_key'])) {
+    if (!isset($_POST['csrf_token']) || !isset($_POST['api_key'])) {
         wp_send_json_error('Missing required data');
         return;
     }
 
-    if (!wp_verify_nonce($_POST['nonce'], 'twoinc_admin_nonce')) {
+    if (!wp_verify_nonce($_POST['csrf_token'], 'twoinc_admin_csrf_token')) {
         wp_send_json_error('Security check failed');
         return;
     }
@@ -383,7 +383,7 @@ function twoinc_ajax_term_fees()
         return;
     }
 
-    if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'twoinc_admin_nonce')) {
+    if (!isset($_POST['csrf_token']) || !wp_verify_nonce($_POST['csrf_token'], 'twoinc_admin_csrf_token')) {
         wp_send_json_error('Security check failed');
         return;
     }

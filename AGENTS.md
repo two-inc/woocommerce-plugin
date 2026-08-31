@@ -22,7 +22,7 @@ PHP/WordPress/WooCommerce
 - Create custom error handlers when necessary.
 - Use try-catch blocks for expected exceptions.
 - Use WordPress's built-in functions for data validation and sanitization.
-- Implement proper nonce verification for form submissions.
+- Implement proper CSRF-token verification for form submissions.
 - Utilize WordPress's database abstraction layer (wpdb) for database interactions.
 - Use `prepare()` statements for secure database queries.
 - Implement proper database schema changes using `dbDelta()` function.
@@ -42,7 +42,7 @@ WordPress and WooCommerce Best Practices
 - Implement background processing for long-running tasks using `wp_cron()`.
 - Use WordPress's built-in testing tools (WP_UnitTestCase) for unit tests.
 - Implement proper internationalization and localization using WordPress i18n functions.
-- Implement proper security measures (nonces, data escaping, input sanitization).
+- Implement proper security measures (CSRF tokens, data escaping, input sanitization).
 - Use `wp_enqueue_script()` and `wp_enqueue_style()` for proper asset management.
 - Implement custom post types and taxonomies when appropriate.
 - Use WordPress's built-in options API for storing configuration data.

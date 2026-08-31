@@ -130,8 +130,10 @@ describe("company search transport", () => {
       expect(params.get("country")).toBe("GB");
     });
 
-    test("carries the checkout nonce the proxy authorizes against", () => {
-      expect(harness.requestParams(search().request).get("nonce")).toBe(harness.API_PROXY.nonce);
+    test("carries the checkout security token the proxy authorizes against", () => {
+      expect(harness.requestParams(search().request).get("csrf_token")).toBe(
+        harness.API_PROXY.csrf_token
+      );
     });
 
     test("bounds the result set, and takes the bound from the helper's constant", () => {

@@ -141,7 +141,18 @@ function get_home_url()
 
 function wp_create_nonce($action = -1)
 {
-    return 'testnonce';
+    return 'testtoken:' . $action;
+}
+
+// Tied to wp_create_nonce like the real thing: a token only verifies against
+// the exact action it was minted for. $GLOBALS['__twoinc_test_nonce_verify_result']
+// overrides this for tests that need to force pass/fail regardless of the token.
+function wp_verify_nonce($nonce, $action = -1)
+{
+    if (array_key_exists('__twoinc_test_nonce_verify_result', $GLOBALS)) {
+        return $GLOBALS['__twoinc_test_nonce_verify_result'];
+    }
+    return $nonce === wp_create_nonce($action) ? 1 : false;
 }
 
 function wp_specialchars_decode($string, $quote_style = ENT_NOQUOTES)
@@ -866,6 +877,13 @@ class StubOrder
         return 'https://shop.example/cancel';
     }
 
+    public $notes = [];
+
+    public function add_order_note($note)
+    {
+        $this->notes[] = $note;
+    }
+
     public function get_edit_order_url()
     {
         return 'https://shop.example/edit';
@@ -980,7 +998,7 @@ function wp_unslash($value)
 
 function check_admin_referer($action = -1, $query_arg = '_wpnonce')
 {
-    // Record the action so tests can assert the nonce is scoped to the
+    // Record the action so tests can assert the token is scoped to the
     // resource it authorizes.
     $GLOBALS['__twoinc_test_referer_actions'][] = $action;
     return 1;
@@ -1077,11 +1095,15 @@ function wp_nonce_url($actionurl, $action = -1, $name = '_wpnonce')
 {
     // Record the action so tests can assert mint-side scoping matches the
     // verify-side check_admin_referer action.
-    $GLOBALS['__twoinc_test_nonce_url_actions'][] = $action;
-    return add_query_arg([$name => 'testnonce'], $actionurl);
+    $GLOBALS['__twoinc_test_token_url_actions'][] = $action;
+    return add_query_arg([$name => 'testtoken'], $actionurl);
 }
 
 // wp_die must halt the handler: surface it as an exception the test catches.
+function status_header($code)
+{
+}
+
 function wp_die($message = '', $title = '', $args = [])
 {
     throw new RuntimeException(is_string($message) ? $message : 'wp_die');
@@ -1111,13 +1133,13 @@ function wc_get_order_statuses()
 // ── wc-ajax handler stubs (sole-trader availability / token minting) ─
 // The real wp_send_json_* die; these record the outcome instead, which is
 // enough because every handler returns immediately after calling them.
-// $GLOBALS['__twoinc_test_ajax_nonce_ok'] drives the nonce branch and
+// $GLOBALS['__twoinc_test_ajax_referer_ok'] drives the token branch and
 // $GLOBALS['__twoinc_test_ajax_json'] holds the last response.
 
 function check_ajax_referer($action = -1, $query_arg = false, $stop = true)
 {
     $GLOBALS['__twoinc_test_ajax_referer_actions'][] = $action;
-    return $GLOBALS['__twoinc_test_ajax_nonce_ok'] ?? true;
+    return $GLOBALS['__twoinc_test_ajax_referer_ok'] ?? true;
 }
 
 function wp_send_json_success($data = null, $status_code = null, $flags = 0)

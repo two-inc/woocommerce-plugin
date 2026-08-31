@@ -25,9 +25,9 @@ if (!class_exists('WC_Twoinc_Api_Proxy')) {
         /** @return WC_Twoinc|null Null when the request was already refused. */
         private static function authorize(string $handler, string $route)
         {
-            if (!check_ajax_referer('twoinc_checkout', 'nonce', false)) {
-                self::log_refusal($handler, 'invalid or expired checkout nonce');
-                wp_send_json_error('Invalid nonce');
+            if (!check_ajax_referer('twoinc_checkout', 'csrf_token', false)) {
+                self::log_refusal($handler, 'invalid or expired checkout security token');
+                wp_send_json_error('Invalid security token');
                 return null;
             }
             if (!WC_Twoinc_Rate_Limiter::check($route)) {
