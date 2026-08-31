@@ -470,22 +470,134 @@ let twoincCompanyCapture = {
       twoincCompanyCapture.forgetPairing(role);
     }
 
-    // `buyer.company` on the order intent is invoice-bound, so only that role's
-    // capture reaches the record.
-    if (role !== twoincAddressRoles.invoice()) return;
-
-    const instance = Twoinc.getInstance();
-    // RAW onto the record, normalised onto the DOM: the record goes verbatim
-    // into `buyer.company` on the order intent, so normalising it here would
-    // change the org number this plugin POSTS. Comparisons against the
-    // record normalise at read time instead.
-    instance.customerCompany.company_name = companyName;
-    instance.customerCompany.organization_number = companyId;
     // Pin the country alongside the number so the pair can never be assembled
-    // from two different moments (TWO-25333); only on a capturing write.
+    // from two different moments (TWO-25333); only on a capturing write, and
+    // on EVERY role's own record — `deliveryIsOrderCompanySource()` below
+    // reads the delivery role's own pin when it becomes the fallback source.
     if (number) {
-      instance.customerCompany.country_prefix = opts.country || twoincAddressRoles.country(role);
+      twoincCompanyCapture.record(role).countryPrefix =
+        opts.country || twoincAddressRoles.country(role);
     }
+
+    // `buyer.company` on the order intent is billing (invoice) first,
+    // shipping (delivery) only as a fallback when billing has captured no
+    // company number at all (Doug 2026-08-31 §2).
+    const instance = Twoinc.getInstance();
+    if (role === twoincAddressRoles.invoice()) {
+      // RAW `companyName`/`companyId` onto the record, exactly as before this
+      // rule existed — this branch is unconditional, invoice always wins.
+      instance.customerCompany.company_name = companyName;
+      instance.customerCompany.organization_number = companyId;
+      if (number) {
+        instance.customerCompany.country_prefix = opts.country || twoincAddressRoles.country(role);
+      } else {
+        // Billing just lost its capture — shipping may now qualify as the
+        // fallback. A qualifying shipping capture overrides the blanks just
+        // written above; nothing qualifying leaves them blank with
+        // `country_prefix` untouched, same invariant as before this rule.
+        twoincCompanyCapture.syncOrderCompany();
+      }
+    } else if (
+      !twoincCompanyCapture.hasCapture(twoincAddressRoles.invoice()) &&
+      twoincCompanyCapture.deliveryFormExistsAndInPlay()
+    ) {
+      // The fallback role's own write reaches the order intent only while
+      // billing has nothing AND the shipping form is genuinely part of this
+      // order (§2) — same RAW-onto-record, country-pinned-only-on-capture
+      // shape as the invoice branch above. Not gated on `hasCapture(delivery)`
+      // itself: a CLEARING write (no number) must still blank
+      // `customerCompany` when shipping was the source a moment ago.
+      instance.customerCompany.company_name = companyName;
+      instance.customerCompany.organization_number = companyId;
+      if (number) {
+        instance.customerCompany.country_prefix = opts.country || twoincAddressRoles.country(role);
+      }
+    }
+  },
+
+  /**
+   * Is the delivery/shipping role currently the source `customerCompany`
+   * should read from — billing has captured nothing, AND the shipping form
+   * is genuinely part of this order (Doug 2026-08-31 §2)?
+   *
+   * Not merely present in the DOM (WooCommerce keeps shipping fields there
+   * permanently) but in play (the "ship to a different address?" checkbox,
+   * where present, is checked) and existing at all (a virtual/no-shipping
+   * cart has no shipping country field for a capture to even attach a
+   * country to).
+   *
+   * @returns {boolean}
+   */
+  deliveryIsOrderCompanySource: function () {
+    if (twoincCompanyCapture.hasCapture(twoincAddressRoles.invoice())) return false;
+    return (
+      twoincCompanyCapture.deliveryFormExistsAndInPlay() &&
+      twoincCompanyCapture.hasCapture(twoincAddressRoles.delivery())
+    );
+  },
+
+  /**
+   * Structural half of `deliveryIsOrderCompanySource()` — the shipping form
+   * genuinely exists and is part of this order — WITHOUT asking whether it
+   * currently holds a capture. `write()`'s own delivery-role branch needs
+   * this half alone: a CLEARING write (no number) must still be allowed to
+   * blank `customerCompany` when shipping was the source a moment ago, which
+   * a `hasCapture(delivery)` gate would refuse the instant the clear itself
+   * makes that false.
+   *
+   * @returns {boolean}
+   */
+  deliveryFormExistsAndInPlay: function () {
+    const delivery = twoincAddressRoles.delivery();
+    return (
+      jQuery(twoincAddressRoles.field(delivery, "country")).length > 0 &&
+      twoincAddressMirror.deliveryFormIsInPlay()
+    );
+  },
+
+  /**
+   * Re-derive `customerCompany` from whichever role currently qualifies as
+   * the order-intent source, for every caller that mutates a role's capture
+   * WITHOUT going through `write()` (manual-entry toggles, a country change,
+   * the "ship to a different address?" checkbox) — `write()`'s own callers
+   * get this inline, above, with the RAW value it was actually passed;
+   * everyone else reads it back off the DOM.
+   */
+  syncOrderCompany: function () {
+    const instance = Twoinc.getInstance();
+    const invoice = twoincAddressRoles.invoice();
+    // Read the DOM, not the cached `hasCapture()` truth from before this call:
+    // a caller reaching this (a deferred re-read, a country change, a
+    // checkbox toggle) may run after something wrote straight to the DOM
+    // without going through `write()`, so `customerCompany` itself cannot be
+    // trusted as the read source here.
+    // Live, same as the invoice-only `getCompanyData()` this generalises:
+    // country is read off the field, not the pin `write()` records, so a
+    // country the buyer changed after capturing without re-searching is
+    // reflected here rather than replayed from an earlier moment.
+    if (twoincCompanyCapture.hasCapture(invoice)) {
+      instance.customerCompany.company_name = twoincUtilHelper.blankToEmpty(
+        twoincCompanyCapture.nameField(invoice).val()
+      );
+      instance.customerCompany.organization_number = twoincUtilHelper.blankToEmpty(
+        twoincCompanyCapture.numberField(invoice).val()
+      );
+      instance.customerCompany.country_prefix = twoincAddressRoles.country(invoice);
+      return;
+    }
+    if (!twoincCompanyCapture.deliveryIsOrderCompanySource()) {
+      instance.customerCompany.company_name = "";
+      instance.customerCompany.organization_number = "";
+      return;
+    }
+    const delivery = twoincAddressRoles.delivery();
+    instance.customerCompany.company_name = twoincUtilHelper.blankToEmpty(
+      twoincCompanyCapture.nameField(delivery).val()
+    );
+    instance.customerCompany.organization_number = twoincUtilHelper.blankToEmpty(
+      twoincCompanyCapture.numberField(delivery).val()
+    );
+    instance.customerCompany.country_prefix = twoincAddressRoles.country(delivery);
   },
 
   /**
@@ -524,9 +636,24 @@ let twoincCompanyCapture = {
    */
   capturedMode: function (role) {
     const mode = twoincCompanyCapture.modeFor(role);
-    if (twoincSoleTrader.mode !== "sole_trader") return mode;
-    if (twoincSoleTrader.soleTraderAdopted) return "sole_trader";
-    return twoincSoleTrader.savedCaptureMode === null ? mode : twoincSoleTrader.savedCaptureMode;
+    const soleTrader = twoincCompanyCapture.soleTraderFor(role);
+    if (!soleTrader || soleTrader.mode !== "sole_trader") return mode;
+    if (soleTrader.soleTraderAdopted) return "sole_trader";
+    return soleTrader.savedCaptureMode === null ? mode : soleTrader.savedCaptureMode;
+  },
+
+  /**
+   * Every role's own sole-trader controller (TWO-40), registered by
+   * `TwoCompanySearch`'s constructor. Each `TwoCompanySearch` instance owns an
+   * independent controller (own mode, flight, adoption state) — this is the
+   * lookup that lets role-keyed helpers like `capturedMode` reach the right
+   * one without every caller threading a `TwoCompanySearch` instance through.
+   */
+  soleTraderRegistry: {},
+
+  soleTraderFor: function (role) {
+    const key = role || twoincAddressRoles.primary();
+    return twoincCompanyCapture.soleTraderRegistry[key] || null;
   },
 
   /**
@@ -620,15 +747,16 @@ let twoincCompanyCapture = {
 
     twoincCompanyCapture.write($name.val(), "", { role: role });
 
-    // Everything below is invoice-bound: the order intent, and the surfaces the
-    // primary control owns.
+    // `write()` above already recomputed `customerCompany` (billing-first,
+    // shipping-fallback), so a retype on EITHER role can change what the
+    // order intent sees — re-check it regardless of which role this is.
+    Twoinc.getInstance().getApproval();
+
+    // Everything below is invoice-bound: the address-lookup/summary/required-
+    // cue surfaces only the primary (billing) control owns.
     if ((role || twoincAddressRoles.primary()) !== twoincAddressRoles.invoice()) return true;
 
-    const instance = Twoinc.getInstance();
-    instance.customerCompany.country_prefix = twoincAddressRoles.country(
-      twoincAddressRoles.invoice()
-    );
-    instance.registryAddressApplied = false;
+    Twoinc.getInstance().registryAddressApplied = false;
 
     // `#company_id` visibility depends on the value just cleared (TWO-25326
     // §12); the verdict on screen was about the company just uncaptured.
@@ -672,6 +800,10 @@ class TwoCompanySearch {
    *   spinner — a class, not an id, so a fragment swap that orphans a duplicate
    *   host cannot leave one animating forever (TWO-40).
    * @param {string} [options.soleTraderSpinnerHostClass] class marking its host.
+   * @param {string} [options.differentSoleTraderBtnId] id of the "select a
+   *   different sole trader" link this instance's sole-trader controller owns.
+   * @param {string} [options.soleTraderNoteSlotClass] class of the DOM node the
+   *   signup-prompt note (and its in-flight/error state) renders into.
    */
   constructor(options) {
     options = options || {};
@@ -683,8 +815,36 @@ class TwoCompanySearch {
     this.companySummaryId = options.companySummaryId || "twoinc_company_summary";
     this.companySearchTileSlotClass =
       options.companySearchTileSlotClass || "twoinc-company-search-tile-slot";
+    this.differentSoleTraderBtnId =
+      options.differentSoleTraderBtnId || "select_different_sole_trader_btn";
+    this.soleTraderNoteSlotClass =
+      options.soleTraderNoteSlotClass || "twoinc-sole-trader-note-slot";
     this.soleTraderSpinnerClass = options.soleTraderSpinnerClass || "twoinc-sole-trader-spinner";
     this.soleTraderSpinnerHostClass = options.soleTraderSpinnerHostClass || "twoinc-name-searching";
+
+    // One sole-trader controller per instance, never a shared global (TWO-40):
+    // `createSoleTraderController` closes over `this` for country/DOM reads
+    // and owns this instance's own mode/flight/adoption state.
+    this.soleTrader = createSoleTraderController(this);
+    twoincCompanyCapture.soleTraderRegistry[this.role] = this.soleTrader;
+  }
+
+  /**
+   * The mode-chips container INSIDE this instance's own panel.
+   *
+   * `company-search-panel.js` builds every panel's chip row under the same
+   * literal class (`CompanySearchPanel.CLASSES.CHIPS`) regardless of which
+   * `TwoCompanySearch` owns it, so a bare `jQuery('.' + CHIPS_CLASS)` matches
+   * every mounted instance's row at once once a second instance exists. Scoped
+   * through this instance's own field wrapper instead of the panel's private
+   * DOM handle, which is not part of `CompanySearchPanel`'s public surface.
+   *
+   * @returns {jQuery}
+   */
+  modeChipsNode() {
+    return jQuery(this.companyFieldSelector())
+      .closest("." + this.fieldWrapClass)
+      .find(".two-company-mode-chips");
   }
 
   /** This control's panel, built on first `attach()`. */
@@ -1093,7 +1253,7 @@ class TwoCompanySearch {
    * every sync rather than mutated, so a chip cannot outlive the mode it means.
    */
   chips() {
-    const cfg = twoincSoleTrader.config();
+    const cfg = this.soleTrader.config();
 
     return [
       {
@@ -1107,7 +1267,7 @@ class TwoCompanySearch {
         mode: "sole_trader",
         text: (cfg.text && cfg.text.sole_trader) || "Sole trader",
         onActivate: () => {
-          twoincSoleTrader.onModeChipClick("sole_trader");
+          this.soleTrader.onModeChipClick("sole_trader");
         }
       },
       {
@@ -1128,7 +1288,7 @@ class TwoCompanySearch {
    * @returns {boolean}
    */
   isChipVisible(mode) {
-    if (mode === "sole_trader") return twoincSoleTrader.isAvailable();
+    if (mode === "sole_trader") return this.soleTrader.isAvailable();
     if (mode === "manual") return this.manualEntryIsAvailable();
     return true;
   }
@@ -1142,7 +1302,7 @@ class TwoCompanySearch {
    */
   selectedMode() {
     if (twoincCompanyCapture.modeFor(this.role) === "manual") return "manual";
-    if (twoincSoleTrader.mode === "sole_trader") return "sole_trader";
+    if (this.soleTrader.mode === "sole_trader") return "sole_trader";
     return "registered";
   }
 
@@ -1155,9 +1315,9 @@ class TwoCompanySearch {
     // On the CLICK, which is the only event Enter and Space produce: behind the
     // guard below this chip did nothing at all for a keyboard buyer, leaving
     // the signup up with no way to dismiss it.
-    twoincSoleTrader.abandonPopupsForChipClick();
-    if (twoincSoleTrader.mode === "business" || twoincSoleTrader.isDeciding()) return;
-    twoincSoleTrader.setMode("business");
+    this.soleTrader.abandonPopupsForChipClick();
+    if (this.soleTrader.mode === "business" || this.soleTrader.isDeciding()) return;
+    this.soleTrader.setMode("business");
     this.openCompanySearchDropdown();
   }
 
@@ -1170,21 +1330,21 @@ class TwoCompanySearch {
   activateManualEntry() {
     // On the CLICK path, so Enter/Space take the popup down too (TWO-25503),
     // and before the guard below, which an outstanding signup makes refuse.
-    twoincSoleTrader.abandonPopupsForChipClick();
+    this.soleTrader.abandonPopupsForChipClick();
 
-    if (twoincSoleTrader.isDeciding()) return;
+    if (this.soleTrader.isDeciding()) return;
 
     // Captured synchronously: the deferred callback can't otherwise tell "was
     // already in sole-trader mode" from "switched into it during the defer".
-    const leavingSoleTrader = twoincSoleTrader.mode === "sole_trader";
+    const leavingSoleTrader = this.soleTrader.mode === "sole_trader";
 
     setTimeout(() => {
       if (
         leavingSoleTrader &&
-        twoincSoleTrader.mode === "sole_trader" &&
-        !twoincSoleTrader.isDeciding()
+        this.soleTrader.mode === "sole_trader" &&
+        !this.soleTrader.isDeciding()
       ) {
-        twoincSoleTrader.setMode("business");
+        this.soleTrader.setMode("business");
       }
       this.enterManualCompanyEntry();
     }, 0);
@@ -1248,15 +1408,15 @@ class TwoCompanySearch {
     // while still genuinely deciding, the same guard every other sole-trader
     // exit uses; once adopted, a pick is the buyer choosing a different
     // company.
-    if (twoincSoleTrader.mode === "sole_trader") {
-      if (twoincSoleTrader.isDeciding()) return;
-      twoincSoleTrader.mode = "business";
-      twoincSoleTrader.soleTraderAdopted = false;
-      twoincSoleTrader.soleTraderReconfirmingCount = 0;
-      twoincSoleTrader.updateChips();
-      twoincSoleTrader.syncDifferentSoleTraderLink();
+    if (this.soleTrader.mode === "sole_trader") {
+      if (this.soleTrader.isDeciding()) return;
+      this.soleTrader.mode = "business";
+      this.soleTrader.soleTraderAdopted = false;
+      this.soleTrader.soleTraderReconfirmingCount = 0;
+      this.soleTrader.updateChips();
+      this.soleTrader.syncDifferentSoleTraderLink();
       this.syncSoleTraderSurfaces();
-      twoincSoleTrader.leaveSoleTraderMode();
+      this.soleTrader.leaveSoleTraderMode();
     }
 
     // The single write path (TWO-40 §5): posted fields, instance record,
@@ -1321,7 +1481,7 @@ class TwoCompanySearch {
     jQuery("." + this.soleTraderSpinnerClass).remove();
     jQuery("." + this.soleTraderSpinnerHostClass).removeClass(this.soleTraderSpinnerHostClass);
 
-    if (twoincSoleTrader.mode !== "sole_trader" || twoincSoleTrader.flightDepth === 0) return;
+    if (this.soleTrader.mode !== "sole_trader" || this.soleTrader.flightDepth === 0) return;
 
     const $host = this.soleTraderSpinnerHost();
     if ($host.length === 0) return;
@@ -1590,7 +1750,11 @@ class TwoCompanySearch {
         Twoinc.getInstance().clearAddress();
       }
       Twoinc.getInstance().registryAddressApplied = false;
-      Twoinc.getInstance().customerCompany = {};
+      // Not a blind `{}` (Doug 2026-08-31 §2): `write()` above already
+      // recomputed this, but a shipping fallback may be the reason it isn't
+      // empty — clearing billing's own capture doesn't mean nothing is
+      // captured any more.
+      twoincCompanyCapture.syncOrderCompany();
     }
 
     // Clearing a capture changes the visible company-name surface exactly as
@@ -1607,7 +1771,7 @@ class TwoCompanySearch {
     setTimeout(() => {
       if (seq !== this.companySearchSeq) return;
       if (this.ownsOrderIntent()) {
-        Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData();
+        twoincCompanyCapture.syncOrderCompany();
       }
       this.renderCompanySummary();
     }, 3000);
@@ -1744,7 +1908,7 @@ class TwoCompanySearch {
     // Guards the deferred activation landing AFTER an async sole-trader switch
     // raced in during the same tick: without it this would force the capture
     // mode back to `manual` and wipe the synthetic id that switch just wrote.
-    if (twoincSoleTrader.mode === "sole_trader" || twoincSoleTrader.isDeciding()) return;
+    if (this.soleTrader.mode === "sole_trader" || this.soleTrader.isDeciding()) return;
     // The chip stays on screen through the switch, so a fast second press
     // queues a second deferred call that would re-clear the field the buyer
     // has by then started typing into.
@@ -1765,8 +1929,11 @@ class TwoCompanySearch {
         Twoinc.getInstance().clearAddress();
         Twoinc.getInstance().registryAddressApplied = false;
       }
-      Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData();
     }
+    // Billing-first, shipping-fallback (Doug 2026-08-31 §2): manual entry on
+    // EITHER role drops that role's own number, which can change what the
+    // order intent resolves to regardless of which role owns it.
+    twoincCompanyCapture.syncOrderCompany();
 
     if (this.panel) {
       this.panel.releaseField();
@@ -1783,6 +1950,8 @@ class TwoCompanySearch {
     // Releasing the field leaves focus on nothing, so a keyboard or AT user
     // loses their place mid-checkout.
     this.focusVisibleCompanyField(twoincAddressRoles.field(this.role, "company"));
+
+    Twoinc.getInstance().getApproval();
   }
 
   /**
@@ -1793,9 +1962,9 @@ class TwoCompanySearch {
 
     twoincCompanyCapture.nameField(this.role).val("");
     twoincCompanyCapture.numberField(this.role).val("");
-    if (this.ownsOrderIntent()) {
-      Twoinc.getInstance().customerCompany = twoincDomHelper.getCompanyData();
-    }
+    // Billing-first, shipping-fallback (Doug 2026-08-31 §2) — see
+    // `enterManualCompanyEntry`'s own comment.
+    twoincCompanyCapture.syncOrderCompany();
 
     this.getSearchCompanyBtnNode().hide();
     twoincDomHelper.toggleBusinessFields();
@@ -1807,6 +1976,8 @@ class TwoCompanySearch {
     if (!this.openCompanySearchDropdown()) {
       this.focusVisibleCompanyField(this.companyFieldSelector());
     }
+
+    Twoinc.getInstance().getApproval();
   }
 
   /**
@@ -1824,15 +1995,41 @@ class TwoCompanySearch {
 }
 
 /**
- * The PRIMARY TwoCompanySearch instance, on the primary address role. Every
- * company-search behaviour this checkout ships — search, dropdown, manual
- * entry, tile relocation — goes through it, and it is the only one this file
- * constructs.
+ * The PRIMARY (billing/invoice) `TwoCompanySearch` instance. Owns the payment
+ * tile relocation and every invoice-scoped extra (address lookup, sole-trader
+ * user-meta restore, required-field cues) — see `twoincSelectWooHelperShipping`
+ * below for the delivery/shipping role's own instance.
  */
 let twoincSelectWooHelper = new TwoCompanySearch({
   addressFieldSelector: "#billing_company_display",
   tileFieldSelector: "#twoinc_tile_company_name"
 });
+
+/**
+ * The SECOND `TwoCompanySearch` instance, on the delivery/shipping role
+ * (TWO-40, Doug 2026-08-31): billing's own second-address-panel counterpart,
+ * same class, own DOM ids/classes so it owns its own nodes rather than
+ * reusing the billing instance's. No `tileFieldSelector` — shipping company
+ * capture has no payment-tile relocation concept, the search control's only
+ * mount is the shipping address panel itself.
+ */
+let twoincSelectWooHelperShipping = new TwoCompanySearch({
+  role: twoincAddressRoles.delivery(),
+  addressFieldSelector: "#shipping_company_display",
+  searchCompanyBtnId: "search_shipping_company_btn",
+  companySummaryId: "twoinc_shipping_company_summary",
+  differentSoleTraderBtnId: "select_different_sole_trader_btn_shipping",
+  soleTraderNoteSlotClass: "twoinc-sole-trader-note-slot-shipping",
+  soleTraderSpinnerClass: "twoinc-sole-trader-spinner-shipping",
+  soleTraderSpinnerHostClass: "twoinc-name-searching-shipping"
+});
+
+// Back-compat alias: every flow that predates the shipping instance and is
+// genuinely invoice-scoped by design (order-intent, order restore from user
+// meta, the billing-country change handler) keeps addressing the billing
+// controller under this name rather than threading `twoincSelectWooHelper`
+// through every one of those call sites.
+let twoincSoleTrader = twoincSelectWooHelper.soleTrader;
 
 let twoincDomHelper = {
   /** Add a placeholder after an input, used for moving fields in the DOM. */
@@ -1996,6 +2193,26 @@ let twoincDomHelper = {
       visibleTargets.push("#billing_company_field");
     }
 
+    // The shipping company row, same shown-for-every-country rule as
+    // billing's above, minus the tile relocation (shipping has no tile mount
+    // — TWO-40) and minus the required-cue logic below (shipping's company
+    // was never a required checkout field). Independent capture mode: the
+    // buyer can be in manual entry on one address and search on the other.
+    // Gated on the shipping form actually existing at all (no country field
+    // means a virtual/no-shipping cart) — matches
+    // `twoincAddressMirror.sync()`'s own guard, and keeps this a no-op on a
+    // checkout that never renders a shipping address in the first place.
+    const hasShippingAddress =
+      jQuery(twoincAddressRoles.field(twoincAddressRoles.delivery(), "country")).length > 0;
+    if (hasShippingAddress) {
+      allTargets.push("#shipping_company_display_field", "#shipping_company_field");
+      if (twoincCompanyCapture.modeFor(twoincAddressRoles.delivery()) !== "manual") {
+        visibleTargets.push("#shipping_company_display_field");
+      } else {
+        visibleTargets.push("#shipping_company_field");
+      }
+    }
+
     if (isTwoincSelected) {
       visibleTargets.push(
         "#invoice_email_field",
@@ -2035,7 +2252,12 @@ let twoincDomHelper = {
 
     // After it: the "select a different sole trader" link anchors against
     // whichever company-NAME field this function just decided to show.
-    twoincSoleTrader.syncDifferentSoleTraderLink();
+    twoincSelectWooHelper.soleTrader.syncDifferentSoleTraderLink();
+
+    if (hasShippingAddress) {
+      twoincSelectWooHelperShipping.renderCompanySummary();
+      twoincSelectWooHelperShipping.soleTrader.syncDifferentSoleTraderLink();
+    }
   },
   /**
    * Mirror each company field's visibility onto its enclosing wrapper
@@ -2772,1501 +2994,1500 @@ let twoincTermChips = {
  * hosted signup popup, and autofills the company fields from
  * GET /autofill/v1/buyer/current. Mirrors the Magento reference flow.
  */
-let twoincSoleTrader = {
-  mode: "business", // 'business' | 'sole_trader'
-  availabilityByCountry: {},
-  tokens: null,
+function createSoleTraderController(companySearch) {
+  const controller = {
+    mode: "business", // 'business' | 'sole_trader'
+    availabilityByCountry: {},
+    tokens: null,
 
-  /** Backoff after a 429: callers gate on `!tokens`, so a failed mint otherwise re-mints every render. */
-  tokenMintBackoffUntil: 0,
-  // Snapshot of twoincCompanyCapture.mode, taken on the way into sole-trader
-  // mode and restored on the way out. A buyer can reach sole-trader mode
-  // while in manual entry, and without this they'd come back out into
-  // `search` instead, with the link back to the picker never shown.
-  // `null` means "nothing saved", distinct from every real mode value.
-  savedCaptureMode: null,
-  messageListenerBound: false,
-  /** @type {Function|null} the bound `message` listener, so it can be removed */
-  messageHandler: null,
-  /** @type {Function|null} the bound window `focus` listener — see `bindWindowRefocusListener` */
-  refocusHandler: null,
-  /** @type {Function|null} the bound `visibilitychange` listener, paired with the above */
-  visibilityHandler: null,
-  /**
-   * @type {Function|null} the bound capture-phase `mousedown` listener that
-   * settles a chip click's own effect on an open popup, independently of
-   * whatever the deferred path is doing.
-   */
-  chipMousedownHandler: null,
-  /**
-   * @type {number|null} the pending abandon a return to the checkout
-   * scheduled, or `null` when none is outstanding.
-   */
-  refocusAbandonTimer: null,
-  /**
-   * How long the abandon waits for the click that caused the refocus to
-   * identify itself. A window `focus` is dispatched before the `mousedown`
-   * that produced it, so the decision can't be made in the focus handler —
-   * it has to outlive it by long enough for that mousedown to arrive.
-   */
-  refocusChipGraceMs: 150,
-  /**
-   * How many sole-trader round trips are outstanding (TWO-40 §7).
-   *
-   * A COUNT, not a boolean: a re-signup can be launched while an earlier
-   * popup's own close poll is still running, so two flights overlap. A
-   * boolean would take the busy state down at the first settle and leave the
-   * second running invisibly.
-   *
-   * Wired to the real async duration — every terminal branch of the call graph
-   * settles its own flight — never to a fixed timeout. Adversarial review of
-   * this exact feature upstream found stuck-forever spinners on two separate
-   * abandon/retry paths, so every `cb(...)` below is a settle point.
-   *
-   * Held by `watchPopupClose()` for as long as the signup popup itself is
-   * open, and by the ACCEPTED handler across its own buyer lookup.
-   */
-  flightDepth: 0,
+    /** Backoff after a 429: callers gate on `!tokens`, so a failed mint otherwise re-mints every render. */
+    tokenMintBackoffUntil: 0,
+    // Snapshot of twoincCompanyCapture.mode, taken on the way into sole-trader
+    // mode and restored on the way out. A buyer can reach sole-trader mode
+    // while in manual entry, and without this they'd come back out into
+    // `search` instead, with the link back to the picker never shown.
+    // `null` means "nothing saved", distinct from every real mode value.
+    savedCaptureMode: null,
+    messageListenerBound: false,
+    /** @type {Function|null} the bound `message` listener, so it can be removed */
+    messageHandler: null,
+    /** @type {Function|null} the bound window `focus` listener — see `bindWindowRefocusListener` */
+    refocusHandler: null,
+    /** @type {Function|null} the bound `visibilitychange` listener, paired with the above */
+    visibilityHandler: null,
+    /**
+     * @type {Function|null} the bound capture-phase `mousedown` listener that
+     * settles a chip click's own effect on an open popup, independently of
+     * whatever the deferred path is doing.
+     */
+    chipMousedownHandler: null,
+    /**
+     * @type {number|null} the pending abandon a return to the checkout
+     * scheduled, or `null` when none is outstanding.
+     */
+    refocusAbandonTimer: null,
+    /**
+     * How long the abandon waits for the click that caused the refocus to
+     * identify itself. A window `focus` is dispatched before the `mousedown`
+     * that produced it, so the decision can't be made in the focus handler —
+     * it has to outlive it by long enough for that mousedown to arrive.
+     */
+    refocusChipGraceMs: 150,
+    /**
+     * How many sole-trader round trips are outstanding (TWO-40 §7).
+     *
+     * A COUNT, not a boolean: a re-signup can be launched while an earlier
+     * popup's own close poll is still running, so two flights overlap. A
+     * boolean would take the busy state down at the first settle and leave the
+     * second running invisibly.
+     *
+     * Wired to the real async duration — every terminal branch of the call graph
+     * settles its own flight — never to a fixed timeout. Adversarial review of
+     * this exact feature upstream found stuck-forever spinners on two separate
+     * abandon/retry paths, so every `cb(...)` below is a settle point.
+     *
+     * Held by `watchPopupClose()` for as long as the signup popup itself is
+     * open, and by the ACCEPTED handler across its own buyer lookup.
+     */
+    flightDepth: 0,
 
-  /**
-   * Re-entrancy guard on the signup popup (TWO-40 §7): without it a double
-   * click opens a second popup over the first. Released when the popup
-   * call returns, not when the popup closes — holding it until signup
-   * finishes would strand the buyer if they closed the window by hand.
-   */
-  openingSignup: false,
+    /**
+     * Re-entrancy guard on the signup popup (TWO-40 §7): without it a double
+     * click opens a second popup over the first. Released when the popup
+     * call returns, not when the popup closes — holding it until signup
+     * finishes would strand the buyer if they closed the window by hand.
+     */
+    openingSignup: false,
 
-  /**
-   * True once `setCompany()` has actually adopted a company while in
-   * sole-trader mode this time through (TWO-40 §7). Reset by every
-   * `setMode()` call. `watchPopupClose()`'s "did the buyer abandon this
-   * popup with nothing captured" check reads this instead of `#company_id`'s
-   * raw value, since that field can already hold an unrelated id from an
-   * earlier capture that `setMode("sole_trader")` never clears.
-   */
-  soleTraderAdopted: false,
+    /**
+     * True once `setCompany()` has actually adopted a company while in
+     * sole-trader mode this time through (TWO-40 §7). Reset by every
+     * `setMode()` call. `watchPopupClose()`'s "did the buyer abandon this
+     * popup with nothing captured" check reads this instead of `#company_id`'s
+     * raw value, since that field can already hold an unrelated id from an
+     * earlier capture that `setMode("sole_trader")` never clears.
+     */
+    soleTraderAdopted: false,
 
-  /**
-   * How many "select a different sole trader" re-signups are outstanding
-   * (TWO-40 §7). `soleTraderAdopted` is a one-way latch set by the first
-   * adoption and never cleared except by `setMode()`, which a re-signup
-   * never calls — so without this count, `isDeciding()` would read the
-   * stale `true` as "already settled" during a re-signup's own flight,
-   * letting the Business chip revert mode and clear fields mid-signup.
-   *
-   * A count, not a boolean: two re-signups can be genuinely concurrent
-   * (close one, re-click within the same poll window), and a boolean would
-   * let the first popup's stale poll clear state the second still needs.
-   * Incremented by `launchSignup` per re-signup opened; decremented exactly
-   * once per popup by that popup's own decrement owner. Clamped at zero.
-   */
-  soleTraderReconfirmingCount: 0,
+    /**
+     * How many "select a different sole trader" re-signups are outstanding
+     * (TWO-40 §7). `soleTraderAdopted` is a one-way latch set by the first
+     * adoption and never cleared except by `setMode()`, which a re-signup
+     * never calls — so without this count, `isDeciding()` would read the
+     * stale `true` as "already settled" during a re-signup's own flight,
+     * letting the Business chip revert mode and clear fields mid-signup.
+     *
+     * A count, not a boolean: two re-signups can be genuinely concurrent
+     * (close one, re-click within the same poll window), and a boolean would
+     * let the first popup's stale poll clear state the second still needs.
+     * Incremented by `launchSignup` per re-signup opened; decremented exactly
+     * once per popup by that popup's own decrement owner. Clamped at zero.
+     */
+    soleTraderReconfirmingCount: 0,
 
-  /**
-   * True while the ACCEPTED-postMessage handler's own `fetchCurrentBuyer()`
-   * is in flight (TWO-40 §7). Popup-close detection is a poll with no
-   * cooperation from the popup, so the buyer can close the window the
-   * instant "ACCEPTED" is posted, well before this fetch resolves and
-   * writes `#company_id` — without this flag `watchPopupClose()`'s poll
-   * could revert to business out from under a signup about to complete.
-   */
-  signupConfirming: false,
+    /**
+     * True while the ACCEPTED-postMessage handler's own `fetchCurrentBuyer()`
+     * is in flight (TWO-40 §7). Popup-close detection is a poll with no
+     * cooperation from the popup, so the buyer can close the window the
+     * instant "ACCEPTED" is posted, well before this fetch resolves and
+     * writes `#company_id` — without this flag `watchPopupClose()`'s poll
+     * could revert to business out from under a signup about to complete.
+     */
+    signupConfirming: false,
 
-  /**
-   * One record per live `watchPopupClose` poll: `{ id, win, isReconfirming,
-   * decided }`. `id` is the `setInterval` handle; `win` is the popup, which
-   * lets an inbound message be attributed to the record that sent it.
-   * `decided` is the popup's own outcome, distinct from the global
-   * `soleTraderAdopted`/`soleTraderReconfirmingCount` state another popup
-   * can move while this one is still open — so an accepted-then-closed
-   * popup can't spend two decrements against its one increment.
-   *
-   * Two or more records can be undecided at once: `launchSignup` refuses
-   * only a live undecided popup, so a hand-closed one stays in this list
-   * until its own poll notices. `findPopupWatcher` owns the attribution.
-   */
-  activePopupWatchers: [],
+    /**
+     * One record per live `watchPopupClose` poll: `{ id, win, isReconfirming,
+     * decided }`. `id` is the `setInterval` handle; `win` is the popup, which
+     * lets an inbound message be attributed to the record that sent it.
+     * `decided` is the popup's own outcome, distinct from the global
+     * `soleTraderAdopted`/`soleTraderReconfirmingCount` state another popup
+     * can move while this one is still open — so an accepted-then-closed
+     * popup can't spend two decrements against its one increment.
+     *
+     * Two or more records can be undecided at once: `launchSignup` refuses
+     * only a live undecided popup, so a hand-closed one stays in this list
+     * until its own poll notices. `findPopupWatcher` owns the attribution.
+     */
+    activePopupWatchers: [],
 
-  /**
-   * A signup popup has been opened during this flow, so the company-search
-   * dropdown must be closed if it's open once the flow completes. A flag
-   * rather than a call at popup-open time because the close belongs at the
-   * end of the flow — consumed exactly once at depth zero, so any number of
-   * nested flights resolve to one close.
-   */
-  closeDropdownOnSettle: false,
+    /**
+     * A signup popup has been opened during this flow, so the company-search
+     * dropdown must be closed if it's open once the flow completes. A flag
+     * rather than a call at popup-open time because the close belongs at the
+     * end of the flow — consumed exactly once at depth zero, so any number of
+     * nested flights resolve to one close.
+     */
+    closeDropdownOnSettle: false,
 
-  /** DOM id of the "select a different sole trader" link (TWO-40 §7). */
-  differentSoleTraderBtnId: "select_different_sole_trader_btn",
+    /** DOM id of the "select a different sole trader" link (TWO-40 §7). */
 
-  config: function () {
-    return (window.twoinc && window.twoinc.sole_trader) || {};
-  },
+    config: function () {
+      return (window.twoinc && window.twoinc.sole_trader) || {};
+    },
 
-  // Delegated rather than a second copy of the same two lines (TWO-24867):
-  // sole-trader availability is decided per country and cached per country,
-  // so it disagreeing with the country the search and the change guard use
-  // would be a cache keyed on one answer and read with another.
-  currentCountry: function () {
-    return twoincSelectWooHelper.currentCountry();
-  },
+    // Delegated rather than a second copy of the same two lines (TWO-24867):
+    // sole-trader availability is decided per country and cached per country,
+    // so it disagreeing with the country the search and the change guard use
+    // would be a cache keyed on one answer and read with another.
+    currentCountry: function () {
+      return companySearch.currentCountry();
+    },
 
-  isAvailable: function () {
-    const country = twoincSoleTrader.currentCountry();
-    return twoincSoleTrader.availabilityByCountry[country] === true;
-  },
+    isAvailable: function () {
+      const country = controller.currentCountry();
+      return controller.availabilityByCountry[country] === true;
+    },
 
-  /**
-   * Re-evaluate the toggle after every checkout update or country change.
-   * Availability is decided server-side by the registry answer for the
-   * billing country (there is no merchant toggle — TWO-25163); responses
-   * are cached per country for the page's lifetime.
-   */
-  refresh: function () {
-    const cfg = twoincSoleTrader.config();
-    const $noteSlot = jQuery(".twoinc-sole-trader-note-slot");
-    if (!cfg.availability_url || $noteSlot.length === 0) {
-      twoincSoleTrader.hide();
-      return;
-    }
-    const country = twoincSoleTrader.currentCountry();
-    if (!country) {
-      twoincSoleTrader.hide();
-      return;
-    }
-    if (country in twoincSoleTrader.availabilityByCountry) {
-      twoincSoleTrader.apply(twoincSoleTrader.availabilityByCountry[country]);
-      return;
-    }
-    jQuery
-      .get(cfg.availability_url, { country: country, csrf_token: cfg.csrf_token })
-      .done(function (response) {
-        const available = !!(
-          response &&
-          response.success &&
-          response.data &&
-          response.data.available
-        );
-        twoincSoleTrader.availabilityByCountry[country] = available;
-        // The buyer may have changed country while the request was in
-        // flight; only apply if the answer is still for the current one.
-        if (twoincSoleTrader.currentCountry() === country) {
-          twoincSoleTrader.apply(available);
-        }
-      })
-      .fail(function (jqXHR) {
-        // A 429 caches like an answer, or every `updated_checkout` re-requests
-        // into the limit. Other failures stay uncached: a cached "no" would
-        // hide sole trader all page over one dropped connection.
-        if (jqXHR && jqXHR.status === 429) {
-          twoincSoleTrader.availabilityByCountry[country] = false;
-          window.setTimeout(function () {
-            delete twoincSoleTrader.availabilityByCountry[country];
-          }, twoincUtilHelper.retryAfterMs(jqXHR));
-        }
-        // Fail-soft: no sole trader option, checkout proceeds as business.
-        if (twoincSoleTrader.currentCountry() === country) {
-          twoincSoleTrader.apply(false);
-        }
-      });
-  },
+    /**
+     * Re-evaluate the toggle after every checkout update or country change.
+     * Availability is decided server-side by the registry answer for the
+     * billing country (there is no merchant toggle — TWO-25163); responses
+     * are cached per country for the page's lifetime.
+     */
+    refresh: function () {
+      const cfg = controller.config();
+      const $noteSlot = jQuery("." + companySearch.soleTraderNoteSlotClass);
+      if (!cfg.availability_url || $noteSlot.length === 0) {
+        controller.hide();
+        return;
+      }
+      const country = controller.currentCountry();
+      if (!country) {
+        controller.hide();
+        return;
+      }
+      if (country in controller.availabilityByCountry) {
+        controller.apply(controller.availabilityByCountry[country]);
+        return;
+      }
+      jQuery
+        .get(cfg.availability_url, { country: country, csrf_token: cfg.csrf_token })
+        .done(function (response) {
+          const available = !!(
+            response &&
+            response.success &&
+            response.data &&
+            response.data.available
+          );
+          controller.availabilityByCountry[country] = available;
+          // The buyer may have changed country while the request was in
+          // flight; only apply if the answer is still for the current one.
+          if (controller.currentCountry() === country) {
+            controller.apply(available);
+          }
+        })
+        .fail(function (jqXHR) {
+          // A 429 caches like an answer, or every `updated_checkout` re-requests
+          // into the limit. Other failures stay uncached: a cached "no" would
+          // hide sole trader all page over one dropped connection.
+          if (jqXHR && jqXHR.status === 429) {
+            controller.availabilityByCountry[country] = false;
+            window.setTimeout(function () {
+              delete controller.availabilityByCountry[country];
+            }, twoincUtilHelper.retryAfterMs(jqXHR));
+          }
+          // Fail-soft: no sole trader option, checkout proceeds as business.
+          if (controller.currentCountry() === country) {
+            controller.apply(false);
+          }
+        });
+    },
 
-  apply: function (available) {
-    if (available) {
-      twoincSoleTrader.render();
-    } else {
-      twoincSoleTrader.hide();
-    }
-    // The mode chip lives inside the company-search panel, not here —
-    // re-sync so an availability change while it's open adds/removes live.
-    twoincSelectWooHelper.syncModeChips();
-  },
+    apply: function (available) {
+      if (available) {
+        controller.render();
+      } else {
+        controller.hide();
+      }
+      // The mode chip lives inside the company-search panel, not here —
+      // re-sync so an availability change while it's open adds/removes live.
+      companySearch.syncModeChips();
+    },
 
-  hide: function () {
-    jQuery(".twoinc-sole-trader-note-slot").addClass("hidden").empty();
-    jQuery("#" + twoincSoleTrader.differentSoleTraderBtnId).hide();
-    // Refused while `isBusy()`, same as the Business chip: this runs from
-    // `refresh()` on every `updated_checkout` (coupon, shipping, quantity —
-    // not only country), so an unconditional revert would drop a signup
-    // still completing in the popup. `watchPopupClose` re-checks adoption
-    // once it settles, so deferring here loses nothing.
-    if (twoincSoleTrader.mode === "sole_trader" && !twoincSoleTrader.isBusy()) {
-      twoincSoleTrader.setMode("business");
-    }
-  },
+    hide: function () {
+      jQuery("." + companySearch.soleTraderNoteSlotClass)
+        .addClass("hidden")
+        .empty();
+      jQuery("#" + companySearch.differentSoleTraderBtnId).hide();
+      // Refused while `isBusy()`, same as the Business chip: this runs from
+      // `refresh()` on every `updated_checkout` (coupon, shipping, quantity —
+      // not only country), so an unconditional revert would drop a signup
+      // still completing in the popup. `watchPopupClose` re-checks adoption
+      // once it settles, so deferring here loses nothing.
+      if (controller.mode === "sole_trader" && !controller.isBusy()) {
+        controller.setMode("business");
+      }
+    },
 
-  render: function () {
-    const cfg = twoincSoleTrader.config();
-    const $container = jQuery(".twoinc-sole-trader-note-slot");
-    $container.empty().removeClass("hidden");
+    render: function () {
+      const cfg = controller.config();
+      const $container = jQuery("." + companySearch.soleTraderNoteSlotClass);
+      $container.empty().removeClass("hidden");
 
-    // Bell-icon note + signup link — shown only when sole-trader mode is
-    // active and signup is needed, and as the fallback when an
-    // auto-launched popup is blocked. The mode chips themselves are NOT
-    // built here — they render as children of the company-search panel, see
-    // TwoCompanySearch#chips().
-    const $note = jQuery(
-      '<div class="twoinc-sole-trader-note hidden">' +
-        '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">' +
-        '<path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0M3.124 7.5A8.969 8.969 0 015.292 3m13.416 0a8.969 8.969 0 012.168 4.5"/>' +
-        "</svg></div>"
-    );
-    jQuery("<a>", {
-      href: "#",
-      class: "twoinc-sole-trader-note__link",
-      text: cfg.text.popup_prompt
-    })
-      .on("click", function (event) {
-        event.preventDefault();
-        twoincSoleTrader.launchSignup();
-      })
-      .appendTo($note);
-    $container.append($note);
-
-    // Minted here rather than at click time, since `window.open()` outside
-    // the click's own gesture is blocker bait. Tokens are country-scoped,
-    // not email-scoped, so one mint per page serves every launch.
-    //
-    // The callback re-decides the "select a different sole trader" link: a
-    // sole trader restored from a previous order is already adopted before
-    // any mint has happened, and that link only shows once `tokens` is real.
-    if (!twoincSoleTrader.tokens) {
-      twoincSoleTrader.fetchTokens(function () {
-        twoincSoleTrader.syncDifferentSoleTraderLink();
-      });
-    }
-  },
-
-  /**
-   * Selected-chip state, delegated to the group's own owner — the chips live
-   * inside the company-search panel, not here.
-   */
-  updateChips: function () {
-    twoincSelectWooHelper.syncModeChips();
-  },
-
-  showNote: function (show) {
-    jQuery(".twoinc-sole-trader-note").toggleClass("hidden", !show);
-  },
-
-  /**
-   * A sole-trader round trip has started (TWO-40 §7). The busy state is
-   * shown over the company-NAME field — the same in-field spinner an
-   * ordinary company search uses — rather than in the query row it hides,
-   * so it's visible for the link-click entry point too, which never has a
-   * dropdown open to paint in.
-   */
-  beginFlight: function () {
-    twoincSoleTrader.flightDepth += 1;
-    if (twoincSoleTrader.flightDepth === 1) {
-      // The note slot and the chip group — the two places busy state is
-      // ever visible.
-      jQuery(".twoinc-sole-trader-note-slot, .two-company-mode-chips").addClass(
-        "twoinc-sole-trader-toggle--busy"
+      // Bell-icon note + signup link — shown only when sole-trader mode is
+      // active and signup is needed, and as the fallback when an
+      // auto-launched popup is blocked. The mode chips themselves are NOT
+      // built here — they render as children of the company-search panel, see
+      // TwoCompanySearch#chips().
+      const $note = jQuery(
+        '<div class="twoinc-sole-trader-note hidden">' +
+          '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">' +
+          '<path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0M3.124 7.5A8.969 8.969 0 015.292 3m13.416 0a8.969 8.969 0 012.168 4.5"/>' +
+          "</svg></div>"
       );
-    }
-    twoincSelectWooHelper.syncSoleTraderSurfaces();
-  },
-
-  /**
-   * A sole-trader round trip has reached a terminal state — success, failure,
-   * retry-exhausted or abandoned. Every branch that can end one calls this.
-   *
-   * Clamped at zero so an unbalanced settle cannot drive the count negative
-   * and make a subsequent genuine flight invisible.
-   *
-   * Depth reaching zero IS "the flow is complete" in the sense the spinner and
-   * the dropdown close are gated on (Doug 2026-08-20): the popup's own watcher
-   * holds a flight until the window is gone, and the ACCEPTED handler holds a
-   * second one across `fetchCurrentBuyer` until `setCompany()` has written the
-   * company name and number. Nothing else has to be joined up for it —
-   * `flightDepth` already counts both, and it is only zero once every one of
-   * them has finished.
-   *
-   * @returns {void}
-   */
-  settleFlight: function () {
-    twoincSoleTrader.flightDepth = Math.max(0, twoincSoleTrader.flightDepth - 1);
-    if (twoincSoleTrader.flightDepth === 0) {
-      jQuery(".twoinc-sole-trader-note-slot, .two-company-mode-chips").removeClass(
-        "twoinc-sole-trader-toggle--busy"
-      );
-      if (twoincSoleTrader.closeDropdownOnSettle) {
-        twoincSoleTrader.closeDropdownOnSettle = false;
-        twoincSelectWooHelper.closeCompanySearchDropdown();
-      }
-    }
-    twoincSelectWooHelper.syncSoleTraderSurfaces();
-  },
-
-  /**
-   * The "select a different sole trader" link, built hidden on first use
-   * (TWO-40 §7). Same visual slot and shape as the "search for company"
-   * link manual entry already offers. One link covers both "pick a
-   * different existing registration" and "register a new one" — that
-   * choice happens inside the hosted signup's own UI.
-   */
-  getDifferentSoleTraderBtnNode: function () {
-    const id = twoincSoleTrader.differentSoleTraderBtnId;
-    let $btn = jQuery("#" + id);
-    if ($btn.length) {
-      twoincSoleTrader.placeDifferentSoleTraderBtn($btn);
-      return $btn;
-    }
-
-    $btn = jQuery("<button></button>")
-      .attr({ id: id, type: "button" })
-      .text(
-        (twoincSoleTrader.config().text && twoincSoleTrader.config().text.select_different) ||
-          "Select a different sole trader"
-      )
-      .hide()
-      // Bound directly on the element, click AND Enter/Space, for the same
-      // reasons documented on getSearchCompanyBtnNode — a delegated click on
-      // document.body was proven not to reach that button live.
-      .on("click", function (event) {
-        event.preventDefault();
-        twoincSoleTrader.launchSignup({ autoselect: false });
+      jQuery("<a>", {
+        href: "#",
+        class: "twoinc-sole-trader-note__link",
+        text: cfg.text.popup_prompt
       })
-      .on("keydown", function (event) {
-        if (event.which !== 13 && event.which !== 32) return;
-        event.preventDefault();
-        event.stopPropagation();
-        twoincSoleTrader.launchSignup({ autoselect: false });
-      });
+        .on("click", function (event) {
+          event.preventDefault();
+          controller.launchSignup();
+        })
+        .appendTo($note);
+      $container.append($note);
 
-    twoincSoleTrader.placeDifferentSoleTraderBtn($btn);
-    return $btn;
-  },
-
-  /**
-   * The slot the "select a different sole trader" link hangs in: the input
-   * wrapper INSIDE whichever company-name field is the visible one.
-   *
-   * TWO-40 §7 makes an adopted sole trader show through the live search
-   * widget, so the search row takes the slot whenever it is the visible
-   * surface — a button appended inside a hidden field never renders.
-   *
-   * Inside the row's wrapper rather than after the row (TWO-25503, Doug):
-   * as a sibling it stacked against the row's own bottom margin and needed a
-   * hardcoded negative margin to look right, which over-pulled it onto the
-   * field itself. Inside, it sits where `#search_company_btn` already does.
-   *
-   * @returns {jQuery}
-   */
-  differentSoleTraderBtnSlot: function () {
-    // Follows `companyNameSurface()` in both mount locations rather than
-    // deciding once at creation (TWO-25503): this link is built late, only on
-    // adoption, so a home chosen at that moment is a home chosen from whatever
-    // happened to be visible then — which is how it has twice ended up in the
-    // wrong region.
-    const helper = twoincSelectWooHelper;
-    const $surface = helper.companyNameSurface();
-    if ($surface.find(helper.companyFieldSelector()).length) {
-      return helper.affordanceSlotIn($surface, helper.companyFieldSelector());
-    }
-    return helper.companyFieldAffordanceSlot();
-  },
-
-  /**
-   * Re-anchor the link on every call, the same way `getCompanySummaryNode()`
-   * does — this runs on every `toggleBusinessFields()`, and the visible
-   * company-name surface can have changed since the last one.
-   */
-  placeDifferentSoleTraderBtn: function ($btn) {
-    const $slot = twoincSoleTrader.differentSoleTraderBtnSlot();
-    // Position as well as parenthood: the link belongs last in the slot, after
-    // the input, and anything appended to that slot after it — the company
-    // summary on a re-render — leaves it stranded mid-slot otherwise.
-    if ($btn.parent()[0] === $slot[0] && $slot.children().last()[0] === $btn[0]) return;
-    $slot.append($btn);
-  },
-
-  /**
-   * Show the "select a different sole trader" link only where it means
-   * something: sole-trader mode (TWO-40 §7). Gated on mode + tokens only,
-   * no `#company_id`-content check — that field is permanently hidden in
-   * every mode, so there's no reason to lean on its DOM value here.
-   */
-  syncDifferentSoleTraderLink: function () {
-    const show = twoincSoleTrader.mode === "sole_trader" && !!twoincSoleTrader.tokens;
-    // Built lazily, only when about to be shown: this runs on every mode
-    // switch, and building it eagerly would insert a hidden button into
-    // the address form of every merchant who never sees this feature.
-    if (!show && !jQuery("#" + twoincSoleTrader.differentSoleTraderBtnId).length) return;
-    twoincSoleTrader.getDifferentSoleTraderBtnNode().toggle(show);
-  },
-
-  /**
-   * A mode chip was clicked. Business is immediate; Sole trader switches mode
-   * then opens the hosted signup in the same synchronous gesture as the click.
-   */
-  onModeChipClick: function (mode) {
-    if (mode === "business") {
-      // Reached only from tests today — the Registered company chip carries
-      // its own click handler, and that is where this mode's abandon and
-      // guard live. Kept as the shared entry point's business arm, matching
-      // that handler's guard so calling it cannot diverge from the chip.
-      if (!twoincSoleTrader.isDeciding()) twoincSoleTrader.setMode("business");
-      return;
-    }
-    // Cancel any abandon the buyer's return armed, here rather than only in
-    // the capture-phase mousedown (TWO-25503): Enter and Space produce no
-    // mousedown, so keyboard-activating this chip raised the popup and then
-    // let the still-armed timer close it 150ms later.
-    clearTimeout(twoincSoleTrader.refocusAbandonTimer);
-    twoincSoleTrader.refocusAbandonTimer = null;
-    // A signup the buyer hasn't finished is still on screen, so this click
-    // is asking for it back, not for anything new: raise it and stop.
-    // Checked on the chip itself, not the refocus that usually precedes it
-    // — a chip activated from the keyboard fires `click` with no
-    // `mousedown`, so a raise hung off the refocus would leave Enter/Space
-    // as the one route that can't get the buyer back to their popup.
-    if (twoincSoleTrader.refocusOpenPopups()) return;
-    // Re-clicking once already adopted is the same re-signup the "select a
-    // different sole trader" link launches, not a no-op — the chip is a
-    // second, equally deliberate way to ask for it. `autoselect: false` so
-    // the hosted flow offers a choice rather than handing back the
-    // registration already adopted.
-    if (twoincSoleTrader.mode === "sole_trader" && twoincSoleTrader.soleTraderAdopted) {
-      twoincSoleTrader.launchSignup({ autoselect: false });
-      return;
-    }
-    twoincSoleTrader.setMode("sole_trader");
-    // Always the hosted signup, no conditional fast path: a company may
-    // only ever be filled in by the buyer's own trip through that flow. The
-    // passive email-driven autofill probe this used to consult could
-    // populate fields off a Two session cookie the buyer never
-    // authenticated against.
-    twoincSoleTrader.launchSignup();
-  },
-
-  /**
-   * Is a sole-trader autofill flight or a signup popup currently
-   * outstanding (TWO-40 §7)? The guard every other way to leave/interrupt
-   * sole-trader mode checks before acting: the widget/chips deliberately
-   * survive this window, so paths once unreachable while
-   * `mode === "sole_trader"` (Business chip, reopenSearch(), an ordinary
-   * pick) are reachable now, and acting on them mid-wait races the flow's
-   * own resolution.
-   */
-  isBusy: function () {
-    return twoincSoleTrader.flightDepth > 0 || twoincSoleTrader.activePopupWatchers.length > 0;
-  },
-
-  /**
-   * Is sole-trader mode still deciding what it is, as opposed to already
-   * adopted with `activePopupWatchers` only nonzero because the poll hasn't
-   * yet noticed the popup closed? `isBusy()` alone over-blocks a direct exit
-   * from sole-trader mode once `soleTraderAdopted` is true and the outcome
-   * is already settled. ORed with `soleTraderReconfirming`, since
-   * `soleTraderAdopted` is a one-way latch that doesn't turn back off for a
-   * "select a different sole trader" re-signup.
-   */
-  isDeciding: function () {
-    return (
-      twoincSoleTrader.isBusy() &&
-      (!twoincSoleTrader.soleTraderAdopted || twoincSoleTrader.soleTraderReconfirmingCount > 0)
-    );
-  },
-
-  /**
-   * Switch mode and toggle the company-search suppression. No token/buyer
-   * work happens here — that is owned by the chip-click handler.
-   */
-  setMode: function (mode) {
-    // Only an actual transition resets adoption/reconfirmation state: a
-    // redundant same-mode `setMode("sole_trader")` must not zero a live
-    // re-signup's own `soleTraderReconfirmingCount` mid-flight.
-    const isTransition = mode !== twoincSoleTrader.mode;
-    twoincSoleTrader.mode = mode;
-    if (isTransition) {
-      twoincSoleTrader.soleTraderAdopted = false;
-      twoincSoleTrader.soleTraderReconfirmingCount = 0;
-    }
-    if (mode === "sole_trader") {
-      // Sole trader is its own company-capture mode: it renders through the
-      // panel but carries a synthetic id, so neither manual entry nor an
-      // ordinary registry pick's surfaces are right for it. Snapshotted first
-      // so it can be restored on the way out, and written BEFORE the chip sync
-      // below — `selectedMode()` reads both axes, and manual entry wins the tie.
-      if (twoincSoleTrader.savedCaptureMode === null) {
-        twoincSoleTrader.savedCaptureMode = twoincCompanyCapture.mode;
-      }
-      twoincCompanyCapture.mode = "sole_trader";
-    }
-
-    twoincSoleTrader.updateChips();
-    twoincSoleTrader.syncDifferentSoleTraderLink();
-    // Before the branch below, so a chip click made while the panel is already
-    // open hides the query row in the click's own gesture.
-    twoincSelectWooHelper.syncSoleTraderSurfaces();
-
-    // Nothing is torn down on the way IN: the panel and its spinner have to
-    // survive the autofill round trip and the signup popup it can lead to.
-    // `lockCapturedFields()` closes the panel once there is a company to show.
-    if (mode !== "sole_trader") {
-      twoincSoleTrader.leaveSoleTraderMode();
-      twoincSoleTrader.setCompany("", "");
-      twoincDomHelper.toggleBusinessFields();
-      Twoinc.getInstance().enableCompanySearch();
-      // The buyer may have been in manual entry when they switched to sole
-      // trader, in which case the restored mode is `manual` and
-      // enableCompanySearch just early-returned — without this the link back
-      // to search stays hidden with no other route back to the picker.
-      if (twoincCompanyCapture.mode === "manual") {
-        twoincSelectWooHelper.getSearchCompanyBtnNode().show();
-      }
-    }
-  },
-
-  /**
-   * The state/DOM bookkeeping every real exit from sole-trader mode needs,
-   * regardless of what happens to the search widget on the way out
-   * (TWO-40 §7): `setMode`'s own business branch tears the widget down, but
-   * a pick made directly off the still-live widget must not also go
-   * through that teardown, since it would blank the pick before `write()`
-   * ever runs. Split out so both paths share identical "leaving" semantics.
-   */
-  leaveSoleTraderMode: function () {
-    twoincSoleTrader.showNote(false);
-    twoincCompanyCapture
-      .nameField()
-      .add(twoincCompanyCapture.numberFieldSelector())
-      .prop("readonly", false);
-    if (twoincSoleTrader.savedCaptureMode !== null) {
-      twoincCompanyCapture.mode = twoincSoleTrader.savedCaptureMode;
-      twoincSoleTrader.savedCaptureMode = null;
-    }
-    // A popup-close poll left over from a resolved adoption/re-signup keeps
-    // `isBusy()`/`isDeciding()` true purely on its own 300ms cadence. This
-    // is the one place every caller has already committed to leaving
-    // sole-trader mode, so whatever that poll was still going to decide is
-    // moot — left running it would race a deferred manual-entry switch,
-    // wrongly refusing it while the stale busy state persists.
-    twoincSoleTrader.abandonSoleTraderFlow();
-  },
-
-  /**
-   * Give up on everything the sole-trader flow still has outstanding, as
-   * one operation: the popup windows and the records tracking them
-   * (TWO-40 §14). Called only from `leaveSoleTraderMode()`.
-   *
-   * Closing comes before dropping the records, since the records hold the
-   * only handles there are — closing after would leave the window on
-   * screen with nothing tracking it, letting the next chip click open a
-   * second popup over it. Every tracked window is closed here, not just the
-   * undecided ones `closeAbandonedPopups()` acts on, since mode has already
-   * left `sole_trader` by the time this runs.
-   */
-  abandonSoleTraderFlow: function () {
-    twoincSoleTrader.activePopupWatchers.forEach(function (watcher) {
-      if (watcher.win.closed || typeof watcher.win.close !== "function") return;
-      watcher.win.close();
-    });
-    twoincSoleTrader.stopAllPopupWatchers();
-  },
-
-  /**
-   * Close the panel and lock the captured fields, once a sole trader is
-   * actually adopted. Split out of `setMode()` — see its comment — so
-   * switching mode alone leaves the panel and its spinner alone; this is the
-   * only moment there is nothing left to search for.
-   *
-   * The adopted name is painted into the company-name field the same way a
-   * registry pick is, so an adopted sole trader reads as a company that was
-   * searched and picked (TWO-40 §7 direction (a)).
-   */
-  lockCapturedFields: function (companyId, companyName) {
-    // An adoption can land with no panel bound — manual entry releases the
-    // field and the Sole trader chip is not hidden there.
-    twoincSelectWooHelper.attach(Twoinc.getInstance());
-    twoincSelectWooHelper.closeCompanySearchDropdown();
-    twoincSelectWooHelper.setDisplayName(companyName);
-
-    jQuery("#" + twoincSelectWooHelper.searchCompanyBtnId).hide();
-    twoincCompanyCapture
-      .nameField()
-      .add(twoincCompanyCapture.numberFieldSelector())
-      .prop("readonly", true);
-  },
-
-  /**
-   * Click-to-reopen (TWO-40 §7): once a sole trader is adopted, the
-   * captured fields readonly-lock and the query row is suppressed, leaving
-   * no way back to an ordinary company search except the "select a
-   * different sole trader" link, which only leads back into the same
-   * hosted signup. Clicking into a locked captured field instead reverts to
-   * business mode and lands the buyer in the reopened dropdown, same as
-   * `exitManualCompanyEntry()` does leaving manual entry. In tile placement the
-   * lock lands on hidden `#company_name`, so the chips are the route back.
-   *
-   * Refused while `isDeciding()`, not the wider `isBusy()`: a captured
-   * field only readonly-locks once `lockCapturedFields()` runs (deferred
-   * for the whole autofill/popup wait), so reverting mode out from under
-   * that wait would drop a completed signup, since the ACCEPTED handler
-   * also gates on `mode === "sole_trader"`. Once adopted, refusing the
-   * click just because the popup-close poll hasn't caught up would
-   * reintroduce that bug for the length of the poll.
-   */
-  reopenSearch: function () {
-    if (twoincSoleTrader.mode !== "sole_trader" || twoincSoleTrader.isDeciding()) return;
-    twoincSoleTrader.setMode("business");
-    const helper = twoincSelectWooHelper;
-    // Reached from the captured fields in the ADDRESS area, which stay on
-    // screen while the panel's own host — the payment tile — is collapsed.
-    if (!helper.companySearchIsReachable()) return;
-    if (!helper.openCompanySearchDropdown()) {
-      helper.focusVisibleCompanyField(helper.companyFieldSelector());
-    }
-  },
-
-  /**
-   * Open the hosted signup popup, falling back to the visible link if the
-   * browser blocks the window. Re-entrancy-guarded (TWO-40 §7): a second
-   * activation while one is already opening is dropped, and an activation
-   * while an already-open popup's outcome is undecided raises that popup
-   * instead of opening a second one.
-   *
-   * A re-signup (`options.autoselect === false`) is also refused while a
-   * different one is already outstanding: `openingSignup` only guards two
-   * clicks in the same synchronous gesture, not a later sequential one —
-   * closing one re-signup and re-clicking is exactly the case that made
-   * `soleTraderReconfirmingCount` a count rather than a boolean.
-   */
-  launchSignup: function (options) {
-    if (twoincSoleTrader.openingSignup) return;
-    // One live undecided popup at a time. "Live" is load-bearing: a
-    // hand-closed record stays undecided until its own poll notices, and a
-    // relaunch is deliberately allowed to open alongside it — reading
-    // "undecided" alone would mis-attribute an inbound ACCEPTED (see
-    // `findPopupWatcher`). Scoped to each popup's own outcome rather than
-    // `isDeciding()`, which would strand a chip click when no popup exists
-    // and only a stale flight is outstanding.
-    if (twoincSoleTrader.signupConfirming) return;
-    // The abandon a return to the checkout armed goes, whatever this
-    // activation then does: left running it closes the popup 150ms later,
-    // raised or freshly opened. Only the mode chips cancel it on their own.
-    clearTimeout(twoincSoleTrader.refocusAbandonTimer);
-    twoincSoleTrader.refocusAbandonTimer = null;
-    // Raised, not silently dropped: the popup that would answer this
-    // activation is already on screen, and a refusal that does nothing at all
-    // reads as a dead control to a buyer who cannot see it.
-    if (twoincSoleTrader.refocusOpenPopups()) return;
-    if (
-      options &&
-      options.autoselect === false &&
-      twoincSoleTrader.soleTraderReconfirmingCount > 0
-    ) {
-      return;
-    }
-    twoincSoleTrader.openingSignup = true;
-    try {
-      const win = twoincSoleTrader.openPopup(options);
-      twoincSoleTrader.showNote(!win);
-      if (win) {
-        // Both callers passing `autoselect: false` — the "select a
-        // different sole trader" link, and a re-click of the chip once
-        // already adopted — are a genuinely new decision launched from a
-        // stale-true `soleTraderAdopted`; see that flag's own comment.
-        //
-        // Incremented only once a popup has actually opened: a blocked
-        // re-signup calls neither `watchPopupClose` nor the ACCEPTED
-        // handler, so incrementing unconditionally would strand the count
-        // above zero until an unrelated `setMode()` reset it.
-        const isReconfirming = !!(options && options.autoselect === false);
-        if (isReconfirming) {
-          twoincSoleTrader.soleTraderReconfirmingCount += 1;
-        }
-        twoincSoleTrader.closeDropdownOnSettle = true;
-        twoincSoleTrader.watchPopupClose(win, isReconfirming);
-      }
-    } finally {
-      // Released once the synchronous open has returned, blocked or not —
-      // held any longer and a blocked popup would lock the buyer out of
-      // retrying via the fallback link.
-      twoincSoleTrader.openingSignup = false;
-    }
-  },
-
-  /**
-   * Keep the search dropdown's spinner up for as long as the signup popup
-   * is open, and settle it the moment the buyer closes the window
-   * (TWO-40 §7). `window.closed` polling is the only signal a same-origin
-   * opener has for "the popup went away", with no cooperation from the
-   * popup and no event for it. If nothing was adopted by close time, hand
-   * the checkout back to an ordinary company search.
-   *
-   * Reads `soleTraderAdopted`, not `#company_id`'s raw value, which can
-   * hold an unrelated id from an earlier capture and would wrongly read as
-   * "already adopted". Also skips the revert while `signupConfirming`:
-   * the ACCEPTED handler's own `fetchCurrentBuyer()` can still be resolving
-   * when this poll notices the window closed, and that handler is the sole
-   * authority once a signup has completed.
-   *
-   * @param {Window} win the popup returned by `window.open`
-   * @param {boolean} [isReconfirming] whether this popup was a re-signup —
-   *   only decrement `soleTraderReconfirmingCount` for the popup that
-   *   actually incremented it, so an unrelated popup's poll can't steal a
-   *   decrement meant for a different, still-open re-signup.
-   */
-  watchPopupClose: function (win, isReconfirming) {
-    twoincSoleTrader.bindWindowRefocusListener();
-    twoincSoleTrader.beginFlight();
-    const watcher = { id: null, win: win, isReconfirming: !!isReconfirming, decided: false };
-    watcher.id = setInterval(function () {
-      if (!win.closed) return;
-      twoincSoleTrader.settleClosedPopup(watcher, false);
-    }, 300);
-    twoincSoleTrader.activePopupWatchers.push(watcher);
-  },
-
-  /**
-   * Everything one popup's window going away settles. Called by that
-   * popup's own poll above, and — only on the mode-chip abandon path —
-   * synchronously by `abandonPopupsForChipClick()`. Factored out so the
-   * settle keeps one owner (TWO-40 §14) for `flightDepth`,
-   * `soleTraderReconfirmingCount` and `closeDropdownOnSettle`.
-   *
-   * @param {Object} watcher the record whose window has gone
-   * @param {boolean} chipOwnsOutcome a mode-chip click is mid-gesture and
-   *   owns the mode and dropdown from here
-   */
-  settleClosedPopup: function (watcher, chipOwnsOutcome) {
-    twoincSoleTrader.stopWatchingPopup(watcher.id);
-    if (chipOwnsOutcome) {
-      // Consumed, not honoured: the chip decides what happens to the
-      // dropdown, and closing it here would destroy the button whose
-      // `click` hasn't been dispatched yet.
-      twoincSoleTrader.closeDropdownOnSettle = false;
-    }
-    twoincSoleTrader.settleFlight();
-    if (watcher.isReconfirming && !watcher.decided) {
-      // Abandoned without a decision — this settle owns the decrement. A
-      // decided popup's decrement belongs to the ACCEPTED handler instead.
-      twoincSoleTrader.soleTraderReconfirmingCount = Math.max(
-        0,
-        twoincSoleTrader.soleTraderReconfirmingCount - 1
-      );
-    }
-    if (
-      // Skipped on the chip path: `setMode`'s business branch destroys the
-      // dropdown the chip lives in, and reverting here would make the
-      // Registered company chip's own "already in business mode" no-op
-      // swallow the click.
-      !chipOwnsOutcome &&
-      twoincSoleTrader.mode === "sole_trader" &&
-      !twoincSoleTrader.soleTraderAdopted &&
-      !twoincSoleTrader.signupConfirming &&
-      // A popup relaunched inside this poll's stale window owns the mode
-      // now — reverting under it would drop its eventual ACCEPTED on the
-      // `mode !== "sole_trader"` gate.
+      // Minted here rather than at click time, since `window.open()` outside
+      // the click's own gesture is blocker bait. Tokens are country-scoped,
+      // not email-scoped, so one mint per page serves every launch.
       //
-      // "Still on screen" is the question, not "still undecided": a popup
-      // whose ACCEPTED resolved to no buyer is decided yet still open, and
-      // a retry inside it posts a second ACCEPTED a revert would drop on
-      // that same gate.
-      !twoincSoleTrader.activePopupWatchers.some(function (other) {
-        return !other.win.closed;
-      })
-    ) {
-      twoincSoleTrader.setMode("business");
-    }
-  },
-
-  /**
-   * Close an abandoned signup popup when the buyer comes back to the
-   * checkout.
-   *
-   * A window `focus` listener AND a `visibilitychange` one. The hosted signup
-   * is a separate window, so a round trip to it and back leaves the checkout's
-   * own tab `visible` throughout and only `focus` reports it; a buyer who
-   * fetches their code from another TAB of the same window is the reverse.
-   * Which of the two Chrome reports for an in-window tab switch is not
-   * established, so both are bound and the arming guard absorbs a duplicate.
-   * Bound lazily from `watchPopupClose`, left bound for the window's lifetime
-   * like the `message` listener.
-   *
-   * The target check is not defensive noise: jQuery's `.trigger("focus")`
-   * does not dispatch natively — it walks the propagation path itself,
-   * window included. This file triggers focus that way on the company field
-   * (`focusVisibleCompanyField`), so without the check, opening the dropdown
-   * would close the popup.
-   *
-   * The refocus only SCHEDULES the abandon — which of three things the
-   * buyer meant depends on what they activated, and window `focus` fires
-   * before that gesture completes — so the decision has to outlive the focus
-   * handler by `refocusChipGraceMs`:
-   *
-   *  - Sole trader chip → cancel the abandon; activating it asks for that
-   *    popup back and `onModeChipClick` raises it.
-   *  - any other mode chip → abandon now, so the chip's own handler runs
-   *    against settled state — left to the timer it would land afterwards
-   *    and the chip's `isDeciding()` guard would wrongly refuse it.
-   *  - anything else (alt-tab back, a click on the page) → the timer fires
-   *    and abandons.
-   *
-   * Each chip resolves this from its own `click` handler, which is the only
-   * event Enter and Space produce. The capture-phase `mousedown` below is the
-   * pointer's earlier shortcut to the same decision, not the only route to it.
-   * Capture phase, on `document` rather than the chips: chips are rebuilt
-   * on every dropdown open, and capture reaches them regardless.
-   *
-   * @returns {void}
-   */
-  bindWindowRefocusListener: function () {
-    if (twoincSoleTrader.refocusHandler) return;
-    twoincSoleTrader.refocusHandler = function (event) {
-      if (event && event.target && event.target !== window && event.target !== document) return;
-      twoincSoleTrader.scheduleRefocusAbandon();
-    };
-    window.addEventListener("focus", twoincSoleTrader.refocusHandler);
-
-    // Paired with `focus` because neither signal covers the case alone. A
-    // return from another TAB of the same window is a visibility change;
-    // a return from another WINDOW leaves visibility untouched. Whether
-    // Chrome also emits a window `focus` for the first is not something
-    // this plugin should depend on, so both are bound and the arming
-    // guard below makes a duplicate harmless.
-    twoincSoleTrader.visibilityHandler = function () {
-      // Fires on HIDE as well as show, and arming is coalesced onto the first
-      // caller — so arming here would spend the grace the buyer's actual
-      // return needs, leaving them a fraction of it or none.
-      if (document.visibilityState === "hidden") return;
-      twoincSoleTrader.scheduleRefocusAbandon();
-    };
-    document.addEventListener("visibilitychange", twoincSoleTrader.visibilityHandler);
-
-    twoincSoleTrader.chipMousedownHandler = function (event) {
-      const target = event && event.target;
-      const chip =
-        target && typeof target.closest === "function"
-          ? target.closest("." + twoincSelectWooHelper.modeChipClass)
-          : null;
-      if (!chip) return;
-      // Whatever the deferred path is or is not waiting on: a chip click is
-      // the buyer saying which mode they want, and only Sole trader means
-      // "give me that popup back".
-      clearTimeout(twoincSoleTrader.refocusAbandonTimer);
-      twoincSoleTrader.refocusAbandonTimer = null;
-      if (chip.getAttribute("data-two-chip") === "sole_trader") return;
-      twoincSoleTrader.abandonPopupsForChipClick();
-    };
-    document.addEventListener("mousedown", twoincSoleTrader.chipMousedownHandler, true);
-  },
-
-  /**
-   * Arm the deferred abandon, decided when the grace elapses rather than now:
-   * the buyer can arrive or leave again inside it, and the answer that matters
-   * is the one at the moment the popup would actually go.
-   *
-   * A refused close is simply a wasted cycle — the next `focus` or visibility
-   * change arms again, and nothing else keys off this timer (TWO-25503: the
-   * chip handler used to, which is how a refused close took the chips with
-   * it).
-   *
-   * @returns {void}
-   */
-  scheduleRefocusAbandon: function () {
-    // Coalesced onto the FIRST arming. Nothing clears an armed timer, so a
-    // second signal would not move the deadline — it would leave a SECOND
-    // timer running past it, coming due against whatever popup exists by then
-    // rather than the one the buyer walked away from. Window-targeted `focus`
-    // arrives in bursts (a blur fires one, so the panel closing its own
-    // dropdown produces a stream), and a single return can legitimately reach
-    // both this and the visibility listener.
-    if (twoincSoleTrader.refocusAbandonTimer !== null) return;
-    twoincSoleTrader.refocusAbandonTimer = setTimeout(function () {
-      twoincSoleTrader.refocusAbandonTimer = null;
-      if (!twoincSoleTrader.checkoutIsInFront()) return;
-      twoincSoleTrader.closeAbandonedPopups();
-    }, twoincSoleTrader.refocusChipGraceMs);
-  },
-
-  /** Test seam / teardown: drop the window `focus` listener, the mousedown
-   * listener that resolves it, and any abandon still scheduled.
-   * @returns {void}
-   */
-  unbindWindowRefocusListener: function () {
-    clearTimeout(twoincSoleTrader.refocusAbandonTimer);
-    twoincSoleTrader.refocusAbandonTimer = null;
-    if (twoincSoleTrader.chipMousedownHandler) {
-      document.removeEventListener("mousedown", twoincSoleTrader.chipMousedownHandler, true);
-      twoincSoleTrader.chipMousedownHandler = null;
-    }
-    if (twoincSoleTrader.visibilityHandler) {
-      document.removeEventListener("visibilitychange", twoincSoleTrader.visibilityHandler);
-      twoincSoleTrader.visibilityHandler = null;
-    }
-    if (!twoincSoleTrader.refocusHandler) return;
-    window.removeEventListener("focus", twoincSoleTrader.refocusHandler);
-    twoincSoleTrader.refocusHandler = null;
-  },
-
-  /**
-   * Close every signup popup whose outcome is still open, and nothing else.
-   * `window.close()` on a handle this page's own `window.open()` returned
-   * is permitted regardless of origin, so this can be a real close.
-   *
-   * Closing the window is the whole action — spinner, mode revert and
-   * dropdown close happen exactly as for a popup closed by hand:
-   * `watchPopupClose`'s poll sees `.closed` within its next 300ms tick and
-   * runs its own terminal branch, keeping one owner for the settle
-   * (TWO-40 §14).
-   *
-   * Decided popups are left alone: a popup whose ACCEPTED resolved to no
-   * buyer is decided yet still on screen, and the buyer's retry inside it
-   * posts a second ACCEPTED — closing it would take the retry with it.
-   *
-   * The deferred path's own closer. A pointer activation of a chip resolves
-   * before this runs, via the capture-phase mousedown; a keyboard one resolves
-   * in the chip's `click` handler, which can land after this has already
-   * fired. See `bindWindowRefocusListener` and `abandonPopupsForChipClick`.
-   */
-  closeAbandonedPopups: function () {
-    twoincSoleTrader.abandonablePopups().forEach(function (watcher) {
-      if (typeof watcher.win.close !== "function") return;
-      watcher.win.close();
-    });
-  },
-
-  /**
-   * Is the buyer actually looking at the checkout right now?
-   *
-   * A window `focus` fires when the browser WINDOW activates even while the
-   * checkout is the background tab, so `focus` alone cannot tell "came back to
-   * the checkout" from "opened the signup email in another tab of the same
-   * window".
-   *
-   * Gates ONLY the deferred refocus path. The chip handlers decide for
-   * themselves and must never consult this: in an iframed checkout it is false
-   * for the whole session unless the frame itself holds focus, and a buyer who
-   * clicks a chip has told us what they want whatever the frame owns.
-   *
-   * @returns {boolean}
-   */
-  checkoutIsInFront: function () {
-    if (typeof document.hasFocus !== "function") return true;
-    return document.hasFocus();
-  },
-
-  /**
-   * Abandon the signup popups because the buyer chose a mode chip other than
-   * Sole trader. Same close as `closeAbandonedPopups`, but drains each
-   * popup's settle synchronously rather than leaving it to the 300ms poll, so
-   * whatever runs next sees no outstanding flight or live popup. Safe to drain
-   * early only because `chipOwnsOutcome` holds back the steps that touch the
-   * dropdown — see `settleClosedPopup`.
-   *
-   * Reached from the chip's `mousedown` where there is one, and from its
-   * `click` regardless, which is the only one Enter and Space produce.
-   */
-  abandonPopupsForChipClick: function () {
-    twoincSoleTrader.abandonablePopups().forEach(function (watcher) {
-      if (typeof watcher.win.close === "function") watcher.win.close();
-      twoincSoleTrader.settleClosedPopup(watcher, true);
-    });
-  },
-
-  /**
-   * Bring the still-undecided signup popups back to the front. `focus()`
-   * on a window handle needs no cooperation from the hosted flow however
-   * cross-origin it is.
-   *
-   * @returns {boolean} whether there was a popup to raise
-   */
-  refocusOpenPopups: function () {
-    const abandonable = twoincSoleTrader.abandonablePopups();
-    abandonable.forEach(function (watcher) {
-      if (typeof watcher.win.focus === "function") watcher.win.focus();
-    });
-    return abandonable.length > 0;
-  },
-
-  /**
-   * The popups a refocus is entitled to act on: still undecided, and their
-   * window still there.
-   *
-   * Decided popups are excluded: a popup whose ACCEPTED resolved to no
-   * buyer is decided yet still on screen, and a retry inside it posts a
-   * second ACCEPTED — closing that window would take the retry with it.
-   *
-   * @returns {Array} a snapshot, safe to iterate while records are removed
-   */
-  abandonablePopups: function () {
-    return twoincSoleTrader.activePopupWatchers.filter(function (watcher) {
-      return !watcher.decided && !watcher.win.closed;
-    });
-  },
-
-  /** Stop one popup-close poll (its own terminal branch, or a test tearing
-   * down early) without touching any other outstanding one.
-   * @param {number} id the interval id returned by `watchPopupClose`
-   * @returns {void}
-   */
-  stopWatchingPopup: function (id) {
-    clearInterval(id);
-    twoincSoleTrader.activePopupWatchers = twoincSoleTrader.activePopupWatchers.filter(
-      function (existing) {
-        return existing.id !== id;
+      // The callback re-decides the "select a different sole trader" link: a
+      // sole trader restored from a previous order is already adopted before
+      // any mint has happened, and that link only shows once `tokens` is real.
+      if (!controller.tokens) {
+        controller.fetchTokens(function () {
+          controller.syncDifferentSoleTraderLink();
+        });
       }
-    );
-  },
+    },
 
-  /**
-   * The watcher record an inbound hosted-signup message belongs to.
-   *
-   * `event.source` is the authoritative answer — a WindowProxy stays
-   * reference-comparable across origins. An exact match wins even when
-   * already `decided`, so a replayed ACCEPTED resolves to the popup it
-   * came from rather than stealing a different, still-undecided popup's
-   * identity.
-   *
-   * The fallbacks cover a popup that closes in the same turn it posts,
-   * which can arrive with `source` already null. Both scan newest first: a
-   * forward scan can return a stale hand-closed record ahead of the live
-   * popup that actually sent the message, marking the wrong one decided.
-   *
-   * An unmatched non-null `source` deliberately falls back too, rather
-   * than refusing to pair: mis-marking a record in an unattributable
-   * replay is cheaper than stranding `soleTraderReconfirmingCount` on any
-   * browser whose `source` is not reference-equal to what `window.open`
-   * returned.
-   *
-   * @param {Window|null} [source] the message's `event.source`
-   * @returns {Object|undefined} the record, if the message can be attributed
-   */
-  findPopupWatcher: function (source) {
-    const watchers = twoincSoleTrader.activePopupWatchers;
-    if (source) {
-      const exact = watchers.find(function (candidate) {
-        return candidate.win === source;
+    /**
+     * Selected-chip state, delegated to the group's own owner — the chips live
+     * inside the company-search panel, not here.
+     */
+    updateChips: function () {
+      companySearch.syncModeChips();
+    },
+
+    showNote: function (show) {
+      jQuery("." + companySearch.soleTraderNoteSlotClass)
+        .find(".twoinc-sole-trader-note")
+        .toggleClass("hidden", !show);
+    },
+
+    /**
+     * A sole-trader round trip has started (TWO-40 §7). The busy state is
+     * shown over the company-NAME field — the same in-field spinner an
+     * ordinary company search uses — rather than in the query row it hides,
+     * so it's visible for the link-click entry point too, which never has a
+     * dropdown open to paint in.
+     */
+    beginFlight: function () {
+      controller.flightDepth += 1;
+      if (controller.flightDepth === 1) {
+        // The note slot and the chip group — the two places busy state is
+        // ever visible. Both scoped to THIS instance: the note-slot class is
+        // per-instance, and the chip row is found within this instance's own
+        // field wrap, since every instance's panel shares the same chip-row
+        // class (TWO-40).
+        jQuery("." + companySearch.soleTraderNoteSlotClass)
+          .add(companySearch.modeChipsNode())
+          .addClass("twoinc-sole-trader-toggle--busy");
+      }
+      companySearch.syncSoleTraderSurfaces();
+    },
+
+    /**
+     * A sole-trader round trip has reached a terminal state — success, failure,
+     * retry-exhausted or abandoned. Every branch that can end one calls this.
+     *
+     * Clamped at zero so an unbalanced settle cannot drive the count negative
+     * and make a subsequent genuine flight invisible.
+     *
+     * Depth reaching zero IS "the flow is complete" in the sense the spinner and
+     * the dropdown close are gated on (Doug 2026-08-20): the popup's own watcher
+     * holds a flight until the window is gone, and the ACCEPTED handler holds a
+     * second one across `fetchCurrentBuyer` until `setCompany()` has written the
+     * company name and number. Nothing else has to be joined up for it —
+     * `flightDepth` already counts both, and it is only zero once every one of
+     * them has finished.
+     *
+     * @returns {void}
+     */
+    settleFlight: function () {
+      controller.flightDepth = Math.max(0, controller.flightDepth - 1);
+      if (controller.flightDepth === 0) {
+        jQuery("." + companySearch.soleTraderNoteSlotClass)
+          .add(companySearch.modeChipsNode())
+          .removeClass("twoinc-sole-trader-toggle--busy");
+        if (controller.closeDropdownOnSettle) {
+          controller.closeDropdownOnSettle = false;
+          companySearch.closeCompanySearchDropdown();
+        }
+      }
+      companySearch.syncSoleTraderSurfaces();
+    },
+
+    /**
+     * The "select a different sole trader" link, built hidden on first use
+     * (TWO-40 §7). Same visual slot and shape as the "search for company"
+     * link manual entry already offers. One link covers both "pick a
+     * different existing registration" and "register a new one" — that
+     * choice happens inside the hosted signup's own UI.
+     */
+    getDifferentSoleTraderBtnNode: function () {
+      const id = companySearch.differentSoleTraderBtnId;
+      let $btn = jQuery("#" + id);
+      if ($btn.length) {
+        controller.placeDifferentSoleTraderBtn($btn);
+        return $btn;
+      }
+
+      $btn = jQuery("<button></button>")
+        .attr({ id: id, type: "button" })
+        .text(
+          (controller.config().text && controller.config().text.select_different) ||
+            "Select a different sole trader"
+        )
+        .hide()
+        // Bound directly on the element, click AND Enter/Space, for the same
+        // reasons documented on getSearchCompanyBtnNode — a delegated click on
+        // document.body was proven not to reach that button live.
+        .on("click", function (event) {
+          event.preventDefault();
+          controller.launchSignup({ autoselect: false });
+        })
+        .on("keydown", function (event) {
+          if (event.which !== 13 && event.which !== 32) return;
+          event.preventDefault();
+          event.stopPropagation();
+          controller.launchSignup({ autoselect: false });
+        });
+
+      controller.placeDifferentSoleTraderBtn($btn);
+      return $btn;
+    },
+
+    /**
+     * The slot the "select a different sole trader" link hangs in: the input
+     * wrapper INSIDE whichever company-name field is the visible one.
+     *
+     * TWO-40 §7 makes an adopted sole trader show through the live search
+     * widget, so the search row takes the slot whenever it is the visible
+     * surface — a button appended inside a hidden field never renders.
+     *
+     * Inside the row's wrapper rather than after the row (TWO-25503, Doug):
+     * as a sibling it stacked against the row's own bottom margin and needed a
+     * hardcoded negative margin to look right, which over-pulled it onto the
+     * field itself. Inside, it sits where `#search_company_btn` already does.
+     *
+     * @returns {jQuery}
+     */
+    differentSoleTraderBtnSlot: function () {
+      // Follows `companyNameSurface()` in both mount locations rather than
+      // deciding once at creation (TWO-25503): this link is built late, only on
+      // adoption, so a home chosen at that moment is a home chosen from whatever
+      // happened to be visible then — which is how it has twice ended up in the
+      // wrong region.
+      const helper = twoincSelectWooHelper;
+      const $surface = helper.companyNameSurface();
+      if ($surface.find(helper.companyFieldSelector()).length) {
+        return helper.affordanceSlotIn($surface, helper.companyFieldSelector());
+      }
+      return helper.companyFieldAffordanceSlot();
+    },
+
+    /**
+     * Re-anchor the link on every call, the same way `getCompanySummaryNode()`
+     * does — this runs on every `toggleBusinessFields()`, and the visible
+     * company-name surface can have changed since the last one.
+     */
+    placeDifferentSoleTraderBtn: function ($btn) {
+      const $slot = controller.differentSoleTraderBtnSlot();
+      // Position as well as parenthood: the link belongs last in the slot, after
+      // the input, and anything appended to that slot after it — the company
+      // summary on a re-render — leaves it stranded mid-slot otherwise.
+      if ($btn.parent()[0] === $slot[0] && $slot.children().last()[0] === $btn[0]) return;
+      $slot.append($btn);
+    },
+
+    /**
+     * Show the "select a different sole trader" link only where it means
+     * something: sole-trader mode (TWO-40 §7). Gated on mode + tokens only,
+     * no `#company_id`-content check — that field is permanently hidden in
+     * every mode, so there's no reason to lean on its DOM value here.
+     */
+    syncDifferentSoleTraderLink: function () {
+      const show = controller.mode === "sole_trader" && !!controller.tokens;
+      // Built lazily, only when about to be shown: this runs on every mode
+      // switch, and building it eagerly would insert a hidden button into
+      // the address form of every merchant who never sees this feature.
+      if (!show && !jQuery("#" + companySearch.differentSoleTraderBtnId).length) return;
+      controller.getDifferentSoleTraderBtnNode().toggle(show);
+    },
+
+    /**
+     * A mode chip was clicked. Business is immediate; Sole trader switches mode
+     * then opens the hosted signup in the same synchronous gesture as the click.
+     */
+    onModeChipClick: function (mode) {
+      if (mode === "business") {
+        // Reached only from tests today — the Registered company chip carries
+        // its own click handler, and that is where this mode's abandon and
+        // guard live. Kept as the shared entry point's business arm, matching
+        // that handler's guard so calling it cannot diverge from the chip.
+        if (!controller.isDeciding()) controller.setMode("business");
+        return;
+      }
+      // Cancel any abandon the buyer's return armed, here rather than only in
+      // the capture-phase mousedown (TWO-25503): Enter and Space produce no
+      // mousedown, so keyboard-activating this chip raised the popup and then
+      // let the still-armed timer close it 150ms later.
+      clearTimeout(controller.refocusAbandonTimer);
+      controller.refocusAbandonTimer = null;
+      // A signup the buyer hasn't finished is still on screen, so this click
+      // is asking for it back, not for anything new: raise it and stop.
+      // Checked on the chip itself, not the refocus that usually precedes it
+      // — a chip activated from the keyboard fires `click` with no
+      // `mousedown`, so a raise hung off the refocus would leave Enter/Space
+      // as the one route that can't get the buyer back to their popup.
+      if (controller.refocusOpenPopups()) return;
+      // Re-clicking once already adopted is the same re-signup the "select a
+      // different sole trader" link launches, not a no-op — the chip is a
+      // second, equally deliberate way to ask for it. `autoselect: false` so
+      // the hosted flow offers a choice rather than handing back the
+      // registration already adopted.
+      if (controller.mode === "sole_trader" && controller.soleTraderAdopted) {
+        controller.launchSignup({ autoselect: false });
+        return;
+      }
+      controller.setMode("sole_trader");
+      // Always the hosted signup, no conditional fast path: a company may
+      // only ever be filled in by the buyer's own trip through that flow. The
+      // passive email-driven autofill probe this used to consult could
+      // populate fields off a Two session cookie the buyer never
+      // authenticated against.
+      controller.launchSignup();
+    },
+
+    /**
+     * Is a sole-trader autofill flight or a signup popup currently
+     * outstanding (TWO-40 §7)? The guard every other way to leave/interrupt
+     * sole-trader mode checks before acting: the widget/chips deliberately
+     * survive this window, so paths once unreachable while
+     * `mode === "sole_trader"` (Business chip, reopenSearch(), an ordinary
+     * pick) are reachable now, and acting on them mid-wait races the flow's
+     * own resolution.
+     */
+    isBusy: function () {
+      return controller.flightDepth > 0 || controller.activePopupWatchers.length > 0;
+    },
+
+    /**
+     * Is sole-trader mode still deciding what it is, as opposed to already
+     * adopted with `activePopupWatchers` only nonzero because the poll hasn't
+     * yet noticed the popup closed? `isBusy()` alone over-blocks a direct exit
+     * from sole-trader mode once `soleTraderAdopted` is true and the outcome
+     * is already settled. ORed with `soleTraderReconfirming`, since
+     * `soleTraderAdopted` is a one-way latch that doesn't turn back off for a
+     * "select a different sole trader" re-signup.
+     */
+    isDeciding: function () {
+      return (
+        controller.isBusy() &&
+        (!controller.soleTraderAdopted || controller.soleTraderReconfirmingCount > 0)
+      );
+    },
+
+    /**
+     * Switch mode and toggle the company-search suppression. No token/buyer
+     * work happens here — that is owned by the chip-click handler.
+     */
+    setMode: function (mode) {
+      // Only an actual transition resets adoption/reconfirmation state: a
+      // redundant same-mode `setMode("sole_trader")` must not zero a live
+      // re-signup's own `soleTraderReconfirmingCount` mid-flight.
+      const isTransition = mode !== controller.mode;
+      controller.mode = mode;
+      if (isTransition) {
+        controller.soleTraderAdopted = false;
+        controller.soleTraderReconfirmingCount = 0;
+      }
+      if (mode === "sole_trader") {
+        // Sole trader is its own company-capture mode: it renders through the
+        // panel but carries a synthetic id, so neither manual entry nor an
+        // ordinary registry pick's surfaces are right for it. Snapshotted first
+        // so it can be restored on the way out, and written BEFORE the chip sync
+        // below — `selectedMode()` reads both axes, and manual entry wins the tie.
+        if (controller.savedCaptureMode === null) {
+          controller.savedCaptureMode = twoincCompanyCapture.mode;
+        }
+        twoincCompanyCapture.mode = "sole_trader";
+      }
+
+      controller.updateChips();
+      controller.syncDifferentSoleTraderLink();
+      // Before the branch below, so a chip click made while the panel is already
+      // open hides the query row in the click's own gesture.
+      companySearch.syncSoleTraderSurfaces();
+
+      // Nothing is torn down on the way IN: the panel and its spinner have to
+      // survive the autofill round trip and the signup popup it can lead to.
+      // `lockCapturedFields()` closes the panel once there is a company to show.
+      if (mode !== "sole_trader") {
+        controller.leaveSoleTraderMode();
+        controller.setCompany("", "");
+        twoincDomHelper.toggleBusinessFields();
+        Twoinc.getInstance().enableCompanySearch();
+        // The buyer may have been in manual entry when they switched to sole
+        // trader, in which case the restored mode is `manual` and
+        // enableCompanySearch just early-returned — without this the link back
+        // to search stays hidden with no other route back to the picker.
+        if (twoincCompanyCapture.mode === "manual") {
+          companySearch.getSearchCompanyBtnNode().show();
+        }
+      }
+    },
+
+    /**
+     * The state/DOM bookkeeping every real exit from sole-trader mode needs,
+     * regardless of what happens to the search widget on the way out
+     * (TWO-40 §7): `setMode`'s own business branch tears the widget down, but
+     * a pick made directly off the still-live widget must not also go
+     * through that teardown, since it would blank the pick before `write()`
+     * ever runs. Split out so both paths share identical "leaving" semantics.
+     */
+    leaveSoleTraderMode: function () {
+      controller.showNote(false);
+      twoincCompanyCapture
+        .nameField()
+        .add(twoincCompanyCapture.numberFieldSelector())
+        .prop("readonly", false);
+      if (controller.savedCaptureMode !== null) {
+        twoincCompanyCapture.mode = controller.savedCaptureMode;
+        controller.savedCaptureMode = null;
+      }
+      // A popup-close poll left over from a resolved adoption/re-signup keeps
+      // `isBusy()`/`isDeciding()` true purely on its own 300ms cadence. This
+      // is the one place every caller has already committed to leaving
+      // sole-trader mode, so whatever that poll was still going to decide is
+      // moot — left running it would race a deferred manual-entry switch,
+      // wrongly refusing it while the stale busy state persists.
+      controller.abandonSoleTraderFlow();
+    },
+
+    /**
+     * Give up on everything the sole-trader flow still has outstanding, as
+     * one operation: the popup windows and the records tracking them
+     * (TWO-40 §14). Called only from `leaveSoleTraderMode()`.
+     *
+     * Closing comes before dropping the records, since the records hold the
+     * only handles there are — closing after would leave the window on
+     * screen with nothing tracking it, letting the next chip click open a
+     * second popup over it. Every tracked window is closed here, not just the
+     * undecided ones `closeAbandonedPopups()` acts on, since mode has already
+     * left `sole_trader` by the time this runs.
+     */
+    abandonSoleTraderFlow: function () {
+      controller.activePopupWatchers.forEach(function (watcher) {
+        if (watcher.win.closed || typeof watcher.win.close !== "function") return;
+        watcher.win.close();
       });
-      if (exact) {
-        return exact;
-      }
-    }
-    for (let i = watchers.length - 1; i >= 0; i -= 1) {
-      if (!watchers[i].decided && !watchers[i].win.closed) {
-        return watchers[i];
-      }
-    }
-    for (let i = watchers.length - 1; i >= 0; i -= 1) {
-      if (!watchers[i].decided) {
-        return watchers[i];
-      }
-    }
-    return undefined;
-  },
+      controller.stopAllPopupWatchers();
+    },
 
-  /** Test seam: stop every outstanding popup-close poll and settle the
-   * flight each was holding, so a test file leaves nothing running past it.
-   * @returns {void}
-   */
-  stopAllPopupWatchers: function () {
-    twoincSoleTrader.activePopupWatchers.forEach(function (watcher) {
-      clearInterval(watcher.id);
-      twoincSoleTrader.settleFlight();
-    });
-    twoincSoleTrader.activePopupWatchers = [];
-  },
+    /**
+     * Close the panel and lock the captured fields, once a sole trader is
+     * actually adopted. Split out of `setMode()` — see its comment — so
+     * switching mode alone leaves the panel and its spinner alone; this is the
+     * only moment there is nothing left to search for.
+     *
+     * The adopted name is painted into the company-name field the same way a
+     * registry pick is, so an adopted sole trader reads as a company that was
+     * searched and picked (TWO-40 §7 direction (a)).
+     */
+    lockCapturedFields: function (companyId, companyName) {
+      // An adoption can land with no panel bound — manual entry releases the
+      // field and the Sole trader chip is not hidden there.
+      companySearch.attach(Twoinc.getInstance());
+      companySearch.closeCompanySearchDropdown();
+      companySearch.setDisplayName(companyName);
 
-  /**
-   * Adopt an enrolled sole trader's company onto the checkout.
-   *
-   * Goes through the ONE capture write path (TWO-40 §5), which owns the posted
-   * fields, the instance record, the pairing tag and the provenance markers.
-   * A `TWO:`-prefixed identifier takes exactly the same path as any registry
-   * number — no branch here, none downstream. The only place it is treated
-   * specially is display, and that is `formatCompanyNumber`'s job.
-   *
-   * @param {string} companyId
-   * @param {string} companyName
-   * @param {Object} [buyer] the autofill buyer, when one was resolved; its
-   *   address and phone number are written too (§2.6, §5)
-   * @returns {void}
-   */
-  setCompany: function (companyId, companyName, buyer) {
-    if (companyId && twoincSoleTrader.mode === "sole_trader") {
-      // The moment there is actually a sole trader captured — not just a
-      // mode switch (TWO-40 §7) — is the moment there is nothing left to
-      // search for. Locking here, not on every switch into sole-trader
-      // mode, is what lets the dropdown+spinner survive the autofill/popup
-      // round trip.
-      twoincSoleTrader.lockCapturedFields(companyId, companyName);
-      // Read by `watchPopupClose()` in place of `#company_id`'s raw value.
-      twoincSoleTrader.soleTraderAdopted = true;
-    }
-    twoincCompanyCapture.write(companyName, companyId);
-    // The visible field too, when this is the clearing call setMode("business")
-    // makes: without it a company picked before the sole-trader detour stays
-    // painted after being cleared from both posted fields (TWO-25288).
-    if (!companyName) {
-      twoincSelectWooHelper.setDisplayName("");
-    }
-    const instance = Twoinc.getInstance();
-    // The buyer's address, written regardless of the merchant's
-    // address-lookup switch (TWO-40 §5): that switch legitimately gates an
-    // ordinary company-search pick's address write in configurations that
-    // have nothing to do with sole-trader signup, but a buyer who just
-    // enrolled must still have their address land. Explicit bypass rather
-    // than making the switch context-aware.
-    const buyerAddress = buyer && (buyer.billing_address || buyer.address);
-    if (companyId && buyerAddress) {
-      instance.setAddress(buyerAddress);
-      instance.registryAddressApplied = true;
-    }
-    if (companyId && buyer && buyer.phone_number) {
-      jQuery("#billing_phone").val(buyer.phone_number);
-    }
-    // Re-evaluate which company fields are shown, after the write above
-    // (TWO-25326 §12): `#company_id`'s visibility depends on the value it
-    // now holds. Every route into sole-trader capture toggles the fields
-    // before the autofill lands, so without this the minted `TWO:…`
-    // identifier lands in a field made visible on the strength of being
-    // empty, and stays on screen until an unrelated toggle happens.
-    twoincDomHelper.toggleBusinessFields();
-    // Explicit rather than DOM-read: this function is the authority on what
-    // was just captured, so the summary should not depend on write order
-    // (TWO-25288).
-    twoincSelectWooHelper.renderCompanySummary(companyName, companyId);
-    twoincSoleTrader.syncDifferentSoleTraderLink();
-    if (companyId) {
-      instance.getApproval();
-    }
-  },
+      jQuery("#" + companySearch.searchCompanyBtnId).hide();
+      twoincCompanyCapture
+        .nameField()
+        .add(twoincCompanyCapture.numberFieldSelector())
+        .prop("readonly", true);
+    },
 
-  /**
-   * Mint the delegation + autofill tokens. Invokes cb(true) once tokens are
-   * available (also binding the signup postMessage listener), cb(false) on
-   * any failure. Tokens are short-lived, so `scheduleTokenRefresh()` re-mints.
-   */
-  fetchTokens: function (cb) {
-    const cfg = twoincSoleTrader.config();
-    if (!cfg.tokens_url) {
-      if (cb) cb(false);
-      return;
-    }
-    if (Date.now() < twoincSoleTrader.tokenMintBackoffUntil) {
-      if (cb) cb(false);
-      return;
-    }
-    const country = twoincSoleTrader.currentCountry();
-    jQuery
-      .post(cfg.tokens_url, { csrf_token: cfg.csrf_token, country: country })
-      .done(function (response) {
-        // The buyer may have changed country while the request was in
-        // flight — same guard `refresh()` uses for availability. Without
-        // it, a slower request for the country the buyer just left can
-        // land after a newer one and overwrite `tokens` with delegated
-        // authority for the wrong jurisdiction.
-        if (twoincSoleTrader.currentCountry() !== country) {
+    /**
+     * Click-to-reopen (TWO-40 §7): once a sole trader is adopted, the
+     * captured fields readonly-lock and the query row is suppressed, leaving
+     * no way back to an ordinary company search except the "select a
+     * different sole trader" link, which only leads back into the same
+     * hosted signup. Clicking into a locked captured field instead reverts to
+     * business mode and lands the buyer in the reopened dropdown, same as
+     * `exitManualCompanyEntry()` does leaving manual entry. In tile placement the
+     * lock lands on hidden `#company_name`, so the chips are the route back.
+     *
+     * Refused while `isDeciding()`, not the wider `isBusy()`: a captured
+     * field only readonly-locks once `lockCapturedFields()` runs (deferred
+     * for the whole autofill/popup wait), so reverting mode out from under
+     * that wait would drop a completed signup, since the ACCEPTED handler
+     * also gates on `mode === "sole_trader"`. Once adopted, refusing the
+     * click just because the popup-close poll hasn't caught up would
+     * reintroduce that bug for the length of the poll.
+     */
+    reopenSearch: function () {
+      if (controller.mode !== "sole_trader" || controller.isDeciding()) return;
+      controller.setMode("business");
+      const helper = twoincSelectWooHelper;
+      // Reached from the captured fields in the ADDRESS area, which stay on
+      // screen while the panel's own host — the payment tile — is collapsed.
+      if (!helper.companySearchIsReachable()) return;
+      if (!helper.openCompanySearchDropdown()) {
+        helper.focusVisibleCompanyField(helper.companyFieldSelector());
+      }
+    },
+
+    /**
+     * Open the hosted signup popup, falling back to the visible link if the
+     * browser blocks the window. Re-entrancy-guarded (TWO-40 §7): a second
+     * activation while one is already opening is dropped, and an activation
+     * while an already-open popup's outcome is undecided raises that popup
+     * instead of opening a second one.
+     *
+     * A re-signup (`options.autoselect === false`) is also refused while a
+     * different one is already outstanding: `openingSignup` only guards two
+     * clicks in the same synchronous gesture, not a later sequential one —
+     * closing one re-signup and re-clicking is exactly the case that made
+     * `soleTraderReconfirmingCount` a count rather than a boolean.
+     */
+    launchSignup: function (options) {
+      if (controller.openingSignup) return;
+      // One live undecided popup at a time. "Live" is load-bearing: a
+      // hand-closed record stays undecided until its own poll notices, and a
+      // relaunch is deliberately allowed to open alongside it — reading
+      // "undecided" alone would mis-attribute an inbound ACCEPTED (see
+      // `findPopupWatcher`). Scoped to each popup's own outcome rather than
+      // `isDeciding()`, which would strand a chip click when no popup exists
+      // and only a stale flight is outstanding.
+      if (controller.signupConfirming) return;
+      // The abandon a return to the checkout armed goes, whatever this
+      // activation then does: left running it closes the popup 150ms later,
+      // raised or freshly opened. Only the mode chips cancel it on their own.
+      clearTimeout(controller.refocusAbandonTimer);
+      controller.refocusAbandonTimer = null;
+      // Raised, not silently dropped: the popup that would answer this
+      // activation is already on screen, and a refusal that does nothing at all
+      // reads as a dead control to a buyer who cannot see it.
+      if (controller.refocusOpenPopups()) return;
+      if (options && options.autoselect === false && controller.soleTraderReconfirmingCount > 0) {
+        return;
+      }
+      controller.openingSignup = true;
+      try {
+        const win = controller.openPopup(options);
+        controller.showNote(!win);
+        if (win) {
+          // Both callers passing `autoselect: false` — the "select a
+          // different sole trader" link, and a re-click of the chip once
+          // already adopted — are a genuinely new decision launched from a
+          // stale-true `soleTraderAdopted`; see that flag's own comment.
+          //
+          // Incremented only once a popup has actually opened: a blocked
+          // re-signup calls neither `watchPopupClose` nor the ACCEPTED
+          // handler, so incrementing unconditionally would strand the count
+          // above zero until an unrelated `setMode()` reset it.
+          const isReconfirming = !!(options && options.autoselect === false);
+          if (isReconfirming) {
+            controller.soleTraderReconfirmingCount += 1;
+          }
+          controller.closeDropdownOnSettle = true;
+          controller.watchPopupClose(win, isReconfirming);
+        }
+      } finally {
+        // Released once the synchronous open has returned, blocked or not —
+        // held any longer and a blocked popup would lock the buyer out of
+        // retrying via the fallback link.
+        controller.openingSignup = false;
+      }
+    },
+
+    /**
+     * Keep the search dropdown's spinner up for as long as the signup popup
+     * is open, and settle it the moment the buyer closes the window
+     * (TWO-40 §7). `window.closed` polling is the only signal a same-origin
+     * opener has for "the popup went away", with no cooperation from the
+     * popup and no event for it. If nothing was adopted by close time, hand
+     * the checkout back to an ordinary company search.
+     *
+     * Reads `soleTraderAdopted`, not `#company_id`'s raw value, which can
+     * hold an unrelated id from an earlier capture and would wrongly read as
+     * "already adopted". Also skips the revert while `signupConfirming`:
+     * the ACCEPTED handler's own `fetchCurrentBuyer()` can still be resolving
+     * when this poll notices the window closed, and that handler is the sole
+     * authority once a signup has completed.
+     *
+     * @param {Window} win the popup returned by `window.open`
+     * @param {boolean} [isReconfirming] whether this popup was a re-signup —
+     *   only decrement `soleTraderReconfirmingCount` for the popup that
+     *   actually incremented it, so an unrelated popup's poll can't steal a
+     *   decrement meant for a different, still-open re-signup.
+     */
+    watchPopupClose: function (win, isReconfirming) {
+      controller.bindWindowRefocusListener();
+      controller.beginFlight();
+      const watcher = { id: null, win: win, isReconfirming: !!isReconfirming, decided: false };
+      watcher.id = setInterval(function () {
+        if (!win.closed) return;
+        controller.settleClosedPopup(watcher, false);
+      }, 300);
+      controller.activePopupWatchers.push(watcher);
+    },
+
+    /**
+     * Everything one popup's window going away settles. Called by that
+     * popup's own poll above, and — only on the mode-chip abandon path —
+     * synchronously by `abandonPopupsForChipClick()`. Factored out so the
+     * settle keeps one owner (TWO-40 §14) for `flightDepth`,
+     * `soleTraderReconfirmingCount` and `closeDropdownOnSettle`.
+     *
+     * @param {Object} watcher the record whose window has gone
+     * @param {boolean} chipOwnsOutcome a mode-chip click is mid-gesture and
+     *   owns the mode and dropdown from here
+     */
+    settleClosedPopup: function (watcher, chipOwnsOutcome) {
+      controller.stopWatchingPopup(watcher.id);
+      if (chipOwnsOutcome) {
+        // Consumed, not honoured: the chip decides what happens to the
+        // dropdown, and closing it here would destroy the button whose
+        // `click` hasn't been dispatched yet.
+        controller.closeDropdownOnSettle = false;
+      }
+      controller.settleFlight();
+      if (watcher.isReconfirming && !watcher.decided) {
+        // Abandoned without a decision — this settle owns the decrement. A
+        // decided popup's decrement belongs to the ACCEPTED handler instead.
+        controller.soleTraderReconfirmingCount = Math.max(
+          0,
+          controller.soleTraderReconfirmingCount - 1
+        );
+      }
+      if (
+        // Skipped on the chip path: `setMode`'s business branch destroys the
+        // dropdown the chip lives in, and reverting here would make the
+        // Registered company chip's own "already in business mode" no-op
+        // swallow the click.
+        !chipOwnsOutcome &&
+        controller.mode === "sole_trader" &&
+        !controller.soleTraderAdopted &&
+        !controller.signupConfirming &&
+        // A popup relaunched inside this poll's stale window owns the mode
+        // now — reverting under it would drop its eventual ACCEPTED on the
+        // `mode !== "sole_trader"` gate.
+        //
+        // "Still on screen" is the question, not "still undecided": a popup
+        // whose ACCEPTED resolved to no buyer is decided yet still open, and
+        // a retry inside it posts a second ACCEPTED a revert would drop on
+        // that same gate.
+        !controller.activePopupWatchers.some(function (other) {
+          return !other.win.closed;
+        })
+      ) {
+        controller.setMode("business");
+      }
+    },
+
+    /**
+     * Close an abandoned signup popup when the buyer comes back to the
+     * checkout.
+     *
+     * A window `focus` listener AND a `visibilitychange` one. The hosted signup
+     * is a separate window, so a round trip to it and back leaves the checkout's
+     * own tab `visible` throughout and only `focus` reports it; a buyer who
+     * fetches their code from another TAB of the same window is the reverse.
+     * Which of the two Chrome reports for an in-window tab switch is not
+     * established, so both are bound and the arming guard absorbs a duplicate.
+     * Bound lazily from `watchPopupClose`, left bound for the window's lifetime
+     * like the `message` listener.
+     *
+     * The target check is not defensive noise: jQuery's `.trigger("focus")`
+     * does not dispatch natively — it walks the propagation path itself,
+     * window included. This file triggers focus that way on the company field
+     * (`focusVisibleCompanyField`), so without the check, opening the dropdown
+     * would close the popup.
+     *
+     * The refocus only SCHEDULES the abandon — which of three things the
+     * buyer meant depends on what they activated, and window `focus` fires
+     * before that gesture completes — so the decision has to outlive the focus
+     * handler by `refocusChipGraceMs`:
+     *
+     *  - Sole trader chip → cancel the abandon; activating it asks for that
+     *    popup back and `onModeChipClick` raises it.
+     *  - any other mode chip → abandon now, so the chip's own handler runs
+     *    against settled state — left to the timer it would land afterwards
+     *    and the chip's `isDeciding()` guard would wrongly refuse it.
+     *  - anything else (alt-tab back, a click on the page) → the timer fires
+     *    and abandons.
+     *
+     * Each chip resolves this from its own `click` handler, which is the only
+     * event Enter and Space produce. The capture-phase `mousedown` below is the
+     * pointer's earlier shortcut to the same decision, not the only route to it.
+     * Capture phase, on `document` rather than the chips: chips are rebuilt
+     * on every dropdown open, and capture reaches them regardless.
+     *
+     * @returns {void}
+     */
+    bindWindowRefocusListener: function () {
+      if (controller.refocusHandler) return;
+      controller.refocusHandler = function (event) {
+        if (event && event.target && event.target !== window && event.target !== document) return;
+        controller.scheduleRefocusAbandon();
+      };
+      window.addEventListener("focus", controller.refocusHandler);
+
+      // Paired with `focus` because neither signal covers the case alone. A
+      // return from another TAB of the same window is a visibility change;
+      // a return from another WINDOW leaves visibility untouched. Whether
+      // Chrome also emits a window `focus` for the first is not something
+      // this plugin should depend on, so both are bound and the arming
+      // guard below makes a duplicate harmless.
+      controller.visibilityHandler = function () {
+        // Fires on HIDE as well as show, and arming is coalesced onto the first
+        // caller — so arming here would spend the grace the buyer's actual
+        // return needs, leaving them a fraction of it or none.
+        if (document.visibilityState === "hidden") return;
+        controller.scheduleRefocusAbandon();
+      };
+      document.addEventListener("visibilitychange", controller.visibilityHandler);
+
+      controller.chipMousedownHandler = function (event) {
+        const target = event && event.target;
+        const chip =
+          target && typeof target.closest === "function"
+            ? target.closest("." + companySearch.modeChipClass)
+            : null;
+        if (!chip) return;
+        // Whatever the deferred path is or is not waiting on: a chip click is
+        // the buyer saying which mode they want, and only Sole trader means
+        // "give me that popup back".
+        clearTimeout(controller.refocusAbandonTimer);
+        controller.refocusAbandonTimer = null;
+        if (chip.getAttribute("data-two-chip") === "sole_trader") return;
+        controller.abandonPopupsForChipClick();
+      };
+      document.addEventListener("mousedown", controller.chipMousedownHandler, true);
+    },
+
+    /**
+     * Arm the deferred abandon, decided when the grace elapses rather than now:
+     * the buyer can arrive or leave again inside it, and the answer that matters
+     * is the one at the moment the popup would actually go.
+     *
+     * A refused close is simply a wasted cycle — the next `focus` or visibility
+     * change arms again, and nothing else keys off this timer (TWO-25503: the
+     * chip handler used to, which is how a refused close took the chips with
+     * it).
+     *
+     * @returns {void}
+     */
+    scheduleRefocusAbandon: function () {
+      // Coalesced onto the FIRST arming. Nothing clears an armed timer, so a
+      // second signal would not move the deadline — it would leave a SECOND
+      // timer running past it, coming due against whatever popup exists by then
+      // rather than the one the buyer walked away from. Window-targeted `focus`
+      // arrives in bursts (a blur fires one, so the panel closing its own
+      // dropdown produces a stream), and a single return can legitimately reach
+      // both this and the visibility listener.
+      if (controller.refocusAbandonTimer !== null) return;
+      controller.refocusAbandonTimer = setTimeout(function () {
+        controller.refocusAbandonTimer = null;
+        if (!controller.checkoutIsInFront()) return;
+        controller.closeAbandonedPopups();
+      }, controller.refocusChipGraceMs);
+    },
+
+    /** Test seam / teardown: drop the window `focus` listener, the mousedown
+     * listener that resolves it, and any abandon still scheduled.
+     * @returns {void}
+     */
+    unbindWindowRefocusListener: function () {
+      clearTimeout(controller.refocusAbandonTimer);
+      controller.refocusAbandonTimer = null;
+      if (controller.chipMousedownHandler) {
+        document.removeEventListener("mousedown", controller.chipMousedownHandler, true);
+        controller.chipMousedownHandler = null;
+      }
+      if (controller.visibilityHandler) {
+        document.removeEventListener("visibilitychange", controller.visibilityHandler);
+        controller.visibilityHandler = null;
+      }
+      if (!controller.refocusHandler) return;
+      window.removeEventListener("focus", controller.refocusHandler);
+      controller.refocusHandler = null;
+    },
+
+    /**
+     * Close every signup popup whose outcome is still open, and nothing else.
+     * `window.close()` on a handle this page's own `window.open()` returned
+     * is permitted regardless of origin, so this can be a real close.
+     *
+     * Closing the window is the whole action — spinner, mode revert and
+     * dropdown close happen exactly as for a popup closed by hand:
+     * `watchPopupClose`'s poll sees `.closed` within its next 300ms tick and
+     * runs its own terminal branch, keeping one owner for the settle
+     * (TWO-40 §14).
+     *
+     * Decided popups are left alone: a popup whose ACCEPTED resolved to no
+     * buyer is decided yet still on screen, and the buyer's retry inside it
+     * posts a second ACCEPTED — closing it would take the retry with it.
+     *
+     * The deferred path's own closer. A pointer activation of a chip resolves
+     * before this runs, via the capture-phase mousedown; a keyboard one resolves
+     * in the chip's `click` handler, which can land after this has already
+     * fired. See `bindWindowRefocusListener` and `abandonPopupsForChipClick`.
+     */
+    closeAbandonedPopups: function () {
+      controller.abandonablePopups().forEach(function (watcher) {
+        if (typeof watcher.win.close !== "function") return;
+        watcher.win.close();
+      });
+    },
+
+    /**
+     * Is the buyer actually looking at the checkout right now?
+     *
+     * A window `focus` fires when the browser WINDOW activates even while the
+     * checkout is the background tab, so `focus` alone cannot tell "came back to
+     * the checkout" from "opened the signup email in another tab of the same
+     * window".
+     *
+     * Gates ONLY the deferred refocus path. The chip handlers decide for
+     * themselves and must never consult this: in an iframed checkout it is false
+     * for the whole session unless the frame itself holds focus, and a buyer who
+     * clicks a chip has told us what they want whatever the frame owns.
+     *
+     * @returns {boolean}
+     */
+    checkoutIsInFront: function () {
+      if (typeof document.hasFocus !== "function") return true;
+      return document.hasFocus();
+    },
+
+    /**
+     * Abandon the signup popups because the buyer chose a mode chip other than
+     * Sole trader. Same close as `closeAbandonedPopups`, but drains each
+     * popup's settle synchronously rather than leaving it to the 300ms poll, so
+     * whatever runs next sees no outstanding flight or live popup. Safe to drain
+     * early only because `chipOwnsOutcome` holds back the steps that touch the
+     * dropdown — see `settleClosedPopup`.
+     *
+     * Reached from the chip's `mousedown` where there is one, and from its
+     * `click` regardless, which is the only one Enter and Space produce.
+     */
+    abandonPopupsForChipClick: function () {
+      controller.abandonablePopups().forEach(function (watcher) {
+        if (typeof watcher.win.close === "function") watcher.win.close();
+        controller.settleClosedPopup(watcher, true);
+      });
+    },
+
+    /**
+     * Bring the still-undecided signup popups back to the front. `focus()`
+     * on a window handle needs no cooperation from the hosted flow however
+     * cross-origin it is.
+     *
+     * @returns {boolean} whether there was a popup to raise
+     */
+    refocusOpenPopups: function () {
+      const abandonable = controller.abandonablePopups();
+      abandonable.forEach(function (watcher) {
+        if (typeof watcher.win.focus === "function") watcher.win.focus();
+      });
+      return abandonable.length > 0;
+    },
+
+    /**
+     * The popups a refocus is entitled to act on: still undecided, and their
+     * window still there.
+     *
+     * Decided popups are excluded: a popup whose ACCEPTED resolved to no
+     * buyer is decided yet still on screen, and a retry inside it posts a
+     * second ACCEPTED — closing that window would take the retry with it.
+     *
+     * @returns {Array} a snapshot, safe to iterate while records are removed
+     */
+    abandonablePopups: function () {
+      return controller.activePopupWatchers.filter(function (watcher) {
+        return !watcher.decided && !watcher.win.closed;
+      });
+    },
+
+    /** Stop one popup-close poll (its own terminal branch, or a test tearing
+     * down early) without touching any other outstanding one.
+     * @param {number} id the interval id returned by `watchPopupClose`
+     * @returns {void}
+     */
+    stopWatchingPopup: function (id) {
+      clearInterval(id);
+      controller.activePopupWatchers = controller.activePopupWatchers.filter(function (existing) {
+        return existing.id !== id;
+      });
+    },
+
+    /**
+     * The watcher record an inbound hosted-signup message belongs to.
+     *
+     * `event.source` is the authoritative answer — a WindowProxy stays
+     * reference-comparable across origins. An exact match wins even when
+     * already `decided`, so a replayed ACCEPTED resolves to the popup it
+     * came from rather than stealing a different, still-undecided popup's
+     * identity.
+     *
+     * The fallbacks cover a popup that closes in the same turn it posts,
+     * which can arrive with `source` already null. Both scan newest first: a
+     * forward scan can return a stale hand-closed record ahead of the live
+     * popup that actually sent the message, marking the wrong one decided.
+     *
+     * An unmatched non-null `source` deliberately falls back too, rather
+     * than refusing to pair: mis-marking a record in an unattributable
+     * replay is cheaper than stranding `soleTraderReconfirmingCount` on any
+     * browser whose `source` is not reference-equal to what `window.open`
+     * returned.
+     *
+     * @param {Window|null} [source] the message's `event.source`
+     * @returns {Object|undefined} the record, if the message can be attributed
+     */
+    findPopupWatcher: function (source) {
+      const watchers = controller.activePopupWatchers;
+      if (source) {
+        const exact = watchers.find(function (candidate) {
+          return candidate.win === source;
+        });
+        if (exact) {
+          return exact;
+        }
+      }
+      for (let i = watchers.length - 1; i >= 0; i -= 1) {
+        if (!watchers[i].decided && !watchers[i].win.closed) {
+          return watchers[i];
+        }
+      }
+      for (let i = watchers.length - 1; i >= 0; i -= 1) {
+        if (!watchers[i].decided) {
+          return watchers[i];
+        }
+      }
+      return undefined;
+    },
+
+    /** Test seam: stop every outstanding popup-close poll and settle the
+     * flight each was holding, so a test file leaves nothing running past it.
+     * @returns {void}
+     */
+    stopAllPopupWatchers: function () {
+      controller.activePopupWatchers.forEach(function (watcher) {
+        clearInterval(watcher.id);
+        controller.settleFlight();
+      });
+      controller.activePopupWatchers = [];
+    },
+
+    /**
+     * Adopt an enrolled sole trader's company onto the checkout.
+     *
+     * Goes through the ONE capture write path (TWO-40 §5), which owns the posted
+     * fields, the instance record, the pairing tag and the provenance markers.
+     * A `TWO:`-prefixed identifier takes exactly the same path as any registry
+     * number — no branch here, none downstream. The only place it is treated
+     * specially is display, and that is `formatCompanyNumber`'s job.
+     *
+     * @param {string} companyId
+     * @param {string} companyName
+     * @param {Object} [buyer] the autofill buyer, when one was resolved; its
+     *   address and phone number are written too (§2.6, §5)
+     * @returns {void}
+     */
+    setCompany: function (companyId, companyName, buyer) {
+      if (companyId && controller.mode === "sole_trader") {
+        // The moment there is actually a sole trader captured — not just a
+        // mode switch (TWO-40 §7) — is the moment there is nothing left to
+        // search for. Locking here, not on every switch into sole-trader
+        // mode, is what lets the dropdown+spinner survive the autofill/popup
+        // round trip.
+        controller.lockCapturedFields(companyId, companyName);
+        // Read by `watchPopupClose()` in place of `#company_id`'s raw value.
+        controller.soleTraderAdopted = true;
+      }
+      twoincCompanyCapture.write(companyName, companyId);
+      // The visible field too, when this is the clearing call setMode("business")
+      // makes: without it a company picked before the sole-trader detour stays
+      // painted after being cleared from both posted fields (TWO-25288).
+      if (!companyName) {
+        companySearch.setDisplayName("");
+      }
+      const instance = Twoinc.getInstance();
+      // The buyer's address, written regardless of the merchant's
+      // address-lookup switch (TWO-40 §5): that switch legitimately gates an
+      // ordinary company-search pick's address write in configurations that
+      // have nothing to do with sole-trader signup, but a buyer who just
+      // enrolled must still have their address land. Explicit bypass rather
+      // than making the switch context-aware.
+      const buyerAddress = buyer && (buyer.billing_address || buyer.address);
+      if (companyId && buyerAddress) {
+        instance.setAddress(buyerAddress);
+        instance.registryAddressApplied = true;
+      }
+      if (companyId && buyer && buyer.phone_number) {
+        jQuery("#billing_phone").val(buyer.phone_number);
+      }
+      // Re-evaluate which company fields are shown, after the write above
+      // (TWO-25326 §12): `#company_id`'s visibility depends on the value it
+      // now holds. Every route into sole-trader capture toggles the fields
+      // before the autofill lands, so without this the minted `TWO:…`
+      // identifier lands in a field made visible on the strength of being
+      // empty, and stays on screen until an unrelated toggle happens.
+      twoincDomHelper.toggleBusinessFields();
+      // Explicit rather than DOM-read: this function is the authority on what
+      // was just captured, so the summary should not depend on write order
+      // (TWO-25288).
+      companySearch.renderCompanySummary(companyName, companyId);
+      controller.syncDifferentSoleTraderLink();
+      if (companyId) {
+        instance.getApproval();
+      }
+    },
+
+    /**
+     * Mint the delegation + autofill tokens. Invokes cb(true) once tokens are
+     * available (also binding the signup postMessage listener), cb(false) on
+     * any failure. Tokens are short-lived, so `scheduleTokenRefresh()` re-mints.
+     */
+    fetchTokens: function (cb) {
+      const cfg = controller.config();
+      if (!cfg.tokens_url) {
+        if (cb) cb(false);
+        return;
+      }
+      if (Date.now() < controller.tokenMintBackoffUntil) {
+        if (cb) cb(false);
+        return;
+      }
+      const country = controller.currentCountry();
+      jQuery
+        .post(cfg.tokens_url, { csrf_token: cfg.csrf_token, country: country })
+        .done(function (response) {
+          // The buyer may have changed country while the request was in
+          // flight — same guard `refresh()` uses for availability. Without
+          // it, a slower request for the country the buyer just left can
+          // land after a newer one and overwrite `tokens` with delegated
+          // authority for the wrong jurisdiction.
+          if (controller.currentCountry() !== country) {
+            if (cb) cb(false);
+            return;
+          }
+          if (response && response.success && response.data && response.data.autofill_token) {
+            controller.tokens = response.data;
+            controller.bindPopupMessageListener();
+            controller.scheduleTokenRefresh();
+            if (cb) cb(true);
+          } else {
+            if (cb) cb(false);
+          }
+        })
+        .fail(function (jqXHR) {
+          if (jqXHR && jqXHR.status === 429) {
+            controller.tokenMintBackoffUntil = Date.now() + twoincUtilHelper.retryAfterMs(jqXHR);
+          }
           if (cb) cb(false);
+        });
+    },
+
+    /** Live id from `scheduleTokenRefresh`, so `stopTokenRefresh` (and tests) can clear it. */
+    tokenRefreshIntervalId: null,
+
+    /**
+     * Keep the delegation/autofill tokens alive across a long checkout
+     * (TWO-40). A buyer who sits on checkout past their expiry would
+     * otherwise find autofill and the signup popup broken on a stale token
+     * the next time either needs one — including via "select a different
+     * sole trader", which reads `tokens` long after adoption.
+     *
+     * Started once, from the first successful mint, not eagerly on page
+     * load: a buyer who never touches the sole-trader flow never mints a
+     * token and has nothing to refresh.
+     *
+     * @returns {void}
+     */
+    scheduleTokenRefresh: function () {
+      if (controller.tokenRefreshIntervalId) return;
+      controller.tokenRefreshIntervalId = setInterval(controller.refreshTokens, 30 * 60 * 1000);
+      window.addEventListener("pagehide", controller.handlePageHide);
+    },
+
+    /**
+     * The 30-minute refresh tick. Skipped, silently, while the signup popup is
+     * outstanding — `isBusy()` is the same guard the other paths use, and that
+     * flight's own settle leaves `tokens` fresh regardless. A failed re-mint
+     * (network error, expired session) is left for the next scheduled tick,
+     * same tolerance `fetchTokens` itself already has for its callers.
+     *
+     * Deliberately does NOT also call `beginFlight()`/`settleFlight()` itself
+     * (round-1 review, rejected): holding the flag for a background round trip
+     * nobody asked for would only over-block the Business chip,
+     * `reopenSearch()` and click-to-reopen. `fetchTokens`'s own
+     * country-staleness guard (round-2 review) is what keeps a late response
+     * from overwriting `tokens` for the wrong jurisdiction.
+     *
+     * @returns {void}
+     */
+    refreshTokens: function () {
+      if (controller.isBusy()) return;
+      controller.fetchTokens(function () {});
+    },
+
+    /**
+     * `pagehide` fires on a bfcache-eligible navigation too, where the page is
+     * only frozen and JS timer state (including this interval) survives the
+     * freeze/resume untouched. Tearing the interval down on that path would
+     * leave a buyer restored from bfcache with a dead refresh loop for the
+     * rest of the session, so only a real unload (`event.persisted` false)
+     * stops it.
+     *
+     * @param {PageTransitionEvent} [event]
+     * @returns {void}
+     */
+    handlePageHide: function (event) {
+      if (event && event.persisted) return;
+      controller.stopTokenRefresh();
+    },
+
+    /**
+     * @returns {void}
+     */
+    stopTokenRefresh: function () {
+      clearInterval(controller.tokenRefreshIntervalId);
+      controller.tokenRefreshIntervalId = null;
+      window.removeEventListener("pagehide", controller.handlePageHide);
+    },
+
+    /**
+     * Read the buyer on the Two cookie. Invokes cb(buyer) with the buyer
+     * details, or cb(null) when none exist (404) or on error. No UI side
+     * effects — the caller decides what to do with the result.
+     */
+    fetchCurrentBuyer: function (cb) {
+      if (!controller.tokens) {
+        cb(null);
+        return;
+      }
+      // The one call no server hop can make (its subject is the API-domain cookie the hosted signup set).
+      const headers = { "two-delegated-authority-token": controller.tokens.autofill_token };
+      if (controller.tokens.firewall_token) {
+        headers["X-WAF-TOKEN"] = controller.tokens.firewall_token;
+      }
+      fetch(window.twoinc.twoinc_checkout_host + "/autofill/v1/buyer/current", {
+        credentials: "include",
+        headers: headers
+      })
+        .then(function (response) {
+          if (response.ok) return response.json();
+          // Every non-2xx path must still drain the body. Abandoning an unread
+          // response leaves the request in flight as far as the browser is
+          // concerned, so the in-flight request count never returns to zero and
+          // anything waiting on network-idle (tooling, analytics, some themes)
+          // hangs.
+          return response.text().then(function () {
+            if (response.status === 404) return null;
+            throw new Error("autofill/v1/buyer/current failed");
+          });
+        })
+        .then(function (json) {
+          cb(json || null);
+        })
+        .catch(function () {
+          cb(null);
+        });
+    },
+
+    /**
+     * Open the hosted sole-trader signup in a real popup window (TWO-40 §7).
+     *
+     * `window.open()`, not an iframe-in-overlay: the signup/OTP flow depends
+     * on a third party that only works in a real popup window. The call
+     * stays synchronous with the click that triggered it — an
+     * async-delayed `window.open()` is blocker bait in every browser — which
+     * is why the chip-click path opens on tokens minted up front rather than
+     * issuing a request first.
+     *
+     * Brand overlays need nothing added here: a branded deployment resolves
+     * this URL's host from the brand registry's own URL template (see
+     * WC_Twoinc_Helper::get_environment_host and the brand's
+     * `checkout_url_template`). A `?brand=`/`?brandVersion=` query-string
+     * form also exists, but is a development-loop affordance, not the
+     * mechanism to build on.
+     *
+     * @param {Object} [options]
+     * @param {boolean} [options.autoselect] when false, appended to the URL so
+     *   the hosted flow offers a choice rather than adopting a known
+     *   registration silently
+     * @returns {Window|null}
+     */
+    openPopup: function (options) {
+      if (!controller.tokens) {
+        return null;
+      }
+      const opts = options || {};
+      const invoice = twoincAddressRoles.invoice();
+      const read = function (name) {
+        return twoincAddressRoles.value(invoice, name);
+      };
+      const prefill = {
+        email: read("email"),
+        first_name: read("first_name"),
+        last_name: read("last_name"),
+        company_name: companySearch.getCompanyName(),
+        phone_number: read("phone"),
+        billing_address: {
+          street: read("address_1"),
+          postal_code: read("postcode"),
+          city: read("city"),
+          region: read("state"),
+          country_code: controller.currentCountry()
+        }
+      };
+      let url =
+        controller.tokens.signup_url +
+        "?businessToken=" +
+        encodeURIComponent(controller.tokens.delegation_token) +
+        "&autofillToken=" +
+        encodeURIComponent(controller.tokens.autofill_token) +
+        "&autofillData=" +
+        encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(prefill)))));
+      // PDEV-4669: server-vetted country only — a DOM read would let the buyer
+      // pick their own verification flow.
+      const country = (controller.tokens.country || "").toUpperCase();
+      if (country) url += "&country=" + encodeURIComponent(country);
+      // Wired through unconditionally when asked for, with no branching on what
+      // the hosted flow does with it — that is the flow's business, not this
+      // plugin's.
+      if (opts.autoselect === false) url += "&autoselect=false";
+      // 700 wide, not narrower: the hosted signup's own layout clips below that.
+      return window.open(
+        url,
+        "_blank",
+        "location=yes,resizable=yes,scrollbars=yes,status=yes,height=805,width=700"
+      );
+    },
+
+    /**
+     * The hosted signup posts 'ACCEPTED' back to the opener when the buyer
+     * completes registration; re-read the buyer (it now owns the entered
+     * email) and apply the result — autofilling and keeping Sole trader.
+     */
+    bindPopupMessageListener: function () {
+      if (controller.messageListenerBound) {
+        return;
+      }
+      controller.messageListenerBound = true;
+      // Kept on the module so it can be unbound again. A `window` listener
+      // outlives everything else this module owns, so without a handle on it
+      // there is no way to take one down — which matters to any harness that
+      // re-evaluates this file against the same window.
+      controller.messageHandler = function (event) {
+        if (controller.mode !== "sole_trader" || !controller.tokens) {
           return;
         }
-        if (response && response.success && response.data && response.data.autofill_token) {
-          twoincSoleTrader.tokens = response.data;
-          twoincSoleTrader.bindPopupMessageListener();
-          twoincSoleTrader.scheduleTokenRefresh();
-          if (cb) cb(true);
+        const signupOrigin = new URL(controller.tokens.signup_url).origin;
+        if (event.origin !== signupOrigin) {
+          return;
+        }
+        if (event.data === "ACCEPTED") {
+          // Attribute the message to the popup that sent it — see
+          // `findPopupWatcher`. Marked decided at receipt so its close poll
+          // must not treat it as abandoned or spend its reconfirming
+          // decrement (that belongs to this handler's callback below).
+          const watcher = controller.findPopupWatcher(event.source);
+          // A replayed ACCEPTED resolves to its own, already-decided popup;
+          // only the receipt that actually settles a popup may spend its
+          // decrement below.
+          const newlyDecided = !!watcher && !watcher.decided;
+          if (watcher) {
+            watcher.decided = true;
+          }
+          controller.beginFlight();
+          // Held for the duration of this fetch: the popup can close the
+          // instant "ACCEPTED" is posted, well before this resolves and
+          // writes `#company_id` — `watchPopupClose()`'s own poll checks
+          // this before deciding the buyer abandoned signup with nothing
+          // captured.
+          controller.signupConfirming = true;
+          controller.fetchCurrentBuyer(function (buyer) {
+            // Authenticated path (TWO-40 §8): the server has just told this
+            // browser who the buyer is, so the email they authenticated with
+            // is the answer, full stop. Re-checking it against the
+            // checkout's own contact field is a confirmed bug: a buyer who
+            // signs up under a different address completes OTP, the stale
+            // email match disagrees with the server, and the same popup
+            // reopens forever.
+            const resolved = !!buyer;
+            controller.signupConfirming = false;
+            // Decremented here rather than only on popup close so a resolved
+            // re-signup un-blocks the Business chip/`reopenSearch()`
+            // immediately, not after another 300ms poll cycle. `newlyDecided`
+            // covers a late or replayed ACCEPTED, which must not spend a
+            // second decrement against one increment.
+            if (newlyDecided && watcher.isReconfirming) {
+              controller.soleTraderReconfirmingCount = Math.max(
+                0,
+                controller.soleTraderReconfirmingCount - 1
+              );
+            }
+            if (resolved) {
+              controller.setCompany(buyer.organization_number, buyer.company_name, buyer);
+              controller.showNote(false);
+            } else {
+              controller.showError();
+            }
+            // Last, after the capture above has actually landed: this used
+            // to settle before the write, so on the ordinary path the
+            // spinner came down and the dropdown closed while the company
+            // name and number were still unwritten. "Flow complete" is the
+            // write, not the response.
+            controller.settleFlight();
+          });
         } else {
-          if (cb) cb(false);
+          controller.showError();
         }
-      })
-      .fail(function (jqXHR) {
-        if (jqXHR && jqXHR.status === 429) {
-          twoincSoleTrader.tokenMintBackoffUntil =
-            Date.now() + twoincUtilHelper.retryAfterMs(jqXHR);
-        }
-        if (cb) cb(false);
-      });
-  },
+      };
+      window.addEventListener("message", controller.messageHandler);
+    },
 
-  /** Live id from `scheduleTokenRefresh`, so `stopTokenRefresh` (and tests) can clear it. */
-  tokenRefreshIntervalId: null,
+    /** Test seam: take the hosted-signup listener back off the window. */
+    unbindPopupMessageListener: function () {
+      if (!controller.messageHandler) return;
+      window.removeEventListener("message", controller.messageHandler);
+      controller.messageHandler = null;
+      controller.messageListenerBound = false;
+    },
 
-  /**
-   * Keep the delegation/autofill tokens alive across a long checkout
-   * (TWO-40). A buyer who sits on checkout past their expiry would
-   * otherwise find autofill and the signup popup broken on a stale token
-   * the next time either needs one — including via "select a different
-   * sole trader", which reads `tokens` long after adoption.
-   *
-   * Started once, from the first successful mint, not eagerly on page
-   * load: a buyer who never touches the sole-trader flow never mints a
-   * token and has nothing to refresh.
-   *
-   * @returns {void}
-   */
-  scheduleTokenRefresh: function () {
-    if (twoincSoleTrader.tokenRefreshIntervalId) return;
-    twoincSoleTrader.tokenRefreshIntervalId = setInterval(
-      twoincSoleTrader.refreshTokens,
-      30 * 60 * 1000
-    );
-    window.addEventListener("pagehide", twoincSoleTrader.handlePageHide);
-  },
-
-  /**
-   * The 30-minute refresh tick. Skipped, silently, while the signup popup is
-   * outstanding — `isBusy()` is the same guard the other paths use, and that
-   * flight's own settle leaves `tokens` fresh regardless. A failed re-mint
-   * (network error, expired session) is left for the next scheduled tick,
-   * same tolerance `fetchTokens` itself already has for its callers.
-   *
-   * Deliberately does NOT also call `beginFlight()`/`settleFlight()` itself
-   * (round-1 review, rejected): holding the flag for a background round trip
-   * nobody asked for would only over-block the Business chip,
-   * `reopenSearch()` and click-to-reopen. `fetchTokens`'s own
-   * country-staleness guard (round-2 review) is what keeps a late response
-   * from overwriting `tokens` for the wrong jurisdiction.
-   *
-   * @returns {void}
-   */
-  refreshTokens: function () {
-    if (twoincSoleTrader.isBusy()) return;
-    twoincSoleTrader.fetchTokens(function () {});
-  },
-
-  /**
-   * `pagehide` fires on a bfcache-eligible navigation too, where the page is
-   * only frozen and JS timer state (including this interval) survives the
-   * freeze/resume untouched. Tearing the interval down on that path would
-   * leave a buyer restored from bfcache with a dead refresh loop for the
-   * rest of the session, so only a real unload (`event.persisted` false)
-   * stops it.
-   *
-   * @param {PageTransitionEvent} [event]
-   * @returns {void}
-   */
-  handlePageHide: function (event) {
-    if (event && event.persisted) return;
-    twoincSoleTrader.stopTokenRefresh();
-  },
-
-  /**
-   * @returns {void}
-   */
-  stopTokenRefresh: function () {
-    clearInterval(twoincSoleTrader.tokenRefreshIntervalId);
-    twoincSoleTrader.tokenRefreshIntervalId = null;
-    window.removeEventListener("pagehide", twoincSoleTrader.handlePageHide);
-  },
-
-  /**
-   * Read the buyer on the Two cookie. Invokes cb(buyer) with the buyer
-   * details, or cb(null) when none exist (404) or on error. No UI side
-   * effects — the caller decides what to do with the result.
-   */
-  fetchCurrentBuyer: function (cb) {
-    if (!twoincSoleTrader.tokens) {
-      cb(null);
-      return;
-    }
-    // The one call no server hop can make (its subject is the API-domain cookie the hosted signup set).
-    const headers = { "two-delegated-authority-token": twoincSoleTrader.tokens.autofill_token };
-    if (twoincSoleTrader.tokens.firewall_token) {
-      headers["X-WAF-TOKEN"] = twoincSoleTrader.tokens.firewall_token;
-    }
-    fetch(window.twoinc.twoinc_checkout_host + "/autofill/v1/buyer/current", {
-      credentials: "include",
-      headers: headers
-    })
-      .then(function (response) {
-        if (response.ok) return response.json();
-        // Every non-2xx path must still drain the body. Abandoning an unread
-        // response leaves the request in flight as far as the browser is
-        // concerned, so the in-flight request count never returns to zero and
-        // anything waiting on network-idle (tooling, analytics, some themes)
-        // hangs.
-        return response.text().then(function () {
-          if (response.status === 404) return null;
-          throw new Error("autofill/v1/buyer/current failed");
-        });
-      })
-      .then(function (json) {
-        cb(json || null);
-      })
-      .catch(function () {
-        cb(null);
-      });
-  },
-
-  /**
-   * Open the hosted sole-trader signup in a real popup window (TWO-40 §7).
-   *
-   * `window.open()`, not an iframe-in-overlay: the signup/OTP flow depends
-   * on a third party that only works in a real popup window. The call
-   * stays synchronous with the click that triggered it — an
-   * async-delayed `window.open()` is blocker bait in every browser — which
-   * is why the chip-click path opens on tokens minted up front rather than
-   * issuing a request first.
-   *
-   * Brand overlays need nothing added here: a branded deployment resolves
-   * this URL's host from the brand registry's own URL template (see
-   * WC_Twoinc_Helper::get_environment_host and the brand's
-   * `checkout_url_template`). A `?brand=`/`?brandVersion=` query-string
-   * form also exists, but is a development-loop affordance, not the
-   * mechanism to build on.
-   *
-   * @param {Object} [options]
-   * @param {boolean} [options.autoselect] when false, appended to the URL so
-   *   the hosted flow offers a choice rather than adopting a known
-   *   registration silently
-   * @returns {Window|null}
-   */
-  openPopup: function (options) {
-    if (!twoincSoleTrader.tokens) {
-      return null;
-    }
-    const opts = options || {};
-    const invoice = twoincAddressRoles.invoice();
-    const read = function (name) {
-      return twoincAddressRoles.value(invoice, name);
-    };
-    const prefill = {
-      email: read("email"),
-      first_name: read("first_name"),
-      last_name: read("last_name"),
-      company_name: twoincSelectWooHelper.getCompanyName(),
-      phone_number: read("phone"),
-      billing_address: {
-        street: read("address_1"),
-        postal_code: read("postcode"),
-        city: read("city"),
-        region: read("state"),
-        country_code: twoincSoleTrader.currentCountry()
-      }
-    };
-    let url =
-      twoincSoleTrader.tokens.signup_url +
-      "?businessToken=" +
-      encodeURIComponent(twoincSoleTrader.tokens.delegation_token) +
-      "&autofillToken=" +
-      encodeURIComponent(twoincSoleTrader.tokens.autofill_token) +
-      "&autofillData=" +
-      encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(prefill)))));
-    // PDEV-4669: server-vetted country only — a DOM read would let the buyer
-    // pick their own verification flow.
-    const country = (twoincSoleTrader.tokens.country || "").toUpperCase();
-    if (country) url += "&country=" + encodeURIComponent(country);
-    // Wired through unconditionally when asked for, with no branching on what
-    // the hosted flow does with it — that is the flow's business, not this
-    // plugin's.
-    if (opts.autoselect === false) url += "&autoselect=false";
-    // 700 wide, not narrower: the hosted signup's own layout clips below that.
-    return window.open(
-      url,
-      "_blank",
-      "location=yes,resizable=yes,scrollbars=yes,status=yes,height=805,width=700"
-    );
-  },
-
-  /**
-   * The hosted signup posts 'ACCEPTED' back to the opener when the buyer
-   * completes registration; re-read the buyer (it now owns the entered
-   * email) and apply the result — autofilling and keeping Sole trader.
-   */
-  bindPopupMessageListener: function () {
-    if (twoincSoleTrader.messageListenerBound) {
-      return;
-    }
-    twoincSoleTrader.messageListenerBound = true;
-    // Kept on the module so it can be unbound again. A `window` listener
-    // outlives everything else this module owns, so without a handle on it
-    // there is no way to take one down — which matters to any harness that
-    // re-evaluates this file against the same window.
-    twoincSoleTrader.messageHandler = function (event) {
-      if (twoincSoleTrader.mode !== "sole_trader" || !twoincSoleTrader.tokens) {
+    showError: function () {
+      const cfg = controller.config();
+      const $container = jQuery("." + companySearch.soleTraderNoteSlotClass);
+      if (!cfg.text || !cfg.text.error || $container.length === 0) {
         return;
       }
-      const signupOrigin = new URL(twoincSoleTrader.tokens.signup_url).origin;
-      if (event.origin !== signupOrigin) {
-        return;
+      let $error = $container.find(".twoinc-sole-trader-toggle__error");
+      if ($error.length === 0) {
+        $error = jQuery("<span>", { class: "twoinc-sole-trader-toggle__error" });
+        $container.append($error);
       }
-      if (event.data === "ACCEPTED") {
-        // Attribute the message to the popup that sent it — see
-        // `findPopupWatcher`. Marked decided at receipt so its close poll
-        // must not treat it as abandoned or spend its reconfirming
-        // decrement (that belongs to this handler's callback below).
-        const watcher = twoincSoleTrader.findPopupWatcher(event.source);
-        // A replayed ACCEPTED resolves to its own, already-decided popup;
-        // only the receipt that actually settles a popup may spend its
-        // decrement below.
-        const newlyDecided = !!watcher && !watcher.decided;
-        if (watcher) {
-          watcher.decided = true;
-        }
-        twoincSoleTrader.beginFlight();
-        // Held for the duration of this fetch: the popup can close the
-        // instant "ACCEPTED" is posted, well before this resolves and
-        // writes `#company_id` — `watchPopupClose()`'s own poll checks
-        // this before deciding the buyer abandoned signup with nothing
-        // captured.
-        twoincSoleTrader.signupConfirming = true;
-        twoincSoleTrader.fetchCurrentBuyer(function (buyer) {
-          // Authenticated path (TWO-40 §8): the server has just told this
-          // browser who the buyer is, so the email they authenticated with
-          // is the answer, full stop. Re-checking it against the
-          // checkout's own contact field is a confirmed bug: a buyer who
-          // signs up under a different address completes OTP, the stale
-          // email match disagrees with the server, and the same popup
-          // reopens forever.
-          const resolved = !!buyer;
-          twoincSoleTrader.signupConfirming = false;
-          // Decremented here rather than only on popup close so a resolved
-          // re-signup un-blocks the Business chip/`reopenSearch()`
-          // immediately, not after another 300ms poll cycle. `newlyDecided`
-          // covers a late or replayed ACCEPTED, which must not spend a
-          // second decrement against one increment.
-          if (newlyDecided && watcher.isReconfirming) {
-            twoincSoleTrader.soleTraderReconfirmingCount = Math.max(
-              0,
-              twoincSoleTrader.soleTraderReconfirmingCount - 1
-            );
-          }
-          if (resolved) {
-            twoincSoleTrader.setCompany(buyer.organization_number, buyer.company_name, buyer);
-            twoincSoleTrader.showNote(false);
-          } else {
-            twoincSoleTrader.showError();
-          }
-          // Last, after the capture above has actually landed: this used
-          // to settle before the write, so on the ordinary path the
-          // spinner came down and the dropdown closed while the company
-          // name and number were still unwritten. "Flow complete" is the
-          // write, not the response.
-          twoincSoleTrader.settleFlight();
-        });
-      } else {
-        twoincSoleTrader.showError();
-      }
-    };
-    window.addEventListener("message", twoincSoleTrader.messageHandler);
-  },
-
-  /** Test seam: take the hosted-signup listener back off the window. */
-  unbindPopupMessageListener: function () {
-    if (!twoincSoleTrader.messageHandler) return;
-    window.removeEventListener("message", twoincSoleTrader.messageHandler);
-    twoincSoleTrader.messageHandler = null;
-    twoincSoleTrader.messageListenerBound = false;
-  },
-
-  showError: function () {
-    const cfg = twoincSoleTrader.config();
-    const $container = jQuery(".twoinc-sole-trader-note-slot");
-    if (!cfg.text || !cfg.text.error || $container.length === 0) {
-      return;
+      $error.text(cfg.text.error);
     }
-    let $error = $container.find(".twoinc-sole-trader-toggle__error");
-    if ($error.length === 0) {
-      $error = jQuery("<span>", { class: "twoinc-sole-trader-toggle__error" });
-      $container.append($error);
-    }
-    $error.text(cfg.text.error);
-  }
-};
+  };
+  return controller;
+}
 
 class Twoinc {
   constructor() {
@@ -4511,6 +4732,31 @@ class Twoinc {
     // Handle the country inputs change event. The tracker behind it is seeded
     // at the END of this function, not here — see the comment there.
     $body.on("change", "#billing_country", self.onCountryInputChange);
+
+    // Shipping's own retype guard / country-change / click-to-reopen (Doug
+    // 2026-08-31 §2, complete instance parity) — same three bindings as
+    // billing's above, scoped to the delivery role and its own controller.
+    $body
+      .off(
+        "input.twoincShippingCompanyPairing change.twoincShippingCompanyPairing",
+        "#shipping_company"
+      )
+      .on(
+        "input.twoincShippingCompanyPairing change.twoincShippingCompanyPairing",
+        "#shipping_company",
+        function () {
+          if (!twoincCompanyCapture.isNameField(this, twoincAddressRoles.delivery())) return;
+          twoincCompanyCapture.guardCompanyRetype(twoincAddressRoles.delivery());
+        }
+      );
+
+    $body.on("change", "#shipping_country", self.onShippingCountryInputChange);
+
+    $body.on("click", "#shipping_company, #shipping_company_id", function () {
+      const soleTrader = twoincSelectWooHelperShipping.soleTrader;
+      if (!soleTrader.soleTraderAdopted || !jQuery(this).prop("readonly")) return;
+      soleTrader.reopenSearch();
+    });
 
     // Click-to-reopen out of an adopted sole trader (TWO-40 §7 correction,
     // live-reported by Doug) — see `reopenSearch()`'s own comment. A plain
@@ -5493,6 +5739,19 @@ class Twoinc {
     // mirror re-asserted against it (TWO-40 §2). A no-op once the buyer has
     // taken that address over.
     twoincAddressMirror.sync();
+
+    twoincSelectWooHelperShipping.soleTrader.refresh();
+
+    // Re-resolve on EVERY `updated_checkout`, not only a real country change
+    // (Doug 2026-08-31 §2, corner case (d)): this is also what fires when
+    // "ship to a different address?" is toggled in either direction, and
+    // `syncOrderCompany()`'s own `deliveryIsOrderCompanySource()` check is what
+    // drops a shipping-sourced fallback the moment that box is unchecked
+    // (the DOM capture itself is left alone, the same way the address mirror
+    // leaves shipping field values in place — only which pair the order
+    // intent SEES changes).
+    twoincCompanyCapture.syncOrderCompany();
+    Twoinc.getInstance().getApproval();
   }
 
   /**
@@ -5649,6 +5908,44 @@ class Twoinc {
   }
 
   /**
+   * Handle the shipping country input change (Doug 2026-08-31 §2) — the
+   * delivery-role counterpart of `onCountryInputChange`/`syncBillingCountry`.
+   *
+   * Never writes `customerCompany` directly: unlike billing, shipping's
+   * capture only reaches the order intent through `resolveOrderCompany()`'s
+   * fallback, so every effect here is "drop/re-evaluate shipping's own state,
+   * then let the resolver decide what (if anything) that changes."
+   */
+  onShippingCountryInputChange() {
+    Twoinc.getInstance().syncShippingCountry();
+  }
+
+  syncShippingCountry() {
+    const helper = twoincSelectWooHelperShipping;
+    const country = helper.currentCountry();
+    const changed = helper.countryDidChange(country);
+
+    twoincDomHelper.toggleBusinessFields();
+    if (!changed) return;
+
+    // Same invalidation as billing's own (TWO-24867): a search or sole-trader
+    // availability answer for the OUTGOING shipping country must not land.
+    helper.companySearchSeq += 1;
+    helper.closeCompanySearchDropdown();
+
+    if (helper.soleTrader.mode !== "sole_trader") {
+      // Recomputes `customerCompany` itself via `write()`'s own resolver call
+      // — a shipping capture leaving means the resolver may fall back to
+      // nothing, or (if billing already had none) that the order intent now
+      // has nothing at all.
+      helper.clearSelectedCompany();
+    }
+
+    helper.soleTrader.refresh();
+    Twoinc.getInstance().getApproval();
+  }
+
+  /**
    * Drop a captured company that belongs to a country the checkout has
    * since moved away from (TWO-25333).
    *
@@ -5702,6 +5999,13 @@ class Twoinc {
   clearCompanyIfCountryStale(country) {
     const company = this.customerCompany || {};
     if (!company.organization_number) return;
+    // `customerCompany` can now be a SHIPPING fallback (Doug 2026-08-31 §2,
+    // `syncOrderCompany()`) — this guard's whole comparison is against
+    // billing's own DOM (`#company_id`, the primary-role name field), which
+    // says nothing about a shipping-sourced pair. Only act when billing is
+    // actually the source; a billing country move with billing uncaptured
+    // must not clear a valid shipping fallback out from under the buyer.
+    if (!twoincCompanyCapture.hasCapture(twoincAddressRoles.invoice())) return;
 
     const capturedCountry = twoincUtilHelper.blankToEmpty(company.country_prefix).toUpperCase();
     // `!country` is unreachable from the only caller today: `countryDidChange`
