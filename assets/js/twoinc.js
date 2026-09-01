@@ -956,8 +956,14 @@ class TwoCompanySearch {
     );
   }
 
-  /** Whether the control renders in the payment tile rather than the address form. */
+  /**
+   * Whether the control renders in the payment tile rather than the address
+   * form. Only the primary role has a tile mount (TWO-40) — the tile row and
+   * its input are built under one shared id, so a second instance answering
+   * yes here would anchor its panel to the primary's tile input.
+   */
   isTileLocation() {
+    if (this.role !== twoincAddressRoles.primary()) return false;
     return window.twoinc.company_search_location === "payment_tile";
   }
 
@@ -1663,7 +1669,7 @@ class TwoCompanySearch {
       $slot.addClass("hidden");
       // Ahead of the slot check: the slot lives in Two's gateway description,
       // so a checkout not offering Two has no other re-bind.
-      if (twoincCompanyCapture.modeFor(this.role) !== "manual") this.attach();
+      this.rebindUnlessManual();
       return;
     }
 
@@ -1696,6 +1702,23 @@ class TwoCompanySearch {
     $slot.toggleClass("hidden", !show);
 
     if (show) this.attach();
+  }
+
+  /**
+   * Re-bind the panel to whatever host is current, unless manual entry has
+   * released the field.
+   *
+   * The re-bind is per instance and the host is per instance, so every path
+   * that can have replaced a host — `updated_checkout`,
+   * `toggleBusinessFields()` — runs this on each control rather than only the
+   * one with a tile mount. WooCommerce replaces the shipping fields on the
+   * same refreshes it replaces the payment fragment on, and `ensurePanel()`
+   * registers no MutationObserver, so a control that is not re-bound here
+   * stays a bare input.
+   */
+  rebindUnlessManual() {
+    if (twoincCompanyCapture.modeFor(this.role) === "manual") return;
+    this.attach();
   }
 
   /**
@@ -2024,6 +2047,14 @@ let twoincSelectWooHelperShipping = new TwoCompanySearch({
   soleTraderSpinnerHostClass: "twoinc-name-searching-shipping"
 });
 
+/**
+ * Every mounted company-search control, for the flows that must treat the two
+ * symmetrically (bootstrap binding, per-refresh re-binding). A list rather
+ * than two named calls so a third role cannot be added without those flows
+ * picking it up.
+ */
+let twoincCompanySearchControls = [twoincSelectWooHelper, twoincSelectWooHelperShipping];
+
 // Back-compat alias: every flow that predates the shipping instance and is
 // genuinely invoice-scoped by design (order-intent, order restore from user
 // meta, the billing-country change handler) keeps addressing the billing
@@ -2255,6 +2286,9 @@ let twoincDomHelper = {
     twoincSelectWooHelper.soleTrader.syncDifferentSoleTraderLink();
 
     if (hasShippingAddress) {
+      // Before renderCompanySummary() for the same reason billing's re-bind is
+      // (above): the summary anchors against the field this control mounts on.
+      twoincSelectWooHelperShipping.rebindUnlessManual();
       twoincSelectWooHelperShipping.renderCompanySummary();
       twoincSelectWooHelperShipping.soleTrader.syncDifferentSoleTraderLink();
     }
@@ -3389,7 +3423,7 @@ function createSoleTraderController(companySearch) {
       // adoption, so a home chosen at that moment is a home chosen from whatever
       // happened to be visible then — which is how it has twice ended up in the
       // wrong region.
-      const helper = twoincSelectWooHelper;
+      const helper = companySearch;
       const $surface = helper.companyNameSurface();
       if ($surface.find(helper.companyFieldSelector()).length) {
         return helper.affordanceSlotIn($surface, helper.companyFieldSelector());
@@ -3615,8 +3649,8 @@ function createSoleTraderController(companySearch) {
 
       jQuery("#" + companySearch.searchCompanyBtnId).hide();
       twoincCompanyCapture
-        .nameField()
-        .add(twoincCompanyCapture.numberFieldSelector())
+        .nameField(companySearch.role)
+        .add(twoincCompanyCapture.numberFieldSelector(companySearch.role))
         .prop("readonly", true);
     },
 
@@ -3641,7 +3675,7 @@ function createSoleTraderController(companySearch) {
     reopenSearch: function () {
       if (controller.mode !== "sole_trader" || controller.isDeciding()) return;
       controller.setMode("business");
-      const helper = twoincSelectWooHelper;
+      const helper = companySearch;
       // Reached from the captured fields in the ADDRESS area, which stay on
       // screen while the panel's own host — the payment tile — is collapsed.
       if (!helper.companySearchIsReachable()) return;
@@ -4571,10 +4605,15 @@ class Twoinc {
    *
    * The mode gate only keeps the bootstrap and its retry off a field manual
    * entry has released; `syncCompanySearchTileLocation()` re-binds sole trader.
+   * Gated per role, not on billing's mode: capture mode is independent per
+   * address, so billing sitting in manual entry must not keep the shipping
+   * control unmounted (TWO-40).
    */
   enableCompanySearch() {
-    if (twoincCompanyCapture.mode !== "search") return;
-    twoincSelectWooHelper.attach(this);
+    twoincCompanySearchControls.forEach((control) => {
+      if (twoincCompanyCapture.modeFor(control.role) !== "search") return;
+      control.attach(this);
+    });
   }
 
   /**
@@ -5740,6 +5779,10 @@ class Twoinc {
     // taken that address over.
     twoincAddressMirror.sync();
 
+    // Same reason as billing's `syncCompanySearchTileLocation()` above: this
+    // refresh re-renders the shipping fields, so the control's host is a new
+    // node and the panel that was bound to the old one is gone with it.
+    twoincSelectWooHelperShipping.rebindUnlessManual();
     twoincSelectWooHelperShipping.soleTrader.refresh();
 
     // Re-resolve on EVERY `updated_checkout`, not only a real country change
