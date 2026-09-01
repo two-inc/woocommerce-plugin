@@ -65,6 +65,9 @@ final class BrandConfigSpec
             'testSupportedBuyerCountriesNormalisesApiField',
             'testAvailabilityGateJudgesMerchantBuyerCountryAllowlist',
             'testMerchantBuyerCountryAllowlistIntersectsBrandGate',
+            'testBuyerCountrySupportJudgesEachAllowlistState',
+            'testOrderCreationRefusesAnUnsupportedBuyerCountry',
+            'testOrderIntentRefusesAnUnsupportedBuyerCountry',
             'testAvailabilityGateSkipsMinimumsOnEmptyCart',
             'testAvailabilityGateSkipsMinimumsOnOrderPayPage',
             'testMerchantMinimumRaisesTheBar',
@@ -346,6 +349,7 @@ final class BrandConfigSpec
         unset($GLOBALS['__twoinc_test_translations']);
         $GLOBALS['__twoinc_test_transients'] = [];
         $GLOBALS['__twoinc_test_logs'] = [];
+        $GLOBALS['__twoinc_test_notices'] = [];
         $GLOBALS['__twoinc_test_http_calls'] = [];
         $GLOBALS['__twoinc_test_admin_messages'] = [];
         $GLOBALS['__twoinc_test_admin_errors'] = [];
@@ -1501,15 +1505,19 @@ final class BrandConfigSpec
 
         $checked = WC_Twoinc_Brand::prefixed_name('supported_buyer_countries_checked_on');
 
+        // Absent means the API predates its own enforcement (unrestricted);
+        // present means the merchant's answer is authoritative, including
+        // when that answer restricts to nothing.
         $cases = [
-            [[], null, 'field absent'],
-            [['supported_buyer_countries' => null], null, 'field null'],
-            [['supported_buyer_countries' => []], null, 'empty list'],
-            [['supported_buyer_countries' => 'NL'], null, 'not a list'],
+            [[], null, 'field absent leaves the merchant unrestricted'],
+            [['supported_buyer_countries' => null], [], 'field present but null supports no country'],
+            [['supported_buyer_countries' => []], [], 'empty list supports no country'],
+            [['supported_buyer_countries' => 'NL'], [], 'a scalar supports no country'],
             [['supported_buyer_countries' => ['NL', 'DE']], ['NL', 'DE'], 'uppercase codes'],
             [['supported_buyer_countries' => ['nl', 'De']], ['NL', 'DE'], 'lowercase normalised'],
             [['supported_buyer_countries' => ['NL', 'nl']], ['NL'], 'duplicates collapsed'],
             [['supported_buyer_countries' => ['NL', 'NLD', 7, '']], ['NL'], 'unusable entries dropped'],
+            [['supported_buyer_countries' => ['NLD', 7]], [], 'a list of only unusable entries supports no country'],
         ];
 
         foreach ($cases as $case) {
@@ -1520,16 +1528,28 @@ final class BrandConfigSpec
 
             TinyAssert::same($expected, $gateway->get_supported_buyer_countries(), $description);
 
-            // The unrestricted outcome is cached too — the common case must
-            // not cost an API call per checkout render.
+            // Every outcome is cached, and each must survive the option
+            // round trip distinctly — the common unrestricted case must not
+            // cost an API call per checkout render, and a stored empty
+            // allowlist must not read back as no allowlist.
             $gateway->responses = [];
             TinyAssert::same($expected, $gateway->get_supported_buyer_countries(), $description . ', served from cache');
         }
 
         WC_Twoinc::reset_merchant_record_memo();
         unset($GLOBALS['__twoinc_test_options'][$checked]);
+        $GLOBALS['__twoinc_test_logs'] = [];
+        $gateway->responses = [['response' => ['code' => 200], 'body' => json_encode(['supported_buyer_countries' => 'NL'])]];
+        $gateway->get_supported_buyer_countries();
+        // Distinct from an empty list, which is the merchant's own answer.
+        self::assertLogged('warning', 'supported_buyer_countries is a string, not a list');
+
+        WC_Twoinc::reset_merchant_record_memo();
+        unset($GLOBALS['__twoinc_test_options'][$checked]);
         $gateway->responses = [new WP_Error('http_request_failed', 'down')];
         TinyAssert::same(null, $gateway->get_supported_buyer_countries(), 'fetch failure means no restriction');
+        $gateway->responses = [];
+        TinyAssert::same(null, $gateway->get_supported_buyer_countries(), 'a failed fetch does not cache a restriction');
     }
 
     private static function testAvailabilityGateJudgesMerchantBuyerCountryAllowlist(): void
@@ -1541,6 +1561,7 @@ final class BrandConfigSpec
 
         $cases = [
             [null, 'DE', '', true, 'no allowlist: every country allowed'],
+            [null, '', '', true, 'no allowlist and no country to judge: still available'],
             [['NL', 'DE'], 'DE', '', true, 'billing country on the allowlist'],
             [['NL'], 'DE', '', false, 'billing country off the allowlist'],
             [['NL'], 'nl', '', true, 'lowercase billing country matches'],
@@ -1548,7 +1569,9 @@ final class BrandConfigSpec
             [['NL'], '', 'DE', false, 'shipping fallback off the allowlist'],
             [['NL'], 'NL', 'DE', true, 'billing wins over shipping'],
             [['NL'], 'DE', 'NL', false, 'billing wins over shipping when it fails'],
-            [['NL'], '', '', true, 'no country to judge: availability is not withheld'],
+            [['NL'], '', '', false, 'restricted with no country to judge: withheld'],
+            [[], 'NL', '', false, 'an allowlist of no countries withholds everywhere'],
+            [[], '', '', false, 'an allowlist of no countries withholds with no country either'],
         ];
 
         foreach ($cases as $case) {
@@ -1584,6 +1607,152 @@ final class BrandConfigSpec
             $result = self::gateway(self::EUR_250_NET, $allowlist)->apply_brand_availability_gate($gateways);
             TinyAssert::same($expected, isset($result['woocommerce-gateway-testbrand']), $description);
         }
+    }
+
+    private static function testBuyerCountrySupportJudgesEachAllowlistState(): void
+    {
+        $cases = [
+            [null, 'DE', true, 'no allowlist allows any country'],
+            [null, '', true, 'no allowlist allows an unresolved country'],
+            [['NL', 'DE'], 'DE', true, 'country on the allowlist'],
+            [['NL'], ' nl ', true, 'padded lowercase country matches'],
+            [['NL'], 'DE', false, 'country off the allowlist'],
+            [['NL'], '', false, 'restricted merchant, unresolved country'],
+            [[], 'NL', false, 'allowlist of no countries allows nothing'],
+            [[], '', false, 'allowlist of no countries with no country either'],
+        ];
+
+        foreach ($cases as $case) {
+            list($allowlist, $country, $expected, $description) = $case;
+            TinyAssert::same(
+                $expected,
+                self::gateway(null, $allowlist)->is_buyer_country_supported($country),
+                $description
+            );
+        }
+    }
+
+    /** A gateway whose only live behaviour is the buyer-country allowlist. */
+    private static function buyerCountryGateway(?array $allowlist)
+    {
+        return new class ($allowlist) extends WC_Twoinc {
+            public $calls = [];
+            private $allowlist;
+
+            public function __construct($allowlist)
+            {
+                $this->id = WC_Twoinc_Brand::get('gateway_id');
+                $this->allowlist = $allowlist;
+            }
+
+            public function get_merchant_id()
+            {
+                return 'mid';
+            }
+
+            public function get_option($key, $empty_value = null)
+            {
+                return $key === 'api_key' ? 'key' : ($empty_value ?? '');
+            }
+
+            public function get_supported_buyer_countries()
+            {
+                return $this->allowlist;
+            }
+
+            public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
+            {
+                $this->calls[] = $endpoint;
+                return ['response' => ['code' => 200], 'body' => '{}'];
+            }
+        };
+    }
+
+    private static function testOrderCreationRefusesAnUnsupportedBuyerCountry(): void
+    {
+        // The allowlist can tighten between render and submit, and the
+        // availability filter never runs on the pay-for-order page, so the
+        // submit path judges again rather than trusting the render.
+        $cases = [
+            [['NL'], 'DE', 'NO', 'posted country off the allowlist'],
+            [['NL'], '', 'DE', 'order country off the allowlist'],
+            [['NL'], '', '', 'restricted merchant with no country to judge'],
+            [[], 'NL', 'NL', 'allowlist of no countries'],
+        ];
+
+        foreach ($cases as $case) {
+            list($allowlist, $posted_country, $order_country, $description) = $case;
+            $order = new class extends StubOrder {
+                public $country = '';
+
+                public function get_payment_method()
+                {
+                    return WC_Twoinc_Brand::get('gateway_id');
+                }
+
+                public function get_billing_country()
+                {
+                    return $this->country;
+                }
+
+                public function get_shipping_country()
+                {
+                    return '';
+                }
+            };
+            $order->country = $order_country;
+            $GLOBALS['__twoinc_test_wc_orders'] = [42 => $order];
+            $GLOBALS['__twoinc_test_logs'] = [];
+            $GLOBALS['__twoinc_test_notices'] = [];
+            $_POST = ['company_id' => '923456789', 'billing_country' => $posted_country];
+
+            $gateway = self::buyerCountryGateway($allowlist);
+            $gateway->process_payment(42);
+
+            TinyAssert::same([], $gateway->calls, $description . ': reached the API');
+            TinyAssert::same(
+                ['Invoice purchase with Two is not available for this order.'],
+                array_column($GLOBALS['__twoinc_test_notices'], 'message'),
+                $description . ': buyer was not told'
+            );
+            self::assertLogged('warning', 'is not supported at order creation (merchant mid');
+        }
+
+        $_POST = [];
+    }
+
+    private static function testOrderIntentRefusesAnUnsupportedBuyerCountry(): void
+    {
+        $cases = [
+            [['NL'], 'DE', 'buyer country off the allowlist'],
+            [['NL'], '', 'intent body carried no buyer country'],
+            [[], 'NL', 'allowlist of no countries'],
+        ];
+
+        foreach ($cases as $case) {
+            list($allowlist, $country, $description) = $case;
+            $GLOBALS['__twoinc_test_transients'] = [];
+            $GLOBALS['__twoinc_test_logs'] = [];
+            $gateway = self::buyerCountryGateway($allowlist);
+            $_POST = ['intent' => json_encode([
+                'gross_amount' => '100',
+                'buyer' => ['company' => $country === '' ? [] : ['country_prefix' => $country]],
+            ])];
+
+            $response = self::runProxyHandler($gateway, 'ajax_order_intent');
+
+            TinyAssert::same(false, $response['success'] ?? null, $description . ': the intent was relayed');
+            TinyAssert::same([], $gateway->calls, $description . ': reached the API');
+            self::assertLogged('warning', 'is not supported at order intent (merchant mid');
+        }
+
+        $GLOBALS['__twoinc_test_transients'] = [];
+        $gateway = self::buyerCountryGateway(['NL']);
+        $_POST = ['intent' => json_encode(['buyer' => ['company' => ['country_prefix' => 'nl']]])];
+        self::runProxyHandler($gateway, 'ajax_order_intent');
+        TinyAssert::same(['/v1/order_intent'], $gateway->calls, 'a supported buyer country must still reach the API');
+
+        $_POST = [];
     }
 
     private static function testAvailabilityGateSkipsMinimumsOnEmptyCart(): void
@@ -9136,8 +9305,12 @@ final class BrandConfigSpec
 
             $calls = $GLOBALS['__twoinc_test_http_calls'] ?? [];
             TinyAssert::true($calls !== [], "$handler made no upstream call at all");
+            // Not necessarily the first call: a handler may resolve merchant
+            // configuration before relaying.
             TinyAssert::true(
-                strpos($calls[0]['url'], $endpoint) !== false,
+                array_filter($calls, static function ($call) use ($endpoint) {
+                    return strpos($call['url'], $endpoint) !== false;
+                }) !== [],
                 "$handler must address $endpoint"
             );
             TinyAssert::same(

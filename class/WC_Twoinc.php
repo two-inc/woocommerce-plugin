@@ -405,7 +405,19 @@ if (!class_exists('WC_Twoinc')) {
 
         /**
          * The merchant's buyer-country allowlist as uppercase ISO-3166-1
-         * alpha-2 codes, or null when unrestricted (TWO-40).
+         * alpha-2 codes, or null when the merchant record carries no
+         * allowlist field at all — every buyer country is then allowed
+         * (TWO-40). An empty array is a restriction no country satisfies.
+         *
+         * Outcomes turn on the field's PRESENCE, not its truthiness: a
+         * record without it predates the API's own enforcement, so the
+         * plugin must not restrict.
+         *
+         * Cached for 15 minutes in dedicated brand-prefixed wp_options
+         * (never the settings blob), JSON-encoded so all three outcomes
+         * survive the round trip. A missing or unparseable cache entry, and
+         * a failed fetch, resolve to unrestricted: the API still enforces,
+         * and hiding the payment method on a blip is the worse failure.
          *
          * @return array|null
          */
@@ -424,41 +436,113 @@ if (!class_exists('WC_Twoinc')) {
 
                 $countries = null;
                 $record = $this->fetch_merchant_record();
-                if (is_array($record)) {
-                    $countries = self::normalize_buyer_countries($record['supported_buyer_countries'] ?? null);
+                if (is_array($record) && array_key_exists('supported_buyer_countries', $record)) {
+                    $raw = $record['supported_buyer_countries'];
+                    if (is_array($raw)) {
+                        $countries = self::normalize_buyer_country_codes($raw);
+                    } else {
+                        $countries = [];
+                        if ($raw !== null) {
+                            self::log_buyer_countries_malformed($raw);
+                        }
+                    }
                 }
 
-                update_option($countries_option, $countries ? wp_json_encode($countries) : '', false);
+                update_option($countries_option, wp_json_encode($countries), false);
                 return $countries;
             }
 
             $cached = get_option($countries_option);
-            if (!$cached) {
+            if ($cached === false || $cached === '') {
                 return null;
             }
-            return self::normalize_buyer_countries(json_decode((string) $cached, true));
+            $decoded = json_decode((string) $cached, true);
+            return is_array($decoded) ? self::normalize_buyer_country_codes($decoded) : null;
         }
 
         /**
-         * Null (no restriction) for anything that is not a usable list of
-         * two-letter codes (TWO-40).
-         *
-         * @param mixed $raw
-         *
-         * @return array|null
+         * Is this buyer country one the merchant may sell to? True whenever
+         * no allowlist is configured; a restricted merchant with no
+         * resolvable buyer country withholds rather than guesses (TWO-40).
          */
-        private static function normalize_buyer_countries($raw)
+        public function is_buyer_country_supported(string $buyer_country): bool
         {
-            if (!is_array($raw)) {
-                return null;
+            $allowlist = $this->get_supported_buyer_countries();
+            if ($allowlist === null) {
+                return true;
             }
+            $code = strtoupper(trim($buyer_country));
+            return $code !== '' && in_array($code, $allowlist, true);
+        }
+
+        /**
+         * A submission the buyer-country allowlist refused. Withholding is
+         * silent to the merchant and the buyer copy is deliberately generic,
+         * so this line carries the reason.
+         */
+        public function log_buyer_country_rejection(string $context, string $buyer_country): void
+        {
+            if (function_exists('wc_get_logger')) {
+                wc_get_logger()->warning(
+                    sprintf(
+                        'Buyer country %s is not supported at %s (merchant %s, supported buyer countries %s)',
+                        $buyer_country !== '' ? strtoupper(trim($buyer_country)) : 'unresolved',
+                        $context,
+                        (string) $this->get_merchant_id(),
+                        $this->describe_buyer_country_allowlist()
+                    ),
+                    ['source' => 'twoinc-payment-gateway']
+                );
+            }
+        }
+
+        /**
+         * The allowlist as the rejection logs name it (TWO-40).
+         */
+        private function describe_buyer_country_allowlist(): string
+        {
+            $allowlist = $this->get_supported_buyer_countries();
+            if ($allowlist === null) {
+                return 'any';
+            }
+            return $allowlist ? implode(',', $allowlist) : 'none';
+        }
+
+        /**
+         * The two-letter codes in a raw allowlist; empty when none is usable.
+         *
+         * @param array $raw
+         *
+         * @return array
+         */
+        private static function normalize_buyer_country_codes(array $raw): array
+        {
             $codes = [];
             foreach ($raw as $code) {
                 if (is_string($code) && strlen(trim($code)) === 2) {
                     $codes[] = strtoupper(trim($code));
                 }
             }
-            return $codes ? array_values(array_unique($codes)) : null;
+            return array_values(array_unique($codes));
+        }
+
+        /**
+         * Named apart from an empty allowlist: this one is a contract break,
+         * not the merchant's answer.
+         *
+         * @param mixed $raw
+         */
+        private static function log_buyer_countries_malformed($raw): void
+        {
+            if (function_exists('wc_get_logger')) {
+                wc_get_logger()->warning(
+                    sprintf(
+                        'Merchant record supported_buyer_countries is a %s, not a list — no buyer country is supported',
+                        gettype($raw)
+                    ),
+                    ['source' => 'twoinc-payment-gateway']
+                );
+            }
         }
 
         /**
@@ -3574,7 +3658,7 @@ if (!class_exists('WC_Twoinc')) {
             $platform_minimum = $this->get_platform_minimum_order();
             $merchant_minimum = $this->get_merchant_minimum_order();
             $supported_buyer_countries = $this->get_supported_buyer_countries();
-            if (!$gate && !$platform_minimum && !$merchant_minimum && !$supported_buyer_countries) {
+            if (!$gate && !$platform_minimum && !$merchant_minimum && $supported_buyer_countries === null) {
                 return $available_gateways;
             }
             if (!function_exists('WC') || !WC()->cart || !WC()->customer) {
@@ -3628,11 +3712,8 @@ if (!class_exists('WC_Twoinc')) {
             if ($satisfied && $gate) {
                 $satisfied = in_array(WC()->customer->get_billing_country(), $gate['billing_countries'], true);
             }
-            if ($satisfied && $supported_buyer_countries) {
-                $buyer_country = self::resolve_buyer_country();
-                // An unresolved country cannot disprove the allowlist.
-                $satisfied = $buyer_country === ''
-                    || in_array($buyer_country, $supported_buyer_countries, true);
+            if ($satisfied && $supported_buyer_countries !== null) {
+                $satisfied = $this->is_buyer_country_supported(self::resolve_buyer_country());
             }
             if ($satisfied && $merchant_minimum && $basket_is_judgeable) {
                 $satisfied = $meets_minimum($merchant_minimum);
@@ -3660,7 +3741,7 @@ if (!class_exists('WC_Twoinc')) {
                             $merchant_minimum
                                 ? $merchant_minimum['amount'] . ' ' . $merchant_minimum['currency'] . ' ' . $merchant_minimum['basis']
                                 : 'none',
-                            $supported_buyer_countries ? implode(',', $supported_buyer_countries) : 'any'
+                            $this->describe_buyer_country_allowlist()
                         ),
                         ['source' => 'twoinc-payment-gateway']
                     );
@@ -3943,6 +4024,25 @@ if (!class_exists('WC_Twoinc')) {
                 WC_Twoinc_Helper::display_ajax_error(
                     sprintf(
                         __('Please select your company before paying with %s.', 'twoinc-payment-gateway'),
+                        WC_Twoinc_Brand::get('product_name')
+                    )
+                );
+                return;
+            }
+
+            // The allowlist can change between checkout render and submit,
+            // and the availability filter never runs on the pay-for-order
+            // page — where $billing_country is the buyer's live selection
+            // rather than anything stored on the order yet.
+            $buyer_country = $billing_country !== '' ? $billing_country : (string) $order->get_billing_country();
+            if ($buyer_country === '') {
+                $buyer_country = (string) $order->get_shipping_country();
+            }
+            if (!$this->is_buyer_country_supported($buyer_country)) {
+                $this->log_buyer_country_rejection('order creation', $buyer_country);
+                WC_Twoinc_Helper::display_ajax_error(
+                    sprintf(
+                        __('Invoice purchase with %s is not available for this order.', 'twoinc-payment-gateway'),
                         WC_Twoinc_Brand::get('product_name')
                     )
                 );
