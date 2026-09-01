@@ -1,9 +1,7 @@
 /**
- * TWO-40 §1 + §2. Address ROLES, the invoice→delivery mirror, and the
- * field-routing table for an address that arrived in an external payload.
- *
- * The two things under test here are the ones the platform this ports from got
- * wrong repeatedly:
+ * TWO-40 §1 + §2.6. Address ROLES, the independence of the two address forms,
+ * and the field-routing table for an address that arrived in an external
+ * payload.
  *
  *   §1 — country/company must be resolved ONE way and that answer reused. On
  *   WooCommerce the invoice role is `#billing_*` and it is also the
@@ -11,15 +9,17 @@
  *   "the primary form" is never the question; "which form plays the invoice
  *   role" is.
  *
- *   §2 — the delivery address mirrors the invoice address until the buyer
- *   edits it, at which point the WHOLE delivery address is pinned, decided by
- *   a pure content match against what the mirror last wrote rather than by a
- *   flag hung off UI events.
+ *   Independence (Doug 2026-09-01) — the billing and shipping address forms
+ *   never write to each other. The ONE thing that reads both is
+ *   `resolveOrderCompany()`, choosing which captured company the order intent
+ *   carries. Every other cross-form effect is a bug, and each test here is a
+ *   live one that was reported.
  */
 
 "use strict";
 
-const { loadTwoinc } = require("./wc-harness");
+const harness = require("./wc-harness");
+const loadTwoinc = harness.loadTwoinc;
 
 /**
  * A checkout form carrying both address forms in full.
@@ -121,15 +121,15 @@ describe("TWO-40 §1 — one address-role resolver", () => {
   });
 });
 
-describe("TWO-40 §2 — invoice→delivery mirror", () => {
+describe("the two address forms are independent (Doug 2026-09-01)", () => {
   let ctx;
   let $;
-  let mirror;
+  let ajax;
 
   beforeEach(() => {
-    ctx = loadTwoinc({});
+    ctx = loadTwoinc({ enable_address_lookup: "yes" });
     $ = ctx.$;
-    mirror = ctx.mirror;
+    ajax = harness.stubAjax($);
     buildAddressForm();
   });
 
@@ -137,235 +137,98 @@ describe("TWO-40 §2 — invoice→delivery mirror", () => {
     document.body.innerHTML = "";
   });
 
-  /** Fill the invoice-role address the way a registry autofill would. */
-  function givenInvoiceAddress() {
-    $("#billing_company").val("ACME Widgets Ltd");
-    $("#billing_country").val("GB");
-    $("#billing_address_1").val("Registry Street 1");
-    $("#billing_address_2").val("Flat 2");
-    $("#billing_city").val("Registryville");
-    $("#billing_postcode").val("AB1 2CD");
-    $("#billing_state").val("Kent");
+  const REGISTRY_ADDRESS = {
+    street_address: "Registry Street 1",
+    city: "Registryville",
+    postal_code: "AB1 2CD"
+  };
+
+  /** Every field of one role, as one object. */
+  function addressOf(role) {
+    return ["company", "address_1", "address_2", "city", "postcode", "state"].reduce((o, f) => {
+      o[f] = $("#" + role + "_" + f).val();
+      return o;
+    }, {});
   }
 
-  test("an untouched delivery address takes the whole invoice address", () => {
-    // Given: nothing has been written to the delivery form
-    mirror.seed();
-    givenInvoiceAddress();
+  const BLANK = { company: "", address_1: "", address_2: "", city: "", postcode: "", state: "" };
 
-    // When
-    expect(mirror.sync()).toBe(true);
+  test("a registry address written for billing leaves the whole shipping form alone", () => {
+    ctx.Twoinc.getInstance().setAddress(REGISTRY_ADDRESS, "billing");
 
-    // Then
-    expect($("#shipping_company").val()).toBe("ACME Widgets Ltd");
-    expect($("#shipping_country").val()).toBe("GB");
-    expect($("#shipping_address_1").val()).toBe("Registry Street 1");
-    expect($("#shipping_address_2").val()).toBe("Flat 2");
-    expect($("#shipping_city").val()).toBe("Registryville");
-    expect($("#shipping_postcode").val()).toBe("AB1 2CD");
-    expect($("#shipping_state").val()).toBe("Kent");
+    expect(addressOf("billing").address_1).toBe("Registry Street 1");
+    expect(addressOf("shipping")).toEqual(BLANK);
   });
 
-  test("the delivery address is never locked or made required", () => {
-    mirror.seed();
-    givenInvoiceAddress();
-    mirror.sync();
+  test("a registry address written for shipping lands on shipping, not billing", () => {
+    // The live bug: the write went to a hardcoded invoice role, so a company
+    // picked in the SHIPPING control filled the BILLING address.
+    ctx.Twoinc.getInstance().setAddress(REGISTRY_ADDRESS, "shipping");
 
-    // The rejected design was a read-only mirrored address. One legal entity
-    // with a branch across a border needs a genuinely different, editable
-    // country/company on the second address.
-    ["company", "country", "address_1", "address_2", "city", "postcode", "state"].forEach(
-      (name) => {
-        const $field = $("#shipping_" + name);
-        // `readOnly` exists on inputs only; a <select> has no such property,
-        // which is why this reads it conditionally rather than asserting
-        // `undefined` for the country control.
-        if ($field.is("input")) expect($field.prop("readOnly")).toBe(false);
-        expect($field.prop("disabled")).toBe(false);
-        expect($field.prop("required")).toBe(false);
-      }
-    );
+    expect(addressOf("shipping").address_1).toBe("Registry Street 1");
+    expect(addressOf("shipping").city).toBe("Registryville");
+    expect(addressOf("shipping").postcode).toBe("AB1 2CD");
+    expect(addressOf("billing")).toEqual(BLANK);
+  });
+
+  test("an address lookup for the shipping control writes shipping only", () => {
+    ctx.Twoinc.getInstance().addressLookup({ lookup_id: "shipping-lookup" }, "shipping");
+    ajax.last().succeed({ addresses: [REGISTRY_ADDRESS] });
+
+    expect(addressOf("shipping").address_1).toBe("Registry Street 1");
+    expect(addressOf("billing")).toEqual(BLANK);
+    expect(ctx.Twoinc.getInstance().addressStateFor("shipping").registryApplied).toBe(true);
+    expect(ctx.Twoinc.getInstance().addressStateFor("billing").registryApplied).toBe(false);
   });
 
   test.each([
-    ["company", "Buyer's Own Ltd", "a company typed on the delivery form"],
-    ["country", "NO", "a different delivery country"],
-    ["address_1", "Somewhere Else 9", "an edited first address line"],
-    ["address_2", "Second floor", "an edited SECOND address line"],
-    ["city", "Ashford", "an edited city"],
-    ["postcode", "ZZ9 9ZZ", "an edited postcode"],
-    ["state", "Fife", "an edited state/county"]
-  ])("editing shipping_%s pins the WHOLE delivery address (%s)", (field, value, _description) => {
-    // Given: a synced pair
-    mirror.seed();
-    givenInvoiceAddress();
-    mirror.sync();
+    ["billing", "shipping"],
+    ["shipping", "billing"]
+  ])("clearAddress(%s) leaves %s untouched", (cleared, kept) => {
+    ctx.Twoinc.getInstance().setAddress(REGISTRY_ADDRESS, cleared);
+    ctx.Twoinc.getInstance().setAddress(REGISTRY_ADDRESS, kept);
 
-    // When: the buyer edits exactly one delivery field
-    $("#shipping_" + field).val(value);
+    ctx.Twoinc.getInstance().clearAddress(cleared);
 
-    // Then: the pin covers every field, not only the edited one — a buyer
-    // correcting one line is editing the address, not that line.
-    expect(mirror.isPinned()).toBe(true);
-    $("#billing_city").val("Newtown");
-    expect(mirror.sync()).toBe(false);
-    expect($("#shipping_city").val()).toBe(field === "city" ? value : "Registryville");
+    expect(addressOf(cleared).address_1).toBe("");
+    expect(addressOf(cleared).city).toBe("");
+    expect(addressOf(kept).address_1).toBe("Registry Street 1");
+    expect(addressOf(kept).city).toBe("Registryville");
   });
 
-  test("clearing the edited delivery fields resumes the mirror with no resume control", () => {
-    mirror.seed();
-    givenInvoiceAddress();
-    mirror.sync();
-    $("#shipping_city").val("Ashford");
-    expect(mirror.isPinned()).toBe(true);
+  test("one role's lookup does not supersede the other's in flight", () => {
+    // A shared supersession counter meant a pick on either control silently
+    // discarded the other's answer.
+    const shipping = (ctx.Twoinc.getInstance().addressLookup(
+      { lookup_id: "shipping-lookup" },
+      "shipping"
+    ),
+    ajax.last());
+    ctx.Twoinc.getInstance().addressLookup({ lookup_id: "billing-lookup" }, "billing");
+    const billing = ajax.last();
 
-    // When: the buyer empties what they typed. There is deliberately no
-    // "resume sync" button — the content match is the whole mechanism.
-    $("#shipping_city").val("");
+    billing.succeed({ addresses: [{ street_address: "Billing Street 9", city: "Billingham" }] });
+    shipping.succeed({ addresses: [REGISTRY_ADDRESS] });
 
-    // Then
-    expect(mirror.isPinned()).toBe(false);
-    $("#billing_city").val("Newtown");
-    expect(mirror.sync()).toBe(true);
-    expect($("#shipping_city").val()).toBe("Newtown");
+    expect(addressOf("billing").address_1).toBe("Billing Street 9");
+    expect(addressOf("shipping").address_1).toBe("Registry Street 1");
   });
 
-  test("the pin check is case- and whitespace-insensitive", () => {
-    mirror.seed();
-    givenInvoiceAddress();
-    mirror.sync();
-
-    // WooCommerce, a theme or the buyer's own browser can re-case or re-pad a
-    // field without the buyer having touched it.
-    $("#shipping_city").val("  registryVILLE ");
-    expect(mirror.isPinned()).toBe(false);
-  });
-
-  test("a delivery address already agreeing with the invoice one at seed time stays synced", () => {
-    // Given: WooCommerce prefilled a logged-in buyer's saved shipping address,
-    // and it happens to match their billing one
-    givenInvoiceAddress();
-    $("#shipping_company").val("ACME Widgets Ltd");
-    $("#shipping_country").val("GB");
-    $("#shipping_address_1").val("Registry Street 1");
-    $("#shipping_address_2").val("Flat 2");
-    $("#shipping_city").val("Registryville");
-    $("#shipping_postcode").val("AB1 2CD");
-    $("#shipping_state").val("Kent");
-    mirror.seed();
-
-    // When: the buyer corrects their billing country
-    $("#billing_country").val("NO");
-
-    // Then: that propagates — this buyer never edited the delivery address
-    expect(mirror.sync()).toBe(true);
-    expect($("#shipping_country").val()).toBe("NO");
-  });
-
-  test("a genuinely different saved delivery address is pinned from the start", () => {
-    // Given: the NI-entity-with-an-RoI-branch case — same legal entity, a
-    // different valid country/company pairing on the second address
-    givenInvoiceAddress();
-    $("#shipping_country").val("NO");
-    $("#shipping_city").val("Oslo");
-    mirror.seed();
-
-    // Then: nothing overwrites it
-    expect(mirror.isPinned()).toBe(true);
-    expect(mirror.sync()).toBe(false);
-    expect($("#shipping_city").val()).toBe("Oslo");
-  });
-
-  test("seeding before the first invoice edit is what keeps an unedited pair synced", () => {
-    // Given: a matching pair at page load, seeded then (as initialize() does)
-    givenInvoiceAddress();
-    $("#shipping_city").val("Registryville");
-    mirror.seed();
-
-    // When: the buyer edits the invoice city
-    $("#billing_city").val("Newtown");
-
-    // Then: the mirror still owns the delivery address. Seeded lazily on the
-    // first sync instead, the record would have captured "Newtown" and the
-    // untouched "Registryville" would have read as a buyer edit.
-    expect(mirror.sync()).toBe(true);
-    expect($("#shipping_city").val()).toBe("Newtown");
-  });
-
-  test('does not touch the delivery form while "ship to a different address" is unchecked', () => {
-    // WooCommerce keeps those fields in the DOM permanently and ignores every
-    // one of them on submit while the box is unchecked. This checkout is also
-    // live for other payment methods, so quietly rewriting a form with no
-    // bearing on the order is not something a payment gateway should do.
-    $("form[name=checkout]").append(
-      '<input type="checkbox" id="ship-to-different-address-checkbox" />'
-    );
-    mirror.seed();
-    givenInvoiceAddress();
-
-    expect(mirror.sync()).toBe(false);
-    expect($("#shipping_city").val()).toBe("");
-
-    // Ticking it fires WooCommerce's own checkout update, which is what runs
-    // this again — so the form is filled the moment it starts to matter.
-    $("#ship-to-different-address-checkbox").prop("checked", true);
-    expect(mirror.sync()).toBe(true);
-    expect($("#shipping_city").val()).toBe("Registryville");
-  });
-
-  test("a theme with no ship-to-different-address toggle counts as in play", () => {
-    // Absence of the checkbox means the delivery form is unconditional.
-    mirror.seed();
-    givenInvoiceAddress();
-    expect(mirror.sync()).toBe(true);
-  });
-
-  test("a checkout with no delivery form at all is a no-op, not an error", () => {
-    document.body.innerHTML = [
-      '<form name="checkout">',
-      '  <select id="billing_country"><option value="GB" selected>GB</option></select>',
-      '  <input type="text" id="billing_city" value="Registryville" />',
-      "</form>"
-    ].join("\n");
-    mirror.reset();
-    expect(mirror.sync()).toBe(false);
-  });
-
-  test("a delivery country the store cannot ship to does not pin the mirror", () => {
-    // The delivery country <select> lists the countries the store SHIPS to,
-    // which is not always the set it BILLS to. Given a value it has no option
-    // for, a <select> keeps its current selection silently — so recording the
-    // INTENDED value would leave the record disagreeing with the field, and
-    // the next pin check would read that as a buyer edit the buyer never made.
-    mirror.seed();
-    $("#billing_country").append('<option value="JP">Japan</option>');
-    $("#billing_country").val("JP");
-    $("#billing_city").val("Kyoto");
-
-    expect(mirror.sync()).toBe(true);
-    // The select refused the value, as it must — no such option.
-    expect($("#shipping_country").val()).not.toBe("JP");
-    // And the mirror is still live rather than pinned on its own write.
-    expect(mirror.isPinned()).toBe(false);
-    $("#billing_city").val("Osaka");
-    expect(mirror.sync()).toBe(true);
-    expect($("#shipping_city").val()).toBe("Osaka");
-  });
-
-  test("the mirror's own writes are not read back as buyer edits", () => {
-    // Re-entrancy: writing #shipping_country fires `change`, which WooCommerce
-    // turns into a checkout update, which re-enters sync().
-    mirror.seed();
-    givenInvoiceAddress();
-    let reentered = 0;
-    $("#shipping_country").on("change", () => {
-      reentered += 1;
-      expect(mirror.sync()).toBe(false);
+  test("editing the billing address never propagates to shipping", () => {
+    // The address mirror this replaces copied billing onto shipping on every
+    // billing edit and on every `updated_checkout`, which is what filled the
+    // shipping form (company included) behind a billing company pick.
+    ctx.Twoinc.getInstance().initialize(false);
+    $("#billing_company").val("ACME Widgets Ltd");
+    ["address_1", "city", "postcode"].forEach((f) => {
+      $("#billing_" + f)
+        .val("billing " + f)
+        .trigger("input")
+        .trigger("change");
     });
+    $(document.body).trigger("updated_checkout");
 
-    expect(mirror.sync()).toBe(true);
-    expect(reentered).toBe(1);
-    expect(mirror.isPinned()).toBe(false);
+    expect(addressOf("shipping")).toEqual(BLANK);
   });
 });
 
@@ -377,7 +240,6 @@ describe("TWO-40 §2.6 — field routing for an externally supplied address", ()
     ctx = loadTwoinc({ enable_address_lookup: "yes" });
     $ = ctx.$;
     buildAddressForm();
-    ctx.mirror.seed();
   });
 
   afterEach(() => {
@@ -451,16 +313,6 @@ describe("TWO-40 §2.6 — field routing for an externally supplied address", ()
     expect($("#billing_postcode").val()).toBe("");
   });
 
-  test("a written address propagates to the delivery address in the same pass", () => {
-    ctx.Twoinc.getInstance().setAddress({
-      street: "Registry Street 1",
-      city: "Registryville",
-      postal_code: "AB1 2CD"
-    });
-    expect($("#shipping_address_1").val()).toBe("Registry Street 1");
-    expect($("#shipping_city").val()).toBe("Registryville");
-  });
-
   describe("region", () => {
     test("matches a state select by option TEXT", () => {
       buildAddressForm({
@@ -469,7 +321,6 @@ describe("TWO-40 §2.6 — field routing for an externally supplied address", ()
           '<option value=""></option><option value="KEN">Kent</option>' +
           "</select>"
       });
-      ctx.mirror.reset();
       ctx.Twoinc.getInstance().setAddress({ street: "x", city: "Ashford", region: "kent" });
 
       expect($("#billing_state").val()).toBe("KEN");
@@ -483,7 +334,6 @@ describe("TWO-40 §2.6 — field routing for an externally supplied address", ()
           '<option value=""></option><option value="KEN">Kent</option>' +
           "</select>"
       });
-      ctx.mirror.reset();
       ctx.Twoinc.getInstance().setAddress({ street: "x", city: "Ashford", region: "KEN" });
 
       expect($("#billing_state").val()).toBe("KEN");
@@ -496,7 +346,6 @@ describe("TWO-40 §2.6 — field routing for an externally supplied address", ()
           '<option value=""></option><option value="FIF">Fife</option>' +
           "</select>"
       });
-      ctx.mirror.reset();
       ctx.Twoinc.getInstance().setAddress({ street: "x", city: "Ashford", region: "Kent" });
 
       // Lossy by nature — the registry's vocabulary and WooCommerce's are two
@@ -517,7 +366,6 @@ describe("TWO-40 §2.6 — field routing for an externally supplied address", ()
       buildAddressForm({
         billingStateMarkup: '<input type="hidden" id="billing_state" name="billing_state" />'
       });
-      ctx.mirror.reset();
       ctx.Twoinc.getInstance().setAddress({ street: "x", city: "Ashford", region: "Kent" });
 
       expect($("#billing_city").val()).toBe("Ashford, Kent");
@@ -527,7 +375,6 @@ describe("TWO-40 §2.6 — field routing for an externally supplied address", ()
       buildAddressForm({
         billingStateMarkup: '<input type="hidden" id="billing_state" name="billing_state" />'
       });
-      ctx.mirror.reset();
       const instance = ctx.Twoinc.getInstance();
       instance.setAddress({ street: "x", city: "Ashford", region: "Kent" });
       instance.setAddress({ street: "x", city: "Ashford, Kent", region: "Kent" });

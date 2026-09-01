@@ -868,7 +868,7 @@ describe("company-search manual-entry affordance", () => {
       jest.useFakeTimers();
       openPanel();
       givenLookedUpAddress();
-      ctx.Twoinc.getInstance().registryAddressApplied = true;
+      ctx.Twoinc.getInstance().addressStateFor("billing").registryApplied = true;
 
       type("abc");
       activate();
@@ -878,7 +878,7 @@ describe("company-search manual-entry affordance", () => {
       expect($("#billing_address_2").val()).toBe("");
       expect($("#billing_city").val()).toBe("");
       expect($("#billing_postcode").val()).toBe("");
-      expect(ctx.Twoinc.getInstance().registryAddressApplied).toBe(false);
+      expect(ctx.Twoinc.getInstance().addressStateFor("billing").registryApplied).toBe(false);
       jest.useRealTimers();
     });
 
@@ -1189,11 +1189,11 @@ describe("company-search manual-entry affordance", () => {
 
     test("clearing the selected company resets the registry-address flag", () => {
       const twoinc = ctx.Twoinc.getInstance();
-      twoinc.registryAddressApplied = true;
+      twoinc.addressStateFor("billing").registryApplied = true;
 
       helper.clearSelectedCompany();
 
-      expect(twoinc.registryAddressApplied).toBe(false);
+      expect(twoinc.addressStateFor("billing").registryApplied).toBe(false);
     });
   });
 

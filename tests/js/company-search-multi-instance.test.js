@@ -199,7 +199,7 @@ describe("TwoCompanySearch is instantiable", () => {
     helper.attach();
     second.attach();
     capture.write("Alpha Ltd", "111111", { role: roles.invoice() });
-    Twoinc.getInstance().registryAddressApplied = true;
+    Twoinc.getInstance().addressStateFor("billing").registryApplied = true;
 
     // When the delivery-role control throws its own capture away
     second.clearSelectedCompany();
@@ -208,7 +208,7 @@ describe("TwoCompanySearch is instantiable", () => {
     // are untouched
     expect(Twoinc.getInstance().customerCompany.company_name).toBe("Alpha Ltd");
     expect(Twoinc.getInstance().customerCompany.organization_number).toBe("111111");
-    expect(Twoinc.getInstance().registryAddressApplied).toBe(true);
+    expect(Twoinc.getInstance().addressStateFor("billing").registryApplied).toBe(true);
   });
 
   test("each instance reads the country off its own address role", () => {
@@ -226,7 +226,7 @@ describe("TwoCompanySearch is instantiable", () => {
     second.attach();
     capture.write("Alpha Ltd", "111111", { role: roles.invoice() });
     capture.write("Beta Ltd", "222222", { role: roles.delivery() });
-    Twoinc.getInstance().registryAddressApplied = true;
+    Twoinc.getInstance().addressStateFor("billing").registryApplied = true;
 
     // When the buyer retypes the delivery-role company name, staling its pair
     capture.nameField(roles.delivery()).val("Beta Ltd Renamed");
@@ -237,7 +237,7 @@ describe("TwoCompanySearch is instantiable", () => {
     expect(capture.numberField(roles.invoice()).val()).toBe("111111");
     expect(Twoinc.getInstance().customerCompany.company_name).toBe("Alpha Ltd");
     expect(Twoinc.getInstance().customerCompany.organization_number).toBe("111111");
-    expect(Twoinc.getInstance().registryAddressApplied).toBe(true);
+    expect(Twoinc.getInstance().addressStateFor("billing").registryApplied).toBe(true);
   });
 
   test("the module singleton is one of these instances, not a separate path", () => {

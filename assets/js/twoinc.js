@@ -150,138 +150,18 @@ let twoincAddressRoles = {
   /** One role's country, upper-cased, or "" when absent/unset (TWO-24867). */
   country: function (role) {
     return twoincAddressRoles.value(role, "country").toUpperCase();
-  }
-};
-
-/**
- * Mirror the invoice address onto the delivery address until the buyer edits
- * the delivery address themselves (TWO-40 §2). Never locked/read-only —
- * rejected on the platform this ports from because of a real case (one legal
- * entity in Northern Ireland with a branch in the Republic: a genuinely
- * different valid country/company pairing on the second address).
- *
- * "Edited" is a pure content-match check against what this mirror last wrote,
- * not a flag set by UI events: one field disagreeing pins the WHOLE delivery
- * address (per-field granularity was rejected — editing one line means
- * editing the address). Because the check is pure content there's no
- * explicit "resume sync" control: clearing the fields back out re-matches and
- * resumes on its own. A field left EMPTY still counts as synced, so a
- * freshly-revealed "Ship to a different address?" form mirrors instead of
- * reading as buyer-edited.
- *
- * Org number/company are required on the invoice-role address only (§2.7),
- * which on WooCommerce is the always-shown `#billing_*` form — unlike
- * shipping-first platforms, WooCommerce can never hide the address that
- * legally needs them, so nothing here adds a required cue to a delivery field.
- */
-let twoincAddressMirror = {
-  /**
-   * Fields this mirror writes/watches. `address_2` and `state` are included
-   * deliberately — a buyer typing into either is as strong an edit signal as
-   * the city.
-   */
-  MIRRORED_FIELDS: ["company", "country", "address_1", "address_2", "city", "postcode", "state"],
-
-  /** Provenance record the pin check compares against. `null` until seeded. */
-  written: null,
-
-  /** Re-entrancy guard: our own writes must not be read as buyer edits. */
-  writing: false,
-
-  /** Trimmed, case-insensitive comparison form. */
-  normalize: function (value) {
-    return twoincUtilHelper.blankToEmpty(value).trim().toLowerCase();
-  },
-
-  /**
-   * Seed the provenance record from the invoice address, so a delivery form
-   * WooCommerce already prefilled to match (a logged-in buyer's saved
-   * shipping address) reads as synced rather than buyer-edited.
-   */
-  seed: function () {
-    const invoice = twoincAddressRoles.invoice();
-    twoincAddressMirror.written = {};
-    twoincAddressMirror.MIRRORED_FIELDS.forEach(function (name) {
-      twoincAddressMirror.written[name] = twoincAddressRoles.value(invoice, name);
-    });
   },
 
   /**
    * Whether the delivery address is part of this order at all. WooCommerce
    * keeps shipping fields in the DOM permanently, gated on "Ship to a
    * different address?"; unchecked, it ignores them on submit and uses
-   * billing — writing into them then would be a payment gateway silently
-   * rewriting a form with no bearing on the order. Absence of the checkbox
-   * means the theme always shows the form, so that's in-play. Checking the
-   * box fires WooCommerce's own checkout update, which re-runs this via
-   * `updated_checkout`, so the form fills the moment it starts to matter.
+   * billing. Absence of the checkbox means the theme always shows the form, so
+   * that's in-play.
    */
   deliveryFormIsInPlay: function () {
     const $toggle = jQuery("#ship-to-different-address-checkbox");
     return $toggle.length === 0 || $toggle.is(":checked");
-  },
-
-  /** Whether the buyer has taken the delivery address over. */
-  isPinned: function () {
-    if (twoincAddressMirror.written === null) return false;
-    const delivery = twoincAddressRoles.delivery();
-    return twoincAddressMirror.MIRRORED_FIELDS.some(function (name) {
-      const $field = jQuery(twoincAddressRoles.field(delivery, name));
-      // A field the delivery form does not have cannot have been edited.
-      if (!$field.length) return false;
-      const current = twoincAddressMirror.normalize($field.val());
-      if (!current) return false;
-      return current !== twoincAddressMirror.normalize(twoincAddressMirror.written[name]);
-    });
-  },
-
-  /**
-   * Propagate the invoice address onto the delivery address, unless pinned.
-   * Country is written first with a `change` event, because WooCommerce
-   * core's address-i18n.js rebuilds the state control (select/text/absent)
-   * off that event, and the state write below must land on whatever control
-   * that rebuild produces.
-   */
-  sync: function () {
-    if (twoincAddressMirror.writing) return false;
-    if (twoincAddressMirror.written === null) twoincAddressMirror.seed();
-    const delivery = twoincAddressRoles.delivery();
-    // No shipping fields at all (virtual cart, or store that doesn't ship).
-    if (!jQuery(twoincAddressRoles.field(delivery, "country")).length) return false;
-    if (!twoincAddressMirror.deliveryFormIsInPlay()) return false;
-    if (twoincAddressMirror.isPinned()) return false;
-
-    const invoice = twoincAddressRoles.invoice();
-    twoincAddressMirror.writing = true;
-    try {
-      twoincAddressMirror.MIRRORED_FIELDS.forEach(function (name) {
-        const value = twoincAddressRoles.value(invoice, name);
-        const $field = jQuery(twoincAddressRoles.field(delivery, name));
-        if (!$field.length) {
-          twoincAddressMirror.written[name] = value;
-          return;
-        }
-        if (twoincAddressMirror.normalize($field.val()) !== twoincAddressMirror.normalize(value)) {
-          $field.val(value);
-          if (name === "country") $field.trigger("change");
-        }
-        // Record what LANDED, not what was intended: a <select> given a value
-        // with no matching option keeps its old selection silently, and the
-        // delivery country select (store's ship-to list) is exactly that —
-        // recording the intended value would make the next pin check see a
-        // false buyer edit and pin the mirror for the session.
-        twoincAddressMirror.written[name] = twoincUtilHelper.blankToEmpty($field.val());
-      });
-    } finally {
-      twoincAddressMirror.writing = false;
-    }
-    return true;
-  },
-
-  /** Test seam: forget the provenance record. */
-  reset: function () {
-    twoincAddressMirror.written = null;
-    twoincAddressMirror.writing = false;
   }
 };
 
@@ -551,7 +431,7 @@ let twoincCompanyCapture = {
     const delivery = twoincAddressRoles.delivery();
     return (
       jQuery(twoincAddressRoles.field(delivery, "country")).length > 0 &&
-      twoincAddressMirror.deliveryFormIsInPlay()
+      twoincAddressRoles.deliveryFormIsInPlay()
     );
   },
 
@@ -651,6 +531,20 @@ let twoincCompanyCapture = {
    */
   soleTraderRegistry: {},
 
+  /**
+   * The `TwoCompanySearch` control that owns each address role, registered by
+   * the control itself. Role-scoped code reached from outside a control (a
+   * retype guard bound by role, not by instance) needs the RIGHT instance's
+   * surfaces, and there is more than one control on the page.
+   */
+  controllerRegistry: {},
+
+  /** The control owning one role, falling back on the primary role's. */
+  controllerFor: function (role) {
+    const registry = twoincCompanyCapture.controllerRegistry;
+    return registry[role || twoincAddressRoles.primary()] || registry[twoincAddressRoles.primary()];
+  },
+
   soleTraderFor: function (role) {
     const key = role || twoincAddressRoles.primary();
     return twoincCompanyCapture.soleTraderRegistry[key] || null;
@@ -722,7 +616,8 @@ let twoincCompanyCapture = {
    *
    * Deliberately does NOT wipe the address fields — the registry address is
    * stale but is also the only address on the form, and destroying it
-   * mid-keystroke costs more than a stale line. `registryAddressApplied` is
+   * mid-keystroke costs more than a stale line. The role's registry-address
+   * provenance is
    * cleared instead, tidied up on the next manual-entry switch or country
    * change.
    *
@@ -752,17 +647,15 @@ let twoincCompanyCapture = {
     // order intent sees — re-check it regardless of which role this is.
     Twoinc.getInstance().getApproval();
 
-    // Everything below is invoice-bound: the address-lookup/summary/required-
-    // cue surfaces only the primary (billing) control owns.
-    if ((role || twoincAddressRoles.primary()) !== twoincAddressRoles.invoice()) return true;
-
-    Twoinc.getInstance().registryAddressApplied = false;
+    // The retyped role's own surfaces — its address provenance and its own
+    // number label (Doug 2026-09-01).
+    Twoinc.getInstance().addressStateFor(role).registryApplied = false;
 
     // `#company_id` visibility depends on the value just cleared (TWO-25326
     // §12); the verdict on screen was about the company just uncaptured.
     twoincDomHelper.clearIntentVerdicts();
     twoincDomHelper.toggleBusinessFields();
-    twoincSelectWooHelper.renderCompanySummary();
+    twoincCompanyCapture.controllerFor(role).renderCompanySummary();
     return true;
   }
 };
@@ -827,6 +720,7 @@ class TwoCompanySearch {
     // and owns this instance's own mode/flight/adoption state.
     this.soleTrader = createSoleTraderController(this);
     twoincCompanyCapture.soleTraderRegistry[this.role] = this.soleTrader;
+    twoincCompanyCapture.controllerRegistry[this.role] = this;
   }
 
   /**
@@ -1444,7 +1338,7 @@ class TwoCompanySearch {
     instance.getApproval();
 
     if (window.twoinc.enable_address_lookup === "yes") {
-      instance.addressLookup(item);
+      instance.addressLookup(item, this.role);
     }
   }
 
@@ -1568,11 +1462,6 @@ class TwoCompanySearch {
       node = node.parentElement;
     }
     return true;
-  }
-
-  /** Whether this control's role is the one `buyer.company` on the order intent describes. */
-  ownsOrderIntent() {
-    return this.role === twoincAddressRoles.invoice();
   }
 
   /** WooCommerce's own company row for this control's address role. */
@@ -1765,20 +1654,19 @@ class TwoCompanySearch {
       { role: this.role }
     );
 
-    if (this.ownsOrderIntent()) {
-      // `clearAddress()`, not a blank `setAddress()` payload: the latter leaves
-      // line 2 untouched by design (TWO-40 §2.6), which would strand the
-      // outgoing company's registry-written line 2 on the form.
-      if (window.twoinc.enable_address_lookup === "yes") {
-        Twoinc.getInstance().clearAddress();
-      }
-      Twoinc.getInstance().registryAddressApplied = false;
-      // Not a blind `{}` (Doug 2026-08-31 §2): `write()` above already
-      // recomputed this, but a shipping fallback may be the reason it isn't
-      // empty — clearing billing's own capture doesn't mean nothing is
-      // captured any more.
-      twoincCompanyCapture.syncOrderCompany();
+    // This role's own address form, never the other's (Doug 2026-09-01).
+    // `clearAddress()`, not a blank `setAddress()` payload: the latter leaves
+    // line 2 untouched by design (TWO-40 §2.6), which would strand the
+    // outgoing company's registry-written line 2 on the form.
+    if (window.twoinc.enable_address_lookup === "yes") {
+      Twoinc.getInstance().clearAddress(this.role);
     }
+    Twoinc.getInstance().addressStateFor(this.role).registryApplied = false;
+    // Not a blind `{}` (Doug 2026-08-31 §2): `write()` above already
+    // recomputed this, but a shipping fallback may be the reason it isn't
+    // empty — clearing billing's own capture doesn't mean nothing is
+    // captured any more.
+    twoincCompanyCapture.syncOrderCompany();
 
     // Clearing a capture changes the visible company-name surface exactly as
     // creating one does (TWO-25503).
@@ -1793,9 +1681,10 @@ class TwoCompanySearch {
     const seq = this.companySearchSeq;
     setTimeout(() => {
       if (seq !== this.companySearchSeq) return;
-      if (this.ownsOrderIntent()) {
-        twoincCompanyCapture.syncOrderCompany();
-      }
+      // Resolver-based, so it is right to call from either role's clear: it
+      // re-reads both roles' DOM and decides which (if either) the order
+      // intent reads.
+      twoincCompanyCapture.syncOrderCompany();
       this.renderCompanySummary();
     }, 3000);
   }
@@ -1943,15 +1832,14 @@ class TwoCompanySearch {
     twoincCompanyCapture.nameField(this.role).val("");
     twoincCompanyCapture.numberField(this.role).val("");
 
-    if (this.ownsOrderIntent()) {
-      // The registry address too, mirroring clearSelectedCompany — but ONLY
-      // when a registry lookup actually wrote it. Reaching manual entry does
-      // not imply one ran, and clearing unconditionally would blank a
-      // logged-in buyer's own account-prefilled address for no reason.
-      if (Twoinc.getInstance().registryAddressApplied) {
-        Twoinc.getInstance().clearAddress();
-        Twoinc.getInstance().registryAddressApplied = false;
-      }
+    // This role's own registry address too, mirroring clearSelectedCompany —
+    // but ONLY when a registry lookup actually wrote it. Reaching manual entry
+    // does not imply one ran, and clearing unconditionally would blank a
+    // logged-in buyer's own account-prefilled address for no reason.
+    const addressState = Twoinc.getInstance().addressStateFor(this.role);
+    if (addressState.registryApplied) {
+      Twoinc.getInstance().clearAddress(this.role);
+      addressState.registryApplied = false;
     }
     // Billing-first, shipping-fallback (Doug 2026-08-31 §2): manual entry on
     // EITHER role drops that role's own number, which can change what the
@@ -2230,9 +2118,8 @@ let twoincDomHelper = {
     // was never a required checkout field). Independent capture mode: the
     // buyer can be in manual entry on one address and search on the other.
     // Gated on the shipping form actually existing at all (no country field
-    // means a virtual/no-shipping cart) — matches
-    // `twoincAddressMirror.sync()`'s own guard, and keeps this a no-op on a
-    // checkout that never renders a shipping address in the first place.
+    // means a virtual/no-shipping cart), so this is a no-op on a checkout that
+    // never renders a shipping address in the first place.
     const hasShippingAddress =
       jQuery(twoincAddressRoles.field(twoincAddressRoles.delivery(), "country")).length > 0;
     if (hasShippingAddress) {
@@ -4154,7 +4041,7 @@ function createSoleTraderController(companySearch) {
         // Read by `watchPopupClose()` in place of `#company_id`'s raw value.
         controller.soleTraderAdopted = true;
       }
-      twoincCompanyCapture.write(companyName, companyId);
+      twoincCompanyCapture.write(companyName, companyId, { role: companySearch.role });
       // The visible field too, when this is the clearing call setMode("business")
       // makes: without it a company picked before the sole-trader detour stays
       // painted after being cleared from both posted fields (TWO-25288).
@@ -4170,11 +4057,13 @@ function createSoleTraderController(companySearch) {
       // than making the switch context-aware.
       const buyerAddress = buyer && (buyer.billing_address || buyer.address);
       if (companyId && buyerAddress) {
-        instance.setAddress(buyerAddress);
-        instance.registryAddressApplied = true;
+        instance.setAddress(buyerAddress, companySearch.role);
+        instance.addressStateFor(companySearch.role).registryApplied = true;
       }
+      // This role's own phone field, where the form has one (WooCommerce
+      // renders `#shipping_phone` only on stores that ask for it).
       if (companyId && buyer && buyer.phone_number) {
-        jQuery("#billing_phone").val(buyer.phone_number);
+        jQuery(twoincAddressRoles.field(companySearch.role, "phone")).val(buyer.phone_number);
       }
       // Re-evaluate which company fields are shown, after the write above
       // (TWO-25326 §12): `#company_id`'s visibility depends on the value it
@@ -4532,24 +4421,19 @@ class Twoinc {
 
     this.isInitialized = false;
     this.isTwoincApproved = null;
-    // Whether the address fields currently hold a registry lookup's result,
-    // as opposed to the buyer's own (typed or account-prefilled) address.
-    // Set only where `setAddress` is actually called with looked-up data
-    // (TWO-25288); read by `enterManualCompanyEntry` to decide whether
-    // disowning the company should clear the address behind it.
-    this.registryAddressApplied = false;
-    // Monotonic supersession counter for the registry address lookup
-    // (TWO-24867). Bumped by every lookup and by every real country change,
-    // so only the newest lookup — and only one issued under the country still
-    // selected — is allowed to write the address fields.
-    this.addressLookupSeq = 0;
+    // Registry-address state per address ROLE, never shared between them
+    // (Doug 2026-09-01): the two address forms are independent, so a capture
+    // on one must not supersede the other's in-flight lookup nor decide
+    // whether the other's address is the plugin's to clear. See
+    // `addressStateFor()`.
+    this.addressState = {};
     /** Timer that retires the busy-retry box a refused lookup painted. */
     this.addressLookupNoticeTimer = null;
     this.orderIntentCheck = {
       interval: null,
       pendingCheck: false,
       // Monotonic supersession counter for the order-intent request, same
-      // idiom as `addressLookupSeq` above. Bumped when a request is issued
+      // idiom as the address lookup's own counter. Bumped when a request is issued
       // and by every abandon, so a response is only allowed to act if it
       // is still the newest question asked. Without it: two checks can
       // overlap and arrive in reverse order, letting an older verdict win
@@ -4652,29 +4536,6 @@ class Twoinc {
       // Move the fields to correct positions
       twoincDomHelper.positionFields();
     }
-
-    // Seed the delivery-address mirror HERE, before any binding below can
-    // change an invoice field (TWO-40 §2). Seeded late — from a
-    // `sync()` that self-seeds — the record would capture the invoice address
-    // as it is AFTER the buyer's first edit, so an unedited delivery address
-    // still holding the pre-edit value would read as buyer-edited and pin
-    // itself for the rest of the session. Reads the invoice form only, so it
-    // does not matter whether WooCommerce has rendered the shipping fields yet.
-    twoincAddressMirror.seed();
-
-    // Propagate invoice → delivery on every invoice-address edit. Delegated,
-    // and on `change` AND `input`: `change` alone misses nothing a buyer does
-    // by hand, but the plugin's own writes (registry autofill, sole-trader
-    // adoption) go through `setAddress()`/the capture helper, which call
-    // `sync()` directly rather than faking events.
-    const mirroredSelector = twoincAddressMirror.MIRRORED_FIELDS.map(function (name) {
-      return twoincAddressRoles.field(twoincAddressRoles.invoice(), name);
-    }).join(", ");
-    $body
-      .off("change.twoincAddressMirror input.twoincAddressMirror", mirroredSelector)
-      .on("change.twoincAddressMirror input.twoincAddressMirror", mirroredSelector, function () {
-        twoincAddressMirror.sync();
-      });
 
     // Enable company search, then again on a delay to catch a billing
     // fragment that WooCommerce had not rendered yet when initialize()
@@ -4879,6 +4740,15 @@ class Twoinc {
     // Through `countryDidChange` rather than by assignment, so this file has
     // exactly one writer for the tracker.
     twoincSelectWooHelper.countryDidChange(twoincSelectWooHelper.currentCountry());
+
+    // The delivery control's tracker needs the same seed as billing's above
+    // (Doug 2026-09-01): unseeded, its first `previous` is null, so
+    // `countryDidChange` reads the buyer's FIRST shipping-country change as
+    // "no previous country to have moved away from" and swallows it — leaving
+    // a shipping company captured under a country the buyer has left.
+    twoincSelectWooHelperShipping.countryDidChange(
+      twoincSelectWooHelperShipping.currentCountry()
+    );
 
     setTimeout(function () {
       twoincDomHelper.saveCheckoutInputs();
@@ -5452,8 +5322,36 @@ class Twoinc {
     }, 1000);
   }
 
-  addressLookup(selectedCompany) {
+  /**
+   * One address role's registry-address state, created on first use.
+   *
+   *  - `registryApplied`: the role's address fields hold a registry lookup's
+   *    result rather than the buyer's own (typed or account-prefilled)
+   *    address, so disowning the company may clear them (TWO-25288).
+   *  - `lookupSeq`: monotonic supersession counter for that role's address
+   *    lookup (TWO-24867) — bumped by every lookup on the role and by every
+   *    real change of THAT role's country.
+   *
+   * @param {string} [role]
+   * @returns {{registryApplied: boolean, lookupSeq: number}}
+   */
+  addressStateFor(role) {
+    const key = role || twoincAddressRoles.invoice();
+    if (!this.addressState[key]) this.addressState[key] = { registryApplied: false, lookupSeq: 0 };
+    return this.addressState[key];
+  }
+
+  /**
+   * Look the picked company's registry address up and write it onto the
+   * address form of the role that picked it.
+   *
+   * @param {Object} selectedCompany
+   * @param {string} [role] address role of the control the pick came from
+   */
+  addressLookup(selectedCompany, role) {
     const self = this;
+    const addressRole = role || twoincAddressRoles.invoice();
+    const state = self.addressStateFor(addressRole);
     // Supersession, not cancellation (TWO-24867). Two independent things can
     // make this response wrong by the time it arrives: a newer lookup (the
     // buyer picked a different company) and a country change (the buyer
@@ -5461,15 +5359,15 @@ class Twoinc {
     // first, the country snapshot the second — a country switched away from
     // and back again between request and response leaves the sequence stale
     // but the country matching, and vice versa, so both are needed.
-    const seq = (self.addressLookupSeq += 1);
-    const requestCountry = twoincSelectWooHelper.currentCountry();
+    const seq = (state.lookupSeq += 1);
+    const requestCountry = twoincAddressRoles.country(addressRole);
     const addressResponse = jQuery.ajax({
       dataType: "json",
       url: twoincUtilHelper.proxyUrl("company_by_id_url"),
       data: { csrf_token: twoincUtilHelper.proxyCsrfToken(), lookup_id: selectedCompany.lookup_id }
     });
     addressResponse.done(function (response) {
-      if (seq !== self.addressLookupSeq) return;
+      if (seq !== state.lookupSeq) return;
       // An empty reading on EITHER side means the field was mid-replacement,
       // not that the country moved — discarding a good registry address on it
       // would be a silent failure with no retry and no message. Both sides
@@ -5477,11 +5375,11 @@ class Twoinc {
       // comparing that against a known country would drop every response.
       // Only two countries that are both known AND different are grounds to
       // drop this.
-      const landedCountry = twoincSelectWooHelper.currentCountry();
+      const landedCountry = twoincAddressRoles.country(addressRole);
       if (requestCountry && landedCountry && landedCountry !== requestCountry) return;
       // Use new address lookup by default
       if (response.addresses) {
-        self.setAddress(response.addresses[0]);
+        self.setAddress(response.addresses[0], addressRole);
         // Only here, on the branch that actually writes registry data. A
         // buyer's own address (account-prefilled, or typed by hand) never
         // goes through this path, so this flag distinguishes the two —
@@ -5489,11 +5387,11 @@ class Twoinc {
         // account-restore and sole-trader code with no lookup behind it, and
         // is empty for company hits that carry no organisation number even
         // though a lookup DID run for them.
-        self.registryAddressApplied = true;
+        state.registryApplied = true;
       }
     });
     addressResponse.fail(function (jqXHR) {
-      if (seq !== self.addressLookupSeq) return;
+      if (seq !== state.lookupSeq) return;
       // Only the shop's own limiter earns the "wait a moment" copy: it is the
       // one failure that retrying does fix. Anything else keeps its silence,
       // where the buyer types the address themselves.
@@ -5506,7 +5404,7 @@ class Twoinc {
       window.clearTimeout(self.addressLookupNoticeTimer);
       self.addressLookupNoticeTimer = window.setTimeout(function () {
         self.addressLookupNoticeTimer = null;
-        if (seq !== self.addressLookupSeq) return;
+        if (seq !== state.lookupSeq) return;
         // Anything that has since painted the pay box owns it now — including
         // a repaint of this same box, on a window of its own that outlives this
         // one. `togglePaySubtitleDesc()` hides every box, so retiring a notice
@@ -5518,8 +5416,9 @@ class Twoinc {
   }
 
   /**
-   * Write an address that arrived in an external payload onto the
-   * INVOICE-role address form (TWO-40 §2.6).
+   * Write an address that arrived in an external payload onto ONE role's
+   * address form — the role of the control that captured the company it
+   * belongs to, never a fixed one (TWO-40 §2.6).
    *
    * ONE routing table for every such payload — the registry address behind a
    * company-search pick and the sole-trader autofill buyer alike. Sole trader
@@ -5541,11 +5440,12 @@ class Twoinc {
    * company-address endpoint calls the same field.
    *
    * @param {Object} address
+   * @param {string} [role] address role to write onto
    * @returns {void}
    */
-  setAddress(address) {
+  setAddress(address, role) {
     const payload = address || {};
-    const role = twoincAddressRoles.invoice();
+    role = role || twoincAddressRoles.invoice();
     const street = twoincUtilHelper.blankToEmpty(
       payload.street !== undefined ? payload.street : payload.street_address
     );
@@ -5565,10 +5465,6 @@ class Twoinc {
       twoincUtilHelper.blankToEmpty(payload.postal_code)
     );
     Twoinc.getInstance().setRegion(role, payload.region);
-
-    // Propagate onto the delivery address before the re-render below, so one
-    // checkout update carries both (TWO-40 §2).
-    twoincAddressMirror.sync();
 
     // Update order review in case there is a shipping change
     jQuery(document.body).trigger("update_checkout");
@@ -5652,14 +5548,14 @@ class Twoinc {
    * The state/county control is left alone: it belongs to the country, not to
    * the company, and the country is not what is being cleared here.
    *
+   * @param {string} [role] address role to clear
    * @returns {void}
    */
-  clearAddress() {
-    const role = twoincAddressRoles.invoice();
+  clearAddress(role) {
+    role = role || twoincAddressRoles.invoice();
     ["address_1", "address_2", "city", "postcode"].forEach(function (name) {
       jQuery(twoincAddressRoles.field(role, name)).val("");
     });
-    twoincAddressMirror.sync();
     jQuery(document.body).trigger("update_checkout");
   }
 
@@ -5742,7 +5638,7 @@ class Twoinc {
       // to questions asked under a country that is no longer selected,
       // never captured state, so it is not something the buyer can lose.
       twoincSelectWooHelper.companySearchSeq += 1;
-      Twoinc.getInstance().addressLookupSeq += 1;
+      Twoinc.getInstance().addressStateFor(twoincAddressRoles.invoice()).lookupSeq += 1;
 
       // Before updateElements() below: clearing before the approval pass
       // is the order in which `updateElements` sees the state the rest of
@@ -5771,13 +5667,6 @@ class Twoinc {
     // re-renders a fresh, empty `.twoinc-company-search-tile-slot` on
     // every one of those refreshes.
     twoincSelectWooHelper.syncCompanySearchTileLocation();
-
-    // WooCommerce re-renders the shipping fields as part of this same refresh
-    // (revealing "Ship to a different address?" is one of the triggers), so a
-    // delivery form that has just appeared, or just been replaced, needs the
-    // mirror re-asserted against it (TWO-40 §2). A no-op once the buyer has
-    // taken that address over.
-    twoincAddressMirror.sync();
 
     // Same reason as billing's `syncCompanySearchTileLocation()` above: this
     // refresh re-renders the shipping fields, so the control's host is a new
@@ -5910,13 +5799,13 @@ class Twoinc {
     //    country's register, next to a field this handler is about to clear;
     //  - an address lookup would write the previous country's registry
     //    address over the cleared address fields, and set
-    //    registryAddressApplied on it.
+    //    address over the cleared fields, and mark them as registry-written.
     //
     // Both are supersession counters rather than aborts on purpose: the
     // network request may already have completed, so cancelling it is not
     // enough — the guard has to sit on the handler.
     twoincSelectWooHelper.companySearchSeq += 1;
-    self.addressLookupSeq += 1;
+    self.addressStateFor(twoincAddressRoles.invoice()).lookupSeq += 1;
     // The order-intent request is retired on this path too, but not from
     // here: `clearSelectedCompany()` below resets `customerCompany`
     // wholesale, so `self.getApproval()` at the end of this function finds
@@ -5974,6 +5863,7 @@ class Twoinc {
     // Same invalidation as billing's own (TWO-24867): a search or sole-trader
     // availability answer for the OUTGOING shipping country must not land.
     helper.companySearchSeq += 1;
+    Twoinc.getInstance().addressStateFor(twoincAddressRoles.delivery()).lookupSeq += 1;
     helper.closeCompanySearchDropdown();
 
     if (helper.soleTrader.mode !== "sole_trader") {
