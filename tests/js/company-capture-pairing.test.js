@@ -376,7 +376,7 @@ describe("TWO-40 §5 — captured-company write path", () => {
       expect($("#billing_address_1").val()).toBe("Registry Street 1");
       expect($("#billing_city").val()).toBe("Registryville");
       expect($("#billing_postcode").val()).toBe("AB1 2CD");
-      expect(ctx.Twoinc.getInstance().registryAddressApplied).toBe(true);
+      expect(ctx.Twoinc.getInstance().addressStateFor("billing").registryApplied).toBe(true);
     });
 
     test("uses the same field-routing table as a registry pick", () => {

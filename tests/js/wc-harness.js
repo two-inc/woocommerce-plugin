@@ -129,7 +129,7 @@ function loadPluginSource() {
   const indirectEval = eval;
   const exported = indirectEval(
     src +
-      "\n;({ twoincUtilHelper, twoincAddressRoles, twoincAddressMirror," +
+      "\n;({ twoincUtilHelper, twoincAddressRoles," +
       " twoincCompanyCapture," +
       " twoincSelectWooHelper, twoincSelectWooHelperShipping, twoincDomHelper," +
       " twoincTermChips, twoincSoleTrader, Twoinc, TwoCompanySearch });"
@@ -152,7 +152,7 @@ function loadPluginSource() {
  * bootstrap is left to no-op and `window.twoinc` is installed afterwards.
  *
  * @param {Object} [twoinc] value for `window.twoinc`, installed post-load
- * @returns {{helper: Object, util: Object, roles: Object, mirror: Object,
+ * @returns {{helper: Object, util: Object, roles: Object,
  *   capture: Object, dom: Object, termChips: Object, soleTrader: Object,
  *   Twoinc: Function, TwoCompanySearch: Function, $: Function, twoinc: Object}}
  */
@@ -186,7 +186,6 @@ function loadTwoinc(twoinc) {
     shippingHelper: exported.twoincSelectWooHelperShipping,
     util: exported.twoincUtilHelper,
     roles: exported.twoincAddressRoles,
-    mirror: exported.twoincAddressMirror,
     capture: exported.twoincCompanyCapture,
     dom: exported.twoincDomHelper,
     termChips: exported.twoincTermChips,

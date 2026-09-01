@@ -419,7 +419,7 @@ describe("billing country switch", () => {
 
       expect(ctx.helper.companySearchSeq).toBeGreaterThan(searchSeqBefore);
       expect(ctx.$("#billing_address_1").val()).toBe("");
-      expect(ctx.Twoinc.getInstance().registryAddressApplied).toBe(false);
+      expect(ctx.Twoinc.getInstance().addressStateFor("billing").registryApplied).toBe(false);
     });
 
     test("updated_checkout does NOT invalidate when the country is unchanged", () => {
@@ -1147,7 +1147,7 @@ describe("billing country switch", () => {
       inFlight.succeed(GB_ADDRESS);
 
       expect(ctx.$("#billing_address_1").val()).toBe("");
-      expect(ctx.Twoinc.getInstance().registryAddressApplied).toBe(false);
+      expect(ctx.Twoinc.getInstance().addressStateFor("billing").registryApplied).toBe(false);
     });
 
     test("a response superseded by a newer lookup is discarded", () => {
@@ -1175,7 +1175,7 @@ describe("billing country switch", () => {
       inFlight.succeed(GB_ADDRESS);
 
       expect(ctx.$("#billing_address_1").val()).toBe("");
-      expect(ctx.Twoinc.getInstance().registryAddressApplied).toBe(false);
+      expect(ctx.Twoinc.getInstance().addressStateFor("billing").registryApplied).toBe(false);
     });
 
     test("a response is discarded after a switch AWAY and BACK", () => {
@@ -1194,7 +1194,7 @@ describe("billing country switch", () => {
       inFlight.succeed(GB_ADDRESS);
 
       expect(ctx.$("#billing_address_1").val()).toBe("");
-      expect(ctx.Twoinc.getInstance().registryAddressApplied).toBe(false);
+      expect(ctx.Twoinc.getInstance().addressStateFor("billing").registryApplied).toBe(false);
     });
 
     test("the current lookup still writes the address", () => {
@@ -1202,7 +1202,7 @@ describe("billing country switch", () => {
       lookup("gb-lookup-id").succeed(GB_ADDRESS);
 
       expect(ctx.$("#billing_address_1").val()).toBe("1 Example Street");
-      expect(ctx.Twoinc.getInstance().registryAddressApplied).toBe(true);
+      expect(ctx.Twoinc.getInstance().addressStateFor("billing").registryApplied).toBe(true);
     });
   });
 

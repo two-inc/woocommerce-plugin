@@ -171,3 +171,50 @@ describe("TWO-40 §2 — the shipping instance is a genuine second TwoCompanySea
     expect(ctx.helper.panel.getBindToken()).not.toBe(ctx.shippingHelper.panel.getBindToken());
   });
 });
+
+describe("each control drops its own capture on its own country change", () => {
+  let ctx;
+  let $;
+
+  beforeEach(() => {
+    ctx = loadTwoinc();
+    $ = ctx.$;
+    buildForm();
+    // As WooCommerce renders it: a shipping country already selected when the
+    // page loads, which is what the seed at init records.
+    $("#shipping_country").val("GB");
+    // `initialize()` is the only thing that seeds the country trackers, and it
+    // refuses to run off a checkout page.
+    $("body").append('<div id="order_review"></div>');
+    ctx.Twoinc.getInstance().initialize(false);
+    $("#ship-to-different-address-checkbox").prop("checked", true);
+  });
+
+  /** Capture a company on one role, then move THAT role's country. */
+  function captureThenMoveCountry(role, country) {
+    ctx.capture.write(role === "shipping" ? "Ship Co" : "Bill Co", "12345678", { role: role });
+    $("#" + role + "_country")
+      .val(country)
+      .trigger("change");
+  }
+
+  test.each([
+    ["shipping", "billing"],
+    ["billing", "shipping"]
+  ])("a %s country change clears the %s role's own capture only", (moved, kept) => {
+    ctx.capture.write("Kept Co", "87654321", { role: kept });
+    captureThenMoveCountry(moved, "NO");
+
+    // The live bug was on the FIRST change of the shipping country: only
+    // billing's country tracker was seeded at init, so the delivery control's
+    // first `change` read as "no previous country" and was swallowed, leaving
+    // a company captured under a country the buyer had left.
+    expect(ctx.capture.numberField(moved).val()).toBe("");
+    expect(ctx.capture.numberField(kept).val()).toBe("87654321");
+  });
+
+  test("both trackers are seeded at init, so neither swallows a first change", () => {
+    expect(ctx.helper.lastObservedCountry).toBe("GB");
+    expect(ctx.shippingHelper.lastObservedCountry).toBe("GB");
+  });
+});

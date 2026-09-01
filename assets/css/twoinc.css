@@ -313,13 +313,20 @@
 
 /*
  * Registered-org mode's gap above the summary (live-reported by Doug on the
- * widget-selection PR): `#billing_company_display_field` carries its own
- * 15px `padding-bottom` AND WooCommerce core's own `.form-row` bottom margin
- * (~22px, theme/core default, not ours to remove) — both apply in full
- * before this summary's own content starts, stacking to ~37px total when
- * the intended gap is ~5px.
+ * widget-selection PR): `#billing_company_display_field` carries its own 15px
+ * `padding-bottom`, which with the number label directly below is space
+ * between the input and its own number.
  *
- * Cancelled here, on the summary, via the adjacent-sibling selector
+ * Cancels that 15px and nothing else. WooCommerce core's `.form-row` bottom
+ * margin is left standing — it is the row's own spacing, it is theme-set (6px
+ * on the shops measured, not the ~22px core default), and it is what the
+ * shipping control's summary already renders against: `#shipping_company_
+ * display_field` carries no plugin padding, so its number sits one row margin
+ * below its input, which is the spacing this matches. Cancelling a guessed
+ * total instead pulled the number up THROUGH the input's bottom border on any
+ * theme whose row margin is smaller than the guess.
+ *
+ * Applied on the summary, via the adjacent-sibling selector
  * `getCompanySummaryNode()` (twoinc.js) actually inserts it after — never on
  * the field's own padding directly, which the no-summary state and the
  * payment-tile placement both still need untouched. `.twoinc-inp-container`
@@ -328,23 +335,21 @@
  * the checkout page, where there is no such wrapper.
  *
  * `#billing_company_field` needs the identical cancellation (Doug,
- * 2026-08-19): it carries the same 15px `padding-bottom` (above) and the same
- * core `.form-row` margin, and it is the anchor `getCompanySummaryNode()`
- * picks whenever the search control is the hidden one of the two company-name
- * elements.
+ * 2026-08-19): it carries the same 15px `padding-bottom` (above), and it is
+ * the anchor `getCompanySummaryNode()` picks whenever the search control is
+ * the hidden one of the two company-name elements.
  */
 #billing_company_display_field + .twoinc-company-summary,
 #billing_company_field + .twoinc-company-summary,
 .twoinc-inp-container + .twoinc-company-summary {
-  margin-top: -32px;
+  margin-top: -15px;
 }
 
 /*
  * The pay-for-order page's own flex row (`.custom-checkout`, above) sizes
  * each row by its tallest item rather than stacking by margin, so the
- * general cancellation above would pull the summary up into the field's own
- * row instead of just tightening a stacked gap. Left at the page's original
- * spacing there.
+ * cancellation above would pull the summary up into the field's own row
+ * instead of just closing a stacked gap. Left at the page's own spacing there.
  */
 .custom-checkout .twoinc-inp-container + .twoinc-company-summary {
   margin-top: 0;
