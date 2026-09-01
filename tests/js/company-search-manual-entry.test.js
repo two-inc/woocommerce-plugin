@@ -511,7 +511,13 @@ describe("company-search manual-entry affordance", () => {
     }
 
     function ruleBodyFor(css, selector) {
-      const re = new RegExp(selector.replace(/[.#]/g, "\\$&") + "\\s*\\{([^}]*)\\}", "m");
+      // Tolerates the selector being the first of a comma-grouped list
+      // (e.g. shipping's id sharing billing's rule body) rather than only
+      // ever standing alone.
+      const re = new RegExp(
+        selector.replace(/[.#]/g, "\\$&") + "\\s*(?:,\\s*[.#]\\S+\\s*)*\\{([^}]*)\\}",
+        "m"
+      );
       const m = re.exec(css);
       return m ? m[1] : "";
     }
@@ -609,7 +615,7 @@ describe("company-search manual-entry affordance", () => {
     test("#search_company_btn declares its below-the-field gap explicitly (round 1 review — Vader)", () => {
       // Mutation-caught gap: a mutation deleting `margin-top` passed the full
       // suite while `display`/`position`/`text-align` were asserted.
-      const m = /^#search_company_btn\s*\{([^}]*)\}/m.exec(
+      const m = /^#search_company_btn,?\s*(?:#\S+\s*)*\{([^}]*)\}/m.exec(
         fs.readFileSync(path.join(harness.REPO_ROOT, harness.STYLESHEET_PATH), "utf8")
       );
       expect(m).not.toBeNull();
@@ -621,7 +627,7 @@ describe("company-search manual-entry affordance", () => {
       // label regardless of `display: block`, which makes `text-align: end` a
       // no-op. `box-sizing: border-box` is what stops the pair overflowing, so
       // either alone reproduces a bug.
-      const m = /^#search_company_btn\s*\{([^}]*)\}/m.exec(
+      const m = /^#search_company_btn,?\s*(?:#\S+\s*)*\{([^}]*)\}/m.exec(
         fs.readFileSync(path.join(harness.REPO_ROOT, harness.STYLESHEET_PATH), "utf8")
       );
       expect(m).not.toBeNull();
@@ -1005,13 +1011,13 @@ describe("company-search manual-entry affordance", () => {
       // button-focus reset can remove the browser default. The width and style
       // are reserved in the base rule so gaining focus never resizes the box —
       // a border occupies box space, unlike an outline.
-      const base = /^#search_company_btn\s*\{([^}]*)\}/m.exec(stylesheetSource());
+      const base = /^#search_company_btn,?\s*(?:#\S+\s*)*\{([^}]*)\}/m.exec(stylesheetSource());
       expect(base).not.toBeNull();
       expect(base[1]).toMatch(/border:\s*1px\s+dotted\s+transparent/);
     });
 
     test("#search_company_btn:focus declares an explicit, !important border colour", () => {
-      const m = /#search_company_btn:focus\s*\{([^}]*)\}/m.exec(stylesheetSource());
+      const m = /#search_company_btn:focus,?\s*(?:#\S+\s*)*\{([^}]*)\}/m.exec(stylesheetSource());
       expect(m).not.toBeNull();
       expect(m[1]).toMatch(/border-color:\s*#808080\s*!important/);
     });
@@ -1020,7 +1026,7 @@ describe("company-search manual-entry affordance", () => {
       // The round-5 border sits flush against the box, so the box has to be
       // sized close to the text rather than left on the browser's own default
       // button padding.
-      const m = /^#search_company_btn\s*\{([^}]*)\}/m.exec(stylesheetSource());
+      const m = /^#search_company_btn,?\s*(?:#\S+\s*)*\{([^}]*)\}/m.exec(stylesheetSource());
       expect(m).not.toBeNull();
       expect(m[1]).toMatch(/padding:\s*0\s+2px/);
     });

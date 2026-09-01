@@ -371,7 +371,8 @@
   display: block;
   position: relative;
 }
-#search_company_btn {
+#search_company_btn,
+#search_shipping_company_btn {
   display: block;
   box-sizing: border-box;
   width: 100%;
@@ -419,7 +420,8 @@
  * this stylesheet is hex, and this is the only rule that would otherwise be
  * the one exception.
  */
-#search_company_btn:focus {
+#search_company_btn:focus,
+#search_shipping_company_btn:focus {
   border-color: #808080 !important;
 }
 
@@ -877,7 +879,8 @@
  * rule's own comments for why each declaration is there, and
  * #search_company_btn:focus below for the dotted focus border.
  */
-#select_different_sole_trader_btn {
+#select_different_sole_trader_btn,
+#select_different_sole_trader_btn_shipping {
   display: block;
   box-sizing: border-box;
   width: 100%;
@@ -891,6 +894,7 @@
   font: inherit;
   text-transform: none !important;
 }
-#select_different_sole_trader_btn:focus {
+#select_different_sole_trader_btn:focus,
+#select_different_sole_trader_btn_shipping:focus {
   border-color: #808080 !important;
 }
