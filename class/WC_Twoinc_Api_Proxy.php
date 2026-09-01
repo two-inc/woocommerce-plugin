@@ -134,6 +134,15 @@ if (!class_exists('WC_Twoinc_Api_Proxy')) {
                 wp_send_json_error('Invalid order intent payload');
                 return;
             }
+            $company = $posted['buyer']['company'] ?? null;
+            $buyer_country = is_array($company) && isset($company['country_prefix'])
+                ? (string) $company['country_prefix']
+                : '';
+            if (!$gateway->is_buyer_country_supported($buyer_country)) {
+                $gateway->log_buyer_country_rejection('order intent', $buyer_country);
+                wp_send_json_error('Buyer country not supported');
+                return;
+            }
             $payload = array_intersect_key($posted, array_flip(self::INTENT_FIELDS));
             // Merchant identity is resolved here, never read from the request.
             $payload['merchant_id'] = (string) $gateway->get_merchant_id();

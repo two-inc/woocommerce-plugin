@@ -68,6 +68,20 @@ class StubWcLogger
     }
 }
 
+// The buyer-facing half of a refused checkout submission; recorded as
+// ['message' => …, 'type' => …] in $GLOBALS['__twoinc_test_notices'].
+$GLOBALS['__twoinc_test_notices'] = [];
+
+function wc_add_notice($message, $notice_type = 'success', $data = [])
+{
+    $GLOBALS['__twoinc_test_notices'][] = ['message' => (string) $message, 'type' => $notice_type];
+}
+
+function wp_generate_password($length = 12, $special_chars = true, $extra_special_chars = false)
+{
+    return str_repeat('a', (int) $length);
+}
+
 function wc_get_logger()
 {
     static $logger = null;
