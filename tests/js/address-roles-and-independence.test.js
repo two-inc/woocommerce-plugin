@@ -199,11 +199,8 @@ describe("the two address forms are independent (Doug 2026-09-01)", () => {
   test("one role's lookup does not supersede the other's in flight", () => {
     // A shared supersession counter meant a pick on either control silently
     // discarded the other's answer.
-    const shipping = (ctx.Twoinc.getInstance().addressLookup(
-      { lookup_id: "shipping-lookup" },
-      "shipping"
-    ),
-    ajax.last());
+    ctx.Twoinc.getInstance().addressLookup({ lookup_id: "shipping-lookup" }, "shipping");
+    const shipping = ajax.last();
     ctx.Twoinc.getInstance().addressLookup({ lookup_id: "billing-lookup" }, "billing");
     const billing = ajax.last();
 

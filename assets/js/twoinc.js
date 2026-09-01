@@ -4746,9 +4746,7 @@ class Twoinc {
     // `countryDidChange` reads the buyer's FIRST shipping-country change as
     // "no previous country to have moved away from" and swallows it — leaving
     // a shipping company captured under a country the buyer has left.
-    twoincSelectWooHelperShipping.countryDidChange(
-      twoincSelectWooHelperShipping.currentCountry()
-    );
+    twoincSelectWooHelperShipping.countryDidChange(twoincSelectWooHelperShipping.currentCountry());
 
     setTimeout(function () {
       twoincDomHelper.saveCheckoutInputs();
