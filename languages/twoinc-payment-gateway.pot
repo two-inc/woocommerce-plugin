@@ -51,9 +51,7 @@ msgid "We require your phone number so we can verify your purchase."
 msgstr ""
 
 #: class/WC_Twoinc_Checkout.php:379
-msgid ""
-"We use your company name to automatically populate your address and register "
-"the company that made the purchase."
+msgid "We use your company name to automatically populate your address and register the company that made the purchase."
 msgstr ""
 
 #: class/WC_Twoinc_Checkout.php:383
@@ -198,10 +196,7 @@ msgstr ""
 
 #: class/WC_Twoinc.php:868
 #, php-format
-msgid ""
-"%s is a payment solution for B2B purchases online, allowing you to buy from "
-"your favourite merchants and suppliers on trade credit. Using %s, you can "
-"access flexible trade credit instantly to make purchasing simple."
+msgid "%s is a payment solution for B2B purchases online, allowing you to buy from your favourite merchants and suppliers on trade credit. Using %s, you can access flexible trade credit instantly to make purchasing simple."
 msgstr ""
 
 #: class/WC_Twoinc.php:869
@@ -221,9 +216,7 @@ msgstr ""
 
 #: class/WC_Twoinc.php:1028
 #, php-format
-msgid ""
-"Your invoice with %1$s is likely to be accepted, subject to additional "
-"checks."
+msgid "Your invoice with %1$s is likely to be accepted, subject to additional checks."
 msgstr ""
 
 #. translators: %1$s: brand product name (e.g. "Two"); %2$s: the buyer's captured company name and number, substituted client-side
@@ -237,8 +230,7 @@ msgid "Phone number is invalid."
 msgstr ""
 
 #: class/WC_Twoinc.php:1151
-msgid ""
-"We could not complete that just now. Please wait a moment and try again."
+msgid "We could not complete that just now. Please wait a moment and try again."
 msgstr ""
 
 #: class/WC_Twoinc.php:1233
@@ -266,20 +258,12 @@ msgid "Never taxed"
 msgstr ""
 
 #: class/WC_Twoinc.php:1382
-msgid ""
-"⚠ This store is set to leave the surcharge UNTAXED for every destination. "
-"That treatment is no longer available and these settings cannot be saved "
-"while it is stored — select a tax treatment above. To keep the fee untaxed, "
-"create a tax class with a 0% rate under WooCommerce → Settings → Tax and "
-"select it as the surcharge tax class."
+msgid "⚠ This store is set to leave the surcharge UNTAXED for every destination. That treatment is no longer available and these settings cannot be saved while it is stored — select a tax treatment above. To keep the fee untaxed, create a tax class with a 0% rate under WooCommerce → Settings → Tax and select it as the surcharge tax class."
 msgstr ""
 
 #: class/WC_Twoinc.php:1405
 #, php-format
-msgid ""
-"⚠ The previously selected tax class (\"%s\") no longer exists. The surcharge "
-"is currently taxed under the Standard treatment — select an existing tax "
-"class or change the tax treatment above."
+msgid "⚠ The previously selected tax class (\"%s\") no longer exists. The surcharge is currently taxed under the Standard treatment — select an existing tax class or change the tax treatment above."
 msgstr ""
 
 #: class/WC_Twoinc.php:1540
@@ -289,23 +273,15 @@ msgstr ""
 #. translators: %s: comma-separated term days, e.g. "14, 30"
 #: class/WC_Twoinc.php:1552
 #, php-format
-msgid ""
-"Clear or correct the surcharge limit of 0 on these terms before enabling a "
-"percentage surcharge: %s. A limit of 0 charges nothing at all; to charge "
-"nothing on a term, set its percentage and fixed fee to 0 and leave the limit "
-"empty."
+msgid "Clear or correct the surcharge limit of 0 on these terms before enabling a percentage surcharge: %s. A limit of 0 charges nothing at all; to charge nothing on a term, set its percentage and fixed fee to 0 and leave the limit empty."
 msgstr ""
 
 #: class/WC_Twoinc.php:1574
-msgid ""
-"Select a surcharge tax treatment — surcharges cannot be used without one."
+msgid "Select a surcharge tax treatment — surcharges cannot be used without one."
 msgstr ""
 
 #: class/WC_Twoinc.php:1585
-msgid ""
-"That surcharge tax treatment leaves the surcharge untaxed for every "
-"destination and is no longer available. Create a tax class with a 0% rate "
-"and select it as the surcharge tax class instead."
+msgid "That surcharge tax treatment leaves the surcharge untaxed for every destination and is no longer available. Create a tax class with a 0% rate and select it as the surcharge tax class instead."
 msgstr ""
 
 #: class/WC_Twoinc.php:1592
@@ -317,35 +293,25 @@ msgid "Surcharge tax class must be one of the store's existing tax classes."
 msgstr ""
 
 #: class/WC_Twoinc.php:1624
-msgid ""
-"Default shipping tax class must be one of the store's existing tax classes."
+msgid "Default shipping tax class must be one of the store's existing tax classes."
 msgstr ""
 
 #. translators: %s: store currency symbol, e.g. "€"
 #: class/WC_Twoinc.php:1669
 #, php-format
-msgid ""
-"Enter a limit amount (in %s) if you do not want to charge your customer more "
-"than a specific amount. Leave the limit field empty if you don't want to "
-"impose a limit amount."
+msgid "Enter a limit amount (in %s) if you do not want to charge your customer more than a specific amount. Leave the limit field empty if you don't want to impose a limit amount."
 msgstr ""
 
 #: class/WC_Twoinc.php:1675
-msgid ""
-"A limit of 0 is not allowed. To charge nothing on a term, set the percentage "
-"and the fixed fee for that term to 0 instead."
+msgid "A limit of 0 is not allowed. To charge nothing on a term, set the percentage and the fixed fee for that term to 0 instead."
 msgstr ""
 
 #: class/WC_Twoinc.php:1679
-msgid ""
-"The limit applies to the whole fee: the percentage and the fixed fee "
-"together, not the percentage alone."
+msgid "The limit applies to the whole fee: the percentage and the fixed fee together, not the percentage alone."
 msgstr ""
 
 #: class/WC_Twoinc.php:1683
-msgid ""
-"Enter the percentage of the fee's cost to you that you want the surcharge to "
-"recover. 100% means the fee no longer reduces your revenue at all."
+msgid "Enter the percentage of the fee's cost to you that you want the surcharge to recover. 100% means the fee no longer reduces your revenue at all."
 msgstr ""
 
 #: class/WC_Twoinc.php:1685
@@ -359,9 +325,7 @@ msgid "Max %s."
 msgstr ""
 
 #: class/WC_Twoinc.php:1694
-msgid ""
-"Enter the amount and percentage of the fee charged to you that you want to "
-"offset with a surcharge. Max 100%."
+msgid "Enter the amount and percentage of the fee charged to you that you want to offset with a surcharge. Max 100%."
 msgstr ""
 
 #. translators: %s: store currency code, e.g. "EUR"
@@ -385,17 +349,13 @@ msgstr ""
 #. translators: %s: term days
 #: class/WC_Twoinc.php:1859
 #, php-format
-msgid ""
-"Surcharge limit for the %s-day term cannot be 0. To charge nothing on this "
-"term, set the percentage and the fixed fee to 0 instead, and leave the limit "
-"empty."
+msgid "Surcharge limit for the %s-day term cannot be 0. To charge nothing on this term, set the percentage and the fixed fee to 0 instead, and leave the limit empty."
 msgstr ""
 
 #. translators: 1: term days, 2: maximum amount with currency
 #: class/WC_Twoinc.php:1866
 #, php-format
-msgid ""
-"Surcharge fixed amount for the %1$s-day term exceeds the maximum of %2$s."
+msgid "Surcharge fixed amount for the %1$s-day term exceeds the maximum of %2$s."
 msgstr ""
 
 #: class/WC_Twoinc.php:2024
@@ -432,8 +392,7 @@ msgid "No %s order reference is set for this order."
 msgstr ""
 
 #: class/WC_Twoinc.php:2699
-msgid ""
-"The invoice for this order is still being prepared. Please try again later."
+msgid "The invoice for this order is still being prepared. Please try again later."
 msgstr ""
 
 #: class/WC_Twoinc.php:2719
@@ -470,16 +429,13 @@ msgstr ""
 #. translators: 1: product name (e.g. Two). 2: HTTP status code returned by the API (e.g. 502), substituted by admin.js.
 #: class/WC_Twoinc.php:3141
 #, php-format
-msgid ""
-"%1$s's API returned a service error (HTTP %2$s). This is likely temporary on "
-"%1$s's side — try again shortly."
+msgid "%1$s's API returned a service error (HTTP %2$s). This is likely temporary on %1$s's side — try again shortly."
 msgstr ""
 
 #. translators: %s: product name (e.g. Two).
 #: class/WC_Twoinc.php:3143
 #, php-format
-msgid ""
-"Could not reach %s's API (network or connectivity error). Try again shortly."
+msgid "Could not reach %s's API (network or connectivity error). Try again shortly."
 msgstr ""
 
 #. translators: %s: product name (e.g. Two).
@@ -504,12 +460,8 @@ msgstr ""
 
 #: class/WC_Twoinc.php:3295
 #, php-format
-msgid ""
-"%s has acknowledged request to fulfill %d order. An invoice will be sent to "
-"the buyer when the fulfilment is complete."
-msgid_plural ""
-"%s has acknowledged request to fulfill %d orders. Invoices will be sent to "
-"the buyers when the fulfilments are complete."
+msgid "%s has acknowledged request to fulfill %d order. An invoice will be sent to the buyer when the fulfilment is complete."
+msgid_plural "%s has acknowledged request to fulfill %d orders. Invoices will be sent to the buyers when the fulfilments are complete."
 msgstr[0] ""
 msgstr[1] ""
 
@@ -543,9 +495,7 @@ msgstr ""
 
 #: class/WC_Twoinc.php:3432
 #, php-format
-msgid ""
-"The tracking number could not be attached to the %s order. The invoice will "
-"be sent without it."
+msgid "The tracking number could not be attached to the %s order. The invoice will be sent without it."
 msgstr ""
 
 #: class/WC_Twoinc.php:3442 class/WC_Twoinc.php:3454
@@ -568,9 +518,7 @@ msgstr ""
 
 #: class/WC_Twoinc.php:3464
 #, php-format
-msgid ""
-"%s has acknowledged the request to fulfil the order. An invoice will be sent "
-"to the buyer when the fulfilment is complete."
+msgid "%s has acknowledged the request to fulfil the order. An invoice will be sent to the buyer when the fulfilment is complete."
 msgstr ""
 
 #: class/WC_Twoinc.php:3496 class/WC_Twoinc.php:3512 class/WC_Twoinc.php:3520
@@ -613,33 +561,22 @@ msgstr ""
 
 #: class/WC_Twoinc.php:3776
 #, php-format
-msgid ""
-"Platform minimum %1$s, %2$s tax. A value here is interpreted in the store "
-"currency on the tax basis selected below and must exceed it."
+msgid "Platform minimum %1$s, %2$s tax. A value here is interpreted in the store currency on the tax basis selected below and must exceed it."
 msgstr ""
 
 #. translators: 1: platform minimum in its native currency, e.g. "EUR 250.00", 2: the same minimum converted into the store currency at the current FX rate, e.g. "NOK 2,941.18", 3: tax basis label, "including" or "excluding"
 #: class/WC_Twoinc.php:3790
 #, php-format
-msgid ""
-"Platform minimum %1$s (approximately %2$s at the current exchange rate), "
-"%3$s tax. A value here is interpreted in the store currency on the tax basis "
-"selected below — both minimums are enforced independently."
+msgid "Platform minimum %1$s (approximately %2$s at the current exchange rate), %3$s tax. A value here is interpreted in the store currency on the tax basis selected below — both minimums are enforced independently."
 msgstr ""
 
 #: class/WC_Twoinc.php:3797
 #, php-format
-msgid ""
-"Platform minimum %1$s, %2$s tax. A value here is interpreted in the store "
-"currency on the tax basis selected below; it cannot be checked against the "
-"platform minimum (different currency) — both minimums are enforced "
-"independently."
+msgid "Platform minimum %1$s, %2$s tax. A value here is interpreted in the store currency on the tax basis selected below; it cannot be checked against the platform minimum (different currency) — both minimums are enforced independently."
 msgstr ""
 
 #: class/WC_Twoinc.php:3802
-msgid ""
-"Hide the payment method below this order value (store currency, on the tax "
-"basis selected below). Leave empty for no minimum."
+msgid "Hide the payment method below this order value (store currency, on the tax basis selected below). Leave empty for no minimum."
 msgstr ""
 
 #: class/WC_Twoinc.php:3857
@@ -654,15 +591,11 @@ msgstr ""
 #. translators: %s is a comma-separated list of the rejected entries
 #: class/WC_Twoinc.php:3898
 #, php-format
-msgid ""
-"Trusted proxy addresses: %s is not a valid IP address or CIDR block, and is "
-"ignored. Requests from it are not treated as coming from a trusted proxy."
+msgid "Trusted proxy addresses: %s is not a valid IP address or CIDR block, and is ignored. Requests from it are not treated as coming from a trusted proxy."
 msgstr ""
 
 #: class/WC_Twoinc.php:3963
-msgid ""
-"The selected payment term is no longer available. Please review the payment "
-"options and place the order again."
+msgid "The selected payment term is no longer available. Please review the payment options and place the order again."
 msgstr ""
 
 #: class/WC_Twoinc.php:4026
@@ -718,8 +651,7 @@ msgstr ""
 
 #: class/WC_Twoinc.php:4314
 #, php-format
-msgid ""
-"Invoice has been partially refunded and credit note has been sent by %s."
+msgid "Invoice has been partially refunded and credit note has been sent by %s."
 msgstr ""
 
 #: class/WC_Twoinc.php:4431 class/WC_Twoinc.php:4438
@@ -766,9 +698,7 @@ msgstr ""
 #. translators: %s is the contact email address for obtaining production API keys
 #: class/WC_Twoinc.php:4507
 #, php-format
-msgid ""
-"API key for the sandbox environment is available on your merchant portal "
-"(however please reach out to %s for access to production keys)."
+msgid "API key for the sandbox environment is available on your merchant portal (however please reach out to %s for access to production keys)."
 msgstr ""
 
 #: class/WC_Twoinc.php:4512
@@ -778,16 +708,11 @@ msgstr ""
 #. translators: %s is the brand product name (e.g. "Two")
 #: class/WC_Twoinc.php:4516
 #, php-format
-msgid ""
-"If your IT administrator asks you to add a firewall token, place it in this "
-"field. It will then be transmitted as header X-WAF-TOKEN on all calls your "
-"store makes to the %s API."
+msgid "If your IT administrator asks you to add a firewall token, place it in this field. It will then be transmitted as header X-WAF-TOKEN on all calls your store makes to the %s API."
 msgstr ""
 
 #: class/WC_Twoinc.php:4518
-msgid ""
-"This is a coarse network gate rather than a secret credential, so unlike the "
-"API key it is not masked here."
+msgid "This is a coarse network gate rather than a secret credential, so unlike the API key it is not masked here."
 msgstr ""
 
 #: class/WC_Twoinc.php:4521
@@ -797,10 +722,7 @@ msgstr ""
 #. translators: %1$s and %2$s are both the brand product name (e.g. "Two")
 #: class/WC_Twoinc.php:4525
 #, php-format
-msgid ""
-"If this store represents one of several vendor sites sharing the same %1$s "
-"merchant account, enter a name here to identify this specific site/vendor on "
-"each order sent to %2$s. Leave blank if you only run a single site."
+msgid "If this store represents one of several vendor sites sharing the same %1$s merchant account, enter a name here to identify this specific site/vendor on each order sent to %2$s. Leave blank if you only run a single site."
 msgstr ""
 
 #: class/WC_Twoinc.php:4533
@@ -816,11 +738,7 @@ msgid "Subtitle"
 msgstr ""
 
 #: class/WC_Twoinc.php:4545
-msgid ""
-"Optional free-text subtitle shown directly under the payment method title at "
-"checkout. Leave blank to show the default tagline. WooCommerce has no per-"
-"language settings model like some other platforms — use a string-translation "
-"plugin (e.g. WPML, Loco Translate) if you need this to vary by language."
+msgid "Optional free-text subtitle shown directly under the payment method title at checkout. Leave blank to show the default tagline. WooCommerce has no per-language settings model like some other platforms — use a string-translation plugin (e.g. WPML, Loco Translate) if you need this to vary by language."
 msgstr ""
 
 #: class/WC_Twoinc.php:4553
@@ -841,9 +759,7 @@ msgid "Excluding tax (net)"
 msgstr ""
 
 #: class/WC_Twoinc.php:4568
-msgid ""
-"Whether the basket is compared against the minimum including or excluding "
-"tax."
+msgid "Whether the basket is compared against the minimum including or excluding tax."
 msgstr ""
 
 #: class/WC_Twoinc.php:4571
@@ -868,9 +784,7 @@ msgid "Show invoice email field"
 msgstr ""
 
 #: class/WC_Twoinc.php:4600
-msgid ""
-"Adds an input field where buyers can input optional additional email address "
-"to receive invoice."
+msgid "Adds an input field where buyers can input optional additional email address to receive invoice."
 msgstr ""
 
 #: class/WC_Twoinc.php:4607
@@ -878,9 +792,7 @@ msgid "Show PO number field"
 msgstr ""
 
 #: class/WC_Twoinc.php:4608
-msgid ""
-"Adds an input field where buyers can input their purchase order number to "
-"display on the invoice."
+msgid "Adds an input field where buyers can input their purchase order number to display on the invoice."
 msgstr ""
 
 #: class/WC_Twoinc.php:4615
@@ -888,9 +800,7 @@ msgid "Show project field"
 msgstr ""
 
 #: class/WC_Twoinc.php:4616
-msgid ""
-"Adds an input field where buyers can input their project in the company to "
-"display on the invoice."
+msgid "Adds an input field where buyers can input their project in the company to display on the invoice."
 msgstr ""
 
 #: class/WC_Twoinc.php:4623
@@ -898,9 +808,7 @@ msgid "Show department field"
 msgstr ""
 
 #: class/WC_Twoinc.php:4624
-msgid ""
-"Adds an input field where buyers can input their department to display on "
-"the invoice."
+msgid "Adds an input field where buyers can input their department to display on the invoice."
 msgstr ""
 
 #: class/WC_Twoinc.php:4634
@@ -908,10 +816,7 @@ msgid "Enable company search in address entry"
 msgstr ""
 
 #: class/WC_Twoinc.php:4635
-msgid ""
-"When enabled, the buyer may search for their company within the address "
-"entry section of the checkout. Otherwise, company search will be visible "
-"within the payment method."
+msgid "When enabled, the buyer may search for their company within the address entry section of the checkout. Otherwise, company search will be visible within the payment method."
 msgstr ""
 
 #: class/WC_Twoinc.php:4642
@@ -919,9 +824,7 @@ msgid "Autofill company address"
 msgstr ""
 
 #: class/WC_Twoinc.php:4643
-msgid ""
-"Enables automatically filling in the registered address from the national "
-"registry."
+msgid "Enables automatically filling in the registered address from the national registry."
 msgstr ""
 
 #: class/WC_Twoinc.php:4655 class/WC_Twoinc.php:4669
@@ -933,9 +836,7 @@ msgid "Payment terms type"
 msgstr ""
 
 #: class/WC_Twoinc.php:4659
-msgid ""
-"Standard counts the term days from the invoice date. End of month counts "
-"them from the end of the invoice month."
+msgid "Standard counts the term days from the invoice date. End of month counts them from the end of the invoice month."
 msgstr ""
 
 #: class/WC_Twoinc.php:4663
@@ -955,9 +856,7 @@ msgid "Custom payment terms (days)"
 msgstr ""
 
 #: class/WC_Twoinc.php:4676
-msgid ""
-"Optional. Enter a custom number of days to offer alongside the selected "
-"terms above."
+msgid "Optional. Enter a custom number of days to offer alongside the selected terms above."
 msgstr ""
 
 #: class/WC_Twoinc.php:4687
@@ -965,9 +864,7 @@ msgid "Default payment terms"
 msgstr ""
 
 #: class/WC_Twoinc.php:4688
-msgid ""
-"Select the payment term that will be automatically selected for your "
-"customer."
+msgid "Select the payment term that will be automatically selected for your customer."
 msgstr ""
 
 #: class/WC_Twoinc.php:4695
@@ -999,10 +896,7 @@ msgid "Surcharge Calculation Basis"
 msgstr ""
 
 #: class/WC_Twoinc.php:4709
-msgid ""
-"Total fee charges the configured surcharge for the chosen term. Fee "
-"difference charges only the difference versus the default term (which then "
-"shows no surcharge)."
+msgid "Total fee charges the configured surcharge for the chosen term. Fee difference charges only the difference versus the default term (which then shows no surcharge)."
 msgstr ""
 
 #: class/WC_Twoinc.php:4713
@@ -1019,9 +913,7 @@ msgstr ""
 
 #: class/WC_Twoinc.php:4720
 #, php-format
-msgid ""
-"Buyer-facing label for the surcharge line. Use %s for the term length in "
-"days. Leave blank to use the brand default."
+msgid "Buyer-facing label for the surcharge line. Use %s for the term length in days. Leave blank to use the brand default."
 msgstr ""
 
 #: class/WC_Twoinc.php:4726
@@ -1029,11 +921,7 @@ msgid "Surcharge Tax Treatment"
 msgstr ""
 
 #: class/WC_Twoinc.php:4727
-msgid ""
-"How the surcharge line is taxed. Standard applies your store's default tax "
-"rules to the fee. Specific tax class taxes the fee under a WooCommerce tax "
-"class you select below — to leave the fee untaxed, create a tax class with a "
-"0% rate and select it here."
+msgid "How the surcharge line is taxed. Standard applies your store's default tax rules to the fee. Specific tax class taxes the fee under a WooCommerce tax class you select below — to leave the fee untaxed, create a tax class with a 0% rate and select it here."
 msgstr ""
 
 #: class/WC_Twoinc.php:4749
@@ -1041,10 +929,7 @@ msgid "Surcharge Tax Class"
 msgstr ""
 
 #: class/WC_Twoinc.php:4750
-msgid ""
-"The WooCommerce tax class applied to the surcharge when the tax treatment is "
-"\"Specific tax class\". Manage tax classes under WooCommerce → Settings → "
-"Tax."
+msgid "The WooCommerce tax class applied to the surcharge when the tax treatment is \"Specific tax class\". Manage tax classes under WooCommerce → Settings → Tax."
 msgstr ""
 
 #: class/WC_Twoinc.php:4760
@@ -1056,9 +941,7 @@ msgid "Surcharge Rounding"
 msgstr ""
 
 #: class/WC_Twoinc.php:4771
-msgid ""
-"Snap the buyer surcharge line to a clean increment. Select None for standard "
-"two-decimal amounts."
+msgid "Snap the buyer surcharge line to a clean increment. Select None for standard two-decimal amounts."
 msgstr ""
 
 #: class/WC_Twoinc.php:4775
@@ -1082,9 +965,7 @@ msgid "Rounding Step"
 msgstr ""
 
 #: class/WC_Twoinc.php:4784
-msgid ""
-"Increment the surcharge is rounded to (e.g. 1 = whole units, 0.50 = nearest "
-"half). Applies only when a rounding direction is selected."
+msgid "Increment the surcharge is rounded to (e.g. 1 = whole units, 0.50 = nearest half). Applies only when a rounding direction is selected."
 msgstr ""
 
 #: class/WC_Twoinc.php:4793
@@ -1098,11 +979,7 @@ msgstr ""
 #. translators: %1$s and %2$s are both the brand product name (e.g. "Two")
 #: class/WC_Twoinc.php:4804
 #, php-format
-msgid ""
-"Which order status(es) tell %1$s an order is fulfilled. Defaults to "
-"\"Completed\" — add another status here (e.g. a custom status from another "
-"plugin) if your workflow never sets an order to Completed, otherwise %2$s is "
-"never notified and the order is left un-fulfilled indefinitely."
+msgid "Which order status(es) tell %1$s an order is fulfilled. Defaults to \"Completed\" — add another status here (e.g. a custom status from another plugin) if your workflow never sets an order to Completed, otherwise %2$s is never notified and the order is left un-fulfilled indefinitely."
 msgstr ""
 
 #: class/WC_Twoinc.php:4811
@@ -1112,9 +989,7 @@ msgstr ""
 #. translators: %s is the brand product name (e.g. "Two")
 #: class/WC_Twoinc.php:4816
 #, php-format
-msgid ""
-"When enabled, a breakdown of tax subtotals is included in the order payload "
-"sent to %s."
+msgid "When enabled, a breakdown of tax subtotals is included in the order payload sent to %s."
 msgstr ""
 
 #: class/WC_Twoinc.php:4823
@@ -1122,12 +997,7 @@ msgid "Default shipping tax class"
 msgstr ""
 
 #: class/WC_Twoinc.php:4827
-msgid ""
-"Used only when a shipping method's tax rate cannot be resolved from the "
-"order itself (e.g. a third-party carrier or click-and-collect module that "
-"registers no tax class) but the shipping line was charged tax. Leave "
-"unselected to keep reporting an unresolvable rate as untaxed, matching "
-"today's behaviour."
+msgid "Used only when a shipping method's tax rate cannot be resolved from the order itself (e.g. a third-party carrier or click-and-collect module that registers no tax class) but the shipping line was charged tax. Leave unselected to keep reporting an unresolvable rate as untaxed, matching today's behaviour."
 msgstr ""
 
 #: class/WC_Twoinc.php:4833
@@ -1143,13 +1013,7 @@ msgid "Serve the checkout AJAX endpoints unmetered"
 msgstr ""
 
 #: class/WC_Twoinc.php:4839
-msgid ""
-"The checkout AJAX endpoints spend your API key, so each client address is "
-"allowed a fixed number of requests per minute. Turn this on only if "
-"legitimate buyers are being refused — that happens when the store sits "
-"behind a reverse proxy or CDN and every buyer reaches PHP as the same "
-"address, which collapses the per-buyer allowance into a store-wide one. The "
-"lasting fix is to list the proxy below."
+msgid "The checkout AJAX endpoints spend your API key, so each client address is allowed a fixed number of requests per minute. Turn this on only if legitimate buyers are being refused — that happens when the store sits behind a reverse proxy or CDN and every buyer reaches PHP as the same address, which collapses the per-buyer allowance into a store-wide one. The lasting fix is to list the proxy below."
 msgstr ""
 
 #: class/WC_Twoinc.php:4843
@@ -1157,10 +1021,7 @@ msgid "Trusted proxy addresses"
 msgstr ""
 
 #: class/WC_Twoinc.php:4845
-msgid ""
-"Addresses of your own reverse proxies, load balancers or CDN egress, as IPs "
-"or CIDR ranges, separated by commas or new lines. These IP addresses will be "
-"exempt from rate limiting."
+msgid "Addresses of your own reverse proxies, load balancers or CDN egress, as IPs or CIDR ranges, separated by commas or new lines. These IP addresses will be exempt from rate limiting."
 msgstr ""
 
 #: class/WC_Twoinc.php:4850
@@ -1168,11 +1029,7 @@ msgid "Add firewall token to browser-originated traffic"
 msgstr ""
 
 #: class/WC_Twoinc.php:4851
-msgid ""
-"Only switch this on if your IT administrator requires the firewall token for "
-"calls from the user's browser as well as those from your server. Your "
-"firewall token will be published to the buyer's brower and may be read by "
-"anyone."
+msgid "Only switch this on if your IT administrator requires the firewall token for calls from the user's browser as well as those from your server. Your firewall token will be published to the buyer's brower and may be read by anyone."
 msgstr ""
 
 #: class/WC_Twoinc.php:4858
@@ -1184,10 +1041,7 @@ msgid "Skip SSL certificate verification on outbound API requests"
 msgstr ""
 
 #: class/WC_Twoinc.php:4861
-msgid ""
-"WARNING: this is unsafe for production and only intended for local/dev "
-"debugging behind a corporate proxy with custom SSL certificates. Applies in "
-"every environment, including Production, while enabled."
+msgid "WARNING: this is unsafe for production and only intended for local/dev debugging behind a corporate proxy with custom SSL certificates. Applies in every environment, including Production, while enabled."
 msgstr ""
 
 #: class/WC_Twoinc.php:4865
@@ -1200,10 +1054,7 @@ msgstr ""
 
 #: class/WC_Twoinc.php:4869
 #, php-format
-msgid ""
-"If enabled, API interactions and other diagnostic detail (e.g. surcharge/FX "
-"rounding) are logged. This can be useful for debugging. You can view the "
-"logs <a href=\"%s\">here</a>."
+msgid "If enabled, API interactions and other diagnostic detail (e.g. surcharge/FX rounding) are logged. This can be useful for debugging. You can view the logs <a href=\"%s\">here</a>."
 msgstr ""
 
 #: class/WC_Twoinc.php:4875
@@ -1215,20 +1066,11 @@ msgid "Skip user validation at order confirmation"
 msgstr ""
 
 #: class/WC_Twoinc.php:4880
-msgid ""
-"Accept the confirmation callback without a valid WordPress security token"
+msgid "Accept the confirmation callback without a valid WordPress security token"
 msgstr ""
 
 #: class/WC_Twoinc.php:4882
-msgid ""
-"The confirmation callback always checks the order's unique 64-character "
-"order reference; this option skips only the additional WordPress security "
-"token, which typically expires 12 to 24 hours after the order was placed — "
-"and, for a signed-in customer, when their session changes — so a buyer who "
-"comes back to a legitimately authorised order can be rejected. The order "
-"reference must still match, so the callback is not left open, but the "
-"security token's protection against a cross-site request is gone; leave this "
-"off unless you are seeing those false rejections."
+msgid "The confirmation callback always checks the order's unique 64-character order reference; this option skips only the additional WordPress security token, which typically expires 12 to 24 hours after the order was placed — and, for a signed-in customer, when their session changes — so a buyer who comes back to a legitimately authorised order can be rejected. The order reference must still match, so the callback is not left open, but the security token's protection against a cross-site request is gone; leave this off unless you are seeing those false rejections."
 msgstr ""
 
 #: class/WC_Twoinc.php:4886
@@ -1331,10 +1173,7 @@ msgstr ""
 
 #: class/WC_Twoinc.php:5531
 #, php-format
-msgid ""
-"%s credit approves 90%% of business buyers, pays you upfront and minimise "
-"your risk. To offer %s in your checkout, you need to signup. It is quick, "
-"easy and gives you immediate access to the %s Merchant Portal."
+msgid "%s credit approves 90%% of business buyers, pays you upfront and minimise your risk. To offer %s in your checkout, you need to signup. It is quick, easy and gives you immediate access to the %s Merchant Portal."
 msgstr ""
 
 #: class/WC_Twoinc.php:5532
@@ -1376,12 +1215,7 @@ msgstr ""
 
 #: class/WC_Twoinc_Rate_Limiter.php:421
 #, php-format
-msgid ""
-"The %s checkout now meters its AJAX endpoints per client address. Checkout "
-"still completes, but if your store sits behind a CDN or load balancer every "
-"buyer arrives as the same address, and company search, address autofill and "
-"the approval check can be refused. List your proxy under Diagnostics to "
-"meter buyers individually."
+msgid "The %s checkout now meters its AJAX endpoints per client address. Checkout still completes, but if your store sits behind a CDN or load balancer every buyer arrives as the same address, and company search, address autofill and the approval check can be refused. List your proxy under Diagnostics to meter buyers individually."
 msgstr ""
 
 #: class/WC_Twoinc_Rate_Limiter.php:430
