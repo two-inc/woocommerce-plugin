@@ -1,6 +1,6 @@
 /**
  * TWO-25498. Admin settings-page row visibility that follows the surcharge
- * method (and, for Rounding Step, the rounding basis too) without a save.
+ * method (and, for Rounding step, the rounding basis too) without a save.
  *
  * `:visible` is unusable under jsdom — nothing has layout — so these assert
  * on `.css("display")`. jQuery's `.show()` restores a `<tr>` to its cached
@@ -46,11 +46,11 @@ describe("surcharge option field visibility", () => {
 
   test.each([
     ["none", "none", true, "surcharge disabled hides the row regardless of basis"],
-    ["fixed", "none", true, "basis=none hides Rounding Step even with a surcharge method"],
-    ["fixed", "up", false, "a real basis with a surcharge method shows Rounding Step"],
-    ["none", "up", true, "surcharge disabled hides Rounding Step even with a real basis"]
+    ["fixed", "none", true, "basis=none hides Rounding step even with a surcharge method"],
+    ["fixed", "up", false, "a real basis with a surcharge method shows Rounding step"],
+    ["none", "up", true, "surcharge disabled hides Rounding step even with a real basis"]
   ])(
-    "surcharge_type=%s, rounding_basis=%s -> Rounding Step hidden=%s (%s)",
+    "surcharge_type=%s, rounding_basis=%s -> Rounding step hidden=%s (%s)",
     async (type, basis, hidden) => {
       const { $ } = await harness.loadAdmin({ type: type, checked: [14] });
       $("#" + harness.FIELD_PREFIX + "surcharge_rounding_basis")

@@ -1721,7 +1721,7 @@ if (!class_exists('WC_Twoinc')) {
                         <thead><tr>
                             <th><?php esc_html_e('Term (days)', 'twoinc-payment-gateway'); ?></th>
                             <th class="twoinc-col-fixed"><?php esc_html_e('Fixed', 'twoinc-payment-gateway'); ?></th>
-                            <th class="twoinc-col-percentage"><?php esc_html_e('Percent of Fee', 'twoinc-payment-gateway'); ?></th>
+                            <th class="twoinc-col-percentage"><?php esc_html_e('Percent of fee', 'twoinc-payment-gateway'); ?></th>
                             <th class="twoinc-col-limit"><?php esc_html_e('Limit', 'twoinc-payment-gateway'); ?></th>
                         </tr></thead>
                         <tbody>
@@ -1752,6 +1752,20 @@ if (!class_exists('WC_Twoinc')) {
             </tr>
             <?php
             return ob_get_clean();
+        }
+
+        /**
+         * The column keys are storage identifiers, so interpolating one raw
+         * would put untranslated English inside a translated sentence.
+         */
+        private static function surcharge_grid_column_label(string $col): string
+        {
+            $labels = [
+                'fixed'      => __('fixed fee', 'twoinc-payment-gateway'),
+                'percentage' => __('percentage', 'twoinc-payment-gateway'),
+                'limit'      => __('limit', 'twoinc-payment-gateway'),
+            ];
+            return $labels[$col] ?? $col;
         }
 
         /**
@@ -1821,9 +1835,9 @@ if (!class_exists('WC_Twoinc')) {
                     }
                     if (!is_numeric($raw) || (float) $raw < 0) {
                         throw new Exception(sprintf(
-                            /* translators: 1: column name, 2: term days */
+                            /* translators: 1: grid column name, already translated; 2: term days */
                             __('Surcharge %1$s for the %2$s-day term must be a non-negative number.', 'twoinc-payment-gateway'),
-                            $col,
+                            self::surcharge_grid_column_label($col),
                             $days
                         ));
                     }
@@ -2099,7 +2113,7 @@ if (!class_exists('WC_Twoinc')) {
                 return '';
             }
             if (!ctype_digit($value)) {
-                throw new Exception(__('Custom Payment Terms (days) must be a whole number of days.', 'twoinc-payment-gateway'));
+                throw new Exception(__('Custom payment terms (days) must be a whole number of days.', 'twoinc-payment-gateway'));
             }
             return (string) (int) $value;
         }
@@ -3559,13 +3573,13 @@ if (!class_exists('WC_Twoinc')) {
 
             <table class="form-table">
                 <tr>
-                    <th><label for="twoinc_billing_company"><?php _e('Billing Company name', 'twoinc-payment-gateway'); ?></label></th>
+                    <th><label for="twoinc_billing_company"><?php _e('Billing company name', 'twoinc-payment-gateway'); ?></label></th>
                     <td>
                         <input type="text" name="twoinc_billing_company" id="twoinc_billing_company" value="<?php echo esc_attr(get_the_author_meta(WC_Twoinc_Brand::prefixed_name('billing_company'), $user->ID)); ?>" class="regular-text" />
                     </td>
                 </tr>
                 <tr>
-                    <th><label for="twoinc_company_id"><?php _e('Billing Company ID', 'twoinc-payment-gateway'); ?></label></th>
+                    <th><label for="twoinc_company_id"><?php _e('Billing company ID', 'twoinc-payment-gateway'); ?></label></th>
                     <td>
                         <input type="text" name="twoinc_company_id" id="twoinc_company_id" value="<?php echo esc_attr(get_the_author_meta(WC_Twoinc_Brand::prefixed_name('company_id'), $user->ID)); ?>" class="regular-text" />
                     </td>
@@ -3575,7 +3589,7 @@ if (!class_exists('WC_Twoinc')) {
                     <td>
                         <input type="text" name="twoinc_project" id="twoinc_project" value="<?php echo esc_attr(get_the_author_meta(WC_Twoinc_Brand::prefixed_name('project'), $user->ID)); ?>" class="regular-text" />
                         <br />
-                        <span class="description"><?php _e("The project displayed on the invoices"); ?></span>
+                        <span class="description"><?php _e('The project displayed on the invoices', 'twoinc-payment-gateway'); ?></span>
                     </td>
                 </tr>
                 <tr>
@@ -3583,7 +3597,7 @@ if (!class_exists('WC_Twoinc')) {
                     <td>
                         <input type="text" name="twoinc_department" id="twoinc_department" value="<?php echo esc_attr(get_the_author_meta(WC_Twoinc_Brand::prefixed_name('department'), $user->ID)); ?>" class="regular-text" />
                         <br />
-                        <span class="description"><?php _e("The department displayed on the invoices"); ?></span>
+                        <span class="description"><?php _e('The department displayed on the invoices', 'twoinc-payment-gateway'); ?></span>
                     </td>
                 </tr>
             </table>
@@ -3854,7 +3868,7 @@ if (!class_exists('WC_Twoinc')) {
             }
             $value = str_replace(',', '.', $value);
             if (!is_numeric($value) || (float) $value < 0) {
-                throw new Exception(__('Minimum Order Value must be a non-negative number.', 'twoinc-payment-gateway'));
+                throw new Exception(__('Minimum order value must be a non-negative number.', 'twoinc-payment-gateway'));
             }
             $platform_minimum = $this->get_platform_minimum_order();
             if (
@@ -3863,7 +3877,7 @@ if (!class_exists('WC_Twoinc')) {
                 && (float) $value <= $platform_minimum['amount']
             ) {
                 throw new Exception(sprintf(
-                    __('Minimum Order Value must exceed the platform minimum of %1$s, %2$s tax.', 'twoinc-payment-gateway'),
+                    __('Minimum order value must exceed the platform minimum of %1$s, %2$s tax.', 'twoinc-payment-gateway'),
                     get_woocommerce_currency_symbol($platform_minimum['currency']) . number_format($platform_minimum['amount'], 2),
                     $platform_minimum['basis'] === 'gross' ? __('including', 'twoinc-payment-gateway') : __('excluding', 'twoinc-payment-gateway')
                 ));
@@ -4490,7 +4504,7 @@ if (!class_exists('WC_Twoinc')) {
                 'enabled' => [
                     'title'       => __('Turn on/off', 'twoinc-payment-gateway'),
                     'type'        => 'checkbox',
-                    'label'       => sprintf(__('Enable %s Payments', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')),
+                    'label'       => sprintf(__('Enable %s payments', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')),
                     'default'     => 'yes'
                 ],
                 'checkout_env' => [
@@ -4500,7 +4514,7 @@ if (!class_exists('WC_Twoinc')) {
                     'options'     => $this->get_checkout_env_options(),
                 ],
                 'api_key' => [
-                    'title'       => sprintf(__('%s API Key', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')),
+                    'title'       => sprintf(__('%s API key', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')),
                     'type'        => 'api_key_with_verification',
                     'description' => sprintf(
                         /* translators: %s is the contact email address for obtaining production API keys */
@@ -4527,10 +4541,10 @@ if (!class_exists('WC_Twoinc')) {
                         WC_Twoinc_Brand::get('product_name')
                     ),
                 ],
-                // ── B. Checkout Fields ──────────────────────────────────
+                // ── B. Checkout fields ──────────────────────────────────
                 'section_checkout_fields' => [
                     'type'        => 'title',
-                    'title'       => __('Checkout Fields', 'twoinc-payment-gateway')
+                    'title'       => __('Checkout fields', 'twoinc-payment-gateway')
                 ],
                 'title' => [
                     'title'       => __('Title', 'twoinc-payment-gateway'),
@@ -4649,10 +4663,10 @@ if (!class_exists('WC_Twoinc')) {
                 // No sole-trader section: sole trader checkout is gated on the
                 // registry's answer for the billing country alone, with no
                 // merchant setting to configure (TWO-25163).
-                // ── D. Payment Terms ────────────────────────────────────
+                // ── D. Payment terms ────────────────────────────────────
                 'section_payment_terms' => [
                     'type'  => 'title',
-                    'title' => __('Payment Terms', 'twoinc-payment-gateway'),
+                    'title' => __('Payment terms', 'twoinc-payment-gateway'),
                 ],
                 'payment_terms_type' => [
                     'title'       => __('Payment terms type', 'twoinc-payment-gateway'),
@@ -4666,7 +4680,7 @@ if (!class_exists('WC_Twoinc')) {
                     'default'     => 'standard'
                 ],
                 'payment_terms_days' => [
-                    'title'       => __('Payment Terms', 'twoinc-payment-gateway'),
+                    'title'       => __('Payment terms', 'twoinc-payment-gateway'),
                     'description' => __('Select the payment term(s) you want to offer.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'type'        => 'two_payment_terms',
@@ -4692,7 +4706,7 @@ if (!class_exists('WC_Twoinc')) {
                     'default'     => ''
                 ],
                 'surcharge_type' => [
-                    'title'       => __('Surcharge Method', 'twoinc-payment-gateway'),
+                    'title'       => __('Surcharge method', 'twoinc-payment-gateway'),
                     'description' => __('Select a method to surcharge your customer.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'type'        => 'select',
@@ -4705,7 +4719,7 @@ if (!class_exists('WC_Twoinc')) {
                     'default'     => 'none'
                 ],
                 'surcharge_differential' => [
-                    'title'       => __('Surcharge Calculation Basis', 'twoinc-payment-gateway'),
+                    'title'       => __('Surcharge calculation basis', 'twoinc-payment-gateway'),
                     'description' => __('Total fee charges the configured surcharge for the chosen term. Fee difference charges only the difference versus the default term (which then shows no surcharge).', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'type'        => 'select',
@@ -4716,14 +4730,14 @@ if (!class_exists('WC_Twoinc')) {
                     'default'     => '0'
                 ],
                 'surcharge_line_description' => [
-                    'title'       => __('Surcharge Line Description', 'twoinc-payment-gateway'),
+                    'title'       => __('Surcharge line description', 'twoinc-payment-gateway'),
                     'description' => __('Buyer-facing label for the surcharge line. Use %s for the term length in days. Leave blank to use the brand default.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'type'        => 'text',
                     'default'     => ''
                 ],
                 'surcharge_tax_treatment' => [
-                    'title'       => __('Surcharge Tax Treatment', 'twoinc-payment-gateway'),
+                    'title'       => __('Surcharge tax treatment', 'twoinc-payment-gateway'),
                     'desc_tip'    => __('How the surcharge line is taxed. Standard applies your store\'s default tax rules to the fee. Specific tax class taxes the fee under a WooCommerce tax class you select below — to leave the fee untaxed, create a tax class with a 0% rate and select it here.', 'twoinc-payment-gateway'),
                     // Visible (non-tooltip) description: carries the loud
                     // never-taxed error when the stored treatment is one this
@@ -4746,7 +4760,7 @@ if (!class_exists('WC_Twoinc')) {
                     'default'     => ''
                 ],
                 'surcharge_tax_class' => [
-                    'title'       => __('Surcharge Tax Class', 'twoinc-payment-gateway'),
+                    'title'       => __('Surcharge tax class', 'twoinc-payment-gateway'),
                     'desc_tip'    => __('The WooCommerce tax class applied to the surcharge when the tax treatment is "Specific tax class". Manage tax classes under WooCommerce → Settings → Tax.', 'twoinc-payment-gateway'),
                     // Visible (non-tooltip) description: carries the stale-
                     // selection warning when the stored class has been
@@ -4757,7 +4771,7 @@ if (!class_exists('WC_Twoinc')) {
                     'default'     => ''
                 ],
                 'surcharge_grid' => [
-                    'title'       => __('Payment Surcharge Configuration', 'twoinc-payment-gateway'),
+                    'title'       => __('Payment surcharge configuration', 'twoinc-payment-gateway'),
                     // No 'description': the grid's help text is the
                     // surcharge-method-keyed copy that
                     // generate_two_surcharge_grid_html() renders below the
@@ -4767,7 +4781,7 @@ if (!class_exists('WC_Twoinc')) {
                     'type'        => 'two_surcharge_grid',
                 ],
                 'surcharge_rounding_basis' => [
-                    'title'       => __('Surcharge Rounding', 'twoinc-payment-gateway'),
+                    'title'       => __('Surcharge rounding', 'twoinc-payment-gateway'),
                     'description' => __('Snap the buyer surcharge line to a clean increment. Select None for standard two-decimal amounts.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'type'        => 'select',
@@ -4780,17 +4794,17 @@ if (!class_exists('WC_Twoinc')) {
                     'default'     => 'none'
                 ],
                 'surcharge_rounding_step' => [
-                    'title'       => __('Rounding Step', 'twoinc-payment-gateway'),
+                    'title'       => __('Rounding step', 'twoinc-payment-gateway'),
                     'description' => __('Increment the surcharge is rounded to (e.g. 1 = whole units, 0.50 = nearest half). Applies only when a rounding direction is selected.', 'twoinc-payment-gateway'),
                     'desc_tip'    => true,
                     'type'        => 'select',
                     'options'     => $this->get_rounding_step_options(),
                     'default'     => ''
                 ],
-                // ── E. Order Management ─────────────────────────────────
+                // ── E. Order management ─────────────────────────────────
                 'section_order_management' => [
                     'type'  => 'title',
-                    'title' => __('Order Management', 'twoinc-payment-gateway'),
+                    'title' => __('Order management', 'twoinc-payment-gateway'),
                 ],
                 'fulfilment_trigger_statuses' => [
                     'title'       => __('Fulfilment trigger statuses', 'twoinc-payment-gateway'),
