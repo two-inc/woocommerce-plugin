@@ -884,7 +884,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
             foreach ($fees as $days => $fee) {
                 if (is_array($fee) && isset($fee['buyer_fee_share'])) {
                     $fees[$days]['buyer_fee_share_display'] = self::format_fee_amount(
-                        (float) $fee['buyer_fee_share'],
+                        self::fee_display_amount((float) $fee['buyer_fee_share'], $gateway, $cart),
                         (string) ($fee['currency'] ?? get_woocommerce_currency())
                     );
                 }
@@ -895,6 +895,30 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
                 'selected' => self::get_selected_term($gateway),
                 'fees' => $fees,
             ]);
+        }
+
+        /**
+         * The net quote grossed up the way the fee LINE ITEM will be shown:
+         * when the shop displays prices including tax, WC adds the fee's tax
+         * to the line, so the chip must add the same tax or the two disagree.
+         * Resolved through the same tax_treatment apply_cart_fee uses, never
+         * the pricing API's own rate — a second source would drift.
+         * always_zero is untaxed by construction there, so it stays net here.
+         */
+        private static function fee_display_amount(float $net, $gateway, $cart): float
+        {
+            if (!$cart || !method_exists($cart, 'display_prices_including_tax') || !$cart->display_prices_including_tax()) {
+                return $net;
+            }
+            if (!class_exists('WC_Tax') || !method_exists('WC_Tax', 'calc_tax')) {
+                return $net;
+            }
+            $settings = self::get_surcharge_settings($gateway);
+            if ($settings['tax_treatment'] === 'always_zero') {
+                return $net;
+            }
+            $rates = WC_Tax::get_rates($settings['tax_treatment'] === 'custom_class' ? $settings['tax_class'] : '');
+            return $net + array_sum(WC_Tax::calc_tax($net, $rates, false));
         }
 
         /**
