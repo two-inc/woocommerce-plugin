@@ -844,18 +844,25 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
          * Buyer-facing label for the fee line. A merchant-set
          * surcharge_line_description wins (with %s replaced by the selected
          * term days, Magento parity); otherwise the brand label, else a
-         * translated default.
+         * translated default matching Magento's "Payment terms fee - %1
+         * days" wording.
          */
         public static function get_fee_label(): string
         {
             $gateway = WC_Twoinc::get_instance();
             $template = $gateway ? trim((string) $gateway->get_option('surcharge_line_description')) : '';
+            $days = $gateway ? self::get_selected_term($gateway) : null;
             if ($template !== '') {
-                $days = $gateway ? self::get_selected_term($gateway) : null;
                 return $days !== null ? str_replace('%s', (string) $days, $template) : $template;
             }
             $label = WC_Twoinc_Brand::get('fee_line_label');
-            return $label ? __($label, 'twoinc-payment-gateway') : __('Service charge', 'twoinc-payment-gateway');
+            if ($label) {
+                return __($label, 'twoinc-payment-gateway');
+            }
+            if ($days === null) {
+                return __('Payment terms fee', 'twoinc-payment-gateway');
+            }
+            return str_replace('%s', (string) $days, __('Payment terms fee - %s days', 'twoinc-payment-gateway'));
         }
 
         /**
