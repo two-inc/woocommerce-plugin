@@ -93,7 +93,7 @@ msgstr "Avrundingssteget må være en av de tilbudte verdiene."
 
 #: class/WC_Twoinc.php:1251
 msgid "— select a tax class —"
-msgstr "— velg en skatteklasse —"
+msgstr "— velg en avgiftsklasse —"
 
 #: class/WC_Twoinc.php:1336
 msgid "-- Select surcharge tax treatment --"
@@ -105,7 +105,7 @@ msgstr "Standard (butikkens standard skatteregler)"
 
 #: class/WC_Twoinc.php:1338
 msgid "Specific tax class"
-msgstr "Bestemt skatteklasse"
+msgstr "Bestemt avgiftsklasse"
 
 #: class/WC_Twoinc.php:1339
 msgid "Never taxed"
@@ -113,12 +113,12 @@ msgstr "Aldri skattlagt"
 
 #: class/WC_Twoinc.php:1382
 msgid "⚠ This store is set to leave the surcharge UNTAXED for every destination. That treatment is no longer available and these settings cannot be saved while it is stored — select a tax treatment above. To keep the fee untaxed, create a tax class with a 0% rate under WooCommerce → Settings → Tax and select it as the surcharge tax class."
-msgstr "⚠ Denne butikken er satt til å la tillegget være USKATTLAGT for alle destinasjoner. Denne behandlingen er ikke lenger tilgjengelig, og disse innstillingene kan ikke lagres så lenge den er lagret — velg en skattebehandling ovenfor. Hvis du vil holde gebyret uskattlagt, oppretter du en skatteklasse med 0 %-sats under WooCommerce → Innstillinger → Skatt og velger den som skatteklasse for tillegg."
+msgstr "⚠ Denne butikken er satt til å la tillegget være USKATTLAGT for alle destinasjoner. Denne behandlingen er ikke lenger tilgjengelig, og disse innstillingene kan ikke lagres så lenge den er lagret — velg en skattebehandling ovenfor. Hvis du vil holde gebyret uskattlagt, oppretter du en avgiftsklasse med 0 %-sats under WooCommerce → Innstillinger → Skatt og velger den som avgiftsklasse for tillegg."
 
 #: class/WC_Twoinc.php:1405
 #, php-format
 msgid "⚠ The previously selected tax class (\"%s\") no longer exists. The surcharge is currently taxed under the Standard treatment — select an existing tax class or change the tax treatment above."
-msgstr "⚠ Den tidligere valgte skatteklassen («%s») finnes ikke lenger. Tillegget skattlegges for tiden under Standard-behandlingen — velg en eksisterende skatteklasse eller endre skattebehandlingen ovenfor."
+msgstr "⚠ Den tidligere valgte avgiftsklassen («%s») finnes ikke lenger. Tillegget skattlegges for tiden under Standard-behandlingen — velg en eksisterende avgiftsklasse eller endre skattebehandlingen ovenfor."
 
 #: class/WC_Twoinc.php:1540
 msgid "Select a surcharge tax treatment before enabling surcharges."
@@ -136,7 +136,7 @@ msgstr "Velg en skattebehandling for tillegg — tillegg kan ikke brukes uten."
 
 #: class/WC_Twoinc.php:1585
 msgid "That surcharge tax treatment leaves the surcharge untaxed for every destination and is no longer available. Create a tax class with a 0% rate and select it as the surcharge tax class instead."
-msgstr "Denne skattebehandlingen for tillegg lar tillegget være uskattlagt for alle destinasjoner og er ikke lenger tilgjengelig. Opprett i stedet en skatteklasse med 0 %-sats og velg den som skatteklasse for tillegg."
+msgstr "Denne skattebehandlingen for tillegg lar tillegget være uskattlagt for alle destinasjoner og er ikke lenger tilgjengelig. Opprett i stedet en avgiftsklasse med 0 %-sats og velg den som avgiftsklasse for tillegg."
 
 #: class/WC_Twoinc.php:1592
 msgid "Surcharge tax treatment must be one of the offered modes."
@@ -144,7 +144,7 @@ msgstr "Skattebehandling av tillegg må være en av de tilbudte modusene."
 
 #: class/WC_Twoinc.php:1611
 msgid "Surcharge tax class must be one of the store's existing tax classes."
-msgstr "Skatteklasse for tillegg må være en av butikkens eksisterende skatteklasser."
+msgstr "Avgiftsklasse for tillegg må være en av butikkens eksisterende avgiftsklasser."
 
 #: class/WC_Twoinc.php:1624
 msgid "Default shipping tax class must be one of the store's existing tax classes."
@@ -820,15 +820,15 @@ msgstr "Skattebehandling av tillegg"
 
 #: class/WC_Twoinc.php:4743
 msgid "How the surcharge line is taxed. Standard applies your store's default tax rules to the fee. Specific tax class taxes the fee under a WooCommerce tax class you select below — to leave the fee untaxed, create a tax class with a 0% rate and select it here."
-msgstr "Hvordan tilleggslinjen skattlegges. Standard bruker butikkens standard skatteregler på gebyret. Bestemt skatteklasse skattlegger gebyret under en WooCommerce-skatteklasse du velger nedenfor — for å la gebyret være uten skatt, opprett en skatteklasse med 0 % sats og velg den her."
+msgstr "Hvordan tilleggslinjen skattlegges. Standard bruker butikkens standard skatteregler på gebyret. Bestemt avgiftsklasse skattlegger gebyret under en WooCommerce-avgiftsklasse du velger nedenfor — for å la gebyret være uten skatt, opprett en avgiftsklasse med 0 % sats og velg den her."
 
 #: class/WC_Twoinc.php:4765
 msgid "Surcharge tax class"
-msgstr "Skatteklasse for tillegg"
+msgstr "Avgiftsklasse for tillegg"
 
 #: class/WC_Twoinc.php:4766
 msgid "The WooCommerce tax class applied to the surcharge when the tax treatment is \"Specific tax class\". Manage tax classes under WooCommerce → Settings → Tax."
-msgstr "WooCommerce-skatteklassen som brukes på tillegget når skattebehandlingen er «Bestemt skatteklasse». Administrer skatteklasser under WooCommerce → Innstillinger → Skatt."
+msgstr "WooCommerce-avgiftsklassen som brukes på tillegget når skattebehandlingen er «Bestemt avgiftsklasse». Administrer avgiftsklasser under WooCommerce → Innstillinger → Skatt."
 
 #: class/WC_Twoinc.php:4776
 msgid "Payment surcharge configuration"

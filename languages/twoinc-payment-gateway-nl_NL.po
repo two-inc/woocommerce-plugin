@@ -112,7 +112,7 @@ msgstr "Nooit belast"
 
 #: class/WC_Twoinc.php:1382
 msgid "⚠ This store is set to leave the surcharge UNTAXED for every destination. That treatment is no longer available and these settings cannot be saved while it is stored — select a tax treatment above. To keep the fee untaxed, create a tax class with a 0% rate under WooCommerce → Settings → Tax and select it as the surcharge tax class."
-msgstr "⚠ Deze winkel is ingesteld om de toeslag ONBELAST te laten voor elke bestemming. Die behandeling is niet meer beschikbaar en deze instellingen kunnen niet worden opgeslagen zolang die is opgeslagen — selecteer hierboven een btw-behandeling. Wilt u de fee onbelast houden, maak dan een btw-klasse met een tarief van 0% aan onder WooCommerce → Instellingen → Btw en selecteer die als btw-klasse van de toeslag."
+msgstr "⚠ Deze winkel is ingesteld om de toeslag ONBELAST te laten voor elke bestemming. Die behandeling is niet meer beschikbaar en deze instellingen kunnen niet worden opgeslagen zolang die is opgeslagen — selecteer hierboven een btw-behandeling. Wilt u de vergoeding onbelast houden, maak dan een btw-klasse met een tarief van 0% aan onder WooCommerce → Instellingen → Btw en selecteer die als btw-klasse van de toeslag."
 
 #: class/WC_Twoinc.php:1405
 #, php-format
@@ -161,11 +161,11 @@ msgstr "Een maximum van 0 is niet toegestaan. Als je voor een termijn niets in r
 
 #: class/WC_Twoinc.php:1679
 msgid "The limit applies to the whole fee: the percentage and the fixed fee together, not the percentage alone."
-msgstr "Het maximum geldt voor de hele fee: het percentage en het vaste bedrag samen, niet alleen het percentage."
+msgstr "Het maximum geldt voor de hele vergoeding: het percentage en het vaste bedrag samen, niet alleen het percentage."
 
 #: class/WC_Twoinc.php:1683
 msgid "Enter the percentage of the fee's cost to you that you want the surcharge to recover. 100% means the fee no longer reduces your revenue at all."
-msgstr "Vul het percentage in van de kosten van de fee voor jou dat je met de toeslag wilt terugverdienen. 100% betekent dat de fee je omzet niet langer verlaagt."
+msgstr "Vul het percentage in van de vergoedingskosten voor jou dat je met de toeslag wilt terugverdienen. 100% betekent dat de vergoeding je omzet niet langer verlaagt."
 
 #: class/WC_Twoinc.php:1685
 msgid "Enter the amount you want to charge your customer."
@@ -179,7 +179,7 @@ msgstr "Max %s."
 
 #: class/WC_Twoinc.php:1694
 msgid "Enter the amount and percentage of the fee charged to you that you want to offset with a surcharge. Max 100%."
-msgstr "Vul het bedrag en percentage in van de fee die aan jou in rekening wordt gebracht en die je wilt compenseren met een toeslag. Max 100%."
+msgstr "Vul het bedrag en percentage in van de vergoeding die aan jou in rekening wordt gebracht en die je wilt compenseren met een toeslag. Max 100%."
 
 #: class/WC_Twoinc.php:1719
 msgid "No payment terms are offered yet — configure the offered terms above first."
@@ -195,7 +195,7 @@ msgstr "Vast"
 
 #: class/WC_Twoinc.php:1724
 msgid "Percent of fee"
-msgstr "Percentage van de fee"
+msgstr "Percentage van de vergoeding"
 
 #: class/WC_Twoinc.php:1725
 msgid "Limit"
@@ -782,11 +782,11 @@ msgstr "Percentage"
 
 #: class/WC_Twoinc.php:4718
 msgid "Fixed fee"
-msgstr "Vast tarief"
+msgstr "Vast bedrag"
 
 #: class/WC_Twoinc.php:4719
 msgid "Fixed fee and percentage"
-msgstr "Vast tarief en percentage"
+msgstr "Vast bedrag en percentage"
 
 #: class/WC_Twoinc.php:4724
 msgid "Surcharge calculation basis"
@@ -794,15 +794,15 @@ msgstr "Berekeningsgrondslag toeslag"
 
 #: class/WC_Twoinc.php:4725
 msgid "Total fee charges the configured surcharge for the chosen term. Fee difference charges only the difference versus the default term (which then shows no surcharge)."
-msgstr "Totaaltarief brengt de ingestelde toeslag voor de gekozen termijn in rekening. Kostenverschil brengt alleen het verschil ten opzichte van de standaardtermijn in rekening (die dan geen toeslag toont)."
+msgstr "Totale vergoeding brengt de ingestelde toeslag voor de gekozen termijn in rekening. Verschil in vergoeding brengt alleen het verschil ten opzichte van de standaardtermijn in rekening (die dan geen toeslag toont)."
 
 #: class/WC_Twoinc.php:4729
 msgid "Total fee for selected term"
-msgstr "Totaaltarief voor geselecteerde termijn"
+msgstr "Totale vergoeding voor geselecteerde termijn"
 
 #: class/WC_Twoinc.php:4730
 msgid "Fee difference vs default payment term"
-msgstr "Kostenverschil t.o.v. standaard betalingstermijn"
+msgstr "Verschil in vergoeding t.o.v. standaard betalingstermijn"
 
 #: class/WC_Twoinc.php:4735
 msgid "Surcharge line description"
