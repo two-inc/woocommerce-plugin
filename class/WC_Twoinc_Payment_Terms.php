@@ -910,7 +910,7 @@ if (!class_exists('WC_Twoinc_Payment_Terms')) {
             if (!$cart || !method_exists($cart, 'display_prices_including_tax') || !$cart->display_prices_including_tax()) {
                 return $net;
             }
-            if (!class_exists('WC_Tax') || !method_exists('WC_Tax', 'calc_tax')) {
+            if (!class_exists('WC_Tax') || !method_exists('WC_Tax', 'get_rates') || !method_exists('WC_Tax', 'calc_tax')) {
                 return $net;
             }
             $settings = self::get_surcharge_settings($gateway);
