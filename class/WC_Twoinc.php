@@ -5647,7 +5647,14 @@ if (!class_exists('WC_Twoinc')) {
                     continue;
                 }
                 $name = self::sanitize_header_line($row['name'] ?? '');
-                if ($name === '' || !self::is_valid_header_name($name)) {
+                // Reserved names are refused on save, but the read path is what
+                // composes the request: a row written around the form (a direct
+                // DB edit, another plugin) must not clobber X-API-Key.
+                if (
+                    $name === ''
+                    || !self::is_valid_header_name($name)
+                    || in_array(strtolower($name), self::reserved_header_names(), true)
+                ) {
                     continue;
                 }
                 $clean[] = [

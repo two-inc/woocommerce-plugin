@@ -277,6 +277,7 @@ final class BrandConfigSpec
             'testCustomHeadersHelpTextUsesOverlayProductNameNotTwo',
             'testCustomHeadersCopyIsTranslatedInEveryLocale',
             'testCustomHeadersAllRowsSentServerSide',
+            'testCustomHeadersReadPathDropsRowsTheFormWouldRefuse',
             'testCustomHeadersValidationRefusesUnusableRows',
             'testCustomHeadersValidationNormalisesAndDropsBlankRows',
             'testCustomHeadersHonouredOnTheSaveThatSetsThem',
@@ -4102,15 +4103,25 @@ final class BrandConfigSpec
                 return $this->options[$key] ?? $empty_value ?? '';
             }
 
+            // Mirrors WC_Twoinc::get_browser_custom_headers() by delegating to
+            // it: a hand-rolled copy here would drift from the real filter.
             public function get_browser_custom_headers()
             {
-                $map = [];
-                foreach ((array) ($this->options['custom_headers'] ?? []) as $row) {
-                    if ('yes' === ($row['send_from_browser'] ?? 'no') && '' !== ($row['value'] ?? '')) {
-                        $map[$row['name']] = $row['value'];
+                $real = new class ($this->options) extends WC_Twoinc {
+                    private $seeded;
+
+                    public function __construct(array $options)
+                    {
+                        $this->seeded = $options;
+                        $this->id = WC_Twoinc_Brand::get('gateway_id');
                     }
-                }
-                return $map;
+
+                    public function get_option($key, $empty_value = null)
+                    {
+                        return $this->seeded[$key] ?? $empty_value ?? '';
+                    }
+                };
+                return $real->get_browser_custom_headers();
             }
 
             public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
@@ -4242,7 +4253,7 @@ final class BrandConfigSpec
         $cases = [
             ['yes', 'waf-token-1', ['X-WAF-TOKEN' => 'waf-token-1'], 'the opted-in merchant gets the header with the minted pair'],
             ['no', 'waf-token-1', null, 'the default keeps a configured header off the page'],
-            ['yes', '', null, 'opting in without a value puts nothing in the page'],
+            ['yes', '', ['X-WAF-TOKEN' => ''], 'a flagged row with no value publishes an empty header, as the server sends it'],
         ];
         foreach ($cases as [$optIn, $configured, $expected, $description]) {
             WC_Twoinc_Sole_Trader::reset_cache();
@@ -9304,6 +9315,31 @@ final class BrandConfigSpec
                 TinyAssert::same(false, array_key_exists('X-WAF-TOKEN', $headers), $description);
             }
         }
+    }
+
+    /**
+     * Save-time refusal is not enough: the read path composes the request, and
+     * a row can arrive around the form (a direct DB edit, another plugin).
+     */
+    private static function testCustomHeadersReadPathDropsRowsTheFormWouldRefuse(): void
+    {
+        $GLOBALS['__twoinc_test_http_calls'] = [];
+        $gateway = self::firewallGateway(['api_key' => 'real-key', 'custom_headers' => [
+            ['name' => 'X-API-Key', 'value' => 'stolen', 'send_from_browser' => 'yes'],
+            ['name' => 'content-type', 'value' => 'text/plain', 'send_from_browser' => 'yes'],
+            ['name' => 'X Bad Name', 'value' => 'v', 'send_from_browser' => 'yes'],
+            ['name' => '', 'value' => 'v', 'send_from_browser' => 'yes'],
+            ['name' => 'X-Tenant', 'value' => 'tenant-7', 'send_from_browser' => 'yes'],
+        ]]);
+        $gateway->make_request('/v1/order_intent', ['a' => 1]);
+        $headers = self::sentHeaders();
+
+        TinyAssert::same('real-key', $headers['X-API-Key'] ?? null, 'a stored row must not clobber the API key');
+        TinyAssert::same('application/json; charset=utf-8', $headers['Content-Type'] ?? null);
+        TinyAssert::same('tenant-7', $headers['X-Tenant'] ?? null, 'the usable row still travels');
+        TinyAssert::same(false, array_key_exists('X Bad Name', $headers));
+        // Nor may a dropped row reach the browser.
+        TinyAssert::same(['X-Tenant' => 'tenant-7'], $gateway->get_browser_custom_headers());
     }
 
     private static function testCustomHeadersValidationRefusesUnusableRows(): void
