@@ -210,15 +210,15 @@ msgstr "Beløpet vises i %s."
 
 #: class/WC_Twoinc.php:1766
 msgid "fixed fee"
-msgstr "Fast beløp"
+msgstr "fast beløp"
 
 #: class/WC_Twoinc.php:1767
 msgid "percentage"
-msgstr "Prosent"
+msgstr "prosent"
 
 #: class/WC_Twoinc.php:1768
 msgid "limit"
-msgstr "Grense"
+msgstr "grense"
 
 #. translators: 1: grid column name, already translated; 2: term days
 #: class/WC_Twoinc.php:1841

@@ -210,15 +210,15 @@ msgstr "Belopp visas i %s."
 
 #: class/WC_Twoinc.php:1766
 msgid "fixed fee"
-msgstr "Fast belopp"
+msgstr "fast belopp"
 
 #: class/WC_Twoinc.php:1767
 msgid "percentage"
-msgstr "Procent"
+msgstr "procent"
 
 #: class/WC_Twoinc.php:1768
 msgid "limit"
-msgstr "Gräns"
+msgstr "gräns"
 
 #. translators: 1: grid column name, already translated; 2: term days
 #: class/WC_Twoinc.php:1841
