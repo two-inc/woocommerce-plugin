@@ -283,11 +283,9 @@ if (!class_exists('WC_Twoinc_Sole_Trader')) {
                 'country' => $country,
             ];
             // Sent here (token-checked, registry-gated) rather than the page bootstrap, so it never reaches an unvetted render.
-            if ($gateway->should_send_firewall_token_from_browser()) {
-                $firewall_token = $gateway->get_firewall_token();
-                if ($firewall_token !== '') {
-                    $response['firewall_token'] = $firewall_token;
-                }
+            $custom_headers = $gateway->get_browser_custom_headers();
+            if (count($custom_headers) > 0) {
+                $response['custom_headers'] = $custom_headers;
             }
             wp_send_json_success($response);
         }

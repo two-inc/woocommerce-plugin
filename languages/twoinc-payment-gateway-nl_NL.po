@@ -598,20 +598,6 @@ msgstr "%s API-sleutel"
 msgid "API key for the sandbox environment is available on your merchant portal (however please reach out to %s for access to production keys)."
 msgstr "De API-sleutel voor de sandboxomgeving is beschikbaar in uw verkopersportaal (neem contact op met %s voor toegang tot productiesleutels)."
 
-#: class/WC_Twoinc.php:4528
-msgid "Firewall token (optional)"
-msgstr "Firewalltoken (optioneel)"
-
-#. translators: %s is the brand product name (e.g. "Two")
-#: class/WC_Twoinc.php:4532
-#, php-format
-msgid "If your IT administrator asks you to add a firewall token, place it in this field. It will then be transmitted as header X-WAF-TOKEN on all calls your store makes to the %s API."
-msgstr "Als uw IT-beheerder u vraagt een firewalltoken toe te voegen, plaatst u deze in dit veld. Deze wordt vervolgens verzonden als header X-WAF-TOKEN bij alle aanroepen die uw winkel naar de %s API doet."
-
-#: class/WC_Twoinc.php:4534
-msgid "This is a coarse network gate rather than a secret credential, so unlike the API key it is not masked here."
-msgstr "Dit is een grove netwerkpoort in plaats van een geheime referentie, dus in tegenstelling tot de API-sleutel wordt deze hier niet gemaskeerd."
-
 #: class/WC_Twoinc.php:4537
 msgid "Vendor name (optional)"
 msgstr "Leveranciersnaam (optioneel)"
@@ -920,14 +906,6 @@ msgstr "Vertrouwde proxyadressen"
 #: class/WC_Twoinc.php:4861
 msgid "Addresses of your own reverse proxies, load balancers or CDN egress, as IPs or CIDR ranges, separated by commas or new lines. These IP addresses will be exempt from rate limiting."
 msgstr "Adressen van uw eigen reverse proxy's, load balancers of CDN-uitgangen, als IP's of CIDR-bereiken, gescheiden door komma's of nieuwe regels. Deze IP-adressen zijn uitgesloten van snelheidsbeperking."
-
-#: class/WC_Twoinc.php:4866
-msgid "Add firewall token to browser-originated traffic"
-msgstr "Firewalltoken toevoegen aan verkeer vanuit de browser"
-
-#: class/WC_Twoinc.php:4867
-msgid "Only switch this on if your IT administrator requires the firewall token for calls from the user's browser as well as those from your server. Your firewall token will be published to the buyer's brower and may be read by anyone."
-msgstr "Schakel dit alleen in als uw IT-beheerder de firewalltoken vereist voor aanroepen vanuit de browser van de gebruiker, naast die vanaf uw server. Uw firewalltoken wordt gepubliceerd naar de browser van de koper en kan door iedereen worden gelezen."
 
 #: class/WC_Twoinc.php:4874
 msgid "Disable SSL verification"
@@ -1284,3 +1262,51 @@ msgstr "Land / Regio"
 #: tillit-payment-gateway.php:216
 msgid "Settings"
 msgstr "Instellingen"
+
+#: class/WC_Twoinc.php
+msgid "Custom request headers"
+msgstr "Aangepaste verzoekheaders"
+
+#: class/WC_Twoinc.php
+msgid "Header name"
+msgstr "Headernaam"
+
+#: class/WC_Twoinc.php
+msgid "Value"
+msgstr "Waarde"
+
+#: class/WC_Twoinc.php
+msgid "Also send from browser"
+msgstr "Ook vanuit de browser verzenden"
+
+#: class/WC_Twoinc.php
+msgid "Remove"
+msgstr "Verwijderen"
+
+#: class/WC_Twoinc.php
+msgid "Add header"
+msgstr "Header toevoegen"
+
+#: class/WC_Twoinc.php
+msgid "Every custom request header needs a name."
+msgstr "Elke aangepaste verzoekheader heeft een naam nodig."
+
+#: class/WC_Twoinc.php
+msgid "The header \"%s\" is set by the plugin itself and cannot be overridden here."
+msgstr "De header \"%s\" wordt door de plug-in zelf ingesteld en kan hier niet worden overschreven."
+
+#: class/WC_Twoinc.php
+msgid "The header \"%s\" is listed more than once."
+msgstr "De header \"%s\" staat meer dan één keer in de lijst."
+
+#: class/WC_Twoinc.php
+msgid "\"%s\" is not a valid HTTP header name. Use letters, digits and hyphens."
+msgstr "\"%s\" is geen geldige HTTP-headernaam. Gebruik letters, cijfers en streepjes."
+
+#: class/WC_Twoinc.php
+msgid "If your IT administrator asks you to add headers to the calls your store makes to the %s API (for example a firewall token), add them here. Every header listed is sent on all calls your store makes from your server."
+msgstr "Als je IT-beheerder je vraagt headers toe te voegen aan de aanroepen die je winkel naar de %s-API doet (bijvoorbeeld een firewalltoken), voeg je ze hier toe. Elke header in de lijst wordt verzonden bij alle aanroepen die je winkel vanaf je server doet."
+
+#: class/WC_Twoinc.php
+msgid "Tick \"Also send from browser\" only if your IT administrator requires the header on calls from the buyer's browser as well as those from your server. Its value will be published to the buyer's browser and may be read by anyone."
+msgstr "Vink \"Ook vanuit de browser verzenden\" alleen aan als je IT-beheerder de header vereist bij aanroepen vanuit de browser van de koper naast die vanaf je server. De waarde wordt gepubliceerd naar de browser van de koper en kan door iedereen worden gelezen."

@@ -422,7 +422,7 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                 'price_thousand_separator' => wc_get_price_thousand_separator(),
                 'twoinc_plugin_url' => WC_TWOINC_PLUGIN_URL,
                 // Addressed instead of the API host so make_request() can add
-                // the merchant's firewall token server-side.
+                // the merchant's custom headers server-side.
                 'api_proxy' => [
                     'company_search_url' => class_exists('WC_AJAX') ? WC_AJAX::get_endpoint('two_company_search') : '',
                     'company_by_id_url' => class_exists('WC_AJAX') ? WC_AJAX::get_endpoint('two_company_by_id') : '',

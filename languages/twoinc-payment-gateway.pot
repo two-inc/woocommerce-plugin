@@ -600,20 +600,6 @@ msgstr ""
 msgid "API key for the sandbox environment is available on your merchant portal (however please reach out to %s for access to production keys)."
 msgstr ""
 
-#: class/WC_Twoinc.php:4528
-msgid "Firewall token (optional)"
-msgstr ""
-
-#. translators: %s is the brand product name (e.g. "Two")
-#: class/WC_Twoinc.php:4532
-#, php-format
-msgid "If your IT administrator asks you to add a firewall token, place it in this field. It will then be transmitted as header X-WAF-TOKEN on all calls your store makes to the %s API."
-msgstr ""
-
-#: class/WC_Twoinc.php:4534
-msgid "This is a coarse network gate rather than a secret credential, so unlike the API key it is not masked here."
-msgstr ""
-
 #: class/WC_Twoinc.php:4537
 msgid "Vendor name (optional)"
 msgstr ""
@@ -921,14 +907,6 @@ msgstr ""
 
 #: class/WC_Twoinc.php:4861
 msgid "Addresses of your own reverse proxies, load balancers or CDN egress, as IPs or CIDR ranges, separated by commas or new lines. These IP addresses will be exempt from rate limiting."
-msgstr ""
-
-#: class/WC_Twoinc.php:4866
-msgid "Add firewall token to browser-originated traffic"
-msgstr ""
-
-#: class/WC_Twoinc.php:4867
-msgid "Only switch this on if your IT administrator requires the firewall token for calls from the user's browser as well as those from your server. Your firewall token will be published to the buyer's brower and may be read by anyone."
 msgstr ""
 
 #: class/WC_Twoinc.php:4874
@@ -1285,4 +1263,52 @@ msgstr ""
 
 #: tillit-payment-gateway.php:216
 msgid "Settings"
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "Custom request headers"
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "Header name"
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "Value"
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "Also send from browser"
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "Remove"
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "Add header"
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "Every custom request header needs a name."
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "The header \"%s\" is set by the plugin itself and cannot be overridden here."
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "The header \"%s\" is listed more than once."
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "\"%s\" is not a valid HTTP header name. Use letters, digits and hyphens."
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "If your IT administrator asks you to add headers to the calls your store makes to the %s API (for example a firewall token), add them here. Every header listed is sent on all calls your store makes from your server."
+msgstr ""
+
+#: class/WC_Twoinc.php
+msgid "Tick \"Also send from browser\" only if your IT administrator requires the header on calls from the buyer's browser as well as those from your server. Its value will be published to the buyer's browser and may be read by anyone."
 msgstr ""
