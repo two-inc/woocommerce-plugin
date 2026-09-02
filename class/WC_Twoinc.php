@@ -1079,8 +1079,7 @@ if (!class_exists('WC_Twoinc')) {
          * is_intent_declined_notice_enabled() above), independent of the
          * approved notice's switch — TWO-25224's original ruling that this
          * box is unconditional stays the documented default (both switches
-         * default true), but a brand may now suppress it (ABN: both
-         * switches false, matching Magento's single toggle).
+         * default true), but an overlay brand may now suppress it too.
          *
          * @param bool $notice_enabled resolved once per render by the caller.
          */
