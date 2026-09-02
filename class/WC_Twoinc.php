@@ -980,6 +980,37 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
+         * Whether the brand wants the intent-declined "not available" notice
+         * at all. Mirrors is_intent_approved_notice_enabled() above:
+         * 'intent_declined_notice_enabled' explicit bool honoured, absent/
+         * null defaults to true (TWO-25224's original unconditional-by-
+         * default behaviour), anything else logs and falls back to true.
+         */
+        private function is_intent_declined_notice_enabled(): bool
+        {
+            $enabled = WC_Twoinc_Brand::get('intent_declined_notice_enabled');
+            if (is_bool($enabled)) {
+                return $enabled;
+            }
+            if ($enabled === null) {
+                return true;
+            }
+
+            $message = sprintf(
+                'Brand "%s" declares intent_declined_notice_enabled as %s; an explicit bool is required.'
+                . ' Falling back to the documented default true (notice shown).',
+                (string) WC_Twoinc_Brand::get('code'),
+                gettype($enabled)
+            );
+            if (function_exists('wc_get_logger')) {
+                wc_get_logger()->error($message, ['source' => 'twoinc-payment-gateway']);
+            } else {
+                error_log('Twoinc: ' . $message);
+            }
+            return true;
+        }
+
+        /**
          * Buyer-facing notice shown once order intent is approved, pending
          * final checks — the whole `.twoinc-intent-approved` block, or ''.
          *
@@ -1041,15 +1072,34 @@ if (!class_exists('WC_Twoinc')) {
 
         /**
          * Buyer-facing notice shown when order intent is NOT approved (or no
-         * intent check has run) — the `.twoinc-err-payment-default` block
-         * (TWO-25326 §7.3).
+         * intent check has run) — the whole `.twoinc-err-payment-default`
+         * block, or '' (TWO-25326 §7.3).
          *
-         * Unlike the approved notice above, this box is NEVER gated on
-         * 'intent_approved_notice_enabled' (TWO-25224: a merchant who wants
-         * no reassurance still needs failures surfaced) — it always renders.
+         * On/off is 'intent_declined_notice_enabled' (see
+         * is_intent_declined_notice_enabled() above), independent of the
+         * approved notice's switch — TWO-25224's original ruling that this
+         * box is unconditional stays the documented default (both switches
+         * default true), but a brand may now suppress it (ABN: both
+         * switches false, matching Magento's single toggle).
          *
-         * Same token mechanism as get_intent_approved_notice(): %1$s is the
-         * brand product name, %2$s is the company token twoinc.js substitutes.
+         * @param bool $notice_enabled resolved once per render by the caller.
+         */
+        private function get_intent_declined_notice(bool $notice_enabled): string
+        {
+            if (!$notice_enabled) {
+                return '';
+            }
+
+            return sprintf(
+                '<div class="twoinc-pay-box twoinc-err-payment-default hidden" role="alert" data-company-template="%s">%s</div>',
+                esc_attr($this->get_intent_declined_notice_template()),
+                sprintf(__('Invoice purchase with %s is not available for this order.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name'))
+            );
+        }
+
+        /**
+         * The declined notice's wording — %1$s the brand product name,
+         * %2$s the company token twoinc.js substitutes.
          *
          * Deliberately NOT brand-overridable (TWO-25326): there is no
          * 'intent_declined_notice' brand key and there must never be one.
@@ -1108,6 +1158,7 @@ if (!class_exists('WC_Twoinc')) {
             // loading state and the approved notice (TWO-25224), so it isn't
             // reported twice per render.
             $notice_enabled = $this->is_intent_approved_notice_enabled();
+            $declined_notice_enabled = $this->is_intent_declined_notice_enabled();
 
             // The standalone `<name> (<number>)` tile label is REMOVED
             // (TWO-25326 §7.2/§7.3); the company lives only inside the
@@ -1137,7 +1188,7 @@ if (!class_exists('WC_Twoinc')) {
                     %s
                     %s
                     %s
-                    <div class="twoinc-pay-box twoinc-err-payment-default hidden" role="alert" data-company-template="%s">%s</div>
+                    %s
                     <div class="twoinc-pay-box twoinc-err-phone-number hidden" role="alert">%s</div>
                     <div class="twoinc-pay-box twoinc-busy-retry hidden" role="status">%s</div>
                 </div>',
@@ -1145,8 +1196,7 @@ if (!class_exists('WC_Twoinc')) {
                 $company_search_tile_slot,
                 $this->get_intent_loader_html($notice_enabled),
                 $this->get_intent_approved_notice($notice_enabled),
-                esc_attr($this->get_intent_declined_notice_template()),
-                sprintf(__('Invoice purchase with %s is not available for this order.', 'twoinc-payment-gateway'), WC_Twoinc_Brand::get('product_name')),
+                $this->get_intent_declined_notice($declined_notice_enabled),
                 __('Phone number is invalid.', 'twoinc-payment-gateway'),
                 __('We could not complete that just now. Please wait a moment and try again.', 'twoinc-payment-gateway')
             );
