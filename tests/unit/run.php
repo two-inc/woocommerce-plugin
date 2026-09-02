@@ -108,6 +108,8 @@ final class BrandConfigSpec
             'testSurchargeFeeCustomClassTaxedAtSelectedClassRates',
             'testSurchargeFeeAlwaysZeroNeverTaxed',
             'testSurchargeChipAmountMatchesFeeLineTaxBasis',
+            'testSurchargeFeeLabelMatchesMagentoWording',
+            'testSurchargeFeeLabelMerchantTemplateOverridesDefault',
             'testSurchargeFeeCustomClassFallsBackWhenClassDeleted',
             'testSurchargeTaxSettingsValidationAndStaleNotice',
             'testNeverTaxedTreatmentSuppressedUnconditionally',
@@ -3429,6 +3431,38 @@ final class BrandConfigSpec
             );
             TinyAssert::same($line, $expected, 'chip and fee line disagree — ' . $description);
         }
+    }
+
+    private static function testSurchargeFeeLabelMatchesMagentoWording(): void
+    {
+        // No merchant override, no brand override: the fee line's label
+        // must match Magento's "Payment terms fee - %1 days" convention,
+        // not the old "Service charge" wording.
+        foreach (
+            [
+                [14, 'Payment terms fee - 14 days'],
+                [30, 'Payment terms fee - 30 days'],
+                [90, 'Payment terms fee - 90 days'],
+            ] as $case
+        ) {
+            list($days, $expected) = $case;
+            $fee = self::runApplyCartFee([
+                'payment_terms_days' => [],
+                'payment_terms_custom_days' => $days,
+                'surcharge_grid' => [$days => ['percentage' => 2.0]],
+            ])->fees[0];
+            TinyAssert::same($expected, $fee['name'], "label for a {$days}-day term");
+        }
+    }
+
+    private static function testSurchargeFeeLabelMerchantTemplateOverridesDefault(): void
+    {
+        // A merchant-set surcharge_line_description wins over the default,
+        // %s replaced with the selected term's day count.
+        $fee = self::runApplyCartFee([
+            'surcharge_line_description' => 'Custom fee - %s days',
+        ])->fees[0];
+        TinyAssert::same('Custom fee - 30 days', $fee['name']);
     }
 
     private static function testSurchargeFeeCustomClassFallsBackWhenClassDeleted(): void
