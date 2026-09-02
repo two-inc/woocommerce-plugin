@@ -3,8 +3,8 @@
 if (!class_exists('WC_Twoinc_Api_Proxy')) {
     /**
      * Server-side proxy for the checkout API calls the browser used to issue
-     * against the API host directly, so the merchant's firewall token can
-     * travel as X-WAF-TOKEN without reaching the page.
+     * against the API host directly, so the merchant's custom request
+     * headers can travel without reaching the page.
      */
     class WC_Twoinc_Api_Proxy
     {

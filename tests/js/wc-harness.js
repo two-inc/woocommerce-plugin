@@ -41,7 +41,7 @@ const STYLESHEET_PATH = "assets/css/twoinc.css";
  * The `api_proxy` bootstrap WC_Twoinc_Checkout localises, in the shape
  * WC_AJAX::get_endpoint() produces. Company search, company lookup, order
  * intent and payment terms are dispatched to these rather than to the API
- * host, so make_request() can add the merchant's firewall token server-side.
+ * host, so make_request() can add the merchant's custom headers server-side.
  */
 const API_PROXY = {
   company_search_url: "https://shop.example.test/?wc-ajax=two_company_search",

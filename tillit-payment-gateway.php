@@ -121,7 +121,7 @@ function load_twoinc_classes()
     add_action('wc_ajax_two_sole_trader_tokens', ['WC_Twoinc_Sole_Trader', 'ajax_tokens']);
 
     // Proxies for the checkout calls the browser used to make against the API
-    // host itself, so the firewall token can be sent server-side (X-WAF-TOKEN).
+    // host itself, so the merchant's custom headers can be sent server-side.
     add_action('wc_ajax_two_company_search', ['WC_Twoinc_Api_Proxy', 'ajax_company_search']);
     add_action('wc_ajax_two_company_by_id', ['WC_Twoinc_Api_Proxy', 'ajax_company_by_id']);
     add_action('wc_ajax_two_order_intent', ['WC_Twoinc_Api_Proxy', 'ajax_order_intent']);

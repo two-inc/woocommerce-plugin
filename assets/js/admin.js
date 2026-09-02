@@ -9,6 +9,46 @@ jQuery(function ($) {
     }
   }
 
+  // ── Custom request headers table (ABN-490) ──────────────────────────
+  // Row indices are only a POST grouping key, so a removed row leaves a gap
+  // rather than forcing a renumber; validate_two_custom_headers_field()
+  // re-indexes on save.
+  $("body").on("click", ".twoinc-custom-header-add", function (e) {
+    e.preventDefault();
+    const $table = $(this).closest("td").find(".twoinc-custom-headers");
+    const fieldKey = $table.data("field-key");
+    const index = Date.now();
+    $table
+      .find("tbody")
+      .append(
+        '<tr class="twoinc-custom-header-row">' +
+          '<td><input type="text" class="input-text regular-input" name="' +
+          fieldKey +
+          "[" +
+          index +
+          '][name]" value="" placeholder="X-WAF-TOKEN" /></td>' +
+          '<td><input type="text" class="input-text regular-input" name="' +
+          fieldKey +
+          "[" +
+          index +
+          '][value]" value="" /></td>' +
+          '<td><input type="checkbox" name="' +
+          fieldKey +
+          "[" +
+          index +
+          '][send_from_browser]" value="1" /></td>' +
+          '<td><button type="button" class="button twoinc-custom-header-remove">' +
+          twoinc_admin.i18n_remove +
+          "</button></td>" +
+          "</tr>"
+      );
+  });
+
+  $("body").on("click", ".twoinc-custom-header-remove", function (e) {
+    e.preventDefault();
+    $(this).closest("tr.twoinc-custom-header-row").remove();
+  });
+
   $("body").on("click", ".woocommerce-twoinc-logo", function (e) {
     e.preventDefault();
 

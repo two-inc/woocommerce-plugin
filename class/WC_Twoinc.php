@@ -16,8 +16,8 @@ if (!class_exists('WC_Twoinc')) {
     {
         private static $instance;
 
-        // Firewall token from the settings POST in flight; null outside a save.
-        private $firewall_token_override = null;
+        // Custom headers from the settings POST in flight; null outside a save.
+        private $custom_headers_override = null;
 
         // Per-request memo for GET /v1/merchant/{id} (TWO-25024): one wire
         // fetch per request shared by every consumer, failures included.
@@ -68,6 +68,7 @@ if (!class_exists('WC_Twoinc')) {
 
             $this->init_form_fields();
             $this->init_settings();
+            $this->migrate_firewall_token_to_custom_headers();
             $this->drop_removed_settings();
             $this->drop_renamed_option_rows();
             $this->migrate_se_tax_subtotals();
@@ -774,6 +775,52 @@ if (!class_exists('WC_Twoinc')) {
                     delete_option($option);
                 }
             }
+        }
+
+        /**
+         * Carry a configured firewall token (ABN-490) into the first row of
+         * the custom-headers table, under the name it used to be sent as.
+         * Self-limiting like the cleanups below: only writes while a legacy
+         * key is present, and it clears both legacy keys as it goes.
+         *
+         * Dropping the legacy keys without carrying the value across would
+         * silently stop sending a token a merchant's firewall requires.
+         *
+         * @return void
+         */
+        private function migrate_firewall_token_to_custom_headers()
+        {
+            if (!is_array($this->settings)) {
+                return;
+            }
+            $legacy = ['firewall_token', 'firewall_token_browser'];
+            $present = array_filter($legacy, function ($key) {
+                return array_key_exists($key, $this->settings);
+            });
+            if (count($present) === 0) {
+                return;
+            }
+            $token = self::sanitize_header_line($this->settings['firewall_token'] ?? '');
+            if ($token !== '') {
+                $existing = isset($this->settings['custom_headers']) && is_array($this->settings['custom_headers'])
+                    ? array_values($this->settings['custom_headers'])
+                    : [];
+                $names = array_map(function ($row) {
+                    return strtolower(is_array($row) ? (string) ($row['name'] ?? '') : '');
+                }, $existing);
+                if (!in_array('x-waf-token', $names, true)) {
+                    array_unshift($existing, [
+                        'name'              => 'X-WAF-TOKEN',
+                        'value'             => $token,
+                        'send_from_browser' => self::is_browser_flag_set($this->settings['firewall_token_browser'] ?? null) ? 'yes' : 'no',
+                    ]);
+                }
+                $this->settings['custom_headers'] = $existing;
+            }
+            foreach ($legacy as $key) {
+                unset($this->settings[$key]);
+            }
+            update_option($this->get_option_key(), $this->settings);
         }
 
         /**
@@ -2999,6 +3046,8 @@ if (!class_exists('WC_Twoinc')) {
                 // follow-up) — admin.js's invalidNoticeText() renders these
                 // instead of hardcoded English so the notice is translatable.
                 'api_key_notices' => $this->get_api_key_notices(),
+                // Button label for header rows admin.js appends client-side.
+                'i18n_remove' => __('Remove', 'twoinc-payment-gateway'),
             ]);
         }
 
@@ -4571,15 +4620,6 @@ if (!class_exists('WC_Twoinc')) {
                         esc_html(WC_Twoinc_Brand::get('production_key_contact_email'))
                     ) . '<div id="api-key-status" style="margin-top: 5px;"></div>',
                 ],
-                'firewall_token' => [
-                    'title'       => __('Firewall token (optional)', 'twoinc-payment-gateway'),
-                    'type'        => 'text',
-                    'description' => sprintf(
-                        /* translators: %s is the brand product name (e.g. "Two") */
-                        __('If your IT administrator asks you to add a firewall token, place it in this field. It will then be transmitted as header X-WAF-TOKEN on all calls your store makes to the %s API.', 'twoinc-payment-gateway'),
-                        WC_Twoinc_Brand::get('product_name')
-                    ) . ' ' . __('This is a coarse network gate rather than a secret credential, so unlike the API key it is not masked here.', 'twoinc-payment-gateway'),
-                ],
                 'vendor_name' => [
                     'title'       => __('Vendor name (optional)', 'twoinc-payment-gateway'),
                     'type'        => 'text',
@@ -4909,13 +4949,14 @@ if (!class_exists('WC_Twoinc')) {
                     'placeholder' => "10.0.0.0/8\n2001:db8::/32",
                     'default'     => ''
                 ],
-                'firewall_token_browser' => [
-                    'title'       => __('Add firewall token to browser-originated traffic', 'twoinc-payment-gateway'),
-                    'description' => __("Only switch this on if your IT administrator requires the firewall token for calls from the user's browser as well as those from your server. Your firewall token will be published to the buyer's brower and may be read by anyone.", 'twoinc-payment-gateway'),
-                    'desc_tip'    => true,
-                    'label'       => ' ',
-                    'type'        => 'checkbox',
-                    'default'     => 'no',
+                'custom_headers' => [
+                    'title'       => __('Custom request headers', 'twoinc-payment-gateway'),
+                    'type'        => 'two_custom_headers',
+                    'description' => sprintf(
+                        /* translators: %s is the brand product name (e.g. "Two") */
+                        __('If your IT administrator asks you to add headers to the calls your store makes to the %s API (for example a firewall token), add them here. Every header listed is sent on all calls your store makes from your server.', 'twoinc-payment-gateway'),
+                        WC_Twoinc_Brand::get('product_name')
+                    ),
                 ],
                 'disable_ssl_verify' => [
                     'title'       => __('Disable SSL verification', 'twoinc-payment-gateway'),
@@ -5036,6 +5077,116 @@ if (!class_exists('WC_Twoinc')) {
             <?php
 
             return ob_get_clean();
+        }
+
+        /**
+         * Repeatable name/value/send-from-browser table. Server render is the
+         * template contract admin.js clones: <tr class="twoinc-custom-header-row">
+         * with inputs named <field_key>[<i>][name|value|send_from_browser].
+         *
+         * @return false|string
+         */
+        public function generate_two_custom_headers_html($key, $data)
+        {
+            $field_key = $this->get_field_key($key);
+            $data = wp_parse_args($data, ['title' => '', 'description' => '']);
+            $rows = $this->get_option($key);
+            $rows = is_array($rows) ? array_values($rows) : [];
+
+            ob_start();
+            ?>
+            <tr valign="top">
+                <th scope="row" class="titledesc">
+                    <label><?php echo wp_kses_post($data['title']); ?></label>
+                </th>
+                <td class="forminp">
+                    <table class="widefat twoinc-custom-headers" data-field-key="<?php echo esc_attr($field_key); ?>">
+                        <thead>
+                            <tr>
+                                <th><?php esc_html_e('Header name', 'twoinc-payment-gateway'); ?></th>
+                                <th><?php esc_html_e('Value', 'twoinc-payment-gateway'); ?></th>
+                                <th><?php esc_html_e('Also send from browser', 'twoinc-payment-gateway'); ?></th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($rows as $i => $row) : ?>
+                                <?php
+                                $name = is_array($row) ? (string) ($row['name'] ?? '') : '';
+                                $value = is_array($row) ? (string) ($row['value'] ?? '') : '';
+                                $browser = is_array($row) && self::is_browser_flag_set($row['send_from_browser'] ?? null);
+                                ?>
+                                <tr class="twoinc-custom-header-row">
+                                    <td><input type="text" class="input-text regular-input" name="<?php echo esc_attr($field_key); ?>[<?php echo (int) $i; ?>][name]" value="<?php echo esc_attr($name); ?>" placeholder="X-WAF-TOKEN" /></td>
+                                    <td><input type="text" class="input-text regular-input" name="<?php echo esc_attr($field_key); ?>[<?php echo (int) $i; ?>][value]" value="<?php echo esc_attr($value); ?>" /></td>
+                                    <td><input type="checkbox" name="<?php echo esc_attr($field_key); ?>[<?php echo (int) $i; ?>][send_from_browser]" value="1" <?php checked($browser); ?> /></td>
+                                    <td><button type="button" class="button twoinc-custom-header-remove"><?php esc_html_e('Remove', 'twoinc-payment-gateway'); ?></button></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                    <p><button type="button" class="button twoinc-custom-header-add"><?php esc_html_e('Add header', 'twoinc-payment-gateway'); ?></button></p>
+                    <p class="description"><?php echo esc_html($data['description']); ?></p>
+                    <p class="description"><?php esc_html_e("Tick \"Also send from browser\" only if your IT administrator requires the header on calls from the buyer's browser as well as those from your server. Its value will be published to the buyer's browser and may be read by anyone.", 'twoinc-payment-gateway'); ?></p>
+                </td>
+            </tr>
+            <?php
+            return ob_get_clean();
+        }
+
+        /**
+         * Validate + normalise the posted header table. Blank rows are
+         * dropped; an invalid or reserved name refuses the save.
+         *
+         * @return array<int, array{name: string, value: string, send_from_browser: string}>
+         */
+        public function validate_two_custom_headers_field($key, $value)
+        {
+            $clean = [];
+            $seen = [];
+            foreach (is_array($value) ? $value : [] as $row) {
+                if (!is_array($row)) {
+                    continue;
+                }
+                $name = self::sanitize_header_line($row['name'] ?? '');
+                $header_value = self::sanitize_header_line($row['value'] ?? '');
+                if ($name === '' && $header_value === '') {
+                    continue;
+                }
+                if ($name === '') {
+                    throw new Exception(__('Every custom request header needs a name.', 'twoinc-payment-gateway'));
+                }
+                if (!self::is_valid_header_name($name)) {
+                    throw new Exception(sprintf(
+                        /* translators: %s: the rejected header name */
+                        __('"%s" is not a valid HTTP header name. Use letters, digits and hyphens.', 'twoinc-payment-gateway'),
+                        $name
+                    ));
+                }
+                $lower = strtolower($name);
+                if (in_array($lower, self::reserved_header_names(), true)) {
+                    throw new Exception(sprintf(
+                        /* translators: %s: the rejected header name */
+                        __('The header "%s" is set by the plugin itself and cannot be overridden here.', 'twoinc-payment-gateway'),
+                        $name
+                    ));
+                }
+                if (isset($seen[$lower])) {
+                    throw new Exception(sprintf(
+                        /* translators: %s: the duplicated header name */
+                        __('The header "%s" is listed more than once.', 'twoinc-payment-gateway'),
+                        $name
+                    ));
+                }
+                $seen[$lower] = true;
+                $clean[] = [
+                    'name'              => $name,
+                    'value'             => $header_value,
+                    // Stored as yes/no to match every other stored boolean here.
+                    'send_from_browser' => empty($row['send_from_browser']) ? 'no' : 'yes',
+                ];
+            }
+            return $clean;
         }
 
         /**
@@ -5475,20 +5626,91 @@ if (!class_exists('WC_Twoinc')) {
             return 'yes' === $this->get_option('enable_api_logging');
         }
 
-        /** @return string the token as a header value: never newline-bearing. */
-        public function get_firewall_token()
+        /**
+         * The configured custom request headers, normalised into rows of
+         * name/value/send_from_browser. Values are never newline-bearing:
+         * an interior newline would split the header on the wire.
+         *
+         * @return array<int, array{name: string, value: string, send_from_browser: bool}>
+         */
+        public function get_custom_headers()
         {
-            $token = $this->firewall_token_override !== null
-                ? $this->firewall_token_override
-                : (string) $this->get_option('firewall_token');
-            // WC's text field keeps interior newlines, which would split the header.
-            return trim((string) preg_replace('/[\r\n\t]+/', '', $token));
+            $rows = $this->custom_headers_override !== null
+                ? $this->custom_headers_override
+                : $this->get_option('custom_headers');
+            if (!is_array($rows)) {
+                return [];
+            }
+            $clean = [];
+            foreach ($rows as $row) {
+                if (!is_array($row)) {
+                    continue;
+                }
+                $name = self::sanitize_header_line($row['name'] ?? '');
+                if ($name === '' || !self::is_valid_header_name($name)) {
+                    continue;
+                }
+                $clean[] = [
+                    'name'              => $name,
+                    'value'             => self::sanitize_header_line($row['value'] ?? ''),
+                    'send_from_browser' => self::is_browser_flag_set($row['send_from_browser'] ?? null),
+                ];
+            }
+            return $clean;
         }
 
-        // Off by default: publishing the token puts it on a device outside the merchant's network.
-        public function should_send_firewall_token_from_browser()
+        /**
+         * The flag arrives as 'yes'/'no' when stored but '1' straight off the
+         * settings POST, so the stored 'no' must not read as truthy.
+         *
+         * @param mixed $raw
+         */
+        private static function is_browser_flag_set($raw): bool
         {
-            return 'yes' === $this->get_option('firewall_token_browser');
+            if (is_bool($raw)) {
+                return $raw;
+            }
+            return is_scalar($raw) && in_array(strtolower((string) $raw), ['yes', '1', 'true'], true);
+        }
+
+        /**
+         * The subset published to the buyer's browser, as name => value.
+         *
+         * @return array<string, string>
+         */
+        public function get_browser_custom_headers()
+        {
+            $map = [];
+            foreach ($this->get_custom_headers() as $row) {
+                if ($row['send_from_browser']) {
+                    $map[$row['name']] = $row['value'];
+                }
+            }
+            return $map;
+        }
+
+        /** Strip the characters that would split or terminate a header line. */
+        private static function sanitize_header_line($raw): string
+        {
+            if (!is_scalar($raw)) {
+                return '';
+            }
+            return trim((string) preg_replace('/[\r\n\t]+/', '', (string) $raw));
+        }
+
+        /** RFC 7230 field-name token, so a name can never break the request. */
+        private static function is_valid_header_name(string $name): bool
+        {
+            return (bool) preg_match('/^[A-Za-z0-9!#$%&\'*+.^_`|~-]+$/', $name);
+        }
+
+        /**
+         * Headers make_request() composes itself. A custom row may not take
+         * one of these names: overwriting X-API-Key would break every call.
+         */
+        private static function reserved_header_names(): array
+        {
+            return ['accept-language', 'content-type', 'x-api-key'];
         }
 
         /**
@@ -5507,9 +5729,9 @@ if (!class_exists('WC_Twoinc')) {
                 'Content-Type' => 'application/json; charset=utf-8',
                 'X-API-Key' => $api_key
             ];
-            $firewall_token = $this->get_firewall_token();
-            if ($firewall_token !== '') {
-                $headers['X-WAF-TOKEN'] = $firewall_token;
+            $custom_headers = $this->get_custom_headers();
+            foreach ($custom_headers as $row) {
+                $headers[$row['name']] = $row['value'];
             }
             if (isset($_SERVER['HTTP_X_CLOUD_TRACE_CONTEXT'])) {
                 $headers['HTTP_X_CLOUD_TRACE_CONTEXT'] = $_SERVER['HTTP_X_CLOUD_TRACE_CONTEXT'];
@@ -5526,10 +5748,10 @@ if (!class_exists('WC_Twoinc')) {
             if ($this->is_debug_logging_enabled()) {
                 $logger = wc_get_logger();
                 // Redacted only when actually sent, so the log does not imply
-                // a firewall token is configured when none is.
+                // a header is configured when none is.
                 $redacted_headers = array_merge($headers, ['X-API-Key' => '[REDACTED]']);
-                if (isset($redacted_headers['X-WAF-TOKEN'])) {
-                    $redacted_headers['X-WAF-TOKEN'] = '[REDACTED]';
+                foreach ($custom_headers as $row) {
+                    $redacted_headers[$row['name']] = '[REDACTED]';
                 }
                 $context = [
                     "source" => "twoinc-payment-gateway",
@@ -5819,13 +6041,14 @@ if (!class_exists('WC_Twoinc')) {
         public function process_admin_options()
         {
             $post_data = $this->get_post_data();
-            $firewall_token_field = 'woocommerce_' . $this->id . '_firewall_token';
-            if (array_key_exists($firewall_token_field, $post_data)) {
-                // Honour a token pasted in the same save as the API key: the
+            $custom_headers_field = 'woocommerce_' . $this->id . '_custom_headers';
+            if (array_key_exists($custom_headers_field, $post_data)) {
+                // Honour headers entered in the same save as the API key: the
                 // verification call below runs before the settings persist, so
-                // reading the stored value would send it without X-WAF-TOKEN
-                // and a merchant WAF would revert the key.
-                $this->firewall_token_override = (string) $post_data[$firewall_token_field];
+                // reading the stored value would send it without them and a
+                // merchant firewall would reject it, reverting the key.
+                $posted = $post_data[$custom_headers_field];
+                $this->custom_headers_override = is_array($posted) ? $posted : [];
             }
             $api_key_field = 'woocommerce_' . $this->id . '_api_key';
             $api_key_in_post = array_key_exists($api_key_field, $post_data);

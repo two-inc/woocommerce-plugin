@@ -4207,8 +4207,11 @@ function createSoleTraderController(companySearch) {
       }
       // The one call no server hop can make (its subject is the API-domain cookie the hosted signup set).
       const headers = { "two-delegated-authority-token": controller.tokens.autofill_token };
-      if (controller.tokens.firewall_token) {
-        headers["X-WAF-TOKEN"] = controller.tokens.firewall_token;
+      const customHeaders = controller.tokens.custom_headers;
+      if (customHeaders) {
+        Object.keys(customHeaders).forEach(function (name) {
+          headers[name] = customHeaders[name];
+        });
       }
       fetch(window.twoinc.twoinc_checkout_host + "/autofill/v1/buyer/current", {
         credentials: "include",

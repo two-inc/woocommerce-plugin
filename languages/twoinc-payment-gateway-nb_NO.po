@@ -599,20 +599,6 @@ msgstr "%s API-nøkkel"
 msgid "API key for the sandbox environment is available on your merchant portal (however please reach out to %s for access to production keys)."
 msgstr "API-nøkkel for sandbox-miljøet er tilgjengelig på selgerportalen din (ta imidlertid kontakt med %s for tilgang til produksjonsnøkler)."
 
-#: class/WC_Twoinc.php:4528
-msgid "Firewall token (optional)"
-msgstr "Brannmur-token (valgfritt)"
-
-#. translators: %s is the brand product name (e.g. "Two")
-#: class/WC_Twoinc.php:4532
-#, php-format
-msgid "If your IT administrator asks you to add a firewall token, place it in this field. It will then be transmitted as header X-WAF-TOKEN on all calls your store makes to the %s API."
-msgstr "Hvis IT-administratoren din ber deg legge til en brannmur-token, plasser den i dette feltet. Den blir da sendt som header X-WAF-TOKEN på alle kall butikken din gjør til %s API."
-
-#: class/WC_Twoinc.php:4534
-msgid "This is a coarse network gate rather than a secret credential, so unlike the API key it is not masked here."
-msgstr "Dette er en grov nettverksport snarere enn et hemmelig legitimasjonsbevis, så i motsetning til API-nøkkelen er den ikke maskert her."
-
 #: class/WC_Twoinc.php:4537
 msgid "Vendor name (optional)"
 msgstr "Leverandørnavn (valgfritt)"
@@ -921,14 +907,6 @@ msgstr "Klarerte proxy-adresser"
 #: class/WC_Twoinc.php:4861
 msgid "Addresses of your own reverse proxies, load balancers or CDN egress, as IPs or CIDR ranges, separated by commas or new lines. These IP addresses will be exempt from rate limiting."
 msgstr "Adresser til dine egne reverse proxyer, lastbalansere eller CDN-utganger, som IP-er eller CIDR-områder, atskilt med komma eller linjeskift. Disse IP-adressene unntas fra hastighetsbegrensning."
-
-#: class/WC_Twoinc.php:4866
-msgid "Add firewall token to browser-originated traffic"
-msgstr "Legg til brannmur-token på trafikk som kommer fra nettleseren"
-
-#: class/WC_Twoinc.php:4867
-msgid "Only switch this on if your IT administrator requires the firewall token for calls from the user's browser as well as those from your server. Your firewall token will be published to the buyer's brower and may be read by anyone."
-msgstr "Slå dette på bare hvis IT-administratoren din krever brannmurtoken for kall fra brukerens nettleser i tillegg til de fra serveren din. Brannmurtokenet ditt vil bli publisert til kjøperens nettleser og kan leses av hvem som helst."
 
 #: class/WC_Twoinc.php:4874
 msgid "Disable SSL verification"
@@ -1285,3 +1263,51 @@ msgstr "Land / Region"
 #: tillit-payment-gateway.php:216
 msgid "Settings"
 msgstr "Innstillinger"
+
+#: class/WC_Twoinc.php
+msgid "Custom request headers"
+msgstr "Egendefinerte forespørselsheadere"
+
+#: class/WC_Twoinc.php
+msgid "Header name"
+msgstr "Headernavn"
+
+#: class/WC_Twoinc.php
+msgid "Value"
+msgstr "Verdi"
+
+#: class/WC_Twoinc.php
+msgid "Also send from browser"
+msgstr "Send også fra nettleseren"
+
+#: class/WC_Twoinc.php
+msgid "Remove"
+msgstr "Fjern"
+
+#: class/WC_Twoinc.php
+msgid "Add header"
+msgstr "Legg til header"
+
+#: class/WC_Twoinc.php
+msgid "Every custom request header needs a name."
+msgstr "Hvert egendefinerte forespørselsheader må ha et navn."
+
+#: class/WC_Twoinc.php
+msgid "The header \"%s\" is set by the plugin itself and cannot be overridden here."
+msgstr "Headeren \"%s\" settes av utvidelsen selv og kan ikke overstyres her."
+
+#: class/WC_Twoinc.php
+msgid "The header \"%s\" is listed more than once."
+msgstr "Headeren \"%s\" er oppført mer enn én gang."
+
+#: class/WC_Twoinc.php
+msgid "\"%s\" is not a valid HTTP header name. Use letters, digits and hyphens."
+msgstr "\"%s\" er ikke et gyldig HTTP-headernavn. Bruk bokstaver, tall og bindestrek."
+
+#: class/WC_Twoinc.php
+msgid "If your IT administrator asks you to add headers to the calls your store makes to the %s API (for example a firewall token), add them here. Every header listed is sent on all calls your store makes from your server."
+msgstr "Hvis IT-administratoren din ber deg legge til headere på kallene butikken din gjør mot %s-API-et (for eksempel et brannmur-token), legger du dem til her. Alle headere i listen sendes på alle kall butikken din gjør fra serveren din."
+
+#: class/WC_Twoinc.php
+msgid "Tick \"Also send from browser\" only if your IT administrator requires the header on calls from the buyer's browser as well as those from your server. Its value will be published to the buyer's browser and may be read by anyone."
+msgstr "Kryss av for \"Send også fra nettleseren\" bare hvis IT-administratoren din krever headeren på kall fra kjøperens nettleser i tillegg til dem fra serveren din. Verdien vil bli publisert til kjøperens nettleser og kan leses av hvem som helst."

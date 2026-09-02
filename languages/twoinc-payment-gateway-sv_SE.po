@@ -599,20 +599,6 @@ msgstr "%s API-nyckel"
 msgid "API key for the sandbox environment is available on your merchant portal (however please reach out to %s for access to production keys)."
 msgstr "API-nyckel för sandbox-miljön finns i din säljarportal (kontakta dock %s för åtkomst till produktionsnycklar)."
 
-#: class/WC_Twoinc.php:4528
-msgid "Firewall token (optional)"
-msgstr "Brandväggstoken (valfritt)"
-
-#. translators: %s is the brand product name (e.g. "Two")
-#: class/WC_Twoinc.php:4532
-#, php-format
-msgid "If your IT administrator asks you to add a firewall token, place it in this field. It will then be transmitted as header X-WAF-TOKEN on all calls your store makes to the %s API."
-msgstr "Om din IT-administratör ber dig lägga till en brandväggstoken, placera den i det här fältet. Den skickas sedan som header X-WAF-TOKEN vid alla anrop som din butik gör till %s API."
-
-#: class/WC_Twoinc.php:4534
-msgid "This is a coarse network gate rather than a secret credential, so unlike the API key it is not masked here."
-msgstr "Detta är en grov nätverksspärr snarare än en hemlig uppgift, så till skillnad från API-nyckeln är den inte maskerad här."
-
 #: class/WC_Twoinc.php:4537
 msgid "Vendor name (optional)"
 msgstr "Leverantörsnamn (valfritt)"
@@ -921,14 +907,6 @@ msgstr "Betrodda proxyadresser"
 #: class/WC_Twoinc.php:4861
 msgid "Addresses of your own reverse proxies, load balancers or CDN egress, as IPs or CIDR ranges, separated by commas or new lines. These IP addresses will be exempt from rate limiting."
 msgstr "Adresser till dina egna reverse proxyservrar, lastbalanserare eller CDN-utgångar, som IP-adresser eller CIDR-intervall, separerade med kommatecken eller nya rader. Dessa IP-adresser undantas från hastighetsbegränsning."
-
-#: class/WC_Twoinc.php:4866
-msgid "Add firewall token to browser-originated traffic"
-msgstr "Lägg till brandväggstoken på trafik från webbläsaren"
-
-#: class/WC_Twoinc.php:4867
-msgid "Only switch this on if your IT administrator requires the firewall token for calls from the user's browser as well as those from your server. Your firewall token will be published to the buyer's brower and may be read by anyone."
-msgstr "Aktivera detta endast om din IT-administratör kräver brandväggstoken för anrop från användarens webbläsare, utöver de från din server. Din brandväggstoken publiceras till köparens webbläsare och kan läsas av vem som helst."
 
 #: class/WC_Twoinc.php:4874
 msgid "Disable SSL verification"
@@ -1285,3 +1263,51 @@ msgstr "Land / Region"
 #: tillit-payment-gateway.php:216
 msgid "Settings"
 msgstr "Inställningar"
+
+#: class/WC_Twoinc.php
+msgid "Custom request headers"
+msgstr "Anpassade begäranshuvuden"
+
+#: class/WC_Twoinc.php
+msgid "Header name"
+msgstr "Huvudnamn"
+
+#: class/WC_Twoinc.php
+msgid "Value"
+msgstr "Värde"
+
+#: class/WC_Twoinc.php
+msgid "Also send from browser"
+msgstr "Skicka även från webbläsaren"
+
+#: class/WC_Twoinc.php
+msgid "Remove"
+msgstr "Ta bort"
+
+#: class/WC_Twoinc.php
+msgid "Add header"
+msgstr "Lägg till huvud"
+
+#: class/WC_Twoinc.php
+msgid "Every custom request header needs a name."
+msgstr "Varje anpassat begäranshuvud måste ha ett namn."
+
+#: class/WC_Twoinc.php
+msgid "The header \"%s\" is set by the plugin itself and cannot be overridden here."
+msgstr "Huvudet \"%s\" sätts av tillägget självt och kan inte åsidosättas här."
+
+#: class/WC_Twoinc.php
+msgid "The header \"%s\" is listed more than once."
+msgstr "Huvudet \"%s\" är listat mer än en gång."
+
+#: class/WC_Twoinc.php
+msgid "\"%s\" is not a valid HTTP header name. Use letters, digits and hyphens."
+msgstr "\"%s\" är inte ett giltigt HTTP-huvudnamn. Använd bokstäver, siffror och bindestreck."
+
+#: class/WC_Twoinc.php
+msgid "If your IT administrator asks you to add headers to the calls your store makes to the %s API (for example a firewall token), add them here. Every header listed is sent on all calls your store makes from your server."
+msgstr "Om din IT-administratör ber dig lägga till huvuden på anropen som din butik gör mot %s-API:et (till exempel en brandväggstoken), lägger du till dem här. Alla huvuden i listan skickas på alla anrop som din butik gör från din server."
+
+#: class/WC_Twoinc.php
+msgid "Tick \"Also send from browser\" only if your IT administrator requires the header on calls from the buyer's browser as well as those from your server. Its value will be published to the buyer's browser and may be read by anyone."
+msgstr "Markera \"Skicka även från webbläsaren\" endast om din IT-administratör kräver huvudet på anrop från köparens webbläsare utöver dem från din server. Värdet publiceras till köparens webbläsare och kan läsas av vem som helst."

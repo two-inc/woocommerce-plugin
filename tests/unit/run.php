@@ -270,18 +270,22 @@ final class BrandConfigSpec
             'testTaxSubtotalsSettingIsOnByDefaultForNewInstalls',
             'testSeTaxSubtotalsBackfill',
             'testSeTaxSubtotalsBackfillDoesNotUndoAMerchantOptOut',
-            'testFirewallTokenFieldIsPlainTextNotMasked',
-            'testFirewallTokenBrowserToggleIsOffUntilTheMerchantOptsIn',
-            'testFirewallTokenBrowserRendersUnderDiagnostics',
-            'testFirewallTokenBrowserAndTrustedProxiesHelpTextIsExact',
-            'testFirewallTokenHelpTextUsesOverlayProductNameNotTwo',
-            'testFirewallTokenCopyIsTranslatedInEveryLocale',
-            'testFirewallTokenHeaderSentOnlyWhenConfigured',
-            'testFirewallTokenHonouredOnTheSaveThatSetsIt',
-            'testFirewallTokenNewlinesNeverReachTheHeader',
-            'testFirewallTokenRedactedFromTheApiLog',
+            'testCustomHeadersFieldIsARepeatableTable',
+            'testCustomHeadersRenderMarkupIsTheAdminJsContract',
+            'testCustomHeadersRenderUnderDiagnostics',
+            'testCustomHeadersBrowserWarningAndTrustedProxiesHelpTextIsExact',
+            'testCustomHeadersHelpTextUsesOverlayProductNameNotTwo',
+            'testCustomHeadersCopyIsTranslatedInEveryLocale',
+            'testCustomHeadersAllRowsSentServerSide',
+            'testCustomHeadersValidationRefusesUnusableRows',
+            'testCustomHeadersValidationNormalisesAndDropsBlankRows',
+            'testCustomHeadersHonouredOnTheSaveThatSetsThem',
+            'testCustomHeaderNewlinesNeverReachTheHeader',
+            'testCustomHeadersRedactedFromTheApiLog',
+            'testLegacyFirewallTokenMigratedIntoTheHeaderTable',
             'testSoleTraderTokensNeverPublishTheFirewallToken',
             'testSoleTraderTokensPublishTheFirewallTokenOnlyWhenOptedIn',
+            'testSoleTraderTokensPublishOnlyFlaggedHeaderRows',
             'testApiProxyRefusesEveryCallWithoutTheCheckoutToken',
             'testApiProxyRelaysUpstreamBodyAndStatusVerbatim',
             'testApiProxyRelaysAnEmptyUpstreamBodyAsAnObject',
@@ -4098,14 +4102,15 @@ final class BrandConfigSpec
                 return $this->options[$key] ?? $empty_value ?? '';
             }
 
-            public function get_firewall_token()
+            public function get_browser_custom_headers()
             {
-                return (string) ($this->options['firewall_token'] ?? '');
-            }
-
-            public function should_send_firewall_token_from_browser()
-            {
-                return 'yes' === ($this->options['firewall_token_browser'] ?? 'no');
+                $map = [];
+                foreach ((array) ($this->options['custom_headers'] ?? []) as $row) {
+                    if ('yes' === ($row['send_from_browser'] ?? 'no') && '' !== ($row['value'] ?? '')) {
+                        $map[$row['name']] = $row['value'];
+                    }
+                }
+                return $map;
             }
 
             public function make_request($endpoint, $payload = [], $method = 'POST', $params = [], $api_key_override = null, $timeout = 30)
@@ -4215,10 +4220,12 @@ final class BrandConfigSpec
     private static function testSoleTraderTokensNeverPublishTheFirewallToken(): void
     {
         // Default state: the firewall sits on the merchant's own egress, which a
-        // buyer's browser never crosses, so nothing it can read may carry the
-        // token — not even with one configured.
+        // buyer's browser never crosses, so nothing it can read may carry an
+        // unflagged header — not even with one configured.
         WC_Twoinc_Sole_Trader::reset_cache();
-        $gateway = self::tokenMintingGateway(['SOLE_TRADER'], ['firewall_token' => 'waf-token-1']);
+        $gateway = self::tokenMintingGateway(['SOLE_TRADER'], ['custom_headers' => [
+            ['name' => 'X-WAF-TOKEN', 'value' => 'waf-token-1', 'send_from_browser' => 'no'],
+        ]]);
         $_REQUEST = ['country' => 'GB'];
         $response = self::runTokensHandler($gateway);
         $_REQUEST = [];
@@ -4226,30 +4233,55 @@ final class BrandConfigSpec
         TinyAssert::true($response['success']);
         TinyAssert::true(
             strpos(json_encode($response), 'waf-token-1') === false,
-            'the minted-token response must not publish the firewall token'
+            'the minted-token response must not publish an unflagged header'
         );
     }
 
     private static function testSoleTraderTokensPublishTheFirewallTokenOnlyWhenOptedIn(): void
     {
         $cases = [
-            ['yes', 'waf-token-1', 'waf-token-1', 'the opted-in merchant gets the token with the minted pair'],
-            ['no', 'waf-token-1', null, 'the default keeps a configured token off the page'],
-            ['yes', '', null, 'opting in without a token puts nothing in the page'],
+            ['yes', 'waf-token-1', ['X-WAF-TOKEN' => 'waf-token-1'], 'the opted-in merchant gets the header with the minted pair'],
+            ['no', 'waf-token-1', null, 'the default keeps a configured header off the page'],
+            ['yes', '', null, 'opting in without a value puts nothing in the page'],
         ];
         foreach ($cases as [$optIn, $configured, $expected, $description]) {
             WC_Twoinc_Sole_Trader::reset_cache();
             $gateway = self::tokenMintingGateway(['SOLE_TRADER'], [
-                'firewall_token' => $configured,
-                'firewall_token_browser' => $optIn,
+                'custom_headers' => [
+                    ['name' => 'X-WAF-TOKEN', 'value' => $configured, 'send_from_browser' => $optIn],
+                ],
             ]);
             $_REQUEST = ['country' => 'GB'];
             $response = self::runTokensHandler($gateway);
             $_REQUEST = [];
 
             TinyAssert::true($response['success']);
-            TinyAssert::same($expected, $response['data']['firewall_token'] ?? null, $description);
+            TinyAssert::same($expected, $response['data']['custom_headers'] ?? null, $description);
         }
+    }
+
+    /** Only the flagged rows reach the page; the rest stay server-side. */
+    private static function testSoleTraderTokensPublishOnlyFlaggedHeaderRows(): void
+    {
+        WC_Twoinc_Sole_Trader::reset_cache();
+        $gateway = self::tokenMintingGateway(['SOLE_TRADER'], ['custom_headers' => [
+            ['name' => 'X-WAF-TOKEN', 'value' => 'waf-token-1', 'send_from_browser' => 'yes'],
+            ['name' => 'X-Server-Only', 'value' => 'server-secret', 'send_from_browser' => 'no'],
+            ['name' => 'X-Tenant', 'value' => 'tenant-7', 'send_from_browser' => 'yes'],
+        ]]);
+        $_REQUEST = ['country' => 'GB'];
+        $response = self::runTokensHandler($gateway);
+        $_REQUEST = [];
+
+        TinyAssert::same(
+            ['X-WAF-TOKEN' => 'waf-token-1', 'X-Tenant' => 'tenant-7'],
+            $response['data']['custom_headers'] ?? null,
+            'only the browser-flagged rows are published'
+        );
+        TinyAssert::true(
+            strpos(json_encode($response), 'server-secret') === false,
+            'an unflagged row must never reach the page'
+        );
     }
 
     /** PDEV-4669: echoed country is normalised to the ISO code the hosted signup expects. */
@@ -4350,11 +4382,10 @@ final class BrandConfigSpec
     }
 
     /**
-     * firewall_token_browser moved out of General into Diagnostics, next to
-     * trusted_proxies — an advanced/support-facing toggle, not a
-     * first-run setup field.
+     * The header table lives in Diagnostics next to trusted_proxies — an
+     * advanced/support-facing field, not a first-run setup one.
      */
-    private static function testFirewallTokenBrowserRendersUnderDiagnostics(): void
+    private static function testCustomHeadersRenderUnderDiagnostics(): void
     {
         $gateway = new class () extends WC_Twoinc {
             public function __construct()
@@ -4376,16 +4407,12 @@ final class BrandConfigSpec
 
         TinyAssert::same(
             'section_diagnostics',
-            $sections['firewall_token_browser'] ?? null,
-            'firewall_token_browser must render under the Diagnostics heading'
+            $sections['custom_headers'] ?? null,
+            'custom_headers must render under the Diagnostics heading'
         );
-        // Sanity on the walker itself: firewall_token (the field it once sat
-        // directly beneath) stays in General.
-        TinyAssert::same(
-            'section_general',
-            $sections['firewall_token'] ?? null,
-            'walker sanity check: firewall_token is expected to stay in the General group'
-        );
+        // The two keys it replaced are gone from the form entirely.
+        TinyAssert::same(null, $sections['firewall_token'] ?? null);
+        TinyAssert::same(null, $sections['firewall_token_browser'] ?? null);
     }
 
     /**
@@ -9089,57 +9116,75 @@ final class BrandConfigSpec
         return $calls[count($calls) - 1]['args']['headers'] ?? [];
     }
 
-    private static function testFirewallTokenFieldIsPlainTextNotMasked(): void
-    {
-        $gateway = self::firewallGateway([]);
-        $gateway->init_form_fields();
-        $field = $gateway->form_fields['firewall_token'] ?? [];
-
-        // A password input would hide from the merchant a value their IT
-        // administrator hands them in plaintext and may need to re-read.
-        TinyAssert::same('text', $field['type'] ?? null);
-        TinyAssert::same('Firewall token (optional)', $field['title'] ?? null);
-        TinyAssert::true(
-            strpos($field['description'] ?? '', 'X-WAF-TOKEN') !== false,
-            'the help text must name the header the token travels as'
-        );
-        TinyAssert::true(
-            strpos($field['description'] ?? '', 'not masked') !== false,
-            'the help text must say why the field is not masked'
-        );
-    }
-
-    private static function testFirewallTokenBrowserToggleIsOffUntilTheMerchantOptsIn(): void
+    private static function testCustomHeadersFieldIsARepeatableTable(): void
     {
         $gateway = self::firewallGateway([]);
         $gateway->init_form_fields();
         $keys = array_keys($gateway->form_fields);
-        $field = $gateway->form_fields['firewall_token_browser'] ?? [];
+        $field = $gateway->form_fields['custom_headers'] ?? [];
 
-        TinyAssert::same('checkbox', $field['type'] ?? null);
-        TinyAssert::same('no', $field['default'] ?? null);
-        TinyAssert::same(false, $gateway->should_send_firewall_token_from_browser());
-        // WC_Settings_API renders form_fields in array order, so this pins
-        // the toggle's position in the Diagnostics group, next to trusted_proxies.
+        TinyAssert::same('two_custom_headers', $field['type'] ?? null);
+        TinyAssert::same('Custom request headers', $field['title'] ?? null);
+        TinyAssert::same([], $gateway->get_custom_headers(), 'an unconfigured table yields no rows');
+        // WC_Settings_API renders form_fields in array order, so this pins the
+        // table's position in the Diagnostics group, next to trusted_proxies.
         TinyAssert::same(
             array_search('trusted_proxies', $keys, true) + 1,
-            array_search('firewall_token_browser', $keys, true),
-            'the browser toggle must render directly beneath trusted proxies, in Diagnostics'
+            array_search('custom_headers', $keys, true),
+            'the header table must render directly beneath trusted proxies, in Diagnostics'
         );
+        // The two keys it replaced must be gone, not merely unrendered.
+        TinyAssert::same(false, array_key_exists('firewall_token', $gateway->form_fields));
+        TinyAssert::same(false, array_key_exists('firewall_token_browser', $gateway->form_fields));
+    }
+
+    /**
+     * admin.js appends rows by cloning this markup's naming scheme, so the
+     * input names and the row class are a contract between the two.
+     */
+    private static function testCustomHeadersRenderMarkupIsTheAdminJsContract(): void
+    {
+        $gateway = self::firewallGateway(['custom_headers' => [
+            ['name' => 'X-WAF-TOKEN', 'value' => 'waf-token-1', 'send_from_browser' => 'yes'],
+            ['name' => 'X-Tenant', 'value' => 'tenant-7', 'send_from_browser' => 'no'],
+        ]]);
+        $gateway->init_form_fields();
+        $html = $gateway->generate_two_custom_headers_html('custom_headers', []);
+        $field_key = $gateway->get_field_key('custom_headers');
+
+        $needles = [
+            'class="widefat twoinc-custom-headers"',
+            'twoinc-custom-header-row',
+            'twoinc-custom-header-add',
+            'twoinc-custom-header-remove',
+            $field_key . '[0][name]',
+            $field_key . '[0][value]',
+            $field_key . '[0][send_from_browser]',
+            $field_key . '[1][name]',
+        ];
+        foreach ($needles as $needle) {
+            TinyAssert::true(strpos($html, $needle) !== false, "the render must carry $needle");
+        }
+        TinyAssert::same(2, substr_count($html, 'twoinc-custom-header-row'), 'one row per stored header');
+        // Only the flagged row is pre-ticked: a stored 'no' must not read as truthy.
+        TinyAssert::same(1, substr_count($html, 'checked="checked"'));
+        TinyAssert::true(strpos($html, 'value="waf-token-1"') !== false);
+        // The per-row security caveat the old single field carried.
         TinyAssert::true(
-            strpos($field['description'] ?? '', "user's browser") !== false,
-            'the help text must say which traffic the toggle covers'
+            strpos($html, 'published to the buyer&#039;s browser and may be read by anyone') !== false,
+            'the render must keep the browser-publication warning'
         );
     }
 
-    private static function testFirewallTokenBrowserAndTrustedProxiesHelpTextIsExact(): void
+    private static function testCustomHeadersBrowserWarningAndTrustedProxiesHelpTextIsExact(): void
     {
         $gateway = self::firewallGateway([]);
         $gateway->init_form_fields();
+        $html = $gateway->generate_two_custom_headers_html('custom_headers', []);
 
-        TinyAssert::same(
-            "Only switch this on if your IT administrator requires the firewall token for calls from the user's browser as well as those from your server. Your firewall token will be published to the buyer's brower and may be read by anyone.",
-            $gateway->form_fields['firewall_token_browser']['description'] ?? null
+        TinyAssert::true(
+            strpos($html, 'Tick &quot;Also send from browser&quot; only if your IT administrator requires the header on calls from the buyer&#039;s browser as well as those from your server. Its value will be published to the buyer&#039;s browser and may be read by anyone.') !== false,
+            'the browser-flag warning copy must be exact'
         );
         TinyAssert::same(
             'Addresses of your own reverse proxies, load balancers or CDN egress, as IPs or CIDR ranges, separated by commas or new lines. These IP addresses will be exempt from rate limiting.',
@@ -9147,22 +9192,22 @@ final class BrandConfigSpec
         );
     }
 
-    private static function testFirewallTokenHelpTextUsesOverlayProductNameNotTwo(): void
+    private static function testCustomHeadersHelpTextUsesOverlayProductNameNotTwo(): void
     {
         self::useTestbrand();
 
         $gateway = self::firewallGateway([]);
         $gateway->init_form_fields();
-        $description = $gateway->form_fields['firewall_token']['description'] ?? '';
+        $description = $gateway->form_fields['custom_headers']['description'] ?? '';
 
         TinyAssert::true(
             strpos($description, WC_Twoinc_Brand::get('product_name')) !== false,
-            'the firewall-token help text must name the overlay brand'
+            'the header-table help text must name the overlay brand'
         );
         TinyAssert::same(false, strpos($description, 'Two API') !== false);
     }
 
-    private static function testFirewallTokenCopyIsTranslatedInEveryLocale(): void
+    private static function testCustomHeadersCopyIsTranslatedInEveryLocale(): void
     {
         $languages = dirname(__DIR__, 2) . '/languages/';
         $gateway = self::firewallGateway([]);
@@ -9172,24 +9217,24 @@ final class BrandConfigSpec
         // literal here cannot see. __() is identity in this suite.
         $cases = [
             [
-                $gateway->form_fields['firewall_token']['title'] ?? '',
-                'Firewall token (optional)',
+                $gateway->form_fields['custom_headers']['title'] ?? '',
+                'Custom request headers',
                 [
-                    'nb_NO' => 'Brannmur-token (valgfritt)',
-                    'nl_NL' => 'Firewalltoken (optioneel)',
-                    'sv_SE' => 'Brandväggstoken (valfritt)',
+                    'nb_NO' => 'Egendefinerte forespørselsheadere',
+                    'nl_NL' => 'Aangepaste verzoekheaders',
+                    'sv_SE' => 'Anpassade begäranshuvuden',
                 ],
-                'firewall-token title',
+                'header-table title',
             ],
             [
-                $gateway->form_fields['firewall_token_browser']['title'] ?? '',
-                'Add firewall token to browser-originated traffic',
+                'Also send from browser',
+                'Also send from browser',
                 [
-                    'nb_NO' => 'Legg til brannmur-token på trafikk som kommer fra nettleseren',
-                    'nl_NL' => 'Firewalltoken toevoegen aan verkeer vanuit de browser',
-                    'sv_SE' => 'Lägg till brandväggstoken på trafik från webbläsaren',
+                    'nb_NO' => 'Send også fra nettleseren',
+                    'nl_NL' => 'Ook vanuit de browser verzenden',
+                    'sv_SE' => 'Skicka även från webbläsaren',
                 ],
-                'browser-toggle title',
+                'browser-flag column label',
             ],
         ];
         foreach ($cases as [$msgid, $source, $expected, $description]) {
@@ -9221,40 +9266,118 @@ final class BrandConfigSpec
         }
     }
 
-    private static function testFirewallTokenHeaderSentOnlyWhenConfigured(): void
+    private static function testCustomHeadersAllRowsSentServerSide(): void
     {
         $cases = [
-            ['waf-token-1', 'waf-token-1', 'a configured token travels on every call'],
-            ['', null, 'an unconfigured token adds no header'],
+            [[], [], 'an empty table adds no header'],
+            [
+                [['name' => 'X-WAF-TOKEN', 'value' => 'waf-token-1', 'send_from_browser' => 'no']],
+                ['X-WAF-TOKEN' => 'waf-token-1'],
+                'a single configured row travels on every call',
+            ],
+            [
+                [
+                    ['name' => 'X-WAF-TOKEN', 'value' => 'waf-token-1', 'send_from_browser' => 'no'],
+                    ['name' => 'X-Tenant', 'value' => 'tenant-7', 'send_from_browser' => 'yes'],
+                    ['name' => 'X-Env', 'value' => 'prod', 'send_from_browser' => 'no'],
+                ],
+                ['X-WAF-TOKEN' => 'waf-token-1', 'X-Tenant' => 'tenant-7', 'X-Env' => 'prod'],
+                'every row is sent server-side, browser flag or not',
+            ],
+            [
+                [['name' => 'X-Empty', 'value' => '', 'send_from_browser' => 'no']],
+                ['X-Empty' => ''],
+                'a named row with an empty value still sends the header',
+            ],
         ];
-        foreach ($cases as [$configured, $expected, $description]) {
+        foreach ($cases as [$rows, $expected, $description]) {
             $GLOBALS['__twoinc_test_http_calls'] = [];
-            $gateway = self::firewallGateway(['api_key' => 'key', 'firewall_token' => $configured]);
+            $gateway = self::firewallGateway(['api_key' => 'key', 'custom_headers' => $rows]);
             $gateway->make_request('/v1/order_intent', ['a' => 1]);
             $headers = self::sentHeaders();
 
-            TinyAssert::same($expected, $headers['X-WAF-TOKEN'] ?? null, $description);
+            foreach ($expected as $name => $value) {
+                TinyAssert::same($value, $headers[$name] ?? null, $description);
+            }
             TinyAssert::same('key', $headers['X-API-Key'] ?? null, $description);
+            if ($rows === []) {
+                TinyAssert::same(false, array_key_exists('X-WAF-TOKEN', $headers), $description);
+            }
         }
     }
 
-    /** The X-WAF-TOKEN on the request to $endpoint, of every one recorded. */
-    private static function firewallHeaderSentTo(string $endpoint)
+    private static function testCustomHeadersValidationRefusesUnusableRows(): void
+    {
+        $cases = [
+            [[['name' => 'X Bad Name', 'value' => 'v']], 'not a valid HTTP header name', 'a space is not a token character'],
+            [[['name' => 'X-Bad:', 'value' => 'v']], 'not a valid HTTP header name', 'a colon would terminate the name'],
+            [[['name' => '', 'value' => 'v']], 'needs a name', 'a value with no name is unusable'],
+            [[['name' => 'X-API-Key', 'value' => 'v']], 'cannot be overridden', 'the API key header is the plugin\'s own'],
+            [[['name' => 'content-type', 'value' => 'v']], 'cannot be overridden', 'reserved names match case-insensitively'],
+            [
+                [['name' => 'X-Dup', 'value' => 'a'], ['name' => 'x-dup', 'value' => 'b']],
+                'listed more than once',
+                'two rows differing only in case would silently drop one',
+            ],
+        ];
+        $gateway = self::firewallGateway([]);
+        foreach ($cases as [$rows, $needle, $description]) {
+            $message = null;
+            try {
+                $gateway->validate_two_custom_headers_field('custom_headers', $rows);
+            } catch (Exception $e) {
+                $message = $e->getMessage();
+            }
+            TinyAssert::true($message !== null, "the save must be refused: $description");
+            TinyAssert::true(
+                strpos((string) $message, $needle) !== false,
+                "the refusal must say why ($description), got: $message"
+            );
+        }
+    }
+
+    private static function testCustomHeadersValidationNormalisesAndDropsBlankRows(): void
+    {
+        $gateway = self::firewallGateway([]);
+        $saved = $gateway->validate_two_custom_headers_field('custom_headers', [
+            5  => ['name' => ' X-WAF-TOKEN ', 'value' => " waf\r\ntoken-1\n", 'send_from_browser' => '1'],
+            7  => ['name' => '', 'value' => ''],
+            9  => ['name' => 'X-Tenant', 'value' => 'tenant-7'],
+        ]);
+
+        // Re-indexed from zero: the posted indices are only a grouping key,
+        // and admin.js appends rows with sparse ones.
+        TinyAssert::same([0, 1], array_keys($saved));
+        TinyAssert::same('X-WAF-TOKEN', $saved[0]['name']);
+        TinyAssert::same('waftoken-1', $saved[0]['value'], 'a newline would split the header line');
+        TinyAssert::same('yes', $saved[0]['send_from_browser']);
+        TinyAssert::same('no', $saved[1]['send_from_browser'], 'an unticked checkbox posts nothing at all');
+
+        // A wholly blank row is dropped, not stored as an unnamed header.
+        TinyAssert::same(2, count($saved));
+
+        // An absent POST is a deliberate clear: the table always renders, so
+        // there is no ambiguity to preserve stored rows through.
+        TinyAssert::same([], $gateway->validate_two_custom_headers_field('custom_headers', null));
+    }
+
+    /** The value of $name on the request to $endpoint, of every one recorded. */
+    private static function headerSentTo(string $endpoint, string $name)
     {
         foreach ($GLOBALS['__twoinc_test_http_calls'] ?? [] as $call) {
             if (strpos((string) $call['url'], $endpoint) !== false) {
-                return $call['args']['headers']['X-WAF-TOKEN'] ?? null;
+                return $call['args']['headers'][$name] ?? null;
             }
         }
         throw new RuntimeException("no request was made to $endpoint");
     }
 
-    private static function testFirewallTokenHonouredOnTheSaveThatSetsIt(): void
+    private static function testCustomHeadersHonouredOnTheSaveThatSetsThem(): void
     {
-        // A merchant pastes key and token together on a first save. The
+        // A merchant pastes key and headers together on a first save. The
         // verification call runs before the settings persist, so reading the
-        // stored token would send none, the WAF would block it, and the key
-        // would be reverted as unverifiable.
+        // stored rows would send none, the firewall would block it, and the
+        // key would be reverted as unverifiable.
         $gateway = self::gateway();
         $gateway->init_form_fields();
         $option_key = $gateway->get_option_key();
@@ -9265,32 +9388,44 @@ final class BrandConfigSpec
         ];
         $gateway->test_post_data = [
             $gateway->get_field_key('api_key') => 'new-key',
-            $gateway->get_field_key('firewall_token') => 'waf-token-1',
+            $gateway->get_field_key('custom_headers') => [
+                0 => ['name' => 'X-WAF-TOKEN', 'value' => 'waf-token-1', 'send_from_browser' => '1'],
+                1 => ['name' => 'X-Tenant', 'value' => 'tenant-7'],
+            ],
             $gateway->get_field_key('surcharge_tax_treatment') => 'standard',
         ];
         $gateway->process_admin_options();
 
-        TinyAssert::same('waf-token-1', self::firewallHeaderSentTo('/v1/merchant/verify_api_key'));
+        TinyAssert::same('waf-token-1', self::headerSentTo('/v1/merchant/verify_api_key', 'X-WAF-TOKEN'));
+        TinyAssert::same('tenant-7', self::headerSentTo('/v1/merchant/verify_api_key', 'X-Tenant'));
         $saved = get_option($option_key, []);
         TinyAssert::same('new-key', $saved['api_key'] ?? null, 'the verified key must persist, not revert');
-        TinyAssert::same('waf-token-1', $saved['firewall_token'] ?? null);
+        TinyAssert::same('X-WAF-TOKEN', $saved['custom_headers'][0]['name'] ?? null);
+        TinyAssert::same('waf-token-1', $saved['custom_headers'][0]['value'] ?? null);
+        TinyAssert::same('yes', $saved['custom_headers'][0]['send_from_browser'] ?? null);
+        TinyAssert::same('no', $saved['custom_headers'][1]['send_from_browser'] ?? null);
     }
 
-    private static function testFirewallTokenNewlinesNeverReachTheHeader(): void
+    private static function testCustomHeaderNewlinesNeverReachTheHeader(): void
     {
-        // WC's text field keeps interior newlines, and a header value carrying
-        // one is a split request.
-        $gateway = self::firewallGateway(['api_key' => 'key', 'firewall_token' => " waf\r\ntoken-1\n"]);
+        // A stored value carrying a newline is a split request, and a row can
+        // predate the save-time normalisation.
+        $gateway = self::firewallGateway(['api_key' => 'key', 'custom_headers' => [
+            ['name' => 'X-WAF-TOKEN', 'value' => " waf\r\ntoken-1\n", 'send_from_browser' => 'no'],
+        ]]);
         $gateway->make_request('/v1/order_intent', ['a' => 1]);
 
         TinyAssert::same('waftoken-1', self::sentHeaders()['X-WAF-TOKEN'] ?? null);
     }
 
-    private static function testFirewallTokenRedactedFromTheApiLog(): void
+    private static function testCustomHeadersRedactedFromTheApiLog(): void
     {
         $gateway = self::firewallGateway([
             'api_key' => 'key',
-            'firewall_token' => 'waf-token-1',
+            'custom_headers' => [
+                ['name' => 'X-WAF-TOKEN', 'value' => 'waf-token-1', 'send_from_browser' => 'no'],
+                ['name' => 'X-Tenant', 'value' => 'tenant-7', 'send_from_browser' => 'yes'],
+            ],
             'enable_api_logging' => 'yes',
         ]);
         $gateway->make_request('/v1/order_intent', ['a' => 1]);
@@ -9299,10 +9434,112 @@ final class BrandConfigSpec
         TinyAssert::true($logs !== [], 'api logging was enabled but nothing was logged');
         $logged = $logs[count($logs) - 1]['context']['request']['headers'] ?? [];
 
+        // Every configured row, not just the one that used to be hardcoded.
         TinyAssert::same('[REDACTED]', $logged['X-WAF-TOKEN'] ?? null);
+        TinyAssert::same('[REDACTED]', $logged['X-Tenant'] ?? null);
         TinyAssert::same('[REDACTED]', $logged['X-API-Key'] ?? null);
+        // A header the plugin composes itself stays legible in the log.
+        TinyAssert::same('application/json; charset=utf-8', $logged['Content-Type'] ?? null);
         // The redaction must not reach the wire copy of the headers.
         TinyAssert::same('waf-token-1', self::sentHeaders()['X-WAF-TOKEN'] ?? null);
+        TinyAssert::same('tenant-7', self::sentHeaders()['X-Tenant'] ?? null);
+    }
+
+    /**
+     * Seed the stored settings, then run the settings load + migration in the
+     * order the real constructor does (init_settings() then the migration).
+     */
+    private static function migratedGateway(array $stored): WC_Twoinc
+    {
+        $gateway = self::gateway();
+        $GLOBALS['__twoinc_test_options'][$gateway->get_option_key()] = $stored;
+        $gateway->init_settings();
+        $method = new ReflectionMethod(WC_Twoinc::class, 'migrate_firewall_token_to_custom_headers');
+        $method->setAccessible(true);
+        $method->invoke($gateway);
+        return $gateway;
+    }
+
+    /**
+     * ABN-490: dropping the legacy keys without carrying the value across
+     * would silently stop sending a token a merchant's firewall requires.
+     */
+    private static function testLegacyFirewallTokenMigratedIntoTheHeaderTable(): void
+    {
+        $cases = [
+            [
+                ['firewall_token' => 'waf-token-1', 'firewall_token_browser' => 'yes'],
+                [['name' => 'X-WAF-TOKEN', 'value' => 'waf-token-1', 'send_from_browser' => 'yes']],
+                'a token opted into the browser keeps that opt-in',
+            ],
+            [
+                ['firewall_token' => 'waf-token-1', 'firewall_token_browser' => 'no'],
+                [['name' => 'X-WAF-TOKEN', 'value' => 'waf-token-1', 'send_from_browser' => 'no']],
+                'a server-only token stays server-only',
+            ],
+            [
+                ['firewall_token' => 'waf-token-1'],
+                [['name' => 'X-WAF-TOKEN', 'value' => 'waf-token-1', 'send_from_browser' => 'no']],
+                'an absent browser flag defaults to server-only',
+            ],
+            [
+                ['firewall_token' => '', 'firewall_token_browser' => 'no'],
+                [],
+                'an empty token seeds no row',
+            ],
+            [
+                ['firewall_token' => " waf\r\ntoken-1\n", 'firewall_token_browser' => 'no'],
+                [['name' => 'X-WAF-TOKEN', 'value' => 'waftoken-1', 'send_from_browser' => 'no']],
+                'a stored newline is stripped on the way in',
+            ],
+        ];
+        foreach ($cases as [$stored, $expected, $description]) {
+            $gateway = self::migratedGateway(array_merge($stored, ['api_key' => 'key']));
+            $saved = get_option($gateway->get_option_key(), []);
+
+            TinyAssert::same($expected, $saved['custom_headers'] ?? [], $description);
+            // The legacy keys are cleared, so the migration cannot run twice.
+            TinyAssert::same(false, array_key_exists('firewall_token', $saved), $description);
+            TinyAssert::same(false, array_key_exists('firewall_token_browser', $saved), $description);
+            // The migrated row is what the header assembly then reads.
+            TinyAssert::same(
+                $expected === [] ? [] : [[
+                    'name' => 'X-WAF-TOKEN',
+                    'value' => $expected[0]['value'],
+                    'send_from_browser' => $expected[0]['send_from_browser'] === 'yes',
+                ]],
+                $gateway->get_custom_headers(),
+                $description
+            );
+        }
+
+        // An install with no legacy key is left completely alone.
+        $gateway = self::migratedGateway(['api_key' => 'key']);
+        TinyAssert::same(
+            ['api_key' => 'key'],
+            get_option($gateway->get_option_key(), []),
+            'no legacy key means no write at all'
+        );
+
+        // A token already carried across is not duplicated by a second pass.
+        $gateway = self::migratedGateway([
+            'firewall_token' => 'waf-token-1',
+            'custom_headers' => [['name' => 'X-WAF-TOKEN', 'value' => 'already-here', 'send_from_browser' => 'no']],
+        ]);
+        $saved = get_option($gateway->get_option_key(), []);
+        TinyAssert::same(1, count($saved['custom_headers'] ?? []), 'the row must not be seeded twice');
+        TinyAssert::same('already-here', $saved['custom_headers'][0]['value'] ?? null, 'the edited row wins');
+
+        // A legacy token alongside unrelated rows is prepended, not dropped.
+        $gateway = self::migratedGateway([
+            'firewall_token' => 'waf-token-1',
+            'custom_headers' => [['name' => 'X-Tenant', 'value' => 'tenant-7', 'send_from_browser' => 'no']],
+        ]);
+        $saved = get_option($gateway->get_option_key(), []);
+        TinyAssert::same(
+            ['X-WAF-TOKEN', 'X-Tenant'],
+            array_column($saved['custom_headers'] ?? [], 'name')
+        );
     }
 
     /**
@@ -9340,7 +9577,6 @@ final class BrandConfigSpec
             {
                 $seeded = [
                     'merchant_short_name' => 'shortname-from-settings',
-                    'firewall_token' => 'waf-token-1',
                 ];
                 return $seeded[$key] ?? $empty_value ?? '';
             }

@@ -120,7 +120,7 @@ describe("company search transport", () => {
     });
 
     test("targets the store's own proxy endpoint, never the API host", () => {
-      // The merchant's firewall token is added by the proxy, so a request that
+      // The merchant's custom headers are added by the proxy, so a request that
       // still addressed the API host would be the one a WAF rejects.
       const run = search();
       const params = harness.requestParams(run.request);
