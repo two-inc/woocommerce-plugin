@@ -213,7 +213,7 @@ function twoinc_settings_link($links)
     if (apply_filters('twoinc_brand_file', null) !== null) {
         return $links;
     }
-    $settings_link = '<a href="admin.php?page=wc-settings&tab=checkout&section=' . WC_Twoinc_Brand::get('gateway_id') . '">Settings</a>';
+    $settings_link = '<a href="admin.php?page=wc-settings&tab=checkout&section=' . WC_Twoinc_Brand::get('gateway_id') . '">' . esc_html__('Settings', 'twoinc-payment-gateway') . '</a>';
     array_unshift($links, $settings_link);
     return $links;
 }
