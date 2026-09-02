@@ -223,6 +223,7 @@ final class BrandConfigSpec
             'testIntentApprovedNoticeSwitchAbsentDefaultsOn',
             'testIntentApprovedNoticeOverlayDeclaringNothingKeepsNoticeOn',
             'testIntentApprovedNoticeInvalidSwitchReportsAndDefaultsOn',
+            'testIntentDeclinedNoticeSuppressed',
             'testIntentLoaderRendersTheSharedSpinnerAndVisibleText',
             'testIntentVerdictBoxesHoldABareSentence',
             'testIntentVerdictBoxesAreAnnounced',
@@ -7616,6 +7617,31 @@ final class BrandConfigSpec
     }
 
     /**
+     * A brand setting 'intent_declined_notice_enabled' => false suppresses
+     * the declined ("not available") box entirely — no markup at all, same
+     * as the approved notice's own off switch. The approved notice and
+     * loader (untouched by this fixture) must survive, since the two
+     * switches are independent.
+     */
+    private static function testIntentDeclinedNoticeSuppressed(): void
+    {
+        add_filter('twoinc_brand_file', static function ($file) {
+            return __DIR__ . '/fixtures/declinednoticesuppressedbrand.php';
+        });
+        TinyAssert::same(false, WC_Twoinc_Brand::get('intent_declined_notice_enabled'));
+
+        $html = self::gateway()->build_payment_description();
+        TinyAssert::true(
+            strpos($html, 'twoinc-err-payment-default') === false,
+            'a brand disabling the declined notice must emit no notice block'
+        );
+        TinyAssert::true(
+            strpos($html, 'twoinc-pay-box twoinc-intent-approved hidden') !== false,
+            'the approved notice must survive the declined notice being suppressed'
+        );
+    }
+
+    /**
      * The order-intent loading state renders the shared spinner GIF beside
      * the VISIBLE words "Checking availability" — the cross-platform target
      * agreed 2026-08-04 for TWO-25326, the same asset and the same sentence
@@ -7765,10 +7791,12 @@ final class BrandConfigSpec
      * brand that declined the approval sentence was still announcing
      * "Checking availability" while the check ran.
      *
-     * The two ERROR boxes are deliberately NOT gated: a merchant who wants
-     * no reassurance still needs failures surfaced, or a declined buyer
-     * sees nothing at all. This test fails if either half regresses — the
-     * loader coming back, or the error boxes disappearing with it.
+     * The two ERROR boxes are NOT gated by the approved-notice switch (a
+     * merchant who wants no reassurance still needs failures surfaced, or
+     * a declined buyer sees nothing at all) — the declined box has its own
+     * independent switch, tested separately. This test fails if either
+     * half regresses — the loader coming back, or the error boxes
+     * disappearing with it.
      */
     private static function testIntentLoaderSuppressedWithTheNoticeButErrorBoxesSurvive(): void
     {
@@ -7809,9 +7837,10 @@ final class BrandConfigSpec
      *
      * The declined ("not available") box is the one still worth pinning
      * against the switch here (TWO-25224's rule, extended by §7.3's new
-     * company template): it is NEVER gated on
-     * 'intent_approved_notice_enabled', so its data-company-template must
-     * survive even on a brand that suppresses the approved notice entirely.
+     * company template): it is NOT gated on 'intent_approved_notice_enabled'
+     * (it has its own independent switch, tested separately), so its
+     * data-company-template must survive even on a brand that suppresses
+     * the approved notice entirely.
      */
     private static function testCompanySearchTileSlotAndDeclinedTemplateSurviveNoticeSuppression(): void
     {
