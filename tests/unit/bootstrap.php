@@ -361,6 +361,42 @@ class WC_Tax
     }
 
     /**
+     * Core's row shape for the current destination: keyed by rate id, each
+     * row carrying at least 'rate'. Fed from the same per-class percentages
+     * as get_rates_for_class(), so one fixture drives both the cart-fee and
+     * the chip-display path and a divergence between them is a test failure.
+     *
+     * @return array<int,array{rate: float}>
+     */
+    public static function get_rates($tax_class = '', $customer = null)
+    {
+        $rows = [];
+        foreach (self::get_rates_for_class((string) $tax_class) as $i => $percent) {
+            $rows[$i + 1] = ['rate' => (float) $percent];
+        }
+        return $rows;
+    }
+
+    /**
+     * Tax per rate row, applied additively. Exclusive-price arithmetic only:
+     * $price_includes_tax is accepted for signature fidelity and asserted
+     * false, because every caller under test hands core a net amount.
+     *
+     * @return array<int,float>
+     */
+    public static function calc_tax($price, $rates, $price_includes_tax = false, $suppress_rounding = false)
+    {
+        if ($price_includes_tax) {
+            throw new RuntimeException('WC_Tax::calc_tax stub models exclusive prices only');
+        }
+        $taxes = [];
+        foreach ((array) $rates as $id => $row) {
+            $taxes[$id] = (float) $price * (float) ($row['rate'] ?? 0) / 100;
+        }
+        return $taxes;
+    }
+
+    /**
      * Address-aware rate lookup (the shipping-tax-fallback seam), unlike
      * get_rates_for_class() above which resolves against the current
      * customer rather than an arbitrary address. Row shape mirrors core:
@@ -417,6 +453,12 @@ class StubFeeCart
     public function get_shipping_tax()
     {
         return 2.5;
+    }
+
+    /** The shop's "display prices in the shop" setting, as core exposes it. */
+    public function display_prices_including_tax()
+    {
+        return (bool) ($GLOBALS['__twoinc_test_display_incl_tax'] ?? false);
     }
 
     public function add_fee($name, $amount, $taxable = false, $tax_class = '')

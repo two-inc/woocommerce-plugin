@@ -107,6 +107,7 @@ final class BrandConfigSpec
             'testSurchargeFeeStandardModeUnchanged',
             'testSurchargeFeeCustomClassTaxedAtSelectedClassRates',
             'testSurchargeFeeAlwaysZeroNeverTaxed',
+            'testSurchargeChipAmountMatchesFeeLineTaxBasis',
             'testSurchargeFeeCustomClassFallsBackWhenClassDeleted',
             'testSurchargeTaxSettingsValidationAndStaleNotice',
             'testNeverTaxedTreatmentSuppressedUnconditionally',
@@ -360,7 +361,7 @@ final class BrandConfigSpec
         WC()->cart = null;
         WC()->customer = null;
         WC()->session = null;
-        unset($GLOBALS['__twoinc_test_tax_classes'], $GLOBALS['__twoinc_test_tax_rates'], $GLOBALS['__twoinc_test_find_rates']);
+        unset($GLOBALS['__twoinc_test_tax_classes'], $GLOBALS['__twoinc_test_tax_rates'], $GLOBALS['__twoinc_test_find_rates'], $GLOBALS['__twoinc_test_display_incl_tax']);
         foreach (['twoinc_brand_file', 'twoinc_checkout_fields', 'twoinc_confirmation_url', 'twoinc_order_payload', 'twoinc_payment_terms_line', 'two_order_create', 'twoinc_payment_validation_error', 'twoinc_sole_trader_signup_url', 'twoinc_shipping_details'] as $tag) {
             remove_all_filters($tag);
         }
@@ -3354,6 +3355,80 @@ final class BrandConfigSpec
         TinyAssert::same(3, $fee['argc'], 'always_zero must not pass a tax class');
         TinyAssert::same(false, $fee['taxable']);
         TinyAssert::same(0.0, $fee['tax']);
+    }
+
+    /**
+     * Drive the wc-ajax term-fees handler and return the chip payload for
+     * the single offered term. Same options shape as runApplyCartFee(), so
+     * one option set can be sent down both the chip and the line-item path.
+     */
+    private static function runAjaxTermFees(array $options): array
+    {
+        $gateway = self::surchargeFeeGateway(array_merge([
+            'surcharge_type' => 'percentage',
+            'payment_terms_days' => [30],
+            'surcharge_grid' => [30 => ['percentage' => 2.0]],
+        ], $options));
+        return self::withGatewayInstance($gateway, static function () {
+            WC_Twoinc_Payment_Terms::reset_fee_cache();
+            WC()->session = new StubSession();
+            WC()->customer = new StubCustomer('US');
+            WC()->cart = new StubFeeCart();
+            unset($GLOBALS['__twoinc_test_ajax_json']);
+            WC_Twoinc_Payment_Terms::ajax_term_fees();
+            $json = $GLOBALS['__twoinc_test_ajax_json'] ?? [];
+            TinyAssert::same(true, $json['success'] ?? null, 'the term-fees handler must succeed');
+            return $json['data']['fees'][30];
+        });
+    }
+
+    private static function testSurchargeChipAmountMatchesFeeLineTaxBasis(): void
+    {
+        // The chip and the fee line must show the same money. The
+        // quote is net; WC grosses the LINE up when the shop displays prices
+        // including tax, so the chip has to gross up identically — under the
+        // same tax treatment, never the pricing API's own rate.
+        $GLOBALS['__twoinc_test_tax_classes'] = ['B2B Levy', 'Zero rate'];
+        $GLOBALS['__twoinc_test_tax_rates'] = ['' => [20.0], 'b2b-levy' => [5.0, 3.0], 'zero-rate' => [19.0]];
+
+        foreach (
+            [
+                [false, [], '€12.50', 'excluding tax: the chip stays at the net quote'],
+                [true, [], '€15.00', 'including tax, standard treatment: + the Standard rate'],
+                [true, ['surcharge_tax_treatment' => 'standard'], '€15.00', 'including tax, explicit standard'],
+                [
+                    true,
+                    ['surcharge_tax_treatment' => 'custom_class', 'surcharge_tax_class' => 'b2b-levy'],
+                    '€13.50',
+                    'including tax, custom class: the class rate rows, stacked, not Standard',
+                ],
+                [
+                    true,
+                    ['surcharge_tax_treatment' => 'custom_class', 'surcharge_tax_class' => 'deleted-class'],
+                    '€15.00',
+                    'including tax, dead class: degraded to Standard, same as the line',
+                ],
+                [
+                    true,
+                    ['surcharge_tax_treatment' => 'always_zero'],
+                    '€12.50',
+                    'including tax, always_zero: untaxed by construction, so still net',
+                ],
+            ] as $case
+        ) {
+            list($display_incl_tax, $options, $expected, $description) = $case;
+            $GLOBALS['__twoinc_test_display_incl_tax'] = $display_incl_tax;
+
+            TinyAssert::same($expected, self::runAjaxTermFees($options)['buyer_fee_share_display'], $description);
+
+            // The chip against what the fee LINE will actually show.
+            $fee = self::runApplyCartFee($options)->fees[0];
+            $line = WC_Twoinc_Payment_Terms::format_fee_amount(
+                $display_incl_tax ? $fee['amount'] + $fee['tax'] : $fee['amount'],
+                'EUR'
+            );
+            TinyAssert::same($line, $expected, 'chip and fee line disagree — ' . $description);
+        }
     }
 
     private static function testSurchargeFeeCustomClassFallsBackWhenClassDeleted(): void
