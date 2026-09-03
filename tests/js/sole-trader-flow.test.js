@@ -86,8 +86,6 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       autofill_token: "autofill",
       signup_url: "https://checkout.example.test/soletrader/signup"
     };
-    // The country the form below is on: tokens carry authority for one.
-    soleTrader.tokenCountry = "GB";
     // No Two session by default, so a chip click resolves to the hosted
     // signup — the path every popup expectation below is written against.
     // Synchronous, like a browser answering from a cookie it already has.
@@ -1670,7 +1668,6 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       );
       const shipping = ctx.shippingHelper.soleTrader;
       shipping.tokens = soleTrader.tokens;
-      shipping.tokenCountry = country;
       return shipping;
     }
 
@@ -1821,13 +1818,11 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     });
 
     /**
-     * The mint is what records the jurisdiction, so it cannot happen without
-     * one to record — the gate would otherwise hold a token scoped to nothing
-     * for the rest of the page.
+     * The backend needs a country to build the mint under, so an unreadable
+     * one mints nothing.
      */
     test("no tokens are minted while the country is unreadable", () => {
       soleTrader.tokens = null;
-      soleTrader.tokenCountry = null;
       const ajax = harness.stubAjax($);
       $("#billing_country").val("");
 
@@ -1877,26 +1872,32 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     });
 
     /**
-     * Filed under the country the signup ran under — the one the popup was
-     * opened with — not whatever the field reads by the time it completes.
-     * WooCommerce can move the country while the popup is open.
+     * Filed under the country the popup was launched under — captured on the
+     * watcher at `launchSignup()` — not whatever the field reads by the time
+     * the signup completes. WooCommerce can move the country while the popup
+     * is open.
      */
     test("a signup completing after the field moved is filed under the country it ran under", () => {
       $("#billing_country").append('<option value="NO">NO</option>');
       soleTrader.setMode("sole_trader");
       soleTrader.bindPopupMessageListener();
+      $("#billing_country").val("NO");
+      soleTrader.launchSignup();
       const SIGNED_UP = { organization_number: "TWO:ST2", company_name: "Second Trader" };
       jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => cb(SIGNED_UP));
 
-      $("#billing_country").val("NO");
+      $("#billing_country").val("GB");
       window.dispatchEvent(
         new window.MessageEvent("message", {
           data: "ACCEPTED",
           origin: "https://checkout.example.test"
         })
       );
-      $("#billing_country").val("GB");
 
+      // Filed under NO (the launch country), invisible under GB (the field's
+      // country once the signup resolved).
+      expect(soleTrader.heldAutofill()).toBeNull();
+      $("#billing_country").val("NO");
       expect(soleTrader.heldAutofill()).toEqual(SIGNED_UP);
     });
 
@@ -1917,25 +1918,6 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       expect(soleTrader.tokens).toBe(heldTokens);
       expect(ajax.calls.some((call) => call.url.includes("two_sole_trader_tokens"))).toBe(false);
       ajax.restore();
-    });
-
-    /**
-     * Not re-minted while a signup is outstanding either — same held tokens,
-     * whatever else is in flight.
-     */
-    test("a country change leaves the tokens alone while a signup is still outstanding", () => {
-      ctx.helper.countryDidChange("GB");
-      soleTrader.availabilityByCountry.SE = true;
-      soleTrader.setMode("sole_trader");
-      soleTrader.launchSignup();
-      expect(soleTrader.isBusy()).toBe(true);
-      const heldTokens = soleTrader.tokens;
-
-      $("#billing_country").append('<option value="SE">SE</option>');
-      $("#billing_country").val("SE");
-      ctx.Twoinc.getInstance().syncBillingCountry();
-
-      expect(soleTrader.tokens).toBe(heldTokens);
     });
 
     test("re-clicking the chip once adopted goes straight to the re-signup, with no lookup", () => {
@@ -1985,9 +1967,6 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         ajax = harness.stubAjax($);
         soleTrader.availabilityByCountry = {};
         soleTrader.tokens = null;
-        // Cleared with them: a real mint is what records the country their
-        // authority is scoped to, and the prefetch is gated on it.
-        soleTrader.tokenCountry = null;
       });
 
       afterEach(() => {

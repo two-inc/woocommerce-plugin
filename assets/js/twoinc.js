@@ -2942,14 +2942,6 @@ function createSoleTraderController(companySearch) {
     availabilityByCountry: {},
     tokens: null,
 
-    /**
-     * The country `tokens` were minted under — not scoped authority, just the
-     * flow's anchor country, so a completed signup files its answer under the
-     * country the buyer had when the flow started rather than whatever the
-     * field reads by the time it resolves.
-     */
-    tokenCountry: null,
-
     /** Backoff after a 429: callers gate on `!tokens`, so a failed mint otherwise re-mints every render. */
     tokenMintBackoffUntil: 0,
     // Snapshot of twoincCompanyCapture.mode, taken on the way into sole-trader
@@ -3696,6 +3688,11 @@ function createSoleTraderController(companySearch) {
       }
       controller.openingSignup = true;
       try {
+        // Captured before the popup opens: the buyer can move the country
+        // field while the popup is open, and the completed signup's answer
+        // must file under the country this launch ran under, not whatever
+        // the field reads by the time it resolves.
+        const country = controller.currentCountry();
         const win = controller.openPopup(options);
         controller.showNote(!win);
         if (win) {
@@ -3713,7 +3710,7 @@ function createSoleTraderController(companySearch) {
             controller.soleTraderReconfirmingCount += 1;
           }
           controller.closeDropdownOnSettle = true;
-          controller.watchPopupClose(win, isReconfirming);
+          controller.watchPopupClose(win, isReconfirming, country);
         }
       } finally {
         // Released once the synchronous open has returned, blocked or not —
@@ -3743,11 +3740,19 @@ function createSoleTraderController(companySearch) {
      *   only decrement `soleTraderReconfirmingCount` for the popup that
      *   actually incremented it, so an unrelated popup's poll can't steal a
      *   decrement meant for a different, still-open re-signup.
+     * @param {string} [country] the country this launch ran under — see the
+     *   ACCEPTED handler's use of `watcher.country`.
      */
-    watchPopupClose: function (win, isReconfirming) {
+    watchPopupClose: function (win, isReconfirming, country) {
       controller.bindWindowRefocusListener();
       controller.beginFlight();
-      const watcher = { id: null, win: win, isReconfirming: !!isReconfirming, decided: false };
+      const watcher = {
+        id: null,
+        win: win,
+        isReconfirming: !!isReconfirming,
+        decided: false,
+        country: country
+      };
       watcher.id = setInterval(function () {
         if (!win.closed) return;
         controller.settleClosedPopup(watcher, false);
@@ -4197,7 +4202,6 @@ function createSoleTraderController(companySearch) {
         .done(function (response) {
           if (response && response.success && response.data && response.data.autofill_token) {
             controller.tokens = response.data;
-            controller.tokenCountry = country;
             controller.bindPopupMessageListener();
             controller.scheduleTokenRefresh();
             if (cb) cb(true);
@@ -4475,10 +4479,15 @@ function createSoleTraderController(companySearch) {
               }
               if (resolved) {
                 // A signup replaces the cookie's buyer. Filed under the
-                // country the tokens were minted under, which is what
-                // `heldAutofill` keys on — not whatever the field reads by
-                // the time the signup completes.
-                controller.holdAutofill(buyer, controller.tokenCountry);
+                // country this launch ran under (`watcher.country`), which
+                // is what `heldAutofill` keys on — not whatever the field
+                // reads by the time the signup completes. No matching
+                // watcher (a replayed/foreign message) falls back to reading
+                // the field now, same as an unattributed signup always did.
+                controller.holdAutofill(
+                  buyer,
+                  (watcher && watcher.country) || controller.currentCountry()
+                );
                 controller.setCompany(buyer.organization_number, buyer.company_name, buyer);
                 controller.showNote(false);
               } else {
