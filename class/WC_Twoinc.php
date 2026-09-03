@@ -5094,8 +5094,7 @@ if (!class_exists('WC_Twoinc')) {
         {
             $field_key = $this->get_field_key($key);
             $data = wp_parse_args($data, ['title' => '', 'description' => '']);
-            $rows = $this->get_option($key);
-            $rows = is_array($rows) ? array_values($rows) : [];
+            $rows = $this->classify_custom_headers();
 
             ob_start();
             ?>
@@ -5116,17 +5115,17 @@ if (!class_exists('WC_Twoinc')) {
                         <tbody>
                             <?php foreach ($rows as $i => $row) : ?>
                                 <?php
-                                $name = is_array($row) ? (string) ($row['name'] ?? '') : '';
-                                $value = is_array($row) ? (string) ($row['value'] ?? '') : '';
-                                $browser = is_array($row) && self::is_browser_flag_set($row['send_from_browser'] ?? null);
-                                $unsendable = $name !== '' && !self::is_valid_header_value($value);
+                                $name = $row['name'];
+                                $value = $row['value'];
+                                $browser = $row['send_from_browser'];
+                                $notice = self::header_row_notice($row['rejection']);
                                 ?>
                                 <tr class="twoinc-custom-header-row">
                                     <td><input type="text" class="input-text regular-input" name="<?php echo esc_attr($field_key); ?>[<?php echo (int) $i; ?>][name]" value="<?php echo esc_attr($name); ?>" placeholder="X-WAF-TOKEN" /></td>
                                     <td>
                                         <input type="text" class="input-text regular-input" name="<?php echo esc_attr($field_key); ?>[<?php echo (int) $i; ?>][value]" value="<?php echo esc_attr($value); ?>" />
-                                        <?php if ($unsendable) : ?>
-                                            <p class="description twoinc-custom-header-unsendable"><?php esc_html_e('This value is not being sent because it is not printable ASCII text. Retype it — saving the form as it stands will store a changed value.', 'twoinc-payment-gateway'); ?></p>
+                                        <?php if ($notice !== null) : ?>
+                                            <p class="description twoinc-custom-header-unsendable"><?php echo esc_html($notice); ?></p>
                                         <?php endif; ?>
                                     </td>
                                     <td><input type="checkbox" name="<?php echo esc_attr($field_key); ?>[<?php echo (int) $i; ?>][send_from_browser]" value="1" <?php checked($browser); ?> /></td>
@@ -5655,38 +5654,67 @@ if (!class_exists('WC_Twoinc')) {
          */
         public function get_custom_headers()
         {
+            $clean = [];
+            foreach ($this->classify_custom_headers() as $row) {
+                if ($row['rejection'] === null) {
+                    $clean[] = [
+                        'name'              => $row['name'],
+                        'value'             => $row['value'],
+                        'send_from_browser' => $row['send_from_browser'],
+                    ];
+                }
+            }
+            return $clean;
+        }
+
+        /**
+         * Every stored row, each tagged with why it is not sent or null if it
+         * is. The form reads the same tags, so it cannot describe a row as
+         * travelling that the request assembly drops.
+         *
+         * @return array<int, array{name: string, value: string, send_from_browser: bool, rejection: string|null}>
+         */
+        private function classify_custom_headers(): array
+        {
             $rows = $this->custom_headers_override !== null
                 ? $this->custom_headers_override
                 : $this->get_option('custom_headers');
             if (!is_array($rows)) {
                 return [];
             }
-            $clean = [];
+            $classified = [];
             $seen = [];
             foreach ($rows as $row) {
                 if (!is_array($row)) {
                     continue;
                 }
                 $name = is_scalar($row['name'] ?? null) ? trim((string) $row['name']) : '';
-                $header_value = is_scalar($row['value'] ?? null) ? (string) $row['value'] : '';
+                $value = is_scalar($row['value'] ?? null) ? (string) $row['value'] : '';
                 $lower = strtolower($name);
-                if (
-                    !self::is_valid_header_name($name)
-                    || !self::is_valid_header_value($header_value)
-                    || trim($header_value) === ''
-                    || in_array($lower, self::reserved_header_names(), true)
-                    || isset($seen[$lower])
-                ) {
-                    continue;
+                if (!self::is_valid_header_name($name)) {
+                    $rejection = 'name';
+                } elseif (in_array($lower, self::reserved_header_names(), true)) {
+                    $rejection = 'reserved';
+                } elseif (isset($seen[$lower])) {
+                    $rejection = 'duplicate';
+                } elseif (!self::is_valid_header_value($value)) {
+                    // The only rejection a text input hides: it strips the
+                    // offending characters, so the next save looks clean.
+                    $rejection = 'unprintable';
+                } elseif (trim($value) === '') {
+                    $rejection = 'blank';
+                } else {
+                    $rejection = null;
+                    $seen[$lower] = true;
                 }
-                $seen[$lower] = true;
-                $clean[] = [
+                $classified[] = [
                     'name'              => $name,
-                    'value'             => $header_value,
+                    'value'             => $value,
                     'send_from_browser' => self::is_browser_flag_set($row['send_from_browser'] ?? null),
+                    'rejection'         => $rejection,
                 ];
             }
-            return $clean;
+            return $classified;
         }
 
         /**
@@ -5717,6 +5745,18 @@ if (!class_exists('WC_Twoinc')) {
                 }
             }
             return $map;
+        }
+
+        /** What the form tells the merchant about a row the request assembly drops. */
+        private static function header_row_notice(?string $rejection): ?string
+        {
+            if ($rejection === null) {
+                return null;
+            }
+            if ($rejection === 'unprintable') {
+                return __('This value is not being sent because it is not printable ASCII text. Retype it — saving the form as it stands will store a changed value.', 'twoinc-payment-gateway');
+            }
+            return __('This row is not being sent.', 'twoinc-payment-gateway');
         }
 
         /** Undo WP's magic quotes on one posted scalar. */
@@ -6086,18 +6126,16 @@ if (!class_exists('WC_Twoinc')) {
         {
             $post_data = $this->get_post_data();
             $custom_headers_field = 'woocommerce_' . $this->id . '_custom_headers';
-            // Honour the table as submitted in the same save as the API key: the
-            // verification call below runs before the settings persist, so reading
-            // the stored rows would verify against a table the merchant just
-            // changed and a firewall would reject the key as unverifiable.
-            // Removing every row posts no key at all, hence no array_key_exists.
+            // Verify against the table as submitted, not as stored: removing
+            // every row posts no field key at all, so absence means cleared.
             try {
                 $this->custom_headers_override = $this->validate_two_custom_headers_field(
                     'custom_headers',
                     $post_data[$custom_headers_field] ?? null
                 );
             } catch (Exception $e) {
-                // A table the save will refuse must not authenticate the key.
+                // A table the save will refuse must not authenticate the key;
+                // the stored rows stand for this request.
                 $this->custom_headers_override = null;
             }
             $api_key_field = 'woocommerce_' . $this->id . '_api_key';

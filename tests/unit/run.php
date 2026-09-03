@@ -287,7 +287,7 @@ final class BrandConfigSpec
             'testCustomHeadersOverrideCarriesOnlyRowsTheSaveKeeps',
             'testTraceContextHeaderIsGatedLikeACustomValue',
             'testClearingTheHeaderTableVerifiesTheKeyWithoutIt',
-            'testUnsendableStoredRowIsMarkedInTheForm',
+            'testEveryDroppedRowIsMarkedInTheForm',
             'testCustomHeadersRedactedFromTheApiLog',
             'testLegacyFirewallTokenMigratedIntoTheHeaderTable',
             'testSoleTraderTokensNeverPublishTheFirewallToken',
@@ -9264,6 +9264,16 @@ final class BrandConfigSpec
                 ],
                 'rejected-header-value message',
             ],
+            [
+                'This row is not being sent.',
+                'This row is not being sent.',
+                [
+                    'nb_NO' => 'Denne raden sendes ikke.',
+                    'nl_NL' => 'Deze rij wordt niet verzonden.',
+                    'sv_SE' => 'Denna rad skickas inte.',
+                ],
+                'dropped-row notice',
+            ],
         ];
         foreach ($cases as [$msgid, $source, $expected, $description]) {
             TinyAssert::same($source, $msgid);
@@ -9434,28 +9444,46 @@ final class BrandConfigSpec
         TinyAssert::same([], get_option($gateway->get_option_key(), [])['custom_headers'] ?? null);
     }
 
-    /** An unsendable stored row says so: the text input would strip it silently on the next save. */
-    private static function testUnsendableStoredRowIsMarkedInTheForm(): void
+    /**
+     * The form must never show a row as travelling that the request assembly
+     * drops, so every rejection the read path applies carries a notice.
+     */
+    private static function testEveryDroppedRowIsMarkedInTheForm(): void
     {
+        $retype = 'saving the form as it stands will store a changed value';
         $cases = [
-            ["waf\r\ntoken", true, 'a newline-bearing value is flagged'],
-            ['tøken', true, 'so is a non-ASCII one'],
-            ['waf-token-1', false, 'a sendable value is not'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => 'waf-token-1']], null, 'a sendable row carries no notice'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => "waf\r\ntoken"]], $retype, 'a text input hides a newline, so say it will be repaired'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => 'tøken']], $retype, 'as it does a non-ASCII byte'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => '   ']], 'This row is not being sent.', 'a blank value is visibly blank, so no retype warning'],
+            [[['name' => 'X Bad Name', 'value' => 'v']], 'This row is not being sent.', 'an unusable name'],
+            [[['name' => 'Host', 'value' => 'v']], 'This row is not being sent.', 'a reserved name'],
+            [
+                [['name' => 'X-Dup', 'value' => 'a'], ['name' => 'x-dup', 'value' => 'b']],
+                'This row is not being sent.',
+                'the second of a duplicate pair',
+            ],
         ];
-        foreach ($cases as [$value, $flagged, $description]) {
-            $gateway = self::firewallGateway(['custom_headers' => [
-                ['name' => 'X-WAF-TOKEN', 'value' => $value, 'send_from_browser' => 'no'],
-            ]]);
+        foreach ($cases as [$rows, $notice, $description]) {
+            $gateway = self::firewallGateway(['custom_headers' => $rows]);
             $html = $gateway->generate_two_custom_headers_html('custom_headers', []);
 
             TinyAssert::same(
-                $flagged,
+                $notice !== null,
                 strpos($html, 'twoinc-custom-header-unsendable') !== false,
                 $description
             );
-            // Inside the row, not beside it: admin.js removes by row selector
-            // and would otherwise leave the notice orphaned.
-            TinyAssert::same(3, substr_count($html, '<tr'), $description);
+            if ($notice !== null) {
+                TinyAssert::true(strpos($html, $notice) !== false, "the notice must say why: $description");
+                // Exactly the rows the read path drops, no more.
+                TinyAssert::same(
+                    count($rows) - count($gateway->get_custom_headers()),
+                    substr_count($html, 'twoinc-custom-header-unsendable'),
+                    $description
+                );
+            }
+            // Inside the row: admin.js removes by row selector.
+            TinyAssert::same(2 + count($rows), substr_count($html, '<tr'), $description);
         }
     }
 

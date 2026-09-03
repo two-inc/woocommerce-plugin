@@ -1308,6 +1308,10 @@ msgid "The value of \"%s\" must be printable ASCII text and cannot be blank."
 msgstr "De waarde van \"%s\" moet afdrukbare ASCII-tekst zijn en mag niet leeg zijn."
 
 #: class/WC_Twoinc.php
+msgid "This row is not being sent."
+msgstr "Deze rij wordt niet verzonden."
+
+#: class/WC_Twoinc.php
 msgid "This value is not being sent because it is not printable ASCII text. Retype it — saving the form as it stands will store a changed value."
 msgstr "Deze waarde wordt niet verzonden omdat het geen afdrukbare ASCII-tekst is. Typ hem opnieuw — als u het formulier nu opslaat, wordt een gewijzigde waarde opgeslagen."
 
