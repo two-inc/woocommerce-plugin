@@ -9471,19 +9471,25 @@ final class BrandConfigSpec
     }
 
     /**
-     * The form must never show a row as travelling that the request assembly
-     * drops, nor show a field it cannot display as though it had.
+     * The form must never report a row as travelling that the request assembly
+     * drops, and a field it does show must come back exactly as stored.
      */
     private static function testEveryDroppedRowIsMarkedInTheForm(): void
     {
         // [row, fields the form cannot show, "not sent" notices, the pair the
         // browser then submits, why]. The submitted pair is written out per
-        // case rather than derived, so the test is not grading the production
-        // rule against a second copy of itself.
+        // case rather than derived from the rule it checks.
         $cases = [
             [['name' => 'X-WAF-TOKEN', 'value' => 'waf-token-1'], 0, 0, ['X-WAF-TOKEN', 'waf-token-1'], 'a sendable row carries no notice'],
             [['name' => 'X-WAF-TOKEN', 'value' => 'a&b'], 0, 0, ['X-WAF-TOKEN', 'a&b'], 'an ampersand is escaped and comes back intact'],
             [['name' => 'X-WAF-TOKEN', 'value' => 'a"b'], 0, 0, ['X-WAF-TOKEN', 'a"b'], 'as is a quote'],
+            // Double-encoded, so the browser shows the entity text itself
+            // rather than the character it stands for.
+            [['name' => 'X-WAF-TOKEN', 'value' => '&amp;'], 0, 0, ['X-WAF-TOKEN', '&amp;'], 'a named reference is shown, not decoded'],
+            [['name' => 'X-WAF-TOKEN', 'value' => '&#038;'], 0, 0, ['X-WAF-TOKEN', '&#038;'], 'nor is a numeric one'],
+            [['name' => 'X-WAF-TOKEN', 'value' => '&#128;'], 0, 0, ['X-WAF-TOKEN', '&#128;'], 'nor one a browser remaps and PHP does not'],
+            [['name' => 'X-WAF-TOKEN', 'value' => '&#13;'], 0, 0, ['X-WAF-TOKEN', '&#13;'], 'nor one that would otherwise decode to CR'],
+            [['name' => '&amp;', 'value' => 'v'], 0, 1, ['&amp;', 'v'], 'the name is shown the same way, and refused for its own reason'],
             [['name' => '', 'value' => ''], 0, 0, ['', ''], 'a wholly blank row is discarded by the save, not refused'],
             [['name' => '', 'value' => '   '], 0, 1, ['', '   '], 'but one holding only whitespace is refused'],
             [['name' => 'X-WAF-TOKEN', 'value' => ''], 0, 1, ['X-WAF-TOKEN', ''], 'an empty value is visibly empty'],
@@ -9532,8 +9538,10 @@ final class BrandConfigSpec
             // A row the save discards carries no notice; one it refuses does.
             TinyAssert::same($unsendable === 1, $refused, "the notice must match what the save does: $why");
 
-            // Notices sit inside the row: admin.js removes by row selector.
+            // Notices sit inside the row's own cells: admin.js removes by row
+            // selector, so one emitted as a sibling would be left orphaned.
             TinyAssert::same(3, substr_count($html, '<tr'), $why);
+            TinyAssert::same(5, substr_count($html, '<td'), $why);
         }
 
         // Only the second of a duplicate pair is reported, and only once.
@@ -9542,14 +9550,26 @@ final class BrandConfigSpec
             ['name' => 'x-dup', 'value' => 'b'],
         ]]);
         $html = $gateway->generate_two_custom_headers_html('custom_headers', []);
-        TinyAssert::same(1, substr_count($html, 'twoinc-custom-header-unsendable'));
-        TinyAssert::same(0, substr_count($html, 'twoinc-custom-header-unholdable'));
+        $why = 'only the second of a duplicate pair is reported';
+        TinyAssert::same(1, substr_count($html, 'twoinc-custom-header-unsendable'), $why);
+        TinyAssert::same(0, substr_count($html, 'twoinc-custom-header-unholdable'), $why);
+        // $seen is claimed by the sending row in one and by the passing row in
+        // the other, so the two could disagree on which of the pair is at fault.
+        $refused = false;
+        try {
+            $gateway->validate_two_custom_headers_field('custom_headers', [
+                ['name' => 'X-Dup', 'value' => 'a'],
+                ['name' => 'x-dup', 'value' => 'b'],
+            ]);
+        } catch (Exception $e) {
+            $refused = true;
+        }
+        TinyAssert::true($refused, $why);
     }
 
     /**
      * The name and value a browser would submit from a one-row render: the two
-     * value attributes, undoing esc_attr's escaping and dropping what a
-     * one-line input drops.
+     * value attributes, decoded the way a browser decodes an attribute.
      *
      * @return array{0: string, 1: string}
      */
@@ -9557,12 +9577,7 @@ final class BrandConfigSpec
     {
         preg_match_all('/\[(?:name|value)\]" value="([^"]*)"/', $html, $matches);
         $fields = array_map(function ($attribute) {
-            $shown = str_replace(
-                ['&quot;', '&#039;', '&lt;', '&gt;', '&amp;'],
-                ['"', "'", '<', '>', '&'],
-                $attribute
-            );
-            return str_replace(["\r", "\n", "\0"], '', $shown);
+            return html_entity_decode($attribute, ENT_QUOTES | ENT_HTML5, 'UTF-8');
         }, $matches[1]);
         return [$fields[0] ?? '', $fields[1] ?? ''];
     }

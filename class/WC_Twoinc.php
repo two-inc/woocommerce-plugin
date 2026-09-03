@@ -5080,13 +5080,13 @@ if (!class_exists('WC_Twoinc')) {
                                 ?>
                                 <tr class="twoinc-custom-header-row">
                                     <td>
-                                        <input type="text" class="input-text regular-input" name="<?php echo esc_attr($field_key); ?>[<?php echo (int) $i; ?>][name]" value="<?php echo $row['name_unholdable'] ? '' : esc_attr($name); ?>" placeholder="X-WAF-TOKEN" />
+                                        <input type="text" class="input-text regular-input" name="<?php echo esc_attr($field_key); ?>[<?php echo (int) $i; ?>][name]" value="<?php echo $row['name_unholdable'] ? '' : self::escape_header_field($name); ?>" placeholder="X-WAF-TOKEN" />
                                         <?php if ($row['name_unholdable']) : ?>
                                             <p class="description twoinc-custom-header-unholdable"><?php esc_html_e('This entry contains characters this field cannot hold, so it is not shown and is not being sent. Enter it again.', 'twoinc-payment-gateway'); ?></p>
                                         <?php endif; ?>
                                     </td>
                                     <td>
-                                        <input type="text" class="input-text regular-input" name="<?php echo esc_attr($field_key); ?>[<?php echo (int) $i; ?>][value]" value="<?php echo $row['value_unholdable'] ? '' : esc_attr($value); ?>" />
+                                        <input type="text" class="input-text regular-input" name="<?php echo esc_attr($field_key); ?>[<?php echo (int) $i; ?>][value]" value="<?php echo $row['value_unholdable'] ? '' : self::escape_header_field($value); ?>" />
                                         <?php if ($row['value_unholdable']) : ?>
                                             <p class="description twoinc-custom-header-unholdable"><?php esc_html_e('This entry contains characters this field cannot hold, so it is not shown and is not being sent. Enter it again.', 'twoinc-payment-gateway'); ?></p>
                                         <?php endif; ?>
@@ -5711,16 +5711,25 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * Whether the form can show a field at all: esc_attr discards one that
-         * is not valid UTF-8, and a one-line input drops these bytes from what
-         * it posts. Entity text is deliberately not judged here — a browser
-         * decodes it where PHP does not, and chasing that parity is unbounded;
-         * such a value is printable, is sent correctly, and any mismatch on
-         * re-entry is refused by the save rather than stored quietly.
+         * Escape a stored field for a value attribute, double-encoding so the
+         * browser shows the field itself. esc_attr leaves an existing entity
+         * alone, which would display "&" for a stored "&amp;" and store that
+         * back on the next save.
+         */
+        private static function escape_header_field(string $field): string
+        {
+            return htmlspecialchars($field, ENT_QUOTES, 'UTF-8');
+        }
+
+        /**
+         * Whether the form can show a field at all. Double-encoded escaping is
+         * its own inverse for anything printable, so only two cases remain:
+         * a field that is not valid UTF-8, which the escape discards, and the
+         * bytes a value attribute cannot carry back.
          */
         private static function survives_the_form(string $field): bool
         {
-            return ($field === '' || esc_attr($field) !== '')
+            return ($field === '' || self::escape_header_field($field) !== '')
                 && preg_match('/[\r\n\x00]/', $field) !== 1;
         }
 
