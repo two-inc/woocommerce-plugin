@@ -68,7 +68,6 @@ if (!class_exists('WC_Twoinc')) {
 
             $this->init_form_fields();
             $this->init_settings();
-            $this->migrate_firewall_token_to_custom_headers();
             $this->drop_removed_settings();
             $this->drop_renamed_option_rows();
             $this->migrate_se_tax_subtotals();
@@ -778,56 +777,6 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * Carry a configured firewall token (ABN-490) into the first row of
-         * the custom-headers table, under the name it used to be sent as.
-         * Self-limiting like the cleanups below: only writes while a legacy
-         * key is present, and it clears both legacy keys as it goes.
-         *
-         * Dropping the legacy keys without carrying the value across would
-         * silently stop sending a token a merchant's firewall requires.
-         *
-         * @return void
-         */
-        private function migrate_firewall_token_to_custom_headers()
-        {
-            if (!is_array($this->settings)) {
-                return;
-            }
-            $legacy = ['firewall_token', 'firewall_token_browser'];
-            $present = array_filter($legacy, function ($key) {
-                return array_key_exists($key, $this->settings);
-            });
-            if (count($present) === 0) {
-                return;
-            }
-            $token = is_scalar($this->settings['firewall_token'] ?? null)
-                ? (string) $this->settings['firewall_token']
-                : '';
-            // Verbatim: repairing carries a different token across, dropping
-            // destroys the only copy. The form marks an unsendable row.
-            if (trim($token) !== '') {
-                $existing = isset($this->settings['custom_headers']) && is_array($this->settings['custom_headers'])
-                    ? array_values($this->settings['custom_headers'])
-                    : [];
-                $names = array_map(function ($row) {
-                    return strtolower(is_array($row) ? (string) ($row['name'] ?? '') : '');
-                }, $existing);
-                if (!in_array('x-waf-token', $names, true)) {
-                    array_unshift($existing, [
-                        'name'              => 'X-WAF-TOKEN',
-                        'value'             => $token,
-                        'send_from_browser' => self::is_browser_flag_set($this->settings['firewall_token_browser'] ?? null) ? 'yes' : 'no',
-                    ]);
-                }
-                $this->settings['custom_headers'] = $existing;
-            }
-            foreach ($legacy as $key) {
-                unset($this->settings[$key]);
-            }
-            update_option($this->get_option_key(), $this->settings);
-        }
-
-        /**
          * Drop settings keys whose feature no longer exists, so an upgraded
          * install doesn't carry a dead key inside the gateway settings blob
          * (a WooCommerce gateway keeps every setting in one
@@ -846,10 +795,20 @@ if (!class_exists('WC_Twoinc')) {
          *   `twoincDomHelper.toggleBusinessFields()` in twoinc.js.
          * - `test_checkout_host` (TWO-25386, Doug's ruling): removed outright
          *   — see get_effective_environment_mode().
+         * - `firewall_token` / `firewall_token_browser` (ABN-490): replaced
+         *   by the `custom_headers` table. Nothing is carried across — the
+         *   fields only ever existed on staging, never in a release.
          */
         private function drop_removed_settings()
         {
-            $removed = ['enable_sole_trader', 'company_search_location', 'enable_company_search_for_others', 'test_checkout_host'];
+            $removed = [
+                'enable_sole_trader',
+                'company_search_location',
+                'enable_company_search_for_others',
+                'test_checkout_host',
+                'firewall_token',
+                'firewall_token_browser',
+            ];
             $present = [];
             foreach ($removed as $key) {
                 if (is_array($this->settings) && array_key_exists($key, $this->settings)) {
@@ -5762,7 +5721,11 @@ if (!class_exists('WC_Twoinc')) {
             return (bool) preg_match('/^[\x20-\x7E]+$/D', $value);
         }
 
-        /** Names a custom row may not take: composed here, set by the transport, or reserved as proxy identity. */
+        /**
+         * Names a custom row may not take: composed by make_request(), set by
+         * the HTTP client, proxy identity, an RFC 7230 hop-by-hop connection
+         * control, or a credential the plugin carries itself.
+         */
         private static function reserved_header_names(): array
         {
             return [
@@ -5772,9 +5735,20 @@ if (!class_exists('WC_Twoinc')) {
                 'accept',
                 'accept-language',
                 'x-api-key',
+                'two-delegated-authority-token',
                 'x-forwarded-for',
                 'x-real-ip',
                 'http_x_cloud_trace_context',
+                'connection',
+                'keep-alive',
+                'proxy-authenticate',
+                'proxy-authorization',
+                'te',
+                'trailer',
+                'transfer-encoding',
+                'upgrade',
+                'authorization',
+                'cookie',
             ];
         }
 
