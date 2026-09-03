@@ -9568,7 +9568,6 @@ final class BrandConfigSpec
             }
             // Inside the row: admin.js removes by row selector.
             TinyAssert::same(2 + count($rows), substr_count($html, '<tr'), $description);
-
         }
     }
 
