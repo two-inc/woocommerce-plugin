@@ -1594,10 +1594,9 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     });
 
     /**
-     * The authority the answer was fetched under is country-scoped, so an
-     * answer from before a country change is not an answer for this one — in
-     * either direction: one landing after the change, and one already held
-     * when it happens.
+     * The answer map is keyed by country, so an answer held under the old one
+     * is not an answer for the new one — in either direction: one landing
+     * after the change, and one already held when it happens.
      */
     test.each([
       {
@@ -1686,8 +1685,8 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     });
 
     /**
-     * Woo lets the delivery address sit in another country, and the two roles'
-     * lookups then carry different authority. One slot for both would have the
+     * Woo lets the delivery address sit in another country, so the two roles'
+     * lookups can land in different buckets. One slot for both would have the
      * second answer land on the first, so the first role's chip prompts a
      * buyer it already had an answer for.
      */
@@ -1758,9 +1757,8 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     });
 
     /**
-     * The jurisdiction decides which authority an answer came from, so an
-     * unreadable country is not a country the held answer answers for — the
-     * chip goes to the popup rather than adopting under an unknown one.
+     * An unreadable country is not a country the held answer answers for —
+     * the chip goes to the popup rather than adopting under an unknown one.
      * WooCommerce leaves the field briefly unreadable while replacing it.
      */
     test("an unreadable country reads no held answer, whatever is held", () => {
