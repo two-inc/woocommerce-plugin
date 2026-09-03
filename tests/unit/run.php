@@ -9275,14 +9275,14 @@ final class BrandConfigSpec
                 'dropped-row notice',
             ],
             [
-                'This value contains characters this field cannot hold, so it is not shown and is not being sent. Enter it again.',
-                'This value contains characters this field cannot hold, so it is not shown and is not being sent. Enter it again.',
+                'This entry contains characters this field cannot hold, so it is not shown and is not being sent. Enter it again.',
+                'This entry contains characters this field cannot hold, so it is not shown and is not being sent. Enter it again.',
                 [
-                    'nb_NO' => 'Denne verdien inneholder tegn dette feltet ikke kan holde, så den vises ikke og sendes ikke. Skriv den inn på nytt.',
-                    'nl_NL' => 'Deze waarde bevat tekens die dit veld niet kan bevatten, dus hij wordt niet weergegeven en niet verzonden. Voer hem opnieuw in.',
-                    'sv_SE' => 'Detta värde innehåller tecken som detta fält inte kan hålla, så det visas inte och skickas inte. Skriv in det igen.',
+                    'nb_NO' => 'Denne oppføringen inneholder tegn dette feltet ikke kan holde, så den vises ikke og sendes ikke. Skriv den inn på nytt.',
+                    'nl_NL' => 'Deze invoer bevat tekens die dit veld niet kan bevatten, dus hij wordt niet weergegeven en niet verzonden. Voer hem opnieuw in.',
+                    'sv_SE' => 'Denna post innehåller tecken som detta fält inte kan hålla, så den visas inte och skickas inte. Skriv in den igen.',
                 ],
-                'unholdable-value notice',
+                'unholdable-entry notice',
             ],
         ];
         foreach ($cases as [$msgid, $source, $expected, $description]) {
@@ -9445,6 +9445,27 @@ final class BrandConfigSpec
         TinyAssert::same([], $gateway->get_custom_headers());
     }
 
+    /**
+     * The rows the browser would submit from $html, read back off the rendered
+     * inputs rather than from what was stored.
+     *
+     * @return array<int, array{name: string, value: string}>
+     */
+    private static function repostOf(string $html): array
+    {
+        preg_match_all('/name="[^"]*\[(\d+)\]\[(name|value)\]" value="([^"]*)"/', $html, $matches, PREG_SET_ORDER);
+        $rows = [];
+        foreach ($matches as $match) {
+            // What the browser decodes the attribute to, minus what a one-line
+            // input drops; WP slashes what it posts.
+            $decoded = html_entity_decode($match[3], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            $decoded = (string) preg_replace('/&#0*(?:0|10|13);|&#x0*[0ad];/i', '', $decoded);
+            $posted = str_replace(["\r", "\n", "\0"], '', $decoded);
+            $rows[(int) $match[1]][$match[2]] = addslashes($posted);
+        }
+        return array_values($rows);
+    }
+
     /** Removing every row posts no field key at all, so absence means "cleared". */
     private static function testClearingTheHeaderTableVerifiesTheKeyWithoutIt(): void
     {
@@ -9472,66 +9493,86 @@ final class BrandConfigSpec
 
     /**
      * The form must never show a row as travelling that the request assembly
-     * drops, nor echo back a value the input would rewrite into a save.
+     * drops, nor re-post a field different from the one it displays.
      */
     private static function testEveryDroppedRowIsMarkedInTheForm(): void
     {
-        // [rows, dropped, unholdable, description].
+        // [rows, unholdable fields, unsendable notices, refused on save, why].
+        // The three differ: a row can be sent today yet be undisplayable, and
+        // a row the save discards is refused by nothing.
         $cases = [
-            [[['name' => 'X-WAF-TOKEN', 'value' => 'waf-token-1']], false, false, 'a sendable row carries no notice'],
-            [[['name' => 'X-WAF-TOKEN', 'value' => "waf\r\ntoken"]], true, true, 'a text input cannot hold a newline'],
-            [[['name' => 'X-WAF-TOKEN', 'value' => "waf\ntoken"]], true, true, 'nor a bare LF'],
-            [[['name' => 'X-WAF-TOKEN', 'value' => "waf\0token"]], true, true, 'nor a NUL'],
-            [[['name' => 'X-WAF-TOKEN', 'value' => "waf\x7Ftoken"]], true, false, 'DEL re-posts intact, so the save refuses it instead'],
-            [[['name' => 'X-WAF-TOKEN', 'value' => "waf\ttoken"]], true, false, 'as does a tab'],
-            [[['name' => 'X-WAF-TOKEN', 'value' => 'tøken']], true, false, 'as does a non-ASCII byte'],
-            [[['name' => 'X-WAF-TOKEN', 'value' => '']], true, false, 'an empty value is visibly empty'],
-            [[['name' => 'X-WAF-TOKEN', 'value' => '   ']], true, false, 'so is a whitespace-only one'],
-            [[['name' => 'X Bad Name', 'value' => 'v']], true, false, 'an unusable name'],
-            [[['name' => 'Host', 'value' => 'v']], true, false, 'a reserved name'],
-            [[['name' => 'Host', 'value' => "a\r\nb"]], true, true, 'a reserved name must not hide an unholdable value'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => 'waf-token-1']], 0, 0, false, 'a sendable row carries no notice'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => 'a&b']], 0, 0, false, 'a bare ampersand is escaped and comes back intact'],
+            [[['name' => '', 'value' => '']], 0, 0, false, 'a wholly blank row is discarded by the save, not refused'],
+            [[['name' => '', 'value' => '   ']], 0, 1, true, 'but one holding only whitespace is refused'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => '']], 0, 1, true, 'an empty value is visibly empty'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => '   ']], 0, 1, true, 'so is a whitespace-only one'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => "waf\x7Ftoken"]], 0, 1, true, 'DEL re-posts intact, so the save refuses it'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => "waf\ttoken"]], 0, 1, true, 'as does a tab'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => 'tøken']], 0, 1, true, 'as does a non-ASCII byte'],
+            [[['name' => 'X Bad Name', 'value' => 'v']], 0, 1, true, 'an unusable name'],
+            [[['name' => 'Host', 'value' => 'v']], 0, 1, true, 'a reserved name'],
             [
                 [['name' => 'X-Dup', 'value' => 'a'], ['name' => 'x-dup', 'value' => 'b']],
+                0,
+                1,
                 true,
-                false,
-                'the second of a duplicate pair',
+                'the second of a duplicate pair, and only the second',
             ],
+            // A one-line input drops CR/LF and NUL from what it posts.
+            [[['name' => 'X-WAF-TOKEN', 'value' => "waf\r\ntoken"]], 1, 1, true, 'a value carrying CRLF cannot be displayed'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => "waf\ntoken"]], 1, 1, true, 'nor a bare LF'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => "waf\0token"]], 1, 1, true, 'nor a NUL'],
+            [[['name' => "X-Foo\r\nBar", 'value' => 'v']], 1, 1, true, 'the name is judged the same way'],
+            [[['name' => 'Host', 'value' => "a\r\nb"]], 1, 1, true, 'a reserved name does not hide an undisplayable value'],
+            [[['name' => '', 'value' => "a\r\nb"]], 1, 0, false, 'blanking a nameless row leaves one the save discards'],
+            [[['name' => "X-Foo\r\nBar", 'value' => "a\r\nb"]], 2, 0, false, 'as does blanking both fields'],
+            // esc_attr discards invalid UTF-8 outright.
+            [[['name' => "X-Foo\xFF", 'value' => 'v']], 1, 1, true, 'invalid UTF-8 in the name'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => "a\xFFb"]], 1, 1, true, 'and in the value'],
+            [[['name' => "X-Foo\xFF", 'value' => '']], 1, 0, false, 'a nameless row so blanked is discarded'],
+            // esc_attr does not double-encode, so the browser decodes what it
+            // renders: entity text the merchant typed cannot survive the field.
+            [[['name' => 'X-WAF-TOKEN', 'value' => '&amp;']], 1, 0, true, 'entity text is sent today but cannot be displayed'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => '&#038;']], 1, 0, true, 'nor can a numeric reference'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => '&#13;']], 1, 0, true, 'nor one PHP itself declines to decode'],
+            [[['name' => '&amp;', 'value' => 'v']], 1, 1, true, 'and a name of entity text is blanked, not silently renamed'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => '&#X0D;']], 1, 0, true, 'a browser accepts an upper-case hex reference PHP leaves alone'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => '&#0;']], 1, 0, true, 'and a NUL reference'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => '&amp']], 0, 0, false, 'an incomplete reference is escaped, so it comes back intact'],
         ];
-        foreach ($cases as [$rows, $dropped, $unholdable, $description]) {
+        foreach ($cases as [$rows, $unholdable, $unsendable, $refused, $why]) {
             $gateway = self::firewallGateway(['custom_headers' => $rows]);
             $html = $gateway->generate_two_custom_headers_html('custom_headers', []);
+            $reposted = self::repostOf($html);
 
-            // One notice or the other, never both and never neither.
-            TinyAssert::same(
-                $unholdable,
-                strpos($html, 'twoinc-custom-header-unholdable') !== false,
-                $description
-            );
-            TinyAssert::same(
-                $dropped && !$unholdable,
-                strpos($html, 'twoinc-custom-header-unsendable') !== false,
-                $description
-            );
-            // An unholdable value is blanked, so hitting Save cannot store the
-            // input's rewrite of it as though the merchant had typed it.
-            foreach ($rows as $row) {
-                if (preg_match('/[\r\n\x00]/', $row['value']) === 1) {
-                    TinyAssert::same(
-                        false,
-                        strpos($html, 'value="' . esc_attr($row['value']) . '"') !== false,
-                        "an unholdable value must not be echoed back: $description"
-                    );
-                }
+            TinyAssert::same($unholdable, substr_count($html, 'twoinc-custom-header-unholdable'), $why);
+            TinyAssert::same($unsendable, substr_count($html, 'twoinc-custom-header-unsendable'), $why);
+
+            // The notice must match what saving the form as rendered does.
+            $threw = false;
+            try {
+                $gateway->validate_two_custom_headers_field('custom_headers', $reposted);
+            } catch (Exception $e) {
+                $threw = true;
             }
-            // Exactly the rows the read path drops, no more.
-            TinyAssert::same(
-                count($rows) - count($gateway->get_custom_headers()),
-                substr_count($html, 'twoinc-custom-header-unholdable')
-                    + substr_count($html, 'twoinc-custom-header-unsendable'),
-                $description
-            );
-            // Inside the row: admin.js removes by row selector.
-            TinyAssert::same(2 + count($rows), substr_count($html, '<tr'), $description);
+            TinyAssert::same($refused, $threw, "the notice must match what the save does: $why");
+
+            // A field the form can display must re-post byte-identically.
+            if ($unholdable === 0) {
+                TinyAssert::same(
+                    array_map(function ($row) {
+                        return ['name' => $row['name'], 'value' => $row['value']];
+                    }, $rows),
+                    array_map(function ($row) {
+                        return ['name' => stripslashes($row['name']), 'value' => stripslashes($row['value'])];
+                    }, $reposted),
+                    "the form must re-post a displayable row unchanged: $why"
+                );
+            }
+            // Notices sit inside the row: admin.js removes by row selector.
+            TinyAssert::same(2 + count($rows), substr_count($html, '<tr'), $why);
+            TinyAssert::same(4 * count($rows) + 1, substr_count($html, '<td'), $why);
         }
     }
 
@@ -9560,33 +9601,33 @@ final class BrandConfigSpec
             [[['name' => 'X Bad Name', 'value' => 'v']], 'not a valid HTTP header name', 'a space is not a token character'],
             [[['name' => 'X-Bad:', 'value' => 'v']], 'not a valid HTTP header name', 'a colon would terminate the name'],
             [[['name' => '', 'value' => 'v']], 'needs a name', 'a value with no name is unusable'],
-            [[['name' => 'X-API-Key', 'value' => 'v']], 'cannot be overridden', 'the API key header is the plugin\'s own'],
-            [[['name' => 'content-type', 'value' => 'v']], 'cannot be overridden', 'reserved names match case-insensitively'],
-            [[['name' => 'Content-Type', 'value' => 'v']], 'cannot be overridden', 'nor does the canonical casing slip through'],
-            [[['name' => 'Host', 'value' => 'v']], 'cannot be overridden', 'Host addresses the request itself'],
-            [[['name' => 'content-length', 'value' => 'v']], 'cannot be overridden', 'Content-Length is set by the HTTP client'],
-            [[['name' => 'Accept', 'value' => 'v']], 'cannot be overridden', 'Accept negotiates the response body'],
-            [[['name' => 'Accept-Language', 'value' => 'v']], 'cannot be overridden', 'the locale header is composed from settings'],
-            [[['name' => 'Accept-Encoding', 'value' => 'gzip']], 'cannot be overridden', 'the transport negotiates response encoding itself'],
-            [[['name' => 'accept-encoding', 'value' => 'gzip']], 'cannot be overridden', 'nor in lower case'],
-            [[['name' => 'ACCEPT-ENCODING', 'value' => 'gzip']], 'cannot be overridden', 'nor in upper case'],
-            [[['name' => 'Expect', 'value' => '100-continue']], 'cannot be overridden', 'a 100-continue handshake is the transport\'s to negotiate'],
-            [[['name' => 'expect', 'value' => '100-continue']], 'cannot be overridden', 'nor in lower case'],
-            [[['name' => 'EXPECT', 'value' => '100-continue']], 'cannot be overridden', 'nor in upper case'],
-            [[['name' => 'X-Forwarded-For', 'value' => 'v']], 'cannot be overridden', 'a forged client IP must not be settable here'],
-            [[['name' => 'x-real-ip', 'value' => 'v']], 'cannot be overridden', 'nor its Nginx-flavoured twin'],
+            [[['name' => 'X-API-Key', 'value' => 'v']], 'is reserved', 'the API key header is the plugin\'s own'],
+            [[['name' => 'content-type', 'value' => 'v']], 'is reserved', 'reserved names match case-insensitively'],
+            [[['name' => 'Content-Type', 'value' => 'v']], 'is reserved', 'nor does the canonical casing slip through'],
+            [[['name' => 'Host', 'value' => 'v']], 'is reserved', 'Host addresses the request itself'],
+            [[['name' => 'content-length', 'value' => 'v']], 'is reserved', 'Content-Length is set by the HTTP client'],
+            [[['name' => 'Accept', 'value' => 'v']], 'is reserved', 'Accept negotiates the response body'],
+            [[['name' => 'Accept-Language', 'value' => 'v']], 'is reserved', 'the locale header is composed from settings'],
+            [[['name' => 'Accept-Encoding', 'value' => 'gzip']], 'is reserved', 'the transport negotiates response encoding itself'],
+            [[['name' => 'accept-encoding', 'value' => 'gzip']], 'is reserved', 'nor in lower case'],
+            [[['name' => 'ACCEPT-ENCODING', 'value' => 'gzip']], 'is reserved', 'nor in upper case'],
+            [[['name' => 'Expect', 'value' => '100-continue']], 'is reserved', 'a 100-continue handshake is the transport\'s to negotiate'],
+            [[['name' => 'expect', 'value' => '100-continue']], 'is reserved', 'nor in lower case'],
+            [[['name' => 'EXPECT', 'value' => '100-continue']], 'is reserved', 'nor in upper case'],
+            [[['name' => 'X-Forwarded-For', 'value' => 'v']], 'is reserved', 'a forged client IP must not be settable here'],
+            [[['name' => 'x-real-ip', 'value' => 'v']], 'is reserved', 'nor its Nginx-flavoured twin'],
             // Casing varies across the set: the rule is case-insensitive.
-            [[['name' => 'Two-Delegated-Authority-Token', 'value' => 'v']], 'cannot be overridden', 'the delegated-authority token is minted, not configured'],
-            [[['name' => 'Connection', 'value' => 'v']], 'cannot be overridden', 'a hop-by-hop control belongs to the connection, not the request'],
-            [[['name' => 'keep-alive', 'value' => 'v']], 'cannot be overridden', 'hop-by-hop'],
-            [[['name' => 'PROXY-AUTHENTICATE', 'value' => 'v']], 'cannot be overridden', 'hop-by-hop'],
-            [[['name' => 'Proxy-Authorization', 'value' => 'v']], 'cannot be overridden', 'hop-by-hop'],
-            [[['name' => 'TE', 'value' => 'v']], 'cannot be overridden', 'hop-by-hop'],
-            [[['name' => 'trailer', 'value' => 'v']], 'cannot be overridden', 'hop-by-hop'],
-            [[['name' => 'Transfer-Encoding', 'value' => 'v']], 'cannot be overridden', 'framing is the HTTP client\'s to set'],
-            [[['name' => 'upgrade', 'value' => 'v']], 'cannot be overridden', 'hop-by-hop'],
-            [[['name' => 'Authorization', 'value' => 'v']], 'cannot be overridden', 'the plugin carries its own credential in X-API-Key'],
-            [[['name' => 'COOKIE', 'value' => 'v']], 'cannot be overridden', 'a store cookie has no business on an API call'],
+            [[['name' => 'Two-Delegated-Authority-Token', 'value' => 'v']], 'is reserved', 'the delegated-authority token is minted, not configured'],
+            [[['name' => 'Connection', 'value' => 'v']], 'is reserved', 'a hop-by-hop control belongs to the connection, not the request'],
+            [[['name' => 'keep-alive', 'value' => 'v']], 'is reserved', 'hop-by-hop'],
+            [[['name' => 'PROXY-AUTHENTICATE', 'value' => 'v']], 'is reserved', 'hop-by-hop'],
+            [[['name' => 'Proxy-Authorization', 'value' => 'v']], 'is reserved', 'hop-by-hop'],
+            [[['name' => 'TE', 'value' => 'v']], 'is reserved', 'hop-by-hop'],
+            [[['name' => 'trailer', 'value' => 'v']], 'is reserved', 'hop-by-hop'],
+            [[['name' => 'Transfer-Encoding', 'value' => 'v']], 'is reserved', 'framing is the HTTP client\'s to set'],
+            [[['name' => 'upgrade', 'value' => 'v']], 'is reserved', 'hop-by-hop'],
+            [[['name' => 'Authorization', 'value' => 'v']], 'is reserved', 'the plugin carries its own credential in X-API-Key'],
+            [[['name' => 'COOKIE', 'value' => 'v']], 'is reserved', 'a store cookie has no business on an API call'],
             [[['name' => 'X-Split', 'value' => "a\r\nX-Injected: b"]], 'printable ASCII text', 'CRLF would splice a second header in'],
             [[['name' => 'X-Split', 'value' => "a\nb"]], 'printable ASCII text', 'a bare LF splits the line too'],
             // Without /D on the pattern, $ matches before a trailing newline.
@@ -9597,8 +9638,8 @@ final class BrandConfigSpec
             [[['name' => 'X-Unicode', 'value' => 'tøken']], 'printable ASCII text', 'a non-ASCII byte has no unambiguous encoding'],
             [[['name' => 'X-Empty', 'value' => '']], 'printable ASCII text', 'a named row with no value is not usable config'],
             [[['name' => 'X-Blank', 'value' => '   ']], 'printable ASCII text', 'nor one a proxy would trim to nothing'],
-            [[['name' => 'HTTP_X_CLOUD_TRACE_CONTEXT', 'value' => 'v']], 'cannot be overridden', 'make_request composes the trace header'],
-            [[['name' => 'Host', 'value' => '']], 'cannot be overridden', 'a reserved name is named before its value is judged'],
+            [[['name' => 'HTTP_X_CLOUD_TRACE_CONTEXT', 'value' => 'v']], 'is reserved', 'make_request composes the trace header'],
+            [[['name' => 'Host', 'value' => '']], 'is reserved', 'a reserved name is named before its value is judged'],
             [
                 [['name' => 'X-Dup', 'value' => 'a'], ['name' => 'x-dup', 'value' => 'b']],
                 'listed more than once',

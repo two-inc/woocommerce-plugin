@@ -1293,8 +1293,8 @@ msgid "Every custom request header needs a name."
 msgstr "Varje anpassat begäranshuvud måste ha ett namn."
 
 #: class/WC_Twoinc.php
-msgid "The header \"%s\" is set by the plugin itself and cannot be overridden here."
-msgstr "Huvudet \"%s\" sätts av tillägget självt och kan inte åsidosättas här."
+msgid "The header \"%s\" is reserved and cannot be set from this table."
+msgstr "Huvudet \"%s\" är reserverat och kan inte anges från denna tabell."
 
 #: class/WC_Twoinc.php
 msgid "The header \"%s\" is listed more than once."
@@ -1309,8 +1309,8 @@ msgid "The value of \"%s\" must be printable ASCII text and cannot be blank."
 msgstr "Värdet för \"%s\" måste vara skrivbar ASCII-text och får inte vara tomt."
 
 #: class/WC_Twoinc.php
-msgid "This value contains characters this field cannot hold, so it is not shown and is not being sent. Enter it again."
-msgstr "Detta värde innehåller tecken som detta fält inte kan hålla, så det visas inte och skickas inte. Skriv in det igen."
+msgid "This entry contains characters this field cannot hold, so it is not shown and is not being sent. Enter it again."
+msgstr "Denna post innehåller tecken som detta fält inte kan hålla, så den visas inte och skickas inte. Skriv in den igen."
 
 #: class/WC_Twoinc.php
 msgid "This row is not being sent, and the settings cannot be saved until it is corrected or removed."

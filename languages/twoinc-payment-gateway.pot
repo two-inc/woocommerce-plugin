@@ -1294,7 +1294,7 @@ msgid "Every custom request header needs a name."
 msgstr ""
 
 #: class/WC_Twoinc.php
-msgid "The header \"%s\" is set by the plugin itself and cannot be overridden here."
+msgid "The header \"%s\" is reserved and cannot be set from this table."
 msgstr ""
 
 #: class/WC_Twoinc.php
@@ -1310,7 +1310,7 @@ msgid "The value of \"%s\" must be printable ASCII text and cannot be blank."
 msgstr ""
 
 #: class/WC_Twoinc.php
-msgid "This value contains characters this field cannot hold, so it is not shown and is not being sent. Enter it again."
+msgid "This entry contains characters this field cannot hold, so it is not shown and is not being sent. Enter it again."
 msgstr ""
 
 #: class/WC_Twoinc.php

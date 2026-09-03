@@ -107,9 +107,15 @@ function esc_html($text)
     return htmlspecialchars((string) $text, ENT_QUOTES);
 }
 
+// Mirrors esc_attr: _wp_specialchars(..., $double_encode = false) leaves an
+// existing entity alone, and wp_check_invalid_utf8() blanks invalid UTF-8.
 function esc_attr($text)
 {
-    return htmlspecialchars((string) $text, ENT_QUOTES);
+    $text = (string) $text;
+    if ($text !== '' && preg_match('//u', $text) !== 1) {
+        return '';
+    }
+    return htmlspecialchars($text, ENT_QUOTES, 'UTF-8', false);
 }
 
 function esc_html_e($text, $domain = 'default')
