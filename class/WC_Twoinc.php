@@ -5711,15 +5711,15 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * Whether a one-line input posts a field back unchanged. Asked as a
-         * round trip rather than a character list, so any way the render
-         * rewrites a field — CR/LF and NUL dropped, invalid UTF-8 discarded —
-         * counts without having to be enumerated here.
+         * Whether a one-line input posts a field back unchanged: esc_attr
+         * discards a field that is not valid UTF-8, and the input drops these
+         * bytes. Deliberately not an entity round trip — esc_attr does not
+         * double-encode, so a field of literal "&amp;" would fail one.
          */
         private static function survives_the_form(string $field): bool
         {
-            $rendered = html_entity_decode(esc_attr($field), ENT_QUOTES, 'UTF-8');
-            return str_replace(["\r", "\n", "\0"], '', $rendered) === $field;
+            return ($field === '' || esc_attr($field) !== '')
+                && preg_match('/[\r\n\x00]/', $field) !== 1;
         }
 
         /** Undo WP's magic quotes on one posted scalar. */

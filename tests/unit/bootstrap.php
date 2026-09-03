@@ -107,9 +107,11 @@ function esc_html($text)
     return htmlspecialchars((string) $text, ENT_QUOTES);
 }
 
+// Mirrors esc_attr's _wp_specialchars(..., $double_encode = false): an
+// existing entity is left alone, and invalid UTF-8 yields ''.
 function esc_attr($text)
 {
-    return htmlspecialchars((string) $text, ENT_QUOTES);
+    return htmlspecialchars((string) $text, ENT_QUOTES, 'UTF-8', false);
 }
 
 function esc_html_e($text, $domain = 'default')

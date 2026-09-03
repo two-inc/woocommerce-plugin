@@ -9457,8 +9457,14 @@ final class BrandConfigSpec
         preg_match_all('/name="[^"]*\[(\d+)\]\[(name|value)\]" value="([^"]*)"/', $html, $matches, PREG_SET_ORDER);
         $rows = [];
         foreach ($matches as $match) {
-            // A one-line input drops these, and WP slashes what it posts.
-            $posted = str_replace(["\r", "\n", "\0"], '', html_entity_decode($match[3], ENT_QUOTES, 'UTF-8'));
+            // Undo only the escaping esc_attr applied, then drop what a
+            // one-line input drops; WP slashes what it posts.
+            $decoded = str_replace(
+                ['&quot;', '&#039;', '&lt;', '&gt;', '&amp;'],
+                ['"', "'", '<', '>', '&'],
+                $match[3]
+            );
+            $posted = str_replace(["\r", "\n", "\0"], '', $decoded);
             $rows[(int) $match[1]][$match[2]] = addslashes($posted);
         }
         return array_values($rows);
@@ -9517,6 +9523,8 @@ final class BrandConfigSpec
             [[['name' => "X-Foo\xFF", 'value' => 'v']], true, 1, 'invalid UTF-8 is discarded by the render, not by a character rule'],
             [[['name' => 'X-WAF-TOKEN', 'value' => "a\xFFb"]], true, 1, 'on the value side too'],
             [[['name' => "X-Foo\xFF", 'value' => '']], false, 1, 'and a nameless row so blanked is one the save drops'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => '&amp;']], false, 0, 'literal entity text is the merchant\'s value, not a rewrite'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => '&#038;']], false, 0, 'nor is a numeric one'],
             [
                 [['name' => 'X-Dup', 'value' => 'a'], ['name' => 'x-dup', 'value' => 'b']],
                 true,
