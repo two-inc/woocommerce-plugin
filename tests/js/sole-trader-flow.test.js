@@ -159,17 +159,10 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     $("#billing_email").val("buyer@example.test");
     soleTrader.bindPopupMessageListener();
     let resolveBuyer;
-    // The chip's own autofill probe answers "nobody" — the buyer has no Two
-    // session yet, which is what sends the click to the popup in the first
-    // place. Only the ACCEPTED handler's later lookup is left deferred, so
-    // the undecided state this arms is a popup on screen, not a probe.
-    let probeAnswered = false;
+    // The ACCEPTED handler's own buyer lookup, left deferred: that is the
+    // flow's one genuinely-undecided state — a popup on screen with no
+    // outcome written yet. The chip click makes no lookup of its own.
     jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => {
-      if (!probeAnswered) {
-        probeAnswered = true;
-        cb(null);
-        return;
-      }
       resolveBuyer = cb;
     });
     return {
@@ -1372,11 +1365,13 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
   });
 
   /**
-   * Autofill first, the hosted signup only when the probe reports nobody
-   * (Doug 2026-09-03). The probe reads the Two cookie, so it can only report
-   * a registration the buyer has already declared to Two.
+   * Autofill first, the hosted signup only when there is nobody to autofill
+   * (Doug 2026-09-03). The answer is resolved up front, on the same trigger
+   * as the token mint, and the chip click only reads it: an in-click lookup
+   * put `window.open()` outside the click's own gesture, which WebKit
+   * refuses.
    */
-  describe("the chip's autofill-first probe", () => {
+  describe("the chip's prefetched autofill answer", () => {
     const ENROLLED = {
       organization_number: "TWO:ST9",
       company_name: "Probed Trader",
@@ -1384,13 +1379,16 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       phone_number: "+4712345678"
     };
 
-    function probeReports(buyer) {
+    // Resolves the prefetch through `render()`, the real trigger, rather than
+    // writing the held state by hand.
+    function prefetched(buyer) {
       jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => cb(buyer));
+      soleTrader.render();
     }
 
     // Hands back `answer(buyer)`, so a test can assert what holds while the
-    // probe is still out.
-    function deferredProbe() {
+    // prefetch is still out.
+    function deferredPrefetch() {
       const state = { calls: 0, answer: null };
       jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => {
         state.calls += 1;
@@ -1403,9 +1401,8 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       return $(".twoinc-sole-trader-note-slot").hasClass("twoinc-sole-trader-toggle--busy");
     }
 
-    test("a reported registration is adopted with no popup at all", () => {
-      soleTrader.render();
-      probeReports(ENROLLED);
+    test("a prefetched registration is adopted with no popup at all", () => {
+      prefetched(ENROLLED);
 
       soleTrader.onModeChipClick("sole_trader");
 
@@ -1418,8 +1415,8 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       expect($(".twoinc-sole-trader-note").hasClass("hidden")).toBe(true);
     });
 
-    test("the reported buyer's own details land too, so the whole object is adopted", () => {
-      probeReports(ENROLLED);
+    test("the prefetched buyer's own details land too, so the whole object is adopted", () => {
+      prefetched(ENROLLED);
 
       soleTrader.onModeChipClick("sole_trader");
 
@@ -1430,8 +1427,8 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
      * Same criterion as the post-signup path — a buyer object at all — so the
      * two routes into a capture cannot disagree about what a complete one is.
      */
-    test("a report with no buyer in it resolves to the popup, exactly as today", () => {
-      probeReports(null);
+    test("a prefetch with no buyer in it resolves to the popup", () => {
+      prefetched(null);
 
       soleTrader.onModeChipClick("sole_trader");
 
@@ -1441,139 +1438,230 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     });
 
     /**
-     * Through the REAL probe, not a stub of it: "the probe could not answer"
-     * is the branch the popup fallback exists for, and a mocked `cb(null)`
-     * proves nothing about the transport reaching it.
+     * The property the in-click lookup broke and this design restores:
+     * `window.open()` runs in the click handler's OWN call stack, never after
+     * a promise tick. Asserted through the REAL transport, so a lookup moved
+     * back into the click cannot pass this by resolving synchronously.
      */
     test.each([
-      {
-        respond: () => Promise.reject(new Error("offline")),
-        description: "the request fails outright"
-      },
+      { respond: () => Promise.reject(new Error("offline")), description: "the request failed" },
       {
         respond: () => Promise.resolve({ ok: false, status: 404, text: () => Promise.resolve("") }),
-        description: "the API reports no buyer on the cookie (404)"
+        description: "the API reported no buyer on the cookie (404)"
       },
       {
         respond: () =>
           Promise.resolve({ ok: false, status: 500, text: () => Promise.resolve("boom") }),
-        description: "the API errors"
+        description: "the API errored"
       }
-    ])("opens the popup when $description", async ({ respond }) => {
+    ])("opens the popup inside the click's own gesture when $description", async ({ respond }) => {
       soleTrader.fetchCurrentBuyer.mockRestore();
       global.fetch = jest.fn(respond);
-
-      soleTrader.onModeChipClick("sole_trader");
-      // A macrotask, not a microtask: the probe's own promise chain has to
-      // drain before the fallback launch has happened at all.
+      soleTrader.render();
+      // The prefetch's own promise chain drains here, BEFORE the click — a
+      // macrotask, since the transport's `.then()`s are microtasks.
       await new Promise((resolve) => setTimeout(resolve, 0));
       delete global.fetch;
+      let inClickHandler = false;
+      let openedInGesture = null;
+      window.open = jest.fn(() => {
+        openedInGesture = inClickHandler;
+        return { closed: false };
+      });
 
-      expect(opened).toHaveLength(1);
-    });
-
-    test("the popup waits for the probe, with the busy state up meanwhile", () => {
-      const probe = deferredProbe();
-      soleTrader.render();
-
+      inClickHandler = true;
       soleTrader.onModeChipClick("sole_trader");
-      expect(opened).toHaveLength(0);
-      expect(busy()).toBe(true);
+      inClickHandler = false;
 
-      probe.answer(null);
-
-      expect(opened).toHaveLength(1);
-      // Still up: the popup's own watcher holds a flight of its own until the
-      // window goes away.
-      expect(busy()).toBe(true);
-    });
-
-    test("an adoption takes the busy state down with it, leaving no stuck spinner", () => {
-      const probe = deferredProbe();
-      soleTrader.render();
-      soleTrader.onModeChipClick("sole_trader");
-
-      probe.answer(ENROLLED);
-
-      expect(busy()).toBe(false);
-      expect(soleTrader.flightDepth).toBe(0);
-    });
-
-    test("a second click while the probe is still out neither re-probes nor stacks", () => {
-      const probe = deferredProbe();
-
-      soleTrader.onModeChipClick("sole_trader");
-      soleTrader.onModeChipClick("sole_trader");
-      expect(probe.calls).toBe(1);
-
-      probe.answer(ENROLLED);
-
-      expect(opened).toHaveLength(0);
-      expect($("#company_id").val()).toBe("TWO:ST9");
+      expect(window.open).toHaveBeenCalledTimes(1);
+      expect(openedInGesture).toBe(true);
     });
 
     /**
-     * A probe left outstanding holds `isDeciding()`, which is what every other
-     * mode chip's own guard refuses on — so without cancelling it, the chip
-     * the buyer pressed would do nothing for the length of the round trip.
+     * A prefetch that has not landed by the time the buyer clicks resolves to
+     * the popup rather than waiting on it: losing the gesture costs more than
+     * one avoidable popup, and the hosted flow recognises a buyer it knows
+     * anyway.
      */
-    test("another mode chip pressed while the probe is out is honoured, not dead", () => {
-      harness.openCompanyPanel($, ctx.helper);
-      const probe = deferredProbe();
+    test("an unresolved answer opens the popup synchronously, making no lookup of its own", () => {
+      const prefetch = deferredPrefetch();
+      soleTrader.render();
+      expect(soleTrader.autofillResult).toBeNull();
+      let inClickHandler = false;
+      let openedInGesture = null;
+      window.open = jest.fn(() => {
+        openedInGesture = inClickHandler;
+        return { closed: false };
+      });
+
+      inClickHandler = true;
       soleTrader.onModeChipClick("sole_trader");
+      inClickHandler = false;
+
+      expect(openedInGesture).toBe(true);
+      // One call, the prefetch's — the click added none.
+      expect(prefetch.calls).toBe(1);
+    });
+
+    test.each([
+      { answer: ENROLLED, description: "a registration to adopt" },
+      { answer: null, description: "nobody, so the popup opens" }
+    ])(
+      "the click itself makes no round trip when the prefetch reported $description",
+      ({ answer }) => {
+        prefetched(answer);
+        soleTrader.fetchCurrentBuyer.mockClear();
+
+        soleTrader.onModeChipClick("sole_trader");
+
+        expect(soleTrader.fetchCurrentBuyer).not.toHaveBeenCalled();
+      }
+    );
+
+    /**
+     * The prefetch is a background round trip nobody asked for: holding
+     * `isBusy()` for it would over-block the Business chip and
+     * `reopenSearch()` for the length of it, which is what the in-click
+     * lookup did.
+     */
+    test("an outstanding prefetch holds no busy state and no flight", () => {
+      const prefetch = deferredPrefetch();
+
+      soleTrader.render();
+
+      expect(busy()).toBe(false);
+      expect(soleTrader.flightDepth).toBe(0);
+      expect(soleTrader.isDeciding()).toBe(false);
+      expect(prefetch.calls).toBe(1);
+    });
+
+    test("a re-render does not start a second, concurrent prefetch", () => {
+      const prefetch = deferredPrefetch();
+
+      soleTrader.render();
+      soleTrader.render();
+
+      expect(prefetch.calls).toBe(1);
+    });
+
+    /**
+     * Without tokens the lookup answers `null` unconditionally, so running it
+     * anyway would latch a false "nobody" over a buyer who does have a
+     * registration.
+     */
+    test("a mint that failed makes no prefetch, rather than latching a false nobody", () => {
+      soleTrader.tokens = null;
+      const prefetch = deferredPrefetch();
+      jest.spyOn(soleTrader, "fetchTokens").mockImplementation((cb) => {
+        if (cb) cb(false);
+      });
+
+      soleTrader.render();
+
+      expect(prefetch.calls).toBe(0);
+      expect(soleTrader.autofillResult).toBeNull();
+    });
+
+    /**
+     * The defect class the in-click lookup kept producing in review: an
+     * answer landing after the buyer has moved on, adopting behind them. A
+     * prefetch cannot adopt anything at all — its only effect is the held
+     * value the next click reads.
+     */
+    test("a prefetch answering after the buyer went into sole-trader mode adopts nothing behind them", () => {
+      const prefetch = deferredPrefetch();
+      soleTrader.render();
+      soleTrader.onModeChipClick("sole_trader");
+      expect(opened).toHaveLength(1);
+
+      prefetch.answer(ENROLLED);
+
+      expect($("#company_id").val()).toBe("");
+      expect(opened).toHaveLength(1);
+    });
+
+    test("a prefetch answering after the buyer left sole-trader mode changes nothing", () => {
+      const prefetch = deferredPrefetch();
+      soleTrader.render();
+      soleTrader.onModeChipClick("sole_trader");
+      soleTrader.setMode("business");
+
+      prefetch.answer(ENROLLED);
+
+      expect($("#company_id").val()).toBe("");
+      expect(soleTrader.mode).toBe("business");
+    });
+
+    /**
+     * The other reviewed defect class: a state reset landing mid-flight.
+     * Nothing the prefetch touches is flight state, so the chip the buyer
+     * pressed acts immediately and the late answer spends no settle.
+     */
+    test("another mode chip pressed while the prefetch is out is honoured, and its late answer settles nothing", () => {
+      harness.openCompanyPanel($, ctx.helper);
+      const prefetch = deferredPrefetch();
+      soleTrader.render();
 
       clickChip("registered");
 
       expect(soleTrader.mode).toBe("business");
-      expect(soleTrader.isDeciding()).toBe(false);
       expect(soleTrader.flightDepth).toBe(0);
 
-      // And the answer that lands afterwards neither adopts nor opens
-      // anything behind the buyer, nor settles anything — the unrelated
-      // flight below stands in for whatever the buyer went on to start.
+      // The unrelated flight below stands in for whatever the buyer went on
+      // to start.
       soleTrader.beginFlight();
-      probe.answer(ENROLLED);
+      prefetch.answer(ENROLLED);
 
+      expect(soleTrader.flightDepth).toBe(1);
+      expect($("#company_id").val()).toBe("");
       expect(opened).toHaveLength(0);
-      expect($("#company_id").val()).toBe("");
-      expect(soleTrader.flightDepth).toBe(1);
     });
 
-    test("a cancelled probe's late answer does not spend the next flight's settle", () => {
-      harness.openCompanyPanel($, ctx.helper);
-      const probe = deferredProbe();
-      soleTrader.onModeChipClick("sole_trader");
-      clickChip("registered");
-      const staleAnswer = probe.answer;
+    /**
+     * Tokens are country-scoped, so an answer fetched under authority for a
+     * country the buyer has since left must not become the held value.
+     */
+    test("an answer landing after a country change is not held", () => {
+      $("#billing_country").append('<option value="NO">NO</option>');
+      const prefetch = deferredPrefetch();
+      soleTrader.render();
 
-      // A second trip into sole-trader mode, still deciding, when the first
-      // trip's abandoned request finally lands.
-      soleTrader.onModeChipClick("sole_trader");
-      staleAnswer(ENROLLED);
+      $("#billing_country").val("NO");
+      prefetch.answer(ENROLLED);
 
-      // The live probe still owns the busy state — a stale settle would have
-      // taken the spinner down under it.
-      expect(soleTrader.flightDepth).toBe(1);
-      expect(busy()).toBe(true);
-      expect($("#company_id").val()).toBe("");
+      expect(soleTrader.autofillResult).toBeNull();
     });
 
-    test("a probe answering after the buyer left sole-trader mode changes nothing", () => {
-      const probe = deferredProbe();
-      soleTrader.onModeChipClick("sole_trader");
-
+    /**
+     * A "select a different sole trader" changes who the cookie's buyer is,
+     * so the held answer has to follow it — otherwise a later trip back into
+     * the mode re-adopts the registration the buyer just replaced.
+     */
+    test("a completed signup refreshes the held answer, so a later trip adopts the new trader", () => {
+      prefetched(ENROLLED);
+      soleTrader.setMode("sole_trader");
+      soleTrader.bindPopupMessageListener();
+      const SIGNED_UP = { organization_number: "TWO:ST2", company_name: "Second Trader" };
+      jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => cb(SIGNED_UP));
+      window.dispatchEvent(
+        new window.MessageEvent("message", {
+          data: "ACCEPTED",
+          origin: "https://checkout.example.test"
+        })
+      );
       soleTrader.setMode("business");
-      probe.answer(ENROLLED);
 
-      expect(opened).toHaveLength(0);
-      expect($("#company_id").val()).toBe("");
-      expect(soleTrader.mode).toBe("business");
+      soleTrader.onModeChipClick("sole_trader");
+
+      expect($("#company_id").val()).toBe("TWO:ST2");
+      expect($("#billing_company").val()).toBe("Second Trader");
     });
 
-    test("re-clicking the chip once adopted goes straight to the re-signup, with no probe", () => {
+    test("re-clicking the chip once adopted goes straight to the re-signup, with no lookup", () => {
       soleTrader.setMode("sole_trader");
       soleTrader.setCompany("TWO:ST1", "First Trader");
-      probeReports(ENROLLED);
+      soleTrader.autofillResult = ENROLLED;
+      soleTrader.fetchCurrentBuyer.mockClear();
 
       soleTrader.onModeChipClick("sole_trader");
 
@@ -1590,11 +1678,12 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         description: "Enter"
       }
     ])(
-      "the select-a-different-sole-trader link opens the popup on $description whatever the probe would report",
+      "the select-a-different-sole-trader link opens the popup on $description whatever the held answer says",
       ({ activate }) => {
         soleTrader.setMode("sole_trader");
         soleTrader.setCompany("TWO:ST1", "First Trader");
-        probeReports(ENROLLED);
+        soleTrader.autofillResult = ENROLLED;
+        soleTrader.fetchCurrentBuyer.mockClear();
 
         activate(soleTrader.getDifferentSoleTraderBtnNode());
 
@@ -1641,6 +1730,16 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
           expect(ajax.calls[1].url).toContain("two_sole_trader_tokens");
         }
         expect(window.open).not.toHaveBeenCalled();
+      });
+
+      test("a successful mint prefetches the autofill answer behind it", () => {
+        const prefetch = deferredPrefetch();
+
+        soleTrader.refresh();
+        ajax.last().succeed({ success: true, data: { available: true } });
+        ajax.last().succeed({ success: true, data: { autofill_token: "autofill" } });
+
+        expect(prefetch.calls).toBe(1);
       });
     });
   });
