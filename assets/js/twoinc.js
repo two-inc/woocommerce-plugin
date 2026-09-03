@@ -2916,25 +2916,32 @@ let twoincTermChips = {
  * GET /autofill/v1/buyer/current. Mirrors the Magento reference flow.
  */
 /**
- * The prefetched autofill answer, `{ country, buyer }` with `buyer` `false`
- * for "nobody on the cookie", or `null` while unresolved.
+ * Prefetched autofill answers by country — the buyer object, or `false` for
+ * "nobody on the cookie". An absent entry means unresolved.
  *
- * Per page, not per controller: the billing and delivery roles each own an
- * instance, and a signup completed through one must not leave the other
- * prompting an already-registered buyer to sign up again. Country-keyed
- * because the authority it was fetched under is country-scoped, so an answer
- * from before a country change is not an answer for this one.
+ * Keyed by country because the delegated authority each was fetched under is,
+ * and shared by every controller because the answer describes the buyer rather
+ * than the role: the billing and delivery panels each own an instance, and a
+ * signup completed through one must not leave the other prompting the same
+ * buyer to sign up again. Two roles on different countries hold one answer
+ * each, which is why this is a map and not a single slot.
  */
-let soleTraderAutofill = null;
+const soleTraderAutofillByCountry = {};
 
-/** The country an outstanding prefetch is for, so two instances make one request. */
-let soleTraderAutofillPending = null;
+/** Countries with a lookup outstanding, so two controllers make one request. */
+const soleTraderAutofillPending = {};
+
+/** Set by a rate-limited lookup: `render()` runs on every `updated_checkout`. */
+let soleTraderAutofillBackoffUntil = 0;
 
 function createSoleTraderController(companySearch) {
   const controller = {
     mode: "business", // 'business' | 'sole_trader'
     availabilityByCountry: {},
     tokens: null,
+
+    /** The country `tokens` were minted for — their delegated authority is scoped to it. */
+    tokenCountry: null,
 
     /** Backoff after a 429: callers gate on `!tokens`, so a failed mint otherwise re-mints every render. */
     tokenMintBackoffUntil: 0,
@@ -3209,29 +3216,51 @@ function createSoleTraderController(companySearch) {
       // A failed mint leaves no tokens, and the lookup then answers `null`
       // unconditionally — latching a false "nobody" over a real registration.
       if (!controller.tokens) return;
+      // Tokens are minted once, for the country the buyer had then, so after a
+      // country change there is no authority to ask under and the chip falls
+      // back to the signup popup.
       const country = controller.currentCountry();
-      if (!country || soleTraderAutofillPending === country) return;
+      if (!country || controller.tokenCountry !== country) return;
+      if (soleTraderAutofillPending[country]) return;
       if (controller.heldAutofill() !== null) return;
-      soleTraderAutofillPending = country;
-      controller.fetchCurrentBuyer(function (buyer, failed) {
-        if (soleTraderAutofillPending === country) soleTraderAutofillPending = null;
+      if (Date.now() < soleTraderAutofillBackoffUntil) return;
+      soleTraderAutofillPending[country] = true;
+      controller.fetchCurrentBuyer(function (buyer, failed, response) {
+        delete soleTraderAutofillPending[country];
         // A dropped request is not an answer: held, it would latch "nobody"
-        // for the life of the page and block the next render's retry.
-        if (failed) return;
+        // for the life of the page and block the next render's retry. A rate
+        // limit is the one failure retrying makes worse.
+        if (failed) {
+          if (response && response.status === 429) {
+            soleTraderAutofillBackoffUntil =
+              Date.now() +
+              twoincUtilHelper.retryAfterMs({
+                getResponseHeader: function (name) {
+                  return response.headers.get(name);
+                }
+              });
+          }
+          return;
+        }
         controller.holdAutofill(buyer || false, country);
       });
     },
 
-    /** @returns {Object|boolean|null} the held answer for the current country, `null` if there is none */
+    /**
+     * @returns {Object|boolean|null} the answer held for this role's country,
+     *   `null` when there is none. An unknown country is `null` too — the
+     *   jurisdiction decides which authority the answer came from, so without
+     *   one the click belongs on the signup popup.
+     */
     heldAutofill: function () {
-      if (!soleTraderAutofill || soleTraderAutofill.country !== controller.currentCountry()) {
-        return null;
-      }
-      return soleTraderAutofill.buyer;
+      const country = controller.currentCountry();
+      if (!country) return null;
+      const held = soleTraderAutofillByCountry[country];
+      return held === undefined ? null : held;
     },
 
     holdAutofill: function (buyer, country) {
-      soleTraderAutofill = { country: country, buyer: buyer };
+      soleTraderAutofillByCountry[country] = buyer;
     },
 
     /**
@@ -3437,16 +3466,12 @@ function createSoleTraderController(companySearch) {
       }
       controller.setMode("sole_trader");
       // Autofill first, hosted signup only when there is nobody to autofill
-      // (Doug 2026-09-03, reversing the 2026-08-21 ruling that a company may
-      // only ever be filled in by a trip through the signup flow). The
-      // answer's subject is a cookie first-party to Two itself, unforgeable
-      // by a third party, so it can only report a registration this buyer has
-      // already declared to Two.
+      // (TWO-40). The answer's subject is a cookie first-party to Two itself,
+      // so it can only report a registration this buyer already declared.
       //
-      // Read here, never fetched here: `render()` resolves it alongside the
-      // token mint, and an unresolved answer means the popup rather than a
-      // wait. Both arms therefore stay inside the click's own gesture, which
-      // WebKit requires of `window.open()` — see `openPopup`.
+      // Read, never fetched: `render()` resolves it, and an unresolved answer
+      // means the popup rather than a wait, so both arms stay in the click's
+      // own gesture — see `openPopup`.
       const autofilled = controller.heldAutofill();
       if (autofilled) {
         // Same criterion as the post-signup path: a buyer object at all.
@@ -4178,6 +4203,7 @@ function createSoleTraderController(companySearch) {
           }
           if (response && response.success && response.data && response.data.autofill_token) {
             controller.tokens = response.data;
+            controller.tokenCountry = country;
             controller.bindPopupMessageListener();
             controller.scheduleTokenRefresh();
             if (cb) cb(true);
@@ -4266,9 +4292,8 @@ function createSoleTraderController(companySearch) {
      * details, or cb(null) when none exist (404). No UI side effects — the
      * caller decides what to do with the result.
      *
-     * A request that never produced an answer invokes cb(null, true) instead:
-     * "nobody on the cookie" and "could not ask" are the same for a caller
-     * acting once, but not for `prefetchAutofill`, which holds the answer.
+     * A request that produced no answer invokes cb(null, true, response) — a
+     * distinction that only matters to a caller which holds the answer.
      */
     fetchCurrentBuyer: function (cb) {
       if (!controller.tokens) {
@@ -4283,6 +4308,9 @@ function createSoleTraderController(companySearch) {
           headers[name] = customHeaders[name];
         });
       }
+      // The response behind a failure, where there was one, for a caller that
+      // treats a refusal differently from a dropped connection.
+      let refused = null;
       fetch(window.twoinc.twoinc_checkout_host + "/autofill/v1/buyer/current", {
         credentials: "include",
         headers: headers
@@ -4296,6 +4324,7 @@ function createSoleTraderController(companySearch) {
           // hangs.
           return response.text().then(function () {
             if (response.status === 404) return null;
+            refused = response;
             throw new Error("autofill/v1/buyer/current failed");
           });
         })
@@ -4303,7 +4332,7 @@ function createSoleTraderController(companySearch) {
           cb(json || null);
         })
         .catch(function () {
-          cb(null, true);
+          cb(null, true, refused);
         });
     },
 
@@ -4441,9 +4470,7 @@ function createSoleTraderController(companySearch) {
               );
             }
             if (resolved) {
-              // A signup changes who the cookie's buyer is, so the held
-              // answer follows it rather than a later trip re-adopting the
-              // registration just replaced.
+              // A signup replaces the cookie's buyer.
               controller.holdAutofill(buyer, controller.currentCountry());
               controller.setCompany(buyer.organization_number, buyer.company_name, buyer);
               controller.showNote(false);

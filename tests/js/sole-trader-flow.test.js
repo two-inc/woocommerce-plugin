@@ -86,6 +86,8 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       autofill_token: "autofill",
       signup_url: "https://checkout.example.test/soletrader/signup"
     };
+    // The country the form below is on: tokens carry authority for one.
+    soleTrader.tokenCountry = "GB";
     // No Two session by default, so a chip click resolves to the hosted
     // signup — the path every popup expectation below is written against.
     // Synchronous, like a browser answering from a cookie it already has.
@@ -1366,10 +1368,9 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
 
   /**
    * Autofill first, the hosted signup only when there is nobody to autofill
-   * (Doug 2026-09-03). The answer is resolved up front, on the same trigger
-   * as the token mint, and the chip click only reads it: an in-click lookup
-   * put `window.open()` outside the click's own gesture, which WebKit
-   * refuses.
+   * (TWO-40). The answer is resolved up front, on the same trigger as the
+   * token mint, and the chip click only reads it — so its `window.open()`
+   * stays in the click's own gesture, which WebKit requires.
    */
   describe("the chip's prefetched autofill answer", () => {
     const ENROLLED = {
@@ -1438,10 +1439,10 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     });
 
     /**
-     * The property the in-click lookup broke and this design restores:
-     * `window.open()` runs in the click handler's OWN call stack, never after
-     * a promise tick. Asserted through the REAL transport, so a lookup moved
-     * back into the click cannot pass this by resolving synchronously.
+     * `window.open()` runs in the click handler's OWN call stack, never
+     * after a promise tick. Asserted through the REAL transport, left
+     * installed across the click, so a lookup made there would reach it and
+     * lose the gesture.
      */
     test.each([
       { respond: () => Promise.reject(new Error("offline")), description: "the request failed" },
@@ -1592,7 +1593,6 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     });
 
     /**
-     * The other reviewed defect class: a state reset landing mid-flight.
      * Nothing the prefetch touches is flight state, so the chip the buyer
      * pressed acts immediately and the late answer spends no settle.
      */
@@ -1652,9 +1652,8 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     });
 
     /**
-     * A dropped request is not an answer. Latching it would leave a buyer who
-     * hit one bad request signing up again, for the life of the page — where
-     * the deleted in-click lookup would have retried on the next click.
+     * A dropped request is not an answer. Latching it would leave a buyer
+     * who hit one bad request signing up again for the life of the page.
      */
     test("a prefetch whose request never answered is retried by the next render", async () => {
       soleTrader.fetchCurrentBuyer.mockRestore();
@@ -1681,13 +1680,24 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
      * each own a controller, and a buyer who signed up through one must not
      * be asked to sign up again by the other.
      */
-    test("both company-search instances read the one held answer, on one request", () => {
+    // The delivery role's own controller, on `country`, with tokens for it.
+    function shippingOn(country) {
       $("form[name='checkout']").append(
-        '<select id="shipping_country"><option value="GB" selected>GB</option></select>'
+        '<select id="shipping_country"><option value="' +
+          country +
+          '" selected>' +
+          country +
+          "</option></select>"
       );
       const shipping = ctx.shippingHelper.soleTrader;
-      const shippingLookup = jest.spyOn(shipping, "fetchCurrentBuyer");
       shipping.tokens = soleTrader.tokens;
+      shipping.tokenCountry = country;
+      return shipping;
+    }
+
+    test("both company-search instances read the one held answer, on one request", () => {
+      const shipping = shippingOn("GB");
+      const shippingLookup = jest.spyOn(shipping, "fetchCurrentBuyer");
       const prefetch = deferredPrefetch();
 
       soleTrader.render();
@@ -1697,6 +1707,126 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       expect(prefetch.calls).toBe(1);
       expect(shippingLookup).not.toHaveBeenCalled();
       expect(shipping.heldAutofill()).toEqual(ENROLLED);
+    });
+
+    /**
+     * Woo lets the delivery address sit in another country, and the two roles'
+     * lookups then carry different authority. One slot for both would have the
+     * second answer land on the first, so the first role's chip prompts a
+     * buyer it already had an answer for.
+     */
+    test("two roles on different countries each keep their own answer", () => {
+      const shipping = shippingOn("NO");
+      const billingPrefetch = deferredPrefetch();
+      const shippingAnswers = [];
+      jest.spyOn(shipping, "fetchCurrentBuyer").mockImplementation((cb) => {
+        shippingAnswers.push(cb);
+      });
+
+      soleTrader.render();
+      shipping.render();
+      shippingAnswers[0](null);
+      billingPrefetch.answer(ENROLLED);
+
+      expect(shippingAnswers).toHaveLength(1);
+      expect(soleTrader.heldAutofill()).toEqual(ENROLLED);
+      expect(shipping.heldAutofill()).toBe(false);
+    });
+
+    test.each([
+      { answer: ENROLLED, description: "a registration" },
+      { answer: null, description: "nobody" }
+    ])("an answer of $description is not looked up twice", ({ answer }) => {
+      const prefetch = deferredPrefetch();
+      soleTrader.render();
+      prefetch.answer(answer);
+
+      soleTrader.render();
+
+      expect(prefetch.calls).toBe(1);
+    });
+
+    /**
+     * A 404 IS an answer — the endpoint saying nobody is on the cookie —
+     * where a 5xx is not. Told apart by whether the next render asks again.
+     */
+    test.each([
+      {
+        respond: () => Promise.resolve({ ok: false, status: 404, text: () => Promise.resolve("") }),
+        expectedRequests: 1,
+        description: "a 404 is held as nobody"
+      },
+      {
+        respond: () =>
+          Promise.resolve({ ok: false, status: 500, text: () => Promise.resolve("boom") }),
+        expectedRequests: 2,
+        description: "a 500 is not held, so the next render asks again"
+      },
+      {
+        respond: () =>
+          Promise.resolve({
+            ok: false,
+            status: 429,
+            text: () => Promise.resolve(""),
+            headers: { get: () => "120" }
+          }),
+        expectedRequests: 1,
+        description: "a 429 backs off rather than asking again"
+      }
+    ])("$description", async ({ respond, expectedRequests }) => {
+      soleTrader.fetchCurrentBuyer.mockRestore();
+      const transport = jest.fn(respond);
+      global.fetch = transport;
+
+      soleTrader.render();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      soleTrader.render();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      delete global.fetch;
+
+      expect(transport).toHaveBeenCalledTimes(expectedRequests);
+    });
+
+    /**
+     * The jurisdiction decides which authority an answer came from, so an
+     * unreadable country is not a country the held answer answers for — the
+     * chip goes to the popup rather than adopting under an unknown one.
+     * WooCommerce leaves the field briefly unreadable while replacing it.
+     */
+    test("an unreadable country reads no held answer, whatever is held", () => {
+      soleTrader.holdAutofill(ENROLLED, "");
+      soleTrader.holdAutofill(ENROLLED, "GB");
+      $("#billing_country").val("");
+
+      soleTrader.onModeChipClick("sole_trader");
+
+      expect(soleTrader.heldAutofill()).toBeNull();
+      expect($("#company_id").val()).toBe("");
+      expect(opened).toHaveLength(1);
+    });
+
+    test("no lookup is made while the country is unreadable", () => {
+      $("#billing_country").val("");
+      const prefetch = deferredPrefetch();
+
+      soleTrader.render();
+
+      expect(prefetch.calls).toBe(0);
+    });
+
+    /**
+     * Tokens carry authority for the country they were minted on and are
+     * never re-minted, so after a country change there is nothing to ask
+     * under — the chip falls back to the popup rather than asking anyway.
+     */
+    test("no lookup is made under another country's tokens", () => {
+      $("#billing_country").append('<option value="NO">NO</option>');
+      const prefetch = deferredPrefetch();
+
+      $("#billing_country").val("NO");
+      soleTrader.render();
+
+      expect(prefetch.calls).toBe(0);
     });
 
     /**
