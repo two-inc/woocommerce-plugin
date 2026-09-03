@@ -9398,8 +9398,10 @@ final class BrandConfigSpec
         $gateway->test_post_data = [
             $gateway->get_field_key('api_key') => 'new-key',
             $gateway->get_field_key('custom_headers') => [
-                // Refused on save, so nothing afterwards may read it as config.
-                0 => ['name' => 'X-Bad', 'value' => "a\r\nb"],
+                // A duplicate pair the save refuses whole, while the read path
+                // would happily keep the first row of it.
+                0 => ['name' => 'X-Dup', 'value' => 'first'],
+                1 => ['name' => 'x-dup', 'value' => 'second'],
             ],
             $gateway->get_field_key('surcharge_tax_treatment') => 'standard',
         ];
