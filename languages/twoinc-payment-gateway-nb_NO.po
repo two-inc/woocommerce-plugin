@@ -1309,12 +1309,12 @@ msgid "The value of \"%s\" must be printable ASCII text and cannot be blank."
 msgstr "Verdien til \"%s\" må være skrivbar ASCII-tekst og kan ikke være tom."
 
 #: class/WC_Twoinc.php
-msgid "This row is not being sent."
-msgstr "Denne raden sendes ikke."
+msgid "Retype this value: it contains characters this field cannot hold, so saving the form as it stands would store a different value."
+msgstr "Skriv inn denne verdien på nytt: den inneholder tegn dette feltet ikke kan holde, så lagrer du skjemaet som det står lagres en annen verdi."
 
 #: class/WC_Twoinc.php
-msgid "This value is not being sent because it is not printable ASCII text. Retype it — saving the form as it stands will store a changed value."
-msgstr "Denne verdien sendes ikke fordi den ikke er skrivbar ASCII-tekst. Skriv den inn på nytt — lagrer du skjemaet som det står, lagres en endret verdi."
+msgid "This row is not being sent, and the settings cannot be saved until it is corrected or removed."
+msgstr "Denne raden sendes ikke, og innstillingene kan ikke lagres før den er rettet eller fjernet."
 
 #: class/WC_Twoinc.php
 msgid "If your IT administrator asks you to add headers to the calls your store makes to the %s API (for example a firewall token), add them here. Every header listed is sent on all calls your store makes from your server."

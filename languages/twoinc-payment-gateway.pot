@@ -1310,11 +1310,11 @@ msgid "The value of \"%s\" must be printable ASCII text and cannot be blank."
 msgstr ""
 
 #: class/WC_Twoinc.php
-msgid "This row is not being sent."
+msgid "Retype this value: it contains characters this field cannot hold, so saving the form as it stands would store a different value."
 msgstr ""
 
 #: class/WC_Twoinc.php
-msgid "This value is not being sent because it is not printable ASCII text. Retype it — saving the form as it stands will store a changed value."
+msgid "This row is not being sent, and the settings cannot be saved until it is corrected or removed."
 msgstr ""
 
 #: class/WC_Twoinc.php

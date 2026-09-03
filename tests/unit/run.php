@@ -9265,14 +9265,24 @@ final class BrandConfigSpec
                 'rejected-header-value message',
             ],
             [
-                'This row is not being sent.',
-                'This row is not being sent.',
+                'This row is not being sent, and the settings cannot be saved until it is corrected or removed.',
+                'This row is not being sent, and the settings cannot be saved until it is corrected or removed.',
                 [
-                    'nb_NO' => 'Denne raden sendes ikke.',
-                    'nl_NL' => 'Deze rij wordt niet verzonden.',
-                    'sv_SE' => 'Denna rad skickas inte.',
+                    'nb_NO' => 'Denne raden sendes ikke, og innstillingene kan ikke lagres før den er rettet eller fjernet.',
+                    'nl_NL' => 'Deze rij wordt niet verzonden en de instellingen kunnen niet worden opgeslagen totdat deze is gecorrigeerd of verwijderd.',
+                    'sv_SE' => 'Denna rad skickas inte och inställningarna kan inte sparas förrän den har rättats eller tagits bort.',
                 ],
                 'dropped-row notice',
+            ],
+            [
+                'Retype this value: it contains characters this field cannot hold, so saving the form as it stands would store a different value.',
+                'Retype this value: it contains characters this field cannot hold, so saving the form as it stands would store a different value.',
+                [
+                    'nb_NO' => 'Skriv inn denne verdien på nytt: den inneholder tegn dette feltet ikke kan holde, så lagrer du skjemaet som det står lagres en annen verdi.',
+                    'nl_NL' => 'Typ deze waarde opnieuw: hij bevat tekens die dit veld niet kan bevatten, dus als u het formulier nu opslaat wordt een andere waarde opgeslagen.',
+                    'sv_SE' => 'Skriv in värdet igen: det innehåller tecken som detta fält inte kan hålla, så sparar du formuläret som det är sparas ett annat värde.',
+                ],
+                'retype warning',
             ],
         ];
         foreach ($cases as [$msgid, $source, $expected, $description]) {
@@ -9444,44 +9454,48 @@ final class BrandConfigSpec
         TinyAssert::same([], get_option($gateway->get_option_key(), [])['custom_headers'] ?? null);
     }
 
-    /**
-     * The form must never show a row as travelling that the request assembly
-     * drops, so every rejection the read path applies carries a notice.
-     */
+    /** The form must never show a row as travelling that the request assembly drops. */
     private static function testEveryDroppedRowIsMarkedInTheForm(): void
     {
-        $retype = 'saving the form as it stands will store a changed value';
+        // [rows, dropped, retype-warned, description]. The two are independent:
+        // a row can be dropped for its name while its value is also unholdable.
         $cases = [
-            [[['name' => 'X-WAF-TOKEN', 'value' => 'waf-token-1']], null, 'a sendable row carries no notice'],
-            [[['name' => 'X-WAF-TOKEN', 'value' => "waf\r\ntoken"]], $retype, 'a text input hides a newline, so say it will be repaired'],
-            [[['name' => 'X-WAF-TOKEN', 'value' => 'tøken']], $retype, 'as it does a non-ASCII byte'],
-            [[['name' => 'X-WAF-TOKEN', 'value' => '   ']], 'This row is not being sent.', 'a blank value is visibly blank, so no retype warning'],
-            [[['name' => 'X Bad Name', 'value' => 'v']], 'This row is not being sent.', 'an unusable name'],
-            [[['name' => 'Host', 'value' => 'v']], 'This row is not being sent.', 'a reserved name'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => 'waf-token-1']], false, false, 'a sendable row carries no notice'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => "waf\r\ntoken"]], true, true, 'a text input drops a newline, so warn about the repair'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => "waf\0token"]], true, true, 'as it does a NUL'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => 'tøken']], true, false, 'a non-ASCII byte survives the field, so the save refuses it instead'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => '']], true, false, 'an empty value is visibly empty'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => '   ']], true, false, 'so is a whitespace-only one'],
+            [[['name' => 'X Bad Name', 'value' => 'v']], true, false, 'an unusable name'],
+            [[['name' => 'Host', 'value' => 'v']], true, false, 'a reserved name'],
+            [[['name' => 'Host', 'value' => "a\r\nb"]], true, true, 'a reserved name must not hide the unholdable value'],
             [
                 [['name' => 'X-Dup', 'value' => 'a'], ['name' => 'x-dup', 'value' => 'b']],
-                'This row is not being sent.',
+                true,
+                false,
                 'the second of a duplicate pair',
             ],
         ];
-        foreach ($cases as [$rows, $notice, $description]) {
+        foreach ($cases as [$rows, $dropped, $warned, $description]) {
             $gateway = self::firewallGateway(['custom_headers' => $rows]);
             $html = $gateway->generate_two_custom_headers_html('custom_headers', []);
 
             TinyAssert::same(
-                $notice !== null,
+                $dropped,
                 strpos($html, 'twoinc-custom-header-unsendable') !== false,
                 $description
             );
-            if ($notice !== null) {
-                TinyAssert::true(strpos($html, $notice) !== false, "the notice must say why: $description");
-                // Exactly the rows the read path drops, no more.
-                TinyAssert::same(
-                    count($rows) - count($gateway->get_custom_headers()),
-                    substr_count($html, 'twoinc-custom-header-unsendable'),
-                    $description
-                );
-            }
+            TinyAssert::same(
+                $warned,
+                strpos($html, 'twoinc-custom-header-strips') !== false,
+                "the retype warning is only for a value the field cannot hold: $description"
+            );
+            // Exactly the rows the read path drops, no more.
+            TinyAssert::same(
+                count($rows) - count($gateway->get_custom_headers()),
+                substr_count($html, 'twoinc-custom-header-unsendable'),
+                $description
+            );
             // Inside the row: admin.js removes by row selector.
             TinyAssert::same(2 + count($rows), substr_count($html, '<tr'), $description);
         }

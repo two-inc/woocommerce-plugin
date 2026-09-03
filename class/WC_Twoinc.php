@@ -5094,7 +5094,7 @@ if (!class_exists('WC_Twoinc')) {
         {
             $field_key = $this->get_field_key($key);
             $data = wp_parse_args($data, ['title' => '', 'description' => '']);
-            $rows = $this->classify_custom_headers();
+            $rows = $this->classify_custom_headers($key);
 
             ob_start();
             ?>
@@ -5118,14 +5118,16 @@ if (!class_exists('WC_Twoinc')) {
                                 $name = $row['name'];
                                 $value = $row['value'];
                                 $browser = $row['send_from_browser'];
-                                $notice = self::header_row_notice($row['rejection']);
                                 ?>
                                 <tr class="twoinc-custom-header-row">
                                     <td><input type="text" class="input-text regular-input" name="<?php echo esc_attr($field_key); ?>[<?php echo (int) $i; ?>][name]" value="<?php echo esc_attr($name); ?>" placeholder="X-WAF-TOKEN" /></td>
                                     <td>
                                         <input type="text" class="input-text regular-input" name="<?php echo esc_attr($field_key); ?>[<?php echo (int) $i; ?>][value]" value="<?php echo esc_attr($value); ?>" />
-                                        <?php if ($notice !== null) : ?>
-                                            <p class="description twoinc-custom-header-unsendable"><?php echo esc_html($notice); ?></p>
+                                        <?php if (!$row['sent']) : ?>
+                                            <p class="description twoinc-custom-header-unsendable"><?php esc_html_e('This row is not being sent, and the settings cannot be saved until it is corrected or removed.', 'twoinc-payment-gateway'); ?></p>
+                                        <?php endif; ?>
+                                        <?php if ($row['strips_on_save']) : ?>
+                                            <p class="description twoinc-custom-header-strips"><?php esc_html_e('Retype this value: it contains characters this field cannot hold, so saving the form as it stands would store a different value.', 'twoinc-payment-gateway'); ?></p>
                                         <?php endif; ?>
                                     </td>
                                     <td><input type="checkbox" name="<?php echo esc_attr($field_key); ?>[<?php echo (int) $i; ?>][send_from_browser]" value="1" <?php checked($browser); ?> /></td>
@@ -5656,7 +5658,7 @@ if (!class_exists('WC_Twoinc')) {
         {
             $clean = [];
             foreach ($this->classify_custom_headers() as $row) {
-                if ($row['rejection'] === null) {
+                if ($row['sent']) {
                     $clean[] = [
                         'name'              => $row['name'],
                         'value'             => $row['value'],
@@ -5668,17 +5670,16 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * Every stored row, each tagged with why it is not sent or null if it
-         * is. The form reads the same tags, so it cannot describe a row as
-         * travelling that the request assembly drops.
+         * Every stored row, tagged with whether it is sent and whether the
+         * form's text input would silently rewrite its value.
          *
-         * @return array<int, array{name: string, value: string, send_from_browser: bool, rejection: string|null}>
+         * @return array<int, array{name: string, value: string, send_from_browser: bool, sent: bool, strips_on_save: bool}>
          */
-        private function classify_custom_headers(): array
+        private function classify_custom_headers(string $key = 'custom_headers'): array
         {
             $rows = $this->custom_headers_override !== null
                 ? $this->custom_headers_override
-                : $this->get_option('custom_headers');
+                : $this->get_option($key);
             if (!is_array($rows)) {
                 return [];
             }
@@ -5691,27 +5692,22 @@ if (!class_exists('WC_Twoinc')) {
                 $name = is_scalar($row['name'] ?? null) ? trim((string) $row['name']) : '';
                 $value = is_scalar($row['value'] ?? null) ? (string) $row['value'] : '';
                 $lower = strtolower($name);
-                if (!self::is_valid_header_name($name)) {
-                    $rejection = 'name';
-                } elseif (in_array($lower, self::reserved_header_names(), true)) {
-                    $rejection = 'reserved';
-                } elseif (isset($seen[$lower])) {
-                    $rejection = 'duplicate';
-                } elseif (!self::is_valid_header_value($value)) {
-                    // The only rejection a text input hides: it strips the
-                    // offending characters, so the next save looks clean.
-                    $rejection = 'unprintable';
-                } elseif (trim($value) === '') {
-                    $rejection = 'blank';
-                } else {
-                    $rejection = null;
+                $sent = self::is_valid_header_name($name)
+                    && self::is_valid_header_value($value)
+                    && trim($value) !== ''
+                    && !in_array($lower, self::reserved_header_names(), true)
+                    && !isset($seen[$lower]);
+                if ($sent) {
                     $seen[$lower] = true;
                 }
                 $classified[] = [
                     'name'              => $name,
                     'value'             => $value,
                     'send_from_browser' => self::is_browser_flag_set($row['send_from_browser'] ?? null),
-                    'rejection'         => $rejection,
+                    'sent'              => $sent,
+                    // A text input drops these on submit, so saving the form
+                    // untouched would store a value the merchant never chose.
+                    'strips_on_save'    => preg_match('/[\x00-\x1F\x7F]/', $value) === 1,
                 ];
             }
             return $classified;
@@ -5745,18 +5741,6 @@ if (!class_exists('WC_Twoinc')) {
                 }
             }
             return $map;
-        }
-
-        /** What the form tells the merchant about a row the request assembly drops. */
-        private static function header_row_notice(?string $rejection): ?string
-        {
-            if ($rejection === null) {
-                return null;
-            }
-            if ($rejection === 'unprintable') {
-                return __('This value is not being sent because it is not printable ASCII text. Retype it — saving the form as it stands will store a changed value.', 'twoinc-payment-gateway');
-            }
-            return __('This row is not being sent.', 'twoinc-payment-gateway');
         }
 
         /** Undo WP's magic quotes on one posted scalar. */
