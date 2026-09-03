@@ -8820,6 +8820,7 @@ final class BrandConfigSpec
             'nb_NO' => 'Sjekker tilgjengelighet',
             'nl_NL' => 'Beschikbaarheid controleren',
             'sv_SE' => 'Kontrollerar tillgänglighet',
+            'es_ES' => 'Comprobando disponibilidad',
         ];
         $catalogues = glob($languages . 'twoinc-payment-gateway-*.po');
         TinyAssert::true($catalogues !== false && $catalogues !== [], 'no .po catalogues found at all');
@@ -8888,6 +8889,7 @@ final class BrandConfigSpec
             'nb_NO' => 'Dette kunne ikke fullføres akkurat nå. Vent litt og prøv igjen.',
             'nl_NL' => 'Dit kon niet worden voltooid. Probeer het zo weer opnieuw.',
             'sv_SE' => 'Det gick inte att slutföra detta just nu. Vänta en stund och försök igen.',
+            'es_ES' => 'No se pudo completar esto en este momento. Espere un momento y vuelva a intentarlo.',
         ];
         $catalogues = glob($languages . 'twoinc-payment-gateway-*.po');
         TinyAssert::true($catalogues !== false && $catalogues !== [], 'no .po catalogues found at all');
@@ -8947,6 +8949,7 @@ final class BrandConfigSpec
             'nb_NO' => 'Velg selskapet ditt før du betaler med %s.',
             'nl_NL' => 'Selecteer uw bedrijf voordat u betaalt met %s.',
             'sv_SE' => 'Välj ditt företag innan du betalar med %s.',
+            'es_ES' => 'Seleccione su empresa antes de pagar con %s.',
         ];
         $catalogues = glob($languages . 'twoinc-payment-gateway-*.po');
         TinyAssert::true($catalogues !== false && $catalogues !== [], 'no .po catalogues found at all');

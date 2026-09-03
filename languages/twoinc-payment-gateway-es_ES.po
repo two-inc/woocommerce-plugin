@@ -55,3 +55,17 @@ msgstr "Seleccionar otro autónomo"
 #: class/WC_Twoinc_Checkout.php:478
 msgid "Something went wrong setting up sole trader checkout. Please try again."
 msgstr "Se produjo un error al configurar el pago como autónomo. Inténtelo de nuevo."
+
+#. translators: shown beside the spinner while the order-intent availability check runs.
+#: class/WC_Twoinc.php:935
+msgid "Checking availability"
+msgstr "Comprobando disponibilidad"
+
+#: class/WC_Twoinc.php:1151
+msgid "We could not complete that just now. Please wait a moment and try again."
+msgstr "No se pudo completar esto en este momento. Espere un momento y vuelva a intentarlo."
+
+#: class/WC_Twoinc.php:4042
+#, php-format
+msgid "Please select your company before paying with %s."
+msgstr "Seleccione su empresa antes de pagar con %s."
