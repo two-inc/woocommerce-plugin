@@ -5080,13 +5080,13 @@ if (!class_exists('WC_Twoinc')) {
                                 ?>
                                 <tr class="twoinc-custom-header-row">
                                     <td>
-                                        <input type="text" class="input-text regular-input" name="<?php echo esc_attr($field_key); ?>[<?php echo (int) $i; ?>][name]" value="<?php echo $row['name_unholdable'] ? '' : esc_attr($name); ?>" placeholder="X-WAF-TOKEN" />
+                                        <input type="text" class="input-text regular-input" name="<?php echo esc_attr($field_key); ?>[<?php echo (int) $i; ?>][name]" value="<?php echo $row['name_unholdable'] ? '' : self::escape_header_field($name); ?>" placeholder="X-WAF-TOKEN" />
                                         <?php if ($row['name_unholdable']) : ?>
                                             <p class="description twoinc-custom-header-unholdable"><?php esc_html_e('This entry contains characters this field cannot hold, so it is not shown and is not being sent. Enter it again.', 'twoinc-payment-gateway'); ?></p>
                                         <?php endif; ?>
                                     </td>
                                     <td>
-                                        <input type="text" class="input-text regular-input" name="<?php echo esc_attr($field_key); ?>[<?php echo (int) $i; ?>][value]" value="<?php echo $row['value_unholdable'] ? '' : esc_attr($value); ?>" />
+                                        <input type="text" class="input-text regular-input" name="<?php echo esc_attr($field_key); ?>[<?php echo (int) $i; ?>][value]" value="<?php echo $row['value_unholdable'] ? '' : self::escape_header_field($value); ?>" />
                                         <?php if ($row['value_unholdable']) : ?>
                                             <p class="description twoinc-custom-header-unholdable"><?php esc_html_e('This entry contains characters this field cannot hold, so it is not shown and is not being sent. Enter it again.', 'twoinc-payment-gateway'); ?></p>
                                         <?php endif; ?>
@@ -5634,8 +5634,8 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * Every stored row, tagged with whether it is sent and whether a text
-         * input can hold its value at all.
+         * Every stored row, tagged with whether it is sent and whether the
+         * form can show each of its two fields.
          *
          * @return array<int, array{name: string, value: string, send_from_browser: bool, sent: bool, name_unholdable: bool, value_unholdable: bool, discarded: bool}>
          */
@@ -5710,13 +5710,17 @@ if (!class_exists('WC_Twoinc')) {
             return $map;
         }
 
-        /** Whether a one-line input posts a field back unchanged. */
+        /** Double-encodes: esc_attr would show "&" for a stored "&amp;" and store that back. */
+        private static function escape_header_field(string $field): string
+        {
+            return htmlspecialchars($field, ENT_QUOTES, 'UTF-8');
+        }
+
+        /** Whether the form can show a field: the escape is its own inverse for all else. */
         private static function survives_the_form(string $field): bool
         {
-            $posted = html_entity_decode(esc_attr($field), ENT_QUOTES | ENT_HTML5, 'UTF-8');
-            // PHP leaves a numeric CR/LF/NUL reference encoded; a browser decodes it.
-            $posted = (string) preg_replace('/&#0*(?:0|10|13);|&#x0*[0ad];/i', '', $posted);
-            return str_replace(["\r", "\n", "\0"], '', $posted) === $field;
+            return ($field === '' || self::escape_header_field($field) !== '')
+                && preg_match('/[\r\n\x00]/', $field) !== 1;
         }
 
         /** Undo WP's magic quotes on one posted scalar. */
