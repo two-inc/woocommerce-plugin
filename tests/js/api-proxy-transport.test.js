@@ -115,6 +115,15 @@ describe("checkout API calls and the firewall-token proxy", () => {
       expect(options.headers["two-delegated-authority-token"]).toBe("autofill");
     });
 
+    test("carries client/client_v as query params, the one call make_request() cannot attach them for", () => {
+      window.twoinc.api_client_params = { client: "wp", client_v: "2.24.0" };
+
+      ctx.soleTrader.fetchCurrentBuyer(function () {});
+
+      const [url] = fetchMock.mock.calls[0];
+      expect(url).toBe("https://api.example.test/autofill/v1/buyer/current?client=wp&client_v=2.24.0");
+    });
+
     test("sends no custom header by default, whatever the page holds", () => {
       // Default state: the server withheld the headers, so none are sent — and
       // a value on the bootstrap is not a back door into sending one.

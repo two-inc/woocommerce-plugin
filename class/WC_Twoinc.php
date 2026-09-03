@@ -5782,8 +5782,7 @@ if (!class_exists('WC_Twoinc')) {
          */
         public function make_request($endpoint, $payload = [], $method = 'POST', $params = array(), $api_key_override = null, $timeout = 30)
         {
-            $params['client'] = 'wp';
-            $params['client_v'] = self::client_version();
+            $params = array_merge($params, self::get_api_client_params());
             # If api_key_override is defined, use that key instead of the saved key
             $api_key = $api_key_override ?: $this->get_option('api_key');
             $headers = [
@@ -6083,6 +6082,21 @@ if (!class_exists('WC_Twoinc')) {
             $version = get_twoinc_plugin_version();
             $commit = self::resolve_component_commit(WC_TWOINC_PLUGIN_PATH);
             return $commit === null ? $version : $version . '+' . substr($commit, 0, 7);
+        }
+
+        /**
+         * The `client`/`client_v` pair make_request() attaches server-side,
+         * exposed for the one browser-direct call (fetchCurrentBuyer in
+         * twoinc.js) that has no server hop to attach them from.
+         *
+         * @return array{client: string, client_v: string}
+         */
+        public static function get_api_client_params(): array
+        {
+            return [
+                'client' => 'wp',
+                'client_v' => self::client_version(),
+            ];
         }
 
         /**
