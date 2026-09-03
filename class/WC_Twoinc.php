@@ -5053,7 +5053,7 @@ if (!class_exists('WC_Twoinc')) {
         {
             $field_key = $this->get_field_key($key);
             $data = wp_parse_args($data, ['title' => '', 'description' => '']);
-            $rows = $this->classify_custom_headers($key);
+            $rows = $this->classify_custom_headers();
 
             ob_start();
             ?>
@@ -5081,12 +5081,11 @@ if (!class_exists('WC_Twoinc')) {
                                 <tr class="twoinc-custom-header-row">
                                     <td><input type="text" class="input-text regular-input" name="<?php echo esc_attr($field_key); ?>[<?php echo (int) $i; ?>][name]" value="<?php echo esc_attr($name); ?>" placeholder="X-WAF-TOKEN" /></td>
                                     <td>
-                                        <input type="text" class="input-text regular-input" name="<?php echo esc_attr($field_key); ?>[<?php echo (int) $i; ?>][value]" value="<?php echo esc_attr($value); ?>" />
-                                        <?php if (!$row['sent']) : ?>
+                                        <input type="text" class="input-text regular-input" name="<?php echo esc_attr($field_key); ?>[<?php echo (int) $i; ?>][value]" value="<?php echo $row['unholdable'] ? '' : esc_attr($value); ?>" />
+                                        <?php if ($row['unholdable']) : ?>
+                                            <p class="description twoinc-custom-header-unholdable"><?php esc_html_e('This value contains characters this field cannot hold, so it is not shown and is not being sent. Enter it again.', 'twoinc-payment-gateway'); ?></p>
+                                        <?php elseif (!$row['sent']) : ?>
                                             <p class="description twoinc-custom-header-unsendable"><?php esc_html_e('This row is not being sent, and the settings cannot be saved until it is corrected or removed.', 'twoinc-payment-gateway'); ?></p>
-                                        <?php endif; ?>
-                                        <?php if ($row['strips_on_save']) : ?>
-                                            <p class="description twoinc-custom-header-strips"><?php esc_html_e('Retype this value: it contains characters this field cannot hold, so saving the form as it stands would store a different value.', 'twoinc-payment-gateway'); ?></p>
                                         <?php endif; ?>
                                     </td>
                                     <td><input type="checkbox" name="<?php echo esc_attr($field_key); ?>[<?php echo (int) $i; ?>][send_from_browser]" value="1" <?php checked($browser); ?> /></td>
@@ -5629,16 +5628,16 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * Every stored row, tagged with whether it is sent and whether the
-         * form's text input would silently rewrite its value.
+         * Every stored row, tagged with whether it is sent and whether a text
+         * input can hold its value at all.
          *
-         * @return array<int, array{name: string, value: string, send_from_browser: bool, sent: bool, strips_on_save: bool}>
+         * @return array<int, array{name: string, value: string, send_from_browser: bool, sent: bool, unholdable: bool}>
          */
-        private function classify_custom_headers(string $key = 'custom_headers'): array
+        private function classify_custom_headers(): array
         {
             $rows = $this->custom_headers_override !== null
                 ? $this->custom_headers_override
-                : $this->get_option($key);
+                : $this->get_option('custom_headers');
             if (!is_array($rows)) {
                 return [];
             }
@@ -5664,9 +5663,9 @@ if (!class_exists('WC_Twoinc')) {
                     'value'             => $value,
                     'send_from_browser' => self::is_browser_flag_set($row['send_from_browser'] ?? null),
                     'sent'              => $sent,
-                    // A text input drops these on submit, so saving the form
-                    // untouched would store a value the merchant never chose.
-                    'strips_on_save'    => preg_match('/[\x00-\x1F\x7F]/', $value) === 1,
+                    // Exactly the bytes a text input cannot round-trip; every
+                    // other rejected value re-posts intact and is refused.
+                    'unholdable'        => preg_match('/[\r\n\x00]/', $value) === 1,
                 ];
             }
             return $classified;
