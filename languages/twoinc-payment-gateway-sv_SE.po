@@ -1305,6 +1305,18 @@ msgid "\"%s\" is not a valid HTTP header name. Use letters, digits and hyphens."
 msgstr "\"%s\" är inte ett giltigt HTTP-huvudnamn. Använd bokstäver, siffror och bindestreck."
 
 #: class/WC_Twoinc.php
+msgid "The value of \"%s\" must be printable ASCII text and cannot be blank."
+msgstr "Värdet för \"%s\" måste vara skrivbar ASCII-text och får inte vara tomt."
+
+#: class/WC_Twoinc.php
+msgid "This value contains characters this field cannot hold, so it is not shown and is not being sent. Enter it again."
+msgstr "Detta värde innehåller tecken som detta fält inte kan hålla, så det visas inte och skickas inte. Skriv in det igen."
+
+#: class/WC_Twoinc.php
+msgid "This row is not being sent, and the settings cannot be saved until it is corrected or removed."
+msgstr "Denna rad skickas inte och inställningarna kan inte sparas förrän den har rättats eller tagits bort."
+
+#: class/WC_Twoinc.php
 msgid "If your IT administrator asks you to add headers to the calls your store makes to the %s API (for example a firewall token), add them here. Every header listed is sent on all calls your store makes from your server."
 msgstr "Om din IT-administratör ber dig lägga till huvuden på anropen som din butik gör mot %s-API:et (till exempel en brandväggstoken), lägger du till dem här. Alla huvuden i listan skickas på alla anrop som din butik gör från din server."
 

@@ -1062,8 +1062,12 @@ function sanitize_key($key)
     return preg_replace('/[^a-z0-9_\-]/', '', strtolower((string) $key));
 }
 
+// Mirrors WP's stripslashes_deep: the settings POST carries an array of rows.
 function wp_unslash($value)
 {
+    if (is_array($value)) {
+        return array_map('wp_unslash', $value);
+    }
     return is_string($value) ? stripslashes($value) : $value;
 }
 

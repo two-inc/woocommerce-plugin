@@ -68,7 +68,6 @@ if (!class_exists('WC_Twoinc')) {
 
             $this->init_form_fields();
             $this->init_settings();
-            $this->migrate_firewall_token_to_custom_headers();
             $this->drop_removed_settings();
             $this->drop_renamed_option_rows();
             $this->migrate_se_tax_subtotals();
@@ -778,52 +777,6 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * Carry a configured firewall token (ABN-490) into the first row of
-         * the custom-headers table, under the name it used to be sent as.
-         * Self-limiting like the cleanups below: only writes while a legacy
-         * key is present, and it clears both legacy keys as it goes.
-         *
-         * Dropping the legacy keys without carrying the value across would
-         * silently stop sending a token a merchant's firewall requires.
-         *
-         * @return void
-         */
-        private function migrate_firewall_token_to_custom_headers()
-        {
-            if (!is_array($this->settings)) {
-                return;
-            }
-            $legacy = ['firewall_token', 'firewall_token_browser'];
-            $present = array_filter($legacy, function ($key) {
-                return array_key_exists($key, $this->settings);
-            });
-            if (count($present) === 0) {
-                return;
-            }
-            $token = self::sanitize_header_line($this->settings['firewall_token'] ?? '');
-            if ($token !== '') {
-                $existing = isset($this->settings['custom_headers']) && is_array($this->settings['custom_headers'])
-                    ? array_values($this->settings['custom_headers'])
-                    : [];
-                $names = array_map(function ($row) {
-                    return strtolower(is_array($row) ? (string) ($row['name'] ?? '') : '');
-                }, $existing);
-                if (!in_array('x-waf-token', $names, true)) {
-                    array_unshift($existing, [
-                        'name'              => 'X-WAF-TOKEN',
-                        'value'             => $token,
-                        'send_from_browser' => self::is_browser_flag_set($this->settings['firewall_token_browser'] ?? null) ? 'yes' : 'no',
-                    ]);
-                }
-                $this->settings['custom_headers'] = $existing;
-            }
-            foreach ($legacy as $key) {
-                unset($this->settings[$key]);
-            }
-            update_option($this->get_option_key(), $this->settings);
-        }
-
-        /**
          * Drop settings keys whose feature no longer exists, so an upgraded
          * install doesn't carry a dead key inside the gateway settings blob
          * (a WooCommerce gateway keeps every setting in one
@@ -842,10 +795,20 @@ if (!class_exists('WC_Twoinc')) {
          *   `twoincDomHelper.toggleBusinessFields()` in twoinc.js.
          * - `test_checkout_host` (TWO-25386, Doug's ruling): removed outright
          *   — see get_effective_environment_mode().
+         * - `firewall_token` / `firewall_token_browser` (ABN-490): replaced
+         *   by the `custom_headers` table. Nothing is carried across — the
+         *   fields only ever existed on staging, never in a release.
          */
         private function drop_removed_settings()
         {
-            $removed = ['enable_sole_trader', 'company_search_location', 'enable_company_search_for_others', 'test_checkout_host'];
+            $removed = [
+                'enable_sole_trader',
+                'company_search_location',
+                'enable_company_search_for_others',
+                'test_checkout_host',
+                'firewall_token',
+                'firewall_token_browser',
+            ];
             $present = [];
             foreach ($removed as $key) {
                 if (is_array($this->settings) && array_key_exists($key, $this->settings)) {
@@ -5090,8 +5053,7 @@ if (!class_exists('WC_Twoinc')) {
         {
             $field_key = $this->get_field_key($key);
             $data = wp_parse_args($data, ['title' => '', 'description' => '']);
-            $rows = $this->get_option($key);
-            $rows = is_array($rows) ? array_values($rows) : [];
+            $rows = $this->classify_custom_headers();
 
             ob_start();
             ?>
@@ -5112,13 +5074,20 @@ if (!class_exists('WC_Twoinc')) {
                         <tbody>
                             <?php foreach ($rows as $i => $row) : ?>
                                 <?php
-                                $name = is_array($row) ? (string) ($row['name'] ?? '') : '';
-                                $value = is_array($row) ? (string) ($row['value'] ?? '') : '';
-                                $browser = is_array($row) && self::is_browser_flag_set($row['send_from_browser'] ?? null);
+                                $name = $row['name'];
+                                $value = $row['value'];
+                                $browser = $row['send_from_browser'];
                                 ?>
                                 <tr class="twoinc-custom-header-row">
                                     <td><input type="text" class="input-text regular-input" name="<?php echo esc_attr($field_key); ?>[<?php echo (int) $i; ?>][name]" value="<?php echo esc_attr($name); ?>" placeholder="X-WAF-TOKEN" /></td>
-                                    <td><input type="text" class="input-text regular-input" name="<?php echo esc_attr($field_key); ?>[<?php echo (int) $i; ?>][value]" value="<?php echo esc_attr($value); ?>" /></td>
+                                    <td>
+                                        <input type="text" class="input-text regular-input" name="<?php echo esc_attr($field_key); ?>[<?php echo (int) $i; ?>][value]" value="<?php echo $row['unholdable'] ? '' : esc_attr($value); ?>" />
+                                        <?php if ($row['unholdable']) : ?>
+                                            <p class="description twoinc-custom-header-unholdable"><?php esc_html_e('This value contains characters this field cannot hold, so it is not shown and is not being sent. Enter it again.', 'twoinc-payment-gateway'); ?></p>
+                                        <?php elseif (!$row['sent']) : ?>
+                                            <p class="description twoinc-custom-header-unsendable"><?php esc_html_e('This row is not being sent, and the settings cannot be saved until it is corrected or removed.', 'twoinc-payment-gateway'); ?></p>
+                                        <?php endif; ?>
+                                    </td>
                                     <td><input type="checkbox" name="<?php echo esc_attr($field_key); ?>[<?php echo (int) $i; ?>][send_from_browser]" value="1" <?php checked($browser); ?> /></td>
                                     <td><button type="button" class="button twoinc-custom-header-remove"><?php esc_html_e('Remove', 'twoinc-payment-gateway'); ?></button></td>
                                 </tr>
@@ -5136,7 +5105,8 @@ if (!class_exists('WC_Twoinc')) {
 
         /**
          * Validate + normalise the posted header table. Blank rows are
-         * dropped; an invalid or reserved name refuses the save.
+         * dropped; an invalid or reserved name, or a value carrying anything
+         * but printable ASCII, refuses the save.
          *
          * @return array<int, array{name: string, value: string, send_from_browser: string}>
          */
@@ -5148,8 +5118,10 @@ if (!class_exists('WC_Twoinc')) {
                 if (!is_array($row)) {
                     continue;
                 }
-                $name = self::sanitize_header_line($row['name'] ?? '');
-                $header_value = self::sanitize_header_line($row['value'] ?? '');
+                // Replaces a WC validator, so it must unslash like one.
+                $name = trim(self::unslash_scalar($row['name'] ?? ''));
+                // Untrimmed: an accepted value reaches the wire byte-identical.
+                $header_value = self::unslash_scalar($row['value'] ?? '');
                 if ($name === '' && $header_value === '') {
                     continue;
                 }
@@ -5168,6 +5140,13 @@ if (!class_exists('WC_Twoinc')) {
                     throw new Exception(sprintf(
                         /* translators: %s: the rejected header name */
                         __('The header "%s" is set by the plugin itself and cannot be overridden here.', 'twoinc-payment-gateway'),
+                        $name
+                    ));
+                }
+                if (!self::is_valid_header_value($header_value) || trim($header_value) === '') {
+                    throw new Exception(sprintf(
+                        /* translators: %s: the header name whose value was rejected */
+                        __('The value of "%s" must be printable ASCII text and cannot be blank.', 'twoinc-payment-gateway'),
                         $name
                     ));
                 }
@@ -5628,12 +5607,33 @@ if (!class_exists('WC_Twoinc')) {
 
         /**
          * The configured custom request headers, normalised into rows of
-         * name/value/send_from_browser. Values are never newline-bearing:
-         * an interior newline would split the header on the wire.
+         * name/value/send_from_browser. A row whose name or value would not
+         * pass the form's validation is dropped rather than repaired.
          *
          * @return array<int, array{name: string, value: string, send_from_browser: bool}>
          */
         public function get_custom_headers()
+        {
+            $clean = [];
+            foreach ($this->classify_custom_headers() as $row) {
+                if ($row['sent']) {
+                    $clean[] = [
+                        'name'              => $row['name'],
+                        'value'             => $row['value'],
+                        'send_from_browser' => $row['send_from_browser'],
+                    ];
+                }
+            }
+            return $clean;
+        }
+
+        /**
+         * Every stored row, tagged with whether it is sent and whether a text
+         * input can hold its value at all.
+         *
+         * @return array<int, array{name: string, value: string, send_from_browser: bool, sent: bool, unholdable: bool}>
+         */
+        private function classify_custom_headers(): array
         {
             $rows = $this->custom_headers_override !== null
                 ? $this->custom_headers_override
@@ -5641,29 +5641,34 @@ if (!class_exists('WC_Twoinc')) {
             if (!is_array($rows)) {
                 return [];
             }
-            $clean = [];
+            $classified = [];
+            $seen = [];
             foreach ($rows as $row) {
                 if (!is_array($row)) {
                     continue;
                 }
-                $name = self::sanitize_header_line($row['name'] ?? '');
-                // Reserved names are refused on save, but the read path is what
-                // composes the request: a row written around the form (a direct
-                // DB edit, another plugin) must not clobber X-API-Key.
-                if (
-                    $name === ''
-                    || !self::is_valid_header_name($name)
-                    || in_array(strtolower($name), self::reserved_header_names(), true)
-                ) {
-                    continue;
+                $name = is_scalar($row['name'] ?? null) ? trim((string) $row['name']) : '';
+                $value = is_scalar($row['value'] ?? null) ? (string) $row['value'] : '';
+                $lower = strtolower($name);
+                $sent = self::is_valid_header_name($name)
+                    && self::is_valid_header_value($value)
+                    && trim($value) !== ''
+                    && !in_array($lower, self::reserved_header_names(), true)
+                    && !isset($seen[$lower]);
+                if ($sent) {
+                    $seen[$lower] = true;
                 }
-                $clean[] = [
+                $classified[] = [
                     'name'              => $name,
-                    'value'             => self::sanitize_header_line($row['value'] ?? ''),
+                    'value'             => $value,
                     'send_from_browser' => self::is_browser_flag_set($row['send_from_browser'] ?? null),
+                    'sent'              => $sent,
+                    // Exactly the bytes a text input cannot round-trip; every
+                    // other rejected value re-posts intact and is refused.
+                    'unholdable'        => preg_match('/[\r\n\x00]/', $value) === 1,
                 ];
             }
-            return $clean;
+            return $classified;
         }
 
         /**
@@ -5696,28 +5701,54 @@ if (!class_exists('WC_Twoinc')) {
             return $map;
         }
 
-        /** Strip the characters that would split or terminate a header line. */
-        private static function sanitize_header_line($raw): string
+        /** Undo WP's magic quotes on one posted scalar. */
+        private static function unslash_scalar($raw): string
         {
-            if (!is_scalar($raw)) {
-                return '';
-            }
-            return trim((string) preg_replace('/[\r\n\t]+/', '', (string) $raw));
+            return is_scalar($raw) ? (string) wp_unslash((string) $raw) : '';
         }
 
         /** RFC 7230 field-name token, so a name can never break the request. */
         private static function is_valid_header_name(string $name): bool
         {
-            return (bool) preg_match('/^[A-Za-z0-9!#$%&\'*+.^_`|~-]+$/', $name);
+            // /D: without it $ also matches before a trailing newline.
+            return (bool) preg_match('/^[A-Za-z0-9!#$%&\'*+.^_`|~-]+$/D', $name);
+        }
+
+        /** Printable ASCII only: bars request splitting, log injection and encoding ambiguity. */
+        private static function is_valid_header_value(string $value): bool
+        {
+            return (bool) preg_match('/^[\x20-\x7E]+$/D', $value);
         }
 
         /**
-         * Headers make_request() composes itself. A custom row may not take
-         * one of these names: overwriting X-API-Key would break every call.
+         * Names a custom row may not take: composed by make_request(), set by
+         * the HTTP client, proxy identity, an RFC 7230 hop-by-hop connection
+         * control, or a credential the plugin carries itself.
          */
         private static function reserved_header_names(): array
         {
-            return ['accept-language', 'content-type', 'x-api-key'];
+            return [
+                'host',
+                'content-type',
+                'content-length',
+                'accept',
+                'accept-language',
+                'x-api-key',
+                'two-delegated-authority-token',
+                'x-forwarded-for',
+                'x-real-ip',
+                'http_x_cloud_trace_context',
+                'connection',
+                'keep-alive',
+                'proxy-authenticate',
+                'proxy-authorization',
+                'te',
+                'trailer',
+                'transfer-encoding',
+                'upgrade',
+                'authorization',
+                'cookie',
+            ];
         }
 
         /**
@@ -5740,8 +5771,11 @@ if (!class_exists('WC_Twoinc')) {
             foreach ($custom_headers as $row) {
                 $headers[$row['name']] = $row['value'];
             }
-            if (isset($_SERVER['HTTP_X_CLOUD_TRACE_CONTEXT'])) {
-                $headers['HTTP_X_CLOUD_TRACE_CONTEXT'] = $_SERVER['HTTP_X_CLOUD_TRACE_CONTEXT'];
+            $trace = is_scalar($_SERVER['HTTP_X_CLOUD_TRACE_CONTEXT'] ?? null)
+                ? (string) $_SERVER['HTTP_X_CLOUD_TRACE_CONTEXT']
+                : '';
+            if (self::is_valid_header_value($trace)) {
+                $headers['HTTP_X_CLOUD_TRACE_CONTEXT'] = $trace;
             }
             $response = wp_remote_request(sprintf('%s%s?%s', $this->get_twoinc_checkout_host(), $endpoint, http_build_query($params)), [
                 'method' => $method,
@@ -6049,13 +6083,17 @@ if (!class_exists('WC_Twoinc')) {
         {
             $post_data = $this->get_post_data();
             $custom_headers_field = 'woocommerce_' . $this->id . '_custom_headers';
-            if (array_key_exists($custom_headers_field, $post_data)) {
-                // Honour headers entered in the same save as the API key: the
-                // verification call below runs before the settings persist, so
-                // reading the stored value would send it without them and a
-                // merchant firewall would reject it, reverting the key.
-                $posted = $post_data[$custom_headers_field];
-                $this->custom_headers_override = is_array($posted) ? $posted : [];
+            // Verify against the table as submitted, not as stored: removing
+            // every row posts no field key at all, so absence means cleared.
+            try {
+                $this->custom_headers_override = $this->validate_two_custom_headers_field(
+                    'custom_headers',
+                    $post_data[$custom_headers_field] ?? null
+                );
+            } catch (Exception $e) {
+                // A table the save will refuse must not authenticate the key;
+                // the stored rows stand for this request.
+                $this->custom_headers_override = null;
             }
             $api_key_field = 'woocommerce_' . $this->id . '_api_key';
             $api_key_in_post = array_key_exists($api_key_field, $post_data);
