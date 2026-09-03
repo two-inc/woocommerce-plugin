@@ -3192,6 +3192,7 @@ function createSoleTraderController(companySearch) {
         .appendTo($note);
       $container.append($note);
 
+      controller.retireTokens();
       // Minted here rather than at click time, since `window.open()` outside
       // the click's own gesture is blocker bait. Tokens are country-scoped,
       // not email-scoped, so one mint per page serves every launch.
@@ -3246,12 +3247,17 @@ function createSoleTraderController(companySearch) {
     },
 
     /**
-     * A country change retires the tokens: their delegated authority is
-     * scoped to the country they were minted on, and the next `render()`
-     * mints for the new one. Refused while busy — an outstanding signup's
-     * own buyer lookup still needs them.
+     * Retire tokens minted for a country the buyer has since left — their
+     * delegated authority is scoped to it, and the next `render()` mints for
+     * the country now on the field.
+     *
+     * Refused while busy, since an outstanding signup's own buyer lookup
+     * still needs them; called from `render()` rather than the country change
+     * itself so a refusal is retried on the next one, instead of stranding
+     * the page on authority for a country it has left.
      */
     retireTokens: function () {
+      if (controller.tokenCountry === controller.currentCountry()) return;
       if (controller.isBusy()) return;
       controller.tokens = null;
       controller.tokenCountry = null;
@@ -4472,33 +4478,38 @@ function createSoleTraderController(companySearch) {
             // reopens forever.
             const resolved = !!buyer;
             controller.signupConfirming = false;
-            // Decremented here rather than only on popup close so a resolved
-            // re-signup un-blocks the Business chip/`reopenSearch()`
-            // immediately, not after another 300ms poll cycle. `newlyDecided`
-            // covers a late or replayed ACCEPTED, which must not spend a
-            // second decrement against one increment.
-            if (newlyDecided && watcher.isReconfirming) {
-              controller.soleTraderReconfirmingCount = Math.max(
-                0,
-                controller.soleTraderReconfirmingCount - 1
-              );
+            try {
+              // Decremented here rather than only on popup close so a
+              // resolved re-signup un-blocks the Business
+              // chip/`reopenSearch()` immediately, not after another 300ms
+              // poll cycle. `newlyDecided` covers a late or replayed
+              // ACCEPTED, which must not spend a second decrement against
+              // one increment.
+              if (newlyDecided && watcher.isReconfirming) {
+                controller.soleTraderReconfirmingCount = Math.max(
+                  0,
+                  controller.soleTraderReconfirmingCount - 1
+                );
+              }
+              if (resolved) {
+                // A signup replaces the cookie's buyer. Filed under the
+                // country the tokens were minted under, which is what
+                // `heldAutofill` keys on — not whatever the field reads by
+                // the time the signup completes.
+                controller.holdAutofill(buyer, controller.tokenCountry);
+                controller.setCompany(buyer.organization_number, buyer.company_name, buyer);
+                controller.showNote(false);
+              } else {
+                controller.showError();
+              }
+            } finally {
+              // In a `finally`, and after the capture above has landed: a
+              // throw from the writes would otherwise hold `flightDepth`
+              // above zero for the life of the page, leaving `isBusy()` true
+              // and every exit from sole-trader mode refused. "Flow
+              // complete" is the write, not the response.
+              controller.settleFlight();
             }
-            if (resolved) {
-              // A signup replaces the cookie's buyer. Filed under the country
-              // the signup was performed under — the one `openPopup` sent —
-              // not whatever the field reads by the time it completes.
-              controller.holdAutofill(buyer, controller.tokenCountry);
-              controller.setCompany(buyer.organization_number, buyer.company_name, buyer);
-              controller.showNote(false);
-            } else {
-              controller.showError();
-            }
-            // Last, after the capture above has actually landed: this used
-            // to settle before the write, so on the ordinary path the
-            // spinner came down and the dropdown closed while the company
-            // name and number were still unwritten. "Flow complete" is the
-            // write, not the response.
-            controller.settleFlight();
           });
         } else {
           controller.showError();
@@ -5951,8 +5962,6 @@ class Twoinc {
     // it back (TWO-24867).
     self.customerCompany.country_prefix = country;
 
-    // Before `refresh()`, whose `render()` is what re-mints.
-    twoincSoleTrader.retireTokens();
     // Sole trader availability is per-country; re-evaluate the toggle.
     twoincSoleTrader.refresh();
 
@@ -5994,7 +6003,6 @@ class Twoinc {
       helper.clearSelectedCompany();
     }
 
-    helper.soleTrader.retireTokens();
     helper.soleTrader.refresh();
     Twoinc.getInstance().getApproval();
   }

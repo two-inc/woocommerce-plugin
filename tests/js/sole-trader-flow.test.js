@@ -1920,6 +1920,32 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       ajax.restore();
     });
 
+    /**
+     * A retire refused mid-flight is retried by a later render, not dropped:
+     * dropping it strands the page on authority for a country the buyer left,
+     * with autofill dead and every later popup opened under the wrong
+     * jurisdiction.
+     */
+    test("a retire refused during a signup happens on the next render instead", () => {
+      ctx.helper.countryDidChange("GB");
+      soleTrader.availabilityByCountry.SE = true;
+      soleTrader.setMode("sole_trader");
+      soleTrader.launchSignup();
+      $("#billing_country").append('<option value="SE">SE</option>');
+      $("#billing_country").val("SE");
+      ctx.Twoinc.getInstance().syncBillingCountry();
+      expect(soleTrader.tokens).not.toBeNull();
+
+      soleTrader.stopAllPopupWatchers();
+      soleTrader.settleFlight();
+      const ajax = harness.stubAjax($);
+      soleTrader.render();
+
+      expect(soleTrader.tokens).toBeNull();
+      expect(ajax.calls.some((call) => call.url.includes("two_sole_trader_tokens"))).toBe(true);
+      ajax.restore();
+    });
+
     test("a country change leaves the tokens alone while a signup is still outstanding", () => {
       ctx.helper.countryDidChange("GB");
       soleTrader.availabilityByCountry.SE = true;
