@@ -9459,7 +9459,7 @@ final class BrandConfigSpec
             // What the browser decodes the attribute to, minus what a one-line
             // input drops; WP slashes what it posts.
             $decoded = html_entity_decode($match[3], ENT_QUOTES | ENT_HTML5, 'UTF-8');
-            $decoded = (string) preg_replace('/&#0*(?:10|13);|&#x0*[adAD];/', '', $decoded);
+            $decoded = (string) preg_replace('/&#0*(?:0|10|13);|&#x0*[0ad];/i', '', $decoded);
             $posted = str_replace(["\r", "\n", "\0"], '', $decoded);
             $rows[(int) $match[1]][$match[2]] = addslashes($posted);
         }
@@ -9537,6 +9537,9 @@ final class BrandConfigSpec
             [[['name' => 'X-WAF-TOKEN', 'value' => '&#038;']], 1, 0, true, 'nor can a numeric reference'],
             [[['name' => 'X-WAF-TOKEN', 'value' => '&#13;']], 1, 0, true, 'nor one PHP itself declines to decode'],
             [[['name' => '&amp;', 'value' => 'v']], 1, 1, true, 'and a name of entity text is blanked, not silently renamed'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => '&#X0D;']], 1, 0, true, 'a browser accepts an upper-case hex reference PHP leaves alone'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => '&#0;']], 1, 0, true, 'and a NUL reference'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => '&amp']], 0, 0, false, 'an incomplete reference is escaped, so it comes back intact'],
         ];
         foreach ($cases as [$rows, $unholdable, $unsendable, $refused, $why]) {
             $gateway = self::firewallGateway(['custom_headers' => $rows]);

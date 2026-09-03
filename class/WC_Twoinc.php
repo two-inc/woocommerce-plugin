@@ -5714,8 +5714,8 @@ if (!class_exists('WC_Twoinc')) {
         private static function survives_the_form(string $field): bool
         {
             $posted = html_entity_decode(esc_attr($field), ENT_QUOTES | ENT_HTML5, 'UTF-8');
-            // PHP leaves a numeric CR/LF reference encoded where a browser decodes it.
-            $posted = (string) preg_replace('/&#0*(?:10|13);|&#x0*[adAD];/', '', $posted);
+            // PHP leaves a numeric CR/LF/NUL reference encoded; a browser decodes it.
+            $posted = (string) preg_replace('/&#0*(?:0|10|13);|&#x0*[0ad];/i', '', $posted);
             return str_replace(["\r", "\n", "\0"], '', $posted) === $field;
         }
 
