@@ -6114,8 +6114,7 @@ if (!class_exists('WC_Twoinc')) {
                     $post_data[$custom_headers_field] ?? null
                 );
             } catch (Exception $e) {
-                // The table's own row notice promises the whole save is
-                // refused, so halt before anything persists or authenticates.
+                // The row notice promises the whole save is refused — halt before anything persists or authenticates.
                 WC_Admin_Settings::add_error($e->getMessage());
                 return;
             }
