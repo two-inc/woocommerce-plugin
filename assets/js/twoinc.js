@@ -2907,24 +2907,20 @@ let twoincTermChips = {
 };
 
 /**
- * Prefetched autofill answers by country — the buyer object, or `false` for
- * "nobody on the cookie". An absent entry means unresolved.
- *
- * Keyed by country because billing and delivery can sit on different ones,
- * so each needs its own answer. Shared by every controller because the
- * answer describes the buyer, not the role: the billing and delivery panels
- * each own an instance, and a signup completed through one must not leave
- * the other prompting the same buyer to sign up again.
+ * The prefetched autofill answer — the buyer object, or `false` for "nobody
+ * on the cookie". `undefined` means unresolved. Not scoped to a country: the
+ * buyer on the cookie is the same buyer whatever the checkout's country
+ * reads. Shared by every controller because it describes the buyer, not the
+ * role: the billing and delivery panels each own an instance, and a signup
+ * completed through one must not leave the other prompting the same buyer to
+ * sign up again.
  */
-const soleTraderAutofillByCountry = {};
+let soleTraderAutofillAnswer;
 
-/** Countries with a lookup outstanding, so two controllers make one request. */
-const soleTraderAutofillPending = {};
+/** Whether a lookup is currently outstanding, so two controllers make one request. */
+let soleTraderAutofillPending = false;
 
-/**
- * Set by a rate-limited lookup. Page-global, unlike the maps above: the limit
- * is on the endpoint, which one country's tokens reach as readily as another's.
- */
+/** Set by a rate-limited lookup, page-global like the answer above. */
 let soleTraderAutofillBackoffUntil = 0;
 
 /**
@@ -3216,14 +3212,12 @@ function createSoleTraderController(companySearch) {
       // A failed mint leaves no tokens, and the lookup then answers `null`
       // unconditionally — latching a false "nobody" over a real registration.
       if (!controller.tokens) return;
-      const country = controller.currentCountry();
-      if (!country) return;
-      if (soleTraderAutofillPending[country]) return;
+      if (soleTraderAutofillPending) return;
       if (controller.heldAutofill() !== null) return;
       if (Date.now() < soleTraderAutofillBackoffUntil) return;
-      soleTraderAutofillPending[country] = true;
+      soleTraderAutofillPending = true;
       controller.fetchCurrentBuyer(function (buyer, failed, response) {
-        delete soleTraderAutofillPending[country];
+        soleTraderAutofillPending = false;
         // A dropped request is not an answer: held, it would latch "nobody"
         // for the life of the page and block the next render's retry. A rate
         // limit is the one failure retrying makes worse.
@@ -3236,20 +3230,17 @@ function createSoleTraderController(companySearch) {
           }
           return;
         }
-        controller.holdAutofill(buyer || false, country);
+        controller.holdAutofill(buyer || false);
       });
     },
 
-    /** @returns {Object|boolean|null} the answer held for this role's country, `null` if none */
+    /** @returns {Object|boolean|null} the held answer, `null` if none */
     heldAutofill: function () {
-      const country = controller.currentCountry();
-      if (!country) return null;
-      const held = soleTraderAutofillByCountry[country];
-      return held === undefined ? null : held;
+      return soleTraderAutofillAnswer === undefined ? null : soleTraderAutofillAnswer;
     },
 
-    holdAutofill: function (buyer, country) {
-      soleTraderAutofillByCountry[country] = buyer;
+    holdAutofill: function (buyer) {
+      soleTraderAutofillAnswer = buyer;
     },
 
     /**
@@ -3688,11 +3679,6 @@ function createSoleTraderController(companySearch) {
       }
       controller.openingSignup = true;
       try {
-        // Captured before the popup opens: the buyer can move the country
-        // field while the popup is open, and the completed signup's answer
-        // must file under the country this launch ran under, not whatever
-        // the field reads by the time it resolves.
-        const country = controller.currentCountry();
         const win = controller.openPopup(options);
         controller.showNote(!win);
         if (win) {
@@ -3710,7 +3696,7 @@ function createSoleTraderController(companySearch) {
             controller.soleTraderReconfirmingCount += 1;
           }
           controller.closeDropdownOnSettle = true;
-          controller.watchPopupClose(win, isReconfirming, country);
+          controller.watchPopupClose(win, isReconfirming);
         }
       } finally {
         // Released once the synchronous open has returned, blocked or not —
@@ -3740,19 +3726,11 @@ function createSoleTraderController(companySearch) {
      *   only decrement `soleTraderReconfirmingCount` for the popup that
      *   actually incremented it, so an unrelated popup's poll can't steal a
      *   decrement meant for a different, still-open re-signup.
-     * @param {string} [country] the country this launch ran under — see the
-     *   ACCEPTED handler's use of `watcher.country`.
      */
-    watchPopupClose: function (win, isReconfirming, country) {
+    watchPopupClose: function (win, isReconfirming) {
       controller.bindWindowRefocusListener();
       controller.beginFlight();
-      const watcher = {
-        id: null,
-        win: win,
-        isReconfirming: !!isReconfirming,
-        decided: false,
-        country: country
-      };
+      const watcher = { id: null, win: win, isReconfirming: !!isReconfirming, decided: false };
       watcher.id = setInterval(function () {
         if (!win.closed) return;
         controller.settleClosedPopup(watcher, false);
@@ -4478,16 +4456,8 @@ function createSoleTraderController(companySearch) {
                 );
               }
               if (resolved) {
-                // A signup replaces the cookie's buyer. Filed under the
-                // country this launch ran under (`watcher.country`), which
-                // is what `heldAutofill` keys on — not whatever the field
-                // reads by the time the signup completes. No matching
-                // watcher (a replayed/foreign message) falls back to reading
-                // the field now, same as an unattributed signup always did.
-                controller.holdAutofill(
-                  buyer,
-                  (watcher && watcher.country) || controller.currentCountry()
-                );
+                // A signup replaces the cookie's buyer.
+                controller.holdAutofill(buyer);
                 controller.setCompany(buyer.organization_number, buyer.company_name, buyer);
                 controller.showNote(false);
               } else {

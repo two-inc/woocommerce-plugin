@@ -1594,9 +1594,9 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     });
 
     /**
-     * The answer map is keyed by country, so an answer held under the old one
-     * is not an answer for the new one — in either direction: one landing
-     * after the change, and one already held when it happens.
+     * The answer is not scoped to a country, so a country change does not
+     * invalidate it — in either direction: one landing after the change, and
+     * one already held when it happens.
      */
     test.each([
       {
@@ -1613,18 +1613,18 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         },
         description: "already held when it happens"
       }
-    ])("an answer $description is not read for the new country", ({ arrange }) => {
+    ])("an answer $description is still read after a country change", ({ arrange }) => {
       $("#billing_country").append('<option value="NO">NO</option>');
       const prefetch = deferredPrefetch();
       soleTrader.render();
 
       arrange(prefetch);
 
-      expect(soleTrader.heldAutofill()).toBeNull();
-      // And the consequence: the chip does not adopt it.
+      expect(soleTrader.heldAutofill()).toEqual(ENROLLED);
+      // And the consequence: the chip adopts it with no popup.
       soleTrader.onModeChipClick("sole_trader");
-      expect($("#company_id").val()).toBe("");
-      expect(opened).toHaveLength(1);
+      expect($("#company_id").val()).toBe("TWO:ST9");
+      expect(opened).toHaveLength(0);
     });
 
     /**
@@ -1685,27 +1685,22 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     });
 
     /**
-     * Woo lets the delivery address sit in another country, so the two roles'
-     * lookups can land in different buckets. One slot for both would have the
-     * second answer land on the first, so the first role's chip prompts a
-     * buyer it already had an answer for.
+     * Woo lets the delivery address sit in another country, and the answer
+     * is not scoped to one — so the two roles still share the single held
+     * answer even when their fields disagree.
      */
-    test("two roles on different countries each keep their own answer", () => {
+    test("two roles on different countries still share the one held answer", () => {
       const shipping = shippingOn("NO");
-      const billingPrefetch = deferredPrefetch();
-      const shippingAnswers = [];
-      jest.spyOn(shipping, "fetchCurrentBuyer").mockImplementation((cb) => {
-        shippingAnswers.push(cb);
-      });
+      const shippingLookup = jest.spyOn(shipping, "fetchCurrentBuyer");
+      const prefetch = deferredPrefetch();
 
       soleTrader.render();
       shipping.render();
-      shippingAnswers[0](null);
-      billingPrefetch.answer(ENROLLED);
+      prefetch.answer(ENROLLED);
 
-      expect(shippingAnswers).toHaveLength(1);
-      expect(soleTrader.heldAutofill()).toEqual(ENROLLED);
-      expect(shipping.heldAutofill()).toBe(false);
+      expect(prefetch.calls).toBe(1);
+      expect(shippingLookup).not.toHaveBeenCalled();
+      expect(shipping.heldAutofill()).toEqual(ENROLLED);
     });
 
     test.each([
@@ -1757,20 +1752,18 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     });
 
     /**
-     * An unreadable country is not a country the held answer answers for —
-     * the chip goes to the popup rather than adopting under an unknown one.
-     * WooCommerce leaves the field briefly unreadable while replacing it.
+     * The held answer describes the buyer, not the field — an unreadable
+     * country (WooCommerce briefly clears it while replacing the select) is
+     * not a reason to withhold it.
      */
-    test("an unreadable country reads no held answer, whatever is held", () => {
-      soleTrader.holdAutofill(ENROLLED, "");
-      soleTrader.holdAutofill(ENROLLED, "GB");
+    test("a held answer is read and adopted even while the country is unreadable", () => {
+      soleTrader.holdAutofill(ENROLLED);
       $("#billing_country").val("");
 
       soleTrader.onModeChipClick("sole_trader");
 
-      expect(soleTrader.heldAutofill()).toBeNull();
-      expect($("#company_id").val()).toBe("");
-      expect(opened).toHaveLength(1);
+      expect($("#company_id").val()).toBe("TWO:ST9");
+      expect(opened).toHaveLength(0);
     });
 
     /**
@@ -1806,13 +1799,14 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       delete global.fetch;
     });
 
-    test("no lookup is made while the country is unreadable", () => {
+    /** The buyer lookup carries no country, so an unreadable one is no reason to skip it. */
+    test("a lookup is still made while the country is unreadable", () => {
       $("#billing_country").val("");
       const prefetch = deferredPrefetch();
 
       soleTrader.render();
 
-      expect(prefetch.calls).toBe(0);
+      expect(prefetch.calls).toBe(1);
     });
 
     /**
@@ -1870,12 +1864,11 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     });
 
     /**
-     * Filed under the country the popup was launched under — captured on the
-     * watcher at `launchSignup()` — not whatever the field reads by the time
-     * the signup completes. WooCommerce can move the country while the popup
-     * is open.
+     * The held answer is not filed under a country, so it is unaffected by
+     * the field moving between launch and completion. WooCommerce can move
+     * the country while the popup is open.
      */
-    test("a signup completing after the field moved is filed under the country it ran under", () => {
+    test("a signup completing after the field moved holds its answer regardless", () => {
       $("#billing_country").append('<option value="NO">NO</option>');
       soleTrader.setMode("sole_trader");
       soleTrader.bindPopupMessageListener();
@@ -1892,10 +1885,6 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         })
       );
 
-      // Filed under NO (the launch country), invisible under GB (the field's
-      // country once the signup resolved).
-      expect(soleTrader.heldAutofill()).toBeNull();
-      $("#billing_country").val("NO");
       expect(soleTrader.heldAutofill()).toEqual(SIGNED_UP);
     });
 
@@ -1921,7 +1910,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     test("re-clicking the chip once adopted goes straight to the re-signup, with no lookup", () => {
       soleTrader.setMode("sole_trader");
       soleTrader.setCompany("TWO:ST1", "First Trader");
-      soleTrader.holdAutofill(ENROLLED, "GB");
+      soleTrader.holdAutofill(ENROLLED);
       soleTrader.fetchCurrentBuyer.mockClear();
 
       soleTrader.onModeChipClick("sole_trader");
@@ -1943,7 +1932,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       ({ activate }) => {
         soleTrader.setMode("sole_trader");
         soleTrader.setCompany("TWO:ST1", "First Trader");
-        soleTrader.holdAutofill(ENROLLED, "GB");
+        soleTrader.holdAutofill(ENROLLED);
         soleTrader.fetchCurrentBuyer.mockClear();
 
         activate(soleTrader.getDifferentSoleTraderBtnNode());
