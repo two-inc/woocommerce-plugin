@@ -9446,9 +9446,8 @@ final class BrandConfigSpec
     }
 
     /**
-     * The rows the browser would submit from $html: read back off the rendered
-     * inputs rather than from what was stored, so any rewriting the render does
-     * is modelled without the test having to know about it.
+     * The rows the browser would submit from $html, read back off the rendered
+     * inputs rather than from what was stored.
      *
      * @return array<int, array{name: string, value: string}>
      */
@@ -9457,13 +9456,10 @@ final class BrandConfigSpec
         preg_match_all('/name="[^"]*\[(\d+)\]\[(name|value)\]" value="([^"]*)"/', $html, $matches, PREG_SET_ORDER);
         $rows = [];
         foreach ($matches as $match) {
-            // Undo only the escaping esc_attr applied, then drop what a
-            // one-line input drops; WP slashes what it posts.
-            $decoded = str_replace(
-                ['&quot;', '&#039;', '&lt;', '&gt;', '&amp;'],
-                ['"', "'", '<', '>', '&'],
-                $match[3]
-            );
+            // What the browser decodes the attribute to, minus what a one-line
+            // input drops; WP slashes what it posts.
+            $decoded = html_entity_decode($match[3], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            $decoded = (string) preg_replace('/&#0*(?:10|13);|&#x0*[adAD];/', '', $decoded);
             $posted = str_replace(["\r", "\n", "\0"], '', $decoded);
             $rows[(int) $match[1]][$match[2]] = addslashes($posted);
         }
@@ -9497,77 +9493,83 @@ final class BrandConfigSpec
 
     /**
      * The form must never show a row as travelling that the request assembly
-     * drops, nor echo back a value the input would rewrite into a save.
+     * drops, nor re-post a field different from the one it displays.
      */
     private static function testEveryDroppedRowIsMarkedInTheForm(): void
     {
-        // [rows, refused-on-save, unholdable-fields, description].
+        // [rows, unholdable fields, unsendable notices, refused on save, why].
+        // The three differ: a row can be sent today yet be undisplayable, and
+        // a row the save discards is refused by nothing.
         $cases = [
-            [[['name' => 'X-WAF-TOKEN', 'value' => 'waf-token-1']], false, 0, 'a sendable row carries no notice'],
-            [[['name' => '', 'value' => '']], false, 0, 'a wholly blank row is discarded by the save, not refused'],
-            [[['name' => '', 'value' => '   ']], true, 0, 'but one holding only whitespace is refused, so say so'],
-            [[['name' => 'X-WAF-TOKEN', 'value' => "waf\r\ntoken"]], true, 1, 'a text input cannot hold a newline'],
-            [[['name' => 'X-WAF-TOKEN', 'value' => "waf\ntoken"]], true, 1, 'nor a bare LF'],
-            [[['name' => 'X-WAF-TOKEN', 'value' => "waf\0token"]], true, 1, 'nor a NUL'],
-            [[['name' => 'X-WAF-TOKEN', 'value' => "waf\x7Ftoken"]], true, 0, 'DEL re-posts intact, so the save refuses it instead'],
-            [[['name' => 'X-WAF-TOKEN', 'value' => "waf\ttoken"]], true, 0, 'as does a tab'],
-            [[['name' => 'X-WAF-TOKEN', 'value' => 'tøken']], true, 0, 'as does a non-ASCII byte'],
-            [[['name' => 'X-WAF-TOKEN', 'value' => '']], true, 0, 'an empty value is visibly empty'],
-            [[['name' => 'X-WAF-TOKEN', 'value' => '   ']], true, 0, 'so is a whitespace-only one'],
-            [[['name' => 'X Bad Name', 'value' => 'v']], true, 0, 'an unusable name'],
-            [[['name' => 'Host', 'value' => 'v']], true, 0, 'a reserved name'],
-            [[['name' => 'Host', 'value' => "a\r\nb"]], true, 1, 'a reserved name must not hide an unholdable value'],
-            [[['name' => '', 'value' => "a\r\nb"]], false, 1, 'a nameless unholdable row re-posts wholly blank, so the save drops it'],
-            [[['name' => "X-Foo\r\nBar", 'value' => 'v']], true, 1, 'a name the field cannot hold must not re-post as a name nobody typed'],
-            [[['name' => "X-Foo\r\nBar", 'value' => "a\r\nb"]], false, 2, 'both fields blanked leaves a row the save drops'],
-            [[['name' => "X-Foo\xFF", 'value' => 'v']], true, 1, 'invalid UTF-8 is discarded by the render, not by a character rule'],
-            [[['name' => 'X-WAF-TOKEN', 'value' => "a\xFFb"]], true, 1, 'on the value side too'],
-            [[['name' => "X-Foo\xFF", 'value' => '']], false, 1, 'and a nameless row so blanked is one the save drops'],
-            [[['name' => 'X-WAF-TOKEN', 'value' => '&amp;']], false, 0, 'literal entity text is the merchant\'s value, not a rewrite'],
-            [[['name' => 'X-WAF-TOKEN', 'value' => '&#038;']], false, 0, 'nor is a numeric one'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => 'waf-token-1']], 0, 0, false, 'a sendable row carries no notice'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => 'a&b']], 0, 0, false, 'a bare ampersand is escaped and comes back intact'],
+            [[['name' => '', 'value' => '']], 0, 0, false, 'a wholly blank row is discarded by the save, not refused'],
+            [[['name' => '', 'value' => '   ']], 0, 1, true, 'but one holding only whitespace is refused'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => '']], 0, 1, true, 'an empty value is visibly empty'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => '   ']], 0, 1, true, 'so is a whitespace-only one'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => "waf\x7Ftoken"]], 0, 1, true, 'DEL re-posts intact, so the save refuses it'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => "waf\ttoken"]], 0, 1, true, 'as does a tab'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => 'tøken']], 0, 1, true, 'as does a non-ASCII byte'],
+            [[['name' => 'X Bad Name', 'value' => 'v']], 0, 1, true, 'an unusable name'],
+            [[['name' => 'Host', 'value' => 'v']], 0, 1, true, 'a reserved name'],
             [
                 [['name' => 'X-Dup', 'value' => 'a'], ['name' => 'x-dup', 'value' => 'b']],
-                true,
                 0,
-                'the second of a duplicate pair',
+                1,
+                true,
+                'the second of a duplicate pair, and only the second',
             ],
+            // A one-line input drops CR/LF and NUL from what it posts.
+            [[['name' => 'X-WAF-TOKEN', 'value' => "waf\r\ntoken"]], 1, 1, true, 'a value carrying CRLF cannot be displayed'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => "waf\ntoken"]], 1, 1, true, 'nor a bare LF'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => "waf\0token"]], 1, 1, true, 'nor a NUL'],
+            [[['name' => "X-Foo\r\nBar", 'value' => 'v']], 1, 1, true, 'the name is judged the same way'],
+            [[['name' => 'Host', 'value' => "a\r\nb"]], 1, 1, true, 'a reserved name does not hide an undisplayable value'],
+            [[['name' => '', 'value' => "a\r\nb"]], 1, 0, false, 'blanking a nameless row leaves one the save discards'],
+            [[['name' => "X-Foo\r\nBar", 'value' => "a\r\nb"]], 2, 0, false, 'as does blanking both fields'],
+            // esc_attr discards invalid UTF-8 outright.
+            [[['name' => "X-Foo\xFF", 'value' => 'v']], 1, 1, true, 'invalid UTF-8 in the name'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => "a\xFFb"]], 1, 1, true, 'and in the value'],
+            [[['name' => "X-Foo\xFF", 'value' => '']], 1, 0, false, 'a nameless row so blanked is discarded'],
+            // esc_attr does not double-encode, so the browser decodes what it
+            // renders: entity text the merchant typed cannot survive the field.
+            [[['name' => 'X-WAF-TOKEN', 'value' => '&amp;']], 1, 0, true, 'entity text is sent today but cannot be displayed'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => '&#038;']], 1, 0, true, 'nor can a numeric reference'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => '&#13;']], 1, 0, true, 'nor one PHP itself declines to decode'],
+            [[['name' => '&amp;', 'value' => 'v']], 1, 1, true, 'and a name of entity text is blanked, not silently renamed'],
         ];
-        foreach ($cases as [$rows, $refused, $unholdable_fields, $description]) {
+        foreach ($cases as [$rows, $unholdable, $unsendable, $refused, $why]) {
             $gateway = self::firewallGateway(['custom_headers' => $rows]);
             $html = $gateway->generate_two_custom_headers_html('custom_headers', []);
+            $reposted = self::repostOf($html);
 
-            TinyAssert::same(
-                $unholdable_fields,
-                substr_count($html, 'twoinc-custom-header-unholdable'),
-                $description
-            );
-            TinyAssert::same(
-                $refused ? 1 : 0,
-                substr_count($html, 'twoinc-custom-header-unsendable'),
-                $description
-            );
+            TinyAssert::same($unholdable, substr_count($html, 'twoinc-custom-header-unholdable'), $why);
+            TinyAssert::same($unsendable, substr_count($html, 'twoinc-custom-header-unsendable'), $why);
+
             // The notice must match what saving the form as rendered does.
             $threw = false;
             try {
-                $gateway->validate_two_custom_headers_field('custom_headers', self::repostOf($html));
+                $gateway->validate_two_custom_headers_field('custom_headers', $reposted);
             } catch (Exception $e) {
                 $threw = true;
             }
-            TinyAssert::same($refused, $threw, "the notice must match what the save does: $description");
-            // Blanked, so Save cannot store the input's rewrite as the merchant's.
-            foreach ($rows as $row) {
-                foreach ([$row['name'], $row['value']] as $field) {
-                    if (preg_match('/[\r\n\x00]/', $field) === 1) {
-                        TinyAssert::same(
-                            false,
-                            strpos($html, 'value="' . esc_attr($field) . '"') !== false,
-                            "an unholdable entry must not be echoed back: $description"
-                        );
-                    }
-                }
+            TinyAssert::same($refused, $threw, "the notice must match what the save does: $why");
+
+            // A field the form can display must re-post byte-identically.
+            if ($unholdable === 0) {
+                TinyAssert::same(
+                    array_map(function ($row) {
+                        return ['name' => $row['name'], 'value' => $row['value']];
+                    }, $rows),
+                    array_map(function ($row) {
+                        return ['name' => stripslashes($row['name']), 'value' => stripslashes($row['value'])];
+                    }, $reposted),
+                    "the form must re-post a displayable row unchanged: $why"
+                );
             }
-            // Inside the row: admin.js removes by row selector.
-            TinyAssert::same(2 + count($rows), substr_count($html, '<tr'), $description);
+            // Notices sit inside the row: admin.js removes by row selector.
+            TinyAssert::same(2 + count($rows), substr_count($html, '<tr'), $why);
+            TinyAssert::same(4 * count($rows) + 1, substr_count($html, '<td'), $why);
         }
     }
 

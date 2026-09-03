@@ -5710,16 +5710,13 @@ if (!class_exists('WC_Twoinc')) {
             return $map;
         }
 
-        /**
-         * Whether a one-line input posts a field back unchanged: esc_attr
-         * discards a field that is not valid UTF-8, and the input drops these
-         * bytes. Deliberately not an entity round trip — esc_attr does not
-         * double-encode, so a field of literal "&amp;" would fail one.
-         */
+        /** Whether a one-line input posts a field back unchanged. */
         private static function survives_the_form(string $field): bool
         {
-            return ($field === '' || esc_attr($field) !== '')
-                && preg_match('/[\r\n\x00]/', $field) !== 1;
+            $posted = html_entity_decode(esc_attr($field), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            // PHP leaves a numeric CR/LF reference encoded where a browser decodes it.
+            $posted = (string) preg_replace('/&#0*(?:10|13);|&#x0*[adAD];/', '', $posted);
+            return str_replace(["\r", "\n", "\0"], '', $posted) === $field;
         }
 
         /** Undo WP's magic quotes on one posted scalar. */
