@@ -399,6 +399,9 @@ if (!class_exists('WC_Twoinc_Checkout')) {
                     'search_company' => __('Search for company', 'twoinc-payment-gateway'),
                 ],
                 'twoinc_checkout_host' => $this->wc_twoinc->get_twoinc_checkout_host(),
+                // Query params make_request() attaches server-side, for the
+                // one browser-direct call (fetchCurrentBuyer) that has none.
+                'api_client_params' => WC_Twoinc::get_api_client_params(),
                 // Always 'yes' at load (TWO-25326 §7.1): the search control
                 // is never "off", only relocated. `window.twoinc.enable_company_search`
                 // is a RUNTIME flag in twoinc.js, toggled to "no" only when
