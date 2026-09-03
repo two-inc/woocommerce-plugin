@@ -1670,38 +1670,30 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       return shipping;
     }
 
-    test("both company-search instances read the one held answer, on one request", () => {
-      const shipping = shippingOn("GB");
-      const shippingLookup = jest.spyOn(shipping, "fetchCurrentBuyer");
-      const prefetch = deferredPrefetch();
-
-      soleTrader.render();
-      shipping.render();
-      prefetch.answer(ENROLLED);
-
-      expect(prefetch.calls).toBe(1);
-      expect(shippingLookup).not.toHaveBeenCalled();
-      expect(shipping.heldAutofill()).toEqual(ENROLLED);
-    });
-
     /**
-     * Woo lets the delivery address sit in another country, and the answer
-     * is not scoped to one — so the two roles still share the single held
-     * answer even when their fields disagree.
+     * Woo lets the delivery address sit in another country. The answer is
+     * not scoped to one, so the two roles share the single held answer
+     * whether their fields agree or not.
      */
-    test("two roles on different countries still share the one held answer", () => {
-      const shipping = shippingOn("NO");
-      const shippingLookup = jest.spyOn(shipping, "fetchCurrentBuyer");
-      const prefetch = deferredPrefetch();
+    test.each([
+      { shippingCountry: "GB", description: "the same country as billing" },
+      { shippingCountry: "NO", description: "a different country from billing" }
+    ])(
+      "both roles read the one held answer, on one request — $description",
+      ({ shippingCountry }) => {
+        const shipping = shippingOn(shippingCountry);
+        const shippingLookup = jest.spyOn(shipping, "fetchCurrentBuyer");
+        const prefetch = deferredPrefetch();
 
-      soleTrader.render();
-      shipping.render();
-      prefetch.answer(ENROLLED);
+        soleTrader.render();
+        shipping.render();
+        prefetch.answer(ENROLLED);
 
-      expect(prefetch.calls).toBe(1);
-      expect(shippingLookup).not.toHaveBeenCalled();
-      expect(shipping.heldAutofill()).toEqual(ENROLLED);
-    });
+        expect(prefetch.calls).toBe(1);
+        expect(shippingLookup).not.toHaveBeenCalled();
+        expect(shipping.heldAutofill()).toEqual(ENROLLED);
+      }
+    );
 
     test.each([
       { answer: ENROLLED, description: "a registration" },
