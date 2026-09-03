@@ -5136,7 +5136,8 @@ if (!class_exists('WC_Twoinc')) {
 
         /**
          * Validate + normalise the posted header table. Blank rows are
-         * dropped; an invalid or reserved name refuses the save.
+         * dropped; an invalid or reserved name, or a value carrying anything
+         * but printable ASCII, refuses the save.
          *
          * @return array<int, array{name: string, value: string, send_from_browser: string}>
          */
@@ -5148,8 +5149,11 @@ if (!class_exists('WC_Twoinc')) {
                 if (!is_array($row)) {
                     continue;
                 }
-                $name = self::sanitize_header_line($row['name'] ?? '');
-                $header_value = self::sanitize_header_line($row['value'] ?? '');
+                // WP slashes the settings POST; WC's own validators unslash and
+                // this one replaces them, so the slashes are ours to remove.
+                $name = trim(self::unslash_scalar($row['name'] ?? ''));
+                // Not trimmed: an accepted value must reach the wire byte-identical.
+                $header_value = self::unslash_scalar($row['value'] ?? '');
                 if ($name === '' && $header_value === '') {
                     continue;
                 }
@@ -5160,6 +5164,13 @@ if (!class_exists('WC_Twoinc')) {
                     throw new Exception(sprintf(
                         /* translators: %s: the rejected header name */
                         __('"%s" is not a valid HTTP header name. Use letters, digits and hyphens.', 'twoinc-payment-gateway'),
+                        $name
+                    ));
+                }
+                if (!self::is_valid_header_value($header_value)) {
+                    throw new Exception(sprintf(
+                        /* translators: %s: the header name whose value was rejected */
+                        __('The value of "%s" may only contain printable ASCII characters, and cannot be empty.', 'twoinc-payment-gateway'),
                         $name
                     ));
                 }
@@ -5628,8 +5639,8 @@ if (!class_exists('WC_Twoinc')) {
 
         /**
          * The configured custom request headers, normalised into rows of
-         * name/value/send_from_browser. Values are never newline-bearing:
-         * an interior newline would split the header on the wire.
+         * name/value/send_from_browser. A row whose name or value would not
+         * pass the form's validation is dropped rather than repaired.
          *
          * @return array<int, array{name: string, value: string, send_from_browser: bool}>
          */
@@ -5646,20 +5657,22 @@ if (!class_exists('WC_Twoinc')) {
                 if (!is_array($row)) {
                     continue;
                 }
-                $name = self::sanitize_header_line($row['name'] ?? '');
-                // Reserved names are refused on save, but the read path is what
+                $name = is_scalar($row['name'] ?? null) ? trim((string) $row['name']) : '';
+                $header_value = is_scalar($row['value'] ?? null) ? (string) $row['value'] : '';
+                // The form refuses these on save, but the read path is what
                 // composes the request: a row written around the form (a direct
-                // DB edit, another plugin) must not clobber X-API-Key.
+                // DB edit, another plugin) must not clobber X-API-Key or splice
+                // a second header in through a newline.
                 if (
-                    $name === ''
-                    || !self::is_valid_header_name($name)
+                    !self::is_valid_header_name($name)
+                    || !self::is_valid_header_value($header_value)
                     || in_array(strtolower($name), self::reserved_header_names(), true)
                 ) {
                     continue;
                 }
                 $clean[] = [
                     'name'              => $name,
-                    'value'             => self::sanitize_header_line($row['value'] ?? ''),
+                    'value'             => $header_value,
                     'send_from_browser' => self::is_browser_flag_set($row['send_from_browser'] ?? null),
                 ];
             }
@@ -5705,19 +5718,47 @@ if (!class_exists('WC_Twoinc')) {
             return trim((string) preg_replace('/[\r\n\t]+/', '', (string) $raw));
         }
 
+        /** Undo WP's magic quotes on one posted scalar. */
+        private static function unslash_scalar($raw): string
+        {
+            return is_scalar($raw) ? (string) wp_unslash((string) $raw) : '';
+        }
+
         /** RFC 7230 field-name token, so a name can never break the request. */
         private static function is_valid_header_name(string $name): bool
         {
-            return (bool) preg_match('/^[A-Za-z0-9!#$%&\'*+.^_`|~-]+$/', $name);
+            // /D: without it $ also matches before a trailing newline.
+            return (bool) preg_match('/^[A-Za-z0-9!#$%&\'*+.^_`|~-]+$/D', $name);
         }
 
         /**
-         * Headers make_request() composes itself. A custom row may not take
-         * one of these names: overwriting X-API-Key would break every call.
+         * Printable ASCII only: bars CR/LF (request splitting), NUL and the
+         * other control chars (log injection), and non-ASCII bytes whose
+         * encoding on the wire is ambiguous.
+         */
+        private static function is_valid_header_value(string $value): bool
+        {
+            return (bool) preg_match('/^[\x20-\x7E]+$/D', $value);
+        }
+
+        /**
+         * Headers a custom row may not take: the ones make_request() composes
+         * itself (overwriting X-API-Key would break every call), the ones the
+         * HTTP client always sets, and the proxy-identity headers a merchant
+         * must not be able to forge from this table.
          */
         private static function reserved_header_names(): array
         {
-            return ['accept-language', 'content-type', 'x-api-key'];
+            return [
+                'host',
+                'content-type',
+                'content-length',
+                'accept',
+                'accept-language',
+                'x-api-key',
+                'x-forwarded-for',
+                'x-real-ip',
+            ];
         }
 
         /**
@@ -6055,7 +6096,7 @@ if (!class_exists('WC_Twoinc')) {
                 // reading the stored value would send it without them and a
                 // merchant firewall would reject it, reverting the key.
                 $posted = $post_data[$custom_headers_field];
-                $this->custom_headers_override = is_array($posted) ? $posted : [];
+                $this->custom_headers_override = is_array($posted) ? wp_unslash($posted) : [];
             }
             $api_key_field = 'woocommerce_' . $this->id . '_api_key';
             $api_key_in_post = array_key_exists($api_key_field, $post_data);

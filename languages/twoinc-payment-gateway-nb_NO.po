@@ -1305,6 +1305,10 @@ msgid "\"%s\" is not a valid HTTP header name. Use letters, digits and hyphens."
 msgstr "\"%s\" er ikke et gyldig HTTP-headernavn. Bruk bokstaver, tall og bindestrek."
 
 #: class/WC_Twoinc.php
+msgid "The value of \"%s\" may only contain printable ASCII characters, and cannot be empty."
+msgstr "Verdien til \"%s\" kan bare inneholde skrivbare ASCII-tegn, og kan ikke være tom."
+
+#: class/WC_Twoinc.php
 msgid "If your IT administrator asks you to add headers to the calls your store makes to the %s API (for example a firewall token), add them here. Every header listed is sent on all calls your store makes from your server."
 msgstr "Hvis IT-administratoren din ber deg legge til headere på kallene butikken din gjør mot %s-API-et (for eksempel et brannmur-token), legger du dem til her. Alle headere i listen sendes på alle kall butikken din gjør fra serveren din."
 

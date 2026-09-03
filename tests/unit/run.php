@@ -282,6 +282,7 @@ final class BrandConfigSpec
             'testCustomHeadersValidationNormalisesAndDropsBlankRows',
             'testCustomHeadersHonouredOnTheSaveThatSetsThem',
             'testCustomHeaderNewlinesNeverReachTheHeader',
+            'testCustomHeadersSurviveTheSlashedPostByteIdentically',
             'testCustomHeadersRedactedFromTheApiLog',
             'testLegacyFirewallTokenMigratedIntoTheHeaderTable',
             'testSoleTraderTokensNeverPublishTheFirewallToken',
@@ -4253,7 +4254,8 @@ final class BrandConfigSpec
         $cases = [
             ['yes', 'waf-token-1', ['X-WAF-TOKEN' => 'waf-token-1'], 'the opted-in merchant gets the header with the minted pair'],
             ['no', 'waf-token-1', null, 'the default keeps a configured header off the page'],
-            ['yes', '', ['X-WAF-TOKEN' => ''], 'a flagged row with no value publishes an empty header, as the server sends it'],
+            ['yes', 'a"b\'c\\d', ['X-WAF-TOKEN' => 'a"b\'c\\d'], 'quotes and backslashes cross to the page unescaped'],
+            ['yes', "waf\r\ntoken", null, 'a stored newline-bearing row is dropped, not repaired'],
         ];
         foreach ($cases as [$optIn, $configured, $expected, $description]) {
             WC_Twoinc_Sole_Trader::reset_cache();
@@ -9247,11 +9249,25 @@ final class BrandConfigSpec
                 ],
                 'browser-flag column label',
             ],
+            [
+                'The value of "%s" may only contain printable ASCII characters, and cannot be empty.',
+                'The value of "%s" may only contain printable ASCII characters, and cannot be empty.',
+                [
+                    'nb_NO' => 'Verdien til "%s" kan bare inneholde skrivbare ASCII-tegn, og kan ikke være tom.',
+                    'nl_NL' => 'De waarde van "%s" mag alleen afdrukbare ASCII-tekens bevatten en mag niet leeg zijn.',
+                    'sv_SE' => 'Värdet för "%s" får endast innehålla skrivbara ASCII-tecken och får inte vara tomt.',
+                ],
+                'rejected-header-value message',
+            ],
         ];
         foreach ($cases as [$msgid, $source, $expected, $description]) {
             TinyAssert::same($source, $msgid);
             TinyAssert::true(
-                strpos((string) file_get_contents($languages . 'twoinc-payment-gateway.pot'), $msgid) !== false,
+                strpos(
+                    (string) file_get_contents($languages . 'twoinc-payment-gateway.pot'),
+                    // A catalogue msgid escapes its quotes; the source string does not.
+                    addcslashes($msgid, '"\\')
+                ) !== false,
                 "the .pot is missing the $description — regenerate it"
             );
 
@@ -9296,9 +9312,9 @@ final class BrandConfigSpec
                 'every row is sent server-side, browser flag or not',
             ],
             [
-                [['name' => 'X-Empty', 'value' => '', 'send_from_browser' => 'no']],
-                ['X-Empty' => ''],
-                'a named row with an empty value still sends the header',
+                [['name' => 'X-Punctuation', 'value' => 'a"b\'c\\d e', 'send_from_browser' => 'no']],
+                ['X-Punctuation' => 'a"b\'c\\d e'],
+                'quotes and backslashes travel exactly as entered',
             ],
         ];
         foreach ($cases as [$rows, $expected, $description]) {
@@ -9327,8 +9343,13 @@ final class BrandConfigSpec
         $gateway = self::firewallGateway(['api_key' => 'real-key', 'custom_headers' => [
             ['name' => 'X-API-Key', 'value' => 'stolen', 'send_from_browser' => 'yes'],
             ['name' => 'content-type', 'value' => 'text/plain', 'send_from_browser' => 'yes'],
+            ['name' => 'Host', 'value' => 'evil.example', 'send_from_browser' => 'yes'],
+            ['name' => 'Content-Length', 'value' => '0', 'send_from_browser' => 'yes'],
+            ['name' => 'X-Forwarded-For', 'value' => '10.0.0.1', 'send_from_browser' => 'yes'],
+            ['name' => 'x-real-ip', 'value' => '10.0.0.1', 'send_from_browser' => 'yes'],
             ['name' => 'X Bad Name', 'value' => 'v', 'send_from_browser' => 'yes'],
             ['name' => '', 'value' => 'v', 'send_from_browser' => 'yes'],
+            ['name' => 'X-Unicode', 'value' => 'tøken', 'send_from_browser' => 'yes'],
             ['name' => 'X-Tenant', 'value' => 'tenant-7', 'send_from_browser' => 'yes'],
         ]]);
         $gateway->make_request('/v1/order_intent', ['a' => 1]);
@@ -9337,7 +9358,9 @@ final class BrandConfigSpec
         TinyAssert::same('real-key', $headers['X-API-Key'] ?? null, 'a stored row must not clobber the API key');
         TinyAssert::same('application/json; charset=utf-8', $headers['Content-Type'] ?? null);
         TinyAssert::same('tenant-7', $headers['X-Tenant'] ?? null, 'the usable row still travels');
-        TinyAssert::same(false, array_key_exists('X Bad Name', $headers));
+        foreach (['X Bad Name', 'Host', 'Content-Length', 'X-Forwarded-For', 'x-real-ip', 'X-Unicode'] as $dropped) {
+            TinyAssert::same(false, array_key_exists($dropped, $headers), "$dropped must not reach the request");
+        }
         // Nor may a dropped row reach the browser.
         TinyAssert::same(['X-Tenant' => 'tenant-7'], $gateway->get_browser_custom_headers());
     }
@@ -9350,6 +9373,22 @@ final class BrandConfigSpec
             [[['name' => '', 'value' => 'v']], 'needs a name', 'a value with no name is unusable'],
             [[['name' => 'X-API-Key', 'value' => 'v']], 'cannot be overridden', 'the API key header is the plugin\'s own'],
             [[['name' => 'content-type', 'value' => 'v']], 'cannot be overridden', 'reserved names match case-insensitively'],
+            [[['name' => 'Content-Type', 'value' => 'v']], 'cannot be overridden', 'nor does the canonical casing slip through'],
+            [[['name' => 'Host', 'value' => 'v']], 'cannot be overridden', 'Host addresses the request itself'],
+            [[['name' => 'content-length', 'value' => 'v']], 'cannot be overridden', 'Content-Length is set by the HTTP client'],
+            [[['name' => 'Accept', 'value' => 'v']], 'cannot be overridden', 'Accept negotiates the response body'],
+            [[['name' => 'Accept-Language', 'value' => 'v']], 'cannot be overridden', 'the locale header is composed from settings'],
+            [[['name' => 'X-Forwarded-For', 'value' => 'v']], 'cannot be overridden', 'a forged client IP must not be settable here'],
+            [[['name' => 'x-real-ip', 'value' => 'v']], 'cannot be overridden', 'nor its Nginx-flavoured twin'],
+            [[['name' => 'X-Split', 'value' => "a\r\nX-Injected: b"]], 'printable ASCII', 'CRLF would splice a second header in'],
+            [[['name' => 'X-Split', 'value' => "a\nb"]], 'printable ASCII', 'a bare LF splits the line too'],
+            // Without /D on the pattern, $ matches before a trailing newline.
+            [[['name' => 'X-Split', 'value' => "ab\n"]], 'printable ASCII', 'a trailing LF is still a split'],
+            [[['name' => 'X-Split', 'value' => "a\rb"]], 'printable ASCII', 'a bare CR splits the line too'],
+            [[['name' => 'X-Nul', 'value' => "a\0b"]], 'printable ASCII', 'NUL truncates the value downstream'],
+            [[['name' => 'X-Tab', 'value' => "a\tb"]], 'printable ASCII', 'a tab is not a value character'],
+            [[['name' => 'X-Unicode', 'value' => 'tøken']], 'printable ASCII', 'a non-ASCII byte has no unambiguous encoding'],
+            [[['name' => 'X-Empty', 'value' => '']], 'printable ASCII', 'a named row with no value is not usable config'],
             [
                 [['name' => 'X-Dup', 'value' => 'a'], ['name' => 'x-dup', 'value' => 'b']],
                 'listed more than once',
@@ -9376,7 +9415,7 @@ final class BrandConfigSpec
     {
         $gateway = self::firewallGateway([]);
         $saved = $gateway->validate_two_custom_headers_field('custom_headers', [
-            5  => ['name' => ' X-WAF-TOKEN ', 'value' => " waf\r\ntoken-1\n", 'send_from_browser' => '1'],
+            5  => ['name' => ' X-WAF-TOKEN ', 'value' => 'waf-token-1', 'send_from_browser' => '1'],
             7  => ['name' => '', 'value' => ''],
             9  => ['name' => 'X-Tenant', 'value' => 'tenant-7'],
         ]);
@@ -9384,8 +9423,8 @@ final class BrandConfigSpec
         // Re-indexed from zero: the posted indices are only a grouping key,
         // and admin.js appends rows with sparse ones.
         TinyAssert::same([0, 1], array_keys($saved));
-        TinyAssert::same('X-WAF-TOKEN', $saved[0]['name']);
-        TinyAssert::same('waftoken-1', $saved[0]['value'], 'a newline would split the header line');
+        TinyAssert::same('X-WAF-TOKEN', $saved[0]['name'], 'a pasted name keeps no surrounding space');
+        TinyAssert::same('waf-token-1', $saved[0]['value']);
         TinyAssert::same('yes', $saved[0]['send_from_browser']);
         TinyAssert::same('no', $saved[1]['send_from_browser'], 'an unticked checkbox posts nothing at all');
 
@@ -9445,13 +9484,71 @@ final class BrandConfigSpec
     private static function testCustomHeaderNewlinesNeverReachTheHeader(): void
     {
         // A stored value carrying a newline is a split request, and a row can
-        // predate the save-time normalisation.
+        // predate the save-time validation.
         $gateway = self::firewallGateway(['api_key' => 'key', 'custom_headers' => [
             ['name' => 'X-WAF-TOKEN', 'value' => " waf\r\ntoken-1\n", 'send_from_browser' => 'no'],
+            ['name' => 'X-Tenant', 'value' => 'tenant-7', 'send_from_browser' => 'no'],
         ]]);
         $gateway->make_request('/v1/order_intent', ['a' => 1]);
 
-        TinyAssert::same('waftoken-1', self::sentHeaders()['X-WAF-TOKEN'] ?? null);
+        TinyAssert::same(false, array_key_exists('X-WAF-TOKEN', self::sentHeaders()));
+        TinyAssert::same('tenant-7', self::sentHeaders()['X-Tenant'] ?? null, 'the usable row still travels');
+    }
+
+    /**
+     * WP slashes the settings POST, so a header entered with an apostrophe
+     * reached the wire and the log with the slash still on it until this
+     * validator unslashed it like every WC validator it replaces.
+     */
+    private static function testCustomHeadersSurviveTheSlashedPostByteIdentically(): void
+    {
+        $cases = [
+            ["X-Tenant's-Key", "the shop's token", 'an apostrophe is a valid token character in a name'],
+            ['X-Quote', 'say "hi"', 'a double quote is printable and must not be escaped'],
+            ['X-Backslash', 'a\\b', 'a lone backslash must not multiply'],
+            ['X-Plain', 'waf-token-1', 'a plain value is untouched'],
+        ];
+        foreach ($cases as [$name, $value, $description]) {
+            $GLOBALS['__twoinc_test_http_calls'] = [];
+            $GLOBALS['__twoinc_test_logs'] = [];
+            $gateway = self::gateway();
+            $gateway->init_form_fields();
+            $option_key = $gateway->get_option_key();
+            $GLOBALS['__twoinc_test_options'][$option_key] = ['enable_api_logging' => 'yes'];
+            $GLOBALS['__twoinc_test_http_response'] = [
+                'response' => ['code' => 200],
+                'body' => json_encode(['id' => 'merchant-1', 'short_name' => 'shop']),
+            ];
+            // What PHP hands the plugin: every quote and backslash slashed.
+            $gateway->test_post_data = [
+                $gateway->get_field_key('api_key') => 'new-key',
+                $gateway->get_field_key('custom_headers') => [
+                    0 => ['name' => addslashes($name), 'value' => addslashes($value)],
+                ],
+                $gateway->get_field_key('surcharge_tax_treatment') => 'standard',
+            ];
+            $gateway->process_admin_options();
+
+            // Storage.
+            $saved = get_option($option_key, []);
+            TinyAssert::same($name, $saved['custom_headers'][0]['name'] ?? null, $description);
+            TinyAssert::same($value, $saved['custom_headers'][0]['value'] ?? null, $description);
+            // The verification call made during that same save.
+            TinyAssert::same($value, self::headerSentTo('/v1/merchant/verify_api_key', $name), $description);
+            // Outbound header + debug log, read back from storage.
+            $GLOBALS['__twoinc_test_http_calls'] = [];
+            $GLOBALS['__twoinc_test_logs'] = [];
+            $saved['enable_api_logging'] = 'yes';
+            $GLOBALS['__twoinc_test_options'][$option_key] = $saved;
+            $reloaded = self::gateway();
+            $reloaded->init_form_fields();
+            $reloaded->init_settings();
+            $reloaded->make_request('/v1/order_intent', ['a' => 1]);
+            TinyAssert::same($value, self::sentHeaders()[$name] ?? null, $description);
+            $logs = $GLOBALS['__twoinc_test_logs'];
+            $logged = $logs[count($logs) - 1]['context']['request']['headers'] ?? [];
+            TinyAssert::same('[REDACTED]', $logged[$name] ?? null, "the log names the header verbatim: $description");
+        }
     }
 
     private static function testCustomHeadersRedactedFromTheApiLog(): void
