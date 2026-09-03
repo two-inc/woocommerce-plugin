@@ -795,7 +795,7 @@ if (!class_exists('WC_Twoinc')) {
          *   `twoincDomHelper.toggleBusinessFields()` in twoinc.js.
          * - `test_checkout_host` (TWO-25386, Doug's ruling): removed outright
          *   — see get_effective_environment_mode().
-         * - `firewall_token` / `firewall_token_browser` (ABN-490): replaced
+         * - `firewall_token` / `firewall_token_browser`: replaced
          *   by the `custom_headers` table. Nothing is carried across — the
          *   fields only ever existed on staging, never in a release.
          */

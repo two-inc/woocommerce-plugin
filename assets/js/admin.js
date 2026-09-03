@@ -9,7 +9,7 @@ jQuery(function ($) {
     }
   }
 
-  // ── Custom request headers table (ABN-490) ──────────────────────────
+  // ── Custom request headers table ────────────────────────────────────
   // Row indices are only a POST grouping key, so a removed row leaves a gap
   // rather than forcing a renumber; validate_two_custom_headers_field()
   // re-indexes on save.

@@ -9786,8 +9786,8 @@ final class BrandConfigSpec
     }
 
     /**
-     * ABN-490: the `firewall_token` fields never reached a release, so there
-     * is nothing to carry into the header table — only two dead keys to drop.
+     * The `firewall_token` fields never reached a release, so there is
+     * nothing to carry into the header table — only two dead keys to drop.
      */
     private static function testLegacyFirewallTokenKeysDroppedWithNoMigration(): void
     {
