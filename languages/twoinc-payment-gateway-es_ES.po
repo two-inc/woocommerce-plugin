@@ -1,0 +1,71 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: woocommerce-plugin\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-09-02 09:39+0100\n"
+"PO-Revision-Date: 2026-09-03 00:00+0000\n"
+"Last-Translator: \n"
+"Language-Team: Spanish\n"
+"Language: es_ES\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: Loco https://localise.biz/\n"
+"Plural-Forms: nplurals=2; plural=n != 1;\n"
+"X-Loco-Version: 2.7.2; wp-6.8.1\n"
+
+#: class/WC_Twoinc_Checkout.php:379
+msgid "We use your company name to automatically populate your address and register the company that made the purchase."
+msgstr "Utilizamos el nombre de su empresa para rellenar automáticamente su dirección y registrar la empresa que realizó la compra."
+
+#: class/WC_Twoinc_Checkout.php:383
+msgid "Company search is temporarily unavailable. Please try again."
+msgstr "La búsqueda de empresas no está disponible temporalmente. Inténtelo de nuevo."
+
+#. translators: %d: minimum number of characters the buyer must type before the company search runs. Left unresolved here and interpolated in JS from the threshold the widget enforces, so the two cannot disagree.
+#: class/WC_Twoinc_Checkout.php:391
+#, php-format
+msgid "Enter %d or more characters"
+msgstr "Introduzca %d o más caracteres"
+
+#: class/WC_Twoinc_Checkout.php:398
+msgid "Enter manually"
+msgstr "Introducir manualmente"
+
+#: class/WC_Twoinc_Checkout.php:399
+msgid "Search for company"
+msgstr "Buscar empresa"
+
+#: class/WC_Twoinc_Checkout.php:469
+msgid "Registered company"
+msgstr "Empresa registrada"
+
+#: class/WC_Twoinc_Checkout.php:470
+msgid "Sole trader"
+msgstr "Autónomo"
+
+#: class/WC_Twoinc_Checkout.php:471
+msgid "Click here to login or sign up as a sole trader."
+msgstr "Haga clic aquí para iniciar sesión o registrarse como autónomo."
+
+#: class/WC_Twoinc_Checkout.php:477
+msgid "Select a different sole trader"
+msgstr "Seleccionar otro autónomo"
+
+#: class/WC_Twoinc_Checkout.php:478
+msgid "Something went wrong setting up sole trader checkout. Please try again."
+msgstr "Se produjo un error al configurar el pago como autónomo. Inténtelo de nuevo."
+
+#. translators: shown beside the spinner while the order-intent availability check runs.
+#: class/WC_Twoinc.php:935
+msgid "Checking availability"
+msgstr "Comprobando disponibilidad"
+
+#: class/WC_Twoinc.php:1151
+msgid "We could not complete that just now. Please wait a moment and try again."
+msgstr "No se pudo completar esto en este momento. Espere un momento y vuelva a intentarlo."
+
+#: class/WC_Twoinc.php:4042
+#, php-format
+msgid "Please select your company before paying with %s."
+msgstr "Seleccione su empresa antes de pagar con %s."
