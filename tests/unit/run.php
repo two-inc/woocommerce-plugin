@@ -284,8 +284,10 @@ final class BrandConfigSpec
             'testCustomHeaderNewlinesNeverReachTheHeader',
             'testCustomHeadersSurviveTheSlashedPostByteIdentically',
             'testCustomHeadersReadPathKeepsOnlyTheFirstOfADuplicatePair',
-            'testCustomHeadersOverrideDoesNotOutliveTheSave',
+            'testCustomHeadersOverrideCarriesOnlyRowsTheSaveKeeps',
             'testTraceContextHeaderIsGatedLikeACustomValue',
+            'testClearingTheHeaderTableVerifiesTheKeyWithoutIt',
+            'testUnsendableStoredRowIsMarkedInTheForm',
             'testCustomHeadersRedactedFromTheApiLog',
             'testLegacyFirewallTokenMigratedIntoTheHeaderTable',
             'testSoleTraderTokensNeverPublishTheFirewallToken',
@@ -9384,7 +9386,7 @@ final class BrandConfigSpec
     }
 
     /** The override carries only rows the save will keep. */
-    private static function testCustomHeadersOverrideDoesNotOutliveTheSave(): void
+    private static function testCustomHeadersOverrideCarriesOnlyRowsTheSaveKeeps(): void
     {
         $gateway = self::gateway();
         $gateway->init_form_fields();
@@ -9405,6 +9407,53 @@ final class BrandConfigSpec
         $gateway->process_admin_options();
 
         TinyAssert::same([], $gateway->get_custom_headers());
+    }
+
+    /** Removing every row posts no field key at all, so absence means "cleared". */
+    private static function testClearingTheHeaderTableVerifiesTheKeyWithoutIt(): void
+    {
+        $gateway = self::gateway();
+        $gateway->init_form_fields();
+        $GLOBALS['__twoinc_test_options'][$gateway->get_option_key()] = [
+            'custom_headers' => [['name' => 'X-WAF-TOKEN', 'value' => 'waf-token-1', 'send_from_browser' => 'no']],
+        ];
+        // Loaded, so a fallback to the stored rows would be visible on the wire.
+        $gateway->init_settings();
+        $GLOBALS['__twoinc_test_http_calls'] = [];
+        $GLOBALS['__twoinc_test_http_response'] = [
+            'response' => ['code' => 200],
+            'body' => json_encode(['id' => 'merchant-1', 'short_name' => 'shop']),
+        ];
+        $gateway->test_post_data = [
+            $gateway->get_field_key('api_key') => 'new-key',
+            $gateway->get_field_key('surcharge_tax_treatment') => 'standard',
+        ];
+        $gateway->process_admin_options();
+
+        TinyAssert::same(null, self::headerSentTo('/v1/merchant/verify_api_key', 'X-WAF-TOKEN'));
+        TinyAssert::same([], get_option($gateway->get_option_key(), [])['custom_headers'] ?? null);
+    }
+
+    /** An unsendable stored row says so: the text input would strip it silently on the next save. */
+    private static function testUnsendableStoredRowIsMarkedInTheForm(): void
+    {
+        $cases = [
+            ["waf\r\ntoken", true, 'a newline-bearing value is flagged'],
+            ['tøken', true, 'so is a non-ASCII one'],
+            ['waf-token-1', false, 'a sendable value is not'],
+        ];
+        foreach ($cases as [$value, $flagged, $description]) {
+            $gateway = self::firewallGateway(['custom_headers' => [
+                ['name' => 'X-WAF-TOKEN', 'value' => $value, 'send_from_browser' => 'no'],
+            ]]);
+            $html = $gateway->generate_two_custom_headers_html('custom_headers', []);
+
+            TinyAssert::same(
+                $flagged,
+                strpos($html, 'twoinc-custom-header-unsendable') !== false,
+                $description
+            );
+        }
     }
 
     /** A proxy-supplied trace header is no more trusted than a merchant-entered one. */

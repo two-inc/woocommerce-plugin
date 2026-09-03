@@ -803,9 +803,8 @@ if (!class_exists('WC_Twoinc')) {
             $token = is_scalar($this->settings['firewall_token'] ?? null)
                 ? (string) $this->settings['firewall_token']
                 : '';
-            // Migrated verbatim, even if unsendable: repairing it would carry a
-            // different token across, and dropping it would destroy the only
-            // copy. The read path refuses to send it and the form names it.
+            // Verbatim: repairing carries a different token across, dropping
+            // destroys the only copy. The form marks an unsendable row.
             if (trim($token) !== '') {
                 $existing = isset($this->settings['custom_headers']) && is_array($this->settings['custom_headers'])
                     ? array_values($this->settings['custom_headers'])
@@ -5120,6 +5119,7 @@ if (!class_exists('WC_Twoinc')) {
                                 $name = is_array($row) ? (string) ($row['name'] ?? '') : '';
                                 $value = is_array($row) ? (string) ($row['value'] ?? '') : '';
                                 $browser = is_array($row) && self::is_browser_flag_set($row['send_from_browser'] ?? null);
+                                $unsendable = $name !== '' && !self::is_valid_header_value($value);
                                 ?>
                                 <tr class="twoinc-custom-header-row">
                                     <td><input type="text" class="input-text regular-input" name="<?php echo esc_attr($field_key); ?>[<?php echo (int) $i; ?>][name]" value="<?php echo esc_attr($name); ?>" placeholder="X-WAF-TOKEN" /></td>
@@ -5127,6 +5127,11 @@ if (!class_exists('WC_Twoinc')) {
                                     <td><input type="checkbox" name="<?php echo esc_attr($field_key); ?>[<?php echo (int) $i; ?>][send_from_browser]" value="1" <?php checked($browser); ?> /></td>
                                     <td><button type="button" class="button twoinc-custom-header-remove"><?php esc_html_e('Remove', 'twoinc-payment-gateway'); ?></button></td>
                                 </tr>
+                                <?php if ($unsendable) : ?>
+                                    <tr class="twoinc-custom-header-unsendable">
+                                        <td colspan="4"><p class="description"><?php esc_html_e('This value is not being sent because it is not printable ASCII text. Retype it — saving the form as it stands will store a changed value.', 'twoinc-payment-gateway'); ?></p></td>
+                                    </tr>
+                                <?php endif; ?>
                             <?php endforeach; ?>
                         </tbody>
                     </table>
@@ -6081,21 +6086,19 @@ if (!class_exists('WC_Twoinc')) {
         {
             $post_data = $this->get_post_data();
             $custom_headers_field = 'woocommerce_' . $this->id . '_custom_headers';
-            if (array_key_exists($custom_headers_field, $post_data)) {
-                // Honour headers entered in the same save as the API key: the
-                // verification call below runs before the settings persist, so
-                // reading the stored value would send it without them and a
-                // merchant firewall would reject it, reverting the key.
-                try {
-                    $this->custom_headers_override = $this->validate_two_custom_headers_field(
-                        'custom_headers',
-                        $post_data[$custom_headers_field]
-                    );
-                } catch (Exception $e) {
-                    // A table the save is about to refuse must not authenticate
-                    // the key either; the stored rows stand for this request.
-                    $this->custom_headers_override = null;
-                }
+            // Honour the table as submitted in the same save as the API key: the
+            // verification call below runs before the settings persist, so reading
+            // the stored rows would verify against a table the merchant just
+            // changed and a firewall would reject the key as unverifiable.
+            // Removing every row posts no key at all, hence no array_key_exists.
+            try {
+                $this->custom_headers_override = $this->validate_two_custom_headers_field(
+                    'custom_headers',
+                    $post_data[$custom_headers_field] ?? null
+                );
+            } catch (Exception $e) {
+                // A table the save will refuse must not authenticate the key.
+                $this->custom_headers_override = null;
             }
             $api_key_field = 'woocommerce_' . $this->id . '_api_key';
             $api_key_in_post = array_key_exists($api_key_field, $post_data);

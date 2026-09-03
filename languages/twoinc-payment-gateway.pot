@@ -1310,6 +1310,10 @@ msgid "The value of \"%s\" must be printable ASCII text and cannot be blank."
 msgstr ""
 
 #: class/WC_Twoinc.php
+msgid "This value is not being sent because it is not printable ASCII text. Retype it — saving the form as it stands will store a changed value."
+msgstr ""
+
+#: class/WC_Twoinc.php
 msgid "If your IT administrator asks you to add headers to the calls your store makes to the %s API (for example a firewall token), add them here. Every header listed is sent on all calls your store makes from your server."
 msgstr ""
 
