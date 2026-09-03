@@ -5634,8 +5634,8 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * Every stored row, tagged with whether it is sent and whether a text
-         * input can hold its value at all.
+         * Every stored row, tagged with whether it is sent and whether the
+         * form can show each of its two fields.
          *
          * @return array<int, array{name: string, value: string, send_from_browser: bool, sent: bool, name_unholdable: bool, value_unholdable: bool, discarded: bool}>
          */
@@ -5710,13 +5710,18 @@ if (!class_exists('WC_Twoinc')) {
             return $map;
         }
 
-        /** Whether a one-line input posts a field back unchanged. */
+        /**
+         * Whether the form can show a field at all: esc_attr discards one that
+         * is not valid UTF-8, and a one-line input drops these bytes from what
+         * it posts. Entity text is deliberately not judged here — a browser
+         * decodes it where PHP does not, and chasing that parity is unbounded;
+         * such a value is printable, is sent correctly, and any mismatch on
+         * re-entry is refused by the save rather than stored quietly.
+         */
         private static function survives_the_form(string $field): bool
         {
-            $posted = html_entity_decode(esc_attr($field), ENT_QUOTES | ENT_HTML5, 'UTF-8');
-            // PHP leaves a numeric CR/LF/NUL reference encoded; a browser decodes it.
-            $posted = (string) preg_replace('/&#0*(?:0|10|13);|&#x0*[0ad];/i', '', $posted);
-            return str_replace(["\r", "\n", "\0"], '', $posted) === $field;
+            return ($field === '' || esc_attr($field) !== '')
+                && preg_match('/[\r\n\x00]/', $field) !== 1;
         }
 
         /** Undo WP's magic quotes on one posted scalar. */
