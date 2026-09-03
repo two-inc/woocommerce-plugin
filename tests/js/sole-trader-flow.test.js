@@ -86,6 +86,10 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       autofill_token: "autofill",
       signup_url: "https://checkout.example.test/soletrader/signup"
     };
+    // No Two session by default, so a chip click resolves to the hosted
+    // signup — the path every popup expectation below is written against.
+    // Synchronous, like a browser answering from a cookie it already has.
+    jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => cb(null));
     opened = [];
     window.open = jest.fn((url, target, features) => {
       opened.push({ url: url, target: target, features: features });
@@ -155,7 +159,17 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     $("#billing_email").val("buyer@example.test");
     soleTrader.bindPopupMessageListener();
     let resolveBuyer;
+    // The chip's own autofill probe answers "nobody" — the buyer has no Two
+    // session yet, which is what sends the click to the popup in the first
+    // place. Only the ACCEPTED handler's later lookup is left deferred, so
+    // the undecided state this arms is a popup on screen, not a probe.
+    let probeAnswered = false;
     jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => {
+      if (!probeAnswered) {
+        probeAnswered = true;
+        cb(null);
+        return;
+      }
       resolveBuyer = cb;
     });
     return {
@@ -1357,8 +1371,282 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     });
   });
 
+  /**
+   * Autofill first, the hosted signup only when the probe reports nobody
+   * (Doug 2026-09-03). The probe reads the Two cookie, so it can only report
+   * a registration the buyer has already declared to Two.
+   */
+  describe("the chip's autofill-first probe", () => {
+    const ENROLLED = {
+      organization_number: "TWO:ST9",
+      company_name: "Probed Trader",
+      email: "buyer@example.test",
+      phone_number: "+4712345678"
+    };
+
+    function probeReports(buyer) {
+      jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => cb(buyer));
+    }
+
+    // Hands back `answer(buyer)`, so a test can assert what holds while the
+    // probe is still out.
+    function deferredProbe() {
+      const state = { calls: 0, answer: null };
+      jest.spyOn(soleTrader, "fetchCurrentBuyer").mockImplementation((cb) => {
+        state.calls += 1;
+        state.answer = cb;
+      });
+      return state;
+    }
+
+    function busy() {
+      return $(".twoinc-sole-trader-note-slot").hasClass("twoinc-sole-trader-toggle--busy");
+    }
+
+    test("a reported registration is adopted with no popup at all", () => {
+      soleTrader.render();
+      probeReports(ENROLLED);
+
+      soleTrader.onModeChipClick("sole_trader");
+
+      expect(window.open).not.toHaveBeenCalled();
+      expect($("#company_id").val()).toBe("TWO:ST9");
+      expect($("#billing_company").val()).toBe("Probed Trader");
+      expect(soleTrader.soleTraderAdopted).toBe(true);
+      expect(soleTrader.mode).toBe("sole_trader");
+      // The blocked-popup fallback link stays down — nothing was blocked.
+      expect($(".twoinc-sole-trader-note").hasClass("hidden")).toBe(true);
+    });
+
+    test("the reported buyer's own details land too, so the whole object is adopted", () => {
+      probeReports(ENROLLED);
+
+      soleTrader.onModeChipClick("sole_trader");
+
+      expect($("#billing_phone").val()).toBe("+4712345678");
+    });
+
+    /**
+     * Same criterion as the post-signup path — a buyer object at all — so the
+     * two routes into a capture cannot disagree about what a complete one is.
+     */
+    test("a report with no buyer in it resolves to the popup, exactly as today", () => {
+      probeReports(null);
+
+      soleTrader.onModeChipClick("sole_trader");
+
+      expect(opened).toHaveLength(1);
+      expect($("#company_id").val()).toBe("");
+      expect(soleTrader.soleTraderAdopted).toBe(false);
+    });
+
+    /**
+     * Through the REAL probe, not a stub of it: "the probe could not answer"
+     * is the branch the popup fallback exists for, and a mocked `cb(null)`
+     * proves nothing about the transport reaching it.
+     */
+    test.each([
+      {
+        respond: () => Promise.reject(new Error("offline")),
+        description: "the request fails outright"
+      },
+      {
+        respond: () => Promise.resolve({ ok: false, status: 404, text: () => Promise.resolve("") }),
+        description: "the API reports no buyer on the cookie (404)"
+      },
+      {
+        respond: () =>
+          Promise.resolve({ ok: false, status: 500, text: () => Promise.resolve("boom") }),
+        description: "the API errors"
+      }
+    ])("opens the popup when $description", async ({ respond }) => {
+      soleTrader.fetchCurrentBuyer.mockRestore();
+      global.fetch = jest.fn(respond);
+
+      soleTrader.onModeChipClick("sole_trader");
+      // A macrotask, not a microtask: the probe's own promise chain has to
+      // drain before the fallback launch has happened at all.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      delete global.fetch;
+
+      expect(opened).toHaveLength(1);
+    });
+
+    test("the popup waits for the probe, with the busy state up meanwhile", () => {
+      const probe = deferredProbe();
+      soleTrader.render();
+
+      soleTrader.onModeChipClick("sole_trader");
+      expect(opened).toHaveLength(0);
+      expect(busy()).toBe(true);
+
+      probe.answer(null);
+
+      expect(opened).toHaveLength(1);
+      // Still up: the popup's own watcher holds a flight of its own until the
+      // window goes away.
+      expect(busy()).toBe(true);
+    });
+
+    test("an adoption takes the busy state down with it, leaving no stuck spinner", () => {
+      const probe = deferredProbe();
+      soleTrader.render();
+      soleTrader.onModeChipClick("sole_trader");
+
+      probe.answer(ENROLLED);
+
+      expect(busy()).toBe(false);
+      expect(soleTrader.flightDepth).toBe(0);
+    });
+
+    test("a second click while the probe is still out neither re-probes nor stacks", () => {
+      const probe = deferredProbe();
+
+      soleTrader.onModeChipClick("sole_trader");
+      soleTrader.onModeChipClick("sole_trader");
+      expect(probe.calls).toBe(1);
+
+      probe.answer(ENROLLED);
+
+      expect(opened).toHaveLength(0);
+      expect($("#company_id").val()).toBe("TWO:ST9");
+    });
+
+    /**
+     * A probe left outstanding holds `isDeciding()`, which is what every other
+     * mode chip's own guard refuses on — so without cancelling it, the chip
+     * the buyer pressed would do nothing for the length of the round trip.
+     */
+    test("another mode chip pressed while the probe is out is honoured, not dead", () => {
+      harness.openCompanyPanel($, ctx.helper);
+      const probe = deferredProbe();
+      soleTrader.onModeChipClick("sole_trader");
+
+      clickChip("registered");
+
+      expect(soleTrader.mode).toBe("business");
+      expect(soleTrader.isDeciding()).toBe(false);
+      expect(soleTrader.flightDepth).toBe(0);
+
+      // And the answer that lands afterwards neither adopts nor opens
+      // anything behind the buyer, nor settles anything — the unrelated
+      // flight below stands in for whatever the buyer went on to start.
+      soleTrader.beginFlight();
+      probe.answer(ENROLLED);
+
+      expect(opened).toHaveLength(0);
+      expect($("#company_id").val()).toBe("");
+      expect(soleTrader.flightDepth).toBe(1);
+    });
+
+    test("a cancelled probe's late answer does not spend the next flight's settle", () => {
+      harness.openCompanyPanel($, ctx.helper);
+      const probe = deferredProbe();
+      soleTrader.onModeChipClick("sole_trader");
+      clickChip("registered");
+      const staleAnswer = probe.answer;
+
+      // A second trip into sole-trader mode, still deciding, when the first
+      // trip's abandoned request finally lands.
+      soleTrader.onModeChipClick("sole_trader");
+      staleAnswer(ENROLLED);
+
+      // The live probe still owns the busy state — a stale settle would have
+      // taken the spinner down under it.
+      expect(soleTrader.flightDepth).toBe(1);
+      expect(busy()).toBe(true);
+      expect($("#company_id").val()).toBe("");
+    });
+
+    test("a probe answering after the buyer left sole-trader mode changes nothing", () => {
+      const probe = deferredProbe();
+      soleTrader.onModeChipClick("sole_trader");
+
+      soleTrader.setMode("business");
+      probe.answer(ENROLLED);
+
+      expect(opened).toHaveLength(0);
+      expect($("#company_id").val()).toBe("");
+      expect(soleTrader.mode).toBe("business");
+    });
+
+    test("re-clicking the chip once adopted goes straight to the re-signup, with no probe", () => {
+      soleTrader.setMode("sole_trader");
+      soleTrader.setCompany("TWO:ST1", "First Trader");
+      probeReports(ENROLLED);
+
+      soleTrader.onModeChipClick("sole_trader");
+
+      expect(opened).toHaveLength(1);
+      expect(opened[0].url).toContain("&autoselect=false");
+      expect(soleTrader.fetchCurrentBuyer).not.toHaveBeenCalled();
+      expect($("#company_id").val()).toBe("TWO:ST1");
+    });
+
+    test.each([
+      { activate: ($btn) => $btn.trigger("click"), description: "click" },
+      {
+        activate: ($btn) => $btn.trigger($.Event("keydown", { which: 13 })),
+        description: "Enter"
+      }
+    ])(
+      "the select-a-different-sole-trader link opens the popup on $description whatever the probe would report",
+      ({ activate }) => {
+        soleTrader.setMode("sole_trader");
+        soleTrader.setCompany("TWO:ST1", "First Trader");
+        probeReports(ENROLLED);
+
+        activate(soleTrader.getDifferentSoleTraderBtnNode());
+
+        expect(opened).toHaveLength(1);
+        expect(opened[0].url).toContain("&autoselect=false");
+        expect(soleTrader.fetchCurrentBuyer).not.toHaveBeenCalled();
+      }
+    );
+
+    /**
+     * The mint must be behind the buyer by the time they click, or the click
+     * path carries a round trip `window.open()` cannot survive.
+     */
+    describe("tokens are minted when the control renders, never on the click path", () => {
+      let ajax;
+
+      beforeEach(() => {
+        ajax = harness.stubAjax($);
+        soleTrader.availabilityByCountry = {};
+        soleTrader.tokens = null;
+      });
+
+      afterEach(() => {
+        ajax.restore();
+      });
+
+      test.each([
+        {
+          available: true,
+          expectedCalls: 2,
+          description: "a country where sole trader is offered"
+        },
+        {
+          available: false,
+          expectedCalls: 1,
+          description: "a country where it is not — a buyer who can never use it mints nothing"
+        }
+      ])("$description", ({ available, expectedCalls }) => {
+        soleTrader.refresh();
+        ajax.last().succeed({ success: true, data: { available: available } });
+
+        expect(ajax.calls).toHaveLength(expectedCalls);
+        if (expectedCalls === 2) {
+          expect(ajax.calls[1].url).toContain("two_sole_trader_tokens");
+        }
+        expect(window.open).not.toHaveBeenCalled();
+      });
+    });
+  });
+
   describe("TWO-40 §7 correction — live-reported by Doug", () => {
-    describe("a chip click resolves to the popup, never a note", () => {
+    describe("a chip click resolves to the popup or a populated company, never a note", () => {
       /**
        * The note is the browser-blocked-popup fallback ONLY — never an outcome
        * the chip click itself chooses. Asserted against a note that exists:
@@ -1372,13 +1660,12 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       }
 
       /**
-       * The chip ALWAYS opens the hosted signup and populates nothing itself,
-       * whatever the email field holds (Doug 2026-08-21: a company may only
-       * ever be filled in by the buyer's own trip through that flow).
+       * With no registration for the autofill probe to report, the chip
+       * resolves to the popup and writes nothing — whatever the email field
+       * holds, which the probe does not read.
        */
       test.each([
-        ["an email Two recognises", "buyer@example.test"],
-        ["an email Two does not recognise", "stranger@example.test"],
+        ["an email is entered", "buyer@example.test"],
         ["no email entered at all", ""]
       ])("opens the popup and writes nothing — %s", (_description, email) => {
         soleTrader.render();
@@ -2622,7 +2909,9 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         // The stomp this test was written for: a result arriving from the
         // abandoned signup must not drag the buyer back into the mode they
         // left. It never reaches a buyer lookup at all — `fetchCurrentBuyer`
-        // is the only thing that can write a company, and it is not called.
+        // is the only thing that can write a company, and the ACCEPTED below
+        // adds no call of its own to the chip's own probe.
+        const lookupsBefore = soleTrader.fetchCurrentBuyer.mock.calls.length;
         window.dispatchEvent(
           new window.MessageEvent("message", {
             data: "ACCEPTED",
@@ -2630,7 +2919,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
           })
         );
 
-        expect(soleTrader.fetchCurrentBuyer).not.toHaveBeenCalled();
+        expect(soleTrader.fetchCurrentBuyer.mock.calls).toHaveLength(lookupsBefore);
         expect(soleTrader.mode).toBe("business");
         expect($("#company_id").val()).not.toBe("TWO:ST1");
         expect(flight).toBeTruthy();
