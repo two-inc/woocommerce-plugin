@@ -121,7 +121,9 @@ describe("checkout API calls and the firewall-token proxy", () => {
       ctx.soleTrader.fetchCurrentBuyer(function () {});
 
       const [url] = fetchMock.mock.calls[0];
-      expect(url).toBe("https://api.example.test/autofill/v1/buyer/current?client=wp&client_v=2.24.0");
+      expect(url).toBe(
+        "https://api.example.test/autofill/v1/buyer/current?client=wp&client_v=2.24.0"
+      );
     });
 
     test("sends no custom header by default, whatever the page holds", () => {
