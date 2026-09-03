@@ -6114,8 +6114,10 @@ if (!class_exists('WC_Twoinc')) {
                     $post_data[$custom_headers_field] ?? null
                 );
             } catch (Exception $e) {
-                // A table the save will refuse must not authenticate the key.
-                $this->custom_headers_override = null;
+                // The table's own row notice promises the whole save is
+                // refused, so halt before anything persists or authenticates.
+                WC_Admin_Settings::add_error($e->getMessage());
+                return;
             }
             $api_key_field = 'woocommerce_' . $this->id . '_api_key';
             $api_key_in_post = array_key_exists($api_key_field, $post_data);

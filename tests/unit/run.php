@@ -285,6 +285,7 @@ final class BrandConfigSpec
             'testCustomHeadersSurviveTheSlashedPostByteIdentically',
             'testCustomHeadersReadPathKeepsOnlyTheFirstOfADuplicatePair',
             'testCustomHeadersOverrideCarriesOnlyRowsTheSaveKeeps',
+            'testAnInvalidHeaderTableHaltsTheWholeSave',
             'testTraceContextHeaderIsGatedLikeACustomValue',
             'testClearingTheHeaderTableVerifiesTheKeyWithoutIt',
             'testEveryDroppedRowIsMarkedInTheForm',
@@ -9443,6 +9444,44 @@ final class BrandConfigSpec
         $gateway->process_admin_options();
 
         TinyAssert::same([], $gateway->get_custom_headers());
+    }
+
+    /**
+     * The row notice promises "the settings cannot be saved until it is
+     * corrected", so no sibling field may slip through either.
+     */
+    private static function testAnInvalidHeaderTableHaltsTheWholeSave(): void
+    {
+        $gateway = self::gateway();
+        $gateway->init_form_fields();
+        $option_key = $gateway->get_option_key();
+        $stored = [
+            'api_key' => 'old-key',
+            'surcharge_tax_treatment' => 'standard',
+            'custom_headers' => [['name' => 'X-WAF-TOKEN', 'value' => 'waf-token-1', 'send_from_browser' => 'no']],
+        ];
+        $GLOBALS['__twoinc_test_options'][$option_key] = $stored;
+        $gateway->init_settings();
+        $GLOBALS['__twoinc_test_http_response'] = [
+            'response' => ['code' => 200],
+            'body' => json_encode(['id' => 'merchant-1', 'short_name' => 'shop']),
+        ];
+        $gateway->test_post_data = [
+            $gateway->get_field_key('api_key') => 'new-key',
+            $gateway->get_field_key('custom_headers') => [
+                0 => ['name' => 'Bad Header!', 'value' => 'waf-token-2'],
+            ],
+            $gateway->get_field_key('surcharge_tax_treatment') => 'never',
+        ];
+        $gateway->process_admin_options();
+
+        TinyAssert::same($stored, get_option($option_key, []), 'nothing may persist from a refused save');
+        TinyAssert::same([], $GLOBALS['__twoinc_test_http_calls'], 'a refused table must not authenticate the key');
+        TinyAssert::same(
+            ['"Bad Header!" is not a valid HTTP header name. Use letters, digits and hyphens.'],
+            $GLOBALS['__twoinc_test_admin_errors'],
+            'the reason must reach the settings-page notice'
+        );
     }
 
     /** Removing every row posts no field key at all, so absence means "cleared". */
