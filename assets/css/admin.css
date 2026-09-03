@@ -67,3 +67,12 @@ a.setting-dropdown {
   padding-left: 10px;
   padding-right: 10px;
 }
+
+/*
+ * Same WordPress core .widefat gap as above, on the custom-headers grid:
+ * row cells get 10px horizontal padding, header cells don't.
+ */
+.twoinc-custom-headers th {
+  padding-left: 10px;
+  padding-right: 10px;
+}
