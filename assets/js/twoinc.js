@@ -4330,10 +4330,15 @@ function createSoleTraderController(companySearch) {
       // call with no server hop to attach them from.
       const query = new URLSearchParams(window.twoinc.api_client_params || {}).toString();
       let refused = null;
-      fetch(window.twoinc.twoinc_checkout_host + "/autofill/v1/buyer/current" + (query ? "?" + query : ""), {
-        credentials: "include",
-        headers: headers
-      })
+      fetch(
+        window.twoinc.twoinc_checkout_host +
+          "/autofill/v1/buyer/current" +
+          (query ? "?" + query : ""),
+        {
+          credentials: "include",
+          headers: headers
+        }
+      )
         .then(function (response) {
           if (response.ok) return response.json();
           // Every non-2xx path must still drain the body. Abandoning an unread
