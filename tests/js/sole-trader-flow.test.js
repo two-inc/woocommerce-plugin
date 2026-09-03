@@ -1374,7 +1374,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
   describe("the chip's prefetched autofill answer", () => {
     const ENROLLED = {
       organization_number: "TWO:ST9",
-      company_name: "Probed Trader",
+      company_name: "Held Trader",
       email: "buyer@example.test",
       phone_number: "+4712345678"
     };
@@ -1408,7 +1408,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
 
       expect(window.open).not.toHaveBeenCalled();
       expect($("#company_id").val()).toBe("TWO:ST9");
-      expect($("#billing_company").val()).toBe("Probed Trader");
+      expect($("#billing_company").val()).toBe("Held Trader");
       expect(soleTrader.soleTraderAdopted).toBe(true);
       expect(soleTrader.mode).toBe("sole_trader");
       // The blocked-popup fallback link stays down — nothing was blocked.
@@ -1459,9 +1459,11 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       global.fetch = jest.fn(respond);
       soleTrader.render();
       // The prefetch's own promise chain drains here, BEFORE the click — a
-      // macrotask, since the transport's `.then()`s are microtasks.
+      // macrotask, since the transport's `.then()`s are microtasks. The
+      // transport stays installed across the click: a lookup moved back into
+      // the handler would reach it and lose the gesture, which is the whole
+      // property under test.
       await new Promise((resolve) => setTimeout(resolve, 0));
-      delete global.fetch;
       let inClickHandler = false;
       let openedInGesture = null;
       window.open = jest.fn(() => {
@@ -1475,6 +1477,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
 
       expect(window.open).toHaveBeenCalledTimes(1);
       expect(openedInGesture).toBe(true);
+      delete global.fetch;
     });
 
     /**
@@ -1486,7 +1489,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     test("an unresolved answer opens the popup synchronously, making no lookup of its own", () => {
       const prefetch = deferredPrefetch();
       soleTrader.render();
-      expect(soleTrader.autofillResult).toBeNull();
+      expect(soleTrader.heldAutofill()).toBeNull();
       let inClickHandler = false;
       let openedInGesture = null;
       window.open = jest.fn(() => {
@@ -1519,10 +1522,8 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     );
 
     /**
-     * The prefetch is a background round trip nobody asked for: holding
-     * `isBusy()` for it would over-block the Business chip and
-     * `reopenSearch()` for the length of it, which is what the in-click
-     * lookup did.
+     * A background round trip nobody asked for: holding `isBusy()` for it
+     * would over-block the Business chip and `reopenSearch()`.
      */
     test("an outstanding prefetch holds no busy state and no flight", () => {
       const prefetch = deferredPrefetch();
@@ -1559,14 +1560,12 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       soleTrader.render();
 
       expect(prefetch.calls).toBe(0);
-      expect(soleTrader.autofillResult).toBeNull();
+      expect(soleTrader.heldAutofill()).toBeNull();
     });
 
     /**
-     * The defect class the in-click lookup kept producing in review: an
-     * answer landing after the buyer has moved on, adopting behind them. A
-     * prefetch cannot adopt anything at all — its only effect is the held
-     * value the next click reads.
+     * A prefetch cannot adopt anything, whenever it lands — its only effect
+     * is the held value the next click reads.
      */
     test("a prefetch answering after the buyer went into sole-trader mode adopts nothing behind them", () => {
       const prefetch = deferredPrefetch();
@@ -1618,18 +1617,86 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     });
 
     /**
-     * Tokens are country-scoped, so an answer fetched under authority for a
-     * country the buyer has since left must not become the held value.
+     * The authority the answer was fetched under is country-scoped, so an
+     * answer from before a country change is not an answer for this one — in
+     * either direction: one landing after the change, and one already held
+     * when it happens.
      */
-    test("an answer landing after a country change is not held", () => {
+    test.each([
+      {
+        arrange: (prefetch) => {
+          $("#billing_country").val("NO");
+          prefetch.answer(ENROLLED);
+        },
+        description: "landing after the change"
+      },
+      {
+        arrange: (prefetch) => {
+          prefetch.answer(ENROLLED);
+          $("#billing_country").val("NO");
+        },
+        description: "already held when it happens"
+      }
+    ])("an answer $description is not read for the new country", ({ arrange }) => {
       $("#billing_country").append('<option value="NO">NO</option>');
       const prefetch = deferredPrefetch();
       soleTrader.render();
 
-      $("#billing_country").val("NO");
+      arrange(prefetch);
+
+      expect(soleTrader.heldAutofill()).toBeNull();
+      // And the consequence: the chip does not adopt it.
+      soleTrader.onModeChipClick("sole_trader");
+      expect($("#company_id").val()).toBe("");
+      expect(opened).toHaveLength(1);
+    });
+
+    /**
+     * A dropped request is not an answer. Latching it would leave a buyer who
+     * hit one bad request signing up again, for the life of the page — where
+     * the deleted in-click lookup would have retried on the next click.
+     */
+    test("a prefetch whose request never answered is retried by the next render", async () => {
+      soleTrader.fetchCurrentBuyer.mockRestore();
+      global.fetch = jest.fn(() => Promise.reject(new Error("offline")));
+      soleTrader.render();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(soleTrader.heldAutofill()).toBeNull();
+
+      global.fetch = jest.fn(() =>
+        Promise.resolve({ ok: true, json: () => Promise.resolve(ENROLLED) })
+      );
+      soleTrader.render();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      delete global.fetch;
+
+      soleTrader.onModeChipClick("sole_trader");
+
+      expect(opened).toHaveLength(0);
+      expect($("#company_id").val()).toBe("TWO:ST9");
+    });
+
+    /**
+     * One answer per page, not per instance: the billing and delivery roles
+     * each own a controller, and a buyer who signed up through one must not
+     * be asked to sign up again by the other.
+     */
+    test("both company-search instances read the one held answer, on one request", () => {
+      $("form[name='checkout']").append(
+        '<select id="shipping_country"><option value="GB" selected>GB</option></select>'
+      );
+      const shipping = ctx.shippingHelper.soleTrader;
+      const shippingLookup = jest.spyOn(shipping, "fetchCurrentBuyer");
+      shipping.tokens = soleTrader.tokens;
+      const prefetch = deferredPrefetch();
+
+      soleTrader.render();
+      shipping.render();
       prefetch.answer(ENROLLED);
 
-      expect(soleTrader.autofillResult).toBeNull();
+      expect(prefetch.calls).toBe(1);
+      expect(shippingLookup).not.toHaveBeenCalled();
+      expect(shipping.heldAutofill()).toEqual(ENROLLED);
     });
 
     /**
@@ -1660,7 +1727,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
     test("re-clicking the chip once adopted goes straight to the re-signup, with no lookup", () => {
       soleTrader.setMode("sole_trader");
       soleTrader.setCompany("TWO:ST1", "First Trader");
-      soleTrader.autofillResult = ENROLLED;
+      soleTrader.holdAutofill(ENROLLED, "GB");
       soleTrader.fetchCurrentBuyer.mockClear();
 
       soleTrader.onModeChipClick("sole_trader");
@@ -1682,7 +1749,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       ({ activate }) => {
         soleTrader.setMode("sole_trader");
         soleTrader.setCompany("TWO:ST1", "First Trader");
-        soleTrader.autofillResult = ENROLLED;
+        soleTrader.holdAutofill(ENROLLED, "GB");
         soleTrader.fetchCurrentBuyer.mockClear();
 
         activate(soleTrader.getDifferentSoleTraderBtnNode());
@@ -1759,9 +1826,9 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
       }
 
       /**
-       * With no registration for the autofill probe to report, the chip
-       * resolves to the popup and writes nothing — whatever the email field
-       * holds, which the probe does not read.
+       * With no registration held, the chip resolves to the popup and
+       * writes nothing — whatever the email field holds, which the autofill
+       * answer does not depend on.
        */
       test.each([
         ["an email is entered", "buyer@example.test"],
@@ -3009,7 +3076,7 @@ describe("TWO-40 §7/§8 — sole-trader flow", () => {
         // abandoned signup must not drag the buyer back into the mode they
         // left. It never reaches a buyer lookup at all — `fetchCurrentBuyer`
         // is the only thing that can write a company, and the ACCEPTED below
-        // adds no call of its own to the chip's own probe.
+        // adds no autofill lookup of its own.
         const lookupsBefore = soleTrader.fetchCurrentBuyer.mock.calls.length;
         window.dispatchEvent(
           new window.MessageEvent("message", {
