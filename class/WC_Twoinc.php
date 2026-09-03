@@ -5651,6 +5651,9 @@ if (!class_exists('WC_Twoinc')) {
                 $name = is_scalar($row['name'] ?? null) ? trim((string) $row['name']) : '';
                 $value = is_scalar($row['value'] ?? null) ? (string) $row['value'] : '';
                 $lower = strtolower($name);
+                // The form blanks a value it cannot hold, so that is what the
+                // next save is judged on, not what is stored.
+                $unholdable = preg_match('/[\r\n\x00]/', $value) === 1;
                 $sent = self::is_valid_header_name($name)
                     && self::is_valid_header_value($value)
                     && trim($value) !== ''
@@ -5664,10 +5667,9 @@ if (!class_exists('WC_Twoinc')) {
                     'value'             => $value,
                     'send_from_browser' => self::is_browser_flag_set($row['send_from_browser'] ?? null),
                     'sent'              => $sent,
-                    // Exactly the bytes a text input cannot round-trip.
-                    'unholdable'        => preg_match('/[\r\n\x00]/', $value) === 1,
+                    'unholdable'        => $unholdable,
                     // Mirrors the save's blank-row skip: it drops such a row.
-                    'discarded'         => $name === '' && $value === '',
+                    'discarded'         => $name === '' && ($unholdable || $value === ''),
                 ];
             }
             return $classified;

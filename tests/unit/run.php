@@ -9492,6 +9492,7 @@ final class BrandConfigSpec
             [[['name' => 'X Bad Name', 'value' => 'v']], true, false, 'an unusable name'],
             [[['name' => 'Host', 'value' => 'v']], true, false, 'a reserved name'],
             [[['name' => 'Host', 'value' => "a\r\nb"]], true, true, 'a reserved name must not hide an unholdable value'],
+            [[['name' => '', 'value' => "a\r\nb"]], false, true, 'a nameless unholdable row re-posts wholly blank, so the save drops it'],
             [
                 [['name' => 'X-Dup', 'value' => 'a'], ['name' => 'x-dup', 'value' => 'b']],
                 true,
@@ -9513,12 +9514,13 @@ final class BrandConfigSpec
                 substr_count($html, 'twoinc-custom-header-unsendable'),
                 $description
             );
-            // The savability claim must hold: refused exactly when it says so.
+            // The notice must match what saving the form as rendered does.
             $threw = false;
             try {
-                // Slashed, as WP hands the validator every settings POST.
                 $gateway->validate_two_custom_headers_field('custom_headers', array_map(function ($row) {
-                    return ['name' => addslashes($row['name']), 'value' => addslashes($row['value'])];
+                    // Blanked as the form renders it, then slashed as WP posts it.
+                    $value = preg_match('/[\r\n\x00]/', $row['value']) === 1 ? '' : $row['value'];
+                    return ['name' => addslashes($row['name']), 'value' => addslashes($value)];
                 }, $rows));
             } catch (Exception $e) {
                 $threw = true;
