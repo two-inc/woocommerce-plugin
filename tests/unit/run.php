@@ -9567,6 +9567,12 @@ final class BrandConfigSpec
             [[['name' => 'content-length', 'value' => 'v']], 'cannot be overridden', 'Content-Length is set by the HTTP client'],
             [[['name' => 'Accept', 'value' => 'v']], 'cannot be overridden', 'Accept negotiates the response body'],
             [[['name' => 'Accept-Language', 'value' => 'v']], 'cannot be overridden', 'the locale header is composed from settings'],
+            [[['name' => 'Accept-Encoding', 'value' => 'gzip']], 'cannot be overridden', 'the transport negotiates response encoding itself'],
+            [[['name' => 'accept-encoding', 'value' => 'gzip']], 'cannot be overridden', 'nor in lower case'],
+            [[['name' => 'ACCEPT-ENCODING', 'value' => 'gzip']], 'cannot be overridden', 'nor in upper case'],
+            [[['name' => 'Expect', 'value' => '100-continue']], 'cannot be overridden', 'a 100-continue handshake is the transport\'s to negotiate'],
+            [[['name' => 'expect', 'value' => '100-continue']], 'cannot be overridden', 'nor in lower case'],
+            [[['name' => 'EXPECT', 'value' => '100-continue']], 'cannot be overridden', 'nor in upper case'],
             [[['name' => 'X-Forwarded-For', 'value' => 'v']], 'cannot be overridden', 'a forged client IP must not be settable here'],
             [[['name' => 'x-real-ip', 'value' => 'v']], 'cannot be overridden', 'nor its Nginx-flavoured twin'],
             // Casing varies across the set: the rule is case-insensitive.

@@ -5722,8 +5722,8 @@ if (!class_exists('WC_Twoinc')) {
 
         /**
          * Names a custom row may not take: composed by make_request(), set by
-         * the HTTP client, proxy identity, an RFC 7230 hop-by-hop connection
-         * control, or a credential the plugin carries itself.
+         * the HTTP client, proxy identity, an RFC 7230 hop-by-hop control, a
+         * transport handshake, or a credential the plugin carries itself.
          */
         private static function reserved_header_names(): array
         {
@@ -5732,6 +5732,7 @@ if (!class_exists('WC_Twoinc')) {
                 'content-type',
                 'content-length',
                 'accept',
+                'accept-encoding',
                 'accept-language',
                 'x-api-key',
                 'two-delegated-authority-token',
@@ -5746,6 +5747,7 @@ if (!class_exists('WC_Twoinc')) {
                 'trailer',
                 'transfer-encoding',
                 'upgrade',
+                'expect',
                 'authorization',
                 'cookie',
             ];
