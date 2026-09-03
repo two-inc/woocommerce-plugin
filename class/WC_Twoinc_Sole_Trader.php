@@ -16,9 +16,11 @@
  * be invisible for its whole life because an installer defaulted it off.
  *
  * Flow: the buyer switches to sole-trader mode, the plugin server-side mints
- * two delegated authority tokens with the merchant API key, the buyer
- * registers or logs in through Two's hosted signup popup, and the checkout
- * autofills the company fields from GET /autofill/v1/buyer/current. No
+ * two delegated authority tokens with the merchant API key, and the checkout
+ * autofills the company fields from GET /autofill/v1/buyer/current — which
+ * answers from the Two cookie, so an already-enrolled buyer needs no popup at
+ * all. Only when it reports nobody does the buyer register or log in through
+ * Two's hosted signup popup, autofilling from the same endpoint after. No
  * sole-trader-specific fields are collected at checkout and the order
  * payload is unchanged — an enrolled sole trader's organization number
  * (TWO:ST…) carries the semantics and the backend derives the company type

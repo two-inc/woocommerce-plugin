@@ -2981,6 +2981,13 @@ function createSoleTraderController(companySearch) {
     openingSignup: false,
 
     /**
+     * A chip click's autofill probe is in flight and owns the decision any
+     * further click resolves to — a second probe would adopt, and credit-
+     * check, the same buyer twice.
+     */
+    autofillProbing: false,
+
+    /**
      * True once `setCompany()` has actually adopted a company while in
      * sole-trader mode this time through (TWO-40 §7). Reset by every
      * `setMode()` call. `watchPopupClose()`'s "did the buyer abandon this
@@ -3348,8 +3355,9 @@ function createSoleTraderController(companySearch) {
     },
 
     /**
-     * A mode chip was clicked. Business is immediate; Sole trader switches mode
-     * then opens the hosted signup in the same synchronous gesture as the click.
+     * A mode chip was clicked. Business is immediate; Sole trader switches
+     * mode, then adopts the registration the autofill probe reports or opens
+     * the hosted signup when it reports none.
      */
     onModeChipClick: function (mode) {
       if (mode === "business") {
@@ -3383,12 +3391,37 @@ function createSoleTraderController(companySearch) {
         return;
       }
       controller.setMode("sole_trader");
-      // Always the hosted signup, no conditional fast path: a company may
-      // only ever be filled in by the buyer's own trip through that flow. The
-      // passive email-driven autofill probe this used to consult could
-      // populate fields off a Two session cookie the buyer never
-      // authenticated against.
-      controller.launchSignup();
+      // Autofill first, hosted signup only when the probe reports nobody
+      // (Doug 2026-09-03, reversing the 2026-08-21 ruling that a company may
+      // only ever be filled in by a trip through the signup flow). The
+      // probe's subject is a cookie first-party to Two itself, unforgeable by
+      // a third party, so it can only report a registration this buyer has
+      // already declared to Two — and it decodes that cookie and answers,
+      // persisting nothing.
+      //
+      // Accepted cost: `window.open()` on the fallback path no longer sits in
+      // the click's own gesture, so a blocker can refuse it and the buyer
+      // goes through the note link instead. Bounded to this one round trip —
+      // tokens are minted by `render()`, never here.
+      if (controller.autofillProbing) return;
+      controller.autofillProbing = true;
+      controller.beginFlight();
+      controller.fetchCurrentBuyer(function (buyer) {
+        controller.autofillProbing = false;
+        // `abandonSoleTraderFlow()` cannot cancel a `fetch`, so a buyer who
+        // left mid-flight is gated out here, as a late ACCEPTED is.
+        if (controller.mode === "sole_trader") {
+          if (buyer) {
+            // Same criterion as the post-signup path: a buyer object at all.
+            controller.setCompany(buyer.organization_number, buyer.company_name, buyer);
+            controller.showNote(false);
+          } else {
+            controller.launchSignup();
+          }
+        }
+        // Last: depth reaching zero is what takes the spinner down.
+        controller.settleFlight();
+      });
     },
 
     /**
@@ -4241,11 +4274,11 @@ function createSoleTraderController(companySearch) {
      * Open the hosted sole-trader signup in a real popup window (TWO-40 §7).
      *
      * `window.open()`, not an iframe-in-overlay: the signup/OTP flow depends
-     * on a third party that only works in a real popup window. The call
-     * stays synchronous with the click that triggered it — an
-     * async-delayed `window.open()` is blocker bait in every browser — which
-     * is why the chip-click path opens on tokens minted up front rather than
-     * issuing a request first.
+     * on a third party that only works in a real popup window. An
+     * async-delayed `window.open()` is blocker bait in every browser, so no
+     * token mint is ever in this path — `render()` mints up front. The chip
+     * path still opens behind its autofill probe (see `onModeChipClick`),
+     * which is why a blocked window falls back to the visible note link.
      *
      * Brand overlays need nothing added here: a branded deployment resolves
      * this URL's host from the brand registry's own URL template (see
