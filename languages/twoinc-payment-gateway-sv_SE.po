@@ -1293,8 +1293,8 @@ msgid "Every custom request header needs a name."
 msgstr "Varje anpassat begäranshuvud måste ha ett namn."
 
 #: class/WC_Twoinc.php
-msgid "The header \"%s\" is set by the plugin, the HTTP client or the connection itself, and cannot be overridden here."
-msgstr "Huvudet \"%s\" sätts av tillägget, HTTP-klienten eller anslutningen själv och kan inte åsidosättas här."
+msgid "The header \"%s\" is reserved and cannot be set from this table."
+msgstr "Huvudet \"%s\" är reserverat och kan inte anges från denna tabell."
 
 #: class/WC_Twoinc.php
 msgid "The header \"%s\" is listed more than once."

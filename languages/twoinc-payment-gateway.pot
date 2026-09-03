@@ -1294,7 +1294,7 @@ msgid "Every custom request header needs a name."
 msgstr ""
 
 #: class/WC_Twoinc.php
-msgid "The header \"%s\" is set by the plugin, the HTTP client or the connection itself, and cannot be overridden here."
+msgid "The header \"%s\" is reserved and cannot be set from this table."
 msgstr ""
 
 #: class/WC_Twoinc.php

@@ -9476,8 +9476,7 @@ final class BrandConfigSpec
      */
     private static function testEveryDroppedRowIsMarkedInTheForm(): void
     {
-        // [rows, refused-on-save, unholdable, description]. The two notices are
-        // independent: retyping an unholdable value cannot fix a reserved name.
+        // [rows, refused-on-save, unholdable, description].
         $cases = [
             [[['name' => 'X-WAF-TOKEN', 'value' => 'waf-token-1']], false, false, 'a sendable row carries no notice'],
             [[['name' => '', 'value' => '']], false, false, 'a wholly blank row is discarded by the save, not refused'],
@@ -9505,19 +9504,22 @@ final class BrandConfigSpec
             $html = $gateway->generate_two_custom_headers_html('custom_headers', []);
 
             TinyAssert::same(
-                $unholdable,
-                strpos($html, 'twoinc-custom-header-unholdable') !== false,
+                $unholdable ? 1 : 0,
+                substr_count($html, 'twoinc-custom-header-unholdable'),
                 $description
             );
             TinyAssert::same(
-                $refused,
-                strpos($html, 'twoinc-custom-header-unsendable') !== false,
+                $refused ? 1 : 0,
+                substr_count($html, 'twoinc-custom-header-unsendable'),
                 $description
             );
             // The savability claim must hold: refused exactly when it says so.
             $threw = false;
             try {
-                $gateway->validate_two_custom_headers_field('custom_headers', $rows);
+                // Slashed, as WP hands the validator every settings POST.
+                $gateway->validate_two_custom_headers_field('custom_headers', array_map(function ($row) {
+                    return ['name' => addslashes($row['name']), 'value' => addslashes($row['value'])];
+                }, $rows));
             } catch (Exception $e) {
                 $threw = true;
             }
@@ -9562,33 +9564,33 @@ final class BrandConfigSpec
             [[['name' => 'X Bad Name', 'value' => 'v']], 'not a valid HTTP header name', 'a space is not a token character'],
             [[['name' => 'X-Bad:', 'value' => 'v']], 'not a valid HTTP header name', 'a colon would terminate the name'],
             [[['name' => '', 'value' => 'v']], 'needs a name', 'a value with no name is unusable'],
-            [[['name' => 'X-API-Key', 'value' => 'v']], 'cannot be overridden', 'the API key header is the plugin\'s own'],
-            [[['name' => 'content-type', 'value' => 'v']], 'cannot be overridden', 'reserved names match case-insensitively'],
-            [[['name' => 'Content-Type', 'value' => 'v']], 'cannot be overridden', 'nor does the canonical casing slip through'],
-            [[['name' => 'Host', 'value' => 'v']], 'cannot be overridden', 'Host addresses the request itself'],
-            [[['name' => 'content-length', 'value' => 'v']], 'cannot be overridden', 'Content-Length is set by the HTTP client'],
-            [[['name' => 'Accept', 'value' => 'v']], 'cannot be overridden', 'Accept negotiates the response body'],
-            [[['name' => 'Accept-Language', 'value' => 'v']], 'cannot be overridden', 'the locale header is composed from settings'],
-            [[['name' => 'Accept-Encoding', 'value' => 'gzip']], 'cannot be overridden', 'the transport negotiates response encoding itself'],
-            [[['name' => 'accept-encoding', 'value' => 'gzip']], 'cannot be overridden', 'nor in lower case'],
-            [[['name' => 'ACCEPT-ENCODING', 'value' => 'gzip']], 'cannot be overridden', 'nor in upper case'],
-            [[['name' => 'Expect', 'value' => '100-continue']], 'cannot be overridden', 'a 100-continue handshake is the transport\'s to negotiate'],
-            [[['name' => 'expect', 'value' => '100-continue']], 'cannot be overridden', 'nor in lower case'],
-            [[['name' => 'EXPECT', 'value' => '100-continue']], 'cannot be overridden', 'nor in upper case'],
-            [[['name' => 'X-Forwarded-For', 'value' => 'v']], 'cannot be overridden', 'a forged client IP must not be settable here'],
-            [[['name' => 'x-real-ip', 'value' => 'v']], 'cannot be overridden', 'nor its Nginx-flavoured twin'],
+            [[['name' => 'X-API-Key', 'value' => 'v']], 'is reserved', 'the API key header is the plugin\'s own'],
+            [[['name' => 'content-type', 'value' => 'v']], 'is reserved', 'reserved names match case-insensitively'],
+            [[['name' => 'Content-Type', 'value' => 'v']], 'is reserved', 'nor does the canonical casing slip through'],
+            [[['name' => 'Host', 'value' => 'v']], 'is reserved', 'Host addresses the request itself'],
+            [[['name' => 'content-length', 'value' => 'v']], 'is reserved', 'Content-Length is set by the HTTP client'],
+            [[['name' => 'Accept', 'value' => 'v']], 'is reserved', 'Accept negotiates the response body'],
+            [[['name' => 'Accept-Language', 'value' => 'v']], 'is reserved', 'the locale header is composed from settings'],
+            [[['name' => 'Accept-Encoding', 'value' => 'gzip']], 'is reserved', 'the transport negotiates response encoding itself'],
+            [[['name' => 'accept-encoding', 'value' => 'gzip']], 'is reserved', 'nor in lower case'],
+            [[['name' => 'ACCEPT-ENCODING', 'value' => 'gzip']], 'is reserved', 'nor in upper case'],
+            [[['name' => 'Expect', 'value' => '100-continue']], 'is reserved', 'a 100-continue handshake is the transport\'s to negotiate'],
+            [[['name' => 'expect', 'value' => '100-continue']], 'is reserved', 'nor in lower case'],
+            [[['name' => 'EXPECT', 'value' => '100-continue']], 'is reserved', 'nor in upper case'],
+            [[['name' => 'X-Forwarded-For', 'value' => 'v']], 'is reserved', 'a forged client IP must not be settable here'],
+            [[['name' => 'x-real-ip', 'value' => 'v']], 'is reserved', 'nor its Nginx-flavoured twin'],
             // Casing varies across the set: the rule is case-insensitive.
-            [[['name' => 'Two-Delegated-Authority-Token', 'value' => 'v']], 'cannot be overridden', 'the delegated-authority token is minted, not configured'],
-            [[['name' => 'Connection', 'value' => 'v']], 'cannot be overridden', 'a hop-by-hop control belongs to the connection, not the request'],
-            [[['name' => 'keep-alive', 'value' => 'v']], 'cannot be overridden', 'hop-by-hop'],
-            [[['name' => 'PROXY-AUTHENTICATE', 'value' => 'v']], 'cannot be overridden', 'hop-by-hop'],
-            [[['name' => 'Proxy-Authorization', 'value' => 'v']], 'cannot be overridden', 'hop-by-hop'],
-            [[['name' => 'TE', 'value' => 'v']], 'cannot be overridden', 'hop-by-hop'],
-            [[['name' => 'trailer', 'value' => 'v']], 'cannot be overridden', 'hop-by-hop'],
-            [[['name' => 'Transfer-Encoding', 'value' => 'v']], 'cannot be overridden', 'framing is the HTTP client\'s to set'],
-            [[['name' => 'upgrade', 'value' => 'v']], 'cannot be overridden', 'hop-by-hop'],
-            [[['name' => 'Authorization', 'value' => 'v']], 'cannot be overridden', 'the plugin carries its own credential in X-API-Key'],
-            [[['name' => 'COOKIE', 'value' => 'v']], 'cannot be overridden', 'a store cookie has no business on an API call'],
+            [[['name' => 'Two-Delegated-Authority-Token', 'value' => 'v']], 'is reserved', 'the delegated-authority token is minted, not configured'],
+            [[['name' => 'Connection', 'value' => 'v']], 'is reserved', 'a hop-by-hop control belongs to the connection, not the request'],
+            [[['name' => 'keep-alive', 'value' => 'v']], 'is reserved', 'hop-by-hop'],
+            [[['name' => 'PROXY-AUTHENTICATE', 'value' => 'v']], 'is reserved', 'hop-by-hop'],
+            [[['name' => 'Proxy-Authorization', 'value' => 'v']], 'is reserved', 'hop-by-hop'],
+            [[['name' => 'TE', 'value' => 'v']], 'is reserved', 'hop-by-hop'],
+            [[['name' => 'trailer', 'value' => 'v']], 'is reserved', 'hop-by-hop'],
+            [[['name' => 'Transfer-Encoding', 'value' => 'v']], 'is reserved', 'framing is the HTTP client\'s to set'],
+            [[['name' => 'upgrade', 'value' => 'v']], 'is reserved', 'hop-by-hop'],
+            [[['name' => 'Authorization', 'value' => 'v']], 'is reserved', 'the plugin carries its own credential in X-API-Key'],
+            [[['name' => 'COOKIE', 'value' => 'v']], 'is reserved', 'a store cookie has no business on an API call'],
             [[['name' => 'X-Split', 'value' => "a\r\nX-Injected: b"]], 'printable ASCII text', 'CRLF would splice a second header in'],
             [[['name' => 'X-Split', 'value' => "a\nb"]], 'printable ASCII text', 'a bare LF splits the line too'],
             // Without /D on the pattern, $ matches before a trailing newline.
@@ -9599,8 +9601,8 @@ final class BrandConfigSpec
             [[['name' => 'X-Unicode', 'value' => 'tøken']], 'printable ASCII text', 'a non-ASCII byte has no unambiguous encoding'],
             [[['name' => 'X-Empty', 'value' => '']], 'printable ASCII text', 'a named row with no value is not usable config'],
             [[['name' => 'X-Blank', 'value' => '   ']], 'printable ASCII text', 'nor one a proxy would trim to nothing'],
-            [[['name' => 'HTTP_X_CLOUD_TRACE_CONTEXT', 'value' => 'v']], 'cannot be overridden', 'make_request composes the trace header'],
-            [[['name' => 'Host', 'value' => '']], 'cannot be overridden', 'a reserved name is named before its value is judged'],
+            [[['name' => 'HTTP_X_CLOUD_TRACE_CONTEXT', 'value' => 'v']], 'is reserved', 'make_request composes the trace header'],
+            [[['name' => 'Host', 'value' => '']], 'is reserved', 'a reserved name is named before its value is judged'],
             [
                 [['name' => 'X-Dup', 'value' => 'a'], ['name' => 'x-dup', 'value' => 'b']],
                 'listed more than once',

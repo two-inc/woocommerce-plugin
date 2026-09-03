@@ -5140,7 +5140,7 @@ if (!class_exists('WC_Twoinc')) {
                 if (in_array($lower, self::reserved_header_names(), true)) {
                     throw new Exception(sprintf(
                         /* translators: %s: the rejected header name */
-                        __('The header "%s" is set by the plugin, the HTTP client or the connection itself, and cannot be overridden here.', 'twoinc-payment-gateway'),
+                        __('The header "%s" is reserved and cannot be set from this table.', 'twoinc-payment-gateway'),
                         $name
                     ));
                 }
@@ -5666,8 +5666,7 @@ if (!class_exists('WC_Twoinc')) {
                     'sent'              => $sent,
                     // Exactly the bytes a text input cannot round-trip.
                     'unholdable'        => preg_match('/[\r\n\x00]/', $value) === 1,
-                    // The save drops this row rather than refusing it, so the
-                    // condition must mirror its blank-row skip exactly.
+                    // Mirrors the save's blank-row skip: it drops such a row.
                     'discarded'         => $name === '' && $value === '',
                 ];
             }
