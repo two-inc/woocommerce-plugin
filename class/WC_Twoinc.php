@@ -5710,23 +5710,13 @@ if (!class_exists('WC_Twoinc')) {
             return $map;
         }
 
-        /**
-         * Escape a stored field for a value attribute, double-encoding so the
-         * browser shows the field itself. esc_attr leaves an existing entity
-         * alone, which would display "&" for a stored "&amp;" and store that
-         * back on the next save.
-         */
+        /** Double-encodes: esc_attr would show "&" for a stored "&amp;" and store that back. */
         private static function escape_header_field(string $field): string
         {
             return htmlspecialchars($field, ENT_QUOTES, 'UTF-8');
         }
 
-        /**
-         * Whether the form can show a field at all. Double-encoded escaping is
-         * its own inverse for anything printable, so only two cases remain:
-         * a field that is not valid UTF-8, which the escape discards, and the
-         * bytes a value attribute cannot carry back.
-         */
+        /** Whether the form can show a field: the escape is its own inverse for all else. */
         private static function survives_the_form(string $field): bool
         {
             return ($field === '' || self::escape_header_field($field) !== '')

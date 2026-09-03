@@ -9507,7 +9507,7 @@ final class BrandConfigSpec
             [['name' => 'Host', 'value' => "a\r\nb"], 1, 1, ['Host', ''], 'a reserved name does not hide an unshowable value'],
             [['name' => '', 'value' => "a\r\nb"], 1, 0, ['', ''], 'blanking a nameless row leaves one the save discards'],
             [['name' => "X-Foo\r\nBar", 'value' => "a\r\nb"], 2, 0, ['', ''], 'as does blanking both fields'],
-            // esc_attr discards a field that is not valid UTF-8.
+            // The escape discards a field that is not valid UTF-8.
             [['name' => "X-Foo\xFF", 'value' => 'v'], 1, 1, ['', 'v'], 'invalid UTF-8 in the name'],
             [['name' => 'X-WAF-TOKEN', 'value' => "a\xFFb"], 1, 1, ['X-WAF-TOKEN', ''], 'and in the value'],
             [['name' => "X-Foo\xFF", 'value' => ''], 1, 0, ['', ''], 'a nameless row so blanked is discarded'],
