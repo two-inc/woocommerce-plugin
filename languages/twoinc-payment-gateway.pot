@@ -1310,7 +1310,7 @@ msgid "The value of \"%s\" must be printable ASCII text and cannot be blank."
 msgstr ""
 
 #: class/WC_Twoinc.php
-msgid "This value contains characters this field cannot hold, so it is not shown and is not being sent. Enter it again."
+msgid "This entry contains characters this field cannot hold, so it is not shown and is not being sent. Enter it again."
 msgstr ""
 
 #: class/WC_Twoinc.php

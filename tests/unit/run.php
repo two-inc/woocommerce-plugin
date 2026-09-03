@@ -9275,14 +9275,14 @@ final class BrandConfigSpec
                 'dropped-row notice',
             ],
             [
-                'This value contains characters this field cannot hold, so it is not shown and is not being sent. Enter it again.',
-                'This value contains characters this field cannot hold, so it is not shown and is not being sent. Enter it again.',
+                'This entry contains characters this field cannot hold, so it is not shown and is not being sent. Enter it again.',
+                'This entry contains characters this field cannot hold, so it is not shown and is not being sent. Enter it again.',
                 [
-                    'nb_NO' => 'Denne verdien inneholder tegn dette feltet ikke kan holde, så den vises ikke og sendes ikke. Skriv den inn på nytt.',
-                    'nl_NL' => 'Deze waarde bevat tekens die dit veld niet kan bevatten, dus hij wordt niet weergegeven en niet verzonden. Voer hem opnieuw in.',
-                    'sv_SE' => 'Detta värde innehåller tecken som detta fält inte kan hålla, så det visas inte och skickas inte. Skriv in det igen.',
+                    'nb_NO' => 'Denne oppføringen inneholder tegn dette feltet ikke kan holde, så den vises ikke og sendes ikke. Skriv den inn på nytt.',
+                    'nl_NL' => 'Deze invoer bevat tekens die dit veld niet kan bevatten, dus hij wordt niet weergegeven en niet verzonden. Voer hem opnieuw in.',
+                    'sv_SE' => 'Denna post innehåller tecken som detta fält inte kan hålla, så den visas inte och skickas inte. Skriv in den igen.',
                 ],
-                'unholdable-value notice',
+                'unholdable-entry notice',
             ],
         ];
         foreach ($cases as [$msgid, $source, $expected, $description]) {
@@ -9476,36 +9476,38 @@ final class BrandConfigSpec
      */
     private static function testEveryDroppedRowIsMarkedInTheForm(): void
     {
-        // [rows, refused-on-save, unholdable, description].
+        // [rows, refused-on-save, unholdable-fields, description].
         $cases = [
-            [[['name' => 'X-WAF-TOKEN', 'value' => 'waf-token-1']], false, false, 'a sendable row carries no notice'],
-            [[['name' => '', 'value' => '']], false, false, 'a wholly blank row is discarded by the save, not refused'],
-            [[['name' => '', 'value' => '   ']], true, false, 'but one holding only whitespace is refused, so say so'],
-            [[['name' => 'X-WAF-TOKEN', 'value' => "waf\r\ntoken"]], true, true, 'a text input cannot hold a newline'],
-            [[['name' => 'X-WAF-TOKEN', 'value' => "waf\ntoken"]], true, true, 'nor a bare LF'],
-            [[['name' => 'X-WAF-TOKEN', 'value' => "waf\0token"]], true, true, 'nor a NUL'],
-            [[['name' => 'X-WAF-TOKEN', 'value' => "waf\x7Ftoken"]], true, false, 'DEL re-posts intact, so the save refuses it instead'],
-            [[['name' => 'X-WAF-TOKEN', 'value' => "waf\ttoken"]], true, false, 'as does a tab'],
-            [[['name' => 'X-WAF-TOKEN', 'value' => 'tøken']], true, false, 'as does a non-ASCII byte'],
-            [[['name' => 'X-WAF-TOKEN', 'value' => '']], true, false, 'an empty value is visibly empty'],
-            [[['name' => 'X-WAF-TOKEN', 'value' => '   ']], true, false, 'so is a whitespace-only one'],
-            [[['name' => 'X Bad Name', 'value' => 'v']], true, false, 'an unusable name'],
-            [[['name' => 'Host', 'value' => 'v']], true, false, 'a reserved name'],
-            [[['name' => 'Host', 'value' => "a\r\nb"]], true, true, 'a reserved name must not hide an unholdable value'],
-            [[['name' => '', 'value' => "a\r\nb"]], false, true, 'a nameless unholdable row re-posts wholly blank, so the save drops it'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => 'waf-token-1']], false, 0, 'a sendable row carries no notice'],
+            [[['name' => '', 'value' => '']], false, 0, 'a wholly blank row is discarded by the save, not refused'],
+            [[['name' => '', 'value' => '   ']], true, 0, 'but one holding only whitespace is refused, so say so'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => "waf\r\ntoken"]], true, 1, 'a text input cannot hold a newline'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => "waf\ntoken"]], true, 1, 'nor a bare LF'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => "waf\0token"]], true, 1, 'nor a NUL'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => "waf\x7Ftoken"]], true, 0, 'DEL re-posts intact, so the save refuses it instead'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => "waf\ttoken"]], true, 0, 'as does a tab'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => 'tøken']], true, 0, 'as does a non-ASCII byte'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => '']], true, 0, 'an empty value is visibly empty'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => '   ']], true, 0, 'so is a whitespace-only one'],
+            [[['name' => 'X Bad Name', 'value' => 'v']], true, 0, 'an unusable name'],
+            [[['name' => 'Host', 'value' => 'v']], true, 0, 'a reserved name'],
+            [[['name' => 'Host', 'value' => "a\r\nb"]], true, 1, 'a reserved name must not hide an unholdable value'],
+            [[['name' => '', 'value' => "a\r\nb"]], false, 1, 'a nameless unholdable row re-posts wholly blank, so the save drops it'],
+            [[['name' => "X-Foo\r\nBar", 'value' => 'v']], true, 1, 'a name the field cannot hold must not re-post as a name nobody typed'],
+            [[['name' => "X-Foo\r\nBar", 'value' => "a\r\nb"]], false, 2, 'both fields blanked leaves a row the save drops'],
             [
                 [['name' => 'X-Dup', 'value' => 'a'], ['name' => 'x-dup', 'value' => 'b']],
                 true,
-                false,
+                0,
                 'the second of a duplicate pair',
             ],
         ];
-        foreach ($cases as [$rows, $refused, $unholdable, $description]) {
+        foreach ($cases as [$rows, $refused, $unholdable_fields, $description]) {
             $gateway = self::firewallGateway(['custom_headers' => $rows]);
             $html = $gateway->generate_two_custom_headers_html('custom_headers', []);
 
             TinyAssert::same(
-                $unholdable ? 1 : 0,
+                $unholdable_fields,
                 substr_count($html, 'twoinc-custom-header-unholdable'),
                 $description
             );
@@ -9519,8 +9521,13 @@ final class BrandConfigSpec
             try {
                 $gateway->validate_two_custom_headers_field('custom_headers', array_map(function ($row) {
                     // Blanked as the form renders it, then slashed as WP posts it.
-                    $value = preg_match('/[\r\n\x00]/', $row['value']) === 1 ? '' : $row['value'];
-                    return ['name' => addslashes($row['name']), 'value' => addslashes($value)];
+                    $blank = function ($field) {
+                        return preg_match('/[\r\n\x00]/', $field) === 1 ? '' : $field;
+                    };
+                    return [
+                        'name'  => addslashes($blank($row['name'])),
+                        'value' => addslashes($blank($row['value'])),
+                    ];
                 }, $rows));
             } catch (Exception $e) {
                 $threw = true;
@@ -9528,16 +9535,20 @@ final class BrandConfigSpec
             TinyAssert::same($refused, $threw, "the notice must match what the save does: $description");
             // Blanked, so Save cannot store the input's rewrite as the merchant's.
             foreach ($rows as $row) {
-                if (preg_match('/[\r\n\x00]/', $row['value']) === 1) {
-                    TinyAssert::same(
-                        false,
-                        strpos($html, 'value="' . esc_attr($row['value']) . '"') !== false,
-                        "an unholdable value must not be echoed back: $description"
-                    );
+                foreach ([$row['name'], $row['value']] as $field) {
+                    if (preg_match('/[\r\n\x00]/', $field) === 1) {
+                        TinyAssert::same(
+                            false,
+                            strpos($html, 'value="' . esc_attr($field) . '"') !== false,
+                            "an unholdable entry must not be echoed back: $description"
+                        );
+                    }
                 }
             }
             // Inside the row: admin.js removes by row selector.
             TinyAssert::same(2 + count($rows), substr_count($html, '<tr'), $description);
+            // Four cells per row, inside the one wrapping the whole field.
+            TinyAssert::same(4 * count($rows) + 1, substr_count($html, '<td'), $description);
         }
     }
 

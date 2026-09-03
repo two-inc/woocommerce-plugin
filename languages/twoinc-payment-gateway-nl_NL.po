@@ -1308,8 +1308,8 @@ msgid "The value of \"%s\" must be printable ASCII text and cannot be blank."
 msgstr "De waarde van \"%s\" moet afdrukbare ASCII-tekst zijn en mag niet leeg zijn."
 
 #: class/WC_Twoinc.php
-msgid "This value contains characters this field cannot hold, so it is not shown and is not being sent. Enter it again."
-msgstr "Deze waarde bevat tekens die dit veld niet kan bevatten, dus hij wordt niet weergegeven en niet verzonden. Voer hem opnieuw in."
+msgid "This entry contains characters this field cannot hold, so it is not shown and is not being sent. Enter it again."
+msgstr "Deze invoer bevat tekens die dit veld niet kan bevatten, dus hij wordt niet weergegeven en niet verzonden. Voer hem opnieuw in."
 
 #: class/WC_Twoinc.php
 msgid "This row is not being sent, and the settings cannot be saved until it is corrected or removed."

@@ -5079,11 +5079,16 @@ if (!class_exists('WC_Twoinc')) {
                                 $browser = $row['send_from_browser'];
                                 ?>
                                 <tr class="twoinc-custom-header-row">
-                                    <td><input type="text" class="input-text regular-input" name="<?php echo esc_attr($field_key); ?>[<?php echo (int) $i; ?>][name]" value="<?php echo esc_attr($name); ?>" placeholder="X-WAF-TOKEN" /></td>
                                     <td>
-                                        <input type="text" class="input-text regular-input" name="<?php echo esc_attr($field_key); ?>[<?php echo (int) $i; ?>][value]" value="<?php echo $row['unholdable'] ? '' : esc_attr($value); ?>" />
-                                        <?php if ($row['unholdable']) : ?>
-                                            <p class="description twoinc-custom-header-unholdable"><?php esc_html_e('This value contains characters this field cannot hold, so it is not shown and is not being sent. Enter it again.', 'twoinc-payment-gateway'); ?></p>
+                                        <input type="text" class="input-text regular-input" name="<?php echo esc_attr($field_key); ?>[<?php echo (int) $i; ?>][name]" value="<?php echo $row['name_unholdable'] ? '' : esc_attr($name); ?>" placeholder="X-WAF-TOKEN" />
+                                        <?php if ($row['name_unholdable']) : ?>
+                                            <p class="description twoinc-custom-header-unholdable"><?php esc_html_e('This entry contains characters this field cannot hold, so it is not shown and is not being sent. Enter it again.', 'twoinc-payment-gateway'); ?></p>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <input type="text" class="input-text regular-input" name="<?php echo esc_attr($field_key); ?>[<?php echo (int) $i; ?>][value]" value="<?php echo $row['value_unholdable'] ? '' : esc_attr($value); ?>" />
+                                        <?php if ($row['value_unholdable']) : ?>
+                                            <p class="description twoinc-custom-header-unholdable"><?php esc_html_e('This entry contains characters this field cannot hold, so it is not shown and is not being sent. Enter it again.', 'twoinc-payment-gateway'); ?></p>
                                         <?php endif; ?>
                                         <?php if (!$row['sent'] && !$row['discarded']) : ?>
                                             <p class="description twoinc-custom-header-unsendable"><?php esc_html_e('This row is not being sent, and the settings cannot be saved until it is corrected or removed.', 'twoinc-payment-gateway'); ?></p>
@@ -5632,7 +5637,7 @@ if (!class_exists('WC_Twoinc')) {
          * Every stored row, tagged with whether it is sent and whether a text
          * input can hold its value at all.
          *
-         * @return array<int, array{name: string, value: string, send_from_browser: bool, sent: bool, unholdable: bool, discarded: bool}>
+         * @return array<int, array{name: string, value: string, send_from_browser: bool, sent: bool, name_unholdable: bool, value_unholdable: bool, discarded: bool}>
          */
         private function classify_custom_headers(): array
         {
@@ -5651,9 +5656,10 @@ if (!class_exists('WC_Twoinc')) {
                 $name = is_scalar($row['name'] ?? null) ? trim((string) $row['name']) : '';
                 $value = is_scalar($row['value'] ?? null) ? (string) $row['value'] : '';
                 $lower = strtolower($name);
-                // The form blanks a value it cannot hold, so that is what the
-                // next save is judged on, not what is stored.
-                $unholdable = preg_match('/[\r\n\x00]/', $value) === 1;
+                // A one-line input drops these on submit, so the form blanks
+                // such a field and the next save is judged on the blank.
+                $name_unholdable = preg_match('/[\r\n\x00]/', $name) === 1;
+                $value_unholdable = preg_match('/[\r\n\x00]/', $value) === 1;
                 $sent = self::is_valid_header_name($name)
                     && self::is_valid_header_value($value)
                     && trim($value) !== ''
@@ -5667,9 +5673,11 @@ if (!class_exists('WC_Twoinc')) {
                     'value'             => $value,
                     'send_from_browser' => self::is_browser_flag_set($row['send_from_browser'] ?? null),
                     'sent'              => $sent,
-                    'unholdable'        => $unholdable,
+                    'name_unholdable'   => $name_unholdable,
+                    'value_unholdable'  => $value_unholdable,
                     // Mirrors the save's blank-row skip: it drops such a row.
-                    'discarded'         => $name === '' && ($unholdable || $value === ''),
+                    'discarded'         => ($name_unholdable || $name === '')
+                        && ($value_unholdable || $value === ''),
                 ];
             }
             return $classified;
