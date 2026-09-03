@@ -5656,10 +5656,8 @@ if (!class_exists('WC_Twoinc')) {
                 $name = is_scalar($row['name'] ?? null) ? trim((string) $row['name']) : '';
                 $value = is_scalar($row['value'] ?? null) ? (string) $row['value'] : '';
                 $lower = strtolower($name);
-                // A one-line input drops these on submit, so the form blanks
-                // such a field and the next save is judged on the blank.
-                $name_unholdable = preg_match('/[\r\n\x00]/', $name) === 1;
-                $value_unholdable = preg_match('/[\r\n\x00]/', $value) === 1;
+                $name_unholdable = !self::survives_the_form($name);
+                $value_unholdable = !self::survives_the_form($value);
                 $sent = self::is_valid_header_name($name)
                     && self::is_valid_header_value($value)
                     && trim($value) !== ''
@@ -5710,6 +5708,18 @@ if (!class_exists('WC_Twoinc')) {
                 }
             }
             return $map;
+        }
+
+        /**
+         * Whether a one-line input posts a field back unchanged. Asked as a
+         * round trip rather than a character list, so any way the render
+         * rewrites a field — CR/LF and NUL dropped, invalid UTF-8 discarded —
+         * counts without having to be enumerated here.
+         */
+        private static function survives_the_form(string $field): bool
+        {
+            $rendered = html_entity_decode(esc_attr($field), ENT_QUOTES, 'UTF-8');
+            return str_replace(["\r", "\n", "\0"], '', $rendered) === $field;
         }
 
         /** Undo WP's magic quotes on one posted scalar. */

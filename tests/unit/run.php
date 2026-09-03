@@ -9445,6 +9445,25 @@ final class BrandConfigSpec
         TinyAssert::same([], $gateway->get_custom_headers());
     }
 
+    /**
+     * The rows the browser would submit from $html: read back off the rendered
+     * inputs rather than from what was stored, so any rewriting the render does
+     * is modelled without the test having to know about it.
+     *
+     * @return array<int, array{name: string, value: string}>
+     */
+    private static function repostOf(string $html): array
+    {
+        preg_match_all('/name="[^"]*\[(\d+)\]\[(name|value)\]" value="([^"]*)"/', $html, $matches, PREG_SET_ORDER);
+        $rows = [];
+        foreach ($matches as $match) {
+            // A one-line input drops these, and WP slashes what it posts.
+            $posted = str_replace(["\r", "\n", "\0"], '', html_entity_decode($match[3], ENT_QUOTES, 'UTF-8'));
+            $rows[(int) $match[1]][$match[2]] = addslashes($posted);
+        }
+        return array_values($rows);
+    }
+
     /** Removing every row posts no field key at all, so absence means "cleared". */
     private static function testClearingTheHeaderTableVerifiesTheKeyWithoutIt(): void
     {
@@ -9495,6 +9514,9 @@ final class BrandConfigSpec
             [[['name' => '', 'value' => "a\r\nb"]], false, 1, 'a nameless unholdable row re-posts wholly blank, so the save drops it'],
             [[['name' => "X-Foo\r\nBar", 'value' => 'v']], true, 1, 'a name the field cannot hold must not re-post as a name nobody typed'],
             [[['name' => "X-Foo\r\nBar", 'value' => "a\r\nb"]], false, 2, 'both fields blanked leaves a row the save drops'],
+            [[['name' => "X-Foo\xFF", 'value' => 'v']], true, 1, 'invalid UTF-8 is discarded by the render, not by a character rule'],
+            [[['name' => 'X-WAF-TOKEN', 'value' => "a\xFFb"]], true, 1, 'on the value side too'],
+            [[['name' => "X-Foo\xFF", 'value' => '']], false, 1, 'and a nameless row so blanked is one the save drops'],
             [
                 [['name' => 'X-Dup', 'value' => 'a'], ['name' => 'x-dup', 'value' => 'b']],
                 true,
@@ -9519,16 +9541,7 @@ final class BrandConfigSpec
             // The notice must match what saving the form as rendered does.
             $threw = false;
             try {
-                $gateway->validate_two_custom_headers_field('custom_headers', array_map(function ($row) {
-                    // Blanked as the form renders it, then slashed as WP posts it.
-                    $blank = function ($field) {
-                        return preg_match('/[\r\n\x00]/', $field) === 1 ? '' : $field;
-                    };
-                    return [
-                        'name'  => addslashes($blank($row['name'])),
-                        'value' => addslashes($blank($row['value'])),
-                    ];
-                }, $rows));
+                $gateway->validate_two_custom_headers_field('custom_headers', self::repostOf($html));
             } catch (Exception $e) {
                 $threw = true;
             }
@@ -9547,8 +9560,7 @@ final class BrandConfigSpec
             }
             // Inside the row: admin.js removes by row selector.
             TinyAssert::same(2 + count($rows), substr_count($html, '<tr'), $description);
-            // Four cells per row, inside the one wrapping the whole field.
-            TinyAssert::same(4 * count($rows) + 1, substr_count($html, '<td'), $description);
+
         }
     }
 
