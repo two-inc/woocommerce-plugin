@@ -5123,15 +5123,15 @@ if (!class_exists('WC_Twoinc')) {
                                 ?>
                                 <tr class="twoinc-custom-header-row">
                                     <td><input type="text" class="input-text regular-input" name="<?php echo esc_attr($field_key); ?>[<?php echo (int) $i; ?>][name]" value="<?php echo esc_attr($name); ?>" placeholder="X-WAF-TOKEN" /></td>
-                                    <td><input type="text" class="input-text regular-input" name="<?php echo esc_attr($field_key); ?>[<?php echo (int) $i; ?>][value]" value="<?php echo esc_attr($value); ?>" /></td>
+                                    <td>
+                                        <input type="text" class="input-text regular-input" name="<?php echo esc_attr($field_key); ?>[<?php echo (int) $i; ?>][value]" value="<?php echo esc_attr($value); ?>" />
+                                        <?php if ($unsendable) : ?>
+                                            <p class="description twoinc-custom-header-unsendable"><?php esc_html_e('This value is not being sent because it is not printable ASCII text. Retype it — saving the form as it stands will store a changed value.', 'twoinc-payment-gateway'); ?></p>
+                                        <?php endif; ?>
+                                    </td>
                                     <td><input type="checkbox" name="<?php echo esc_attr($field_key); ?>[<?php echo (int) $i; ?>][send_from_browser]" value="1" <?php checked($browser); ?> /></td>
                                     <td><button type="button" class="button twoinc-custom-header-remove"><?php esc_html_e('Remove', 'twoinc-payment-gateway'); ?></button></td>
                                 </tr>
-                                <?php if ($unsendable) : ?>
-                                    <tr class="twoinc-custom-header-unsendable">
-                                        <td colspan="4"><p class="description"><?php esc_html_e('This value is not being sent because it is not printable ASCII text. Retype it — saving the form as it stands will store a changed value.', 'twoinc-payment-gateway'); ?></p></td>
-                                    </tr>
-                                <?php endif; ?>
                             <?php endforeach; ?>
                         </tbody>
                     </table>

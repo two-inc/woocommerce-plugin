@@ -9453,6 +9453,9 @@ final class BrandConfigSpec
                 strpos($html, 'twoinc-custom-header-unsendable') !== false,
                 $description
             );
+            // Inside the row, not beside it: admin.js removes by row selector
+            // and would otherwise leave the notice orphaned.
+            TinyAssert::same(3, substr_count($html, '<tr'), $description);
         }
     }
 
