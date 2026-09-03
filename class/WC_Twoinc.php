@@ -5084,7 +5084,8 @@ if (!class_exists('WC_Twoinc')) {
                                         <input type="text" class="input-text regular-input" name="<?php echo esc_attr($field_key); ?>[<?php echo (int) $i; ?>][value]" value="<?php echo $row['unholdable'] ? '' : esc_attr($value); ?>" />
                                         <?php if ($row['unholdable']) : ?>
                                             <p class="description twoinc-custom-header-unholdable"><?php esc_html_e('This value contains characters this field cannot hold, so it is not shown and is not being sent. Enter it again.', 'twoinc-payment-gateway'); ?></p>
-                                        <?php elseif (!$row['sent']) : ?>
+                                        <?php endif; ?>
+                                        <?php if (!$row['sent'] && !$row['discarded']) : ?>
                                             <p class="description twoinc-custom-header-unsendable"><?php esc_html_e('This row is not being sent, and the settings cannot be saved until it is corrected or removed.', 'twoinc-payment-gateway'); ?></p>
                                         <?php endif; ?>
                                     </td>
@@ -5139,7 +5140,7 @@ if (!class_exists('WC_Twoinc')) {
                 if (in_array($lower, self::reserved_header_names(), true)) {
                     throw new Exception(sprintf(
                         /* translators: %s: the rejected header name */
-                        __('The header "%s" is set by the plugin itself and cannot be overridden here.', 'twoinc-payment-gateway'),
+                        __('The header "%s" is set by the plugin, the HTTP client or the connection itself, and cannot be overridden here.', 'twoinc-payment-gateway'),
                         $name
                     ));
                 }
@@ -5606,9 +5607,9 @@ if (!class_exists('WC_Twoinc')) {
         }
 
         /**
-         * The configured custom request headers, normalised into rows of
-         * name/value/send_from_browser. A row whose name or value would not
-         * pass the form's validation is dropped rather than repaired.
+         * The configured custom request headers, as name/value/send_from_browser.
+         * A row can arrive around the form (a direct DB edit, another plugin),
+         * so one the form would refuse is dropped here rather than repaired.
          *
          * @return array<int, array{name: string, value: string, send_from_browser: bool}>
          */
@@ -5631,7 +5632,7 @@ if (!class_exists('WC_Twoinc')) {
          * Every stored row, tagged with whether it is sent and whether a text
          * input can hold its value at all.
          *
-         * @return array<int, array{name: string, value: string, send_from_browser: bool, sent: bool, unholdable: bool}>
+         * @return array<int, array{name: string, value: string, send_from_browser: bool, sent: bool, unholdable: bool, discarded: bool}>
          */
         private function classify_custom_headers(): array
         {
@@ -5663,17 +5664,18 @@ if (!class_exists('WC_Twoinc')) {
                     'value'             => $value,
                     'send_from_browser' => self::is_browser_flag_set($row['send_from_browser'] ?? null),
                     'sent'              => $sent,
-                    // Exactly the bytes a text input cannot round-trip; every
-                    // other rejected value re-posts intact and is refused.
+                    // Exactly the bytes a text input cannot round-trip.
                     'unholdable'        => preg_match('/[\r\n\x00]/', $value) === 1,
+                    // The save drops this row rather than refusing it, so the
+                    // condition must mirror its blank-row skip exactly.
+                    'discarded'         => $name === '' && $value === '',
                 ];
             }
             return $classified;
         }
 
         /**
-         * The flag arrives as 'yes'/'no' when stored but '1' straight off the
-         * settings POST, so the stored 'no' must not read as truthy.
+         * Stored as 'yes'/'no', so the stored 'no' must not read as truthy.
          *
          * @param mixed $raw
          */
@@ -6085,16 +6087,14 @@ if (!class_exists('WC_Twoinc')) {
         {
             $post_data = $this->get_post_data();
             $custom_headers_field = 'woocommerce_' . $this->id . '_custom_headers';
-            // Verify against the table as submitted, not as stored: removing
-            // every row posts no field key at all, so absence means cleared.
+            // Removing every row posts no field key, so absence means cleared.
             try {
                 $this->custom_headers_override = $this->validate_two_custom_headers_field(
                     'custom_headers',
                     $post_data[$custom_headers_field] ?? null
                 );
             } catch (Exception $e) {
-                // A table the save will refuse must not authenticate the key;
-                // the stored rows stand for this request.
+                // A table the save will refuse must not authenticate the key.
                 $this->custom_headers_override = null;
             }
             $api_key_field = 'woocommerce_' . $this->id . '_api_key';

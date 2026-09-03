@@ -9476,9 +9476,12 @@ final class BrandConfigSpec
      */
     private static function testEveryDroppedRowIsMarkedInTheForm(): void
     {
-        // [rows, dropped, unholdable, description].
+        // [rows, refused-on-save, unholdable, description]. The two notices are
+        // independent: retyping an unholdable value cannot fix a reserved name.
         $cases = [
             [[['name' => 'X-WAF-TOKEN', 'value' => 'waf-token-1']], false, false, 'a sendable row carries no notice'],
+            [[['name' => '', 'value' => '']], false, false, 'a wholly blank row is discarded by the save, not refused'],
+            [[['name' => '', 'value' => '   ']], true, false, 'but one holding only whitespace is refused, so say so'],
             [[['name' => 'X-WAF-TOKEN', 'value' => "waf\r\ntoken"]], true, true, 'a text input cannot hold a newline'],
             [[['name' => 'X-WAF-TOKEN', 'value' => "waf\ntoken"]], true, true, 'nor a bare LF'],
             [[['name' => 'X-WAF-TOKEN', 'value' => "waf\0token"]], true, true, 'nor a NUL'],
@@ -9497,23 +9500,29 @@ final class BrandConfigSpec
                 'the second of a duplicate pair',
             ],
         ];
-        foreach ($cases as [$rows, $dropped, $unholdable, $description]) {
+        foreach ($cases as [$rows, $refused, $unholdable, $description]) {
             $gateway = self::firewallGateway(['custom_headers' => $rows]);
             $html = $gateway->generate_two_custom_headers_html('custom_headers', []);
 
-            // One notice or the other, never both and never neither.
             TinyAssert::same(
                 $unholdable,
                 strpos($html, 'twoinc-custom-header-unholdable') !== false,
                 $description
             );
             TinyAssert::same(
-                $dropped && !$unholdable,
+                $refused,
                 strpos($html, 'twoinc-custom-header-unsendable') !== false,
                 $description
             );
-            // An unholdable value is blanked, so hitting Save cannot store the
-            // input's rewrite of it as though the merchant had typed it.
+            // The savability claim must hold: refused exactly when it says so.
+            $threw = false;
+            try {
+                $gateway->validate_two_custom_headers_field('custom_headers', $rows);
+            } catch (Exception $e) {
+                $threw = true;
+            }
+            TinyAssert::same($refused, $threw, "the notice must match what the save does: $description");
+            // Blanked, so Save cannot store the input's rewrite as the merchant's.
             foreach ($rows as $row) {
                 if (preg_match('/[\r\n\x00]/', $row['value']) === 1) {
                     TinyAssert::same(
@@ -9523,13 +9532,6 @@ final class BrandConfigSpec
                     );
                 }
             }
-            // Exactly the rows the read path drops, no more.
-            TinyAssert::same(
-                count($rows) - count($gateway->get_custom_headers()),
-                substr_count($html, 'twoinc-custom-header-unholdable')
-                    + substr_count($html, 'twoinc-custom-header-unsendable'),
-                $description
-            );
             // Inside the row: admin.js removes by row selector.
             TinyAssert::same(2 + count($rows), substr_count($html, '<tr'), $description);
         }

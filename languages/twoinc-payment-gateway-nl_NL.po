@@ -1292,8 +1292,8 @@ msgid "Every custom request header needs a name."
 msgstr "Elke aangepaste verzoekheader heeft een naam nodig."
 
 #: class/WC_Twoinc.php
-msgid "The header \"%s\" is set by the plugin itself and cannot be overridden here."
-msgstr "De header \"%s\" wordt door de plug-in zelf ingesteld en kan hier niet worden overschreven."
+msgid "The header \"%s\" is set by the plugin, the HTTP client or the connection itself, and cannot be overridden here."
+msgstr "De header \"%s\" wordt ingesteld door de plug-in, de HTTP-client of de verbinding zelf en kan hier niet worden overschreven."
 
 #: class/WC_Twoinc.php
 msgid "The header \"%s\" is listed more than once."
