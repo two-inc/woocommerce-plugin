@@ -289,7 +289,7 @@ final class BrandConfigSpec
             'testClearingTheHeaderTableVerifiesTheKeyWithoutIt',
             'testUnsendableStoredRowIsMarkedInTheForm',
             'testCustomHeadersRedactedFromTheApiLog',
-            'testLegacyFirewallTokenMigratedIntoTheHeaderTable',
+            'testLegacyFirewallTokenKeysDroppedWithNoMigration',
             'testSoleTraderTokensNeverPublishTheFirewallToken',
             'testSoleTraderTokensPublishTheFirewallTokenOnlyWhenOptedIn',
             'testSoleTraderTokensPublishOnlyFlaggedHeaderRows',
@@ -9352,6 +9352,17 @@ final class BrandConfigSpec
             ['name' => 'Content-Length', 'value' => '0', 'send_from_browser' => 'yes'],
             ['name' => 'X-Forwarded-For', 'value' => '10.0.0.1', 'send_from_browser' => 'yes'],
             ['name' => 'x-real-ip', 'value' => '10.0.0.1', 'send_from_browser' => 'yes'],
+            ['name' => 'Two-Delegated-Authority-Token', 'value' => 'forged', 'send_from_browser' => 'yes'],
+            ['name' => 'Connection', 'value' => 'close', 'send_from_browser' => 'yes'],
+            ['name' => 'keep-alive', 'value' => 'timeout=5', 'send_from_browser' => 'yes'],
+            ['name' => 'PROXY-AUTHENTICATE', 'value' => 'Basic', 'send_from_browser' => 'yes'],
+            ['name' => 'Proxy-Authorization', 'value' => 'Basic abc', 'send_from_browser' => 'yes'],
+            ['name' => 'TE', 'value' => 'trailers', 'send_from_browser' => 'yes'],
+            ['name' => 'trailer', 'value' => 'Expires', 'send_from_browser' => 'yes'],
+            ['name' => 'Transfer-Encoding', 'value' => 'chunked', 'send_from_browser' => 'yes'],
+            ['name' => 'upgrade', 'value' => 'h2c', 'send_from_browser' => 'yes'],
+            ['name' => 'Authorization', 'value' => 'Bearer forged', 'send_from_browser' => 'yes'],
+            ['name' => 'COOKIE', 'value' => 'session=1', 'send_from_browser' => 'yes'],
             ['name' => 'X Bad Name', 'value' => 'v', 'send_from_browser' => 'yes'],
             ['name' => '', 'value' => 'v', 'send_from_browser' => 'yes'],
             ['name' => 'X-Unicode', 'value' => 'tøken', 'send_from_browser' => 'yes'],
@@ -9364,7 +9375,12 @@ final class BrandConfigSpec
         TinyAssert::same('real-key', $headers['X-API-Key'] ?? null, 'a stored row must not clobber the API key');
         TinyAssert::same('application/json; charset=utf-8', $headers['Content-Type'] ?? null);
         TinyAssert::same('tenant-7', $headers['X-Tenant'] ?? null, 'the usable row still travels');
-        foreach (['X Bad Name', 'Host', 'Content-Length', 'X-Forwarded-For', 'x-real-ip', 'X-Unicode', 'X-Blank'] as $dropped) {
+        $dropped_names = [
+            'X Bad Name', 'Host', 'Content-Length', 'X-Forwarded-For', 'x-real-ip', 'X-Unicode', 'X-Blank',
+            'Two-Delegated-Authority-Token', 'Connection', 'keep-alive', 'PROXY-AUTHENTICATE',
+            'Proxy-Authorization', 'TE', 'trailer', 'Transfer-Encoding', 'upgrade', 'Authorization', 'COOKIE',
+        ];
+        foreach ($dropped_names as $dropped) {
             TinyAssert::same(false, array_key_exists($dropped, $headers), "$dropped must not reach the request");
         }
         // Nor may a dropped row reach the browser.
@@ -9490,6 +9506,18 @@ final class BrandConfigSpec
             [[['name' => 'Accept-Language', 'value' => 'v']], 'cannot be overridden', 'the locale header is composed from settings'],
             [[['name' => 'X-Forwarded-For', 'value' => 'v']], 'cannot be overridden', 'a forged client IP must not be settable here'],
             [[['name' => 'x-real-ip', 'value' => 'v']], 'cannot be overridden', 'nor its Nginx-flavoured twin'],
+            // Casing varies across the set: the rule is case-insensitive.
+            [[['name' => 'Two-Delegated-Authority-Token', 'value' => 'v']], 'cannot be overridden', 'the delegated-authority token is minted, not configured'],
+            [[['name' => 'Connection', 'value' => 'v']], 'cannot be overridden', 'a hop-by-hop control belongs to the connection, not the request'],
+            [[['name' => 'keep-alive', 'value' => 'v']], 'cannot be overridden', 'hop-by-hop'],
+            [[['name' => 'PROXY-AUTHENTICATE', 'value' => 'v']], 'cannot be overridden', 'hop-by-hop'],
+            [[['name' => 'Proxy-Authorization', 'value' => 'v']], 'cannot be overridden', 'hop-by-hop'],
+            [[['name' => 'TE', 'value' => 'v']], 'cannot be overridden', 'hop-by-hop'],
+            [[['name' => 'trailer', 'value' => 'v']], 'cannot be overridden', 'hop-by-hop'],
+            [[['name' => 'Transfer-Encoding', 'value' => 'v']], 'cannot be overridden', 'framing is the HTTP client\'s to set'],
+            [[['name' => 'upgrade', 'value' => 'v']], 'cannot be overridden', 'hop-by-hop'],
+            [[['name' => 'Authorization', 'value' => 'v']], 'cannot be overridden', 'the plugin carries its own credential in X-API-Key'],
+            [[['name' => 'COOKIE', 'value' => 'v']], 'cannot be overridden', 'a store cookie has no business on an API call'],
             [[['name' => 'X-Split', 'value' => "a\r\nX-Injected: b"]], 'printable ASCII text', 'CRLF would splice a second header in'],
             [[['name' => 'X-Split', 'value' => "a\nb"]], 'printable ASCII text', 'a bare LF splits the line too'],
             // Without /D on the pattern, $ matches before a trailing newline.
@@ -9689,115 +9717,32 @@ final class BrandConfigSpec
     }
 
     /**
-     * Seed the stored settings, then run the settings load + migration in the
-     * order the real constructor does (init_settings() then the migration).
+     * ABN-490: the `firewall_token` fields never reached a release, so there
+     * is nothing to carry into the header table — only two dead keys to drop.
      */
-    private static function migratedGateway(array $stored): WC_Twoinc
+    private static function testLegacyFirewallTokenKeysDroppedWithNoMigration(): void
     {
+        TinyAssert::same(
+            false,
+            method_exists(WC_Twoinc::class, 'migrate_firewall_token_to_custom_headers'),
+            'the migration is gone: a seeded row would invent config no merchant ever set'
+        );
+
         $gateway = self::gateway();
-        $GLOBALS['__twoinc_test_options'][$gateway->get_option_key()] = $stored;
-        $gateway->init_settings();
-        $method = new ReflectionMethod(WC_Twoinc::class, 'migrate_firewall_token_to_custom_headers');
-        $method->setAccessible(true);
-        $method->invoke($gateway);
-        return $gateway;
-    }
+        $key = $gateway->get_option_key();
+        $drop = new ReflectionMethod(WC_Twoinc::class, 'drop_removed_settings');
+        $drop->setAccessible(true);
 
-    /**
-     * ABN-490: dropping the legacy keys without carrying the value across
-     * would silently stop sending a token a merchant's firewall requires.
-     */
-    private static function testLegacyFirewallTokenMigratedIntoTheHeaderTable(): void
-    {
-        $cases = [
-            [
-                ['firewall_token' => 'waf-token-1', 'firewall_token_browser' => 'yes'],
-                [['name' => 'X-WAF-TOKEN', 'value' => 'waf-token-1', 'send_from_browser' => 'yes']],
-                [['name' => 'X-WAF-TOKEN', 'value' => 'waf-token-1', 'send_from_browser' => true]],
-                'a token opted into the browser keeps that opt-in',
-            ],
-            [
-                ['firewall_token' => 'waf-token-1', 'firewall_token_browser' => 'no'],
-                [['name' => 'X-WAF-TOKEN', 'value' => 'waf-token-1', 'send_from_browser' => 'no']],
-                [['name' => 'X-WAF-TOKEN', 'value' => 'waf-token-1', 'send_from_browser' => false]],
-                'a server-only token stays server-only',
-            ],
-            [
-                ['firewall_token' => 'waf-token-1'],
-                [['name' => 'X-WAF-TOKEN', 'value' => 'waf-token-1', 'send_from_browser' => 'no']],
-                [['name' => 'X-WAF-TOKEN', 'value' => 'waf-token-1', 'send_from_browser' => false]],
-                'an absent browser flag defaults to server-only',
-            ],
-            [
-                ['firewall_token' => '', 'firewall_token_browser' => 'no'],
-                [],
-                [],
-                'an empty token seeds no row',
-            ],
-            [
-                ['firewall_token' => " waf\r\ntoken-1\n", 'firewall_token_browser' => 'no'],
-                [['name' => 'X-WAF-TOKEN', 'value' => " waf\r\ntoken-1\n", 'send_from_browser' => 'no']],
-                [],
-                'a newline-bearing token migrates verbatim: repairing it would carry a different token across',
-            ],
-            [
-                ['firewall_token' => 'tøken', 'firewall_token_browser' => 'no'],
-                [['name' => 'X-WAF-TOKEN', 'value' => 'tøken', 'send_from_browser' => 'no']],
-                [],
-                'nor is a non-ASCII token thrown away',
-            ],
-            [
-                ['firewall_token' => '   ', 'firewall_token_browser' => 'no'],
-                [],
-                [],
-                'a blank token seeds no row',
-            ],
-            [
-                ['firewall_token' => "a\"b'c\\d", 'firewall_token_browser' => 'no'],
-                [['name' => 'X-WAF-TOKEN', 'value' => "a\"b'c\\d", 'send_from_browser' => 'no']],
-                [['name' => 'X-WAF-TOKEN', 'value' => "a\"b'c\\d", 'send_from_browser' => false]],
-                'a token of printable punctuation migrates verbatim',
-            ],
+        $GLOBALS['__twoinc_test_options'][$key] = [
+            'firewall_token' => 'waf-token-1',
+            'firewall_token_browser' => 'yes',
+            'api_key' => 'keep-me',
         ];
-        foreach ($cases as [$stored, $expected, $sent, $description]) {
-            $gateway = self::migratedGateway(array_merge($stored, ['api_key' => 'key']));
-            $saved = get_option($gateway->get_option_key(), []);
+        $gateway->init_settings();
+        $drop->invoke($gateway);
 
-            TinyAssert::same($expected, $saved['custom_headers'] ?? [], $description);
-            // The legacy keys are cleared, so the migration cannot run twice.
-            TinyAssert::same(false, array_key_exists('firewall_token', $saved), $description);
-            TinyAssert::same(false, array_key_exists('firewall_token_browser', $saved), $description);
-            // An unsendable token is kept and visible without going out.
-            TinyAssert::same($sent, $gateway->get_custom_headers(), $description);
-        }
-
-        // An install with no legacy key is left completely alone.
-        $gateway = self::migratedGateway(['api_key' => 'key']);
-        TinyAssert::same(
-            ['api_key' => 'key'],
-            get_option($gateway->get_option_key(), []),
-            'no legacy key means no write at all'
-        );
-
-        // A token already carried across is not duplicated by a second pass.
-        $gateway = self::migratedGateway([
-            'firewall_token' => 'waf-token-1',
-            'custom_headers' => [['name' => 'X-WAF-TOKEN', 'value' => 'already-here', 'send_from_browser' => 'no']],
-        ]);
-        $saved = get_option($gateway->get_option_key(), []);
-        TinyAssert::same(1, count($saved['custom_headers'] ?? []), 'the row must not be seeded twice');
-        TinyAssert::same('already-here', $saved['custom_headers'][0]['value'] ?? null, 'the edited row wins');
-
-        // A legacy token alongside unrelated rows is prepended, not dropped.
-        $gateway = self::migratedGateway([
-            'firewall_token' => 'waf-token-1',
-            'custom_headers' => [['name' => 'X-Tenant', 'value' => 'tenant-7', 'send_from_browser' => 'no']],
-        ]);
-        $saved = get_option($gateway->get_option_key(), []);
-        TinyAssert::same(
-            ['X-WAF-TOKEN', 'X-Tenant'],
-            array_column($saved['custom_headers'] ?? [], 'name')
-        );
+        TinyAssert::same(['api_key' => 'keep-me'], $GLOBALS['__twoinc_test_options'][$key]);
+        TinyAssert::same([], $gateway->get_custom_headers(), 'no row is seeded from the dropped keys');
     }
 
     /**
