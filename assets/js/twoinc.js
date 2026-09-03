@@ -2907,6 +2907,27 @@ let twoincTermChips = {
 };
 
 /**
+ * Prefetched autofill answers by country — the buyer object, or `false` for
+ * "nobody on the cookie". An absent entry means unresolved.
+ *
+ * Keyed by country because the delegated authority each was fetched under is.
+ * Shared by every controller because the answer describes the buyer, not the
+ * role: the billing and delivery panels each own an instance, and a signup
+ * completed through one must not leave the other prompting the same buyer to
+ * sign up again.
+ */
+const soleTraderAutofillByCountry = {};
+
+/** Countries with a lookup outstanding, so two controllers make one request. */
+const soleTraderAutofillPending = {};
+
+/**
+ * Set by a rate-limited lookup. Page-global, unlike the maps above: the limit
+ * is on the endpoint, which one country's tokens reach as readily as another's.
+ */
+let soleTraderAutofillBackoffUntil = 0;
+
+/**
  * Sole trader checkout — presentation only (TWO-24754).
  *
  * All business logic (country eligibility, token minting) lives in
@@ -2920,6 +2941,9 @@ function createSoleTraderController(companySearch) {
     mode: "business", // 'business' | 'sole_trader'
     availabilityByCountry: {},
     tokens: null,
+
+    /** The country `tokens` were minted for — their delegated authority is scoped to it. */
+    tokenCountry: null,
 
     /** Backoff after a 429: callers gate on `!tokens`, so a failed mint otherwise re-mints every render. */
     tokenMintBackoffUntil: 0,
@@ -2979,16 +3003,6 @@ function createSoleTraderController(companySearch) {
      * finishes would strand the buyer if they closed the window by hand.
      */
     openingSignup: false,
-
-    /**
-     * A chip click's autofill probe is in flight and owns the decision any
-     * further click resolves to — a second probe would adopt, and credit-
-     * check, the same buyer twice.
-     */
-    autofillProbing: false,
-
-    /** Supersession stamp for that probe, same idiom as `companySearchSeq`. */
-    autofillProbeSeq: 0,
 
     /**
      * True once `setCompany()` has actually adopted a company while in
@@ -3178,6 +3192,7 @@ function createSoleTraderController(companySearch) {
         .appendTo($note);
       $container.append($note);
 
+      controller.retireTokens();
       // Minted here rather than at click time, since `window.open()` outside
       // the click's own gesture is blocker bait. Tokens are country-scoped,
       // not email-scoped, so one mint per page serves every launch.
@@ -3188,8 +3203,76 @@ function createSoleTraderController(companySearch) {
       if (!controller.tokens) {
         controller.fetchTokens(function () {
           controller.syncDifferentSoleTraderLink();
+          controller.prefetchAutofill();
         });
+      } else {
+        controller.prefetchAutofill();
       }
+    },
+
+    /**
+     * Resolve the autofill answer up front, on the same trigger as the token
+     * mint, so the chip click has it already. Holds no flight, for the same
+     * reason `refreshTokens` does not.
+     */
+    prefetchAutofill: function () {
+      // A failed mint leaves no tokens, and the lookup then answers `null`
+      // unconditionally — latching a false "nobody" over a real registration.
+      if (!controller.tokens) return;
+      // Tokens are minted once, for the country the buyer had then, so after a
+      // country change there is no authority to ask under and the chip falls
+      // back to the signup popup.
+      const country = controller.currentCountry();
+      if (controller.tokenCountry !== country) return;
+      if (soleTraderAutofillPending[country]) return;
+      if (controller.heldAutofill() !== null) return;
+      if (Date.now() < soleTraderAutofillBackoffUntil) return;
+      soleTraderAutofillPending[country] = true;
+      controller.fetchCurrentBuyer(function (buyer, failed, response) {
+        delete soleTraderAutofillPending[country];
+        // A dropped request is not an answer: held, it would latch "nobody"
+        // for the life of the page and block the next render's retry. A rate
+        // limit is the one failure retrying makes worse.
+        if (failed) {
+          // `Retry-After` is not CORS-safelisted and this request is
+          // cross-origin, so the server's own value is unreadable here —
+          // `retryAfterMs`'s default stands in.
+          if (response && response.status === 429) {
+            soleTraderAutofillBackoffUntil = Date.now() + twoincUtilHelper.retryAfterMs();
+          }
+          return;
+        }
+        controller.holdAutofill(buyer || false, country);
+      });
+    },
+
+    /**
+     * Retire tokens minted for a country the buyer has since left — their
+     * delegated authority is scoped to it, and the next `render()` mints for
+     * the country now on the field.
+     *
+     * Refused while busy, since an outstanding signup's own buyer lookup
+     * still needs them; called from `render()` rather than the country change
+     * itself so a refusal is retried on the next one, instead of stranding
+     * the page on authority for a country it has left.
+     */
+    retireTokens: function () {
+      if (controller.tokenCountry === controller.currentCountry()) return;
+      if (controller.isBusy()) return;
+      controller.tokens = null;
+      controller.tokenCountry = null;
+    },
+
+    /** @returns {Object|boolean|null} the answer held for this role's country, `null` if none */
+    heldAutofill: function () {
+      const country = controller.currentCountry();
+      if (!country) return null;
+      const held = soleTraderAutofillByCountry[country];
+      return held === undefined ? null : held;
+    },
+
+    holdAutofill: function (buyer, country) {
+      soleTraderAutofillByCountry[country] = buyer;
     },
 
     /**
@@ -3359,8 +3442,8 @@ function createSoleTraderController(companySearch) {
 
     /**
      * A mode chip was clicked. Business is immediate; Sole trader switches
-     * mode, then adopts the registration the autofill probe reports or opens
-     * the hosted signup when it reports none.
+     * mode, then adopts the prefetched registration or opens the hosted
+     * signup when there is none. Synchronous throughout, in both arms.
      */
     onModeChipClick: function (mode) {
       if (mode === "business") {
@@ -3394,49 +3477,26 @@ function createSoleTraderController(companySearch) {
         return;
       }
       controller.setMode("sole_trader");
-      // Autofill first, hosted signup only when the probe reports nobody
-      // (Doug 2026-09-03, reversing the 2026-08-21 ruling that a company may
-      // only ever be filled in by a trip through the signup flow). The
-      // probe's subject is a cookie first-party to Two itself, unforgeable by
-      // a third party, so it can only report a registration this buyer has
-      // already declared to Two — and it decodes that cookie and answers,
-      // persisting nothing.
+      // Autofill first, hosted signup only when there is nobody to autofill
+      // (TWO-40). The answer's subject is a cookie first-party to Two itself,
+      // so it can only report a registration this buyer already declared.
       //
-      // Accepted cost: `window.open()` on the fallback path no longer sits in
-      // the click's own gesture, so a blocker can refuse it and the buyer
-      // goes through the note link instead. Bounded to this one round trip —
-      // tokens are minted by `render()`, never here.
-      if (controller.autofillProbing) return;
-      controller.autofillProbing = true;
-      const seq = (controller.autofillProbeSeq += 1);
-      controller.beginFlight();
-      controller.fetchCurrentBuyer(function (buyer) {
-        // Stamped per probe, not a bare flag: a chip click cancels the probe
-        // and settles its flight, and the buyer can be back in a SECOND probe
-        // by the time the abandoned request lands — a flag read at that point
-        // says "probing" and lets the stale answer spend the live probe's
-        // settle.
-        if (seq !== controller.autofillProbeSeq) return;
-        controller.autofillProbing = false;
-        // `abandonSoleTraderFlow()` cannot cancel a `fetch`, so a buyer who
-        // left mid-flight is gated out here, as a late ACCEPTED is.
-        if (controller.mode === "sole_trader") {
-          if (buyer) {
-            // Same criterion as the post-signup path: a buyer object at all.
-            controller.setCompany(buyer.organization_number, buyer.company_name, buyer);
-            controller.showNote(false);
-          } else {
-            controller.launchSignup();
-          }
-        }
-        // Last: depth reaching zero is what takes the spinner down.
-        controller.settleFlight();
-      });
+      // Read, never fetched: `render()` resolves it, and an unresolved answer
+      // means the popup rather than a wait, so both arms stay in the click's
+      // own gesture — see `openPopup`.
+      const autofilled = controller.heldAutofill();
+      if (autofilled) {
+        // Same criterion as the post-signup path: a buyer object at all.
+        controller.setCompany(autofilled.organization_number, autofilled.company_name, autofilled);
+        controller.showNote(false);
+        return;
+      }
+      controller.launchSignup();
     },
 
     /**
-     * Is a sole-trader autofill flight or a signup popup currently
-     * outstanding (TWO-40 §7)? The guard every other way to leave/interrupt
+     * Is a sole-trader round trip or a signup popup currently outstanding
+     * (TWO-40 §7)? The guard every other way to leave/interrupt
      * sole-trader mode checks before acting: the widget/chips deliberately
      * survive this window, so paths once unreachable while
      * `mode === "sole_trader"` (Business chip, reopenSearch(), an ordinary
@@ -3951,24 +4011,10 @@ function createSoleTraderController(companySearch) {
      * `click` regardless, which is the only one Enter and Space produce.
      */
     abandonPopupsForChipClick: function () {
-      controller.cancelAutofillProbe();
       controller.abandonablePopups().forEach(function (watcher) {
         if (typeof watcher.win.close === "function") watcher.win.close();
         controller.settleClosedPopup(watcher, true);
       });
-    },
-
-    /**
-     * Drop an outstanding chip-click probe, settling its flight here rather
-     * than when the request lands: nothing can cancel a `fetch`, and left
-     * outstanding it holds `isDeciding()` true, so the chip the buyer just
-     * pressed would do nothing at all for the length of the round trip.
-     */
-    cancelAutofillProbe: function () {
-      if (!controller.autofillProbing) return;
-      controller.autofillProbing = false;
-      controller.autofillProbeSeq += 1;
-      controller.settleFlight();
     },
 
     /**
@@ -4155,6 +4201,12 @@ function createSoleTraderController(companySearch) {
         return;
       }
       const country = controller.currentCountry();
+      // A mint under an unreadable country would scope its authority to
+      // nothing, and `tokenCountry` gates every later use of it.
+      if (!country) {
+        if (cb) cb(false);
+        return;
+      }
       jQuery
         .post(cfg.tokens_url, { csrf_token: cfg.csrf_token, country: country })
         .done(function (response) {
@@ -4169,6 +4221,7 @@ function createSoleTraderController(companySearch) {
           }
           if (response && response.success && response.data && response.data.autofill_token) {
             controller.tokens = response.data;
+            controller.tokenCountry = country;
             controller.bindPopupMessageListener();
             controller.scheduleTokenRefresh();
             if (cb) cb(true);
@@ -4254,8 +4307,11 @@ function createSoleTraderController(companySearch) {
 
     /**
      * Read the buyer on the Two cookie. Invokes cb(buyer) with the buyer
-     * details, or cb(null) when none exist (404) or on error. No UI side
-     * effects — the caller decides what to do with the result.
+     * details, or cb(null) when none exist (404). No UI side effects — the
+     * caller decides what to do with the result.
+     *
+     * A request that produced no answer invokes cb(null, true, response) — a
+     * distinction that only matters to a caller which holds the answer.
      */
     fetchCurrentBuyer: function (cb) {
       if (!controller.tokens) {
@@ -4270,6 +4326,7 @@ function createSoleTraderController(companySearch) {
           headers[name] = customHeaders[name];
         });
       }
+      let refused = null;
       fetch(window.twoinc.twoinc_checkout_host + "/autofill/v1/buyer/current", {
         credentials: "include",
         headers: headers
@@ -4283,15 +4340,20 @@ function createSoleTraderController(companySearch) {
           // hangs.
           return response.text().then(function () {
             if (response.status === 404) return null;
+            refused = response;
             throw new Error("autofill/v1/buyer/current failed");
           });
         })
-        .then(function (json) {
-          cb(json || null);
-        })
-        .catch(function () {
-          cb(null);
-        });
+        .then(
+          function (json) {
+            cb(json || null);
+          },
+          // Paired with the success handler rather than chained after it, so
+          // a throw from the callback itself cannot re-enter it as a failure.
+          function () {
+            cb(null, true, refused);
+          }
+        );
     },
 
     /**
@@ -4299,10 +4361,10 @@ function createSoleTraderController(companySearch) {
      *
      * `window.open()`, not an iframe-in-overlay: the signup/OTP flow depends
      * on a third party that only works in a real popup window. An
-     * async-delayed `window.open()` is blocker bait in every browser, so no
-     * token mint is ever in this path — `render()` mints up front. The chip
-     * path still opens behind its autofill probe (see `onModeChipClick`),
-     * which is why a blocked window falls back to the visible note link.
+     * async-delayed `window.open()` is refused outright by WebKit, so neither
+     * the token mint nor the autofill lookup is in this path — `render()`
+     * resolves both up front and every caller reaches here inside the click's
+     * own gesture. The visible note link is the fallback for a refusal.
      *
      * Brand overlays need nothing added here: a branded deployment resolves
      * this URL's host from the brand registry's own URL template (see
@@ -4416,29 +4478,37 @@ function createSoleTraderController(companySearch) {
             // reopens forever.
             const resolved = !!buyer;
             controller.signupConfirming = false;
-            // Decremented here rather than only on popup close so a resolved
-            // re-signup un-blocks the Business chip/`reopenSearch()`
-            // immediately, not after another 300ms poll cycle. `newlyDecided`
-            // covers a late or replayed ACCEPTED, which must not spend a
-            // second decrement against one increment.
-            if (newlyDecided && watcher.isReconfirming) {
-              controller.soleTraderReconfirmingCount = Math.max(
-                0,
-                controller.soleTraderReconfirmingCount - 1
-              );
+            try {
+              // Decremented here rather than only on popup close so a
+              // resolved re-signup un-blocks the Business
+              // chip/`reopenSearch()` immediately, not after another 300ms
+              // poll cycle. `newlyDecided` covers a late or replayed
+              // ACCEPTED, which must not spend a second decrement against
+              // one increment.
+              if (newlyDecided && watcher.isReconfirming) {
+                controller.soleTraderReconfirmingCount = Math.max(
+                  0,
+                  controller.soleTraderReconfirmingCount - 1
+                );
+              }
+              if (resolved) {
+                // A signup replaces the cookie's buyer. Filed under the
+                // country the tokens were minted under, which is what
+                // `heldAutofill` keys on — not whatever the field reads by
+                // the time the signup completes.
+                controller.holdAutofill(buyer, controller.tokenCountry);
+                controller.setCompany(buyer.organization_number, buyer.company_name, buyer);
+                controller.showNote(false);
+              } else {
+                controller.showError();
+              }
+            } finally {
+              // In a `finally`, and after the capture above has landed: a
+              // throw from the writes would otherwise hold `flightDepth`
+              // above zero for the life of the page, leaving `isBusy()` true
+              // and every exit from sole-trader mode refused.
+              controller.settleFlight();
             }
-            if (resolved) {
-              controller.setCompany(buyer.organization_number, buyer.company_name, buyer);
-              controller.showNote(false);
-            } else {
-              controller.showError();
-            }
-            // Last, after the capture above has actually landed: this used
-            // to settle before the write, so on the ordinary path the
-            // spinner came down and the dropdown closed while the company
-            // name and number were still unwritten. "Flow complete" is the
-            // write, not the response.
-            controller.settleFlight();
           });
         } else {
           controller.showError();
